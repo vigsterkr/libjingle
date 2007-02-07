@@ -124,7 +124,7 @@ noinst_HEADERS =            asyncfile.h \
 			    event.h
 
 AM_CXXFLAGS = -DPOSIX
-DEFAULT_INCLUDES = -I$(top_srcdir) `pkg-config --cflags gtk+-2.0`
+DEFAULT_INCLUDES = -I$(top_srcdir) 
 
 noinst_LTLIBRARIES = libcricketbase.la libcrickettest.la
 noinst_PROGRAMS = natserver nat_unittest virtualsocket_unittest
