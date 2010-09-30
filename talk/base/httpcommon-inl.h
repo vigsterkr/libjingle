@@ -38,73 +38,102 @@ namespace talk_base {
 ///////////////////////////////////////////////////////////////////////////////
 
 template<class CTYPE>
-Url<CTYPE>::Url(const string& url) {
-  const CTYPE* raw_url = url.c_str();
-  if (ascnicmp(raw_url, "http://", 7) == 0) {
-    raw_url += 7;
-    m_secure = false;
-  } else if (ascnicmp(raw_url, "https://", 8) == 0) {
-    raw_url += 8;
-    m_secure = true;
+void Url<CTYPE>::do_set_url(const CTYPE* val, size_t len) {
+  if (ascnicmp(val, "http://", 7) == 0) {
+    val += 7; len -= 7;
+    secure_ = false;
+  } else if (ascnicmp(val, "https://", 8) == 0) {
+    val += 8; len -= 8;
+    secure_ = true;
   } else {
+    clear();
     return;
   }
-  m_port = UrlDefaultPort(m_secure);
-  const CTYPE* colon = ::strchr(raw_url, static_cast<CTYPE>(':'));
-  const CTYPE* slash = ::strchr(raw_url, static_cast<CTYPE>('/'));
-  if (!colon && !slash) {
-    m_server = url;
-    // TODO: rethink this slash
-    m_path.append(1, static_cast<CTYPE>('/'));
-  } else {
-    const CTYPE* ptr;
-    if (colon == 0) {
-      ptr = slash;
-    } else if (slash == 0) {
-      ptr = colon;
-    } else {
-      ptr = _min(colon, slash);
-    }
-    m_server.assign(raw_url, ptr - raw_url);
-    if (ptr == colon) {
-      CTYPE* tmp = 0;
-      m_port = static_cast<uint16>(::strtoul(ptr + 1, &tmp, 10));
-      ptr = tmp;
-    }
-    const CTYPE* query = ::strchr(ptr, static_cast<CTYPE>('?'));
-    if (!query) {
-      m_path.assign(ptr);
-    } else {
-      m_path.assign(ptr, query - ptr);
-      m_query.assign(query);
-    }
+  const CTYPE* path = strchrn(val, len, static_cast<CTYPE>('/'));
+  if (!path) {
+    path = val + len;
   }
-  ASSERT(m_path.empty() || (m_path[0] == static_cast<CTYPE>('/')));
-  ASSERT(m_query.empty() || (m_query[0] == static_cast<CTYPE>('?')));
+  size_t address_length = (path - val);
+  do_set_address(val, address_length);
+  do_set_full_path(path, len - address_length);
 }
 
 template<class CTYPE>
-typename Traits<CTYPE>::string Url<CTYPE>::full_path() {
-  string full_path(m_path);
-  full_path.append(m_query);
-  return full_path;
+void Url<CTYPE>::do_set_address(const CTYPE* val, size_t len) {
+  if (const CTYPE* colon = strchrn(val, len, static_cast<CTYPE>(':'))) {
+    host_.assign(val, colon - val);
+    // Note: In every case, we're guaranteed that colon is followed by a null,
+    // or non-numeric character.
+    port_ = static_cast<uint16>(::strtoul(colon + 1, NULL, 10));
+    // TODO: Consider checking for invalid data following port number.
+  } else {
+    host_.assign(val, len);
+    port_ = HttpDefaultPort(secure_);
+  }
 }
 
 template<class CTYPE>
-typename Traits<CTYPE>::string Url<CTYPE>::url() {
+void Url<CTYPE>::do_set_full_path(const CTYPE* val, size_t len) {
+  const CTYPE* query = strchrn(val, len, static_cast<CTYPE>('?'));
+  if (!query) {
+    query = val + len;
+  }
+  size_t path_length = (query - val);
+  if (0 == path_length) {
+    // TODO: consider failing in this case.
+    path_.assign(1, static_cast<CTYPE>('/'));
+  } else {
+    ASSERT(val[0] == static_cast<CTYPE>('/'));
+    path_.assign(val, path_length);
+  }
+  query_.assign(query, len - path_length);
+}
+
+template<class CTYPE>
+void Url<CTYPE>::do_get_url(string* val) const {
   CTYPE protocol[9];
-  asccpyn(protocol, ARRAY_SIZE(protocol), m_secure ? "https://" : "http://");
-  string url(protocol);
-  url.append(m_server);
-  if (m_port != UrlDefaultPort(m_secure)) {
+  asccpyn(protocol, ARRAY_SIZE(protocol), secure_ ? "https://" : "http://");
+  val->append(protocol);
+  do_get_address(val);
+  do_get_full_path(val);
+}
+
+template<class CTYPE>
+void Url<CTYPE>::do_get_address(string* val) const {
+  val->append(host_);
+  if (port_ != HttpDefaultPort(secure_)) {
     CTYPE format[5], port[32];
     asccpyn(format, ARRAY_SIZE(format), ":%hu");
-    sprintfn(port, ARRAY_SIZE(port), format, m_port);
-    url.append(port);
+    sprintfn(port, ARRAY_SIZE(port), format, port_);
+    val->append(port);
   }
-  url.append(m_path);
-  url.append(m_query);
-  return url;
+}
+
+template<class CTYPE>
+void Url<CTYPE>::do_get_full_path(string* val) const {
+  val->append(path_);
+  val->append(query_);
+}
+
+template<class CTYPE>
+bool Url<CTYPE>::get_attribute(const string& name, string* value) const {
+  if (query_.empty())
+    return false;
+  
+  std::string::size_type pos = query_.find(name, 1);
+  if (std::string::npos == pos)
+    return false;
+
+  pos += name.length() + 1;
+  if ((pos > query_.length()) || (static_cast<CTYPE>('=') != query_[pos-1]))
+    return false;
+
+  std::string::size_type end = query_.find(static_cast<CTYPE>('&'), pos);
+  if (std::string::npos == end) {
+    end = query_.length();
+  }
+  value->assign(query_.substr(pos, end - pos));
+  return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

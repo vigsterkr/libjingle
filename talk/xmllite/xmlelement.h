@@ -178,7 +178,7 @@ public:
   XmlElement * FirstWithNamespace(const std::string & ns);
   const XmlElement * FirstWithNamespace(const std::string & ns) const
     { return const_cast<XmlElement *>(this)->FirstWithNamespace(ns); }
-    
+
   XmlElement * NextWithNamespace(const std::string & ns);
   const XmlElement * NextWithNamespace(const std::string & ns) const
     { return const_cast<XmlElement *>(this)->NextWithNamespace(ns); }
@@ -201,6 +201,9 @@ public:
   void RemoveChildAfter(XmlChild * pPredecessor);
 
   void AddParsedText(const char * buf, int len);
+  // Note: CDATA is not supported by XMPP, therefore using this function will
+  // generate non-XMPP compatible XML.
+  void AddCDATAText(const char * buf, int len);
   void AddText(const std::string & text);
   void AddText(const std::string & text, int depth);
   void AddElement(XmlElement * pelChild);
@@ -208,12 +211,15 @@ public:
   void AddAttr(const QName & name, const std::string & value);
   void AddAttr(const QName & name, const std::string & value, int depth);
   void ClearNamedChildren(const QName & name);
+  void ClearAttributes();
   void ClearChildren();
 
   static XmlElement * ForStr(const std::string & str);
   std::string Str() const;
 
   void Print(std::ostream * pout, std::string xmlns[], int xmlnsCount) const;
+
+  bool IsCDATA() const { return cdata_; }
 
 protected:
   virtual bool IsTextImpl() const;
@@ -226,6 +232,7 @@ private:
   XmlAttr * pLastAttr_;
   XmlChild * pFirstChild_;
   XmlChild * pLastChild_;
+  bool cdata_;
 };
 
 }

@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -30,9 +30,7 @@
 #endif
 
 #ifdef POSIX
-extern "C" {
 #include <sys/time.h>
-}
 #endif
 
 #include "talk/base/common.h"
@@ -66,7 +64,8 @@ MessageQueueManager::~MessageQueueManager() {
 
 void MessageQueueManager::Add(MessageQueue *message_queue) {
   // MessageQueueManager methods should be non-reentrant, so we
-  // ASSERT that is the case.
+  // ASSERT that is the case.  If any of these ASSERT, please
+  // contact bpm or jbeda.
   ASSERT(!crit_.CurrentThreadIsOwner());
   CritScope cs(&crit_);
   message_queues_.push_back(message_queue);
@@ -74,11 +73,25 @@ void MessageQueueManager::Add(MessageQueue *message_queue) {
 
 void MessageQueueManager::Remove(MessageQueue *message_queue) {
   ASSERT(!crit_.CurrentThreadIsOwner());  // See note above.
-  CritScope cs(&crit_);
-  std::vector<MessageQueue *>::iterator iter;
-  iter = std::find(message_queues_.begin(), message_queues_.end(), message_queue);
-  if (iter != message_queues_.end())
-    message_queues_.erase(iter);
+  // If this is the last MessageQueue, destroy the manager as well so that
+  // we don't leak this object at program shutdown. As mentioned above, this is
+  // not thread-safe, but this should only happen at program termination (when
+  // the ThreadManager is destroyed, and threads are no longer active).
+  bool destroy = false;
+  {
+    CritScope cs(&crit_);
+    std::vector<MessageQueue *>::iterator iter;
+    iter = std::find(message_queues_.begin(), message_queues_.end(),
+                     message_queue);
+    if (iter != message_queues_.end()) {
+      message_queues_.erase(iter);      
+    }
+    destroy = message_queues_.empty();
+  }
+  if (destroy) {
+    instance_ = NULL;
+    delete this;    
+  }
 }
 
 void MessageQueueManager::Clear(MessageHandler *handler) {
@@ -93,35 +106,45 @@ void MessageQueueManager::Clear(MessageHandler *handler) {
 // MessageQueue
 
 MessageQueue::MessageQueue(SocketServer* ss)
-    : ss_(ss), new_ss(false), fStop_(false), fPeekKeep_(false), active_(false) {
+    : ss_(ss), fStop_(false), fPeekKeep_(false), active_(false),
+      dmsgq_next_num_(0) {
   if (!ss_) {
-    new_ss = true;
-    ss_ = new PhysicalSocketServer();
+    // Currently, MessageQueue holds a socket server, and is the base class for
+    // Thread.  It seems like it makes more sense for Thread to hold the socket
+    // server, and provide it to the MessageQueue, since the Thread controls
+    // the I/O model, and MQ is agnostic to those details.  Anyway, this causes
+    // messagequeue_unittest to depend on network libraries... yuck.
+    default_ss_.reset(new PhysicalSocketServer());
+    ss_ = default_ss_.get();
   }
+  ss_->SetMessageQueue(this);
 }
 
 MessageQueue::~MessageQueue() {
+  // The signal is done from here to ensure
+  // that it always gets called when the queue
+  // is going away.
+  SignalQueueDestroyed();
   if (active_) {
     MessageQueueManager::Instance()->Remove(this);
     Clear(NULL);
   }
-  if (new_ss)
-    delete ss_;
+  if (ss_) {
+    ss_->SetMessageQueue(NULL);
+  }
 }
 
 void MessageQueue::set_socketserver(SocketServer* ss) {
-  if (new_ss)
-    delete ss_;
-  new_ss = false;
-  ss_ = ss;
+  ss_ = ss ? ss : default_ss_.get();
+  ss_->SetMessageQueue(this);
 }
 
-void MessageQueue::Stop() {
+void MessageQueue::Quit() {
   fStop_ = true;
   ss_->WakeUp();
 }
 
-bool MessageQueue::IsStopping() {
+bool MessageQueue::IsQuitting() {
   return fStop_;
 }
 
@@ -141,7 +164,7 @@ bool MessageQueue::Peek(Message *pmsg, int cmsWait) {
   return true;
 }
 
-bool MessageQueue::Get(Message *pmsg, int cmsWait) {
+bool MessageQueue::Get(Message *pmsg, int cmsWait, bool process_io) {
   // Return and clear peek if present
   // Always return the peek if it exists so there is Peek/Get symmetry
 
@@ -172,11 +195,11 @@ bool MessageQueue::Get(Message *pmsg, int cmsWait) {
       // Calc the next trigger too
 
       while (!dmsgq_.empty()) {
-        if (msCurrent < dmsgq_.top().msTrigger_) {
-          cmsDelayNext = dmsgq_.top().msTrigger_ - msCurrent;
+        if (TimeIsLater(msCurrent, dmsgq_.top().msTrigger_)) {
+          cmsDelayNext = TimeDiff(dmsgq_.top().msTrigger_, msCurrent);
           break;
         }
-        msgq_.push(dmsgq_.top().msg_);
+        msgq_.push_back(dmsgq_.top().msg_);
         dmsgq_.pop();
       }
 
@@ -191,7 +214,7 @@ bool MessageQueue::Get(Message *pmsg, int cmsWait) {
                               << (delay + kMaxMsgLatency) << "ms";
           }
         }
-        msgq_.pop();
+        msgq_.pop_front();
         if (MQID_DISPOSE == pmsg->message_id) {
           ASSERT(NULL == pmsg->phandler);
           delete pmsg->pdata;
@@ -210,20 +233,19 @@ bool MessageQueue::Get(Message *pmsg, int cmsWait) {
     if (cmsWait == kForever) {
       cmsNext = cmsDelayNext;
     } else {
-      cmsNext = cmsTotal - cmsElapsed;
-      if (cmsNext < 0)
-        cmsNext = 0;
+      cmsNext = _max(0, cmsTotal - cmsElapsed);
       if ((cmsDelayNext != kForever) && (cmsDelayNext < cmsNext))
         cmsNext = cmsDelayNext;
     }
 
     // Wait and multiplex in the meantime
-    ss_->Wait(cmsNext, true);
+    if (!ss_->Wait(cmsNext, process_io))
+      return false;
 
     // If the specified timeout expired, return
 
     msCurrent = Time();
-    cmsElapsed = msCurrent - msStart;
+    cmsElapsed = TimeDiff(msCurrent, msStart);
     if (cmsWait != kForever) {
       if (cmsElapsed >= cmsWait)
         return false;
@@ -253,12 +275,12 @@ void MessageQueue::Post(MessageHandler *phandler, uint32 id,
   if (time_sensitive) {
     msg.ts_sensitive = Time() + kMaxMsgLatency;
   }
-  msgq_.push(msg);
+  msgq_.push_back(msg);
   ss_->WakeUp();
 }
 
-void MessageQueue::PostDelayed(int cmsDelay, MessageHandler *phandler,
-    uint32 id, MessageData *pdata) {
+void MessageQueue::DoDelayPost(int cmsDelay, uint32 tstamp,
+    MessageHandler *phandler, uint32 id, MessageData* pdata) {
   if (fStop_)
     return;
 
@@ -272,7 +294,12 @@ void MessageQueue::PostDelayed(int cmsDelay, MessageHandler *phandler,
   msg.phandler = phandler;
   msg.message_id = id;
   msg.pdata = pdata;
-  dmsgq_.push(DelayedMessage(cmsDelay, &msg));
+  DelayedMessage dmsg(cmsDelay, tstamp, dmsgq_next_num_, msg);
+  dmsgq_.push(dmsg);
+  // If this message queue processes 1 message every millisecond for 50 days,
+  // we will wrap this number.  Even then, only messages with identical times
+  // will be misordered, and then only briefly.  This is probably ok.
+  VERIFY(0 != ++dmsgq_next_num_);
   ss_->WakeUp();
 }
 
@@ -283,7 +310,7 @@ int MessageQueue::GetDelay() {
     return 0;
 
   if (!dmsgq_.empty()) {
-    int delay = dmsgq_.top().msTrigger_ - Time();
+    int delay = TimeUntil(dmsgq_.top().msTrigger_);
     if (delay < 0)
       delay = 0;
     return delay;
@@ -292,57 +319,53 @@ int MessageQueue::GetDelay() {
   return kForever;
 }
 
-void MessageQueue::Clear(MessageHandler *phandler, uint32 id) {
+void MessageQueue::Clear(MessageHandler *phandler, uint32 id,
+                         MessageList* removed) {
   CritScope cs(&crit_);
 
   // Remove messages with phandler
 
-  if (fPeekKeep_) {
-    if (phandler == NULL || msgPeek_.phandler == phandler) {
-      if (id == MQID_ANY || msgPeek_.message_id == id) {
-        delete msgPeek_.pdata;
-        fPeekKeep_ = false;
-      }
+  if (fPeekKeep_ && msgPeek_.Match(phandler, id)) {
+    if (removed) {
+      removed->push_back(msgPeek_);
+    } else {
+      delete msgPeek_.pdata;
     }
+    fPeekKeep_ = false;
   }
 
   // Remove from ordered message queue
 
-  size_t c = msgq_.size();
-  while (c-- != 0) {
-    Message msg = msgq_.front();
-    msgq_.pop();
-    if (phandler != NULL && msg.phandler != phandler) {
-      msgq_.push(msg);
-    } else {
-      if (id == MQID_ANY || msg.message_id == id) {
-        delete msg.pdata;
+  for (MessageList::iterator it = msgq_.begin(); it != msgq_.end();) {
+    if (it->Match(phandler, id)) {
+      if (removed) {
+        removed->push_back(*it);
       } else {
-        msgq_.push(msg);
+        delete it->pdata;
       }
+      it = msgq_.erase(it);
+    } else {
+      ++it;
     }
   }
 
   // Remove from priority queue. Not directly iterable, so use this approach
 
-  std::queue<DelayedMessage> dmsgs;
-  while (!dmsgq_.empty()) {
-    DelayedMessage dmsg = dmsgq_.top();
-    dmsgq_.pop();
-    if (phandler != NULL && dmsg.msg_.phandler != phandler) {
-      dmsgs.push(dmsg);
-    } else {
-      if (id == MQID_ANY || dmsg.msg_.message_id == id) {
-        delete dmsg.msg_.pdata;
+  PriorityQueue::container_type::iterator new_end = dmsgq_.container().begin();
+  for (PriorityQueue::container_type::iterator it = new_end;
+       it != dmsgq_.container().end(); ++it) {
+    if (it->msg_.Match(phandler, id)) {
+      if (removed) {
+        removed->push_back(it->msg_);
       } else {
-        dmsgs.push(dmsg);
+        delete it->msg_.pdata;
       }
+    } else {
+      *new_end++ = *it;
     }
   }
-  while (!dmsgs.empty()) {
-    dmsgq_.push(dmsgs.front());
-    dmsgs.pop();
-  }
+  dmsgq_.container().erase(new_end, dmsgq_.container().end());
+  dmsgq_.reheap();
 }
 
 void MessageQueue::Dispatch(Message *pmsg) {
@@ -357,4 +380,4 @@ void MessageQueue::EnsureActive() {
   }
 }
 
-} // namespace talk_base
+}  // namespace talk_base

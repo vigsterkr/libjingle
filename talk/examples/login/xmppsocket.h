@@ -33,6 +33,13 @@
 #include "talk/base/sigslot.h"
 #include "talk/xmpp/asyncsocket.h"
 
+// The below define selects the SSLStreamAdapter implementation for
+// SSL, as opposed to the SSLAdapter socket adapter.
+// #define USE_SSLSTREAM 
+
+namespace talk_base {
+  class StreamInterface;
+};
 extern talk_base::AsyncSocket* cricket_socket_;
 
 class XmppSocket : public buzz::AsyncSocket, public sigslot::has_slots<> {
@@ -50,12 +57,22 @@ public:
   virtual bool Close();
   virtual bool StartTls(const std::string & domainname);
 
+  sigslot::signal1<int> SignalCloseEvent;
+
 private:
+#ifndef USE_SSLSTREAM
   void OnReadEvent(talk_base::AsyncSocket * socket);
   void OnWriteEvent(talk_base::AsyncSocket * socket);
   void OnConnectEvent(talk_base::AsyncSocket * socket);
+  void OnCloseEvent(talk_base::AsyncSocket * socket, int error);
+#else  // USE_SSLSTREAM
+  void OnEvent(talk_base::StreamInterface* stream, int events, int err);
+#endif  // USE_SSLSTREAM
 
   talk_base::AsyncSocket * cricket_socket_;
+#ifdef USE_SSLSTREAM
+  talk_base::StreamInterface *stream_;
+#endif  // USE_SSLSTREAM
   buzz::AsyncSocket::State state_;
   talk_base::ByteBuffer buffer_;
   bool tls_;

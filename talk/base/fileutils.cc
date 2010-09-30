@@ -25,11 +25,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <errno.h>
 #include <cassert>
 
 #ifdef WIN32
-#include "talk/base/convert.h"
+#include "talk/base/win32.h"
 #endif
 
 #include "talk/base/pathutils.h"
@@ -41,7 +40,7 @@
 #include "talk/base/win32filesystem.h"
 
 #ifndef WIN32
-#define MAX_PATH 256
+#define MAX_PATH 260
 #endif
 
 namespace talk_base {
@@ -50,18 +49,18 @@ namespace talk_base {
 // Directory Iterator   //
 //////////////////////////
 
-// A Directoryraverser is created with a given directory. It originally points to
-// the first file in the directory, and can be advanecd with Next(). This allows you
-// to get information about each file.
+// A DirectoryIterator is created with a given directory. It originally points
+// to the first file in the directory, and can be advanecd with Next(). This
+// allows you to get information about each file.
 
   // Constructor
-DirectoryIterator::DirectoryIterator() : 
+DirectoryIterator::DirectoryIterator()
 #ifdef _WIN32
-  handle_(INVALID_HANDLE_VALUE)
+    : handle_(INVALID_HANDLE_VALUE) {
 #else
-  dir_(NULL), dirent_(NULL)
+    : dir_(NULL), dirent_(NULL) {
 #endif
-{}
+}
 
   // Destructor
 DirectoryIterator::~DirectoryIterator() {
@@ -83,7 +82,7 @@ bool DirectoryIterator::Iterate(const Pathname &dir) {
   if (handle_ != INVALID_HANDLE_VALUE)
     ::FindClose(handle_);
   std::string d = dir.pathname() + '*';
-  handle_ = ::FindFirstFile(Utf16(d).AsWz(), &data_);
+  handle_ = ::FindFirstFile(ToUtf16(d).c_str(), &data_);
   if (handle_ == INVALID_HANDLE_VALUE)
     return false;
 #else
@@ -95,7 +94,7 @@ bool DirectoryIterator::Iterate(const Pathname &dir) {
   dirent_ = readdir(dir_);
   if (dirent_ == NULL)
     return false;
-  
+
   if (::stat(std::string(directory_ + Name()).c_str(), &stat_) != 0)
     return false;
 #endif
@@ -128,7 +127,7 @@ bool DirectoryIterator::IsDirectory() const {
   // returns the name of the file currently pointed to
 std::string DirectoryIterator::Name() const {
 #ifdef WIN32
-  return Utf8(data_.cFileName).AsString();
+  return ToUtf8(data_.cFileName);
 #else
   assert(dirent_ != NULL);
   return dirent_->d_name;
@@ -138,95 +137,106 @@ std::string DirectoryIterator::Name() const {
   // returns the size of the file currently pointed to
 size_t DirectoryIterator::FileSize() const {
 #ifndef WIN32
-      	return stat_.st_size;
+  return stat_.st_size;
 #else
-	return data_.nFileSizeLow;
+  return data_.nFileSizeLow;
 #endif
 }
- 
+
   // returns the last modified time of this file
 time_t DirectoryIterator::FileModifyTime() const {
 #ifdef WIN32
-return 0;
+  time_t val;
+  FileTimeToUnixTime(data_.ftLastWriteTime, &val);
+  return val;
 #else
   return stat_.st_mtime;
 #endif
 }
 
-Filesystem *Filesystem::default_filesystem_ = 0;
-  
-
-bool Filesystem::CreateFolder(const Pathname &pathname)
-{
-  return EnsureDefaultFilesystem()->CreateFolderI(pathname);
-}
-
-FileStream *Filesystem::OpenFile(const Pathname &filename, 
-				 const std::string &mode)
-{
-  return EnsureDefaultFilesystem()->OpenFileI(filename, mode);
-}
-
-bool Filesystem::DeleteFile(const Pathname &filename)
-{
-  return EnsureDefaultFilesystem()->DeleteFileI(filename);
-}
-
-bool Filesystem::MoveFile(const Pathname &old_path, const Pathname &new_path)
-{
-  return EnsureDefaultFilesystem()->MoveFileI(old_path, new_path);
-}
-
-bool Filesystem::CopyFile(const Pathname &old_path, const Pathname &new_path)
-{
-  return EnsureDefaultFilesystem()->CopyFileI(old_path, new_path);
-}
-
-bool Filesystem::IsFolder(const Pathname& pathname)
-{
-  return EnsureDefaultFilesystem()->IsFolderI(pathname);
-}
-
-bool Filesystem::FileExists(const Pathname& pathname)
-{
-  return EnsureDefaultFilesystem()->FileExistsI(pathname);
-}
-
-bool Filesystem::IsTemporaryPath(const Pathname& pathname)
-{
-  return EnsureDefaultFilesystem()->IsTemporaryPathI(pathname);
-}
-
-bool Filesystem::GetTemporaryFolder(Pathname &path, bool create,
-			       const std::string *append)
-{
-  return EnsureDefaultFilesystem()->GetTemporaryFolderI(path,create, append);
-}
-
-std::string Filesystem::TempFilename(const Pathname &dir, const std::string &prefix)
-{
-  return EnsureDefaultFilesystem()->TempFilenameI(dir, prefix);
-}
-
-bool Filesystem::GetFileSize(const Pathname &dir, size_t *size)
-{
-  return EnsureDefaultFilesystem()->GetFileSizeI(dir, size);
-}
-
-Filesystem *Filesystem::EnsureDefaultFilesystem()
-{
-  if (!default_filesystem_)
+scoped_ptr<FilesystemInterface> Filesystem::default_filesystem_;
+FilesystemInterface *Filesystem::EnsureDefaultFilesystem() {
+  if (!default_filesystem_.get())
 #ifdef WIN32
-    default_filesystem_ = new Win32Filesystem();
+    default_filesystem_.reset(new Win32Filesystem());
 #else
-    default_filesystem_ = new UnixFilesystem();
+    default_filesystem_.reset(new UnixFilesystem());
 #endif
-    return default_filesystem_;
+    return default_filesystem_.get();
+}
+
+bool FilesystemInterface::CopyFolder(const Pathname &old_path,
+                                     const Pathname &new_path) {
+  VERIFY(IsFolder(old_path));
+  Pathname new_dir;
+  new_dir.SetFolder(new_path.pathname());
+  Pathname old_dir;
+  old_dir.SetFolder(old_path.pathname());
+  if (!CreateFolder(new_dir))
+    return false;
+  DirectoryIterator di;
+  di.Iterate(old_dir.pathname());
+  while (di.Next()) {
+    if (di.Name() == "." || di.Name() == "..")
+      continue;
+    Pathname source;
+    Pathname dest;
+    source.SetFolder(old_dir.pathname());
+    dest.SetFolder(new_path.pathname());
+    source.SetFilename(di.Name());
+    dest.SetFilename(di.Name());
+    if (!CopyFileOrFolder(source, dest))
+      return false;
+  }
+  return true;
+}
+
+bool FilesystemInterface::DeleteFolderContents(const Pathname &folder) {
+  bool success = true;
+  VERIFY(IsFolder(folder));
+  DirectoryIterator *di = IterateDirectory();
+  di->Iterate(folder);
+  while (di->Next()) {
+    if (di->Name() == "." || di->Name() == "..")
+      continue;
+    Pathname subdir;
+    subdir.SetFolder(folder.pathname());
+    if (di->IsDirectory()) {
+      subdir.AppendFolder(di->Name());
+      if (!DeleteFolderAndContents(subdir)) {
+        success = false;
+      }
+    } else {
+      subdir.SetFilename(di->Name());
+      if (!DeleteFile(subdir)) {
+        success = false;
+      }
+    }
+  }
+  delete di;
+  return success;
+}
+
+bool FilesystemInterface::CleanAppTempFolder() {
+  Pathname path;
+  if (!GetAppTempFolder(&path))
+    return false;
+  if (IsAbsent(path))
+    return true;
+  if (!IsTemporaryPath(path)) {
+    ASSERT(false);
+    return false;
+  }
+  return DeleteFolderContents(path);
+}
+
+Pathname Filesystem::GetCurrentDirectory() {
+  return EnsureDefaultFilesystem()->GetCurrentDirectory();
 }
 
 bool CreateUniqueFile(Pathname& path, bool create_empty) {
   LOG(LS_INFO) << "Path " << path.pathname() << std::endl;
-  // If not folder is supplied, use the temporary folder
+  // If no folder is supplied, use the temporary folder
   if (path.folder().empty()) {
     Pathname temporary_path;
     if (!Filesystem::GetTemporaryFolder(temporary_path, true, NULL)) {
@@ -236,17 +246,17 @@ bool CreateUniqueFile(Pathname& path, bool create_empty) {
     path.SetFolder(temporary_path.pathname());
   }
 
-  // If not filename is supplied, use a temporary name
+  // If no filename is supplied, use a temporary name
   if (path.filename().empty()) {
     std::string folder(path.folder());
     std::string filename = Filesystem::TempFilename(folder, "gt");
-    path.SetFilename(filename);
+    path.SetPathname(filename);
     if (!create_empty) {
       Filesystem::DeleteFile(path.pathname());
     }
     return true;
   }
-  
+
   // Otherwise, create a unique name based on the given filename
   // foo.txt -> foo-N.txt
   const std::string basename = path.basename();
@@ -254,20 +264,21 @@ bool CreateUniqueFile(Pathname& path, bool create_empty) {
   size_t version = 0;
   while (version < MAX_VERSION) {
     std::string pathname = path.pathname();
- 
-    if (!Filesystem::FileExists(pathname)) {
+
+    if (!Filesystem::IsFile(pathname)) {
       if (create_empty) {
-        FileStream* fs = Filesystem::OpenFile(pathname,"w");
-	delete fs;
+        FileStream* fs = Filesystem::OpenFile(pathname, "w");
+        delete fs;
       }
       return true;
     }
     version += 1;
     char version_base[MAX_PATH];
-    talk_base::sprintfn(version_base, ARRAY_SIZE(version_base), "%s-%u",
-                        basename.c_str(), version);
+    sprintfn(version_base, ARRAY_SIZE(version_base), "%s-%u",
+             basename.c_str(), version);
     path.SetBasename(version_base);
   }
   return true;
 }
-}
+
+}  // namespace talk_base

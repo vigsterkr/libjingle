@@ -31,20 +31,42 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
+
 #ifdef WIN32
+#include <malloc.h>
 #include <wchar.h>
+#define alloca _alloca
 #endif  // WIN32
 
+#ifdef POSIX
+#ifdef BSD
+#include <stdlib.h>
+#else  // BSD
+#include <alloca.h>
+#endif  // !BSD
+#endif  // POSIX
+
+#include <cstring>
 #include <string>
+
+#include "talk/base/basictypes.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Generic string/memory utilities
 ///////////////////////////////////////////////////////////////////////////////
 
+#define STACK_ARRAY(TYPE, LEN) static_cast<TYPE*>(::alloca((LEN)*sizeof(TYPE)))
+
 namespace talk_base {
 
 // Complement to memset.  Verifies memory consists of count bytes of value c.
 bool memory_check(const void* memory, int c, size_t count);
+
+// Determines whether the simple wildcard pattern matches target.
+// Alpha characters in pattern match case-insensitively.
+// Asterisks in pattern match 0 or more characters.
+// Ex: string_match("www.TEST.GOOGLE.COM", "www.*.com") -> true
+bool string_match(const char* target, const char* pattern);
 
 }  // namespace talk_base
 
@@ -55,7 +77,10 @@ bool memory_check(const void* memory, int c, size_t count);
 //  strlen, strcmp, stricmp, strncmp, strnicmp
 //  strchr, vsnprintf, strtoul, tolowercase
 // tolowercase is like tolower, but not compatible with end-of-file value
-// Note that the wchar_t versions are not available on Linux
+//
+// It's not clear if we will ever use wchar_t strings on unix.  In theory,
+// all strings should be Utf8 all the time, except when interfacing with Win32
+// APIs that require Utf16.
 ///////////////////////////////////////////////////////////////////////////////
 
 inline char tolowercase(char c) {
@@ -85,12 +110,14 @@ inline const wchar_t* strchr(const wchar_t* s, wchar_t c) {
 inline const wchar_t* strstr(const wchar_t* haystack, const wchar_t* needle) {
   return wcsstr(haystack, needle);
 }
+#ifndef vsnprintf
 inline int vsnprintf(char* buf, size_t n, const char* fmt, va_list args) {
   return _vsnprintf(buf, n, fmt, args);
 }
 inline int vsnprintf(wchar_t* buf, size_t n, const wchar_t* fmt, va_list args) {
   return _vsnwprintf(buf, n, fmt, args);
 }
+#endif // !vsnprintf
 inline unsigned long strtoul(const wchar_t* snum, wchar_t** end, int base) {
   return wcstoul(snum, end, base);
 }
@@ -196,15 +223,8 @@ size_t strcatn(CTYPE* buffer, size_t buflen,
   return bufpos + strcpyn(buffer + bufpos, buflen - bufpos, source, srclen);
 }
 
-template<class CTYPE>
-size_t sprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format, ...) {
-  va_list args;
-  va_start(args, format);
-  size_t len = vsprintfn(buffer, buflen, format, args);
-  va_end(args);
-  return len;
-}
-
+// Some compilers (clang specifically) require vsprintfn be defined before
+// sprintfn.
 template<class CTYPE>
 size_t vsprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format,
                  va_list args) {
@@ -213,6 +233,22 @@ size_t vsprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format,
     len = static_cast<int>(buflen - 1);
     buffer[len] = 0;
   }
+  return len;
+}
+
+template<class CTYPE>
+size_t sprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format, ...);
+/* This works to get GCC to notice printf argument mismatches, but then complains of missing implementation of sprintfn<char>
+template<>
+size_t sprintfn(char* buffer, size_t buflen, const char* format, ...)
+GCC_ATTR(format(printf,3,4));
+*/
+template<class CTYPE>
+size_t sprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format, ...) {
+  va_list args;
+  va_start(args, format);
+  size_t len = vsprintfn(buffer, buflen, format, args);
+  va_end(args);
   return len;
 }
 
@@ -269,7 +305,7 @@ size_t asccpyn(wchar_t* buffer, size_t buflen,
 template<>
 struct Traits<char> {
   typedef std::string string;
-  inline static const char* Traits<char>::empty_str() { return ""; }
+  inline static const char* empty_str() { return ""; }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -285,6 +321,16 @@ struct Traits<wchar_t> {
 };
 
 #endif  // WIN32
+
+// Replaces all occurrences of "search" with "replace".
+void replace_substrs(const char *search,
+                     size_t search_len,
+                     const char *replace,
+                     size_t replace_len,
+                     std::string *s);
+
+// True iff s1 starts with s2.
+bool starts_with(const char *s1, const char *s2);
 
 }  // namespace talk_base
 

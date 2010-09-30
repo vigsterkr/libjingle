@@ -25,21 +25,18 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern "C" {
-#include <ctype.h>
-}
-#include <string>
 #include "talk/xmpp/jid.h"
-#include "talk/xmpp/constants.h"
-#include "talk/base/common.h"
+
+#include <ctype.h>
+
 #include <algorithm>
+#include <string>
+
+#include "talk/base/common.h"
 #include "talk/base/logging.h"
+#include "talk/xmpp/constants.h"
 
 namespace buzz {
-
-static int AsciiToLower(int x) {
-  return (x <= 'Z' && x >= 'A') ? (x + ('a' - 'A')) : x;
-}
 
 Jid::Jid() : data_(NULL) {
 }
@@ -209,20 +206,20 @@ Jid::set_resource(const std::string & res_name) {
 bool
 Jid::BareEquals(const Jid & other) const {
   return (other.data_ == data_ ||
-          data_ != NULL &&
+          (data_ != NULL &&
           other.data_ != NULL &&
           other.data_->node_name_ == data_->node_name_ &&
-          other.data_->domain_name_ == data_->domain_name_);
+          other.data_->domain_name_ == data_->domain_name_));
 }
 
 bool
 Jid::operator==(const Jid & other) const {
   return (other.data_ == data_ ||
-          data_ != NULL &&
+          (data_ != NULL &&
           other.data_ != NULL &&
           other.data_->node_name_ == data_->node_name_ &&
           other.data_->domain_name_ == data_->domain_name_ &&
-          other.data_->resource_name_ == data_->resource_name_);
+          other.data_->resource_name_ == data_->resource_name_));
 }
 
 int

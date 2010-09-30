@@ -92,12 +92,7 @@ class RateLimitManager {
 
     // True iff the current time >= to the next song allowed time
     bool IsWithinRateLimit() {
-      uint32 current_time = talk_base::Time();
-      if (talk_base::TimeDiff(current_time, NextTimeAllowedForCounter()) >= 0) {
-        return true;
-      } else {
-        return false;
-      }
+      return (talk_base::TimeSince(NextTimeAllowedForCounter()) >= 0);
     }
     
     // Updates time and counter for rate limit

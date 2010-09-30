@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/base/stl_decl.h"
 #include <string>
 #include <iostream>
 #include <vector>

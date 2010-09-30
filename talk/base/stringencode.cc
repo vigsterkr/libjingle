@@ -25,17 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef WIN32
-#include <malloc.h>
-#endif  // WIN32
-#ifdef POSIX
-#include <alloca.h>
-#define _alloca alloca
-#endif  // POSIX
+#include "talk/base/stringencode.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 #include "talk/base/basictypes.h"
 #include "talk/base/common.h"
-#include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 
 namespace talk_base {
@@ -51,10 +47,17 @@ char hex_encode(unsigned char val) {
   return (val < 16) ? HEX[val] : '!';
 }
 
-unsigned char hex_decode(char ch) {
-  char lower = tolower(ch);
-  ASSERT(((ch >= '0') && (ch <= '9')) || ((lower >= 'a') && (lower <= 'z')));
-  return (ch <= '9') ? (ch - '0') : ((lower - 'a') + 10);
+bool hex_decode(char ch, unsigned char* val) {
+  if ((ch >= '0') && (ch <= '9')) {
+    *val = ch - '0';
+  } else if ((ch >= 'A') && (ch <= 'Z')) {
+    *val = (ch - 'A') + 10;
+  } else if ((ch >= 'a') && (ch <= 'z')) {
+    *val = (ch - 'a') + 10;
+  } else {
+    return false;
+  }
+  return true;
 }
 
 size_t escape(char * buffer, size_t buflen,
@@ -129,12 +132,15 @@ size_t decode(char * buffer, size_t buflen,
   if (buflen <= 0)
     return 0;
 
+  unsigned char h1, h2;
   size_t srcpos = 0, bufpos = 0;
   while ((srcpos < srclen) && (bufpos + 1 < buflen)) {
     char ch = source[srcpos++];
-    if ((ch == escape) && (srcpos + 1 < srclen)) {
-      buffer[bufpos++] = (hex_decode(source[srcpos]) << 4)
-                         | hex_decode(source[srcpos+1]);
+    if ((ch == escape)
+        && (srcpos + 1 < srclen)
+        && hex_decode(source[srcpos], &h1)
+        && hex_decode(source[srcpos+1], &h2)) {
+      buffer[bufpos++] = (h1 << 4) | h2;
       srcpos += 2;
     } else {
       buffer[bufpos++] = ch;
@@ -151,6 +157,8 @@ const char* unsafe_filename_characters() {
   return "\\/:*?\"<>|";
 #else  // !WIN32
   // TODO
+  ASSERT(false);
+  return "";
 #endif  // !WIN23
 }
 
@@ -202,14 +210,18 @@ size_t url_decode(char * buffer, size_t buflen,
   if (buflen <= 0)
     return 0;
 
+  unsigned char h1, h2;
   size_t srcpos = 0, bufpos = 0;
   while ((srcpos < srclen) && (bufpos + 1 < buflen)) {
     unsigned char ch = source[srcpos++];
     if (ch == '+') {
       buffer[bufpos++] = ' ';
-    } else if ((ch == '%') && (srcpos + 1 < srclen)) {
-      buffer[bufpos++] = (hex_decode(source[srcpos]) << 4)
-                         | hex_decode(source[srcpos+1]);
+    } else if ((ch == '%')
+               && (srcpos + 1 < srclen)
+               && hex_decode(source[srcpos], &h1)
+               && hex_decode(source[srcpos+1], &h2))
+    {
+      buffer[bufpos++] = (h1 << 4) | h2;
       srcpos += 2;
     } else {
       buffer[bufpos++] = ch;
@@ -432,6 +444,13 @@ size_t xml_decode(char * buffer, size_t buflen,
   return bufpos;
 }
 
+std::string hex_encode(const char * source, size_t srclen) {
+  const size_t kBufferSize = srclen * 2 + 1;
+  char* buffer = STACK_ARRAY(char, kBufferSize);
+  size_t length = hex_encode(buffer, kBufferSize, source, srclen);
+  return std::string(buffer, length);
+}
+
 size_t hex_encode(char * buffer, size_t buflen,
                   const char * csource, size_t srclen) {
   ASSERT(NULL != buffer);  // TODO: estimate output size
@@ -461,30 +480,67 @@ size_t hex_decode(char * cbuffer, size_t buflen,
 
   unsigned char * bbuffer = reinterpret_cast<unsigned char *>(cbuffer);
 
+  unsigned char h1, h2;
   size_t srcpos = 0, bufpos = 0;
-  while ((srcpos + 1 < srclen) && (bufpos + 1 < buflen)) {
-    unsigned char v1 = (hex_decode(source[srcpos]) << 4);
-    unsigned char v2 = hex_decode(source[srcpos+1]);
-    bbuffer[bufpos++] =  v1 | v2;
+  while ((srcpos + 1 < srclen)
+         && (bufpos + 1 < buflen)
+         && hex_decode(source[srcpos], &h1)
+         && hex_decode(source[srcpos+1], &h2))
+  {
+    bbuffer[bufpos++] = (h1 << 4) | h2;
     srcpos += 2;
   }
   bbuffer[bufpos] = '\0';
   return bufpos;
 }
 
-void transform(std::string& value, size_t maxlen, const std::string& source,
-               Transform t) {
-  char * buffer = static_cast<char *>(_alloca(maxlen + 1));
-  value.assign(buffer, t(buffer, maxlen + 1, source.data(), source.length()));
+size_t transform(std::string& value, size_t maxlen, const std::string& source,
+                 Transform t) {
+  char* buffer = STACK_ARRAY(char, maxlen + 1);
+  size_t length = t(buffer, maxlen + 1, source.data(), source.length());
+  value.assign(buffer, length);
+  return length;
 }
 
 std::string s_transform(const std::string& source, Transform t) {
   // Ask transformation function to approximate the destination size (returns upper bound)
   size_t maxlen = t(NULL, 0, source.data(), source.length());
-  char * buffer = static_cast<char *>(_alloca(maxlen));
+  char * buffer = STACK_ARRAY(char, maxlen);
   size_t len = t(buffer, maxlen, source.data(), source.length());
   std::string result(buffer, len);
   return result;
+}
+
+size_t split(const std::string& source, char delimiter,
+             std::vector<std::string>* fields)
+{
+  ASSERT(NULL != fields);
+  fields->clear();
+  size_t last = 0;
+  for (size_t i=0; i<source.length(); ++i) {
+    if (source[i] == delimiter) {
+      fields->push_back(source.substr(last, i - last));
+      last = i+1;
+    }
+  }
+  fields->push_back(source.substr(last, source.length() - last));
+  return fields->size();
+}
+
+std::string split_one(const std::string& source, char delimiter, int* index) {
+  std::string substring;
+  size_t start = source.find_first_not_of(delimiter, *index);
+  size_t end = source.find_first_of(delimiter, start);
+  if (start != std::string::npos) {
+    if (end == std::string::npos) {
+      substring = source.substr(start);
+      *index = source.length();
+    } else {
+      substring = source.substr(start, end - start);
+      *index = source.find_first_not_of(delimiter, end);
+    }
+  }
+  return substring;
 }
 
 char make_char_safe_for_filename(char c) {
@@ -510,69 +566,13 @@ char make_char_safe_for_filename(char c) {
 
 /*
 void sprintf(std::string& value, size_t maxlen, const char * format, ...) {
-  char * buffer = static_cast<char *>(alloca(maxlen + 1));
+  char * buffer = STACK_ARRAY(char, maxlen + 1);
   va_list args;
   va_start(args, format);
   value.assign(buffer, vsprintfn(buffer, maxlen + 1, format, args));
   va_end(args);
 }
 */
-
-/////////////////////////////////////////////////////////////////////////////
-// Unit Tests
-/////////////////////////////////////////////////////////////////////////////
-
-#ifdef _DEBUG
-
-static int utf8_unittest() {
-  const struct Utf8Test {
-    const char* encoded;
-    size_t encsize, enclen;
-    unsigned long decoded;
-  } kTests[] = {
-    { "a    ",             5, 1, 'a' },
-    { "\x7F    ",          5, 1, 0x7F },
-    { "\xC2\x80   ",       5, 2, 0x80 },
-    { "\xDF\xBF   ",       5, 2, 0x7FF },
-    { "\xE0\xA0\x80  ",    5, 3, 0x800 },
-    { "\xEF\xBF\xBF  ",    5, 3, 0xFFFF },
-    { "\xF0\x90\x80\x80 ", 5, 4, 0x10000 },
-    { "\xF0\x90\x80\x80 ", 3, 0, 0x10000 },
-    { "\xF0\xF0\x80\x80 ", 5, 0, 0 },
-    { "\xF0\x90\x80  ",    5, 0, 0 },
-    { "\x90\x80\x80  ",    5, 0, 0 },
-    { NULL, 0, 0 },
-  };
-  for (size_t i=0; kTests[i].encoded; ++i) {
-    unsigned long val = 0;
-    ASSERT(kTests[i].enclen == utf8_decode(kTests[i].encoded,
-                                           kTests[i].encsize,
-                                           &val));
-    unsigned long result = (kTests[i].enclen == 0) ? 0 : kTests[i].decoded;
-    ASSERT(val == result);
-
-    if (kTests[i].decoded == 0) {
-      // Not an interesting encoding test case
-      continue;
-    }
-
-    char buffer[5];
-    memset(buffer, 0x01, ARRAY_SIZE(buffer));
-    ASSERT(kTests[i].enclen == utf8_encode(buffer,
-                                           kTests[i].encsize,
-                                           kTests[i].decoded));
-    ASSERT(memcmp(buffer, kTests[i].encoded, kTests[i].enclen) == 0);
-    // Make sure remainder of buffer is unchanged
-    ASSERT(memory_check(buffer + kTests[i].enclen,
-                        0x1,
-                        ARRAY_SIZE(buffer) - kTests[i].enclen));
-  }
-  return 1;
-}
-
-int test = utf8_unittest();
-
-#endif  // _DEBUG
 
 /////////////////////////////////////////////////////////////////////////////
 

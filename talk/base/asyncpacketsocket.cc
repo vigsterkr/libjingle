@@ -69,6 +69,14 @@ int AsyncPacketSocket::Close() {
   return socket_->Close();
 }
 
+Socket::ConnState AsyncPacketSocket::GetState() const {
+  return socket_->GetState();
+}
+
+int AsyncPacketSocket::GetOption(Socket::Option opt, int* value) {
+  return socket_->GetOption(opt, value);
+}
+
 int AsyncPacketSocket::SetOption(Socket::Option opt, int value) {
   return socket_->SetOption(opt, value);
 }
@@ -81,4 +89,4 @@ void AsyncPacketSocket::SetError(int error) {
   return socket_->SetError(error);
 }
 
-} // namespace talk_base
+}  // namespace talk_base

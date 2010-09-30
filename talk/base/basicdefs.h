@@ -26,7 +26,7 @@
  */
 
 #ifndef TALK_BASE_BASICDEFS_H__
-#define TAKL_BASE_BASICDEFS_H__
+#define TALK_BASE_BASICDEFS_H__
 
 #if HAVE_CONFIG_H
 #include "config.h"

@@ -25,66 +25,65 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __UDPPORT_H__
-#define __UDPPORT_H__
+#ifndef TALK_P2P_BASE_UDPPORT_H_
+#define TALK_P2P_BASE_UDPPORT_H_
+
+#include <string>
 
 #include "talk/base/asyncudpsocket.h"
 #include "talk/p2p/base/port.h"
 
 namespace talk_base {
-  class Thread;
-  class Network;
-  class SocketAddress;
-} // namespace talk_base
+class Thread;
+class Network;
+class SocketAddress;
+}
 
 namespace cricket {
 
-extern const std::string LOCAL_PORT_TYPE; // type of UDP ports
+extern const std::string LOCAL_PORT_TYPE;  // type of UDP ports
 
 // Communicates using a local UDP port.
-//
-// This class is designed to allow subclasses to take advantage of the
-// connection management provided by this class.  A subclass should take of all
-// packet sending and preparation, but when a packet is received, it should
-// call this UDPPort::OnReadPacket (3 arg) to dispatch to a connection.
 class UDPPort : public Port {
-public:
-  UDPPort(talk_base::Thread* thread, talk_base::SocketFactory* factory, 
-          talk_base::Network* network, const talk_base::SocketAddress& address);
+ public:
+  static UDPPort* Create(talk_base::Thread* thread,
+                         talk_base::SocketFactory* factory,
+                         talk_base::Network* network,
+                         const talk_base::SocketAddress& local_addr) {
+    UDPPort* port = new UDPPort(thread, factory, network);
+    if (!port->Init(local_addr)) {
+      delete port;
+      port = NULL;
+    }
+    return port;
+  }
+  UDPPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
+          talk_base::Network* network);
+  bool Init(const talk_base::SocketAddress& local_addr);
   virtual ~UDPPort();
 
   virtual void PrepareAddress();
-  virtual Connection* CreateConnection(const Candidate& address, CandidateOrigin origin);
+  virtual Connection* CreateConnection(const Candidate& address,
+                                       CandidateOrigin origin);
 
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError();
 
-protected:
-  UDPPort(talk_base::Thread* thread, const std::string &type, 
-          talk_base::SocketFactory* factory, talk_base::Network* network);
-
+ protected:
   // Handles sending using the local UDP socket.
-  virtual int SendTo(const void* data, size_t size, 
-      const talk_base::SocketAddress& addr, bool payload);
+  virtual int SendTo(const void* data, size_t size,
+                     const talk_base::SocketAddress& remote_addr, bool payload);
 
   // Dispatches the given packet to the port or connection as appropriate.
-  void OnReadPacket(
-      const char* data, size_t size, 
-      const talk_base::SocketAddress& remote_addr);
+  void OnReadPacket(const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr,
+                    talk_base::AsyncPacketSocket* socket);
 
-  talk_base::AsyncPacketSocket* socket() { return socket_; }
-
-private:
+ private:
   talk_base::AsyncPacketSocket* socket_;
   int error_;
-
-  // Receives packet signal from the local UDP Socket.
-  void OnReadPacketSlot(
-      const char* data, size_t size, 
-      const talk_base::SocketAddress& remote_addr, 
-      talk_base::AsyncPacketSocket* socket);
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // __UDPPORT_H__
+#endif  // TALK_P2P_BASE_UDPPORT_H_

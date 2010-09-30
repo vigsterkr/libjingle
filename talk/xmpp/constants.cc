@@ -204,9 +204,6 @@ const QName QN_SASL_MECHANISM_TOO_WEAK(true, NS_SASL, "mechanism-too-weak");
 const QName QN_SASL_NOT_AUTHORIZED(true, NS_SASL, "not-authorized");
 const QName QN_SASL_TEMPORARY_AUTH_FAILURE(true, NS_SASL, "temporary-auth-failure");
 
-const std::string NS_GOOGLE_AUTH("google:auth");
-const QName QN_MISSING_USERNAME(true, NS_GOOGLE_AUTH, "missing-username");
-
 const QName QN_DIALBACK_RESULT(true, NS_DIALBACK, "result");
 const QName QN_DIALBACK_VERIFY(true, NS_DIALBACK, "verify");
 
@@ -285,6 +282,18 @@ const QName QN_VCARD_AVATAR_HASH(true, NS_AVATAR_HASH, "hash");
 const QName QN_VCARD_AVATAR_HASH_MODIFIED(true, NS_AVATAR_HASH, "modified");
 
 const buzz::QName QN_NAME(true, STR_EMPTY, "name");
+const buzz::QName QN_AFFILIATION(true, STR_EMPTY, "affiliation");
+const buzz::QName QN_ROLE(true, STR_EMPTY, "role");
+
+#if defined(FEATURE_ENABLE_PSTN)
+const QName QN_VCARD_TEL(true, NS_VCARD, "TEL");
+const QName QN_VCARD_VOICE(true, NS_VCARD, "VOICE");
+const QName QN_VCARD_HOME(true, NS_VCARD, "HOME");
+const QName QN_VCARD_WORK(true, NS_VCARD, "WORK");
+const QName QN_VCARD_CELL(true, NS_VCARD, "CELL");
+const QName QN_VCARD_NUMBER(true, NS_VCARD, "NUMBER");
+#endif
+
 const QName QN_XML_LANG(true, NS_XML, "lang");
 
 const std::string STR_TYPE("type");
@@ -332,6 +341,12 @@ const std::string STR_SUBSCRIBED("subscribed");
 const std::string STR_UNSUBSCRIBE("unsubscribe");
 const std::string STR_UNSUBSCRIBED("unsubscribed");
 
+// Google Invite
+const std::string NS_GOOGLE_INVITE("google:subscribe");
+const QName QN_INVITATION(true, NS_GOOGLE_INVITE, "invitation");
+const QName QN_INVITE_NAME(true, NS_GOOGLE_INVITE, "name");
+const QName QN_INVITE_SUBJECT(true, NS_GOOGLE_INVITE, "subject");
+const QName QN_INVITE_MESSAGE(true, NS_GOOGLE_INVITE, "body");
 
 // JEP 0030
 const QName QN_NODE(true, STR_EMPTY, "node");
@@ -346,6 +361,11 @@ const QName QN_DISCO_FEATURE(true, NS_DISCO_INFO, "feature");
 const QName QN_DISCO_ITEMS_QUERY(true, NS_DISCO_ITEMS, "query");
 const QName QN_DISCO_ITEM(true, NS_DISCO_ITEMS, "item");
 
+const std::string NS_MUC_USER("http://jabber.org/protocol/muc#user");
+const QName QN_MUC_USER_CONTINUE(true, NS_MUC_USER, "continue");
+const QName QN_MUC_USER_X(true, NS_MUC_USER, "x");
+const QName QN_MUC_USER_ITEM(true, NS_MUC_USER, "item");
+const QName QN_MUC_USER_STATUS(true, NS_MUC_USER, "status");
 
 // JEP 0115
 const std::string NS_CAPS("http://jabber.org/protocol/caps");
@@ -382,6 +402,19 @@ const QName kQnTime(true, kNSTimestamp, "time");
 const QName kQnMilliseconds(true, STR_EMPTY, "ms");
 
 
+// Event tracking
+#ifdef FEATURE_ENABLE_TRACKING
+const std::string NS_GOOGLE_EVENT_TRACKING("google:client-usability-testing");
+const QName QN_EVENT_TRACKING(true, NS_GOOGLE_EVENT_TRACKING, "usage-stats");
+const QName QN_EVENT_TRACKING_BRANDID(true, NS_GOOGLE_EVENT_TRACKING, "bid");
+const QName QN_EVENT_TRACKING_EVENT(true, NS_GOOGLE_EVENT_TRACKING, "event");
+const QName QN_EVENT_TRACKING_VARIABLE_KEY(true, STR_EMPTY, "key");
+const QName QN_EVENT_TRACKING_VARIABLE_VALUE(true, STR_EMPTY, "value");
+const QName QN_EVENT_TRACKING_VARIABLE_TIME(true, STR_EMPTY, "time");
+const QName QN_EVENT_TRACKING_EVENT_GROUP(true,
+                                          NS_GOOGLE_EVENT_TRACKING, "events");
+#endif
+
 
 // Jingle Info
 const std::string NS_JINGLE_INFO("google:jingleinfo");
@@ -394,5 +427,41 @@ const QName QN_JINGLE_INFO_HOST(true, STR_EMPTY, "host");
 const QName QN_JINGLE_INFO_TCP(true, STR_EMPTY, "tcp");
 const QName QN_JINGLE_INFO_UDP(true, STR_EMPTY, "udp");
 const QName QN_JINGLE_INFO_TCPSSL(true, STR_EMPTY, "tcpssl");
+
+// Call Performance Logging
+const std::string NS_GOOGLE_CALLPERF_STATS("google:call-perf-stats");
+const QName QN_CALLPERF_STATS(true, NS_GOOGLE_CALLPERF_STATS, "callPerfStats");
+const QName QN_CALLPERF_SESSIONID(true, STR_EMPTY, "sessionId");
+const QName QN_CALLPERF_LOCALUSER(true, STR_EMPTY, "localUser");
+const QName QN_CALLPERF_REMOTEUSER(true, STR_EMPTY, "remoteUser");
+const QName QN_CALLPERF_STARTTIME(true, STR_EMPTY, "startTime");
+const QName QN_CALLPERF_CALL_LENGTH(true, STR_EMPTY, "callLength");
+const QName QN_CALLPERF_DATAPOINT(true, NS_GOOGLE_CALLPERF_STATS, "dataPoint");
+const QName QN_CALLPERF_DATAPOINT_TIME(true, STR_EMPTY, "timeStamp");
+const QName QN_CALLPERF_DATAPOINT_FRACTION_LOST(true, STR_EMPTY, "fraction_lost");
+const QName QN_CALLPERF_DATAPOINT_CUM_LOST(true, STR_EMPTY, "cum_lost");
+const QName QN_CALLPERF_DATAPOINT_EXT_MAX(true, STR_EMPTY, "ext_max");
+const QName QN_CALLPERF_DATAPOINT_JITTER(true, STR_EMPTY, "jitter");
+const QName QN_CALLPERF_DATAPOINT_RTT(true, STR_EMPTY, "RTT");
+const QName QN_CALLPERF_DATAPOINT_BYTES_R(true, STR_EMPTY, "bytesReceived");
+const QName QN_CALLPERF_DATAPOINT_PACKETS_R(true, STR_EMPTY, "packetsReceived");
+const QName QN_CALLPERF_DATAPOINT_BYTES_S(true, STR_EMPTY, "bytesSent");
+const QName QN_CALLPERF_DATAPOINT_PACKETS_S(true, STR_EMPTY, "packetsSent");
+const QName QN_CALLPERF_CONNECTION(true, NS_GOOGLE_CALLPERF_STATS, "connection");
+const QName QN_CALLPERF_CONNECTION_LOCAL_ADDRESS(true, STR_EMPTY, "localAddress");
+const QName QN_CALLPERF_CONNECTION_REMOTE_ADDRESS(true, STR_EMPTY, "remoteAddress");
+
+// Muc invites.
+const QName QN_MUC_USER_INVITE(true, NS_MUC_USER, "invite");
+
+// Multiway audio/video.
+const std::string NS_GOOGLE_MUC_USER("google:muc#user");
+const QName QN_GOOGLE_MUC_USER_AVAILABLE_MEDIA(true, NS_GOOGLE_MUC_USER, "available-media");
+const QName QN_GOOGLE_MUC_USER_ENTRY(true, NS_GOOGLE_MUC_USER, "entry");
+const QName QN_GOOGLE_MUC_USER_MEDIA(true, NS_GOOGLE_MUC_USER, "media");
+const QName QN_GOOGLE_MUC_USER_TYPE(true, NS_GOOGLE_MUC_USER, "type");
+const QName QN_GOOGLE_MUC_USER_SRC_ID(true, NS_GOOGLE_MUC_USER, "src-id");
+const QName QN_GOOGLE_MUC_USER_STATUS(true, NS_GOOGLE_MUC_USER, "status");
+const QName QN_LABEL(true, STR_EMPTY, "label");
 
 }

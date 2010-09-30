@@ -25,6 +25,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// Copyright 2005 Google Inc.  All Rights Reserved.
+//
+
+
 #ifndef TALK_BASE_HTTPBASE_H__
 #define TALK_BASE_HTTPBASE_H__
 
@@ -34,30 +38,41 @@ namespace talk_base {
 
 class StreamInterface;
 
-//////////////////////////////////////////////////////////////////////
-// HttpParser
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// HttpParser - Parses an HTTP stream provided via Process and end_of_input, and
+// generates events for:
+//  Structural Elements: Leader, Headers, Document Data
+//  Events: End of Headers, End of Document, Errors
+///////////////////////////////////////////////////////////////////////////////
 
 class HttpParser {
 public:
+  enum ProcessResult { PR_CONTINUE, PR_BLOCK, PR_COMPLETE };
   HttpParser();
   virtual ~HttpParser();
   
   void reset();
-  bool process(const char* buffer, size_t len, size_t& read, HttpError& err);
-  void end_of_input();
+  ProcessResult Process(const char* buffer, size_t len, size_t* processed,
+                        HttpError* error);
+  bool is_valid_end_of_input() const;
   void complete(HttpError err);
   
+  size_t GetDataRemaining() const { return data_size_; }
+
 protected:
-  bool process_line(const char* line, size_t len, HttpError& err);
+  ProcessResult ProcessLine(const char* line, size_t len, HttpError* error);
 
   // HttpParser Interface
-  virtual HttpError onHttpRecvLeader(const char* line, size_t len) = 0;
-  virtual HttpError onHttpRecvHeader(const char* name, size_t nlen,
-                                     const char* value, size_t vlen) = 0;
-  virtual HttpError onHttpRecvHeaderComplete(bool chunked, size_t& data_size) = 0;
-  virtual HttpError onHttpRecvData(const char* data, size_t len, size_t& read) = 0;
-  virtual void onHttpRecvComplete(HttpError err) = 0;
+  virtual ProcessResult ProcessLeader(const char* line, size_t len,
+                                      HttpError* error) = 0;
+  virtual ProcessResult ProcessHeader(const char* name, size_t nlen,
+                                      const char* value, size_t vlen,
+                                      HttpError* error) = 0;
+  virtual ProcessResult ProcessHeaderComplete(bool chunked, size_t& data_size,
+                                              HttpError* error) = 0;
+  virtual ProcessResult ProcessData(const char* data, size_t len, size_t& read,
+                                    HttpError* error) = 0;
+  virtual void OnComplete(HttpError err) = 0;
   
 private:
   enum State {
@@ -69,31 +84,41 @@ private:
   size_t data_size_;
 };
 
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 // IHttpNotify
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 enum HttpMode { HM_NONE, HM_CONNECT, HM_RECV, HM_SEND };
 
 class IHttpNotify {
 public:
+  virtual ~IHttpNotify() {}
   virtual HttpError onHttpHeaderComplete(bool chunked, size_t& data_size) = 0;
   virtual void onHttpComplete(HttpMode mode, HttpError err) = 0;
   virtual void onHttpClosed(HttpError err) = 0;
 };
 
-//////////////////////////////////////////////////////////////////////
-// HttpBase
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// HttpBase - Provides a state machine for implementing HTTP-based components.
+// Attach HttpBase to a StreamInterface which represents a bidirectional HTTP
+// stream, and then call send() or recv() to initiate sending or receiving one
+// side of an HTTP transaction.  By default, HttpBase operates as an I/O pump,
+// moving data from the HTTP stream to the HttpData object and vice versa.
+// However, it can also operate in stream mode, in which case the user of the
+// stream interface drives I/O via calls to Read().
+///////////////////////////////////////////////////////////////////////////////
 
-class HttpBase : private HttpParser, public sigslot::has_slots<> {
+class HttpBase
+: private HttpParser,
+  public sigslot::has_slots<>
+{
 public:
   HttpBase();
   virtual ~HttpBase();
 
   void notify(IHttpNotify* notify) { notify_ = notify; }
   bool attach(StreamInterface* stream);
-  StreamInterface* stream() { return stream_; }
+  StreamInterface* stream() { return http_stream_; }
   StreamInterface* detach();
   bool isConnected() const;
 
@@ -106,28 +131,62 @@ public:
   void set_ignore_data(bool ignore) { ignore_data_ = ignore; }
   bool ignore_data() const { return ignore_data_; }
 
+  // Obtaining this stream puts HttpBase into stream mode until the stream
+  // is closed.  HttpBase can only expose one open stream interface at a time.
+  // Further calls will return NULL.
+  StreamInterface* GetDocumentStream();
+
 protected:
+  // Do cleanup when the http stream closes (error may be 0 for a clean
+  // shutdown), and return the error code to signal.
+  HttpError HandleStreamClose(int error);
+
+  // DoReceiveLoop acts as a data pump, pulling data from the http stream,
+  // pushing it through the HttpParser, and then populating the HttpData object
+  // based on the callbacks from the parser.  One of the most interesting
+  // callbacks is ProcessData, which provides the actual http document body.
+  // This data is then written to the HttpData::document.  As a result, data
+  // flows from the network to the document, with some incidental protocol
+  // parsing in between.
+  // Ideally, we would pass in the document* to DoReceiveLoop, to more easily
+  // support GetDocumentStream().  However, since the HttpParser is callback
+  // driven, we are forced to store the pointer somewhere until the callback
+  // is triggered.
+  // Returns true if the received document has finished, and
+  // HttpParser::complete should be called.
+  bool DoReceiveLoop(HttpError* err);
+
+  void read_and_process_data();
   void flush_data();
-  void queue_headers();
+  bool queue_headers();
   void do_complete(HttpError err = HE_NONE);
 
-  void OnEvent(StreamInterface* stream, int events, int error);
-  
+  void OnHttpStreamEvent(StreamInterface* stream, int events, int error);
+  void OnDocumentEvent(StreamInterface* stream, int events, int error);
+
   // HttpParser Interface
-  virtual HttpError onHttpRecvLeader(const char* line, size_t len);
-  virtual HttpError onHttpRecvHeader(const char* name, size_t nlen,
-                                     const char* value, size_t vlen);
-  virtual HttpError onHttpRecvHeaderComplete(bool chunked, size_t& data_size);
-  virtual HttpError onHttpRecvData(const char* data, size_t len, size_t& read);
-  virtual void onHttpRecvComplete(HttpError err);
+  virtual ProcessResult ProcessLeader(const char* line, size_t len,
+                                      HttpError* error);
+  virtual ProcessResult ProcessHeader(const char* name, size_t nlen,
+                                      const char* value, size_t vlen,
+                                      HttpError* error);
+  virtual ProcessResult ProcessHeaderComplete(bool chunked, size_t& data_size,
+                                              HttpError* error);
+  virtual ProcessResult ProcessData(const char* data, size_t len, size_t& read,
+                                    HttpError* error);
+  virtual void OnComplete(HttpError err);
 
 private:
+  class DocumentStream;
+  friend class DocumentStream;
+
   enum { kBufferSize = 32 * 1024 };
 
   HttpMode mode_;
   HttpData* data_;
   IHttpNotify* notify_;
-  StreamInterface* stream_;
+  StreamInterface* http_stream_;
+  DocumentStream* doc_stream_;
   char buffer_[kBufferSize];
   size_t len_;
 
@@ -135,7 +194,7 @@ private:
   HttpData::const_iterator header_;
 };
 
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 } // namespace talk_base
 

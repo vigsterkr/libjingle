@@ -61,9 +61,9 @@ public:
   class Data {
   public:
     Data(const std::string & ns, const std::string & local) :
-      refcount_(1),
       namespace_(ns),
-      localPart_(local) {}
+      localPart_(local),
+      refcount_(1) {}
 
     Data() : refcount_(0) {}
       

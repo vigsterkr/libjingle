@@ -37,10 +37,11 @@ namespace cricket {
 
 class VoiceChannel;
 
-
 struct AudioInfo {
   int input_level;
   int output_level;
+  typedef std::vector<std::pair<uint32, int> > StreamList;
+  StreamList active_streams; // ssrcs contributing to output_level
 };
 
 class AudioMonitor : public talk_base::MessageHandler, 

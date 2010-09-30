@@ -1,37 +1,58 @@
 /*
- * Jingle call example
+ * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CRICKET_EXAMPLES_CALL_CALLCLIENT_H__
-#define CRICKET_EXAMPLES_CALL_CALLCLIENT_H__
+#ifndef TALK_EXAMPLES_CALL_CALLCLIENT_H_
+#define TALK_EXAMPLES_CALL_CALLCLIENT_H_
 
 #include <map>
 #include <string>
-#include "talk/base/autodetectproxy.h"
+#include <vector>
+
 #include "talk/p2p/base/session.h"
-#include "talk/p2p/client/httpportallocator.h"
+#include "talk/session/phone/mediachannel.h"
 #include "talk/xmpp/xmppclient.h"
-#include "talk/examples/login/status.h"
+#include "talk/examples/call/status.h"
 #include "talk/examples/call/console.h"
+#ifdef USE_TALK_SOUND
+#include "talk/sound/soundsystemfactory.h"
+#endif
 
 namespace buzz {
 class PresencePushTask;
+class PresenceOutTask;
+class MucInviteRecvTask;
+class MucInviteSendTask;
+class FriendInviteSendTask;
+class VoicemailJidRequester;
+class DiscoInfoQueryTask;
+class Muc;
 class Status;
+class MucStatus;
+struct AvailableMediaEntry;
 }
 
 namespace talk_base {
@@ -41,7 +62,8 @@ class NetworkManager;
 
 namespace cricket {
 class PortAllocator;
-class PhoneSessionClient;
+class MediaEngine;
+class MediaSessionClient;
 class Receiver;
 class Call;
 class SessionManagerTask;
@@ -53,53 +75,112 @@ struct RosterItem {
   std::string status;
 };
 
+class NullRenderer;
+
 class CallClient: public sigslot::has_slots<> {
-public:
-  CallClient(buzz::XmppClient* xmpp_client);
+ public:
+  explicit CallClient(buzz::XmppClient* xmpp_client);
   ~CallClient();
 
-  cricket::PhoneSessionClient* phone_client() const { return phone_client_; }
+  cricket::MediaSessionClient* media_client() const { return media_client_; }
+  void SetMediaEngine(cricket::MediaEngine* media_engine) {
+    media_engine_ = media_engine;
+  }
+  void SetAutoAccept(bool auto_accept) {
+    auto_accept_ = auto_accept;
+  }
+  void SetPmucDomain(const std::string &pmuc_domain) {
+      pmuc_domain_ = pmuc_domain;
+  }
+  void SetConsole(Console *console) {
+    console_ = console;
+  }
 
-  void PrintRoster();
-  void MakeCallTo(const std::string& name);
-  void SetConsole(Console *console) {console_ = console;}
   void ParseLine(const std::string &str);
 
-private:
-  typedef std::map<std::string,RosterItem> RosterMap;
+  void InviteFriend(const std::string& user);
+  void JoinMuc(const std::string& room);
+  void InviteToMuc(const std::string& user, const std::string& room);
+  void LeaveMuc(const std::string& room);
+  void SetPortAllocatorFlags(uint32 flags) { portallocator_flags_ = flags; }
+
+  typedef std::map<buzz::Jid, buzz::Muc*> MucMap;
+
+  const MucMap& mucs() const {
+    return mucs_;
+  }
+
+ private:
+  void AddStream(uint32 audio_src_id, uint32 video_src_id);
+  void RemoveStream(uint32 audio_src_id, uint32 video_src_id);
+  void OnStateChange(buzz::XmppEngine::State state);
+
+  void InitPhone();
+  void InitPresence();
+  void RefreshStatus();
+  void OnRequestSignaling();
+  void OnCallCreate(cricket::Call* call);
+  void OnCallDestroy(cricket::Call* call);
+  void OnSessionState(cricket::Call* call,
+                      cricket::BaseSession* session,
+                      cricket::BaseSession::State state);
+  void OnStatusUpdate(const buzz::Status& status);
+  void OnMucInviteReceived(const buzz::Jid& inviter, const buzz::Jid& room,
+      const std::vector<buzz::AvailableMediaEntry>& avail);
+  void OnMucJoined(const buzz::Jid& endpoint);
+  void OnMucStatusUpdate(const buzz::Jid& jid, const buzz::MucStatus& status);
+  void OnMucLeft(const buzz::Jid& endpoint, int error);
+  void OnDevicesChange();
+  void OnFoundVoicemailJid(const buzz::Jid& to, const buzz::Jid& voicemail);
+  void OnVoicemailJidError(const buzz::Jid& to);
+
+  static const std::string strerror(buzz::XmppEngine::Error err);
+
+  void PrintRoster();
+  void MakeCallTo(const std::string& name, bool video);
+  void PlaceCall(const buzz::Jid& jid, bool is_muc, bool video);
+  void CallVoicemail(const std::string& name);
+  void Accept();
+  void Reject();
+  void Quit();
+
+  void GetDevices();
+  void PrintDevices(const std::vector<std::string>& names);
+
+  void SetVolume(const std::string& level);
+
+  typedef std::map<std::string, RosterItem> RosterMap;
 
   Console *console_;
   buzz::XmppClient* xmpp_client_;
   talk_base::Thread* worker_thread_;
-  talk_base::NetworkManager network_manager_;
-  talk_base::AutoDetectProxy *proxy_detect_;
-  cricket::HttpPortAllocator* port_allocator_;
+  talk_base::NetworkManager* network_manager_;
+  cricket::PortAllocator* port_allocator_;
   cricket::SessionManager* session_manager_;
   cricket::SessionManagerTask* session_manager_task_;
-  cricket::PhoneSessionClient* phone_client_;
-  
-  cricket::Call* call_; 
-  cricket::Session *session_;
+  cricket::MediaEngine* media_engine_;
+  cricket::MediaSessionClient* media_client_;
+  MucMap mucs_;
+
+  cricket::Call* call_;
+  cricket::BaseSession *session_;
   bool incoming_call_;
+  bool auto_accept_;
+  std::string pmuc_domain_;
+  NullRenderer* local_renderer_;
+  NullRenderer* remote_renderer_;
 
+  buzz::Status my_status_;
   buzz::PresencePushTask* presence_push_;
+  buzz::PresenceOutTask* presence_out_;
+  buzz::MucInviteRecvTask* muc_invite_recv_;
+  buzz::MucInviteSendTask* muc_invite_send_;
+  buzz::FriendInviteSendTask* friend_invite_send_;
   RosterMap* roster_;
-
-  void OnStateChange(buzz::XmppEngine::State state);
-  void OnJingleInfo(const std::string &relay_token, const std::vector<std::string> &relay_hosts, 
-		    const std::vector<talk_base::SocketAddress> &stun_hosts);
-  void OnProxyDetect(talk_base::SignalThread *thread);
-  void InitPhone();
-  void OnRequestSignaling();
-  void OnCallCreate(cricket::Call* call);
-  void OnCallDestroy(cricket::Call* call);
-  const std::string strerror(buzz::XmppEngine::Error err);
-  void OnSessionState(cricket::Call* call,
-                      cricket::Session* session,
-                      cricket::Session::State state);
-
-  void InitPresence();
-  void OnStatusUpdate(const buzz::Status& status);
+  uint32 portallocator_flags_;
+#ifdef USE_TALK_SOUND
+  cricket::SoundSystemFactory* sound_system_factory_;
+#endif
 };
 
-#endif // CRICKET_EXAMPLES_CALL_CALLCLIENT_H__
+#endif  // TALK_EXAMPLES_CALL_CALLCLIENT_H_

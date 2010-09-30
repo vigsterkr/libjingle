@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -29,6 +29,7 @@
 #define _xmppengineimpl_h_
 
 #include <sstream>
+#include <vector>
 #include "talk/xmpp/xmppengine.h"
 #include "talk/xmpp/xmppstanzaparser.h"
 
@@ -124,7 +125,7 @@ public:
      if (subcode) {
        *subcode = subcode_;
      }
-     return error_code_; 
+     return error_code_;
   }
 
   //! The stream:error stanza, when the error is XmppEngine::ERROR_STREAM.
@@ -207,6 +208,7 @@ private:
   class StanzaParseHandler : public XmppStanzaParseHandler {
   public:
     StanzaParseHandler(XmppEngineImpl * outer) : outer_(outer) {}
+    virtual ~StanzaParseHandler() {}
     virtual void StartStream(const XmlElement * pelStream)
       { outer_->IncomingStart(pelStream); }
     virtual void Stanza(const XmlElement * pelStanza)
@@ -226,8 +228,8 @@ private:
    private:
     XmppEngineImpl* engine_;
     State state_;
-    Error error_;  
-    
+    Error error_;
+
   };
 
   friend class StanzaParseHandler;
@@ -245,7 +247,7 @@ private:
   bool tls_needed_;
   std::string tls_server_hostname_;
   std::string tls_server_domain_;
-  scoped_ptr<XmppLoginTask> login_task_;
+  talk_base::scoped_ptr<XmppLoginTask> login_task_;
   std::string lang_;
 
   int next_id_;
@@ -254,20 +256,20 @@ private:
   bool encrypted_;
   Error error_code_;
   int subcode_;
-  scoped_ptr<XmlElement> stream_error_;
+  talk_base::scoped_ptr<XmlElement> stream_error_;
   bool raised_reset_;
   XmppOutputHandler* output_handler_;
   XmppSessionHandler* session_handler_;
 
-  typedef STD_VECTOR(XmppStanzaHandler*) StanzaHandlerVector;
-  scoped_ptr<StanzaHandlerVector> stanza_handlers_[HL_COUNT];
+  typedef std::vector<XmppStanzaHandler*> StanzaHandlerVector;
+  talk_base::scoped_ptr<StanzaHandlerVector> stanza_handlers_[HL_COUNT];
 
-  typedef STD_VECTOR(XmppIqEntry*) IqEntryVector;
-  scoped_ptr<IqEntryVector> iq_entries_;
+  typedef std::vector<XmppIqEntry*> IqEntryVector;
+  talk_base::scoped_ptr<IqEntryVector> iq_entries_;
 
-  scoped_ptr<SaslHandler> sasl_handler_;
+  talk_base::scoped_ptr<SaslHandler> sasl_handler_;
 
-  scoped_ptr<std::stringstream> output_;
+  talk_base::scoped_ptr<std::stringstream> output_;
 };
 
 }

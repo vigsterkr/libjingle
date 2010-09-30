@@ -1,57 +1,83 @@
 Libjingle
 
-Libjingle is a set of components provided by Google to interoperate with Google
-Talk's peer-to-peer and voice capabilities. This package will create several
-static libraries you may link to your project as needed.
+1. Introduction
+
+Libjingle is a set of components provided by Google to implement Jingle
+protocols XEP-166 (http://xmpp.org/extensions/xep-0166.html) and XEP-167
+(http://xmpp.org/extensions/xep-0167.html). Libjingle is also backward
+compatible with Google Talk Call Signaling
+(http://code.google.com/apis/talk/call_signaling.html). This package will
+create several static libraries you may link to your projects as needed.
 
 -talk               - No source files in talk/, just these subdirectories
-|-base              - Contains basic low-level portable utility functions for 
+|-base              - Contains basic low-level portable utility functions for
 |                     things like threads and sockets
 |-p2p               - The P2P stack
   |-base            - Base p2p functionality
   |-client          - Hooks to tie it into XMPP
 |-session           - Signaling
   |-phone           - Signaling code specific to making phone calls
-|-third_party       - Components that aren't ours
-  |-mediastreamer   - Media components for dealing with sound hardware and 
-  |                   voice codecs
+    |-testdata      - Samples of RTP voice and video dump
+  |-tunnel          - Tunnel session and channel
 |-xmllite           - XML parser
 |-xmpp              - XMPP engine
 
-In addition, this package contains two examples in talk/examples which 
+In addition, this package contains two examples in talk/examples which
 illustrate the basic concepts of how the provided classes work.
 
-The xmllite component of libjingle depends on expat. You can download expat 
-from http://expat.sourceforge.net/.
+2. How to Build
 
-mediastreamer, the media components used by the example applications depend on
-the oRTP and iLBC components from linphone, which can be found at 
-http://www.linphone.org. Linphone, in turn depends on GLib, which can be found
-at http://www.gtk.org. This GLib dependency should be removed in future 
-releases.
+Libjingle is built with swtoolkit (http://code.google.com/p/swtoolkit/), which
+is a set of extensions to the open-source SCons build tool (www.scons.org).
+  * First, install Python 2.4 or later from http://www.python.org/.
 
-Building Libjingle
+  * Second, install the stand alone scons-local package 2.0.0 or later from
+    http://www.scons.org/download.php and set an environment variable,
+    SCONS_DIR, to point to the directory containing SCons, for example,
+    /src/libjingle/scons-local/scons-local-2.0.0.final.0/.
 
-Once the dependencies are installed, run ./configure. ./configure will return
-an error if it failed to locate the proper dependencies. If ./configure
-succeeds, run 'make' to build the components and examples.
+  * Third, install swtoolkit from http://code.google.com/p/swtoolkit/.
 
-When the build is complete, you can run the call example from 
-talk/examples/call and the pcp example from talk/examples/pcp.
+  * Finally, Libjingle depends on two open-source projects, expat and srtp.
+    Download expat from http://sourceforge.net/projects/expat/ to
+    talk/third_party/expat-2.0.1/. Follow the instructions at
+    http://sourceforge.net/projects/srtp/develop to download latest srtp to
+    talk/third_party/srtp. Note that srtp-1.4.4 does not work since it misses
+    the extensions used by Libjingle.
+    If you put expat or srtp in a different directory, you need to edit
+    talk/libjingle.scons correspondingly.
 
-Relay Server
+2.1 Build Libjingle under Linux or OS X
+  * First, make sure the SCONS_DIR environment variable is set correctly.
+  * Second, run talk/third_party/expat-2.0.1/configure and
+    talk/third_party/srtp/configure.
+  * Third, go to the talk/ directory and run $path_to_swtoolkit/hammer.sh. Run
+    $path_to_swtoolkit/hammer.sh --help for information on how to build for
+    different modes.
 
-Libjingle will also build a relay server that may be used to relay traffic
-when a direct peer-to-peer connection could not be established. The relay
-server will build in talk/p2p/base/relayserver and will listen on UDP
-ports 5000 and 5001. See the Libjingle Developer Guide at 
-http://code.google.com/apis/talk/index.html for information about configuring
-a client to use this relay server.
+2.2 Build Libjingle under Windows
+  * First, make sure the SCONS_DIR environment variable is set correctly and
+    Microsoft Visual Studio is installed.
+  * Second, copy talk/third_party/srtp/config.hw to
+    talk/third_party/srtp/crypto/include/config.h.
+  * Third, go to the talk/ directory and run $path_to_swtoolkit/hammer.bat. Run
+    $path_to_swtoolkit/hammer.sh --help for information on how to build for
+    different modes. You can run the last step under Visual Studio Command
+    Prompt if Visual Studio tools are not under the path environment variable.
 
-STUN Server
+The built binaries are under talk/build/dbg/staging or talk/build/opt/staging,
+depending on the build mode. When the build is complete, you can run the
+examples, login or call. For the call sample, you can specify the input and
+output RTP dump for voice and video. This package provides two samples of input
+RTP dump: voice.rtpdump is a single channel, 16Khz voice encoded with G722, and
+video.rtpdump is 320x240 video encoded with H264 AVC at 30 frames per second.
+These provided samples will inter-operate with Google Talk Video. If you use
+other input RTP dump, you may need to change the codecs in call_main.cc, lines
+215 - 222.
 
-Lastly, Libjingle builds a STUN server which implements the STUN protocol for
-Simple Traversal of UDP over NAT. The STUN server is built as
-talk/p2p/base/stunserver and listens on UDP port 7000. See the Libjingle
-Developer Guide at http://code.google.com/apis/talk/index.html for information
-about configuring a client to use this STUN server.
+Libjingle also builds two server tools, a relay server and a STUN server. The
+relay server may be used to relay traffic when a direct peer-to-peer connection
+could not be established. The STUN Server implements the STUN protocol for
+Simple Traversal of UDP over NAT. See the Libjingle Developer Guide at
+http://code.google.com/apis/talk/index.html for information about configuring a
+client to use this relay server and this STUN server.

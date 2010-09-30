@@ -1,155 +1,111 @@
-#include "talk/base/common.h"
-#include "talk/base/firewallsocketserver.h"
-#include "talk/base/httpclient.h"
-#include "talk/base/logging.h"
-#include "talk/base/physicalsocketserver.h"
-#include "talk/base/socketadapters.h"
-#include "talk/base/socketpool.h"
-#include "talk/base/ssladapter.h"
+/*
+ * libjingle
+ * Copyright 2004--2010, Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "talk/base/asynchttprequest.h"
 
-using namespace talk_base;
+namespace talk_base {
 
-///////////////////////////////////////////////////////////////////////////////
-// HttpMonitor
-///////////////////////////////////////////////////////////////////////////////
-
-HttpMonitor::HttpMonitor(SocketServer *ss) {
-  ASSERT(talk_base::Thread::Current() != NULL);
-  ss_ = ss;
-  reset();
-}
-
-void HttpMonitor::Connect(talk_base::HttpClient *http) {
-  http->SignalHttpClientComplete.connect(this,
-    &HttpMonitor::OnHttpClientComplete);
-}
-
-void HttpMonitor::OnHttpClientComplete(talk_base::HttpClient * http, int err) {
-  complete_ = true;
-  err_ = err;
-  ss_->WakeUp();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// SslSocketFactory
-///////////////////////////////////////////////////////////////////////////////
-
-talk_base::Socket * SslSocketFactory::CreateSocket(int type) {
-  return factory_->CreateSocket(type);
-}
-
-talk_base::AsyncSocket * SslSocketFactory::CreateAsyncSocket(int type) {
-  talk_base::AsyncSocket * socket = factory_->CreateAsyncSocket(type);
-  if (!socket)
-    return 0;
-
-  // Binary logging happens at the lowest level 
-  if (!logging_label_.empty() && binary_mode_) {
-    socket = new talk_base::LoggingSocketAdapter(socket, logging_level_, 
-                                                 logging_label_.c_str(),
-                                                 binary_mode_);
-  }
-
-  if (proxy_.type) {
-    talk_base::AsyncSocket * proxy_socket = 0;
-    if (proxy_.type == talk_base::PROXY_SOCKS5) {
-      proxy_socket = new talk_base::AsyncSocksProxySocket(socket, proxy_.address,
-        proxy_.username, proxy_.password);
-    } else {
-      // Note: we are trying unknown proxies as HTTPS currently
-      proxy_socket = new talk_base::AsyncHttpsProxySocket(socket,
-        agent_, proxy_.address,
-        proxy_.username, proxy_.password);
-    }
-    if (!proxy_socket) {
-      delete socket;
-      return 0;
-    }
-    socket = proxy_socket;  // for our purposes the proxy is now the socket
-  }
-
-  if (!hostname_.empty()) {
-    talk_base::SSLAdapter * ssl_adapter = talk_base::SSLAdapter::Create(socket);
-    ssl_adapter->set_ignore_bad_cert(ignore_bad_cert_);
-    ssl_adapter->StartSSL(hostname_.c_str(), true);
-    socket = ssl_adapter;
-  }
-
-  // Regular logging occurs at the highest level
-  if (!logging_label_.empty() && !binary_mode_) {
-    socket = new talk_base::LoggingSocketAdapter(socket, logging_level_, 
-                                                 logging_label_.c_str(),
-                                                 binary_mode_);
-  }
-  return socket;
-}
+enum { MSG_TIMEOUT = SignalThread::ST_MSG_FIRST_AVAILABLE };
+static const int kDefaultHTTPTimeout = 30 * 1000;  // 30 sec
 
 ///////////////////////////////////////////////////////////////////////////////
 // AsyncHttpRequest
 ///////////////////////////////////////////////////////////////////////////////
 
-const int kDefaultHTTPTimeout = 30 * 1000; // 30 sec
-
 AsyncHttpRequest::AsyncHttpRequest(const std::string &user_agent)
-: firewall_(0), port_(80), secure_(false),
-  timeout_(kDefaultHTTPTimeout), fail_redirect_(false),
-  client_(user_agent.c_str(), NULL)
-{
+    : firewall_(NULL), port_(80), secure_(false),
+      timeout_(kDefaultHTTPTimeout), fail_redirect_(false),
+      factory_(Thread::Current()->socketserver(), user_agent),
+      pool_(&factory_), client_(user_agent.c_str(), &pool_), error_(HE_NONE)  {
+  client_.SignalHttpClientComplete.connect(this,
+      &AsyncHttpRequest::OnComplete);
 }
 
-void AsyncHttpRequest::DoWork() {
-  // TODO: Rewrite this to use the thread's native socket server, and a more
-  // natural flow?
+AsyncHttpRequest::~AsyncHttpRequest() {
+}
 
-  talk_base::PhysicalSocketServer physical;
-  talk_base::SocketServer * ss = &physical;
-  if (firewall_) {
-    ss = new talk_base::FirewallSocketServer(ss, firewall_);
-  }
-
-  SslSocketFactory factory(ss, client_.agent());
-  factory.SetProxy(proxy_);
+void AsyncHttpRequest::OnWorkStart() {
+  factory_.SetProxy(proxy_);
   if (secure_)
-    factory.UseSSL(host_.c_str());
+    factory_.UseSSL(host_.c_str());
 
-  //factory.SetLogging("AsyncHttpRequest");
-
-  talk_base::ReuseSocketPool pool(&factory);
-  client_.set_pool(&pool);
-  
-  bool transparent_proxy = (port_ == 80)
-    && ((proxy_.type == talk_base::PROXY_HTTPS)
-        || (proxy_.type == talk_base::PROXY_UNKNOWN));
-
+  bool transparent_proxy = (port_ == 80) &&
+           ((proxy_.type == PROXY_HTTPS) || (proxy_.type == PROXY_UNKNOWN));
   if (transparent_proxy) {
     client_.set_proxy(proxy_);
   }
   client_.set_fail_redirect(fail_redirect_);
+  client_.set_server(SocketAddress(host_, port_));
 
-  talk_base::SocketAddress server(host_, port_);
-  client_.set_server(server);
+  LOG(LS_INFO) << "HttpRequest start: " << host_ + client_.request().path;
 
-  HttpMonitor monitor(ss);
-  monitor.Connect(&client_);
+  Thread::Current()->PostDelayed(timeout_, this, MSG_TIMEOUT);
   client_.start();
-  ss->Wait(timeout_, true);
-  if (!monitor.done()) {
-    LOG(LS_INFO) << "AsyncHttpRequest request timed out";
-    client_.reset();
-    return;
-  }
-  
-  if (monitor.error()) {
-    LOG(LS_INFO) << "AsyncHttpRequest request error: " << monitor.error();
-    if (monitor.error() == talk_base::HE_AUTH) {
-      //proxy_auth_required_ = true;
+}
+
+void AsyncHttpRequest::OnWorkStop() {
+  // worker is already quitting, no need to explicitly quit
+  LOG(LS_INFO) << "HttpRequest cancelled";
+}
+
+void AsyncHttpRequest::OnComplete(HttpClient* client, HttpErrorType error) {
+  Thread::Current()->Clear(this, MSG_TIMEOUT);
+
+  set_error(error);
+  if (!error) {
+    LOG(LS_INFO) << "HttpRequest completed successfully";
+
+    std::string value;
+    if (client_.response().hasHeader(HH_LOCATION, &value)) {
+      response_redirect_ = value.c_str();
     }
+  } else {
+    LOG(LS_INFO) << "HttpRequest completed with error: " << error;
+  }
+
+  worker()->Quit();
+}
+
+void AsyncHttpRequest::OnMessage(Message* message) {
+  if (message->message_id != MSG_TIMEOUT) {
+    SignalThread::OnMessage(message);
     return;
   }
 
-  std::string value;
-  if (client_.response().hasHeader(HH_LOCATION, &value)) {
-    response_redirect_ = value.c_str();
-  }
+  LOG(LS_INFO) << "HttpRequest timed out";
+  client_.reset();
+  worker()->Quit();
 }
+
+void AsyncHttpRequest::DoWork() {
+  // Do nothing while we wait for the request to finish. We only do this so
+  // that we can be a SignalThread; in the future this class should not be
+  // a SignalThread, since it does not need to spawn a new thread.
+  Thread::Current()->ProcessMessages(kForever);
+}
+
+}  // namespace talk_base

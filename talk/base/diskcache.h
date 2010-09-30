@@ -54,7 +54,7 @@ class StreamInterface;
 class DiskCache {
 public:
   DiskCache();
-  ~DiskCache();
+  virtual ~DiskCache();
 
   bool Initialize(const std::string& folder, size_t size);
   bool Purge();

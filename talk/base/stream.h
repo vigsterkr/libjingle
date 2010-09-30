@@ -1,27 +1,27 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -29,7 +29,9 @@
 #define TALK_BASE_STREAM_H__
 
 #include "talk/base/basictypes.h"
+#include "talk/base/criticalsection.h"
 #include "talk/base/logging.h"
+#include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
 
@@ -39,7 +41,7 @@ namespace talk_base {
 // StreamInterface is a generic asynchronous stream interface, supporting read,
 // write, and close operations, and asynchronous signalling of state changes.
 // The interface is designed with file, memory, and socket implementations in
-// mind.
+// mind.  Some implementations offer extended operations, such as seeking.
 ///////////////////////////////////////////////////////////////////////////////
 
 // The following enumerations are declared outside of the StreamInterface
@@ -61,9 +63,11 @@ enum StreamResult { SR_ERROR, SR_SUCCESS, SR_BLOCK, SR_EOS };
 //  SE_WRITE: Data can be written, so Write is likely to not return SR_BLOCK
 enum StreamEvent { SE_OPEN = 1, SE_READ = 2, SE_WRITE = 4, SE_CLOSE = 8 };
 
-class StreamInterface {
+class Thread;
+
+class StreamInterface : public MessageHandler {
  public:
-  virtual ~StreamInterface() { }
+  virtual ~StreamInterface();
 
   virtual StreamState GetState() const = 0;
 
@@ -84,23 +88,120 @@ class StreamInterface {
                             size_t* read, int* error) = 0;
   virtual StreamResult Write(const void* data, size_t data_len,
                              size_t* written, int* error) = 0;
-
   // Attempt to transition to the SS_CLOSED state.  SE_CLOSE will not be
   // signalled as a result of this call.
   virtual void Close() = 0;
 
-  // Return the number of bytes that will be returned by Read, if known.
-  virtual bool GetSize(size_t* size) const = 0;
+  // Streams may signal one or more StreamEvents to indicate state changes.
+  // The first argument identifies the stream on which the state change occured.
+  // The second argument is a bit-wise combination of StreamEvents.
+  // If SE_CLOSE is signalled, then the third argument is the associated error
+  // code.  Otherwise, the value is undefined.
+  // Note: Not all streams will support asynchronous event signalling.  However,
+  // SS_OPENING and SR_BLOCK returned from stream member functions imply that
+  // certain events will be raised in the future.
+  sigslot::signal3<StreamInterface*, int, int> SignalEvent;
+
+  // Like calling SignalEvent, but posts a message to the specified thread,
+  // which will call SignalEvent.  This helps unroll the stack and prevent
+  // re-entrancy.
+  void PostEvent(Thread* t, int events, int err);
+  // Like the aforementioned method, but posts to the current thread.
+  void PostEvent(int events, int err);
+
+  //
+  // OPTIONAL OPERATIONS
+  //
+  // Not all implementations will support the following operations.  In general,
+  // a stream will only support an operation if it reasonably efficient to do
+  // so.  For example, while a socket could buffer incoming data to support
+  // seeking, it will not do so.  Instead, a buffering stream adapter should
+  // be used.
+  //
+  // Even though several of these operations are related, you should
+  // always use whichever operation is most relevant.  For example, you may
+  // be tempted to use GetSize() and GetPosition() to deduce the result of
+  // GetAvailable().  However, a stream which is read-once may support the
+  // latter operation but not the former.
+  //
+
+  // The following four methods are used to avoid coping data multiple times.
+
+  // GetReadData returns a pointer to a buffer which is owned by the stream.
+  // The buffer contains data_len bytes.  NULL is returned if no data is
+  // available, or if the method fails.  If the caller processes the data, it
+  // must call ConsumeReadData with the number of processed bytes.  GetReadData
+  // does not require a matching call to ConsumeReadData if the data is not
+  // processed.  Read and ConsumeReadData invalidate the buffer returned by
+  // GetReadData.
+  virtual const void* GetReadData(size_t* data_len) { return NULL; }
+  virtual void ConsumeReadData(size_t used) {}
+
+  // GetWriteBuffer returns a pointer to a buffer which is owned by the stream.
+  // The buffer has a capacity of buf_len bytes.  NULL is returned if there is
+  // no buffer available, or if the method fails.  The call may write data to
+  // the buffer, and then call ConsumeWriteBuffer with the number of bytes
+  // written.  GetWriteBuffer does not require a matching call to
+  // ConsumeWriteData if no data is written.  Write, ForceWrite, and
+  // ConsumeWriteData invalidate the buffer returned by GetWriteBuffer.
+  // TODO: Allow the caller to specify a minimum buffer size.  If the specified
+  // amount of buffer is not yet available, return NULL and Signal SE_WRITE
+  // when it is available.  If the requested amount is too large, return an
+  // error.
+  virtual void* GetWriteBuffer(size_t* buf_len) { return NULL; }
+  virtual void ConsumeWriteBuffer(size_t used) {}
+
+  // Write data_len bytes found in data, circumventing any throttling which
+  // would could cause SR_BLOCK to be returned.  Returns true if all the data
+  // was written.  Otherwise, the method is unsupported, or an unrecoverable
+  // error occurred, and the error value is set.  This method should be used
+  // sparingly to write critical data which should not be throttled.  A stream
+  // which cannot circumvent its blocking constraints should not implement this
+  // method.
+  // NOTE: This interface is being considered experimentally at the moment.  It
+  // would be used by JUDP and BandwidthStream as a way to circumvent certain
+  // soft limits in writing.
+  //virtual bool ForceWrite(const void* data, size_t data_len, int* error) {
+  //  if (error) *error = -1;
+  //  return false;
+  //}
+
+  // Seek to a byte offset from the beginning of the stream.  Returns false if
+  // the stream does not support seeking, or cannot seek to the specified
+  // position.
+  virtual bool SetPosition(size_t position) { return false; }
+
+  // Get the byte offset of the current position from the start of the stream.
+  // Returns false if the position is not known.
+  virtual bool GetPosition(size_t* position) const { return false; }
+
+  // Get the byte length of the entire stream.  Returns false if the length
+  // is not known.
+  virtual bool GetSize(size_t* size) const { return false; }
+
+  // Return the number of Read()-able bytes remaining before end-of-stream.
+  // Returns false if not known.
+  virtual bool GetAvailable(size_t* size) const { return false; }
+
+  // Return the number of Write()-able bytes remaining before end-of-stream.
+  // Returns false if not known.
+  virtual bool GetWriteRemaining(size_t* size) const { return false; }
 
   // Communicates the amount of data which will be written to the stream.  The
   // stream may choose to preallocate memory to accomodate this data.  The
-  // stream may return false to indicate that there is not enough room (ie, 
+  // stream may return false to indicate that there is not enough room (ie,
   // Write will return SR_EOS/SR_ERROR at some point).  Note that calling this
   // function should not affect the existing state of data in the stream.
-  virtual bool ReserveSize(size_t size) = 0;
+  virtual bool ReserveSize(size_t size) { return true; }
 
-  // Returns true if stream could be repositioned to the beginning.
-  virtual bool Rewind() = 0;
+  //
+  // CONVENIENCE METHODS
+  //
+  // These methods are implemented in terms of other methods, for convenience.
+  //
+
+  // Seek to the start of the stream.
+  inline bool Rewind() { return SetPosition(0); }
 
   // WriteAll is a helper function which repeatedly calls Write until all the
   // data is written, or something other than SR_SUCCESS is returned.  Note that
@@ -121,18 +222,11 @@ class StreamInterface {
   // readline object or adapter
   StreamResult ReadLine(std::string *line);
 
-  // Streams may signal one or more StreamEvents to indicate state changes.
-  // The first argument identifies the stream on which the state change occured.
-  // The second argument is a bit-wise combination of StreamEvents.
-  // If SE_CLOSE is signalled, then the third argument is the associated error
-  // code.  Otherwise, the value is undefined.
-  // Note: Not all streams will support asynchronous event signalling.  However,
-  // SS_OPENING and SR_BLOCK returned from stream member functions imply that
-  // certain events will be raised in the future.
-  sigslot::signal3<StreamInterface*, int, int> SignalEvent;
-
  protected:
-  StreamInterface() { }
+  StreamInterface();
+
+  // MessageHandler Interface
+  virtual void OnMessage(Message* msg);
 
  private:
   DISALLOW_EVIL_CONSTRUCTORS(StreamInterface);
@@ -141,16 +235,17 @@ class StreamInterface {
 ///////////////////////////////////////////////////////////////////////////////
 // StreamAdapterInterface is a convenient base-class for adapting a stream.
 // By default, all operations are pass-through.  Override the methods that you
-// require adaptation.  Note that the adapter will delete the adapted stream.
+// require adaptation.  Streams should really be upgraded to reference-counted.
+// In the meantime, use the owned flag to indicate whether the adapter should
+// own the adapted stream.
 ///////////////////////////////////////////////////////////////////////////////
 
 class StreamAdapterInterface : public StreamInterface,
                                public sigslot::has_slots<> {
  public:
-  explicit StreamAdapterInterface(StreamInterface* stream) {
-    Attach(stream);
-  }
+  explicit StreamAdapterInterface(StreamInterface* stream, bool owned = true);
 
+  // Core Stream Interface
   virtual StreamState GetState() const {
     return stream_->GetState();
   }
@@ -165,39 +260,69 @@ class StreamAdapterInterface : public StreamInterface,
   virtual void Close() {
     stream_->Close();
   }
+
+  // Optional Stream Interface
+  /*  Note: Many stream adapters were implemented prior to this Read/Write
+      interface.  Therefore, a simple pass through of data in those cases may
+      be broken.  At a later time, we should do a once-over pass of all
+      adapters, and make them compliant with these interfaces, after which this
+      code can be uncommented.
+  virtual const void* GetReadData(size_t* data_len) {
+    return stream_->GetReadData(data_len);
+  }
+  virtual void ConsumeReadData(size_t used) {
+    stream_->ConsumeReadData(used);
+  }
+
+  virtual void* GetWriteBuffer(size_t* buf_len) {
+    return stream_->GetWriteBuffer(buf_len);
+  }
+  virtual void ConsumeWriteBuffer(size_t used) {
+    stream_->ConsumeWriteBuffer(used);
+  }
+  */
+
+  /*  Note: This interface is currently undergoing evaluation.
+  virtual bool ForceWrite(const void* data, size_t data_len, int* error) {
+    return stream_->ForceWrite(data, data_len, error);
+  }
+  */
+
+  virtual bool SetPosition(size_t position) {
+    return stream_->SetPosition(position);
+  }
+  virtual bool GetPosition(size_t* position) const {
+    return stream_->GetPosition(position);
+  }
   virtual bool GetSize(size_t* size) const {
     return stream_->GetSize(size);
+  }
+  virtual bool GetAvailable(size_t* size) const {
+    return stream_->GetAvailable(size);
+  }
+  virtual bool GetWriteRemaining(size_t* size) const {
+    return stream_->GetWriteRemaining(size);
   }
   virtual bool ReserveSize(size_t size) {
     return stream_->ReserveSize(size);
   }
-  virtual bool Rewind() {
-    return stream_->Rewind();
-  }
 
-  void Attach(StreamInterface* stream) {
-    if (NULL != stream_.get())
-      stream_->SignalEvent.disconnect(this);
-    stream_.reset(stream);
-    if (NULL != stream_.get())
-      stream_->SignalEvent.connect(this, &StreamAdapterInterface::OnEvent);
-  }
-  StreamInterface* Detach() { 
-    if (NULL == stream_.get())
-      return NULL;
-    stream_->SignalEvent.disconnect(this);
-    return stream_.release();
-  }
+  void Attach(StreamInterface* stream, bool owned = true);
+  StreamInterface* Detach();
 
  protected:
+  virtual ~StreamAdapterInterface();
+
   // Note that the adapter presents itself as the origin of the stream events,
   // since users of the adapter may not recognize the adapted object.
   virtual void OnEvent(StreamInterface* stream, int events, int err) {
     SignalEvent(this, events, err);
   }
+  StreamInterface* stream() { return stream_; }
 
  private:
-  scoped_ptr<StreamInterface> stream_;
+  StreamInterface* stream_;
+  bool owned_;
   DISALLOW_EVIL_CONSTRUCTORS(StreamAdapterInterface);
 };
 
@@ -229,6 +354,34 @@ class StreamTap : public StreamAdapterInterface {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+// StreamSegment adapts a read stream, to expose a subset of the adapted
+// stream's data.  This is useful for cases where a stream contains multiple
+// documents concatenated together.  StreamSegment can expose a subset of
+// the data as an independent stream, including support for rewinding and
+// seeking.
+///////////////////////////////////////////////////////////////////////////////
+
+class StreamSegment : public StreamAdapterInterface {
+ public:
+  // The current position of the adapted stream becomes the beginning of the
+  // segment.  If a length is specified, it bounds the length of the segment.
+  explicit StreamSegment(StreamInterface* stream);
+  explicit StreamSegment(StreamInterface* stream, size_t length);
+
+  // StreamAdapterInterface Interface
+  virtual StreamResult Read(void* buffer, size_t buffer_len,
+                            size_t* read, int* error);
+  virtual bool SetPosition(size_t position);
+  virtual bool GetPosition(size_t* position) const;
+  virtual bool GetSize(size_t* size) const;
+  virtual bool GetAvailable(size_t* size) const;
+
+ private:
+  size_t start_, pos_, length_;
+  DISALLOW_EVIL_CONSTRUCTORS(StreamSegment);
+};
+
+///////////////////////////////////////////////////////////////////////////////
 // NullStream gives errors on read, and silently discards all written data.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -244,9 +397,6 @@ class NullStream : public StreamInterface {
   virtual StreamResult Write(const void* data, size_t data_len,
                              size_t* written, int* error);
   virtual void Close();
-  virtual bool GetSize(size_t* size) const;
-  virtual bool ReserveSize(size_t size);
-  virtual bool Rewind();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -274,64 +424,171 @@ class FileStream : public StreamInterface {
   virtual StreamResult Write(const void* data, size_t data_len,
                              size_t* written, int* error);
   virtual void Close();
+  virtual bool SetPosition(size_t position);
+  virtual bool GetPosition(size_t* position) const;
   virtual bool GetSize(size_t* size) const;
+  virtual bool GetAvailable(size_t* size) const;
   virtual bool ReserveSize(size_t size);
-  virtual bool Rewind() { return SetPosition(0); }
 
-  bool SetPosition(size_t position);
-  bool GetPosition(size_t* position) const;
-  int Flush();
+  bool Flush();
+
+#if defined(POSIX)
+  // Tries to aquire an exclusive lock on the file.
+  // Use OpenShare(...) on win32 to get similar functionality.
+  bool TryLock();
+  bool Unlock();
+#endif
+
+  // Note: Deprecated in favor of Filesystem::GetFileSize().
   static bool GetSize(const std::string& filename, size_t* size);
 
- private:
+ protected:
+  virtual void DoClose();
+
   FILE* file_;
+
+ private:
   DISALLOW_EVIL_CONSTRUCTORS(FileStream);
 };
 
+#ifdef POSIX
+// A FileStream that is actually not a file, but the output or input of a
+// sub-command. See "man 3 popen" for documentation of the underlying OS popen()
+// function.
+class POpenStream : public FileStream {
+ public:
+  POpenStream() : wait_status_(-1) {}
+  virtual ~POpenStream();
+
+  virtual bool Open(const std::string& subcommand, const char* mode);
+  // Same as Open(). shflag is ignored.
+  virtual bool OpenShare(const std::string& subcommand, const char* mode,
+                         int shflag);
+
+  // Returns the wait status from the last Close() of an Open()'ed stream, or
+  // -1 if no Open()+Close() has been done on this object. Meaning of the number
+  // is documented in "man 2 wait".
+  int GetWaitStatus() const { return wait_status_; }
+
+ protected:
+  virtual void DoClose();
+
+ private:
+  int wait_status_;
+};
+#endif  // POSIX
+
 ///////////////////////////////////////////////////////////////////////////////
 // MemoryStream is a simple implementation of a StreamInterface over in-memory
-// data.  It does not support asynchronous notification.
+// data.  Data is read and written at the current seek position.  Reads return
+// end-of-stream when they reach the end of data.  Writes actually extend the
+// end of data mark.
 ///////////////////////////////////////////////////////////////////////////////
 
-class MemoryStream : public StreamInterface {
+class MemoryStreamBase : public StreamInterface {
  public:
-  MemoryStream();
-  // Pre-populate stream with the provided data.
-  MemoryStream(const char* data);
-  MemoryStream(const char* data, size_t length);
-  virtual ~MemoryStream();
-
   virtual StreamState GetState() const;
-  virtual StreamResult Read(void *buffer, size_t bytes, size_t *bytes_read, int *error);
-  virtual StreamResult Write(const void *buffer, size_t bytes, size_t *bytes_written, int *error);
+  virtual StreamResult Read(void* buffer, size_t bytes, size_t* bytes_read,
+                            int* error);
+  virtual StreamResult Write(const void* buffer, size_t bytes,
+                             size_t* bytes_written, int* error);
   virtual void Close();
+  virtual bool SetPosition(size_t position);
+  virtual bool GetPosition(size_t* position) const;
   virtual bool GetSize(size_t* size) const;
+  virtual bool GetAvailable(size_t* size) const;
   virtual bool ReserveSize(size_t size);
-  virtual bool Rewind() { return SetPosition(0); }
 
   char* GetBuffer() { return buffer_; }
   const char* GetBuffer() const { return buffer_; }
-  bool SetPosition(size_t position);
-  bool GetPosition(size_t* position) const;
+
+ protected:
+  MemoryStreamBase();
+
+  virtual StreamResult DoReserve(size_t size, int* error);
+
+  // Invariant: 0 <= seek_position <= data_length_ <= buffer_length_
+  char* buffer_;
+  size_t buffer_length_;
+  size_t data_length_;
+  size_t seek_position_;
 
  private:
-  void SetContents(const char* data, size_t length);
+  DISALLOW_EVIL_CONSTRUCTORS(MemoryStreamBase);
+};
 
-  size_t   allocated_length_;
-  char*    buffer_;
-  size_t   data_length_;
-  size_t   seek_position_;
+// MemoryStream dynamically resizes to accomodate written data.
+
+class MemoryStream : public MemoryStreamBase {
+ public:
+  MemoryStream();
+  explicit MemoryStream(const char* data);  // Calls SetData(data, strlen(data))
+  MemoryStream(const void* data, size_t length);  // Calls SetData(data, length)
+  virtual ~MemoryStream();
+
+  void SetData(const void* data, size_t length);
+
+ protected:
+  virtual StreamResult DoReserve(size_t size, int* error);
+};
+
+// ExternalMemoryStream adapts an external memory buffer, so writes which would
+// extend past the end of the buffer will return end-of-stream.
+
+class ExternalMemoryStream : public MemoryStreamBase {
+ public:
+  ExternalMemoryStream();
+  ExternalMemoryStream(void* data, size_t length);
+  virtual ~ExternalMemoryStream();
+
+  void SetData(void* data, size_t length);
+};
+
+// FifoBuffer allows for efficient, thread-safe buffering of data between
+// writer and reader. As the data can wrap around the end of the buffer,
+// MemoryStreamBase can't help us here.
+
+class FifoBuffer : public StreamInterface {
+ public:
+  // Creates a FIFO buffer with the specified capacity.
+  explicit FifoBuffer(size_t length);
+  virtual ~FifoBuffer();
+  // Gets the amount of data currently readable from the buffer.
+  bool GetBuffered(size_t* data_len) const;
+  // Resizes the buffer to the specified capacity. Fails if data_length_ > size
+  bool SetCapacity(size_t length);
+
+  // StreamInterface methods
+  virtual StreamState GetState() const;
+  virtual StreamResult Read(void* buffer, size_t bytes,
+                            size_t* bytes_read, int* error);
+  virtual StreamResult Write(const void* buffer, size_t bytes,
+                             size_t* bytes_written, int* error);
+  virtual void Close();
+  virtual const void* GetReadData(size_t* data_len);
+  virtual void ConsumeReadData(size_t used);
+  virtual void* GetWriteBuffer(size_t *buf_len);
+  virtual void ConsumeWriteBuffer(size_t used);
 
  private:
-  DISALLOW_EVIL_CONSTRUCTORS(MemoryStream);
+  StreamState state_;  // keeps the opened/closed state of the stream
+  scoped_array<char> buffer_;  // the allocated buffer
+  size_t buffer_length_;  // size of the allocated buffer
+  size_t data_length_;  // amount of readable data in the buffer
+  size_t read_position_;  // offset to the readable data
+  Thread* owner_;  // stream callbacks are dispatched on this thread
+  mutable CriticalSection crit_;  // object lock
+  DISALLOW_EVIL_CONSTRUCTORS(FifoBuffer);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class LoggingAdapter : public StreamAdapterInterface {
-public:
+ public:
   LoggingAdapter(StreamInterface* stream, LoggingSeverity level,
                  const std::string& label, bool hex_mode = false);
+
+  void set_label(const std::string& label);
 
   virtual StreamResult Read(void* buffer, size_t buffer_len,
                             size_t* read, int* error);
@@ -356,9 +613,9 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 class StringStream : public StreamInterface {
-public:
-  StringStream(std::string& str);
-  StringStream(const std::string& str);
+ public:
+  explicit StringStream(std::string& str);
+  explicit StringStream(const std::string& str);
 
   virtual StreamState GetState() const;
   virtual StreamResult Read(void* buffer, size_t buffer_len,
@@ -366,14 +623,76 @@ public:
   virtual StreamResult Write(const void* data, size_t data_len,
                              size_t* written, int* error);
   virtual void Close();
+  virtual bool SetPosition(size_t position);
+  virtual bool GetPosition(size_t* position) const;
   virtual bool GetSize(size_t* size) const;
+  virtual bool GetAvailable(size_t* size) const;
   virtual bool ReserveSize(size_t size);
-  virtual bool Rewind();
 
-private:
+ private:
   std::string& str_;
   size_t read_pos_;
   bool read_only_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// StreamReference - A reference counting stream adapter
+///////////////////////////////////////////////////////////////////////////////
+
+// Keep in mind that the streams and adapters defined in this file are
+// not thread-safe, so this has limited uses.
+
+// A StreamRefCount holds the reference count and a pointer to the
+// wrapped stream. It deletes the wrapped stream when there are no
+// more references. We can then have multiple StreamReference
+// instances pointing to one StreamRefCount, all wrapping the same
+// stream.
+
+class StreamReference : public StreamAdapterInterface {
+  class StreamRefCount;
+ public:
+  // Constructor for the first reference to a stream
+  // Note: get more references through NewReference(). Use this
+  // constructor only once on a given stream.
+  explicit StreamReference(StreamInterface* stream);
+  StreamInterface* GetStream() { return stream(); }
+  StreamInterface* NewReference();
+  virtual ~StreamReference();
+
+ private:
+  class StreamRefCount {
+   public:
+    explicit StreamRefCount(StreamInterface* stream)
+        : stream_(stream), ref_count_(1) {
+    }
+    void AddReference() {
+      CritScope lock(&cs_);
+      ++ref_count_;
+    }
+    void Release() {
+      int ref_count;
+      {  // Atomic ops would have been a better fit here.
+        CritScope lock(&cs_);
+        ref_count = --ref_count_;
+      }
+      if (ref_count == 0) {
+        delete stream_;
+        delete this;
+      }
+    }
+   private:
+    StreamInterface* stream_;
+    int ref_count_;
+    CriticalSection cs_;
+    DISALLOW_EVIL_CONSTRUCTORS(StreamRefCount);
+  };
+
+  // Constructor for adding references
+  explicit StreamReference(StreamRefCount* stream_ref_count,
+                           StreamInterface* stream);
+
+  StreamRefCount* stream_ref_count_;
+  DISALLOW_EVIL_CONSTRUCTORS(StreamReference);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -384,13 +703,15 @@ private:
 // to sink.  Alternately, if source returns SR_BLOCK or SR_ERROR, or if sink
 // returns SR_BLOCK, SR_ERROR, or SR_EOS, then the function immediately returns
 // with the unexpected StreamResult value.
-
+// data_len is the length of the valid data in buffer. in case of error
+// this is the data that read from source but can't move to destination.
+// as a pass in parameter, it indicates data in buffer that should move to sink
 StreamResult Flow(StreamInterface* source,
                   char* buffer, size_t buffer_len,
-                  StreamInterface* sink);
+                  StreamInterface* sink, size_t* data_len = NULL);
 
 ///////////////////////////////////////////////////////////////////////////////
 
-} // namespace talk_base
+}  // namespace talk_base
 
 #endif  // TALK_BASE_STREAM_H__

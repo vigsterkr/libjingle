@@ -25,13 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <errno.h>
+#include <iomanip>
 
 #include "talk/base/asyncsocket.h"
 #include "talk/base/logging.h"
 #include "talk/base/socketfactory.h"
 #include "talk/base/socketpool.h"
 #include "talk/base/socketstream.h"
+#include "talk/base/thread.h"
 
 namespace talk_base {
 
@@ -56,7 +57,7 @@ StreamCache::~StreamCache() {
 
 StreamInterface* StreamCache::RequestConnectedStream(
     const SocketAddress& remote, int* err) {
-  LOG_F(LS_VERBOSE) << "(" << remote.ToString() << ")";
+  LOG_F(LS_VERBOSE) << "(" << remote << ")";
   for (ConnectedList::iterator it = cached_.begin(); it != cached_.end();
        ++it) {
     if (remote == it->first) {
@@ -83,7 +84,7 @@ void StreamCache::ReturnConnectedStream(StreamInterface* stream) {
   for (ConnectedList::iterator it = active_.begin(); it != active_.end();
        ++it) {
     if (stream == it->second) {
-      LOG_F(LS_VERBOSE) << "(" << it->first.ToString() << ")";
+      LOG_F(LS_VERBOSE) << "(" << it->first << ")";
       if (stream->GetState() == SS_CLOSED) {
         // Return closed streams
         LOG_F(LS_VERBOSE) << "Returning closed stream";
@@ -110,7 +111,7 @@ void StreamCache::OnStreamEvent(StreamInterface* stream, int events, int err) {
   for (ConnectedList::iterator it = cached_.begin(); it != cached_.end();
        ++it) {
     if (stream == it->second) {
-      LOG_F(LS_VERBOSE) << "(" << it->first.ToString() << ")";
+      LOG_F(LS_VERBOSE) << "(" << it->first << ")";
       // We don't cache closed streams, so return it.
       it->second->SignalEvent.disconnect(this);
       LOG_F(LS_VERBOSE) << "Returning closed stream";
@@ -130,9 +131,6 @@ NewSocketPool::NewSocketPool(SocketFactory* factory) : factory_(factory) {
 }
 
 NewSocketPool::~NewSocketPool() {
-  for (size_t i = 0; i < used_.size(); ++i) {
-    delete used_[i];
-  }
 }
 
 StreamInterface* 
@@ -157,33 +155,28 @@ NewSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
 
 void
 NewSocketPool::ReturnConnectedStream(StreamInterface* stream) {
-  used_.push_back(stream);
+  Thread::Current()->Dispose(stream);
 }
 
 //////////////////////////////////////////////////////////////////////
 // ReuseSocketPool
 //////////////////////////////////////////////////////////////////////
 
-ReuseSocketPool::ReuseSocketPool(SocketFactory* factory, AsyncSocket* socket)
-  : factory_(factory), stream_(NULL) {
-  stream_ = socket ? new SocketStream(socket) : NULL;
+ReuseSocketPool::ReuseSocketPool(SocketFactory* factory)
+: factory_(factory), stream_(NULL), checked_out_(false) {
 }
 
 ReuseSocketPool::~ReuseSocketPool() {
+  ASSERT(!checked_out_);
   delete stream_;
-}
-
-void
-ReuseSocketPool::setSocket(AsyncSocket* socket) {
-  ASSERT(false); // TODO: need ref-counting to make this work
-  delete stream_;
-  stream_ = socket ? new SocketStream(socket) : NULL;
 }
 
 StreamInterface* 
 ReuseSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
+  // Only one socket can be used from this "pool" at a time
+  ASSERT(!checked_out_);
   if (!stream_) {
-    LOG(LS_INFO) << "ReuseSocketPool - Creating new socket";
+    LOG_F(LS_VERBOSE) << "Creating new socket";
     AsyncSocket* socket = factory_->CreateAsyncSocket(SOCK_STREAM);
     if (!socket) {
       ASSERT(false);
@@ -193,22 +186,22 @@ ReuseSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
     }
     stream_ = new SocketStream(socket);
   }
-  if ((stream_->GetState() == SS_OPEN) &&
-      (stream_->GetSocket()->GetRemoteAddress() == remote)) {
-    LOG(LS_INFO) << "ReuseSocketPool - Reusing connection to: "
-                 << remote.ToString();
+  if ((stream_->GetState() == SS_OPEN) && (remote == remote_)) {
+    LOG_F(LS_VERBOSE) << "Reusing connection to: " << remote_;
   } else {
+    remote_ = remote;
     stream_->Close();
-    if ((stream_->GetSocket()->Connect(remote) != 0)
+    if ((stream_->GetSocket()->Connect(remote_) != 0)
         && !stream_->GetSocket()->IsBlocking()) {
       if (err)
         *err = stream_->GetSocket()->GetError();
       return NULL;
     } else {
-      LOG(LS_INFO) << "ReuseSocketPool - Opening connection to: "
-                   << remote.ToString();
+      LOG_F(LS_VERBOSE) << "Opening connection to: " << remote_;
     }
   }
+  stream_->SignalEvent.disconnect(this);
+  checked_out_ = true;
   if (err)
     *err = 0;
   return stream_;
@@ -216,8 +209,21 @@ ReuseSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
 
 void
 ReuseSocketPool::ReturnConnectedStream(StreamInterface* stream) {
-  // Note: this might not be true with the advent of setSocket
   ASSERT(stream == stream_);
+  ASSERT(checked_out_);
+  checked_out_ = false;
+  // Until the socket is reused, monitor it to determine if it closes.
+  stream_->SignalEvent.connect(this, &ReuseSocketPool::OnStreamEvent);
+}
+
+void
+ReuseSocketPool::OnStreamEvent(StreamInterface* stream, int events, int err) {
+  LOG_F(LS_VERBOSE) << "Connection closed with error: " << err;
+  ASSERT(stream == stream_);
+  ASSERT(!checked_out_);
+  ASSERT(0 != (events & SE_CLOSE));
+  // Socket has closed.  We'll reconnect it the next time it is used.
+  stream_->Close();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -241,11 +247,20 @@ LoggingPoolAdapter::~LoggingPoolAdapter() {
 StreamInterface* LoggingPoolAdapter::RequestConnectedStream(
     const SocketAddress& remote, int* err) {
   if (StreamInterface* stream = pool_->RequestConnectedStream(remote, err)) {
+    ASSERT(SS_CLOSED != stream->GetState());
+    std::stringstream ss;
+    ss << label_ << "(0x" << std::setfill('0') << std::hex << std::setw(8)
+       << stream << ")";
+    LOG_V(level_) << ss.str()
+                  << ((SS_OPEN == stream->GetState()) ? " Connected"
+                                                      : " Connecting")
+                  << " to " << remote;
     if (recycle_bin_.empty()) {
-      return new LoggingAdapter(stream, level_, label_, binary_mode_);
+      return new LoggingAdapter(stream, level_, ss.str(), binary_mode_);
     }
     LoggingAdapter* logging = recycle_bin_.front();
     recycle_bin_.pop_front();
+    logging->set_label(ss.str());
     logging->Attach(stream);
     return logging;
   }

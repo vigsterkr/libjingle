@@ -37,14 +37,14 @@
 // be made on the signaling thread and all channel related calls (including
 // signaling for a channel) will be made on the worker thread.  When
 // information needs to be sent between the two threads, this class should do
-// the work (e.g., ForwardChannelMessage).
+// the work (e.g., OnRemoteCandidate).
 //
 // Note: Subclasses must call DestroyChannels() in their own constructors.
 // It is not possible to do so here because the subclass constructor will
 // already have run.
 
-#ifndef _CRICKET_P2P_BASE_TRANSPORT_H_
-#define _CRICKET_P2P_BASE_TRANSPORT_H_
+#ifndef TALK_P2P_BASE_TRANSPORT_H_
+#define TALK_P2P_BASE_TRANSPORT_H_
 
 #include <string>
 #include <map>
@@ -52,6 +52,12 @@
 #include "talk/base/criticalsection.h"
 #include "talk/base/messagequeue.h"
 #include "talk/base/sigslot.h"
+#include "talk/p2p/base/candidate.h"
+#include "talk/p2p/base/constants.h"
+
+namespace talk_base {
+class Thread;
+}
 
 namespace buzz {
 class QName;
@@ -60,21 +66,63 @@ class XmlElement;
 
 namespace cricket {
 
+struct ParseError;
+struct WriteError;
+class PortAllocator;
 class SessionManager;
 class Session;
 class TransportChannel;
 class TransportChannelImpl;
 
-class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> {
+typedef std::vector<buzz::XmlElement*> XmlElements;
+typedef std::vector<Candidate> Candidates;
+
+// Used to parse and serialize (write) transport candidates.  For
+// convenience of old code, Transports will implement TransportParser.
+// Parse/Write seems better than Serialize/Deserialize or
+// Create/Translate.
+class TransportParser {
  public:
-  Transport(SessionManager* session_manager, const std::string& name);
+  virtual bool ParseCandidates(SignalingProtocol protocol,
+                               const buzz::XmlElement* elem,
+                               Candidates* candidates,
+                               ParseError* error) = 0;
+  virtual bool WriteCandidates(SignalingProtocol protocol,
+                               const Candidates& candidates,
+                               XmlElements* candidate_elems,
+                               WriteError* error) = 0;
+
+  // Helper function to parse an element describing an address.  This
+  // retrieves the IP and port from the given element and verifies
+  // that they look like plausible values.
+  bool ParseAddress(const buzz::XmlElement* elem,
+                    const buzz::QName& address_name,
+                    const buzz::QName& port_name,
+                    talk_base::SocketAddress* address,
+                    ParseError* error);
+
+  virtual ~TransportParser() {}
+};
+
+class Transport : public talk_base::MessageHandler,
+                  public sigslot::has_slots<> {
+ public:
+  Transport(talk_base::Thread* signaling_thread,
+            talk_base::Thread* worker_thread,
+            const std::string& type,
+            PortAllocator* allocator);
   virtual ~Transport();
 
-  // Returns a pointer to the singleton session manager.
-  SessionManager* session_manager() const { return session_manager_; }
+  // Returns the signaling thread. The app talks to Transport on this thread.
+  talk_base::Thread* signaling_thread() { return signaling_thread_; }
+  // Returns the worker thread. The actual networking is done on this thread.
+  talk_base::Thread* worker_thread() { return worker_thread_; }
 
-  // Returns the name of this transport.
-  const std::string& name() const { return name_; }
+  // Returns the type of this transport.
+  const std::string& type() const { return type_; }
+
+  // Returns the port allocator object for this transport.
+  PortAllocator* port_allocator() { return allocator_; }
 
   // Returns the readable and states of this manager.  These bits are the ORs
   // of the corresponding bits on the managed channels.  Each time one of these
@@ -88,12 +136,15 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   bool connect_requested() const { return connect_requested_; }
 
   // Create, destroy, and lookup the channels of this type by their names.
-  TransportChannelImpl* CreateChannel(const std::string& name, const std::string &session_type);
+  TransportChannelImpl* CreateChannel(const std::string& name,
+                                      const std::string& content_type);
   // Note: GetChannel may lead to race conditions, since the mutex is not held
   // after the pointer is returned.
   TransportChannelImpl* GetChannel(const std::string& name);
   // Note: HasChannel does not lead to race conditions, unlike GetChannel.
-  bool HasChannel(const std::string& name) { return (NULL != GetChannel(name)); }
+  bool HasChannel(const std::string& name) {
+    return (NULL != GetChannel(name));
+  }
   bool HasChannels();
   void DestroyChannel(const std::string& name);
 
@@ -109,32 +160,6 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   // Destroys every channel created so far.
   void DestroyAllChannels();
 
-  // The session handshake includes negotiation of both the application and the
-  // transport.  The initiating transport creates an "offer" describing what
-  // options it supports and the responding transport creates an "answer"
-  // describing which options it has accepted.  If OnTransport* returns false,
-  // that indicates that no acceptable options given and this transport cannot
-  // be negotiated.
-  //
-  // The transport negotiation operates as follows.  When the initiating client
-  // creates the session, but before they send the initiate, we create the
-  // supported transports.  The client may override these, but otherwise they
-  // get a default set.  When the initiate is sent, we ask each transport to
-  // produce an offer.  When the receiving client gets the initiate, they will
-  // iterate through the transport offers in order of their own preference.
-  // For each one, they create the transport (if they know what it is) and
-  // call OnTransportOffer.  If this returns true, then we're good; otherwise,
-  // we continue iterating.  If no transport works, then we reject the session.
-  // Otherwise, we have a single transport, and we send back a transport-accept
-  // message that contains the answer.  When this arrives at the initiating
-  // client, we destroy all transports but the one in the answer and then pass
-  // the answer to it.  If this transport cannot be found or it cannot accept
-  // the answer, then we reject the session.  Otherwise, we're in good shape.
-  virtual buzz::XmlElement* CreateTransportOffer() = 0;
-  virtual buzz::XmlElement* CreateTransportAnswer() = 0;
-  virtual bool OnTransportOffer(const buzz::XmlElement* elem) = 0;
-  virtual bool OnTransportAnswer(const buzz::XmlElement* elem) = 0;
-
   // Before any stanza is sent, the manager will request signaling.  Once
   // signaling is available, the client should call OnSignalingReady.  Once
   // this occurs, the transport (or its channels) can send any waiting stanzas.
@@ -143,25 +168,24 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   sigslot::signal1<Transport*> SignalRequestSignaling;
   void OnSignalingReady();
 
-  // Handles sending and receiving of stanzas related to negotiating the
-  // connections of the channels.  Different transports may have very different
-  // signaling, so the XML is handled by the subclass.  The msg variable holds
-  // the element whose name matches this transport, while stanza holds the
-  // entire stanza.  The latter is needed when sending an error response.
-  // SignalTransportMessage is given the elements that will become the children
-  // of the transport-info message.  Each element must have a name that matches
-  // the transport's name.
-  virtual bool OnTransportMessage(const buzz::XmlElement* msg,
-                                  const buzz::XmlElement* stanza) = 0;
-  sigslot::signal2<Transport*, const std::vector<buzz::XmlElement*>&>
-      SignalTransportMessage;
+  // Handles sending of ready candidates and receiving of remote candidates.
+  sigslot::signal2<Transport*,
+                   const std::vector<Candidate>&> SignalCandidatesReady;
+  void OnRemoteCandidates(const std::vector<Candidate>& candidates);
+
+  // If candidate is not acceptable, returns false and sets error.
+  // Call this before calling OnRemoteCandidates.
+  virtual bool VerifyCandidate(const Candidate& candidate,
+                               ParseError* error);
 
   // A transport message has generated an transport-specific error.  The
   // stanza that caused the error is available in session_msg.  If false is
   // returned, the error is considered unrecoverable, and the session is
   // terminated.
-  virtual bool OnTransportError(const buzz::XmlElement* session_msg,
-                                const buzz::XmlElement* error) = 0;
+  // TODO: Make OnTransportError take an abstract data type
+  // rather than an XmlElement.  It isn't needed yet, but it might be
+  // later for Jingle compliance.
+  virtual void OnTransportError(const buzz::XmlElement* error) {}
   sigslot::signal6<Transport*, const buzz::XmlElement*, const buzz::QName&,
                    const std::string&, const std::string&,
                    const buzz::XmlElement*>
@@ -175,60 +199,17 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   void set_allow_local_ips(bool value) { allow_local_ips_ = value; }
 
  protected:
-  // Helper function to bad-request error for a stanza passed to
-  // OnTransportMessage.  Returns false.
-  bool BadRequest(const buzz::XmlElement* stanza, const std::string& text,
-                  const buzz::XmlElement* extra_info);
-
-  // Helper function to parse an element describing an address.  This retrieves
-  // the IP and port from the given element (using QN_ADDRESS and QN_PORT) and
-  // verifies that they look like plausible values.
-  bool ParseAddress(const buzz::XmlElement* stanza,
-                    const buzz::XmlElement* elem,
-                    talk_base::SocketAddress* address);
-
   // These are called by Create/DestroyChannel above in order to create or
   // destroy the appropriate type of channel.
   virtual TransportChannelImpl* CreateTransportChannel(
-		  const std::string& name, const std::string &session_type) = 0;
+      const std::string& name, const std::string &content_type) = 0;
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) = 0;
 
   // Informs the subclass that we received the signaling ready message.
   virtual void OnTransportSignalingReady() {}
 
-  // Forwards the given XML element to the channel on the worker thread.  This
-  // occurs asynchronously, so we take ownership of the element.  Furthermore,
-  // the channel will not be able to return an error if the XML is invalid, so
-  // the transport should have checked its validity already.
-  void ForwardChannelMessage(const std::string& name,
-                             buzz::XmlElement* elem);
-
-  // Handles a set of messages sent by the channels.  The default
-  // implementation simply forwards each as its own transport message by
-  // wrapping it in an element identifying this transport and then invoking
-  // SignalTransportMessage.  Smarter transports may be able to place multiple
-  // channel messages within one transport message.
-  //
-  // Note: The implementor of this method is responsible for deleting the XML
-  // elements passed in, unless they are sent to SignalTransportMessage, where
-  // the receiver will delete them.
-  virtual void OnTransportChannelMessages(
-      const std::vector<buzz::XmlElement*>& msgs);
-
  private:
   typedef std::map<std::string, TransportChannelImpl*> ChannelMap;
-  typedef std::vector<buzz::XmlElement*> XmlElementList;
-
-  SessionManager* session_manager_;
-  std::string name_;
-  bool destroyed_;
-  bool readable_;
-  bool writable_;
-  bool connect_requested_;
-  ChannelMap channels_;
-  XmlElementList messages_;
-  talk_base::CriticalSection crit_; // Protects changes to channels and messages
-  bool allow_local_ips_;
 
   // Called when the state of a channel changes.
   void OnChannelReadableState(TransportChannel* channel);
@@ -237,8 +218,11 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   // Called when a channel requests signaling.
   void OnChannelRequestSignaling();
 
-  // Called when a channel wishes to send a transport message.
-  void OnChannelMessage(TransportChannelImpl* impl, buzz::XmlElement* elem);
+  // Called when a candidate is ready from remote peer.
+  void OnRemoteCandidate(const Candidate& candidate);
+  // Called when a candidate is ready from channel.
+  void OnChannelCandidateReady(TransportChannelImpl* channel,
+                               const Candidate& candidate);
 
   // Dispatches messages to the appropriate handler (below).
   void OnMessage(talk_base::Message* msg);
@@ -246,13 +230,13 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   // These are versions of the above methods that are called only on a
   // particular thread (s = signaling, w = worker).  The above methods post or
   // send a message to invoke this version.
-  TransportChannelImpl* CreateChannel_w(const std::string& name, const std::string& session_type);
+  TransportChannelImpl* CreateChannel_w(const std::string& name,
+                                        const std::string& content_type);
   void DestroyChannel_w(const std::string& name);
   void ConnectChannels_w();
   void ResetChannels_w();
   void DestroyAllChannels_w();
-  void ForwardChannelMessage_w(const std::string& name,
-                               buzz::XmlElement* elem);
+  void OnRemoteCandidate_w(const Candidate& candidate);
   void OnChannelReadableState_s();
   void OnChannelWritableState_s();
   void OnChannelRequestSignaling_s();
@@ -265,13 +249,27 @@ class Transport : public talk_base::MessageHandler, public sigslot::has_slots<> 
   // Computes the OR of the channel's read or write state (argument picks).
   bool GetTransportState_s(bool read);
 
-  // Invoked when there are messages waiting to send in the messages_ list.
-  // We wait to send any messages until the client asks us to connect.
-  void OnChannelMessage_s();
+  void OnChannelCandidateReady_s();
+
+  talk_base::Thread* signaling_thread_;
+  talk_base::Thread* worker_thread_;
+  std::string type_;
+  PortAllocator* allocator_;
+  bool destroyed_;
+  bool readable_;
+  bool writable_;
+  bool connect_requested_;
+  ChannelMap channels_;
+  // Buffers the ready_candidates so that SignalCanidatesReady can
+  // provide them in multiples.
+  std::vector<Candidate> ready_candidates_;
+  // Protects changes to channels and messages
+  talk_base::CriticalSection crit_;
+  bool allow_local_ips_;
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);
 };
 
 }  // namespace cricket
 
-#endif  // _CRICKET_P2P_BASE_TRANSPORT_H_
+#endif  // TALK_P2P_BASE_TRANSPORT_H_

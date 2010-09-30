@@ -26,6 +26,7 @@
  */
 
 #include "talk/base/byteorder.h"
+#include "talk/base/common.h"
 #include "talk/base/socketaddress.h"
 #include "talk/base/winping.h"
 #include "talk/base/logging.h"
@@ -130,7 +131,7 @@ const char * const ICMP_SEND_FUNC = "IcmpSendEcho";
 inline uint32 ReplySize(uint32 data_size) {
   // A ping error message is 8 bytes long, so make sure we allow for at least
   // 8 bytes of reply data.
-  return sizeof(ICMP_ECHO_REPLY) + max(8UL, data_size);
+  return sizeof(ICMP_ECHO_REPLY) + talk_base::_max<uint32>(8, data_size);
 }
 
 //////////////////////////////////////////////////////////////////////

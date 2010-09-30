@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -32,66 +32,59 @@
 #include <cassert>
 
 #ifdef POSIX
-extern "C" {
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
-}
+#include <signal.h>
 #endif
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#define _WINSOCKAPI_
-#include <windows.h>
 #undef SetPort
 #endif
 
 #include <algorithm>
-#include <iostream>
+#include <map>
 
 #include "talk/base/basictypes.h"
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/physicalsocketserver.h"
 #include "talk/base/time.h"
 #include "talk/base/winping.h"
+#include "talk/base/win32socketinit.h"
 
-#ifdef __linux 
+// stm: this will tell us if we are on OSX
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#ifdef POSIX
+#include <netinet/tcp.h>  // for TCP_NODELAY
 #define IP_MTU 14 // Until this is integrated from linux/in.h to netinet/in.h
-#endif  // __linux
+typedef void* SockOptArg;
+#endif  // POSIX
 
 #ifdef WIN32
-class WinsockInitializer {
-public:
-  WinsockInitializer() {
-    WSADATA wsaData;
-    WORD wVersionRequested = MAKEWORD(1, 0);
-    err_ = WSAStartup(wVersionRequested, &wsaData);
-  }
-  ~WinsockInitializer() {
-    WSACleanup();
-  }
-  int error() {
-    return err_;
-  }
-private:
-  int err_;
-};
-WinsockInitializer g_winsockinit;
+typedef char* SockOptArg;
 #endif
 
 namespace talk_base {
 
-const int kfRead  = 0x0001;
-const int kfWrite = 0x0002;
+const int kfRead    = 0x0001;
+const int kfWrite   = 0x0002;
 const int kfConnect = 0x0004;
-const int kfClose = 0x0008;
+const int kfClose   = 0x0008;
+const int kfAccept  = 0x0010;
 
-// Standard MTUs
+// Standard MTUs, from RFC 1191
 const uint16 PACKET_MAXIMUMS[] = {
   65535,    // Theoretical maximum, Hyperchannel
   32000,    // Nothing
@@ -117,13 +110,28 @@ const uint16 PACKET_MAXIMUMS[] = {
 const uint32 IP_HEADER_SIZE = 20;
 const uint32 ICMP_HEADER_SIZE = 8;
 
-class PhysicalSocket : public AsyncSocket {
-public:
+class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
+ public:
   PhysicalSocket(PhysicalSocketServer* ss, SOCKET s = INVALID_SOCKET)
     : ss_(ss), s_(s), enabled_events_(0), error_(0),
-      state_((s == INVALID_SOCKET) ? CS_CLOSED : CS_CONNECTED) {
-    if (s != INVALID_SOCKET)
+      state_((s == INVALID_SOCKET) ? CS_CLOSED : CS_CONNECTED),
+      resolver_(NULL) {
+#ifdef WIN32
+    // EnsureWinsockInit() ensures that winsock is initialized. The default
+    // version of this function doesn't do anything because winsock is
+    // initialized by constructor of a static object. If neccessary libjingle
+    // users can link it with a different version of this function by replacing
+    // win32socketinit.cc. See win32socketinit.cc for more details.
+    EnsureWinsockInit();
+#endif
+    if (s_ != INVALID_SOCKET) {
       enabled_events_ = kfRead | kfWrite;
+
+      int type = SOCK_STREAM;
+      socklen_t len = sizeof(type);
+      VERIFY(0 == getsockopt(s_, SOL_SOCKET, SO_TYPE, (SockOptArg)&type, &len));
+      udp_ = (SOCK_DGRAM == type);
+    }
   }
 
   virtual ~PhysicalSocket() {
@@ -134,8 +142,9 @@ public:
   virtual bool Create(int type) {
     Close();
     s_ = ::socket(AF_INET, type, 0);
+    udp_ = (SOCK_DGRAM == type);
     UpdateLastError();
-    if (type != SOCK_STREAM)
+    if (udp_)
       enabled_events_ = kfRead | kfWrite;
     return s_ != INVALID_SOCKET;
   }
@@ -144,12 +153,13 @@ public:
     sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     int result = ::getsockname(s_, (sockaddr*)&addr, &addrlen);
-    ASSERT(addrlen == sizeof(addr));
-    talk_base::SocketAddress address;
+    SocketAddress address;
     if (result >= 0) {
+      ASSERT(addrlen == sizeof(addr));
       address.FromSockAddr(addr);
     } else {
-      ASSERT(result >= 0);
+      LOG(LS_WARNING) << "GetLocalAddress: unable to get local addr, socket="
+                      << s_;
     }
     return address;
   }
@@ -158,12 +168,13 @@ public:
     sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     int result = ::getpeername(s_, (sockaddr*)&addr, &addrlen);
-    ASSERT(addrlen == sizeof(addr));
-    talk_base::SocketAddress address;
+    SocketAddress address;
     if (result >= 0) {
+      ASSERT(addrlen == sizeof(addr));
       address.FromSockAddr(addr);
     } else {
-      ASSERT(errno == ENOTCONN);
+      LOG(LS_WARNING) << "GetRemoteAddress: unable to get remote addr, socket="
+                      << s_;
     }
     return address;
   }
@@ -173,6 +184,12 @@ public:
     addr.ToSockAddr(&saddr);
     int err = ::bind(s_, (sockaddr*)&saddr, sizeof(saddr));
     UpdateLastError();
+#ifdef _DEBUG
+    if (0 == err) {
+      dbg_addr_ = "Bound @ ";
+      dbg_addr_.append(GetLocalAddress().ToString());
+    }
+#endif  // _DEBUG
     return err;
   }
 
@@ -181,13 +198,27 @@ public:
     // ...but should we make it more explicit?
     if ((s_ == INVALID_SOCKET) && !Create(SOCK_STREAM))
       return SOCKET_ERROR;
-    SocketAddress addr2(addr);
-    if (addr2.IsUnresolved()) {
-      LOG(INFO) << "Resolving addr in PhysicalSocket::Connect";
-      addr2.Resolve(); // TODO: Do this async later?
+    if (addr.IsUnresolved()) {
+      if (state_ != CS_CLOSED) {
+        SetError(EALREADY);
+        return SOCKET_ERROR;
+      }
+
+      LOG(LS_VERBOSE) << "Resolving addr in PhysicalSocket::Connect";
+      resolver_ = new AsyncResolver();
+      resolver_->set_address(addr);
+      resolver_->SignalWorkDone.connect(this, &PhysicalSocket::OnResolveResult);
+      resolver_->Start();
+      state_ = CS_CONNECTING;
+      return 0;
     }
+
+    return DoConnect(addr);
+  }
+
+  int DoConnect(const SocketAddress& addr) {
     sockaddr_in saddr;
-    addr2.ToSockAddr(&saddr);
+    addr.ToSockAddr(&saddr);
     int err = ::connect(s_, (sockaddr*)&saddr, sizeof(saddr));
     UpdateLastError();
     //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Connect(" << addr2.ToString() << ") Ret: " << err << " Error: " << error_;
@@ -196,9 +227,12 @@ public:
     } else if (IsBlockingError(error_)) {
       state_ = CS_CONNECTING;
       enabled_events_ |= kfConnect;
+    } else {
+      return SOCKET_ERROR;
     }
+
     enabled_events_ |= kfRead | kfWrite;
-    return err;
+    return 0;
   }
 
   int GetError() const {
@@ -213,27 +247,47 @@ public:
     return state_;
   }
 
+  int GetOption(Option opt, int* value) {
+    int slevel;
+    int sopt;
+    if (TranslateOption(opt, &slevel, &sopt) == -1)
+      return -1;
+    socklen_t optlen = sizeof(*value);
+    int ret = ::getsockopt(s_, slevel, sopt, (SockOptArg)value, &optlen);
+    if (ret != -1 && opt == OPT_DONTFRAGMENT) {
+#ifdef LINUX
+      *value = (*value != IP_PMTUDISC_DONT) ? 1 : 0;
+#endif
+    }
+    return ret;
+  }
+
   int SetOption(Option opt, int value) {
-    assert(opt == OPT_DONTFRAGMENT);
-#ifdef WIN32
-    value = (value == 0) ? 0 : 1;
-    return ::setsockopt(
-        s_, IPPROTO_IP, IP_DONTFRAGMENT, reinterpret_cast<char*>(&value),
-        sizeof(value));
+    int slevel;
+    int sopt;
+    if (TranslateOption(opt, &slevel, &sopt) == -1)
+      return -1;
+    if (opt == OPT_DONTFRAGMENT) {
+#ifdef LINUX
+      value = (value) ? IP_PMTUDISC_DO : IP_PMTUDISC_DONT;
 #endif
-#ifdef __linux 
-    value = (value == 0) ? IP_PMTUDISC_DONT : IP_PMTUDISC_DO;
-    return ::setsockopt(
-        s_, IPPROTO_IP, IP_MTU_DISCOVER, &value, sizeof(value));
-#endif
-#ifdef OSX
-    // This is not possible on OSX.
-    return -1;
-#endif
+    }
+    return ::setsockopt(s_, slevel, sopt, (SockOptArg)&value, sizeof(value));
   }
 
   int Send(const void *pv, size_t cb) {
-    int sent = ::send(s_, reinterpret_cast<const char *>(pv), (int)cb, 0);
+    int sent = ::send(s_, reinterpret_cast<const char *>(pv), (int)cb,
+#ifdef LINUX
+        // Suppress SIGPIPE. Without this, attempting to send on a socket whose
+        // other end is closed will result in a SIGPIPE signal being raised to
+        // our process, which by default will terminate the process, which we
+        // don't want. By specifying this flag, we'll just get the error EPIPE
+        // instead and can handle the error gracefully.
+        MSG_NOSIGNAL
+#else
+        0
+#endif
+        );
     UpdateLastError();
     //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Send(" << cb << ") Ret: " << sent << " Error: " << error_;
     ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
@@ -247,13 +301,20 @@ public:
     sockaddr_in saddr;
     addr.ToSockAddr(&saddr);
     int sent = ::sendto(
-        s_, (const char *)pv, (int)cb, 0, (sockaddr*)&saddr,
-        sizeof(saddr));
+        s_, (const char *)pv, (int)cb,
+#ifdef LINUX
+        // Suppress SIGPIPE. See above for explanation.
+        MSG_NOSIGNAL,
+#else
+        0,
+#endif
+        (sockaddr*)&saddr, sizeof(saddr));
     UpdateLastError();
     ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
     if ((sent < 0) && IsBlockingError(error_)) {
       enabled_events_ |= kfWrite;
     }
+    //LOG_F(LS_INFO) << cb << ":" << addr.ToString() << ":" << sent << ":" << error_;
     return sent;
   }
 
@@ -263,12 +324,20 @@ public:
       // Note: on graceful shutdown, recv can return 0.  In this case, we
       // pretend it is blocking, and then signal close, so that simplifying
       // assumptions can be made about Recv.
+      LOG(LS_WARNING) << "EOF from socket; deferring close event";
+      // Must turn this back on so that the select() loop will notice the close
+      // event.
+      enabled_events_ |= kfRead;
       error_ = EWOULDBLOCK;
       return SOCKET_ERROR;
     }
     UpdateLastError();
-    if ((received >= 0) || IsBlockingError(error_)) {
+    bool success = (received >= 0) || IsBlockingError(error_);
+    if (udp_ || success) {
       enabled_events_ |= kfRead;
+    }
+    if (!success) {
+      LOG_F(LS_VERBOSE) << "Error = " << error_;
     }
     return received;
   }
@@ -281,8 +350,12 @@ public:
     UpdateLastError();
     if ((received >= 0) && (paddr != NULL))
       paddr->FromSockAddr(saddr);
-    if ((received >= 0) || IsBlockingError(error_)) {
+    bool success = (received >= 0) || IsBlockingError(error_);
+    if (udp_ || success) {
       enabled_events_ |= kfRead;
+    }
+    if (!success) {
+      LOG_F(LS_VERBOSE) << "Error = " << error_;
     }
     return received;
   }
@@ -290,23 +363,27 @@ public:
   int Listen(int backlog) {
     int err = ::listen(s_, backlog);
     UpdateLastError();
-    if (err == 0)
+    if (err == 0) {
       state_ = CS_CONNECTING;
-    enabled_events_ |= kfRead;
-
+      enabled_events_ |= kfAccept;
+#ifdef _DEBUG
+      dbg_addr_ = "Listening @ ";
+      dbg_addr_.append(GetLocalAddress().ToString());
+#endif  // _DEBUG
+    }
     return err;
   }
 
-  Socket* Accept(SocketAddress *paddr) {
+  AsyncSocket* Accept(SocketAddress *paddr) {
     sockaddr_in saddr;
     socklen_t cbAddr = sizeof(saddr);
     SOCKET s = ::accept(s_, (sockaddr*)&saddr, &cbAddr);
     UpdateLastError();
     if (s == INVALID_SOCKET)
       return NULL;
+    enabled_events_ |= kfAccept;
     if (paddr != NULL)
       paddr->FromSockAddr(saddr);
-    enabled_events_ |= kfRead | kfWrite;
     return ss_->WrapSocket(s);
   }
 
@@ -319,6 +396,10 @@ public:
     s_ = INVALID_SOCKET;
     state_ = CS_CLOSED;
     enabled_events_ = 0;
+    if (resolver_) {
+      resolver_->Destroy(false);
+      resolver_ = NULL;
+    }
     return err;
   }
 
@@ -329,8 +410,8 @@ public:
       return -1;
     }
 
-#ifdef WIN32
-
+#if defined(WIN32)
+    // Gets the interface MTU (TTL=1) for the interface used to reach |addr|.
     WinPing ping;
     if (!ping.IsValid()) {
       error_ = EINVAL; // can't think of a better error ID
@@ -343,20 +424,23 @@ public:
       if (result == WinPing::PING_FAIL) {
         error_ = EINVAL; // can't think of a better error ID
         return -1;
-      }
-      if (result != WinPing::PING_TOO_LARGE) {
+      } else if (result != WinPing::PING_TOO_LARGE) {
         *mtu = PACKET_MAXIMUMS[level];
         return 0;
       }
     }
 
-    assert(false);
-    return 0;
-
-#endif // WIN32
-
-#ifdef __linux 
-
+    ASSERT(false);
+    return -1;
+#elif defined(OSX)
+    // No simple way to do this on Mac OS X.
+    // SIOCGIFMTU would work if we knew which interface would be used, but
+    // figuring that out is pretty complicated. For now we'll return an error
+    // and let the caller pick a default MTU.
+    error_ = EINVAL;
+    return -1;
+#elif defined(LINUX)
+    // Gets the path MTU.
     int value;
     socklen_t vlen = sizeof(value);
     int err = getsockopt(s_, IPPROTO_IP, IP_MTU, &value, &vlen);
@@ -365,45 +449,97 @@ public:
       return err;
     }
 
-    assert((0 <= value) && (value <= 65536));
-    *mtu = uint16(value);
+    ASSERT((0 <= value) && (value <= 65536));
+    *mtu = value;
     return 0;
-
-#endif   // __linux
-
-    // TODO: OSX support
+#endif
   }
 
   SocketServer* socketserver() { return ss_; }
- 
-protected:
-  PhysicalSocketServer* ss_;
-  SOCKET s_;
-  uint32 enabled_events_;
-  int error_;
-  ConnState state_;
+
+ protected:
+  void OnResolveResult(SignalThread* thread) {
+    if (thread != resolver_) {
+      return;
+    }
+
+    int error = resolver_->error();
+    if (error == 0) {
+      error = DoConnect(resolver_->address());
+    } else {
+      Close();
+    }
+
+    if (error) {
+      error_ = error;
+      SignalCloseEvent(this, error_);
+    }
+  }
 
   void UpdateLastError() {
-#ifdef WIN32
-    error_ = WSAGetLastError();
-#endif
-#ifdef POSIX
-    error_ = errno;
-#endif
+    error_ = LAST_SYSTEM_ERROR;
   }
+
+  static int TranslateOption(Option opt, int* slevel, int* sopt) {
+    switch (opt) {
+      case OPT_DONTFRAGMENT:
+#ifdef WIN32
+        *slevel = IPPROTO_IP;
+        *sopt = IP_DONTFRAGMENT;
+        break;
+#elif defined(OSX) || defined(BSD)
+        LOG(LS_WARNING) << "Socket::OPT_DONTFRAGMENT not supported.";
+        return -1;
+#elif defined(POSIX)
+        *slevel = IPPROTO_IP;
+        *sopt = IP_MTU_DISCOVER;
+        break;
+#endif
+      case OPT_RCVBUF:
+        *slevel = SOL_SOCKET;
+        *sopt = SO_RCVBUF;
+        break;
+      case OPT_SNDBUF:
+        *slevel = SOL_SOCKET;
+        *sopt = SO_SNDBUF;
+        break;
+      case OPT_NODELAY:
+        *slevel = IPPROTO_TCP;
+        *sopt = TCP_NODELAY;
+        break;
+      default:
+        ASSERT(false);
+        return -1;
+    }
+    return 0;
+  }
+
+  PhysicalSocketServer* ss_;
+  SOCKET s_;
+  uint8 enabled_events_;
+  bool udp_;
+  int error_;
+  ConnState state_;
+  AsyncResolver* resolver_;
+
+#ifdef _DEBUG
+  std::string dbg_addr_;
+#endif  // _DEBUG;
 };
 
 #ifdef POSIX
 class Dispatcher {
-public:
+ public:
+  virtual ~Dispatcher() { }
   virtual uint32 GetRequestedEvents() = 0;
-  virtual void OnPreEvent(uint32 ff) = 0;    
+  virtual void OnPreEvent(uint32 ff) = 0;
   virtual void OnEvent(uint32 ff, int err) = 0;
   virtual int GetDescriptor() = 0;
+  virtual bool IsDescriptorClosed() = 0;
 };
 
 class EventDispatcher : public Dispatcher {
-public:
+ public:
   EventDispatcher(PhysicalSocketServer* ss) : ss_(ss), fSignaled_(false) {
     if (pipe(afd_) < 0)
       LOG(LERROR) << "pipe failed";
@@ -415,17 +551,17 @@ public:
     close(afd_[0]);
     close(afd_[1]);
   }
-  
+
   virtual void Signal() {
     CritScope cs(&crit_);
     if (!fSignaled_) {
-      uint8 b = 0;
-      if (write(afd_[1], &b, sizeof(b)) < 0)
-        LOG(LERROR) << "write failed";
-      fSignaled_ = true;
+      const uint8 b[1] = { 0 };
+      if (VERIFY(1 == write(afd_[1], b, sizeof(b)))) {
+        fSignaled_ = true;
+      }
     }
   }
-  
+
   virtual uint32 GetRequestedEvents() {
     return kfRead;
   }
@@ -433,37 +569,206 @@ public:
   virtual void OnPreEvent(uint32 ff) {
     // It is not possible to perfectly emulate an auto-resetting event with
     // pipes.  This simulates it by resetting before the event is handled.
-  
+
     CritScope cs(&crit_);
     if (fSignaled_) {
-      uint8 b;
-      read(afd_[0], &b, sizeof(b));
+      uint8 b[4];  // Allow for reading more than 1 byte, but expect 1.
+      VERIFY(1 == read(afd_[0], b, sizeof(b)));
       fSignaled_ = false;
     }
   }
 
   virtual void OnEvent(uint32 ff, int err) {
-    assert(false);
+    ASSERT(false);
   }
 
   virtual int GetDescriptor() {
     return afd_[0];
   }
 
-private:
+  virtual bool IsDescriptorClosed() {
+    return false;
+  }
+
+ private:
   PhysicalSocketServer *ss_;
   int afd_[2];
   bool fSignaled_;
   CriticalSection crit_;
 };
 
+// This is a class customized to use the self-pipe trick to deliver POSIX
+// signals. This is the only safe, reliable, cross-platform way to do
+// non-trivial things with a POSIX signal (until proper pselect()
+// implementations become ubiquitous).
+class PosixSignalDeliveryDispatcher : public Dispatcher {
+ public:
+  virtual ~PosixSignalDeliveryDispatcher() {
+    close(afd_[0]);
+    close(afd_[1]);
+  }
+
+  virtual uint32 GetRequestedEvents() {
+    return kfRead;
+  }
+
+  virtual void OnPreEvent(uint32 ff) {
+    // Events might get grouped if signals come very fast, so we read out up to
+    // 16 bytes to make sure we keep the pipe empty.
+    uint8 b[16];
+    ssize_t ret = read(afd_[0], b, sizeof(b));
+    if (ret < 0) {
+      LOG_ERR(LS_WARNING) << "Error in read()";
+    } else if (ret == 0) {
+      LOG(LS_WARNING) << "Should have read at least one byte";
+    }
+  }
+
+  virtual void OnEvent(uint32 ff, int err) {
+    for (int signum = 0; signum < ARRAY_SIZE(received_signal_); ++signum) {
+      if (received_signal_[signum]) {
+        received_signal_[signum] = false;
+        HandlerMap::iterator i = handlers_.find(signum);
+        if (i == handlers_.end()) {
+          // This can happen if a signal is delivered to our process at around
+          // the same time as we unset our handler for it. It is not an error
+          // condidion, but it's unusual enough to be worth logging.
+          LOG(LS_INFO) << "Received signal with no handler: " << signum;
+        } else {
+          // Otherwise, execute the handler.
+          (*i->second)(signum);
+        }
+      }
+    }
+  }
+
+  virtual int GetDescriptor() {
+    return afd_[0];
+  }
+
+  virtual bool IsDescriptorClosed() {
+    return false;
+  }
+
+  void SetHandler(int signum, void (*handler)(int)) {
+    handlers_[signum] = handler;
+  }
+
+  void ClearHandler(int signum) {
+    handlers_.erase(signum);
+  }
+
+  bool HasHandlers() {
+    return !handlers_.empty();
+  }
+
+  // This is called directly from our real signal handler, so it must be
+  // signal-handler-safe. That means it cannot assume anything about the
+  // user-level state of the process, since the handler could be executed at any
+  // time on any thread.
+  void OnPosixSignalReceived(int signum) {
+    if (signum >= ARRAY_SIZE(received_signal_)) {
+      // We don't have space in our array for this.
+      return;
+    }
+    // Set a flag saying we've seen this signal.
+    received_signal_[signum] = true;
+    // Tell the thread running our PhysicalSocketServer that we got a signal.
+    const uint8 b[1] = { 0 };
+    if (-1 == write(afd_[1], b, sizeof(b))) {
+      // Nothing we can do here. If there's an error somehow then there's
+      // nothing we can safely do from a signal handler.
+      // No, we can't even safely log it.
+      // But, we still have to check the return value here. Otherwise,
+      // GCC 4.4.1 complains ignoring return value. Even (void) doesn't help.
+      return;
+    }
+  }
+
+  // Sets a PhysicalSocketServer to own signal delivery, or fails if already
+  // owned.
+  bool SetOwner(PhysicalSocketServer *owner) {
+    CritScope cs(&owner_critsec_);
+    if (owner == owner_) {
+      return true;
+    } else if (owner_) {
+      return false;
+    } else {
+      owner_ = owner;
+      owner_->Add(this);
+      return true;
+    }
+  }
+
+  bool IsOwner(PhysicalSocketServer *ss) {
+    CritScope cs(&owner_critsec_);
+    return owner_ == ss;
+  }
+
+  void ClearOwner(PhysicalSocketServer *ss) {
+    CritScope cs(&owner_critsec_);
+    if (owner_ != ss) {
+      return;
+    }
+    owner_->Remove(this);
+    owner_ = NULL;
+  }
+
+  // There is just a single global instance. (Signal handlers do not get any
+  // sort of user-defined void * parameter, so they can't access anything that
+  // isn't global.)
+  static PosixSignalDeliveryDispatcher instance_;
+
+ private:
+  // POSIX only specifies 32 signals, but in principle the system might have
+  // more and the programmer might choose to use them, so we size our array
+  // for 128.
+  static const int kNumPosixSignals = 128;
+
+  typedef std::map<int, void (*)(int)> HandlerMap;
+
+  PosixSignalDeliveryDispatcher() : owner_(NULL) {
+    if (pipe(afd_) < 0) {
+      LOG_ERR(LS_ERROR) << "pipe failed";
+      return;
+    }
+    if (fcntl(afd_[0], F_SETFL, O_NONBLOCK) < 0) {
+      LOG_ERR(LS_WARNING) << "fcntl #1 failed";
+    }
+    if (fcntl(afd_[1], F_SETFL, O_NONBLOCK) < 0) {
+      LOG_ERR(LS_WARNING) << "fcntl #2 failed";
+    }
+    memset(const_cast<void *>(static_cast<volatile void *>(received_signal_)),
+           0,
+           sizeof(received_signal_));
+  }
+
+  int afd_[2];
+  HandlerMap handlers_;
+  // These are boolean flags that will be set in our signal handler and read
+  // and cleared from Wait(). There is a race involved in this, but it is
+  // benign. The signal handler sets the flag before signaling the pipe, so
+  // we'll never end up blocking in select() while a flag is still true.
+  // However, if two of the same signal arrive close to each other then it's
+  // possible that the second time the handler may set the flag while it's still
+  // true, meaning that signal will be missed. But the first occurrence of it
+  // will still be handled, so this isn't a problem.
+  // Volatile is not necessary here for correctness, but this data _is_ volatile
+  // so I've marked it as such.
+  volatile uint8 received_signal_[kNumPosixSignals];
+  // Our owner.
+  PhysicalSocketServer *owner_;
+  // To synchronize ownership changes.
+  CriticalSection owner_critsec_;
+};
+
+PosixSignalDeliveryDispatcher PosixSignalDeliveryDispatcher::instance_;
+
 class SocketDispatcher : public Dispatcher, public PhysicalSocket {
-public:
-  SocketDispatcher(PhysicalSocketServer *ss) : PhysicalSocket(ss) {
-    ss_->Add(this);
+ public:
+  explicit SocketDispatcher(PhysicalSocketServer *ss) : PhysicalSocket(ss) {
   }
   SocketDispatcher(SOCKET s, PhysicalSocketServer *ss) : PhysicalSocket(ss, s) {
-    ss_->Add(this);
   }
 
   virtual ~SocketDispatcher() {
@@ -483,9 +788,44 @@ public:
 
     return Initialize();
   }
-  
+
   virtual int GetDescriptor() {
     return s_;
+  }
+
+  virtual bool IsDescriptorClosed() {
+    // We don't have a reliable way of distinguishing end-of-stream
+    // from readability.  So test on each readable call.  Is this
+    // inefficient?  Probably.
+    char ch;
+    ssize_t res = ::recv(s_, &ch, 1, MSG_PEEK);
+    if (res > 0) {
+      // Data available, so not closed.
+      return false;
+    } else if (res == 0) {
+      // EOF, so closed.
+      return true;
+    } else {  // error
+      switch (errno) {
+        // Returned if we've already closed s_.
+        case EBADF:
+        // Returned during ungraceful peer shutdown.
+        case ECONNRESET:
+          return true;
+        default:
+          // Assume that all other errors are just blocking errors, meaning the
+          // connection is still good but we just can't read from it right now.
+          // This should only happen when connecting (and at most once), because
+          // in all other cases this function is only called if the file
+          // descriptor is already known to be in the readable state. However,
+          // it's not necessary a problem if we spuriously interpret a
+          // "connection lost"-type error as a blocking error, because typically
+          // the next recv() will get EOF, so we'll still eventually notice that
+          // the socket is closed.
+          LOG_ERR(LS_WARNING) << "Assuming benign blocking error";
+          return false;
+      }
+    }
   }
 
   virtual uint32 GetRequestedEvents() {
@@ -495,6 +835,8 @@ public:
   virtual void OnPreEvent(uint32 ff) {
     if ((ff & kfConnect) != 0)
       state_ = CS_CONNECTED;
+    if ((ff & kfClose) != 0)
+      state_ = CS_CLOSED;
   }
 
   virtual void OnEvent(uint32 ff, int err) {
@@ -510,8 +852,15 @@ public:
       enabled_events_ &= ~kfConnect;
       SignalConnectEvent(this);
     }
-    if ((ff & kfClose) != 0)
+    if ((ff & kfAccept) != 0) {
+      enabled_events_ &= ~kfAccept;
+      SignalReadEvent(this);
+    }
+    if ((ff & kfClose) != 0) {
+      // The socket is now dead to us, so stop checking it.
+      enabled_events_ = 0;
       SignalCloseEvent(this, err);
+    }
   }
 
   virtual int Close() {
@@ -521,11 +870,10 @@ public:
     ss_->Remove(this);
     return PhysicalSocket::Close();
   }
-    
 };
 
 class FileDispatcher: public Dispatcher, public AsyncFile {
-public:
+ public:
   FileDispatcher(int fd, PhysicalSocketServer *ss) : ss_(ss), fd_(fd) {
     set_readable(true);
 
@@ -542,6 +890,10 @@ public:
 
   virtual int GetDescriptor() {
     return fd_;
+  }
+
+  virtual bool IsDescriptorClosed() {
+    return false;
   }
 
   virtual uint32 GetRequestedEvents() {
@@ -576,7 +928,7 @@ public:
     flags_ = value ? (flags_ | kfWrite) : (flags_ & ~kfWrite);
   }
 
-private:
+ private:
   PhysicalSocketServer* ss_;
   int fd_;
   int flags_;
@@ -590,30 +942,34 @@ AsyncFile* PhysicalSocketServer::CreateFile(int fd) {
 
 #ifdef WIN32
 class Dispatcher {
-public:
+ public:
+  virtual ~Dispatcher() {}
   virtual uint32 GetRequestedEvents() = 0;
-  virtual void OnPreEvent(uint32 ff) = 0;  
+  virtual void OnPreEvent(uint32 ff) = 0;
   virtual void OnEvent(uint32 ff, int err) = 0;
   virtual WSAEVENT GetWSAEvent() = 0;
   virtual SOCKET GetSocket() = 0;
   virtual bool CheckSignalClose() = 0;
 };
 
-uint32 FlagsToEvents(uint32 events) {
-  uint32 ffFD = FD_CLOSE | FD_ACCEPT;
+static uint32 FlagsToEvents(uint32 events) {
+  uint32 ffFD = FD_CLOSE;
   if (events & kfRead)
     ffFD |= FD_READ;
   if (events & kfWrite)
     ffFD |= FD_WRITE;
   if (events & kfConnect)
     ffFD |= FD_CONNECT;
+  if (events & kfAccept)
+    ffFD |= FD_ACCEPT;
   return ffFD;
 }
 
 class EventDispatcher : public Dispatcher {
-public:
+ public:
   EventDispatcher(PhysicalSocketServer *ss) : ss_(ss) {
-    if (hev_ = WSACreateEvent()) {
+    hev_ = WSACreateEvent();
+    if (hev_) {
       ss_->Add(this);
     }
   }
@@ -625,12 +981,12 @@ public:
       hev_ = NULL;
     }
   }
-  
+
   virtual void Signal() {
     if (hev_ != NULL)
       WSASetEvent(hev_);
   }
-  
+
   virtual uint32 GetRequestedEvents() {
     return 0;
   }
@@ -658,7 +1014,7 @@ private:
 };
 
 class SocketDispatcher : public Dispatcher, public PhysicalSocket {
-public:
+ public:
   static int next_id_;
   int id_;
   bool signal_close_;
@@ -674,14 +1030,14 @@ public:
   }
 
   bool Initialize() {
-    assert(s_ != INVALID_SOCKET);
+    ASSERT(s_ != INVALID_SOCKET);
     // Must be a non-blocking
     u_long argp = 1;
     ioctlsocket(s_, FIONBIO, &argp);
     ss_->Add(this);
     return true;
   }
- 
+
   virtual bool Create(int type) {
     // Create socket
     if (!PhysicalSocket::Create(type))
@@ -711,6 +1067,7 @@ public:
   virtual void OnPreEvent(uint32 ff) {
     if ((ff & kfConnect) != 0)
       state_ = CS_CONNECTED;
+    // We set CS_CLOSED from CheckSignalClose.
   }
 
   virtual void OnEvent(uint32 ff, int err) {
@@ -727,7 +1084,15 @@ public:
       if (ff != kfConnect)
         LOG(LS_VERBOSE) << "Signalled with kfConnect: " << ff;
       enabled_events_ &= ~kfConnect;
+#ifdef _DEBUG
+      dbg_addr_ = "Connected @ ";
+      dbg_addr_.append(GetRemoteAddress().ToString());
+#endif  // _DEBUG
       SignalConnectEvent(this);
+    }
+    if (((ff & kfAccept) != 0) && (id_ == cache_id)) {
+      enabled_events_ &= ~kfAccept;
+      SignalReadEvent(this);
     }
     if (((ff & kfClose) != 0) && (id_ == cache_id)) {
       //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] OnClose() Error: " << err;
@@ -752,6 +1117,7 @@ public:
     if (recv(s_, &ch, 1, MSG_PEEK) > 0)
       return false;
 
+    state_ = CS_CLOSED;
     signal_close_ = false;
     SignalCloseEvent(this, signal_err_);
     return true;
@@ -760,11 +1126,11 @@ public:
 
 int SocketDispatcher::next_id_ = 0;
 
-#endif // WIN32
+#endif  // WIN32
 
 // Sets the value of a boolean value to false when signaled.
 class Signaler : public EventDispatcher {
-public:
+ public:
   Signaler(PhysicalSocketServer* ss, bool* pf)
       : EventDispatcher(ss), pf_(pf) {
   }
@@ -775,18 +1141,29 @@ public:
       *pf_ = false;
   }
 
-private:
+ private:
   bool *pf_;
 };
 
-PhysicalSocketServer::PhysicalSocketServer() : fWait_(false),
-  last_tick_tracked_(0), last_tick_dispatch_count_(0) {
+PhysicalSocketServer::PhysicalSocketServer()
+    : fWait_(false),
+      last_tick_tracked_(0),
+      last_tick_dispatch_count_(0) {
   signal_wakeup_ = new Signaler(this, &fWait_);
+#ifdef WIN32
+  socket_ev_ = WSACreateEvent();
+#endif
 }
 
 PhysicalSocketServer::~PhysicalSocketServer() {
+#ifdef WIN32
+  WSACloseEvent(socket_ev_);
+#endif
+#ifdef POSIX
+  PosixSignalDeliveryDispatcher::instance_.ClearOwner(this);
+#endif
   delete signal_wakeup_;
-  //  ASSERT(dispatchers_.empty());
+  ASSERT(dispatchers_.empty());
 }
 
 void PhysicalSocketServer::WakeUp() {
@@ -825,12 +1202,29 @@ AsyncSocket* PhysicalSocketServer::WrapSocket(SOCKET s) {
 
 void PhysicalSocketServer::Add(Dispatcher *pdispatcher) {
   CritScope cs(&crit_);
+  // Prevent duplicates. This can cause dead dispatchers to stick around.
+  DispatcherList::iterator pos = std::find(dispatchers_.begin(),
+                                           dispatchers_.end(),
+                                           pdispatcher);
+  if (pos != dispatchers_.end())
+    return;
   dispatchers_.push_back(pdispatcher);
 }
 
 void PhysicalSocketServer::Remove(Dispatcher *pdispatcher) {
   CritScope cs(&crit_);
-  dispatchers_.erase(std::remove(dispatchers_.begin(), dispatchers_.end(), pdispatcher), dispatchers_.end());
+  DispatcherList::iterator pos = std::find(dispatchers_.begin(),
+                                           dispatchers_.end(),
+                                           pdispatcher);
+  ASSERT(pos != dispatchers_.end());
+  size_t index = pos - dispatchers_.begin();
+  dispatchers_.erase(pos);
+  for (IteratorList::iterator it = iterators_.begin(); it != iterators_.end();
+       ++it) {
+    if (index < **it) {
+      --**it;
+    }
+  }
 }
 
 #ifdef POSIX
@@ -858,74 +1252,105 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
 
   // Zero all fd_sets. Don't need to do this inside the loop since
   // select() zeros the descriptors not signaled
-  
+
   fd_set fdsRead;
   FD_ZERO(&fdsRead);
   fd_set fdsWrite;
   FD_ZERO(&fdsWrite);
- 
+
   fWait_ = true;
 
   while (fWait_) {
     int fdmax = -1;
     {
       CritScope cr(&crit_);
-      for (unsigned i = 0; i < dispatchers_.size(); i++) {
+      for (size_t i = 0; i < dispatchers_.size(); ++i) {
         // Query dispatchers for read and write wait state
-      
         Dispatcher *pdispatcher = dispatchers_[i];
-        assert(pdispatcher);
+        ASSERT(pdispatcher);
         if (!process_io && (pdispatcher != signal_wakeup_))
           continue;
         int fd = pdispatcher->GetDescriptor();
         if (fd > fdmax)
           fdmax = fd;
+
         uint32 ff = pdispatcher->GetRequestedEvents();
-        if (ff & kfRead)
+        if (ff & (kfRead | kfAccept))
           FD_SET(fd, &fdsRead);
         if (ff & (kfWrite | kfConnect))
           FD_SET(fd, &fdsWrite);
       }
     }
-      
+
     // Wait then call handlers as appropriate
     // < 0 means error
     // 0 means timeout
     // > 0 means count of descriptors ready
     int n = select(fdmax + 1, &fdsRead, &fdsWrite, NULL, ptvWait);
-    // If error, return error
-    // todo: do something intelligent
-    if (n < 0)
-      return false;
-    
-    // If timeout, return success
-    
-    if (n == 0)
+
+    // If error, return error.
+    if (n < 0) {
+      if (errno != EINTR) {
+        LOG_E(LS_ERROR, EN, errno) << "select";
+        return false;
+      }
+      // Else ignore the error and keep going. If this EINTR was for one of the
+      // signals managed by this PhysicalSocketServer, the
+      // PosixSignalDeliveryDispatcher will be in the signaled state in the next
+      // iteration.
+    } else if (n == 0) {
+      // If timeout, return success
       return true;
-    
-    // We have signaled descriptors
-   
-    {
+    } else {
+      // We have signaled descriptors
       CritScope cr(&crit_);
-      for (unsigned i = 0; i < dispatchers_.size(); i++) {
+      for (size_t i = 0; i < dispatchers_.size(); ++i) {
         Dispatcher *pdispatcher = dispatchers_[i];
         int fd = pdispatcher->GetDescriptor();
         uint32 ff = 0;
+        int errcode = 0;
+
+        // Reap any error code, which can be signaled through reads or writes.
+        // TODO: Should we set errcode if getsockopt fails?
+        if (FD_ISSET(fd, &fdsRead) || FD_ISSET(fd, &fdsWrite)) {
+          socklen_t len = sizeof(errcode);
+          ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &errcode, &len);
+        }
+
+        // Check readable descriptors. If we're waiting on an accept, signal
+        // that. Otherwise we're waiting for data, check to see if we're
+        // readable or really closed.
+        // TODO: Only peek at TCP descriptors.
         if (FD_ISSET(fd, &fdsRead)) {
           FD_CLR(fd, &fdsRead);
-          ff |= kfRead;
+          if (pdispatcher->GetRequestedEvents() & kfAccept) {
+            ff |= kfAccept;
+          } else if (errcode || pdispatcher->IsDescriptorClosed()) {
+            ff |= kfClose;
+          } else {
+            ff |= kfRead;
+          }
         }
+
+        // Check writable descriptors. If we're waiting on a connect, detect
+        // success versus failure by the reaped error code.
         if (FD_ISSET(fd, &fdsWrite)) {
           FD_CLR(fd, &fdsWrite);
           if (pdispatcher->GetRequestedEvents() & kfConnect) {
-            ff |= kfConnect;
+            if (!errcode) {
+              ff |= kfConnect;
+            } else {
+              ff |= kfClose;
+            }
           } else {
             ff |= kfWrite;
           }
         }
+
+        // Tell the descriptor about the event.
         if (ff != 0) {
           pdispatcher->OnPreEvent(ff);
-          pdispatcher->OnEvent(ff, 0);
+          pdispatcher->OnEvent(ff, errcode);
         }
       }
     }
@@ -938,27 +1363,80 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
       ptvWait->tv_usec = 0;
       struct timeval tvT;
       gettimeofday(&tvT, NULL);
-      if (tvStop.tv_sec >= tvT.tv_sec) {
+      if ((tvStop.tv_sec > tvT.tv_sec)
+          || ((tvStop.tv_sec == tvT.tv_sec)
+              && (tvStop.tv_usec > tvT.tv_usec))) {
         ptvWait->tv_sec = tvStop.tv_sec - tvT.tv_sec;
         ptvWait->tv_usec = tvStop.tv_usec - tvT.tv_usec;
         if (ptvWait->tv_usec < 0) {
+          ASSERT(ptvWait->tv_sec > 0);
           ptvWait->tv_usec += 1000000;
           ptvWait->tv_sec -= 1;
         }
       }
     }
   }
-        
+
   return true;
 }
-#endif // POSIX
+
+static void GlobalSignalHandler(int signum) {
+  PosixSignalDeliveryDispatcher::instance_.OnPosixSignalReceived(signum);
+}
+
+bool PhysicalSocketServer::SetPosixSignalHandler(int signum,
+                                                 void (*handler)(int)) {
+  // If handler is SIG_IGN or SIG_DFL then clear our user-level handler,
+  // otherwise set one.
+  if (handler == SIG_IGN || handler == SIG_DFL) {
+    if (!InstallSignal(signum, handler)) {
+      return false;
+    }
+    if (PosixSignalDeliveryDispatcher::instance_.IsOwner(this)) {
+      PosixSignalDeliveryDispatcher::instance_.ClearHandler(signum);
+      if (!PosixSignalDeliveryDispatcher::instance_.HasHandlers()) {
+        PosixSignalDeliveryDispatcher::instance_.ClearOwner(this);
+      }
+    }
+  } else {
+    if (!PosixSignalDeliveryDispatcher::instance_.SetOwner(this)) {
+      LOG(LS_ERROR) <<
+        "Cannot do POSIX signal delivery on more than one PhysicalSocketServer";
+      return false;
+    }
+    PosixSignalDeliveryDispatcher::instance_.SetHandler(signum, handler);
+    if (!InstallSignal(signum, &GlobalSignalHandler)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool PhysicalSocketServer::InstallSignal(int signum, void (*handler)(int)) {
+  struct sigaction act;
+  // It doesn't really matter what we set this mask to.
+  if (sigemptyset(&act.sa_mask) != 0) {
+    LOG_ERR(LS_ERROR) << "Couldn't set mask";
+    return false;
+  }
+  act.sa_handler = handler;
+  // Use SA_RESTART so that our syscalls don't get EINTR, since we don't need it
+  // and it's a nuisance. Though some syscalls still return EINTR and there's no
+  // real standard for which ones. :(
+  act.sa_flags = SA_RESTART;
+  if (sigaction(signum, &act, NULL) != 0) {
+    LOG_ERR(LS_ERROR) << "Couldn't set sigaction";
+    return false;
+  }
+  return true;
+}
+#endif  // POSIX
 
 #ifdef WIN32
-bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
-{
+bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
   int cmsTotal = cmsWait;
   int cmsElapsed = 0;
-  uint32 msStart = GetMillisecondCount();
+  uint32 msStart = Time();
 
 #if LOGGING
   if (last_tick_dispatch_count_ == 0) {
@@ -966,19 +1444,21 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
   }
 #endif
 
-  WSAEVENT socket_ev = WSACreateEvent();
-  
   fWait_ = true;
   while (fWait_) {
     std::vector<WSAEVENT> events;
     std::vector<Dispatcher *> event_owners;
 
-    events.push_back(socket_ev);
+    events.push_back(socket_ev_);
 
     {
       CritScope cr(&crit_);
-      for (size_t i = 0; i < dispatchers_.size(); ++i) {
-        Dispatcher * disp = dispatchers_[i];
+      size_t i = 0;
+      iterators_.push_back(&i);
+      // Don't track dispatchers_.size(), because we want to pick up any new
+      // dispatchers that were added while processing the loop.
+      while (i < dispatchers_.size()) {
+        Dispatcher* disp = dispatchers_[i++];
         if (!process_io && (disp != signal_wakeup_))
           continue;
         SOCKET s = disp->GetSocket();
@@ -991,6 +1471,8 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
           event_owners.push_back(disp);
         }
       }
+      ASSERT(iterators_.back() == &i);
+      iterators_.pop_back();
     }
 
     // Which is shorter, the delay wait or the asked wait?
@@ -999,9 +1481,7 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
     if (cmsWait == kForever) {
       cmsNext = cmsWait;
     } else {
-      cmsNext = cmsTotal - cmsElapsed;
-      if (cmsNext < 0)
-        cmsNext = 0;
+      cmsNext = _max(0, cmsTotal - cmsElapsed);
     }
 
     // Wait for one of the events to signal
@@ -1011,38 +1491,29 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
     // we track this information purely for logging purposes.
     last_tick_dispatch_count_++;
     if (last_tick_dispatch_count_ >= 1000) {
-      uint32 now = GetMillisecondCount();
-      LOG(INFO) << "PhysicalSocketServer took " << TimeDiff(now, last_tick_tracked_) << "ms for 1000 events";
+      int32 elapsed = TimeSince(last_tick_tracked_);
+      LOG(INFO) << "PhysicalSocketServer took " << elapsed << "ms for 1000 events";
 
       // If we get more than 1000 events in a second, we are spinning badly
       // (normally it should take about 8-20 seconds).
-      assert(TimeDiff(now, last_tick_tracked_) > 1000);
-      
-      last_tick_tracked_ = now;
+      ASSERT(elapsed > 1000);
+
+      last_tick_tracked_ = Time();
       last_tick_dispatch_count_ = 0;
     }
 #endif
 
-    // Failed?
-    // todo: need a better strategy than this!
-
     if (dw == WSA_WAIT_FAILED) {
+      // Failed?
+      // TODO: need a better strategy than this!
       int error = WSAGetLastError();
-      assert(false);
-      WSACloseEvent(socket_ev);
+      ASSERT(false);
       return false;
-    }
-
-    // Timeout?
-
-    if (dw == WSA_WAIT_TIMEOUT) {
-      WSACloseEvent(socket_ev);
+    } else if (dw == WSA_WAIT_TIMEOUT) {
+      // Timeout?
       return true;
-    }
-
-    // Figure out which one it is and call it
-
-    {
+    } else {
+      // Figure out which one it is and call it
       CritScope cr(&crit_);
       int index = dw - WSA_WAIT_EVENT_0;
       if (index > 0) {
@@ -1050,8 +1521,11 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
         event_owners[index]->OnPreEvent(0);
         event_owners[index]->OnEvent(0, 0);
       } else if (process_io) {
-        for (size_t i = 0; i < dispatchers_.size(); ++i) {
-          Dispatcher * disp = dispatchers_[i];
+        size_t i = 0, end = dispatchers_.size();
+        iterators_.push_back(&i);
+        iterators_.push_back(&end);  // Don't iterate over new dispatchers.
+        while (i < end) {
+          Dispatcher* disp = dispatchers_[i++];
           SOCKET s = disp->GetSocket();
           if (s == INVALID_SOCKET)
             continue;
@@ -1059,7 +1533,7 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
           WSANETWORKEVENTS wsaEvents;
           int err = WSAEnumNetworkEvents(s, events[0], &wsaEvents);
           if (err == 0) {
-            
+
 #if LOGGING
             {
               if ((wsaEvents.lNetworkEvents & FD_READ) && wsaEvents.iErrorCode[FD_READ_BIT] != 0) {
@@ -1089,13 +1563,12 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
               if (wsaEvents.iErrorCode[FD_CONNECT_BIT] == 0) {
                 ff |= kfConnect;
               } else {
-                // TODO: Decide whether we want to signal connect, but with an error code
-                ff |= kfClose; 
+                ff |= kfClose;
                 errcode = wsaEvents.iErrorCode[FD_CONNECT_BIT];
               }
             }
             if (wsaEvents.lNetworkEvents & FD_ACCEPT)
-              ff |= kfRead;
+              ff |= kfAccept;
             if (wsaEvents.lNetworkEvents & FD_CLOSE) {
               ff |= kfClose;
               errcode = wsaEvents.iErrorCode[FD_CLOSE_BIT];
@@ -1106,27 +1579,28 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io)
             }
           }
         }
+        ASSERT(iterators_.back() == &end);
+        iterators_.pop_back();
+        ASSERT(iterators_.back() == &i);
+        iterators_.pop_back();
       }
 
       // Reset the network event until new activity occurs
-      WSAResetEvent(socket_ev);
+      WSAResetEvent(socket_ev_);
     }
 
     // Break?
-
     if (!fWait_)
       break;
-    cmsElapsed = GetMillisecondCount() - msStart;
+    cmsElapsed = TimeSince(msStart);
     if ((cmsWait != kForever) && (cmsElapsed >= cmsWait)) {
        break;
     }
   }
-  
+
   // Done
-  
-  WSACloseEvent(socket_ev);
   return true;
 }
-#endif // WIN32
+#endif  // WIN32
 
-} // namespace talk_base
+}  // namespace talk_base

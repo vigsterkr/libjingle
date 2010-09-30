@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/base/stl_decl.h"
 #include <string>
 #include <iostream>
 #include <vector>
@@ -44,6 +43,7 @@ public:
   void PrintElement(const XmlElement * element);
   void PrintQuotedValue(const std::string & text);
   void PrintBodyText(const std::string & text);
+  void PrintCDATAText(const std::string & text);
 
 private:
   std::ostream *pout_;
@@ -131,9 +131,13 @@ XmlPrinterImpl::PrintElement(const XmlElement * element) {
   else {
     *pout_ << '>';
     while (pchild) {
-      if (pchild->IsText())
-        PrintBodyText(pchild->AsText()->Text());
-      else
+      if (pchild->IsText()) {
+        if (element->IsCDATA()) {
+          PrintCDATAText(pchild->AsText()->Text());
+        } else {
+          PrintBodyText(pchild->AsText()->Text());
+        }
+      } else
         PrintElement(pchild->AsElement());
       pchild = pchild->NextChild();
     }
@@ -186,5 +190,9 @@ XmlPrinterImpl::PrintBodyText(const std::string & text) {
   }
 }
 
+void
+XmlPrinterImpl::PrintCDATAText(const std::string & text) {
+  *pout_ << "<![CDATA[" << text << "]]>";
+}
 
 }

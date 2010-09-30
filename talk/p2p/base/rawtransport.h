@@ -25,53 +25,47 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_BASE_RAWTRANSPORT_H_
-#define _CRICKET_P2P_BASE_RAWTRANSPORT_H_
+#ifndef TALK_P2P_BASE_RAWTRANSPORT_H_
+#define TALK_P2P_BASE_RAWTRANSPORT_H_
 
+#include <string>
 #include "talk/p2p/base/transport.h"
 
+#if defined(FEATURE_ENABLE_PSTN)
 namespace cricket {
-
-// Xml names used to name this transport and create our elements
-extern const std::string kNsRawTransport;
-extern const buzz::QName kQnRawTransport;
-extern const buzz::QName kQnRawChannel;
-extern const buzz::QName kQnRawNatType;
-extern const buzz::QName kQnRawNatTypeAllowed;
 
 // Implements a transport that only sends raw packets, no STUN.  As a result,
 // it cannot do pings to determine connectivity, so it only uses a single port
 // that it thinks will work.
-class RawTransport: public Transport {
+class RawTransport: public Transport, public TransportParser {
  public:
-  RawTransport(SessionManager* session_manager);
+  RawTransport(talk_base::Thread* signaling_thread,
+               talk_base::Thread* worker_thread,
+               PortAllocator* allocator);
   virtual ~RawTransport();
 
-  // Handles the raw transport protocol descriptions, which are trivial.
-  virtual buzz::XmlElement* CreateTransportOffer();
-  virtual buzz::XmlElement* CreateTransportAnswer();
-  virtual bool OnTransportOffer(const buzz::XmlElement* elem);
-  virtual bool OnTransportAnswer(const buzz::XmlElement* elem);
-
-  // Forwards messages containing channel addresses to the appropriate channel.
-  virtual bool OnTransportMessage(const buzz::XmlElement* msg,
-                                  const buzz::XmlElement* stanza);
-  virtual bool OnTransportError(const buzz::XmlElement* session_msg,
-                                const buzz::XmlElement* error);
+  virtual bool ParseCandidates(SignalingProtocol protocol,
+                               const buzz::XmlElement* elem,
+                               Candidates* candidates,
+                               ParseError* error);
+  virtual bool WriteCandidates(SignalingProtocol protocol,
+                               const Candidates& candidates,
+                               XmlElements* candidate_elems,
+                               WriteError* error);
 
  protected:
   // Creates and destroys raw channels.
   virtual TransportChannelImpl* CreateTransportChannel(
-     const std::string& name, const std::string &session_type);
+     const std::string& name, const std::string &content_type);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
 
  private:
   // Parses the given element, which should describe the address to use for a
   // given channel.  This will return false and signal an error if the address
   // or channel name is bad.
-  bool ParseAddress(const buzz::XmlElement* stanza,
-                    const buzz::XmlElement* elem,
-                    talk_base::SocketAddress* addr);
+  bool ParseRawAddress(const buzz::XmlElement* elem,
+                       talk_base::SocketAddress* addr,
+                       ParseError* error);
 
   friend class RawTransportChannel;  // For ParseAddress.
 
@@ -80,5 +74,6 @@ class RawTransport: public Transport {
 
 }  // namespace cricket
 
+#endif  // defined(FEATURE_ENABLE_PSTN)
 
-#endif  // _CRICKET_P2P_BASE_RAWTRANSPORT_H_
+#endif  // TALK_P2P_BASE_RAWTRANSPORT_H_

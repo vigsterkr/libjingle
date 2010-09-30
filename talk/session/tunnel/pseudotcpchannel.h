@@ -66,10 +66,13 @@ public:
   PseudoTcpChannel(talk_base::Thread* stream_thread,
                    Session* session);
 
-  bool Connect(const std::string& channel_name);
+  bool Connect(const std::string& content_name,
+               const std::string& channel_name);
   talk_base::StreamInterface* GetStream();
 
   sigslot::signal1<PseudoTcpChannel*> SignalChannelClosed;
+
+  void OnSessionTerminate(Session* session);
 
 private:
   class InternalStream;
@@ -110,6 +113,7 @@ private:
   talk_base::Thread* signal_thread_, * worker_thread_, * stream_thread_;
   Session* session_;
   TransportChannel* channel_;
+  std::string content_name_;
   std::string channel_name_;
   PseudoTcp* tcp_;
   InternalStream* stream_;

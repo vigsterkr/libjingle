@@ -1,50 +1,41 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#pragma warning(disable:4786)
-#endif
-
 #include "talk/base/asynctcpsocket.h"
+
+#include <cstring>
+
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-namespace std {
-  using ::strerror;
-}
-#endif
-
 #ifdef POSIX
-extern "C" {
 #include <errno.h>
-}
-#endif // POSIX
+#endif  // POSIX
 
 namespace talk_base {
 
@@ -55,7 +46,17 @@ const size_t PKT_LEN_SIZE = sizeof(PacketLength);
 
 const size_t BUF_SIZE = MAX_PACKET_SIZE + PKT_LEN_SIZE;
 
-AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket) : AsyncPacketSocket(socket), insize_(BUF_SIZE), inpos_(0), outsize_(BUF_SIZE), outpos_(0) {
+AsyncTCPSocket* AsyncTCPSocket::Create(SocketFactory* factory) {
+  AsyncSocket* sock = factory->CreateAsyncSocket(SOCK_STREAM);
+  return (sock) ? new AsyncTCPSocket(sock) : NULL;
+}
+
+AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket)
+    : AsyncPacketSocket(socket),
+      insize_(BUF_SIZE),
+      inpos_(0),
+      outsize_(BUF_SIZE),
+      outpos_(0) {
   inbuf_ = new char[insize_];
   outbuf_ = new char[outsize_];
 
@@ -89,7 +90,7 @@ int AsyncTCPSocket::Send(const void *pv, size_t cb) {
   int res = Flush();
   if (res <= 0) {
     // drop packet if we made no progress
-    outpos_ = 0; 
+    outpos_ = 0;
     return res;
   }
 
@@ -97,7 +98,8 @@ int AsyncTCPSocket::Send(const void *pv, size_t cb) {
   return static_cast<int>(cb);
 }
 
-int AsyncTCPSocket::SendTo(const void *pv, size_t cb, const SocketAddress& addr) {
+int AsyncTCPSocket::SendTo(const void *pv, size_t cb,
+                           const SocketAddress& addr) {
   if (addr == GetRemoteAddress())
     return Send(pv, cb);
 
@@ -169,7 +171,7 @@ void AsyncTCPSocket::OnReadEvent(AsyncSocket* socket) {
   if (len < 0) {
     // TODO: Do something better like forwarding the error to the user.
     if (!socket_->IsBlocking()) {
-      LOG(LS_ERROR) << "recvfrom: " << errno << " " <<  std::strerror(errno);
+      LOG_ERR(LS_ERROR) << "recvfrom";
     }
     return;
   }
@@ -197,4 +199,4 @@ void AsyncTCPSocket::OnCloseEvent(AsyncSocket* socket, int error) {
   SignalClose(this, error);
 }
 
-} // namespace talk_base
+}  // namespace talk_base

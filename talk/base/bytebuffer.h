@@ -25,47 +25,58 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_BYTEBUFFER_H__
-#define TALK_BASE_BYTEBUFFER_H__
+#ifndef TALK_BASE_BYTEBUFFER_H_
+#define TALK_BASE_BYTEBUFFER_H_
 
 #include <string>
+
 #include "talk/base/basictypes.h"
+#include "talk/base/constructormagic.h"
 
 namespace talk_base {
 
 class ByteBuffer {
-public:
+ public:
   ByteBuffer();
   ByteBuffer(const char* bytes, size_t len);
-  ByteBuffer(const char* bytes); // uses strlen
+  explicit ByteBuffer(const char* bytes);  // uses strlen
   ~ByteBuffer();
 
   const char* Data() const { return bytes_ + start_; }
-  size_t Length() { return end_ - start_; }
-  size_t Capacity() { return size_ - start_; }
+  size_t Length() const { return end_ - start_; }
+  size_t Capacity() const { return size_ - start_; }
 
-  bool ReadUInt8(uint8& val);
-  bool ReadUInt16(uint16& val);
-  bool ReadUInt32(uint32& val);
-  bool ReadString(std::string& val, size_t len); // append to val
+  bool ReadUInt8(uint8* val);
+  bool ReadUInt16(uint16* val);
+  bool ReadUInt24(uint32* val);
+  bool ReadUInt32(uint32* val);
+  bool ReadUInt64(uint64* val);
+  bool ReadString(std::string* val, size_t len);  // append to val
   bool ReadBytes(char* val, size_t len);
 
   void WriteUInt8(uint8 val);
   void WriteUInt16(uint16 val);
+  void WriteUInt24(uint32 val);
   void WriteUInt32(uint32 val);
+  void WriteUInt64(uint64 val);
   void WriteString(const std::string& val);
   void WriteBytes(const char* val, size_t len);
 
   void Resize(size_t size);
+  void Consume(size_t size);
   void Shift(size_t size);
 
-private:
+ private:
   char* bytes_;
   size_t size_;
   size_t start_;
   size_t end_;
+
+  // There are sensible ways to define these, but they aren't needed in our code
+  // base.
+  DISALLOW_COPY_AND_ASSIGN(ByteBuffer);
 };
 
-} // namespace talk_base
+}  // namespace talk_base
 
-#endif // TALK_BASE_BYTEBUFFER_H__
+#endif  // TALK_BASE_BYTEBUFFER_H_

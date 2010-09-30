@@ -25,9 +25,10 @@
 #ifndef TALK_BASE_SCOPED_PTR_H__
 #define TALK_BASE_SCOPED_PTR_H__
 
-#include <cstddef>            // for std::ptrdiff_t
-#include <assert.h>           // for assert
-#include <stdlib.h>           // for free() decl
+#include <cstddef>             // for std::ptrdiff_t
+#include <stdlib.h>            // for free() decl
+
+#include "talk/base/common.h"  // for ASSERT
 
 #ifdef _WIN32
 namespace std { using ::ptrdiff_t; };
@@ -48,29 +49,31 @@ class scoped_ptr {
 
   typedef T element_type;
 
-  explicit scoped_ptr(T* p = 0): ptr(p) {}
+  explicit scoped_ptr(T* p = NULL): ptr(p) {}
 
   ~scoped_ptr() {
     typedef char type_must_be_complete[sizeof(T)];
     delete ptr;
   }
 
-  void reset(T* p = 0) {
+  void reset(T* p = NULL) {
     typedef char type_must_be_complete[sizeof(T)];
 
     if (ptr != p) {
-      delete ptr;
+      T* obj = ptr;
       ptr = p;
+      // Delete last, in case obj destructor indirectly results in ~scoped_ptr
+      delete obj;
     }
   }
 
   T& operator*() const {
-    assert(ptr != 0);
+    ASSERT(ptr != NULL);
     return *ptr;
   }
 
   T* operator->() const  {
-    assert(ptr != 0);
+    ASSERT(ptr != NULL);
     return ptr;
   }
 
@@ -86,14 +89,14 @@ class scoped_ptr {
 
   T* release() {
     T* tmp = ptr;
-    ptr = 0;
+    ptr = NULL;
     return tmp;
   }
-  
+
   T** accept() {
     if (ptr) {
       delete ptr;
-      ptr = 0;
+      ptr = NULL;
     }
     return &ptr;
   }
@@ -128,25 +131,27 @@ class scoped_array {
 
   typedef T element_type;
 
-  explicit scoped_array(T* p = 0) : ptr(p) {}
+  explicit scoped_array(T* p = NULL) : ptr(p) {}
 
   ~scoped_array() {
     typedef char type_must_be_complete[sizeof(T)];
     delete[] ptr;
   }
 
-  void reset(T* p = 0) {
+  void reset(T* p = NULL) {
     typedef char type_must_be_complete[sizeof(T)];
 
     if (ptr != p) {
-      delete [] ptr;
+      T* arr = ptr;
       ptr = p;
+      // Delete last, in case arr destructor indirectly results in ~scoped_array
+      delete [] arr;
     }
   }
 
   T& operator[](std::ptrdiff_t i) const {
-    assert(ptr != 0);
-    assert(i >= 0);
+    ASSERT(ptr != NULL);
+    ASSERT(i >= 0);
     return ptr[i];
   }
 
@@ -162,14 +167,14 @@ class scoped_array {
 
   T* release() {
     T* tmp = ptr;
-    ptr = 0;
+    ptr = NULL;
     return tmp;
   }
 
   T** accept() {
     if (ptr) {
       delete [] ptr;
-      ptr = 0;
+      ptr = NULL;
     }
     return &ptr;
   }
@@ -198,13 +203,10 @@ template<typename T, void (*FF)(void*) = free> class scoped_ptr_malloc {
   explicit scoped_ptr_malloc(T* p = 0): ptr(p) {}
 
   ~scoped_ptr_malloc() {
-    typedef char type_must_be_complete[sizeof(T)];
     FF(static_cast<void*>(ptr));
   }
 
   void reset(T* p = 0) {
-    typedef char type_must_be_complete[sizeof(T)];
-
     if (ptr != p) {
       FF(static_cast<void*>(ptr));
       ptr = p;
@@ -212,12 +214,12 @@ template<typename T, void (*FF)(void*) = free> class scoped_ptr_malloc {
   }
 
   T& operator*() const {
-    assert(ptr != 0);
+    ASSERT(ptr != 0);
     return *ptr;
   }
 
   T* operator->() const {
-    assert(ptr != 0);
+    ASSERT(ptr != 0);
     return ptr;
   }
 
@@ -252,8 +254,5 @@ void swap(scoped_ptr_malloc<T,FF>& a, scoped_ptr_malloc<T,FF>& b) {
 }
 
 } // namespace talk_base
-
-// TODO: get rid of this global using 
-using talk_base::scoped_ptr;
 
 #endif  // #ifndef TALK_BASE_SCOPED_PTR_H__

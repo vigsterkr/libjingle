@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_ASYNCUDPSOCKET_H__
-#define TALK_BASE_ASYNCUDPSOCKET_H__
+#ifndef TALK_BASE_ASYNCUDPSOCKET_H_
+#define TALK_BASE_ASYNCUDPSOCKET_H_
 
 #include "talk/base/asyncpacketsocket.h"
 #include "talk/base/socketfactory.h"
@@ -36,24 +36,29 @@ namespace talk_base {
 // Provides the ability to receive packets asynchronously.  Sends are not
 // buffered since it is acceptable to drop packets under high load.
 class AsyncUDPSocket : public AsyncPacketSocket {
-public:
-  AsyncUDPSocket(AsyncSocket* socket);
+ public:
+  // Creates a new socket for sending asynchronous UDP packets using an
+  // asynchronous socket from the given factory.
+  static AsyncUDPSocket* Create(SocketFactory* factory) {
+    AsyncSocket* sock = factory->CreateAsyncSocket(SOCK_DGRAM);
+    return (sock) ? new AsyncUDPSocket(sock) : NULL;
+  }
+  explicit AsyncUDPSocket(AsyncSocket* socket);
   virtual ~AsyncUDPSocket();
 
-private:
-  char* buf_;
-  size_t size_;
-
+ private:
   // Called when the underlying socket is ready to be read from.
   void OnReadEvent(AsyncSocket* socket);
+
+  char* buf_;
+  size_t size_;
 };
 
-// Creates a new socket for sending asynchronous UDP packets using an
-// asynchronous socket from the given factory.
+// TODO: This is now deprecated. Remove it.
 inline AsyncUDPSocket* CreateAsyncUDPSocket(SocketFactory* factory) {
-  return new AsyncUDPSocket(factory->CreateAsyncSocket(SOCK_DGRAM));
+  return AsyncUDPSocket::Create(factory);
 }
 
-} // namespace talk_base
+}  // namespace talk_base
 
-#endif // TALK_BASE_ASYNCUDPSOCKET_H__
+#endif  // TALK_BASE_ASYNCUDPSOCKET_H_

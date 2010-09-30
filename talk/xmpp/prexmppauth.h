@@ -73,12 +73,12 @@ public:
   
   sigslot::signal0<> SignalAuthDone;
   
-  virtual bool IsAuthDone() = 0;
-  virtual bool IsAuthorized() = 0;
-  virtual bool HadError() = 0;
-  virtual int GetError() = 0;
-  virtual CaptchaChallenge GetCaptchaChallenge() = 0;
-  virtual std::string GetAuthCookie() = 0;
+  virtual bool IsAuthDone() const = 0;
+  virtual bool IsAuthorized() const = 0;
+  virtual bool HadError() const = 0;
+  virtual int GetError() const = 0;
+  virtual CaptchaChallenge GetCaptchaChallenge() const = 0;
+  virtual std::string GetAuthCookie() const = 0;
 };
 
 }

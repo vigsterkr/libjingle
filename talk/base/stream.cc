@@ -1,38 +1,44 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(POSIX)
+#include <sys/file.h>
+#endif  // POSIX
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <string>
 #include "talk/base/basictypes.h"
 #include "talk/base/common.h"
+#include "talk/base/messagequeue.h"
 #include "talk/base/stream.h"
 #include "talk/base/stringencode.h"
+#include "talk/base/stringutils.h"
+#include "talk/base/thread.h"
 
 #ifdef WIN32
 #include "talk/base/win32.h"
@@ -42,6 +48,20 @@
 namespace talk_base {
 
 ///////////////////////////////////////////////////////////////////////////////
+// StreamInterface
+///////////////////////////////////////////////////////////////////////////////
+
+enum {
+  MSG_POST_EVENT = 0xF1F1
+};
+
+StreamInterface::~StreamInterface() {
+}
+
+struct PostEventData : public MessageData {
+  int events, error;
+  PostEventData(int ev, int er) : events(ev), error(er) { }
+};
 
 StreamResult StreamInterface::WriteAll(const void* data, size_t data_len,
                                        size_t* written, int* error) {
@@ -76,6 +96,7 @@ StreamResult StreamInterface::ReadAll(void* buffer, size_t buffer_len,
 }
 
 StreamResult StreamInterface::ReadLine(std::string* line) {
+  line->clear();
   StreamResult result = SR_SUCCESS;
   while (true) {
     char ch;
@@ -94,6 +115,60 @@ StreamResult StreamInterface::ReadLine(std::string* line) {
   return result;
 }
 
+void StreamInterface::PostEvent(Thread* t, int events, int err) {
+  t->Post(this, MSG_POST_EVENT, new PostEventData(events, err));
+}
+
+void StreamInterface::PostEvent(int events, int err) {
+  PostEvent(Thread::Current(), events, err);
+}
+
+StreamInterface::StreamInterface() {
+}
+
+void StreamInterface::OnMessage(Message* msg) {
+  if (MSG_POST_EVENT == msg->message_id) {
+    PostEventData* pe = static_cast<PostEventData*>(msg->pdata);
+    SignalEvent(this, pe->events, pe->error);
+    delete msg->pdata;
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// StreamAdapterInterface
+///////////////////////////////////////////////////////////////////////////////
+
+StreamAdapterInterface::StreamAdapterInterface(StreamInterface* stream,
+                                               bool owned)
+    : stream_(stream), owned_(owned) {
+  if (NULL != stream_)
+    stream_->SignalEvent.connect(this, &StreamAdapterInterface::OnEvent);
+}
+
+void StreamAdapterInterface::Attach(StreamInterface* stream, bool owned) {
+  if (NULL != stream_)
+    stream_->SignalEvent.disconnect(this);
+  if (owned_)
+    delete stream_;
+  stream_ = stream;
+  owned_ = owned;
+  if (NULL != stream_)
+    stream_->SignalEvent.connect(this, &StreamAdapterInterface::OnEvent);
+}
+
+StreamInterface* StreamAdapterInterface::Detach() {
+  if (NULL != stream_)
+    stream_->SignalEvent.disconnect(this);
+  StreamInterface* stream = stream_;
+  stream_ = NULL;
+  return stream;
+}
+
+StreamAdapterInterface::~StreamAdapterInterface() {
+  if (owned_)
+    delete stream_;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // StreamTap
 ///////////////////////////////////////////////////////////////////////////////
@@ -109,7 +184,7 @@ void StreamTap::AttachTap(StreamInterface* tap) {
   tap_.reset(tap);
 }
 
-StreamInterface* StreamTap::DetachTap() { 
+StreamInterface* StreamTap::DetachTap() {
   return tap_.release();
 }
 
@@ -149,6 +224,92 @@ StreamResult StreamTap::Write(const void* data, size_t data_len,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// StreamSegment
+///////////////////////////////////////////////////////////////////////////////
+
+StreamSegment::StreamSegment(StreamInterface* stream)
+: StreamAdapterInterface(stream), start_(SIZE_UNKNOWN), pos_(0),
+  length_(SIZE_UNKNOWN)
+{
+  // It's ok for this to fail, in which case start_ is left as SIZE_UNKNOWN.
+  stream->GetPosition(&start_);
+}
+
+StreamSegment::StreamSegment(StreamInterface* stream, size_t length)
+: StreamAdapterInterface(stream), start_(SIZE_UNKNOWN), pos_(0),
+  length_(length)
+{
+  // It's ok for this to fail, in which case start_ is left as SIZE_UNKNOWN.
+  stream->GetPosition(&start_);
+}
+
+StreamResult StreamSegment::Read(void* buffer, size_t buffer_len,
+                                 size_t* read, int* error)
+{
+  if (SIZE_UNKNOWN != length_) {
+    if (pos_ >= length_)
+      return SR_EOS;
+    buffer_len = _min(buffer_len, length_ - pos_);
+  }
+  size_t backup_read;
+  if (!read) {
+    read = &backup_read;
+  }
+  StreamResult result = StreamAdapterInterface::Read(buffer, buffer_len,
+                                                     read, error);
+  if (SR_SUCCESS == result) {
+    pos_ += *read;
+  }
+  return result;
+}
+
+bool StreamSegment::SetPosition(size_t position) {
+  if (SIZE_UNKNOWN == start_)
+    return false;  // Not seekable
+  if ((SIZE_UNKNOWN != length_) && (position > length_))
+    return false;  // Seek past end of segment
+  if (!StreamAdapterInterface::SetPosition(start_ + position))
+    return false;
+  pos_ = position;
+  return true;
+}
+
+bool StreamSegment::GetPosition(size_t* position) const {
+  if (SIZE_UNKNOWN == start_)
+    return false;  // Not seekable
+  if (!StreamAdapterInterface::GetPosition(position))
+    return false;
+  if (position) {
+    ASSERT(*position >= start_);
+    *position -= start_;
+  }
+  return true;
+}
+
+bool StreamSegment::GetSize(size_t* size) const {
+  if (!StreamAdapterInterface::GetSize(size))
+    return false;
+  if (size) {
+    if (SIZE_UNKNOWN != start_) {
+      ASSERT(*size >= start_);
+      *size -= start_;
+    }
+    if (SIZE_UNKNOWN != length_) {
+      *size = _min(*size, length_);
+    }
+  }
+  return true;
+}
+
+bool StreamSegment::GetAvailable(size_t* size) const {
+  if (!StreamAdapterInterface::GetAvailable(size))
+    return false;
+  if (size && (SIZE_UNKNOWN != length_))
+    *size = _min(*size, length_ - pos_);
+  return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // NullStream
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -168,7 +329,6 @@ StreamResult NullStream::Read(void* buffer, size_t buffer_len,
   return SR_ERROR;
 }
 
-
 StreamResult NullStream::Write(const void* data, size_t data_len,
                                size_t* written, int* error) {
   if (written) *written = data_len;
@@ -176,20 +336,6 @@ StreamResult NullStream::Write(const void* data, size_t data_len,
 }
 
 void NullStream::Close() {
-}
-
-bool NullStream::GetSize(size_t* size) const {
-  if (size)
-    *size = 0;
-  return true;
-}
-
-bool NullStream::ReserveSize(size_t size) {
-  return true;
-}
-
-bool NullStream::Rewind() {
-  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -206,28 +352,12 @@ FileStream::~FileStream() {
 bool FileStream::Open(const std::string& filename, const char* mode) {
   Close();
 #ifdef WIN32
-  int filenamelen = MultiByteToWideChar(CP_UTF8, 0, filename.c_str(),
-                                        filename.length() + 1, NULL, 0);
-  int modelen     = MultiByteToWideChar(CP_UTF8, 0, mode, -1, NULL, 0);
-  wchar_t *wfilename = new wchar_t[filenamelen+4];  // 4 for "\\?\"
-  wchar_t *wfilename_dest = wfilename;
-  wchar_t *wmode = new wchar_t[modelen];
-
-  if (!filename.empty() && (filename[0] != '\\')) {
-    wcscpy(wfilename, L"\\\\?\\");
-    wfilename_dest = wfilename + 4;
-  }
-
-  if ((MultiByteToWideChar(CP_UTF8, 0, filename.c_str(), filename.length() + 1,
-                           wfilename_dest, filenamelen) > 0) &&
-      (MultiByteToWideChar(CP_UTF8, 0, mode, -1, wmode, modelen) > 0)) {
-    file_ = _wfopen(wfilename, wmode);
+  std::wstring wfilename;
+  if (Utf8ToWindowsFilename(filename, &wfilename)) {
+    file_ = _wfopen(wfilename.c_str(), ToUtf16(mode).c_str());
   } else {
     file_ = NULL;
   }
-
-  delete[] wfilename;
-  delete[] wmode;
 #else
   file_ = fopen(filename.c_str(), mode);
 #endif
@@ -238,28 +368,12 @@ bool FileStream::OpenShare(const std::string& filename, const char* mode,
                            int shflag) {
   Close();
 #ifdef WIN32
-  int filenamelen = MultiByteToWideChar(CP_UTF8, 0, filename.c_str(),
-                                        filename.length() + 1, NULL, 0);
-  int modelen     = MultiByteToWideChar(CP_UTF8, 0, mode, -1, NULL, 0);
-  wchar_t *wfilename = new wchar_t[filenamelen+4];  // 4 for "\\?\"
-  wchar_t *wfilename_dest = wfilename;
-  wchar_t *wmode = new wchar_t[modelen];
-
-  if (!filename.empty() && (filename[0] != '\\')) {
-    wcscpy(wfilename, L"\\\\?\\");
-    wfilename_dest = wfilename + 4;
-  }
-
-  if ((MultiByteToWideChar(CP_UTF8, 0, filename.c_str(), filename.length() + 1,
-                           wfilename_dest, filenamelen) > 0) &&
-      (MultiByteToWideChar(CP_UTF8, 0, mode, -1, wmode, modelen) > 0)) {
-    file_ = _wfsopen(wfilename, wmode, shflag);
+  std::wstring wfilename;
+  if (Utf8ToWindowsFilename(filename, &wfilename)) {
+    file_ = _wfsopen(wfilename.c_str(), ToUtf16(mode).c_str(), shflag);
   } else {
     file_ = NULL;
   }
-
-  delete[] wfilename;
-  delete[] wmode;
 #else
   return Open(filename, mode);
 #endif
@@ -310,7 +424,7 @@ StreamResult FileStream::Write(const void* data, size_t data_len,
 
 void FileStream::Close() {
   if (file_) {
-    fclose(file_);
+    DoClose();
     file_ = NULL;
   }
 }
@@ -321,25 +435,39 @@ bool FileStream::SetPosition(size_t position) {
   return (fseek(file_, position, SEEK_SET) == 0);
 }
 
-bool FileStream::GetPosition(size_t * position) const {
-  ASSERT(position != NULL);
-  if (!file_ || !position)
+bool FileStream::GetPosition(size_t* position) const {
+  ASSERT(NULL != position);
+  if (!file_)
     return false;
   long result = ftell(file_);
   if (result < 0)
     return false;
-  *position = result;
+  if (position)
+    *position = result;
   return true;
 }
 
-bool FileStream::GetSize(size_t * size) const {
-  ASSERT(size != NULL);
-  if (!file_ || !size)
+bool FileStream::GetSize(size_t* size) const {
+  ASSERT(NULL != size);
+  if (!file_)
     return false;
   struct stat file_stats;
   if (fstat(fileno(file_), &file_stats) != 0)
     return false;
-  *size = file_stats.st_size;
+  if (size)
+    *size = file_stats.st_size;
+  return true;
+}
+
+bool FileStream::GetAvailable(size_t* size) const {
+  ASSERT(NULL != size);
+  if (!GetSize(size))
+    return false;
+  long result = ftell(file_);
+  if (result < 0)
+    return false;
+  if (size)
+    *size -= result;
   return true;
 }
 
@@ -356,60 +484,89 @@ bool FileStream::GetSize(const std::string& filename, size_t* size) {
   return true;
 }
 
-int FileStream::Flush() {
+bool FileStream::Flush() {
   if (file_) {
-    return fflush (file_);
+    return (0 == fflush(file_));
   }
   // try to flush empty file?
   ASSERT(false);
-  return 0;
+  return false;
 }
+
+#if defined(POSIX)
+
+bool FileStream::TryLock() {
+  if (file_ == NULL) {
+    // Stream not open.
+    ASSERT(false);
+    return false;
+  }
+
+  return flock(fileno(file_), LOCK_EX|LOCK_NB) == 0;
+}
+
+bool FileStream::Unlock() {
+  if (file_ == NULL) {
+    // Stream not open.
+    ASSERT(false);
+    return false;
+  }
+
+  return flock(fileno(file_), LOCK_UN) == 0;
+}
+
+#endif
+
+void FileStream::DoClose() {
+  fclose(file_);
+}
+
+#ifdef POSIX
+
+// Have to identically rewrite the FileStream destructor or else it would call
+// the base class's Close() instead of the sub-class's.
+POpenStream::~POpenStream() {
+  POpenStream::Close();
+}
+
+bool POpenStream::Open(const std::string& subcommand, const char* mode) {
+  Close();
+  file_ = popen(subcommand.c_str(), mode);
+  return file_ != NULL;
+}
+
+bool POpenStream::OpenShare(const std::string& subcommand, const char* mode,
+                            int shflag) {
+  return Open(subcommand, mode);
+}
+
+void POpenStream::DoClose() {
+  wait_status_ = pclose(file_);
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+// MemoryStream
 ///////////////////////////////////////////////////////////////////////////////
 
-
-MemoryStream::MemoryStream()
-  : allocated_length_(0), buffer_(NULL), data_length_(0), seek_position_(0) {
+MemoryStreamBase::MemoryStreamBase()
+  : buffer_(NULL), buffer_length_(0), data_length_(0), seek_position_(0) {
 }
 
-MemoryStream::MemoryStream(const char* data)
-  : allocated_length_(0), buffer_(NULL), data_length_(0), seek_position_(0) {
-  SetContents(data, strlen(data));
-}
-
-MemoryStream::MemoryStream(const char* data, size_t length)
-  : allocated_length_(0), buffer_(NULL), data_length_(0), seek_position_(0) {
-  SetContents(data, length);
-}
-
-MemoryStream::~MemoryStream() {
-  delete [] buffer_;
-}
-
-void MemoryStream::SetContents(const char* data, size_t length) { 
-  delete [] buffer_;
-  data_length_ = allocated_length_ = length;
-  buffer_ = new char[allocated_length_];
-  memcpy(buffer_, data, data_length_);
-}
-
-StreamState MemoryStream::GetState() const {
+StreamState MemoryStreamBase::GetState() const {
   return SS_OPEN;
 }
 
-StreamResult MemoryStream::Read(void *buffer, size_t bytes,
-    size_t *bytes_read, int *error) {
+StreamResult MemoryStreamBase::Read(void* buffer, size_t bytes,
+                                    size_t* bytes_read, int* error) {
   if (seek_position_ >= data_length_) {
-    // At end of stream
-    if (error) {
-      *error = EOF;
-    }
     return SR_EOS;
   }
-
-  size_t remaining_length = data_length_ - seek_position_;
-  if (bytes > remaining_length) {
+  size_t available = data_length_ - seek_position_;
+  if (bytes > available) {
     // Read partial buffer
-    bytes = remaining_length;
+    bytes = available;
   }
   memcpy(buffer, &buffer_[seek_position_], bytes);
   seek_position_ += bytes;
@@ -419,140 +576,301 @@ StreamResult MemoryStream::Read(void *buffer, size_t bytes,
   return SR_SUCCESS;
 }
 
-StreamResult MemoryStream::Write(const void *buffer,
-    size_t bytes, size_t *bytes_written, int *error) {
-  StreamResult sr = SR_SUCCESS;
-  int error_value = 0;
-  size_t bytes_written_value = 0;
-
-  size_t new_position = seek_position_ + bytes;
-  if (new_position > allocated_length_) {
+StreamResult MemoryStreamBase::Write(const void* buffer, size_t bytes,
+                                     size_t* bytes_written, int* error) {
+  size_t available = buffer_length_ - seek_position_;
+  if (0 == available) {
     // Increase buffer size to the larger of:
     // a) new position rounded up to next 256 bytes
     // b) double the previous length
-    size_t new_allocated_length = _max((new_position | 0xFF) + 1,
-                                       allocated_length_ * 2);
-    if (char* new_buffer = new char[new_allocated_length]) {
-      memcpy(new_buffer, buffer_, data_length_);
-      delete [] buffer_;
-      buffer_ = new_buffer;
-      allocated_length_ = new_allocated_length;
-    } else {
-      error_value = ENOMEM;
-      sr = SR_ERROR;
+    size_t new_buffer_length = _max(((seek_position_ + bytes) | 0xFF) + 1,
+                                    buffer_length_ * 2);
+    StreamResult result = DoReserve(new_buffer_length, error);
+    if (SR_SUCCESS != result) {
+      return result;
     }
+    ASSERT(buffer_length_ >= new_buffer_length);
+    available = buffer_length_ - seek_position_;
   }
 
-  if (sr == SR_SUCCESS) {
-    bytes_written_value = bytes;
-    memcpy(&buffer_[seek_position_], buffer, bytes);
-    seek_position_ = new_position;
-    if (data_length_ < seek_position_) {
-      data_length_ = seek_position_;
-    }
+  if (bytes > available) {
+    bytes = available;
   }
-
+  memcpy(&buffer_[seek_position_], buffer, bytes);
+  seek_position_ += bytes;
+  if (data_length_ < seek_position_) {
+    data_length_ = seek_position_;
+  }
   if (bytes_written) {
-    *bytes_written = bytes_written_value;
+    *bytes_written = bytes;
   }
-  if (error) {
-    *error = error_value;
-  }
-
-  return sr;
+  return SR_SUCCESS;
 }
 
-void MemoryStream::Close() {
+void MemoryStreamBase::Close() {
   // nothing to do
 }
 
-bool MemoryStream::SetPosition(size_t position) {
-  if (position <= data_length_) {
-    seek_position_ = position;
-    return true;
-  }
-  return false;
-}
-
-bool MemoryStream::GetPosition(size_t *position) const {
-  if (!position) {
+bool MemoryStreamBase::SetPosition(size_t position) {
+  if (position > data_length_)
     return false;
-  }
-  *position = seek_position_;
+  seek_position_ = position;
   return true;
 }
 
-bool MemoryStream::GetSize(size_t *size) const {
-  if (!size) {
-    return false;
-  }
-  *size = data_length_;
+bool MemoryStreamBase::GetPosition(size_t *position) const {
+  if (position)
+    *position = seek_position_;
   return true;
 }
 
-bool MemoryStream::ReserveSize(size_t size) {
-  if (allocated_length_ >= size)
-    return true;
+bool MemoryStreamBase::GetSize(size_t *size) const {
+  if (size)
+    *size = data_length_;
+  return true;
+}
+
+bool MemoryStreamBase::GetAvailable(size_t *size) const {
+  if (size)
+    *size = data_length_ - seek_position_;
+  return true;
+}
+
+bool MemoryStreamBase::ReserveSize(size_t size) {
+  return (SR_SUCCESS == DoReserve(size, NULL));
+}
+
+StreamResult MemoryStreamBase::DoReserve(size_t size, int* error) {
+  return (buffer_length_ >= size) ? SR_SUCCESS : SR_EOS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+MemoryStream::MemoryStream() {
+}
+
+MemoryStream::MemoryStream(const char* data) {
+  SetData(data, strlen(data));
+}
+
+MemoryStream::MemoryStream(const void* data, size_t length) {
+  SetData(data, length);
+}
+
+MemoryStream::~MemoryStream() {
+  delete [] buffer_;
+}
+
+void MemoryStream::SetData(const void* data, size_t length) {
+  data_length_ = buffer_length_ = length;
+  delete [] buffer_;
+  buffer_ = new char[buffer_length_];
+  memcpy(buffer_, data, data_length_);
+  seek_position_ = 0;
+}
+
+StreamResult MemoryStream::DoReserve(size_t size, int* error) {
+  if (buffer_length_ >= size)
+    return SR_SUCCESS;
 
   if (char* new_buffer = new char[size]) {
     memcpy(new_buffer, buffer_, data_length_);
     delete [] buffer_;
     buffer_ = new_buffer;
-    allocated_length_ = size;
-    return true;
+    buffer_length_ = size;
+    return SR_SUCCESS;
   }
 
-  return false;
+  if (error) {
+    *error = ENOMEM;
+  }
+  return SR_ERROR;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-StreamResult Flow(StreamInterface* source,
-                  char* buffer, size_t buffer_len,
-                  StreamInterface* sink) {
-  ASSERT(buffer_len > 0);
+ExternalMemoryStream::ExternalMemoryStream() {
+}
 
-  StreamResult result;
-  size_t count, read_pos, write_pos;
+ExternalMemoryStream::ExternalMemoryStream(void* data, size_t length) {
+  SetData(data, length);
+}
 
-  bool end_of_stream = false;
-  do {
-    // Read until buffer is full, end of stream, or error
-    read_pos = 0;
-    do {
-      result = source->Read(buffer + read_pos, buffer_len - read_pos,
-                            &count, NULL);
-      if (result == SR_EOS) {
-        end_of_stream = true;
-      } else if (result != SR_SUCCESS) {
-        return result;
-      } else {
-        read_pos += count;
-      }
-    } while (!end_of_stream && (read_pos < buffer_len));
+ExternalMemoryStream::~ExternalMemoryStream() {
+}
 
-    // Write until buffer is empty, or error (including end of stream)
-    write_pos = 0;
-    do {
-      result = sink->Write(buffer + write_pos, read_pos - write_pos,
-                           &count, NULL);
-      if (result != SR_SUCCESS)
-        return result;
+void ExternalMemoryStream::SetData(void* data, size_t length) {
+  data_length_ = buffer_length_ = length;
+  buffer_ = static_cast<char*>(data);
+  seek_position_ = 0;
+}
 
-      write_pos += count;
-    } while (write_pos < read_pos);
-  } while (!end_of_stream);
+///////////////////////////////////////////////////////////////////////////////
+// FifoBuffer
+///////////////////////////////////////////////////////////////////////////////
+
+FifoBuffer::FifoBuffer(size_t size)
+    : state_(SS_OPEN), buffer_(new char[size]), buffer_length_(size),
+      data_length_(0), read_position_(0), owner_(Thread::Current()) {
+  // all events are done on the owner_ thread
+}
+
+FifoBuffer::~FifoBuffer() {
+}
+
+bool FifoBuffer::GetBuffered(size_t* size) const {
+  CritScope cs(&crit_);
+  *size = data_length_;
+  return true;
+}
+
+bool FifoBuffer::SetCapacity(size_t size) {
+  CritScope cs(&crit_);
+  if (data_length_ > size) {
+    return false;
+  }
+
+  if (size != buffer_length_) {
+    char* buffer = new char[size];
+    const size_t copy = data_length_;
+    const size_t tail_copy = _min(copy, buffer_length_ - read_position_);
+    memcpy(buffer, &buffer_[read_position_], tail_copy);
+    memcpy(buffer + tail_copy, &buffer_[0], copy - tail_copy);
+    buffer_.reset(buffer);
+    read_position_ = 0;
+    buffer_length_ = size;
+  }
+  return true;
+}
+
+StreamState FifoBuffer::GetState() const {
+  return state_;
+}
+
+StreamResult FifoBuffer::Read(void* buffer, size_t bytes,
+                              size_t* bytes_read, int* error) {
+  CritScope cs(&crit_);
+  const size_t available = data_length_;
+  if (0 == available) {
+    return (state_ != SS_CLOSED) ? SR_BLOCK : SR_EOS;
+  }
+
+  const bool was_writable = data_length_ < buffer_length_;
+  const size_t copy = _min(bytes, available);
+  const size_t tail_copy = _min(copy, buffer_length_ - read_position_);
+  char* const p = static_cast<char*>(buffer);
+  memcpy(p, &buffer_[read_position_], tail_copy);
+  memcpy(p + tail_copy, &buffer_[0], copy - tail_copy);
+  read_position_ = (read_position_ + copy) % buffer_length_;
+  data_length_ -= copy;
+  if (bytes_read) {
+    *bytes_read = copy;
+  }
+  // if we were full before, and now we're not, post an event
+  if (!was_writable && copy > 0) {
+    PostEvent(owner_, SE_WRITE, 0);
+  }
 
   return SR_SUCCESS;
 }
 
+StreamResult FifoBuffer::Write(const void* buffer, size_t bytes,
+                               size_t* bytes_written, int* error) {
+  CritScope cs(&crit_);
+  if (state_ == SS_CLOSED) {
+    return SR_EOS;
+  }
+
+  const size_t available = buffer_length_ - data_length_;
+  if (0 == available) {
+    return SR_BLOCK;
+  }
+
+  const bool was_readable = (data_length_ > 0);
+  const size_t write_position = (read_position_ + data_length_)
+      % buffer_length_;
+  const size_t copy = _min(bytes, available);
+  const size_t tail_copy = _min(copy, buffer_length_ - write_position);
+  const char* const p = static_cast<const char*>(buffer);
+  memcpy(&buffer_[write_position], p, tail_copy);
+  memcpy(&buffer_[0], p + tail_copy, copy - tail_copy);
+  data_length_ += copy;
+  if (bytes_written) {
+    *bytes_written = copy;
+  }
+  // if we didn't have any data to read before, and now we do, post an event
+  if (!was_readable && copy > 0) {
+    PostEvent(owner_, SE_READ, 0);
+  }
+
+  return SR_SUCCESS;
+}
+
+void FifoBuffer::Close() {
+  CritScope cs(&crit_);
+  state_ = SS_CLOSED;
+}
+
+const void* FifoBuffer::GetReadData(size_t* size) {
+  CritScope cs(&crit_);
+  *size = (read_position_ + data_length_ <= buffer_length_) ?
+      data_length_ : buffer_length_ - read_position_;
+  return &buffer_[read_position_];
+}
+
+void FifoBuffer::ConsumeReadData(size_t size) {
+  CritScope cs(&crit_);
+  ASSERT(size <= data_length_);
+  const bool was_writable = data_length_ < buffer_length_;
+  read_position_ = (read_position_ + size) % buffer_length_;
+  data_length_ -= size;
+  if (!was_writable && size > 0) {
+    PostEvent(owner_, SE_WRITE, 0);
+  }
+}
+
+void* FifoBuffer::GetWriteBuffer(size_t* size) {
+  CritScope cs(&crit_);
+  if (state_ == SS_CLOSED) {
+    return NULL;
+  }
+
+  // if empty, reset the write position to the beginning, so we can get
+  // the biggest possible block
+  if (data_length_ == 0) {
+    read_position_ = 0;
+  }
+
+  const size_t write_position = (read_position_ + data_length_)
+      % buffer_length_;
+  *size = (write_position >= read_position_) ?
+      buffer_length_ - write_position : read_position_ - write_position;
+  return &buffer_[write_position];
+}
+
+void FifoBuffer::ConsumeWriteBuffer(size_t size) {
+  CritScope cs(&crit_);
+  ASSERT(size <= buffer_length_ - data_length_);
+  const bool was_readable = (data_length_ > 0);
+  data_length_ += size;
+  if (!was_readable && size > 0) {
+    PostEvent(owner_, SE_READ, 0);
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// LoggingAdapter
 ///////////////////////////////////////////////////////////////////////////////
 
 LoggingAdapter::LoggingAdapter(StreamInterface* stream, LoggingSeverity level,
                                const std::string& label, bool hex_mode)
 : StreamAdapterInterface(stream), level_(level), hex_mode_(hex_mode)
 {
-  label_.append("[");
+  set_label(label);
+}
+
+void LoggingAdapter::set_label(const std::string& label) {
+  label_.assign("[");
   label_.append(label);
   label_.append("]");
 }
@@ -560,10 +878,10 @@ LoggingAdapter::LoggingAdapter(StreamInterface* stream, LoggingSeverity level,
 StreamResult LoggingAdapter::Read(void* buffer, size_t buffer_len,
                                   size_t* read, int* error) {
   size_t local_read; if (!read) read = &local_read;
-  StreamResult result = StreamAdapterInterface::Read(buffer, buffer_len, read, error);
+  StreamResult result = StreamAdapterInterface::Read(buffer, buffer_len, read,
+                                                     error);
   if (result == SR_SUCCESS) {
-    LogMultiline(level_, label_.c_str(), true,
-                 static_cast<const char *>(buffer), *read, hex_mode_, &lms_);
+    LogMultiline(level_, label_.c_str(), true, buffer, *read, hex_mode_, &lms_);
   }
   return result;
 }
@@ -571,15 +889,18 @@ StreamResult LoggingAdapter::Read(void* buffer, size_t buffer_len,
 StreamResult LoggingAdapter::Write(const void* data, size_t data_len,
                                    size_t* written, int* error) {
   size_t local_written; if (!written) written = &local_written;
-  StreamResult result = StreamAdapterInterface::Write(data, data_len, written, error);
+  StreamResult result = StreamAdapterInterface::Write(data, data_len, written,
+                                                      error);
   if (result == SR_SUCCESS) {
-    LogMultiline(level_, label_.c_str(), false,
-                 static_cast<const char *>(data), *written, hex_mode_, &lms_);
+    LogMultiline(level_, label_.c_str(), false, data, *written, hex_mode_,
+                 &lms_);
   }
   return result;
 }
 
 void LoggingAdapter::Close() {
+  LogMultiline(level_, label_.c_str(), false, NULL, 0, hex_mode_, &lms_);
+  LogMultiline(level_, label_.c_str(), true, NULL, 0, hex_mode_, &lms_);
   LOG_V(level_) << label_ << " Closed locally";
   StreamAdapterInterface::Close();
 }
@@ -588,6 +909,8 @@ void LoggingAdapter::OnEvent(StreamInterface* stream, int events, int err) {
   if (events & SE_OPEN) {
     LOG_V(level_) << label_ << " Open";
   } else if (events & SE_CLOSE) {
+    LogMultiline(level_, label_.c_str(), false, NULL, 0, hex_mode_, &lms_);
+    LogMultiline(level_, label_.c_str(), true, NULL, 0, hex_mode_, &lms_);
     LOG_V(level_) << label_ << " Closed with error: " << err;
   }
   StreamAdapterInterface::OnEvent(stream, events, err);
@@ -613,7 +936,7 @@ StreamState StringStream::GetState() const {
 
 StreamResult StringStream::Read(void* buffer, size_t buffer_len,
                                       size_t* read, int* error) {
-  size_t available = talk_base::_min(buffer_len, str_.size() - read_pos_);
+  size_t available = _min(buffer_len, str_.size() - read_pos_);
   if (!available)
     return SR_EOS;
   memcpy(buffer, str_.data() + read_pos_, available);
@@ -641,9 +964,28 @@ StreamResult StringStream::Write(const void* data, size_t data_len,
 void StringStream::Close() {
 }
 
+bool StringStream::SetPosition(size_t position) {
+  if (position > str_.size())
+    return false;
+  read_pos_ = position;
+  return true;
+}
+
+bool StringStream::GetPosition(size_t* position) const {
+  if (position)
+    *position = read_pos_;
+  return true;
+}
+
 bool StringStream::GetSize(size_t* size) const {
-  ASSERT(size != NULL);
-  *size = str_.size();
+  if (size)
+    *size = str_.size();
+  return true;
+}
+
+bool StringStream::GetAvailable(size_t* size) const {
+  if (size)
+    *size = str_.size() - read_pos_;
   return true;
 }
 
@@ -654,9 +996,89 @@ bool StringStream::ReserveSize(size_t size) {
   return true;
 }
 
-bool StringStream::Rewind() {
-  read_pos_ = 0;
-  return true;
+///////////////////////////////////////////////////////////////////////////////
+// StreamReference
+///////////////////////////////////////////////////////////////////////////////
+
+StreamReference::StreamReference(StreamInterface* stream)
+    : StreamAdapterInterface(stream, false) {
+  // owner set to false so the destructor does not free the stream.
+  stream_ref_count_ = new StreamRefCount(stream);
+}
+
+StreamInterface* StreamReference::NewReference() {
+  stream_ref_count_->AddReference();
+  return new StreamReference(stream_ref_count_, stream());
+}
+
+StreamReference::~StreamReference() {
+  stream_ref_count_->Release();
+}
+
+StreamReference::StreamReference(StreamRefCount* stream_ref_count,
+                                 StreamInterface* stream)
+    : StreamAdapterInterface(stream, false),
+      stream_ref_count_(stream_ref_count) {
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+StreamResult Flow(StreamInterface* source,
+                  char* buffer, size_t buffer_len,
+                  StreamInterface* sink,
+                  size_t* data_len /* = NULL */) {
+  ASSERT(buffer_len > 0);
+
+  StreamResult result;
+  size_t count, read_pos, write_pos;
+  if (data_len) {
+    read_pos = *data_len;
+  } else {
+    read_pos = 0;
+  }
+
+  bool end_of_stream = false;
+  do {
+    // Read until buffer is full, end of stream, or error
+    while (!end_of_stream && (read_pos < buffer_len)) {
+      result = source->Read(buffer + read_pos, buffer_len - read_pos,
+                            &count, NULL);
+      if (result == SR_EOS) {
+        end_of_stream = true;
+      } else if (result != SR_SUCCESS) {
+        if (data_len) {
+          *data_len = read_pos;
+        }
+        return result;
+      } else {
+        read_pos += count;
+      }
+    }
+
+    // Write until buffer is empty, or error (including end of stream)
+    write_pos = 0;
+    while (write_pos < read_pos) {
+      result = sink->Write(buffer + write_pos, read_pos - write_pos,
+                           &count, NULL);
+      if (result != SR_SUCCESS) {
+        if (data_len) {
+          *data_len = read_pos - write_pos;
+          if (write_pos > 0) {
+            memmove(buffer, buffer + write_pos, *data_len);
+          }
+        }
+        return result;
+      }
+      write_pos += count;
+    }
+
+    read_pos = 0;
+  } while (!end_of_stream);
+
+  if (data_len) {
+    *data_len = 0;
+  }
+  return SR_SUCCESS;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

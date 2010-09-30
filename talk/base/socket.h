@@ -75,6 +75,7 @@
 #define ENOTCONN WSAENOTCONN
 #define ESHUTDOWN WSAESHUTDOWN
 #define ETOOMANYREFS WSAETOOMANYREFS
+#undef ETIMEDOUT // remove pthreads.h's definition
 #define ETIMEDOUT WSAETIMEDOUT
 #define ECONNREFUSED WSAECONNREFUSED
 #define ELOOP WSAELOOP
@@ -144,8 +145,12 @@ public:
   virtual int EstimateMTU(uint16* mtu) = 0;
 
   enum Option {
-    OPT_DONTFRAGMENT
+    OPT_DONTFRAGMENT,
+    OPT_RCVBUF, // receive buffer size
+    OPT_SNDBUF, // send buffer size
+    OPT_NODELAY // whether Nagle algorithm is enabled
   };
+  virtual int GetOption(Option opt, int* value) = 0;
   virtual int SetOption(Option opt, int value) = 0;
 
 protected:

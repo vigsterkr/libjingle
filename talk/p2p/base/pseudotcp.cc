@@ -2,30 +2,34 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/base/basicdefs.h"
+#include "talk/p2p/base/pseudotcp.h"
+
+#include <cstdio>
+#include <cstdlib>
+
 #include "talk/base/basictypes.h"
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
@@ -33,15 +37,8 @@
 #include "talk/base/socket.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/time.h"
-#include "talk/p2p/base/pseudotcp.h"
 
-#ifdef POSIX
-extern "C" {
-#include <errno.h>
-}
-#endif // POSIX
-
-// The following logging is for detailed (packet-level) pseudotcp analysis only.
+// The following logging is for detailed (packet-level) analysis only.
 #define _DBG_NONE     0
 #define _DBG_NORMAL   1
 #define _DBG_VERBOSE  2
@@ -90,8 +87,8 @@ const uint32 JINGLE_HEADER_SIZE = 64; // when relay framing is in use
 // Global Constants and Functions
 //////////////////////////////////////////////////////////////////////
 //
-//    0                   1                   2                   3   
-//    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
+//    0                   1                   2                   3
+//    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //  0 |                      Conversation Number                      |
 //    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -199,7 +196,7 @@ inline void Incr(Stat s) { ++g_stats[s]; }
 void ReportStats() {
   char buffer[256];
   size_t len = 0;
-  for (int i=0; i<S_NUM_STATS; ++i) {
+  for (int i = 0; i < S_NUM_STATS; ++i) {
     len += talk_base::sprintfn(buffer, ARRAY_SIZE(buffer), "%s%s:%d",
                                (i == 0) ? "" : ",", STAT_NAMES[i], g_stats[i]);
     g_stats[i] = 0;
@@ -215,13 +212,13 @@ void ReportStats() {
 
 uint32 PseudoTcp::Now() {
 #if 0  // Use this to synchronize timers with logging timestamps (easier debug)
-  return talk_base::ElapsedTime();
+  return talk_base::TimeSince(StartTime());
 #else
   return talk_base::Time();
 #endif
 }
 
-PseudoTcp::PseudoTcp(IPseudoTcpNotify * notify, uint32 conv)
+PseudoTcp::PseudoTcp(IPseudoTcpNotify* notify, uint32 conv)
     : m_notify(notify), m_shutdown(SD_NONE), m_error(0) {
 
   // Sanity check on buffer sizes (needed for OnTcpWriteable notification logic)
@@ -264,8 +261,7 @@ PseudoTcp::PseudoTcp(IPseudoTcpNotify * notify, uint32 conv)
 PseudoTcp::~PseudoTcp() {
 }
 
-int
-PseudoTcp::Connect() {
+int PseudoTcp::Connect() {
   if (m_state != TCP_LISTEN) {
     m_error = EINVAL;
     return -1;
@@ -282,16 +278,14 @@ PseudoTcp::Connect() {
   return 0;
 }
 
-void
-PseudoTcp::NotifyMTU(uint16 mtu) {
+void PseudoTcp::NotifyMTU(uint16 mtu) {
   m_mtu_advise = mtu;
   if (m_state == TCP_ESTABLISHED) {
     adjustMTU();
   }
 }
 
-void
-PseudoTcp::NotifyClock(uint32 now) {
+void PseudoTcp::NotifyClock(uint32 now) {
   if (m_state == TCP_CLOSED)
     return;
 
@@ -325,9 +319,9 @@ PseudoTcp::NotifyClock(uint32 now) {
       m_rto_base = now;
     }
   }
-  
+
   // Check if it's time to probe closed windows
-  if ((m_snd_wnd == 0) 
+  if ((m_snd_wnd == 0)
         && (talk_base::TimeDiff(m_lastsend + m_rx_rto, now) <= 0)) {
     if (talk_base::TimeDiff(now, m_lastrecv) >= 15000) {
       closedown(ECONNABORTED);
@@ -361,8 +355,7 @@ PseudoTcp::NotifyClock(uint32 now) {
 #endif // PSEUDO_KEEPALIVE
 }
 
-bool
-PseudoTcp::NotifyPacket(const char * buffer, size_t len) {
+bool PseudoTcp::NotifyPacket(const char* buffer, size_t len) {
   if (len > MAX_PACKET) {
     LOG_F(WARNING) << "packet too large";
     return false;
@@ -370,17 +363,15 @@ PseudoTcp::NotifyPacket(const char * buffer, size_t len) {
   return parse(reinterpret_cast<const uint8 *>(buffer), uint32(len));
 }
 
-bool
-PseudoTcp::GetNextClock(uint32 now, long& timeout) {
+bool PseudoTcp::GetNextClock(uint32 now, long& timeout) {
   return clock_check(now, timeout);
 }
 
-// 
+//
 // IPStream Implementation
 //
 
-int
-PseudoTcp::Recv(char * buffer, size_t len) {
+int PseudoTcp::Recv(char* buffer, size_t len) {
   if (m_state != TCP_ESTABLISHED) {
     m_error = ENOTCONN;
     return SOCKET_ERROR;
@@ -399,7 +390,7 @@ PseudoTcp::Recv(char * buffer, size_t len) {
   // !?! until we create a circular buffer, we need to move all of the rest of the buffer up!
   memmove(m_rbuf, m_rbuf + read, sizeof(m_rbuf) - read/*m_rlen*/);
 
-  if ((sizeof(m_rbuf) - m_rlen - m_rcv_wnd) 
+  if ((sizeof(m_rbuf) - m_rlen - m_rcv_wnd)
       >= talk_base::_min<uint32>(sizeof(m_rbuf) / 2, m_mss)) {
     bool bWasClosed = (m_rcv_wnd == 0); // !?! Not sure about this was closed business
 
@@ -413,8 +404,7 @@ PseudoTcp::Recv(char * buffer, size_t len) {
   return read;
 }
 
-int
-PseudoTcp::Send(const char * buffer, size_t len) {
+int PseudoTcp::Send(const char* buffer, size_t len) {
   if (m_state != TCP_ESTABLISHED) {
     m_error = ENOTCONN;
     return SOCKET_ERROR;
@@ -431,8 +421,7 @@ PseudoTcp::Send(const char * buffer, size_t len) {
   return written;
 }
 
-void
-PseudoTcp::Close(bool force) {
+void PseudoTcp::Close(bool force) {
   LOG_F(LS_VERBOSE) << "(" << (force ? "true" : "false") << ")";
   m_shutdown = force ? SD_FORCEFUL : SD_GRACEFUL;
 }
@@ -445,8 +434,7 @@ int PseudoTcp::GetError() {
 // Internal Implementation
 //
 
-uint32
-PseudoTcp::queue(const char * data, uint32 len, bool bCtrl) {
+uint32 PseudoTcp::queue(const char* data, uint32 len, bool bCtrl) {
   if (len > sizeof(m_sbuf) - m_slen) {
     ASSERT(!bCtrl);
     len = sizeof(m_sbuf) - m_slen;
@@ -467,8 +455,8 @@ PseudoTcp::queue(const char * data, uint32 len, bool bCtrl) {
   return len;
 }
 
-IPseudoTcpNotify::WriteResult
-PseudoTcp::packet(uint32 seq, uint8 flags, const char * data, uint32 len) {
+IPseudoTcpNotify::WriteResult PseudoTcp::packet(uint32 seq, uint8 flags,
+                                                const char* data, uint32 len) {
   ASSERT(HEADER_SIZE + len <= MAX_PACKET);
 
   uint32 now = Now();
@@ -516,8 +504,7 @@ PseudoTcp::packet(uint32 seq, uint8 flags, const char * data, uint32 len) {
   return IPseudoTcpNotify::WR_SUCCESS;
 }
 
-bool
-PseudoTcp::parse(const uint8 * buffer, uint32 size) {
+bool PseudoTcp::parse(const uint8* buffer, uint32 size) {
   if (size < 12)
     return false;
 
@@ -527,7 +514,7 @@ PseudoTcp::parse(const uint8 * buffer, uint32 size) {
   seg.ack = bytes_to_long(buffer + 8);
   seg.flags = buffer[13];
   seg.wnd = bytes_to_short(buffer + 14);
-  
+
   seg.tsval = bytes_to_long(buffer + 16);
   seg.tsecr = bytes_to_long(buffer + 20);
 
@@ -548,8 +535,7 @@ PseudoTcp::parse(const uint8 * buffer, uint32 size) {
   return process(seg);
 }
 
-bool
-PseudoTcp::clock_check(uint32 now, long& nTimeout) {
+bool PseudoTcp::clock_check(uint32 now, long& nTimeout) {
   if (m_shutdown == SD_FORCEFUL)
     return false;
 
@@ -567,27 +553,26 @@ PseudoTcp::clock_check(uint32 now, long& nTimeout) {
   nTimeout = DEFAULT_TIMEOUT;
 
   if (m_t_ack) {
-    nTimeout = talk_base::_min(nTimeout, 
+    nTimeout = talk_base::_min<int32>(nTimeout,
       talk_base::TimeDiff(m_t_ack + ACK_DELAY, now));
   }
   if (m_rto_base) {
-    nTimeout = talk_base::_min(nTimeout, 
+    nTimeout = talk_base::_min<int32>(nTimeout,
       talk_base::TimeDiff(m_rto_base + m_rx_rto, now));
   }
   if (m_snd_wnd == 0) {
-    nTimeout = talk_base::_min(nTimeout, talk_base::TimeDiff(m_lastsend + m_rx_rto, now));
+    nTimeout = talk_base::_min<int32>(nTimeout, talk_base::TimeDiff(m_lastsend + m_rx_rto, now));
   }
 #if PSEUDO_KEEPALIVE
   if (m_state == TCP_ESTABLISHED) {
-    nTimeout = talk_base::_min(nTimeout, 
+    nTimeout = talk_base::_min<int32>(nTimeout,
       talk_base::TimeDiff(m_lasttraffic + (m_bOutgoing ? IDLE_PING * 3/2 : IDLE_PING), now));
   }
 #endif // PSEUDO_KEEPALIVE
   return true;
 }
 
-bool
-PseudoTcp::process(Segment& seg) {
+bool PseudoTcp::process(Segment& seg) {
   // If this is the wrong conversation, send a reset!?! (with the correct conversation?)
   if (seg.conv != m_conv) {
     //if ((seg.flags & FLAG_RST) == 0) {
@@ -661,7 +646,8 @@ PseudoTcp::process(Segment& seg) {
           m_rx_rttvar = (3 * m_rx_rttvar + abs(long(rtt - m_rx_srtt))) / 4;
           m_rx_srtt = (7 * m_rx_srtt + rtt) / 8;
         }
-        m_rx_rto = bound(MIN_RTO, m_rx_srtt + talk_base::_max(1LU, 4 * m_rx_rttvar), MAX_RTO);
+        m_rx_rto = bound(MIN_RTO, m_rx_srtt +
+            talk_base::_max<uint32>(1, 4 * m_rx_rttvar), MAX_RTO);
 #if _DEBUGMSG >= _DBG_VERBOSE
         LOG(LS_INFO) << "rtt: " << rtt
                      << "  srtt: " << m_rx_srtt
@@ -700,7 +686,7 @@ PseudoTcp::process(Segment& seg) {
     if (m_dup_acks >= 3) {
       if (m_snd_una >= m_recover) { // NewReno
         uint32 nInFlight = m_snd_nxt - m_snd_una;
-        m_cwnd = talk_base::_min(m_ssthresh, nInFlight + m_mss); // (Fast Retransmit) 
+        m_cwnd = talk_base::_min(m_ssthresh, nInFlight + m_mss); // (Fast Retransmit)
 #if _DEBUGMSG >= _DBG_NORMAL
         LOG(LS_INFO) << "exit recovery";
 #endif // _DEBUGMSG
@@ -721,7 +707,7 @@ PseudoTcp::process(Segment& seg) {
       if (m_cwnd < m_ssthresh) {
         m_cwnd += m_mss;
       } else {
-        m_cwnd += talk_base::_max(1LU, m_mss * m_mss / m_cwnd);
+        m_cwnd += talk_base::_max<uint32>(1, m_mss * m_mss / m_cwnd);
       }
     }
 
@@ -735,7 +721,7 @@ PseudoTcp::process(Segment& seg) {
       }
       //notify(evOpen);
     }
-    
+
     // If we make room in the send queue, notify the user
     // The goal it to make sure we always have at least enough data to fill the
     // window.  We'd like to notify the app when we are halfway to that point.
@@ -836,7 +822,7 @@ PseudoTcp::process(Segment& seg) {
         m_rcv_nxt += seg.len;
         m_rcv_wnd -= seg.len;
         bNewData = true;
-        
+
         RList::iterator it = m_rlist.begin();
         while ((it != m_rlist.end()) && (it->seq <= m_rcv_nxt)) {
           if (it->seq + it->len > m_rcv_nxt) {
@@ -881,8 +867,7 @@ PseudoTcp::process(Segment& seg) {
   return true;
 }
 
-bool
-PseudoTcp::transmit(const SList::iterator& seg, uint32 now) {
+bool PseudoTcp::transmit(const SList::iterator& seg, uint32 now) {
   if (seg->xmit >= ((m_state == TCP_ESTABLISHED) ? 15 : 30)) {
     LOG_F(LS_VERBOSE) << "too many retransmits";
     return false;
@@ -893,7 +878,7 @@ PseudoTcp::transmit(const SList::iterator& seg, uint32 now) {
   while (true) {
     uint32 seq = seg->seq;
     uint8 flags = (seg->bCtrl ? FLAG_CTL : 0);
-    const char * buffer = m_sbuf + (seg->seq - m_snd_una);
+    const char* buffer = m_sbuf + (seg->seq - m_snd_una);
     IPseudoTcpNotify::WriteResult wres = this->packet(seq, flags, buffer, nTransmit);
 
     if (wres == IPseudoTcpNotify::WR_SUCCESS)
@@ -949,8 +934,7 @@ PseudoTcp::transmit(const SList::iterator& seg, uint32 now) {
   return true;
 }
 
-void
-PseudoTcp::attemptSend(SendFlags sflags) {
+void PseudoTcp::attemptSend(SendFlags sflags) {
   uint32 now = Now();
 
   if (talk_base::TimeDiff(now, m_lastsend) > static_cast<long>(m_rx_rto)) {
@@ -1005,9 +989,9 @@ PseudoTcp::attemptSend(SendFlags sflags) {
       } else {
         m_t_ack = Now();
       }
-      return;       
+      return;
     }
-    
+
     // Nagle algorithm
     if ((m_snd_nxt > m_snd_una) && (nAvailable < m_mss))  {
       return;
@@ -1068,4 +1052,4 @@ PseudoTcp::adjustMTU() {
   m_cwnd = talk_base::_max(m_cwnd, m_mss);
 }
 
-} // namespace cricket
+}  // namespace cricket

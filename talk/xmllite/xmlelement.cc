@@ -85,7 +85,8 @@ XmlElement::XmlElement(const QName & name) :
     pFirstAttr_(NULL),
     pLastAttr_(NULL),
     pFirstChild_(NULL),
-    pLastChild_(NULL) {
+    pLastChild_(NULL),
+    cdata_(false) {
 }
 
 XmlElement::XmlElement(const XmlElement & elt) :
@@ -94,7 +95,8 @@ XmlElement::XmlElement(const XmlElement & elt) :
     pFirstAttr_(NULL),
     pLastAttr_(NULL),
     pFirstChild_(NULL),
-    pLastChild_(NULL) {
+    pLastChild_(NULL),
+    cdata_(false) {
 
   // copy attributes
   XmlAttr * pAttr;
@@ -123,6 +125,7 @@ XmlElement::XmlElement(const XmlElement & elt) :
   }
   pLastChild_ = newChild;
 
+  cdata_ = elt.cdata_;
 }
 
 XmlElement::XmlElement(const QName & name, bool useDefaultNs) :
@@ -130,7 +133,8 @@ XmlElement::XmlElement(const QName & name, bool useDefaultNs) :
   pFirstAttr_(useDefaultNs ? new XmlAttr(QN_XMLNS, name.Namespace()) : NULL),
   pLastAttr_(pFirstAttr_),
   pFirstChild_(NULL),
-  pLastChild_(NULL) {
+  pLastChild_(NULL),
+  cdata_(false) {
 }
 
 bool
@@ -391,6 +395,12 @@ XmlElement::AddParsedText(const char * cstr, int len) {
 }
 
 void
+XmlElement::AddCDATAText(const char * buf, int len) {
+  cdata_ = true;
+  AddParsedText(buf, len);
+}
+
+void
 XmlElement::AddText(const std::string & text) {
   if (text == STR_EMPTY)
     return;
@@ -447,6 +457,17 @@ XmlElement::ClearNamedChildren(const QName & name) {
     }
     prev_child = child;
   }
+}
+
+void
+XmlElement::ClearAttributes() {
+  XmlAttr * pattr;
+  for (pattr = pFirstAttr_; pattr; ) {
+    XmlAttr * pToDelete = pattr;
+    pattr = pattr->pNextAttr_;
+    delete pToDelete;
+  }
+  pFirstAttr_ = pLastAttr_ = NULL;
 }
 
 void

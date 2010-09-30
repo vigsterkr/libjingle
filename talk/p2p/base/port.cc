@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -29,10 +29,7 @@
 #pragma warning(disable:4786)
 #endif
 
-#include <errno.h>
-
 #include <algorithm>
-#include <iostream>
 #include <vector>
 
 #include "talk/base/asyncudpsocket.h"
@@ -41,6 +38,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/socketadapters.h"
+#include "talk/base/stringutils.h"
 #include "talk/p2p/base/common.h"
 #include "talk/p2p/base/port.h"
 
@@ -53,19 +51,19 @@ namespace std {
 namespace {
 
 // The length of time we wait before timing out readability on a connection.
-const uint32 CONNECTION_READ_TIMEOUT = 30 * 1000; // 30 seconds
+const uint32 CONNECTION_READ_TIMEOUT = 30 * 1000;   // 30 seconds
 
 // The length of time we wait before timing out writability on a connection.
-const uint32 CONNECTION_WRITE_TIMEOUT = 15 * 1000; // 15 seconds
+const uint32 CONNECTION_WRITE_TIMEOUT = 15 * 1000;  // 15 seconds
 
 // The length of time we wait before we become unwritable.
-const uint32 CONNECTION_WRITE_CONNECT_TIMEOUT = 5 * 1000; // 5 seconds
+const uint32 CONNECTION_WRITE_CONNECT_TIMEOUT = 5 * 1000;  // 5 seconds
 
 // The number of pings that must fail to respond before we become unwritable.
 const uint32 CONNECTION_WRITE_CONNECT_FAILURES = 5;
 
 // This is the length of time that we wait for a ping response to come back.
-const int CONNECTION_RESPONSE_TIMEOUT = 5 * 1000; // 5 seconds
+const int CONNECTION_RESPONSE_TIMEOUT = 5 * 1000;   // 5 seconds
 
 // Determines whether we have seen at least the given maximum number of
 // pings fail to have a response.
@@ -98,64 +96,56 @@ inline bool TooLongWithoutResponse(
 
 // We will restrict RTT estimates (when used for determining state) to be
 // within a reasonable range.
-const uint32 MINIMUM_RTT = 100;  // 0.1 seconds
-const uint32 MAXIMUM_RTT = 3000; // 3 seconds
+const uint32 MINIMUM_RTT = 100;   // 0.1 seconds
+const uint32 MAXIMUM_RTT = 3000;  // 3 seconds
 
 // When we don't have any RTT data, we have to pick something reasonable.  We
 // use a large value just in case the connection is really slow.
 const uint32 DEFAULT_RTT = MAXIMUM_RTT;
 
-// Computes our estimate of the RTT given the current estimate and the number
-// of data points on which it is based.
-inline uint32 ConservativeRTTEstimate(uint32 rtt, uint32 rtt_data_points) {
-  if (rtt_data_points == 0)
-    return DEFAULT_RTT;
-  else
-    return talk_base::_max(MINIMUM_RTT, talk_base::_min(MAXIMUM_RTT, 2 * rtt));
+// Computes our estimate of the RTT given the current estimate.
+inline uint32 ConservativeRTTEstimate(uint32 rtt) {
+  return talk_base::_max(MINIMUM_RTT, talk_base::_min(MAXIMUM_RTT, 2 * rtt));
 }
 
 // Weighting of the old rtt value to new data.
-const int RTT_RATIO = 3; // 3 : 1
+const int RTT_RATIO = 3;  // 3 : 1
 
 // The delay before we begin checking if this port is useless.
-const int kPortTimeoutDelay = 30 * 1000; // 30 seconds
+const int kPortTimeoutDelay = 30 * 1000;  // 30 seconds
 
 const uint32 MSG_CHECKTIMEOUT = 1;
 const uint32 MSG_DELETE = 1;
-
 }
 
 namespace cricket {
 
-static const char * const PROTO_NAMES[PROTO_LAST+1] = { "udp", "tcp", "ssltcp" };
+static const char* const PROTO_NAMES[] = { "udp", "tcp", "ssltcp" };
 
-const char * ProtoToString(ProtocolType proto) {
+const char* ProtoToString(ProtocolType proto) {
   return PROTO_NAMES[proto];
 }
 
-bool StringToProto(const char * value, ProtocolType& proto) {
-  for (size_t i=0; i<=PROTO_LAST; ++i) {
+bool StringToProto(const char* value, ProtocolType* proto) {
+  for (size_t i = 0; i <= PROTO_LAST; ++i) {
     if (strcmp(PROTO_NAMES[i], value) == 0) {
-      proto = static_cast<ProtocolType>(i);
+      *proto = static_cast<ProtocolType>(i);
       return true;
     }
   }
   return false;
 }
 
-std::string Port::agent_;
-talk_base::ProxyInfo Port::proxy_;
-
-Port::Port(talk_base::Thread* thread, const std::string& type, 
+Port::Port(talk_base::Thread* thread, const std::string& type,
            talk_base::SocketFactory* factory, talk_base::Network* network)
   : thread_(thread), factory_(factory), type_(type), network_(network),
     preference_(-1), lifetime_(LT_PRESTART), enable_port_packets_(false) {
-
   if (factory_ == NULL)
     factory_ = thread_->socketserver();
 
-  set_username_fragment(CreateRandomString(16));
-  set_password(CreateRandomString(16));
+  set_username_fragment(talk_base::CreateRandomString(16));
+  set_password(talk_base::CreateRandomString(16));
+  LOG_J(LS_INFO, this) << "Port created";
 }
 
 Port::~Port() {
@@ -227,6 +217,10 @@ void Port::OnReadPacket(
   } else if (msg->type() == STUN_BINDING_REQUEST) {
     SignalUnknownAddress(this, addr, msg, remote_username);
   } else {
+    // NOTE(tschmelcher): This is benign. It occurs if we pruned a
+    // connection for this port while it had STUN requests in flight, because
+    // we then get back responses for them, which this code correctly does not
+    // handle.
     LOG_J(LS_ERROR, this) << "Received unexpected STUN message type ("
                           << msg->type() << ") from unknown address ("
                           << addr.ToString() << ")";
@@ -235,18 +229,16 @@ void Port::OnReadPacket(
 }
 
 void Port::SendBindingRequest(Connection* conn) {
-
   // Construct the request message.
-
   StunMessage request;
   request.SetType(STUN_BINDING_REQUEST);
-  request.SetTransactionID(CreateRandomString(16));
+  request.SetTransactionID(talk_base::CreateRandomString(16));
 
   StunByteStringAttribute* username_attr =
       StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   std::string username = conn->remote_candidate().username();
   username.append(username_frag_);
-  username_attr->CopyBytes(username.c_str(), (uint16)username.size());
+  username_attr->CopyBytes(username.c_str(), username.size());
   request.AddAttribute(username_attr);
 
   // Send the request message.
@@ -257,7 +249,7 @@ void Port::SendBindingRequest(Connection* conn) {
 }
 
 bool Port::GetStunMessage(const char* data, size_t size,
-                          const talk_base::SocketAddress& addr, 
+                          const talk_base::SocketAddress& addr,
                           StunMessage *& msg, std::string& remote_username) {
   // NOTE: This could clearly be optimized to avoid allocating any memory.
   //       However, at the data rates we'll be looking at on the client side,
@@ -283,12 +275,15 @@ bool Port::GetStunMessage(const char* data, size_t size,
   remote_frag_len -= static_cast<int>(username_frag_.size());
 
   if (stun_msg->type() == STUN_BINDING_REQUEST) {
-    if ((remote_frag_len < 0)
-        || (std::memcmp(username_attr->bytes(),
-                        username_frag_.c_str(), username_frag_.size()) != 0)) {
+    if (remote_frag_len < 0) {
+      // Username not present or corrupted, don't reply.
+      LOG_J(LS_ERROR, this) << "Received STUN request without username";
+      return true;
+    } else if (std::memcmp(username_attr->bytes(), username_frag_.c_str(),
+                           username_frag_.size()) != 0) {
       LOG_J(LS_ERROR, this) << "Received STUN request with bad username";
       SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_BAD_REQUEST,
-        STUN_ERROR_REASON_BAD_REQUEST);
+                               STUN_ERROR_REASON_BAD_REQUEST);
       return true;
     }
 
@@ -296,10 +291,19 @@ bool Port::GetStunMessage(const char* data, size_t size,
       username_attr->bytes() + username_attr->length());
   } else if ((stun_msg->type() == STUN_BINDING_RESPONSE)
       || (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE)) {
-    if ((remote_frag_len < 0)
-        || (std::memcmp(username_attr->bytes() + remote_frag_len,
-                        username_frag_.c_str(), username_frag_.size()) != 0)) {
-       LOG_J(LS_ERROR, this) << "Received STUN response with bad username";
+    if (remote_frag_len < 0) {
+      // NOTE(tschmelcher): This is benign. It occurs when the response to a
+      // StunBindingRequest to the real STUN server (which involves no
+      // usernames) took too long to reach us and so the base StunRequest
+      // re-sent itself, resulting in us getting an extraneous second response
+      // that gets forwarded on to this code and correctly discarded.
+      LOG_J(LS_ERROR, this) << "Received STUN response without username";
+      // Do not send error response to a response
+      return true;
+    } else if (std::memcmp(username_attr->bytes() + remote_frag_len,
+                           username_frag_.c_str(),
+                           username_frag_.size()) != 0) {
+      LOG_J(LS_ERROR, this) << "Received STUN response with bad username";
       // Do not send error response to a response
       return true;
     }
@@ -335,15 +339,18 @@ bool Port::GetStunMessage(const char* data, size_t size,
 void Port::SendBindingResponse(
     StunMessage* request, const talk_base::SocketAddress& addr) {
 
-  assert(request->type() == STUN_BINDING_REQUEST);
+  ASSERT(request->type() == STUN_BINDING_REQUEST);
 
   // Retrieve the username from the request.
   const StunByteStringAttribute* username_attr =
       request->GetByteString(STUN_ATTR_USERNAME);
-  assert(username_attr);
+  ASSERT(username_attr != NULL);
+  if (username_attr == NULL) {
+    // No valid username, skip the response.
+    return;
+  }
 
   // Fill in the response message.
-
   StunMessage response;
   response.SetType(STUN_BINDING_RESPONSE);
   response.SetTransactionID(request->transaction_id());
@@ -369,7 +376,7 @@ void Port::SendBindingResponse(
   // The fact that we received a successful request means that this connection
   // (if one exists) should now be readable.
   Connection* conn = GetConnection(addr);
-  assert(conn);
+  ASSERT(conn != NULL);
   if (conn)
     conn->ReceivedPing();
 }
@@ -378,16 +385,19 @@ void Port::SendBindingErrorResponse(
     StunMessage* request, const talk_base::SocketAddress& addr, int error_code,
     const std::string& reason) {
 
-  assert(request->type() == STUN_BINDING_REQUEST);
+  ASSERT(request->type() == STUN_BINDING_REQUEST);
 
   // Retrieve the username from the request.  If it didn't have one, we
   // shouldn't be responding at all.
   const StunByteStringAttribute* username_attr =
       request->GetByteString(STUN_ATTR_USERNAME);
-  assert(username_attr);
+  ASSERT(username_attr != NULL);
+  if (username_attr == NULL) {
+    // No valid username, skip the response.
+    return;
+  }
 
   // Fill in the response message.
-
   StunMessage response;
   response.SetType(STUN_BINDING_ERROR_RESPONSE);
   response.SetTransactionID(request->transaction_id());
@@ -411,37 +421,42 @@ void Port::SendBindingErrorResponse(
 
 talk_base::AsyncPacketSocket* Port::CreatePacketSocket(ProtocolType proto) {
   if (proto == PROTO_UDP) {
-    return new talk_base::AsyncUDPSocket(
-        factory_->CreateAsyncSocket(SOCK_DGRAM));
-  } else if ((proto == PROTO_TCP) || (proto == PROTO_SSLTCP)) {
-    talk_base::AsyncSocket * socket = factory_->CreateAsyncSocket(SOCK_STREAM);
-    switch (proxy().type) {
-    case talk_base::PROXY_NONE:
-      break;
-    case talk_base::PROXY_SOCKS5:
+    // UDP sockets are simple.
+    return talk_base::AsyncUDPSocket::Create(factory_);
+  } else if (proto == PROTO_TCP || proto == PROTO_SSLTCP) {
+    // Create the base TCP socket. Bail out if this fails.
+    talk_base::AsyncSocket* socket = factory_->CreateAsyncSocket(SOCK_STREAM);
+    if (!socket) {
+      return NULL;
+    }
+
+    // If using a proxy, wrap the socket in a proxy socket.
+    if (proxy().type == talk_base::PROXY_SOCKS5) {
       socket = new talk_base::AsyncSocksProxySocket(
           socket, proxy().address, proxy().username, proxy().password);
-      break;
-    case talk_base::PROXY_HTTPS:
-    default:
+    } else if (proxy().type == talk_base::PROXY_HTTPS) {
       socket = new talk_base::AsyncHttpsProxySocket(
-          socket, user_agent(), proxy().address, proxy().username, 
-          proxy().password);
-      break;
+          socket, user_agent(), proxy().address,
+          proxy().username, proxy().password);
     }
+
+    // If using SSLTCP, wrap the TCP socket in a pseudo-SSL socket.
     if (proto == PROTO_SSLTCP) {
       socket = new talk_base::AsyncSSLSocket(socket);
     }
+
+    // Finally, wrap that socket in a TCP packet socket.
+    // [Insert obligatory Taco Town reference here]
     return new talk_base::AsyncTCPSocket(socket);
   } else {
-    LOG_J(LS_INFO, this) << "Unknown protocol (" << proto << ")";
-    return 0;
+    LOG_J(LS_ERROR, this) << "Unknown protocol (" << proto << ")";
+    return NULL;
   }
 }
 
 void Port::OnMessage(talk_base::Message *pmsg) {
-  assert(pmsg->message_id == MSG_CHECKTIMEOUT);
-  assert(lifetime_ == LT_PRETIMEOUT);
+  ASSERT(pmsg->message_id == MSG_CHECKTIMEOUT);
+  ASSERT(lifetime_ == LT_PRETIMEOUT);
   lifetime_ = LT_POSTTIMEOUT;
   CheckTimeout();
 }
@@ -468,15 +483,16 @@ void Port::Start() {
 }
 
 void Port::OnConnectionDestroyed(Connection* conn) {
-  AddressMap::iterator iter = connections_.find(conn->remote_candidate().address());
-  assert(iter != connections_.end());
+  AddressMap::iterator iter =
+      connections_.find(conn->remote_candidate().address());
+  ASSERT(iter != connections_.end());
   connections_.erase(iter);
 
   CheckTimeout();
 }
 
 void Port::Destroy() {
-  assert(connections_.empty());
+  ASSERT(connections_.empty());
   LOG_J(LS_INFO, this) << "Port deleted";
   SignalDestroyed(this);
   delete this;
@@ -494,8 +510,8 @@ void Port::CheckTimeout() {
 
 // A ConnectionRequest is a simple STUN ping used to determine writability.
 class ConnectionRequest : public StunRequest {
-public:
-  ConnectionRequest(Connection* connection) : connection_(connection) {
+ public:
+  explicit ConnectionRequest(Connection* connection) : connection_(connection) {
   }
 
   virtual ~ConnectionRequest() {
@@ -507,7 +523,7 @@ public:
         StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
     std::string username = connection_->remote_candidate().username();
     username.append(connection_->port()->username_fragment());
-    username_attr->CopyBytes(username.c_str(), (uint16)username.size());
+    username_attr->CopyBytes(username.c_str(), username.size());
     request->AddAttribute(username_attr);
   }
 
@@ -520,6 +536,7 @@ public:
   }
 
   virtual void OnTimeout() {
+    LOG_J(LS_VERBOSE, connection_) << "Timing-out STUN ping " << id();
   }
 
   virtual int GetNextDelay() {
@@ -529,7 +546,7 @@ public:
     return CONNECTION_RESPONSE_TIMEOUT;
   }
 
-private:
+ private:
   Connection* connection_;
 };
 
@@ -537,19 +554,16 @@ private:
 // Connection
 //
 
-Connection::Connection(Port* port, size_t index, const Candidate& remote_candidate)
-  : requests_(port->thread()), port_(port), local_candidate_index_(index),
+Connection::Connection(Port* port, size_t index,
+                       const Candidate& remote_candidate)
+  : port_(port), local_candidate_index_(index),
     remote_candidate_(remote_candidate), read_state_(STATE_READ_TIMEOUT),
     write_state_(STATE_WRITE_CONNECT), connected_(true), pruned_(false),
-    rtt_(0), rtt_data_points_(0), last_ping_sent_(0), last_ping_received_(0),
-    recv_total_bytes_(0), recv_bytes_second_(0),
-    last_recv_bytes_second_time_((uint32)-1), last_recv_bytes_second_calc_(0),
-    sent_total_bytes_(0), sent_bytes_second_(0),
-    last_sent_bytes_second_time_((uint32)-1), last_sent_bytes_second_calc_(0),
-    reported_(false) {
-
+    requests_(port->thread()), rtt_(DEFAULT_RTT),
+    last_ping_sent_(0), last_ping_received_(0), reported_(false) {
   // Wire up to send stun packets
   requests_.SignalSendPacket.connect(this, &Connection::OnSendStunPacket);
+  LOG_J(LS_INFO, this) << "Connection created";
 }
 
 Connection::~Connection() {
@@ -558,7 +572,7 @@ Connection::~Connection() {
 const Candidate& Connection::local_candidate() const {
   if (local_candidate_index_ < port_->candidates().size())
     return port_->candidates()[local_candidate_index_];
-  assert(false);
+  ASSERT(false);
   static Candidate foo;
   return foo;
 }
@@ -602,13 +616,13 @@ void Connection::OnReadPacket(const char* data, size_t size) {
   const talk_base::SocketAddress& addr(remote_candidate_.address());
   if (!port_->GetStunMessage(data, size, addr, msg, remote_username)) {
     // The packet did not parse as a valid STUN message
-  
+
     // If this connection is readable, then pass along the packet.
     if (read_state_ == STATE_READABLE) {
       // readable means data from this address is acceptable
       // Send it on!
 
-      recv_total_bytes_ += size;
+      recv_rate_tracker_.Update(size);
       SignalReadPacket(this, data, size);
 
       // If timed out sending writability checks, start up again
@@ -657,7 +671,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       break;
 
     default:
-      assert(false);
+      ASSERT(false);
       break;
     }
 
@@ -702,7 +716,17 @@ void Connection::UpdateState(uint32 now) {
   // Before timing out writability, we give a fixed amount of time.  This is to
   // allow for changes in network conditions.
 
-  uint32 rtt = ConservativeRTTEstimate(rtt_, rtt_data_points_);
+  uint32 rtt = ConservativeRTTEstimate(rtt_);
+
+  std::string pings;
+  for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
+    char buf[32];
+    talk_base::sprintfn(buf, sizeof(buf), "%u",
+        pings_since_last_response_[i]);
+    pings.append(buf).append(" ");
+  }
+  LOG_J(LS_VERBOSE, this) << "UpdateState(): pings_since_last_response_ = " <<
+      pings << ", rtt = " << rtt << ", now = " << now;
 
   if ((write_state_ == STATE_WRITABLE) &&
       TooManyFailures(pings_since_last_response_,
@@ -724,10 +748,12 @@ void Connection::UpdateState(uint32 now) {
 }
 
 void Connection::Ping(uint32 now) {
-  assert(connected_);
+  ASSERT(connected_);
   last_ping_sent_ = now;
   pings_since_last_response_.push_back(now);
-  requests_.Send(new ConnectionRequest(this));
+  ConnectionRequest *req = new ConnectionRequest(this);
+  LOG_J(LS_VERBOSE, this) << "Sending STUN ping " << req->id() << " at " << now;
+  requests_.Send(req);
 }
 
 void Connection::ReceivedPing() {
@@ -737,33 +763,36 @@ void Connection::ReceivedPing() {
 
 std::string Connection::ToString() const {
   const char CONNECT_STATE_ABBREV[2] = {
-    '-', // not connected (false)
-    'C', // connected (true)
+    '-',  // not connected (false)
+    'C',  // connected (true)
   };
   const char READ_STATE_ABBREV[2] = {
-    'R', // STATE_READABLE
-    '-', // STATE_READ_TIMEOUT
+    'R',  // STATE_READABLE
+    '-',  // STATE_READ_TIMEOUT
   };
   const char WRITE_STATE_ABBREV[3] = {
-    'W', // STATE_WRITABLE
-    'w', // STATE_WRITE_CONNECT
-    '-', // STATE_WRITE_TIMEOUT
+    'W',  // STATE_WRITABLE
+    'w',  // STATE_WRITE_CONNECT
+    '-',  // STATE_WRITE_TIMEOUT
   };
   const Candidate& local = local_candidate();
   const Candidate& remote = remote_candidate();
   std::stringstream ss;
   ss << "Conn[" << local.generation()
-     << ":" << local.name() << ":" << local.type() << ":" << local.address().ToString()
-     << "->" << remote.name() << ":" << remote.type() << ":" << remote.address().ToString()
-     << "|" 
+     << ":" << local.name() << ":" << local.type() << ":"
+     << local.protocol() << ":" << local.address().ToString()
+     << "->" << remote.name() << ":" << remote.type() << ":"
+     << remote.protocol() << ":" << remote.address().ToString()
+     << "|"
      << CONNECT_STATE_ABBREV[connected()]
      << READ_STATE_ABBREV[read_state()]
      << WRITE_STATE_ABBREV[write_state()]
-     << "]";
+     << "|" << rtt_ << "]";
   return ss.str();
 }
 
-void Connection::OnConnectionRequestResponse(StunMessage *response, uint32 rtt) {
+void Connection::OnConnectionRequestResponse(StunMessage* response,
+                                             uint32 rtt) {
   // We have a potentially valid reply from the remote address.
   // The packet must include a username that ends with our fragment,
   // since it is a response.
@@ -809,13 +838,26 @@ void Connection::OnConnectionRequestResponse(StunMessage *response, uint32 rtt) 
     // it, we can always prune it again.
     set_write_state(STATE_WRITABLE);
 
+    std::string pings;
+    for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
+      char buf[32];
+      talk_base::sprintfn(buf, sizeof(buf), "%u",
+          pings_since_last_response_[i]);
+      pings.append(buf).append(" ");
+    }
+    LOG_J(LS_VERBOSE, this) << "OnConnectionRequestResponse(): "
+        "pings_since_last_response_ = " << pings << ", rtt = " << rtt;
+
     pings_since_last_response_.clear();
     rtt_ = (RTT_RATIO * rtt_ + rtt) / (RTT_RATIO + 1);
-    rtt_data_points_ += 1;
+
+    LOG_J(LS_VERBOSE, this) << "Received STUN ping response " <<
+        response->transaction_id() << " after rtt = " << rtt;
   }
 }
 
-void Connection::OnConnectionRequestErrorResponse(StunMessage *response, uint32 rtt) {
+void Connection::OnConnectionRequestErrorResponse(StunMessage *response,
+                                                  uint32 rtt) {
   const StunErrorCodeAttribute* error = response->GetErrorCode();
   uint32 error_code = error ? error->error_code() : STUN_ERROR_GLOBAL_FAILURE;
 
@@ -827,6 +869,7 @@ void Connection::OnConnectionRequestErrorResponse(StunMessage *response, uint32 
     // Race failure, retry
   } else {
     // This is not a valid connection.
+    LOG_J(LS_ERROR, this) << "Received STUN error response; killing connection";
     set_write_state(STATE_WRITE_TIMEOUT);
   }
 }
@@ -843,7 +886,7 @@ void Connection::CheckTimeout() {
 }
 
 void Connection::OnMessage(talk_base::Message *pmsg) {
-  assert(pmsg->message_id == MSG_DELETE);
+  ASSERT(pmsg->message_id == MSG_DELETE);
 
   LOG_J(LS_INFO, this) << "Connection deleted";
   SignalDestroyed(this);
@@ -851,60 +894,23 @@ void Connection::OnMessage(talk_base::Message *pmsg) {
 }
 
 size_t Connection::recv_bytes_second() {
-  // Snapshot bytes / second calculator
-
-  uint32 current_time = talk_base::Time();
-  if (last_recv_bytes_second_time_ != (uint32)-1) {
-    int delta = talk_base::TimeDiff(current_time, last_recv_bytes_second_time_);
-    if (delta >= 1000) {
-      int fraction_time = delta % 1000;
-      int seconds_time = delta - fraction_time;
-      int fraction_bytes = (int)(recv_total_bytes_ - last_recv_bytes_second_calc_) * fraction_time / delta;
-      recv_bytes_second_ = (recv_total_bytes_ - last_recv_bytes_second_calc_ - fraction_bytes) * seconds_time / delta;
-      last_recv_bytes_second_time_ = current_time - fraction_time;
-      last_recv_bytes_second_calc_ = recv_total_bytes_ - fraction_bytes;
-    }
-  }
-  if (last_recv_bytes_second_time_ == (uint32)-1) {
-    last_recv_bytes_second_time_ = current_time;
-    last_recv_bytes_second_calc_ = recv_total_bytes_;
-  }
-
-  return recv_bytes_second_;
+  return recv_rate_tracker_.bytes_second();
 }
 
 size_t Connection::recv_total_bytes() {
-  return recv_total_bytes_;
+  return recv_rate_tracker_.total_bytes();
 }
 
 size_t Connection::sent_bytes_second() {
-  // Snapshot bytes / second calculator
-
-  uint32 current_time = talk_base::Time();
-  if (last_sent_bytes_second_time_ != (uint32)-1) {
-    int delta = talk_base::TimeDiff(current_time, last_sent_bytes_second_time_);
-    if (delta >= 1000) {
-      int fraction_time = delta % 1000;
-      int seconds_time = delta - fraction_time;
-      int fraction_bytes = (int)(sent_total_bytes_ - last_sent_bytes_second_calc_) * fraction_time / delta;
-      sent_bytes_second_ = (sent_total_bytes_ - last_sent_bytes_second_calc_ - fraction_bytes) * seconds_time / delta;
-      last_sent_bytes_second_time_ = current_time - fraction_time;
-      last_sent_bytes_second_calc_ = sent_total_bytes_ - fraction_bytes;
-    }
-  }
-  if (last_sent_bytes_second_time_ == (uint32)-1) {
-    last_sent_bytes_second_time_ = current_time;
-    last_sent_bytes_second_calc_ = sent_total_bytes_;
-  }
-
-  return sent_bytes_second_;
+  return send_rate_tracker_.bytes_second();
 }
 
 size_t Connection::sent_total_bytes() {
-  return sent_total_bytes_;
+  return send_rate_tracker_.total_bytes();
 }
 
-ProxyConnection::ProxyConnection(Port* port, size_t index, const Candidate& candidate)
+ProxyConnection::ProxyConnection(Port* port, size_t index,
+                                 const Candidate& candidate)
   : Connection(port, index, candidate), error_(0) {
 }
 
@@ -915,12 +921,56 @@ int ProxyConnection::Send(const void* data, size_t size) {
   }
   int sent = port_->SendTo(data, size, remote_candidate_.address(), true);
   if (sent <= 0) {
-    assert(sent < 0);
+    ASSERT(sent < 0);
     error_ = port_->GetError();
   } else {
-    sent_total_bytes_ += sent;
+    send_rate_tracker_.Update(sent);
   }
   return sent;
 }
 
-} // namespace cricket
+RateTracker::RateTracker()
+    : total_bytes_(0), bytes_second_(0),
+      last_bytes_second_time_(static_cast<uint32>(-1)),
+      last_bytes_second_calc_(0) {
+}
+
+size_t RateTracker::total_bytes() const {
+  return total_bytes_;
+}
+
+size_t RateTracker::bytes_second() {
+  // Snapshot bytes / second calculator. Determine how many seconds have
+  // elapsed since our last reference point. If over 1 second, establish
+  // a new reference point that is an integer number of seconds since the
+  // last one, and compute the bytes over that interval.
+
+  uint32 current_time = talk_base::Time();
+  if (last_bytes_second_time_ != static_cast<uint32>(-1)) {
+    int delta = talk_base::TimeDiff(current_time, last_bytes_second_time_);
+    if (delta >= 1000) {
+      int fraction_time = delta % 1000;
+      int seconds = delta / 1000;
+      int fraction_bytes =
+          static_cast<int>(total_bytes_ - last_bytes_second_calc_) *
+              fraction_time / delta;
+      // Compute "bytes received during the interval" / "seconds in interval"
+      bytes_second_ =
+          (total_bytes_ - last_bytes_second_calc_ - fraction_bytes) / seconds;
+      last_bytes_second_time_ = current_time - fraction_time;
+      last_bytes_second_calc_ = total_bytes_ - fraction_bytes;
+    }
+  }
+  if (last_bytes_second_time_ == static_cast<uint32>(-1)) {
+    last_bytes_second_time_ = current_time;
+    last_bytes_second_calc_ = total_bytes_;
+  }
+
+  return bytes_second_;
+}
+
+void RateTracker::Update(size_t bytes) {
+  total_bytes_ += bytes;
+}
+
+}  // namespace cricket

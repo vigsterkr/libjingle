@@ -2,32 +2,34 @@
  * libjingle
  * Copyright 2004--2006, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string>
 #include "talk/base/basictypes.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/transportchannel.h"
 #include "pseudotcpchannel.h"
@@ -71,10 +73,6 @@ public:
                                         size_t* written, int* error);
   virtual void Close();
 
-  virtual bool GetSize(size_t* size) const { return false; }
-  virtual bool ReserveSize(size_t size) { return true; }
-  virtual bool Rewind() { return false; }
-
 private:
   // parent_ is accessed and modified exclusively on the event thread, to
   // avoid thread contention.  This means that the PseudoTcpChannel cannot go
@@ -108,6 +106,7 @@ PseudoTcpChannel::PseudoTcpChannel(Thread* stream_thread, Session* session)
     stream_readable_(false), pending_read_event_(false),
     ready_to_connect_(false) {
   ASSERT(signal_thread_->IsCurrent());
+  ASSERT(NULL != session_);
 }
 
 PseudoTcpChannel::~PseudoTcpChannel() {
@@ -119,7 +118,8 @@ PseudoTcpChannel::~PseudoTcpChannel() {
   ASSERT(tcp_ == NULL);
 }
 
-bool PseudoTcpChannel::Connect(const std::string& channel_name) {
+bool PseudoTcpChannel::Connect(const std::string& content_name,
+                               const std::string& channel_name) {
   ASSERT(signal_thread_->IsCurrent());
   CritScope lock(&cs_);
 
@@ -128,7 +128,8 @@ bool PseudoTcpChannel::Connect(const std::string& channel_name) {
 
   ASSERT(session_ != NULL);
   worker_thread_ = session_->session_manager()->worker_thread();
-  channel_ = session_->CreateChannel(channel_name);
+  content_name_ = content_name;
+  channel_ = session_->CreateChannel(content_name, channel_name);
   channel_name_ = channel_name;
   channel_->SetOption(Socket::OPT_DONTFRAGMENT, 1);
 
@@ -182,6 +183,21 @@ void PseudoTcpChannel::OnChannelDestroyed(TransportChannel* channel) {
     tcp_->Close(true);
     AdjustClock();
   }
+  SignalChannelClosed(this);
+}
+
+void PseudoTcpChannel::OnSessionTerminate(Session* session) {
+  // When the session terminates before we even connected
+  CritScope lock(&cs_);
+  if (session_ != NULL && channel_ == NULL) {
+    ASSERT(session == session_);
+    ASSERT(worker_thread_ == NULL);
+    ASSERT(tcp_ == NULL);
+    LOG(LS_INFO) << "Destroying unconnected PseudoTcpChannel";
+    session_ = NULL;
+    if (stream_ != NULL)
+      stream_thread_->Post(this, MSG_ST_EVENT, new EventData(SE_CLOSE, -1));
+  }
 }
 
 //
@@ -191,6 +207,8 @@ void PseudoTcpChannel::OnChannelDestroyed(TransportChannel* channel) {
 StreamState PseudoTcpChannel::GetState() const {
   ASSERT(stream_ != NULL && stream_thread_->IsCurrent());
   CritScope lock(&cs_);
+  if (!session_)
+    return SS_CLOSED;
   if (!tcp_)
     return SS_OPENING;
   switch (tcp_->State()) {
@@ -234,7 +252,7 @@ StreamResult PseudoTcpChannel::Read(void* buffer, size_t buffer_len,
       *error = tcp_->GetError();
     return SR_ERROR;
   }
-  AdjustClock();
+  // This spot is never reached.
 }
 
 StreamResult PseudoTcpChannel::Write(const void* data, size_t data_len,
@@ -256,7 +274,7 @@ StreamResult PseudoTcpChannel::Write(const void* data, size_t data_len,
       *error = tcp_->GetError();
     return SR_ERROR;
   }
-  AdjustClock();
+  // This spot is never reached.
 }
 
 void PseudoTcpChannel::Close() {
@@ -331,19 +349,18 @@ void PseudoTcpChannel::OnChannelConnectionChanged(TransportChannel* channel,
     return;
   }
 
-  scoped_ptr<Socket> mtu_socket(
-    worker_thread_->socketserver()
-           ->CreateSocket(SOCK_DGRAM));
-
-  uint16 mtu = 65535;
-  if (mtu_socket->Connect(addr) < 0) {
-    LOG_F(LS_ERROR) << "Socket::Connect: " << mtu_socket->GetError();
-  } else if (mtu_socket->EstimateMTU(&mtu) < 0) {
-    LOG_F(LS_ERROR) << "Socket::EstimateMTU: " << mtu_socket->GetError();
-  } else {
-    tcp_->NotifyMTU(mtu);
-    AdjustClock();
+  uint16 mtu = 1280;  // safe default
+  talk_base::scoped_ptr<Socket> mtu_socket(
+      worker_thread_->socketserver()->CreateSocket(SOCK_DGRAM));
+  if (mtu_socket->Connect(addr) < 0 ||
+      mtu_socket->EstimateMTU(&mtu) < 0) {
+    LOG_F(LS_WARNING) << "Failed to estimate MTU, error="
+                      << mtu_socket->GetError();
   }
+
+  LOG_F(LS_VERBOSE) << "Using MTU of " << mtu << " bytes";
+  tcp_->NotifyMTU(mtu);
+  AdjustClock();
 }
 
 void PseudoTcpChannel::OnTcpOpen(PseudoTcp* tcp) {
@@ -437,7 +454,7 @@ void PseudoTcpChannel::OnMessage(Message* pmsg) {
     LOG_F(LS_INFO) << "(MSG_SI_DESTROYCHANNEL)";
     ASSERT(session_ != NULL);
     ASSERT(channel_ != NULL);
-    session_->DestroyChannel(channel_);
+    session_->DestroyChannel(content_name_, channel_->name());
 
   } else if (pmsg->message_id == MSG_SI_DESTROY) {
 
@@ -545,7 +562,7 @@ StreamResult PseudoTcpChannel::InternalStream::Write(
 void PseudoTcpChannel::InternalStream::Close() {
   if (!parent_)
     return;
-  parent_->Close(); 
+  parent_->Close();
   parent_ = NULL;
 }
 

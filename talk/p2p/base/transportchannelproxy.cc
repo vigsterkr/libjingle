@@ -32,8 +32,9 @@
 
 namespace cricket {
 
-TransportChannelProxy::TransportChannelProxy(const std::string& name, const std::string &session_type)
-  : TransportChannel(name, session_type), impl_(NULL) {
+TransportChannelProxy::TransportChannelProxy(const std::string& name,
+                                             const std::string &content_type)
+    : TransportChannel(name, content_type), impl_(NULL) {
 }
 
 TransportChannelProxy::~TransportChannelProxy() {
@@ -58,8 +59,8 @@ void TransportChannelProxy::SetImplementation(TransportChannelImpl* impl) {
 }
 
 int TransportChannelProxy::SendPacket(const char *data, size_t len) {
-  ASSERT(impl_ != NULL);  // should not be used until channel is writable
-  return impl_->SendPacket(data, len);
+  // Fail if we don't have an impl yet.
+  return (impl_) ? impl_->SendPacket(data, len) : -1;
 }
 
 int TransportChannelProxy::SetOption(talk_base::Socket::Option opt, int value) {
@@ -84,8 +85,8 @@ void TransportChannelProxy::OnWritableState(TransportChannel* channel) {
   set_writable(impl_->writable());
 }
 
-void TransportChannelProxy::OnReadPacket(
-    TransportChannel* channel, const char* data, size_t size) {
+void TransportChannelProxy::OnReadPacket(TransportChannel* channel,
+                                         const char* data, size_t size) {
   ASSERT(channel == impl_);
   SignalReadPacket(this, data, size);
 }

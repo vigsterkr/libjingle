@@ -29,34 +29,19 @@
 #pragma warning(disable:4786)
 #endif
 
-#include <cassert>
-#include <cstring>
-#include <iostream>
-
-#ifdef POSIX
-extern "C" {
-#include <errno.h>
-}
-#endif // POSIX
-
 #include "talk/base/asyncudpsocket.h"
 #include "talk/base/logging.h"
-
-#if defined(_MSC_VER) && _MSC_VER < 1300
-namespace std {
-  using ::strerror;
-}
-#endif
 
 namespace talk_base {
 
 const int BUF_SIZE = 64 * 1024;
 
-AsyncUDPSocket::AsyncUDPSocket(AsyncSocket* socket) : AsyncPacketSocket(socket) {
+AsyncUDPSocket::AsyncUDPSocket(AsyncSocket* socket)
+    : AsyncPacketSocket(socket) {
+  ASSERT(socket_ != NULL);
   size_ = BUF_SIZE;
   buf_ = new char[size_];
 
-  assert(socket_);
   // The socket should start out readable but not writable.
   socket_->SignalReadEvent.connect(this, &AsyncUDPSocket::OnReadEvent);
 }
@@ -66,20 +51,24 @@ AsyncUDPSocket::~AsyncUDPSocket() {
 }
 
 void AsyncUDPSocket::OnReadEvent(AsyncSocket* socket) {
-  assert(socket == socket_);
+  ASSERT(socket == socket_);
 
   SocketAddress remote_addr;
   int len = socket_->RecvFrom(buf_, size_, &remote_addr);
   if (len < 0) {
+    // An error here typically means we got an ICMP error in response to our
+    // send datagram, indicating the remote address was unreachable.
+    // When doing ICE, this kind of thing will often happen.
     // TODO: Do something better like forwarding the error to the user.
-    PLOG(LS_ERROR, socket_->GetError()) << "recvfrom";
+    SocketAddress local_addr = socket_->GetLocalAddress();
+    LOG(LS_INFO) << "AsyncUDPSocket[" << local_addr.ToString() << "] "
+                 << "receive failed with error " << socket_->GetError();
     return;
   }
 
-  // TODO: Make sure that we got all of the packet.  If we did not, then we
-  // should resize our buffer to be large enough.
-
+  // TODO: Make sure that we got all of the packet.
+  // If we did not, then we should resize our buffer to be large enough.
   SignalReadPacket(buf_, (size_t)len, remote_addr, this);
 }
 
-} // namespace talk_base
+}  // namespace talk_base

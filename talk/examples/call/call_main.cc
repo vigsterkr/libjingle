@@ -1,66 +1,51 @@
 /*
- * Jingle call example
+ * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <time.h>
 #include <iomanip>
+#include <cstdio>
+#include <cstring>
+#include <vector>
 #include "talk/base/logging.h"
-#include "talk/base/physicalsocketserver.h"
+#include "talk/base/flags.h"
+#include "talk/base/pathutils.h"
+#include "talk/base/stream.h"
 #include "talk/base/ssladapter.h"
+#include "talk/base/win32socketserver.h"
 #include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
 #include "talk/examples/login/xmppauth.h"
+#include "talk/examples/login/xmpppump.h"
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
+#include "talk/session/phone/filemediaengine.h"
 
-#if defined(_MSC_VER) && (_MSC_VER < 1400)
-// The following are necessary to properly link when compiling STL without
-// /EHsc, otherwise known as C++ exceptions.
-void __cdecl std::_Throw(const std::exception &) {}
-std::_Prhand std::_Raise_handler = 0;
-#endif
-
-void SetConsoleEcho(bool on) {
-#ifdef WIN32
-  HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
-  if ((hIn == INVALID_HANDLE_VALUE) || (hIn == NULL))
-    return;
-
-  DWORD mode;
-  if (!GetConsoleMode(hIn, &mode))
-    return;
-
-  if (on) {
-    mode = mode | ENABLE_ECHO_INPUT;
-  } else {
-    mode = mode & ~ENABLE_ECHO_INPUT;
-  }
-
-  SetConsoleMode(hIn, mode);
-#else
-  if (on)
-    system("stty echo");
-  else
-    system("stty -echo");
-#endif
-}
 class DebugLog : public sigslot::has_slots<> {
-public:
+ public:
   DebugLog() :
     debug_input_buf_(NULL), debug_input_len_(0), debug_input_alloc_(0),
     debug_output_buf_(NULL), debug_output_len_(0), debug_output_alloc_(0),
@@ -106,8 +91,7 @@ public:
     DebugPrint(debug_output_buf_, &debug_output_len_, true);
   }
 
-  static bool
-  IsAuthTag(const char * str, size_t len) {
+  static bool IsAuthTag(const char * str, size_t len) {
     if (str[0] == '<' && str[1] == 'a' &&
                          str[2] == 'u' &&
                          str[3] == 't' &&
@@ -117,13 +101,11 @@ public:
 
       if (tag.find("mechanism") != std::string::npos)
         return true;
-
     }
     return false;
   }
 
-  void
-  DebugPrint(char * buf, int * plen, bool output) {
+  void DebugPrint(char * buf, int * plen, bool output) {
     int len = *plen;
     if (len > 0) {
       time_t tim = time(NULL);
@@ -135,8 +117,8 @@ public:
           time_string[time_len-1] = 0;    // trim off terminating \n
         }
       }
-      LOG(INFO) << (output ? "SEND >>>>>>>>>>>>>>>>>>>>>>>>>" : "RECV <<<<<<<<<<<<<<<<<<<<<<<<<")
-        << " : " << time_string;
+      LOG(INFO) << (output ? "SEND >>>>>>>>>>>>>>>>" : "RECV <<<<<<<<<<<<<<<<")
+                << " : " << time_string;
 
       bool indent;
       int start = 0, nest = 3;
@@ -152,28 +134,29 @@ public:
           }
 
           // Output a tag
-          LOG(INFO) << std::setw(nest) << " " << std::string(buf + start, i + 1 - start);
+          LOG(INFO) << std::setw(nest) << " "
+                    << std::string(buf + start, i + 1 - start);
 
           if (indent)
             nest += 2;
 
           // Note if it's a PLAIN auth tag
-	  if (IsAuthTag(buf + start, i + 1 - start)) {
-	    censor_password_ = true;
-	  }
+          if (IsAuthTag(buf + start, i + 1 - start)) {
+            censor_password_ = true;
+          }
 
           // incr
           start = i + 1;
         }
 
         if (buf[i] == '<' && start < i) {
-	  if (censor_password_) {
-	    LOG(INFO) << std::setw(nest) << " " << "## TEXT REMOVED ##";
-	    censor_password_ = false;
-	  }
-	  else {
-	    LOG(INFO) << std::setw(nest) << " " << std::string(buf + start, i - start);
-	  }
+          if (censor_password_) {
+            LOG(INFO) << std::setw(nest) << " " << "## TEXT REMOVED ##";
+            censor_password_ = false;
+          } else {
+            LOG(INFO) << std::setw(nest) << " "
+                      << std::string(buf + start, i - start);
+          }
           start = i;
         }
       }
@@ -182,67 +165,171 @@ public:
       *plen = len;
     }
   }
-
 };
 
 static DebugLog debug_log_;
+static const int DEFAULT_PORT = 5222;
 
+
+cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
+                                            const char* voice_out,
+                                            const char* video_in,
+                                            const char* video_out) {
+  cricket::FileMediaEngine* file_media_engine = new cricket::FileMediaEngine;
+  // Set the RTP dump file names.
+  if (voice_in) {
+    file_media_engine->set_voice_input_filename(voice_in);
+  }
+  if (voice_out) {
+    file_media_engine->set_voice_output_filename(voice_out);
+  }
+  if (video_in) {
+    file_media_engine->set_video_input_filename(video_in);
+  }
+  if (video_out) {
+    file_media_engine->set_video_output_filename(video_out);
+  }
+
+  // Set voice and video codecs. TODO: The codecs actually depend on
+  // the the input voice and video streams.
+  std::vector<cricket::AudioCodec> voice_codecs;
+  voice_codecs.push_back(
+      cricket::AudioCodec(9, "G722", 16000, 64000, 1, 0));
+  file_media_engine->set_voice_codecs(voice_codecs);
+  std::vector<cricket::VideoCodec> video_codecs;
+  video_codecs.push_back(
+      cricket::VideoCodec(97, "H264", 320, 240, 30, 0));
+  file_media_engine->set_video_codecs(video_codecs);
+
+  return file_media_engine;
+}
 
 int main(int argc, char **argv) {
-  // This app has three threads. The main thread will run the XMPP client, 
-  // which will print to the screen in its own thread. A second thread 
+  // This app has three threads. The main thread will run the XMPP client,
+  // which will print to the screen in its own thread. A second thread
   // will get input from the console, parse it, and pass the appropriate
   // message back to the XMPP client's thread. A third thread is used
-  // by PhoneSessionClient as its worker thread.
+  // by MediaSessionClient as its worker thread.
 
-  bool debug = false;
-  if (argc > 1 && !strcmp(argv[1], "-d"))
-    debug = true;
-  
+  // define options
+  DEFINE_bool(a, false, "Turn on auto accept.");
+  DEFINE_bool(d, false, "Turn on debugging.");
+  DEFINE_bool(testserver, false, "Use test server");
+  DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
+  DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
+  DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
+  DEFINE_string(s, "talk.google.com", "The connection server to use.");
+  DEFINE_string(voiceinput, NULL, "RTP dump file for voice input.");
+  DEFINE_string(voiceoutput, NULL, "RTP dump file for voice output.");
+  DEFINE_string(videoinput, NULL, "RTP dump file for video input.");
+  DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
+  DEFINE_bool(help, false, "Prints this message");
+
+  // parse options
+  FlagList::SetFlagsFromCommandLine(&argc, argv, true);
+  if (FLAG_help) {
+    FlagList::Print(NULL, false);
+    return 0;
+  }
+
+  bool auto_accept = FLAG_a;
+  bool debug = FLAG_d;
+  bool test_server = FLAG_testserver;
+  int32 portallocator_flags = FLAG_portallocator;
+  std::string pmuc_domain = FLAG_pmuc;
+  std::string server = FLAG_s;
+
+  // parse username and password, if present
+  buzz::Jid jid;
+  std::string username;
+  talk_base::InsecureCryptStringImpl pass;
+  if (argc > 1) {
+    username = argv[1];
+    if (argc > 2) {
+      pass.password() = argv[2];
+    }
+  }
+
   if (debug)
     talk_base::LogMessage::LogToDebug(talk_base::LS_VERBOSE);
 
-
-  talk_base::InitializeSSL();   
-  XmppPump pump;
-  buzz::Jid jid;
-  buzz::XmppClientSettings xcs;
-  talk_base::InsecureCryptStringImpl pass;
-  std::string username;
-
-  std::cout << "JID: ";
-  std::cin >> username;
+  if (username.empty()) {
+    std::cout << "JID: ";
+    std::cin >> username;
+  }
+  if (username.find('@') == std::string::npos) {
+    username.append("@localhost");
+  }
   jid = buzz::Jid(username);
   if (!jid.IsValid() || jid.node() == "") {
     printf("Invalid JID. JIDs should be in the form user@domain\n");
     return 1;
   }
-  SetConsoleEcho(false);
-  std::cout << "Password: ";
-  std::cin >> pass.password();
-  SetConsoleEcho(true);
-  std::cout << std::endl;
+  if (pass.password().empty() && !test_server) {
+    Console::SetEcho(false);
+    std::cout << "Password: ";
+    std::cin >> pass.password();
+    Console::SetEcho(true);
+    std::cout << std::endl;
+  }
 
+  buzz::XmppClientSettings xcs;
   xcs.set_user(jid.node());
   xcs.set_resource("call");
   xcs.set_host(jid.domain());
-  xcs.set_use_tls(true);
- 
+  xcs.set_use_tls(!test_server);
+
+  if (test_server) {
+    pass.password() = jid.node();
+    xcs.set_allow_plain(true);
+  }
   xcs.set_pass(talk_base::CryptString(pass));
-  xcs.set_server(talk_base::SocketAddress("talk.google.com", 5222));
-  printf("Logging in as %s\n", jid.Str().c_str());
 
-  talk_base::PhysicalSocketServer ss;
+  std::string host;
+  int port;
 
+  int colon = server.find(':');
+  if (colon == -1) {
+    host = server;
+    port = DEFAULT_PORT;
+  } else {
+    host = server.substr(0, colon);
+    port = atoi(server.substr(colon + 1).c_str());
+  }
+
+  xcs.set_server(talk_base::SocketAddress(host, port));
+  printf("Logging in to %s as %s\n", server.c_str(), jid.Str().c_str());
+
+  talk_base::InitializeSSL();
+
+
+#if WIN32
+  // Need to pump messages on our main thread on Windows.
+  talk_base::Win32Thread w32_thread;
+  talk_base::ThreadManager::SetCurrent(&w32_thread);
+#endif
+  talk_base::Thread* main_thread = talk_base::Thread::Current();
+
+  XmppPump pump;
   CallClient *client = new CallClient(pump.client());
-  
-  talk_base::Thread main_thread(&ss);
-  talk_base::ThreadManager::SetCurrent(&main_thread);
-  Console *console = new Console(&main_thread, client);
+
+  if (FLAG_voiceinput || FLAG_voiceoutput ||
+      FLAG_videoinput || FLAG_videooutput) {
+    // If any dump file is specified, we use FileMediaEngine.
+    cricket::MediaEngine* engine = CreateFileMediaEngine(FLAG_voiceinput,
+                                                         FLAG_voiceoutput,
+                                                         FLAG_videoinput,
+                                                         FLAG_videooutput);
+    // The engine will be released by the client later.
+    client->SetMediaEngine(engine);
+  }
+
+  Console *console = new Console(main_thread, client);
   client->SetConsole(console);
-  talk_base::Thread *console_thread = new talk_base::Thread(&ss);
-  console_thread->Start();
-  console_thread->Post(console, MSG_START);
+  client->SetAutoAccept(auto_accept);
+  client->SetPmucDomain(pmuc_domain);
+  client->SetPortAllocatorFlags(portallocator_flags);
+  console->Start();
 
   if (debug) {
     pump.client()->SignalLogInput.connect(&debug_log_, &DebugLog::Input);
@@ -250,7 +337,12 @@ int main(int argc, char **argv) {
   }
 
   pump.DoLogin(xcs, new XmppSocket(true), NULL);
-  main_thread.Run();
+  main_thread->Run();
+  pump.DoDisconnect();
+
+  console->Stop();
+  delete console;
+  delete client;
 
   return 0;
 }

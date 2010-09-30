@@ -2,31 +2,35 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __PORT_H__
-#define __PORT_H__
+#ifndef TALK_P2P_BASE_PORT_H_
+#define TALK_P2P_BASE_PORT_H_
+
+#include <string>
+#include <vector>
+#include <map>
 
 #include "talk/base/network.h"
 #include "talk/base/socketaddress.h"
@@ -37,10 +41,6 @@
 #include "talk/p2p/base/stun.h"
 #include "talk/p2p/base/stunrequest.h"
 
-#include <string>
-#include <vector>
-#include <map>
-
 namespace talk_base {
 class AsyncPacketSocket;
 }
@@ -49,30 +49,45 @@ namespace cricket {
 
 class Connection;
 
-enum ProtocolType { 
-  PROTO_UDP, 
-  PROTO_TCP, 
-  PROTO_SSLTCP, 
-  PROTO_LAST = PROTO_SSLTCP 
+enum ProtocolType {
+  PROTO_UDP,
+  PROTO_TCP,
+  PROTO_SSLTCP,
+  PROTO_LAST = PROTO_SSLTCP
 };
 
-const char * ProtoToString(ProtocolType proto);
-bool StringToProto(const char * value, ProtocolType& proto);
+const char* ProtoToString(ProtocolType proto);
+bool StringToProto(const char* value, ProtocolType* proto);
 
 struct ProtocolAddress {
   talk_base::SocketAddress address;
   ProtocolType proto;
 
-  ProtocolAddress(const talk_base::SocketAddress& a, ProtocolType p) 
+  ProtocolAddress(const talk_base::SocketAddress& a, ProtocolType p)
     : address(a), proto(p) { }
+};
+
+// Computes instantaneous bytes per second.
+class RateTracker {
+ public:
+  RateTracker();
+  size_t total_bytes() const;
+  size_t bytes_second();
+  void Update(size_t bytes);
+
+ private:
+  size_t total_bytes_;
+  size_t bytes_second_;
+  uint32 last_bytes_second_time_;
+  size_t last_bytes_second_calc_;
 };
 
 // Represents a local communication mechanism that can be used to create
 // connections to similar mechanisms of the other client.  Subclasses of this
 // one add support for specific mechanisms like local UDP ports.
 class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
-public:
-  Port(talk_base::Thread* thread, const std::string &type, 
+ public:
+  Port(talk_base::Thread* thread, const std::string &type,
        talk_base::SocketFactory* factory, talk_base::Network* network);
   virtual ~Port();
 
@@ -81,7 +96,7 @@ public:
 
   // The factory used to create the sockets of this port.
   talk_base::SocketFactory* socket_factory() const { return factory_; }
-  void set_socket_factory(talk_base::SocketFactory* factory) 
+  void set_socket_factory(talk_base::SocketFactory* factory)
     { factory_ = factory; }
 
   // Each port is identified by a name (for debugging purposes).
@@ -91,8 +106,17 @@ public:
   // In order to establish a connection to this Port (so that real data can be
   // sent through), the other side must send us a STUN binding request that is
   // authenticated with this username and password.
+  // Fills in the username fragment and password.  These will be initially set
+  // in the constructor to random values.  Subclasses or tests can override.
+  // TODO: Change this to "username" rather than "username_fragment".
   const std::string& username_fragment() const { return username_frag_; }
+  void set_username_fragment(const std::string& username) {
+    username_frag_ = username;
+  }
+
   const std::string& password() const { return password_; }
+  void set_password(const std::string& password) { password_ = password; }
+
 
   // A value in [0,1] that indicates the preference for this port versus other
   // ports on this client.  (Larger indicates more preference.)
@@ -125,14 +149,14 @@ public:
   // Returns a map containing all of the connections of this port, keyed by the
   // remote address.
   typedef std::map<talk_base::SocketAddress, Connection*> AddressMap;
-  const AddressMap& connections() { return connections_; }  
+  const AddressMap& connections() { return connections_; }
 
   // Returns the connection to the given address or NULL if none exists.
   Connection* GetConnection(const talk_base::SocketAddress& remote_addr);
 
   // Creates a new connection to the given address.
   enum CandidateOrigin { ORIGIN_THIS_PORT, ORIGIN_OTHER_PORT, ORIGIN_MESSAGE };
-  virtual Connection* CreateConnection(const Candidate& remote_candidate, 
+  virtual Connection* CreateConnection(const Candidate& remote_candidate,
     CandidateOrigin origin) = 0;
 
   // Called each time a connection is created.
@@ -141,22 +165,22 @@ public:
   // Sends the given packet to the given address, provided that the address is
   // that of a connection or an address that has sent to us already.
   virtual int SendTo(
-      const void* data, size_t size, const talk_base::SocketAddress& addr, 
+      const void* data, size_t size, const talk_base::SocketAddress& addr,
       bool payload) = 0;
 
   // Indicates that we received a successful STUN binding request from an
   // address that doesn't correspond to any current connection.  To turn this
   // into a real connection, call CreateConnection.
-  sigslot::signal4<Port*, const talk_base::SocketAddress&, StunMessage*, 
+  sigslot::signal4<Port*, const talk_base::SocketAddress&, StunMessage*,
                    const std::string&> SignalUnknownAddress;
 
   // Sends a response message (normal or error) to the given request.  One of
   // these methods should be called as a response to SignalUnknownAddress.
   // NOTE: You MUST call CreateConnection BEFORE SendBindingResponse.
-  void SendBindingResponse(StunMessage* request, 
+  void SendBindingResponse(StunMessage* request,
                            const talk_base::SocketAddress& addr);
   void SendBindingErrorResponse(
-      StunMessage* request, const talk_base::SocketAddress& addr, 
+      StunMessage* request, const talk_base::SocketAddress& addr,
       int error_code, const std::string& reason);
 
   // Indicates that errors occurred when performing I/O.
@@ -167,12 +191,13 @@ public:
   virtual int SetOption(talk_base::Socket::Option opt, int value) = 0;
   virtual int GetError() = 0;
 
-  static void set_proxy(const std::string& user_agent, 
-                        const talk_base::ProxyInfo& proxy) {
-    agent_ = user_agent; proxy_ = proxy;
+  void set_proxy(const std::string& user_agent,
+                 const talk_base::ProxyInfo& proxy) {
+    user_agent_ = user_agent;
+    proxy_ = proxy;
   }
-  static const std::string& user_agent() { return agent_; }
-  static const talk_base::ProxyInfo& proxy() { return proxy_; }
+  const std::string& user_agent() { return user_agent_; }
+  const talk_base::ProxyInfo& proxy() { return proxy_; }
 
   talk_base::AsyncPacketSocket * CreatePacketSocket(ProtocolType proto);
 
@@ -200,7 +225,7 @@ public:
   // Debugging description of this port
   std::string ToString() const;
 
-protected:
+ protected:
   talk_base::Thread* thread_;
   talk_base::SocketFactory* factory_;
   std::string type_;
@@ -215,15 +240,8 @@ protected:
   enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
   bool enable_port_packets_;
 
-  // Fills in the username fragment and password.  These will be initially set
-  // in the constructor to random values.  Subclasses can override, though.
-  void set_username_fragment(const std::string& username_fragment) {
-    username_frag_ = username_fragment;
-  }
-  void set_password(const std::string& password) { password_ = password; }
-
   // Fills in the local address of the port.
-  void AddAddress(const talk_base::SocketAddress& address, 
+  void AddAddress(const talk_base::SocketAddress& address,
                   const std::string& protocol, bool final);
 
   // Adds the given connection to the list.  (Deleting removes them.)
@@ -232,7 +250,7 @@ protected:
   // Called when a packet is received from an unknown address that is not
   // currently a connection.  If this is an authenticated STUN binding request,
   // then we will signal the client.
-  void OnReadPacket(const char* data, size_t size, 
+  void OnReadPacket(const char* data, size_t size,
                     const talk_base::SocketAddress& addr);
 
   // Constructs a STUN binding request for the given connection and sends it.
@@ -243,28 +261,29 @@ protected:
   // with this port's username fragment, msg will contain the parsed STUN
   // message.  Otherwise, the function may send a STUN response internally.
   // remote_username contains the remote fragment of the STUN username.
-  bool GetStunMessage(const char* data, size_t size, 
+  bool GetStunMessage(const char* data, size_t size,
                       const talk_base::SocketAddress& addr,
                       StunMessage *& msg, std::string& remote_username);
 
   friend class Connection;
 
-private:
+ private:
   // Called when one of our connections deletes itself.
   void OnConnectionDestroyed(Connection* conn);
 
   // Checks if this port is useless, and hence, should be destroyed.
   void CheckTimeout();
 
-  static std::string agent_;
-  static talk_base::ProxyInfo proxy_;
+  // Information to use when going through a proxy.
+  std::string user_agent_;
+  talk_base::ProxyInfo proxy_;
 };
 
 // Represents a communication link between a port on the local client and a
 // port on the remote client.
-class Connection : public talk_base::MessageHandler, 
+class Connection : public talk_base::MessageHandler,
     public sigslot::has_slots<> {
-public:
+ public:
   virtual ~Connection();
 
   // The local port where this connection sends and receives packets.
@@ -278,16 +297,16 @@ public:
   const Candidate& remote_candidate() const { return remote_candidate_; }
 
   enum ReadState {
-    STATE_READABLE     = 0, // we have received pings recently
-    STATE_READ_TIMEOUT = 1  // we haven't received pings in a while
+    STATE_READABLE     = 0,  // we have received pings recently
+    STATE_READ_TIMEOUT = 1   // we haven't received pings in a while
   };
 
   ReadState read_state() const { return read_state_; }
 
   enum WriteState {
-    STATE_WRITABLE      = 0, // we have received ping responses recently
-    STATE_WRITE_CONNECT = 1, // we have had a few ping failures
-    STATE_WRITE_TIMEOUT = 2  // we have had a large number of ping failures
+    STATE_WRITABLE      = 0,  // we have received ping responses recently
+    STATE_WRITE_CONNECT = 1,  // we have had a few ping failures
+    STATE_WRITE_TIMEOUT = 2   // we have had a large number of ping failures
   };
 
   WriteState write_state() const { return write_state_; }
@@ -310,7 +329,7 @@ public:
   sigslot::signal1<Connection*> SignalDestroyed;
 
   // The connection can send and receive packets asynchronously.  This matches
-  // the interface of AsyncPacketSocket, which may use UDP or TCP under the 
+  // the interface of AsyncPacketSocket, which may use UDP or TCP under the
   // covers.
   virtual int Send(const void* data, size_t size) = 0;
 
@@ -350,7 +369,7 @@ public:
   bool reported() { return reported_; }
   void set_reported(bool reported) { reported_ = reported;}
 
-protected:
+ protected:
   Port* port_;
   size_t local_candidate_index_;
   Candidate remote_candidate_;
@@ -360,21 +379,13 @@ protected:
   bool pruned_;
   StunRequestManager requests_;
   uint32 rtt_;
-  uint32 rtt_data_points_;
-  uint32 last_ping_sent_;     // last time we sent a ping to the other side
-  uint32 last_ping_received_; // last time we received a ping from the other 
-                              // side
+  uint32 last_ping_sent_;      // last time we sent a ping to the other side
+  uint32 last_ping_received_;  // last time we received a ping from the other
+                               // side
   std::vector<uint32> pings_since_last_response_;
 
-  size_t recv_total_bytes_;
-  size_t recv_bytes_second_;
-  uint32 last_recv_bytes_second_time_;
-  size_t last_recv_bytes_second_calc_;
-
-  size_t sent_total_bytes_;
-  size_t sent_bytes_second_;
-  uint32 last_sent_bytes_second_time_;
-  size_t last_sent_bytes_second_calc_;
+  RateTracker recv_rate_tracker_;
+  RateTracker send_rate_tracker_;
 
   // Callbacks from ConnectionRequest
   void OnConnectionRequestResponse(StunMessage *response, uint32 rtt);
@@ -399,23 +410,22 @@ protected:
   friend class Port;
   friend class ConnectionRequest;
 
-private:
+ private:
   bool reported_;
 };
 
 // ProxyConnection defers all the interesting work to the port
-
 class ProxyConnection : public Connection {
-public:
+ public:
   ProxyConnection(Port* port, size_t index, const Candidate& candidate);
 
   virtual int Send(const void* data, size_t size);
   virtual int GetError() { return error_; }
 
-private:
+ private:
   int error_;
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // __PORT_H__
+#endif  // TALK_P2P_BASE_PORT_H_

@@ -25,18 +25,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SESSIONMANAGER_H_
-#define _SESSIONMANAGER_H_
+#ifndef TALK_P2P_BASE_SESSIONMANAGER_H_
+#define TALK_P2P_BASE_SESSIONMANAGER_H_
 
-#include "talk/base/thread.h"
-#include "talk/p2p/base/portallocator.h"
-#include "talk/p2p/base/session.h"
-#include "talk/p2p/base/sessionid.h"
-#include "talk/base/sigslot.h"
-
+#include <map>
 #include <string>
 #include <utility>
-#include <map>
+#include <vector>
+
+#include "talk/base/sigslot.h"
+#include "talk/base/thread.h"
+#include "talk/p2p/base/portallocator.h"
 
 namespace buzz {
 class QName;
@@ -46,13 +45,14 @@ class XmlElement;
 namespace cricket {
 
 class Session;
+class BaseSession;
 class SessionClient;
 
 // SessionManager manages session instances
 
 class SessionManager : public sigslot::has_slots<> {
  public:
-  SessionManager(PortAllocator *allocator, 
+  SessionManager(PortAllocator *allocator,
                  talk_base::Thread *worker_thread = NULL);
   virtual ~SessionManager();
 
@@ -67,20 +67,20 @@ class SessionManager : public sigslot::has_slots<> {
   // describing a session of the given type, we will automatically create a
   // Session object and notify this client.  The client may then accept or
   // reject the session.
-  void AddClient(const std::string& session_type, SessionClient* client);
-  void RemoveClient(const std::string& session_type);
-  SessionClient* GetClient(const std::string& session_type);
+  void AddClient(const std::string& content_type, SessionClient* client);
+  void RemoveClient(const std::string& content_type);
+  SessionClient* GetClient(const std::string& content_type);
 
   // Creates a new session.  The given name is the JID of the client on whose
   // behalf we initiate the session.
-  Session *CreateSession(const std::string& name,
-                         const std::string& session_type);
+  Session *CreateSession(const std::string& local_name,
+                         const std::string& content_type);
 
   // Destroys the given session.
   void DestroySession(Session *session);
 
   // Returns the session with the given ID or NULL if none exists.
-  Session *GetSession(const SessionID& id);
+  Session *GetSession(const std::string& sid);
 
   // Terminates all of the sessions created by this manager.
   void TerminateAll();
@@ -92,12 +92,13 @@ class SessionManager : public sigslot::has_slots<> {
   // Determines whether the given stanza is intended for some session.
   bool IsSessionMessage(const buzz::XmlElement* stanza);
 
-  // Given a stanza, this find the Session associated with that stanza
-  Session* FindSessionForStanza(const buzz::XmlElement* stanza, bool incoming);
+  // Given a sid, initiator, and remote_name, this finds the matching Session
+  Session* FindSession(const std::string& sid,
+                       const std::string& remote_name);
 
   // Called when we receive a stanza for which IsSessionMessage is true.
   void OnIncomingMessage(const buzz::XmlElement* stanza);
-  
+
   // Called when we get a response to a message that we sent.
   void OnIncomingResponse(const buzz::XmlElement* orig_stanza,
                           const buzz::XmlElement* response_stanza);
@@ -108,7 +109,9 @@ class SessionManager : public sigslot::has_slots<> {
                     const buzz::XmlElement* error_stanza);
 
   // Signalled each time a session generates a signaling message to send.
-  sigslot::signal1<const buzz::XmlElement*> SignalOutgoingMessage;
+  // Also signalled on errors, but with a NULL session.
+  sigslot::signal2<SessionManager*,
+                   const buzz::XmlElement*> SignalOutgoingMessage;
 
   // Signaled before sessions try to send certain signaling messages.  The
   // client should call OnSignalingReady once it is safe to send them.  These
@@ -122,7 +125,7 @@ class SessionManager : public sigslot::has_slots<> {
   void OnSignalingReady();
 
  private:
-  typedef std::map<SessionID, Session *> SessionMap;
+  typedef std::map<std::string, Session*> SessionMap;
   typedef std::map<std::string, SessionClient*> ClientMap;
 
   PortAllocator *allocator_;
@@ -134,9 +137,10 @@ class SessionManager : public sigslot::has_slots<> {
 
   // Helper function for CreateSession.  This is also invoked when we receive
   // a message attempting to initiate a session with this client.
-  Session *CreateSession(const std::string& name,
-                         const SessionID& id,
-                         const std::string& session_type,
+  Session *CreateSession(const std::string& local_name,
+                         const std::string& initiator,
+                         const std::string& sid,
+                         const std::string& content_type,
                          bool received_initiate);
 
   // Attempts to find a registered session type whose description appears as
@@ -156,7 +160,7 @@ class SessionManager : public sigslot::has_slots<> {
 
   // Creates and returns an error message from the given components.  The
   // caller is responsible for deleting this.
-  buzz::XmlElement* SessionManager::CreateErrorMessage(
+  buzz::XmlElement* CreateErrorMessage(
       const buzz::XmlElement* stanza,
       const buzz::QName& name,
       const std::string& type,
@@ -170,12 +174,14 @@ class SessionManager : public sigslot::has_slots<> {
   void OnOutgoingMessage(Session* session, const buzz::XmlElement* stanza);
 
   // Called each time a session has an error to send.
-  void OnErrorMessage(Session* session, const buzz::XmlElement* stanza,
-                      const buzz::QName& name, const std::string& type,
+  void OnErrorMessage(BaseSession* session,
+                      const buzz::XmlElement* stanza,
+                      const buzz::QName& name,
+                      const std::string& type,
                       const std::string& text,
                       const buzz::XmlElement* extra_info);
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // _SESSIONMANAGER_H_
+#endif  // TALK_P2P_BASE_SESSIONMANAGER_H_

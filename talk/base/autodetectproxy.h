@@ -1,17 +1,40 @@
-#ifndef _AUTODETECTPROXY_H_
-#define _AUTODETECTPROXY_H_
+/*
+ * libjingle
+ * Copyright 2004--2005, Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
-#include "talk/base/sigslot.h"
-#include "talk/base/physicalsocketserver.h"
+#ifndef TALK_BASE_AUTODETECTPROXY_H_
+#define TALK_BASE_AUTODETECTPROXY_H_
+
+#include <string>
+
+#include "talk/base/cryptstring.h"
 #include "talk/base/proxyinfo.h"
 #include "talk/base/signalthread.h"
-#include "talk/base/cryptstring.h"
 
-namespace buzz { 
-class XmppClientSettings; 
-}
-
-namespace talk_base { 
+namespace talk_base {
 
 ///////////////////////////////////////////////////////////////////////////////
 // AutoDetectProxy
@@ -19,11 +42,11 @@ namespace talk_base {
 
 class AsyncSocket;
 
-class AutoDetectProxy : public SignalThread, public sigslot::has_slots<> {
-public:
-  AutoDetectProxy(const std::string& user_agent);
+class AutoDetectProxy : public SignalThread {
+ public:
+  explicit AutoDetectProxy(const std::string& user_agent);
 
-  const talk_base::ProxyInfo& proxy() const { return proxy_; }
+  const ProxyInfo& proxy() const { return proxy_; }
 
   void set_server_url(const std::string& url) {
     server_url_ = url;
@@ -33,14 +56,14 @@ public:
     proxy_.address = proxy;
   }
   void set_auth_info(bool use_auth, const std::string& username,
-      const CryptString& password) {
+                     const CryptString& password) {
     if (use_auth) {
       proxy_.username = username;
       proxy_.password = password;
     }
   }
 
-protected:
+ protected:
   virtual ~AutoDetectProxy();
 
   // SignalThread Interface
@@ -54,15 +77,14 @@ protected:
   void OnReadEvent(AsyncSocket * socket);
   void OnCloseEvent(AsyncSocket * socket, int error);
 
-private:
-  std::string agent_, server_url_;
+ private:
+  std::string agent_;
+  std::string server_url_;
   ProxyInfo proxy_;
-  AsyncSocket * socket_;
+  AsyncSocket* socket_;
   int next_;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-
 }  // namespace talk_base
 
-#endif  // _AUTODETECTPROXY_H_
+#endif  // TALK_BASE_AUTODETECTPROXY_H_

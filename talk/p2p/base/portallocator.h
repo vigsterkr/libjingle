@@ -81,6 +81,7 @@ private:
 class PortAllocator {
 public:
   PortAllocator() : flags_(kDefaultPortAllocatorFlags) {}
+  virtual ~PortAllocator() {}
 
     virtual PortAllocatorSession *CreateSession(const std::string &name, const std::string &session_type) = 0;
 

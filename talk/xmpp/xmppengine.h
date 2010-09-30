@@ -83,6 +83,7 @@ enum XmppReturnStatus {
 //! Connect, SendStanza, SendIq, Disconnect, or HandleInput.
 class XmppOutputHandler {
 public:
+  virtual ~XmppOutputHandler() {}
 
   //! Deliver the specified bytes to the XMPP socket.
   virtual void WriteOutput(const char * bytes, size_t len) = 0;
@@ -100,6 +101,7 @@ public:
 //! to the object managing the engine.
 class XmppSessionHandler {
 public:
+  virtual ~XmppSessionHandler() {}
   //! Called when engine changes state. Argument is new state.
   virtual void OnStateChange(int state) = 0;
 };
@@ -109,7 +111,7 @@ public:
 //! XmppEngine.AddSessionHAndler.  
 class XmppStanzaHandler {
 public:
-
+  virtual ~XmppStanzaHandler() {}
   //! Process the given stanza.
   //! The handler must return true if it has handled the stanza.
   //! A false return value causes the stanza to be passed on to
@@ -123,6 +125,7 @@ public:
 //! to sending to any registered SessionHandlers.
 class XmppIqHandler {
 public:
+  virtual ~XmppIqHandler() {}
   //! Called to handle the iq response.
   //! The response may be either a result or an error, and will have
   //! an 'id' that matches the request and a 'from' that matches the

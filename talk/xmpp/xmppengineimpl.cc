@@ -72,8 +72,8 @@ XmppEngineImpl::XmppEngineImpl() :
     output_handler_(NULL),
     session_handler_(NULL),
     iq_entries_(new IqEntryVector()),
-    output_(new std::stringstream()),
-    sasl_handler_(NULL) {
+    sasl_handler_(NULL),
+    output_(new std::stringstream()) {
   for (int i = 0; i < HL_COUNT; i+= 1) {
     stanza_handlers_[i].reset(new StanzaHandlerVector());
   }
@@ -110,7 +110,7 @@ XmppEngineImpl::HandleInput(const char * bytes, size_t len) {
 
   EnterExit ee(this);
 
-  // TODO(jliaw): The return value of the xml parser is not checked.
+  // TODO: The return value of the xml parser is not checked.
   stanzaParser_.Parse(bytes, len, false);
 
   return XMPP_RETURN_OK;

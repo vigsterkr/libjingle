@@ -38,6 +38,7 @@ class XmlElement;
 
 class XmppStanzaParseHandler {
 public:
+  virtual ~XmppStanzaParseHandler() {}
   virtual void StartStream(const XmlElement * pelStream) = 0;
   virtual void Stanza(const XmlElement * pelStanza) = 0;
   virtual void EndStream() = 0;

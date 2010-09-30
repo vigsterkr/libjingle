@@ -1,4 +1,34 @@
+/*
+ * libjingle
+ * Copyright 2008, Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice, 
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products 
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "talk/base/urlencode.h"
+
+#include "talk/base/common.h"
+#include "talk/base/stringutils.h"
 
 static int HexPairValue(const char * code) {
   int value = 0;
@@ -23,14 +53,18 @@ static int HexPairValue(const char * code) {
   }
 }
 
-int UrlDecode(const char *source, char *dest)
-{
+int InternalUrlDecode(const char *source, char *dest,
+                      bool encode_space_as_plus) {
   char * start = dest;
 
   while (*source) {
     switch (*source) {
     case '+':
-      *(dest++) = ' ';
+      if (encode_space_as_plus) {
+        *(dest++) = ' ';
+      } else {
+        *dest++ = *source;
+      }
       break;
     case '%':
       if (source[1] && source[2]) {
@@ -52,69 +86,111 @@ int UrlDecode(const char *source, char *dest)
     }
     source++;
   }
-  
+
   *dest = 0;
   return dest - start;
-}  
+}
 
-int UrlEncode(const char *source, char *dest, unsigned max)  
-{
+int UrlDecode(const char *source, char *dest) {
+  return InternalUrlDecode(source, dest, true);
+}
+
+int UrlDecodeWithoutEncodingSpaceAsPlus(const char *source, char *dest) {
+  return InternalUrlDecode(source, dest, false);
+}
+
+bool IsValidUrlChar(char ch, bool unsafe_only) {
+  if (unsafe_only) {
+    return !(ch <= ' ' || strchr("\\\"^&`<>[]{}", ch));
+  } else {
+    return isalnum(ch) || strchr("-_.!~*'()", ch);
+  }
+}
+
+int InternalUrlEncode(const char *source, char *dest, unsigned int max,
+                      bool encode_space_as_plus, bool unsafe_only) {
   static const char *digits = "0123456789ABCDEF";
-  unsigned char ch;
-  unsigned len = 0;
-  char *start = dest;
+  if (max == 0) {
+    return 0;
+  }
 
-  while (len < max - 4 && *source)
-  {
-    ch = (unsigned char)*source;
-    if (*source == ' ') {
+  char *start = dest;
+  while (static_cast<unsigned>(dest - start) < max && *source) {
+    unsigned char ch = static_cast<unsigned char>(*source);
+    if (*source == ' ' && encode_space_as_plus && !unsafe_only) {
       *dest++ = '+';
-    }
-    else if (isalnum(ch) || strchr("-_.!~*'()", ch)) {
+    } else if (IsValidUrlChar(ch, unsafe_only)) {
       *dest++ = *source;
-    }
-    else {
+    } else {
+      if (static_cast<unsigned>(dest - start) + 4 > max) {
+        break;
+      }
       *dest++ = '%';
       *dest++ = digits[(ch >> 4) & 0x0F];
       *dest++ = digits[       ch & 0x0F];
-    }  
+    }
     source++;
   }
+  ASSERT(static_cast<unsigned int>(dest - start) < max);
   *dest = 0;
-  return start - dest;
+
+  return dest - start;
+}
+
+int UrlEncode(const char *source, char *dest, unsigned max) {
+  return InternalUrlEncode(source, dest, max, true, false);
+}
+
+int UrlEncodeWithoutEncodingSpaceAsPlus(const char *source, char *dest,
+                                        unsigned max) {
+  return InternalUrlEncode(source, dest, max, false, false);
+}
+
+int UrlEncodeOnlyUnsafeChars(const char *source, char *dest, unsigned max) {
+  return InternalUrlEncode(source, dest, max, false, true);
+}
+
+std::string
+InternalUrlDecodeString(const std::string & encoded,
+                        bool encode_space_as_plus) {
+  size_t needed_length = encoded.length() + 1;
+  char* buf = STACK_ARRAY(char, needed_length);
+  InternalUrlDecode(encoded.c_str(), buf, encode_space_as_plus);
+  return buf;
 }
 
 std::string
 UrlDecodeString(const std::string & encoded) {
-  const char * sz_encoded = encoded.c_str();
-  size_t needed_length = encoded.length();
-  for (const char * pch = sz_encoded; *pch; pch++) {
-    if (*pch == '%')
-      needed_length += 2;
-  }
-  needed_length += 10;
-  char stackalloc[64];
-  char * buf = needed_length > sizeof(stackalloc)/sizeof(*stackalloc) ?
-    (char *)malloc(needed_length) : stackalloc;
-  UrlDecode(encoded.c_str(), buf);
-  std::string result(buf);
-  if (buf != stackalloc) {
-    free(buf);
-  }
-  return result;
+  return InternalUrlDecodeString(encoded, true);
+}
+
+std::string
+UrlDecodeStringWithoutEncodingSpaceAsPlus(const std::string & encoded) {
+  return InternalUrlDecodeString(encoded, false);
+}
+
+std::string
+InternalUrlEncodeString(const std::string & decoded,
+                        bool encode_space_as_plus,
+                        bool unsafe_only) {
+  size_t needed_length = decoded.length() * 3 + 1;
+  char* buf = STACK_ARRAY(char, needed_length);
+  InternalUrlEncode(decoded.c_str(), buf, needed_length,
+                    encode_space_as_plus, unsafe_only);
+  return buf;
 }
 
 std::string
 UrlEncodeString(const std::string & decoded) {
-  const char * sz_decoded = decoded.c_str();
-  size_t needed_length = decoded.length() * 3 + 3;
-  char stackalloc[64];
-  char * buf = needed_length > sizeof(stackalloc)/sizeof(*stackalloc) ?
-    (char *)malloc(needed_length) : stackalloc;
-  UrlEncode(decoded.c_str(), buf, needed_length);
-  std::string result(buf);
-  if (buf != stackalloc) {
-    free(buf);
-  }
-  return result;
+  return InternalUrlEncodeString(decoded, true, false);
+}
+
+std::string
+UrlEncodeStringWithoutEncodingSpaceAsPlus(const std::string & decoded) {
+  return InternalUrlEncodeString(decoded, false, false);
+}
+
+std::string
+UrlEncodeStringForOnlyUnsafeChars(const std::string & decoded) {
+  return InternalUrlEncodeString(decoded, false, true);
 }

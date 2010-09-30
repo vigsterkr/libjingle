@@ -1,14 +1,43 @@
-#ifndef _ASYNCHTTPREQUEST_H_
-#define _ASYNCHTTPREQUEST_H_
+/*
+ * libjingle
+ * Copyright 2004--2010, Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
+#ifndef TALK_BASE_ASYNCHTTPREQUEST_H_
+#define TALK_BASE_ASYNCHTTPREQUEST_H_
+
+#include <string>
+#include "talk/base/event.h"
 #include "talk/base/httpclient.h"
-#include "talk/base/logging.h"
-#include "talk/base/proxyinfo.h"
-#include "talk/base/socketserver.h"
-#include "talk/base/thread.h"
 #include "talk/base/signalthread.h"
+#include "talk/base/socketpool.h"
+#include "talk/base/sslsocketfactory.h"
 
 namespace talk_base {
+
+class FirewallManager;
 
 ///////////////////////////////////////////////////////////////////////////////
 // AsyncHttpRequest
@@ -16,19 +45,15 @@ namespace talk_base {
 // thread once the request is done (successfully or unsuccessfully).
 ///////////////////////////////////////////////////////////////////////////////
 
-class FirewallManager;
-class MemoryStream;
+class AsyncHttpRequest : public SignalThread {
+ public:
+  explicit AsyncHttpRequest(const std::string &user_agent);
+  ~AsyncHttpRequest();
 
-class AsyncHttpRequest:
-  public SignalThread,
-  public sigslot::has_slots<> {
-public:
-  AsyncHttpRequest(const std::string &user_agent);
-
-  void set_proxy(const talk_base::ProxyInfo& proxy) {
+  void set_proxy(const ProxyInfo& proxy) {
     proxy_ = proxy;
   }
-  void set_firewall(talk_base::FirewallManager * firewall) {
+  void set_firewall(FirewallManager * firewall) {
     firewall_ = firewall;
   }
 
@@ -39,102 +64,49 @@ public:
   // The port to connect to on the target host.
   int port() { return port_; }
   void set_port(int port) { port_ = port; }
-       
-   // Whether the request should use SSL.
+
+  // Whether the request should use SSL.
   bool secure() { return secure_; }
   void set_secure(bool secure) { secure_ = secure; }
 
-  // Returns the redirect when redirection occurs
-  const std::string& response_redirect() { return response_redirect_; }
-
-  // Time to wait on the download, in ms.  Default is 5000 (5s)
+  // Time to wait on the download, in ms.
   int timeout() { return timeout_; }
   void set_timeout(int timeout) { timeout_ = timeout; }
 
   // Fail redirects to allow analysis of redirect urls, etc.
   bool fail_redirect() const { return fail_redirect_; }
-  void set_fail_redirect(bool fail_redirect) { fail_redirect_ = fail_redirect; }
+  void set_fail_redirect(bool redirect) { fail_redirect_ = redirect; }
+
+  // Returns the redirect when redirection occurs
+  const std::string& response_redirect() { return response_redirect_; }
 
   HttpRequestData& request() { return client_.request(); }
   HttpResponseData& response() { return client_.response(); }
-   
-private:
-  // SignalThread Interface
+  HttpErrorType error() { return error_; }
+
+ protected:
+  void set_error(HttpErrorType error) { error_ = error; }
+  virtual void OnWorkStart();
+  virtual void OnWorkStop();
+  void OnComplete(HttpClient* client, HttpErrorType error);
+  virtual void OnMessage(Message* message);
   virtual void DoWork();
-  
-  talk_base::ProxyInfo proxy_;
-  talk_base::FirewallManager * firewall_;
+
+ private:
+  ProxyInfo proxy_;
+  FirewallManager* firewall_;
   std::string host_;
   int port_;
   bool secure_;
   int timeout_;
   bool fail_redirect_;
+  SslSocketFactory factory_;
+  ReuseSocketPool pool_;
   HttpClient client_;
+  HttpErrorType error_;
   std::string response_redirect_;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// HttpMonitor
-///////////////////////////////////////////////////////////////////////////////
+}  // namespace talk_base
 
-class HttpMonitor : public sigslot::has_slots<> {
-public:
-  HttpMonitor(SocketServer *ss);
-
-  void reset() { complete_ = false; }
-
-  bool done() const { return complete_; }
-  int error() const { return err_; }
-
-  void Connect(talk_base::HttpClient* http);  
-  void OnHttpClientComplete(talk_base::HttpClient * http, int err);
-
-private:
-  bool complete_;
-  int err_;
-  SocketServer *ss_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-// SslSocketFactory
-///////////////////////////////////////////////////////////////////////////////
-
-class SslSocketFactory : public talk_base::SocketFactory {
- public:
-  SslSocketFactory(talk_base::SocketFactory * factory, const std::string &user_agent)
-    : factory_(factory), logging_level_(talk_base::LS_VERBOSE), 
-      binary_mode_(false), agent_(user_agent) { }
-
-  void UseSSL(const char * hostname) { hostname_ = hostname; }
-  void DisableSSL() { hostname_.clear(); }
-
-  void SetProxy(const talk_base::ProxyInfo& proxy) { proxy_ = proxy; }
-  const talk_base::ProxyInfo& proxy() const { return proxy_; }
-  bool ignore_bad_cert() {return ignore_bad_cert_;}
-  void SetIgnoreBadCert(bool ignore) { ignore_bad_cert_ = ignore; }
-
-  void SetLogging(talk_base::LoggingSeverity level, const std::string& label, 
-      bool binary_mode = false) {
-    logging_level_ = level;
-    logging_label_ = label;
-    binary_mode_ = binary_mode;
-  }
-
-  virtual talk_base::Socket * CreateSocket(int type);
-  virtual talk_base::AsyncSocket * CreateAsyncSocket(int type);
-
-private:
-  talk_base::SocketFactory * factory_;
-  talk_base::ProxyInfo proxy_;
-  std::string hostname_, logging_label_;
-  talk_base::LoggingSeverity logging_level_;
-  bool binary_mode_;
-  std::string agent_;
-  bool ignore_bad_cert_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-}  // namespace talk_base_
-
-#endif  // _ASYNCHTTPREQUEST_H_
+#endif  // TALK_BASE_ASYNCHTTPREQUEST_H_

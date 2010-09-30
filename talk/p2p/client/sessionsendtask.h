@@ -45,7 +45,7 @@ namespace cricket {
 
 class SessionSendTask : public buzz::XmppTask {
 public:
-  SessionSendTask(Task *parent, SessionManager *session_manager)
+  SessionSendTask(TaskParent *parent, SessionManager *session_manager)
     : buzz::XmppTask(parent, buzz::XmppEngine::HL_SINGLE),
       session_manager_(session_manager) {
     set_timeout_seconds(15);

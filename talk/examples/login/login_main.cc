@@ -25,30 +25,31 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <cstdio>
+#include <iostream>
+
 #include "talk/base/thread.h"
 #include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
-#include <iostream>
 
 int main(int argc, char **argv) {
-  printf("Auth Cookie: ");
-  fflush(stdout);
+  std::cout << "Auth Cookie: ";
+  std::string auth_cookie;
+  std::getline(std::cin, auth_cookie);
 
-  char auth_cookie[256];
-  scanf("%s", auth_cookie);
-  
-  char username[256];
-  scanf("%s", username);
+  std::cout << "User Name: ";
+  std::string username;
+  std::getline(std::cin, username);
 
   // Start xmpp on a different thread
   XmppThread thread;
   thread.Start();
 
   buzz::XmppClientSettings xcs;
-  xcs.set_user(username);
+  xcs.set_user(username.c_str());
   xcs.set_host("gmail.com");
   xcs.set_use_tls(false);
-  xcs.set_auth_cookie(auth_cookie);
+  xcs.set_auth_cookie(auth_cookie.c_str());
   xcs.set_server(talk_base::SocketAddress("talk.google.com", 5222));
   thread.Login(xcs);
 

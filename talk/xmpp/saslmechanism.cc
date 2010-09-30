@@ -54,17 +54,19 @@ SaslMechanism::HandleSaslFailure(const XmlElement * failure) {
 
 std::string
 SaslMechanism::Base64Encode(const std::string & plain) {
-  return Base64::encode(plain);
+  return Base64::Encode(plain);
 }
 
 std::string
 SaslMechanism::Base64Decode(const std::string & encoded) {
-  return Base64::decode(encoded);
+  return Base64::Decode(encoded, Base64::DO_LAX);
 }
 
 std::string
 SaslMechanism::Base64EncodeFromArray(const char * plain, size_t length) {
-  return Base64::encodeFromArray(plain, length);
+  std::string result;
+  Base64::EncodeFromArray(plain, length, &result);
+  return result;
 }
 
 }

@@ -31,10 +31,11 @@
 // This file contains classes for dealing with the STUN and TURN protocols.
 // Both protocols use the same wire format.
 
-#include "talk/base/basictypes.h"
-#include "talk/base/bytebuffer.h"
 #include <string>
 #include <vector>
+
+#include "talk/base/basictypes.h"
+#include "talk/base/bytebuffer.h"
 
 namespace cricket {
 

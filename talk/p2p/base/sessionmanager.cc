@@ -26,15 +26,19 @@
  */
 
 #include "talk/p2p/base/sessionmanager.h"
+
 #include "talk/base/common.h"
 #include "talk/base/helpers.h"
+#include "talk/base/stringencode.h"
 #include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/session.h"
+#include "talk/p2p/base/sessionmessages.h"
 #include "talk/xmpp/constants.h"
 #include "talk/xmpp/jid.h"
 
 namespace cricket {
 
-SessionManager::SessionManager(PortAllocator *allocator, 
+SessionManager::SessionManager(PortAllocator *allocator,
                                talk_base::Thread *worker) {
   allocator_ = allocator;
   signaling_thread_ = talk_base::Thread::Current();
@@ -50,39 +54,42 @@ SessionManager::~SessionManager() {
   // Note: Session::Terminate occurs asynchronously, so it's too late to
   // delete them now.  They better be all gone.
   ASSERT(session_map_.empty());
-  //TerminateAll();
+  // TerminateAll();
 }
 
-void SessionManager::AddClient(const std::string& session_type,
+void SessionManager::AddClient(const std::string& content_type,
                                SessionClient* client) {
-  ASSERT(client_map_.find(session_type) == client_map_.end());
-  client_map_[session_type] = client;
+  ASSERT(client_map_.find(content_type) == client_map_.end());
+  client_map_[content_type] = client;
 }
 
-void SessionManager::RemoveClient(const std::string& session_type) {
-  ClientMap::iterator iter = client_map_.find(session_type);
+void SessionManager::RemoveClient(const std::string& content_type) {
+  ClientMap::iterator iter = client_map_.find(content_type);
   ASSERT(iter != client_map_.end());
   client_map_.erase(iter);
 }
 
-SessionClient* SessionManager::GetClient(const std::string& session_type) {
-  ClientMap::iterator iter = client_map_.find(session_type);
+SessionClient* SessionManager::GetClient(const std::string& content_type) {
+  ClientMap::iterator iter = client_map_.find(content_type);
   return (iter != client_map_.end()) ? iter->second : NULL;
 }
 
-Session *SessionManager::CreateSession(const std::string& name,
-                                       const std::string& session_type) {
-  return CreateSession(name, SessionID(name, CreateRandomId()), session_type,
-                       false);
+Session* SessionManager::CreateSession(const std::string& local_name,
+                                       const std::string& content_type) {
+  return CreateSession(local_name, local_name,
+                       talk_base::ToString(talk_base::CreateRandomId()),
+                       content_type, false);
 }
 
-Session *SessionManager::CreateSession(
-    const std::string &name, const SessionID& id,
-    const std::string& session_type, bool received_initiate) {
-  SessionClient* client = GetClient(session_type);
+Session* SessionManager::CreateSession(
+    const std::string& local_name, const std::string& initiator_name,
+    const std::string& sid, const std::string& content_type,
+    bool received_initiate) {
+  SessionClient* client = GetClient(content_type);
   ASSERT(client != NULL);
 
-  Session *session = new Session(this, name, id, session_type, client);
+  Session* session = new Session(this, local_name, initiator_name,
+                                 sid, content_type, client);
   session_map_[session->id()] = session;
   session->SignalRequestSignaling.connect(
       this, &SessionManager::OnRequestSignaling);
@@ -94,7 +101,7 @@ Session *SessionManager::CreateSession(
   return session;
 }
 
-void SessionManager::DestroySession(Session *session) {
+void SessionManager::DestroySession(Session* session) {
   if (session != NULL) {
     SessionMap::iterator it = session_map_.find(session->id());
     if (it != session_map_.end()) {
@@ -106,8 +113,8 @@ void SessionManager::DestroySession(Session *session) {
   }
 }
 
-Session *SessionManager::GetSession(const SessionID& id) {
-  SessionMap::iterator it = session_map_.find(id);
+Session* SessionManager::GetSession(const std::string& sid) {
+  SessionMap::iterator it = session_map_.find(sid);
   if (it != session_map_.end())
     return it->second;
   return NULL;
@@ -115,97 +122,66 @@ Session *SessionManager::GetSession(const SessionID& id) {
 
 void SessionManager::TerminateAll() {
   while (session_map_.begin() != session_map_.end()) {
-    Session *session = session_map_.begin()->second;
+    Session* session = session_map_.begin()->second;
     session->Terminate();
   }
 }
 
 bool SessionManager::IsSessionMessage(const buzz::XmlElement* stanza) {
-  if (stanza->Name() != buzz::QN_IQ)
-    return false;
-  if (!stanza->HasAttr(buzz::QN_TYPE))
-    return false;
-  if (stanza->Attr(buzz::QN_TYPE) != buzz::STR_SET)
-    return false;
-
-  const buzz::XmlElement* session = stanza->FirstNamed(QN_SESSION);
-  if (!session)
-    return false;
-  if (!session->HasAttr(buzz::QN_TYPE))
-    return false;
-  if (!session->HasAttr(buzz::QN_ID) || !session->HasAttr(QN_INITIATOR))
-    return false;
-
-  return true;
+  return cricket::IsSessionMessage(stanza);
 }
 
-Session* SessionManager::FindSessionForStanza(const buzz::XmlElement* stanza, 
-                                              bool incoming) {
-  const buzz::XmlElement* session_xml = stanza->FirstNamed(QN_SESSION);
-  ASSERT(session_xml != NULL);
-
-  SessionID id;
-  id.set_id_str(session_xml->Attr(buzz::QN_ID));
-  id.set_initiator(session_xml->Attr(QN_INITIATOR));
-
-  // Pass this message to the session in question.
-  SessionMap::iterator iter = session_map_.find(id);
+Session* SessionManager::FindSession(const std::string& sid,
+                                     const std::string& remote_name) {
+  SessionMap::iterator iter = session_map_.find(sid);
   if (iter == session_map_.end())
     return NULL;
 
   Session* session = iter->second;
+  if (buzz::Jid(remote_name) != buzz::Jid(session->remote_name()))
+    return NULL;
 
-  // match on "from"? or "to"?
-  buzz::QName attr = buzz::QN_TO;
-  if (incoming) {
-    attr = buzz::QN_FROM;
-  }
-  buzz::Jid remote(session->remote_name());
-  buzz::Jid match(stanza->Attr(attr));
-  if (remote == match) {
-    return session;
-  }
-  return NULL;
+  return session;
 }
 
 void SessionManager::OnIncomingMessage(const buzz::XmlElement* stanza) {
-  ASSERT(stanza->Attr(buzz::QN_TYPE) == buzz::STR_SET);
+  SessionMessage msg;
+  ParseError error;
 
-  Session* session = FindSessionForStanza(stanza, true);
+  if (!ParseSessionMessage(stanza, &msg, &error)) {
+    SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
+                     error.text, NULL);
+    return;
+  }
+
+  Session* session = FindSession(msg.sid, msg.from);
   if (session) {
-    session->OnIncomingMessage(stanza);
+    session->OnIncomingMessage(msg);
+    return;
+  }
+  if (msg.type != ACTION_SESSION_INITIATE) {
+    SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
+                     "unknown session", NULL);
     return;
   }
 
-  const buzz::XmlElement* session_xml = stanza->FirstNamed(QN_SESSION);
-  ASSERT(session_xml != NULL);
-  if (session_xml->Attr(buzz::QN_TYPE) == "initiate") {
-    std::string session_type = FindClient(session_xml);
-    if (session_type.size() == 0) {
-      SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
-                       "unknown session description type", NULL);
-    } else {
-      SessionID id;
-      id.set_id_str(session_xml->Attr(buzz::QN_ID));
-      id.set_initiator(session_xml->Attr(QN_INITIATOR));
-
-      session = CreateSession(stanza->Attr(buzz::QN_TO), 
-                              id,
-                              session_type,  true);
-      session->OnIncomingMessage(stanza);
-
-      // If we haven't rejected, and we haven't selected a transport yet,
-      // let's do it now.
-      if ((session->state() != Session::STATE_SENTREJECT) &&
-          (session->transport() == NULL)) {
-        session->ChooseTransport(stanza);
-      }
-    }
+  std::string content_type;
+  if (!ParseContentType(msg.protocol, msg.action_elem,
+                        &content_type, &error)) {
+    SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
+                     error.text, NULL);
     return;
   }
 
-  SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
-                  "unknown session", NULL);
+  if (!GetClient(content_type)) {
+    SendErrorMessage(stanza, buzz::QN_STANZA_BAD_REQUEST, "modify",
+                     "unknown content type: " + content_type, NULL);
+    return;
+  }
+
+  session = CreateSession(msg.to, msg.initiator, msg.sid,
+                          content_type, true);
+  session->OnIncomingMessage(msg);
 }
 
 void SessionManager::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
@@ -215,16 +191,22 @@ void SessionManager::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
   return;
 }
 
-void SessionManager::OnFailedSend(const buzz::XmlElement* orig_stanza, 
+void SessionManager::OnFailedSend(const buzz::XmlElement* orig_stanza,
                                   const buzz::XmlElement* error_stanza) {
-  Session* session = FindSessionForStanza(orig_stanza, false);
+  SessionMessage msg;
+  ParseError error;
+  if (!ParseSessionMessage(orig_stanza, &msg, &error)) {
+    return;  // TODO: log somewhere?
+  }
+
+  Session* session = FindSession(msg.sid, msg.to);
   if (session) {
-    scoped_ptr<buzz::XmlElement> synthetic_error;
+    talk_base::scoped_ptr<buzz::XmlElement> synthetic_error;
     if (!error_stanza) {
-      // A failed send is semantically equivalent to an error response, so we 
+      // A failed send is semantically equivalent to an error response, so we
       // can just turn the former into the latter.
       synthetic_error.reset(
-        CreateErrorMessage(orig_stanza, buzz::QN_STANZA_ITEM_NOT_FOUND, 
+        CreateErrorMessage(orig_stanza, buzz::QN_STANZA_ITEM_NOT_FOUND,
                            "cancel", "Recipient did not respond", NULL));
       error_stanza = synthetic_error.get();
     }
@@ -233,27 +215,14 @@ void SessionManager::OnFailedSend(const buzz::XmlElement* orig_stanza,
   }
 }
 
-std::string SessionManager::FindClient(const buzz::XmlElement* session) {
-  for (const buzz::XmlElement* elem = session->FirstElement();
-       elem != NULL;
-       elem = elem->NextElement()) {
-    if (elem->Name().LocalPart() == "description") {
-      ClientMap::iterator iter = client_map_.find(elem->Name().Namespace());
-      if (iter != client_map_.end())
-        return iter->first;
-    }
-  }
-  return "";
-}
-
 void SessionManager::SendErrorMessage(const buzz::XmlElement* stanza,
                                       const buzz::QName& name,
                                       const std::string& type,
                                       const std::string& text,
                                       const buzz::XmlElement* extra_info) {
-  scoped_ptr<buzz::XmlElement> msg(
+  talk_base::scoped_ptr<buzz::XmlElement> msg(
       CreateErrorMessage(stanza, name, type, text, extra_info));
-  SignalOutgoingMessage(msg.get());
+  SignalOutgoingMessage(this, msg.get());
 }
 
 buzz::XmlElement* SessionManager::CreateErrorMessage(
@@ -267,11 +236,7 @@ buzz::XmlElement* SessionManager::CreateErrorMessage(
   iq->SetAttr(buzz::QN_ID, stanza->Attr(buzz::QN_ID));
   iq->SetAttr(buzz::QN_TYPE, "error");
 
-  for (const buzz::XmlElement* elem = stanza->FirstElement();
-       elem != NULL;
-       elem = elem->NextElement()) {
-    iq->AddElement(new buzz::XmlElement(*elem));
-  }
+  CopyXmlChildren(stanza, iq);
 
   buzz::XmlElement* error = new buzz::XmlElement(buzz::QN_ERROR);
   error->SetAttr(buzz::QN_TYPE, type);
@@ -304,10 +269,10 @@ buzz::XmlElement* SessionManager::CreateErrorMessage(
 
 void SessionManager::OnOutgoingMessage(Session* session,
                                        const buzz::XmlElement* stanza) {
-  SignalOutgoingMessage(stanza);
+  SignalOutgoingMessage(this, stanza);
 }
 
-void SessionManager::OnErrorMessage(Session* session,
+void SessionManager::OnErrorMessage(BaseSession* session,
                                     const buzz::XmlElement* stanza,
                                     const buzz::QName& name,
                                     const std::string& type,
@@ -328,4 +293,4 @@ void SessionManager::OnRequestSignaling(Session* session) {
   SignalRequestSignaling();
 }
 
-} // namespace cricket
+}  // namespace cricket

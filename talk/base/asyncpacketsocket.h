@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_ASYNCPACKETSOCKET_H__
-#define TALK_BASE_ASYNCPACKETSOCKET_H__
+#ifndef TALK_BASE_ASYNCPACKETSOCKET_H_
+#define TALK_BASE_ASYNCPACKETSOCKET_H_
 
 #include "talk/base/asyncsocket.h"
 
@@ -35,8 +35,8 @@ namespace talk_base {
 // Provides the ability to receive packets asynchronously.  Sends are not
 // buffered since it is acceptable to drop packets under high load.
 class AsyncPacketSocket : public sigslot::has_slots<> {
-public:
-  AsyncPacketSocket(AsyncSocket* socket);
+ public:
+  explicit AsyncPacketSocket(AsyncSocket* socket);
   virtual ~AsyncPacketSocket();
 
   // Relevant socket methods:
@@ -47,17 +47,22 @@ public:
   virtual int Send(const void *pv, size_t cb);
   virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr);
   virtual int Close();
+
+  virtual Socket::ConnState GetState() const;
+  virtual int GetOption(Socket::Option opt, int* value);
   virtual int SetOption(Socket::Option opt, int value);
   virtual int GetError() const;
   virtual void SetError(int error);
 
   // Emitted each time a packet is read.
-  sigslot::signal4<const char*, size_t, const SocketAddress&, AsyncPacketSocket*> SignalReadPacket;
+  sigslot::signal4<const char*, size_t,
+                   const SocketAddress&, AsyncPacketSocket*> SignalReadPacket;
 
-protected:
+ protected:
   AsyncSocket* socket_;
+  DISALLOW_EVIL_CONSTRUCTORS(AsyncPacketSocket);
 };
 
-} // namespace talk_base
+}  // namespace talk_base
 
-#endif // TALK_BASE_ASYNCPACKETSOCKET_H__
+#endif  // TALK_BASE_ASYNCPACKETSOCKET_H_

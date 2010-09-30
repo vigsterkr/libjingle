@@ -2,41 +2,41 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "talk/p2p/base/relayserver.h"
-#include "talk/base/helpers.h"
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <iostream>
 
 #ifdef POSIX
-extern "C" {
 #include <errno.h>
-}
-#endif // POSIX
+#endif  // POSIX
+
+#include <algorithm>
+
+#include "talk/base/asynctcpsocket.h"
+#include "talk/base/helpers.h"
+#include "talk/base/logging.h"
+#include "talk/base/socketadapters.h"
 
 namespace cricket {
 
@@ -46,15 +46,17 @@ const int MAX_LIFETIME = 15 * 60 * 1000;
 // The number of bytes in each of the usernames we use.
 const uint32 USERNAME_LENGTH = 16;
 
+static const uint32 kMessageAcceptConnection = 1;
+
 // Calls SendTo on the given socket and logs any bad results.
 void Send(talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
           const talk_base::SocketAddress& addr) {
   int result = socket->SendTo(bytes, size, addr);
-  if (result < int(size)) {
-    std::cerr << "SendTo wrote only " << result << " of " << int(size)
-              << " bytes" << std::endl;
+  if (result < static_cast<int>(size)) {
+    LOG(LS_ERROR) << "SendTo wrote only " << result << " of " << size
+                  << " bytes";
   } else if (result < 0) {
-    std::cerr << "SendTo: " << std::strerror(errno) << std::endl;
+    LOG_ERR(LS_ERROR) << "SendTo";
   }
 }
 
@@ -71,7 +73,6 @@ void SendStun(const StunMessage& msg,
 void SendStunError(const StunMessage& msg, talk_base::AsyncPacketSocket* socket,
                    const talk_base::SocketAddress& remote_addr, int error_code,
                    const char* error_desc, const std::string& magic_cookie) {
-
   StunMessage err_msg;
   err_msg.SetType(GetStunErrorResponseType(msg.type()));
   err_msg.SetTransactionID(msg.transaction_id());
@@ -98,14 +99,22 @@ RelayServer::RelayServer(talk_base::Thread* thread)
 }
 
 RelayServer::~RelayServer() {
-  for (unsigned i = 0; i < internal_sockets_.size(); i++)
+  // Deleting the binding will cause it to be removed from the map.
+  while (!bindings_.empty())
+    delete bindings_.begin()->second;
+  for (size_t i = 0; i < internal_sockets_.size(); ++i)
     delete internal_sockets_[i];
-  for (unsigned i = 0; i < external_sockets_.size(); i++)
+  for (size_t i = 0; i < external_sockets_.size(); ++i)
     delete external_sockets_[i];
+  while (!server_sockets_.empty()) {
+    talk_base::AsyncSocket* socket = server_sockets_.begin()->first;
+    server_sockets_.erase(server_sockets_.begin()->first);
+    delete socket;
+  }
 }
 
 void RelayServer::AddInternalSocket(talk_base::AsyncPacketSocket* socket) {
-  assert(internal_sockets_.end() ==
+  ASSERT(internal_sockets_.end() ==
       std::find(internal_sockets_.begin(), internal_sockets_.end(), socket));
   internal_sockets_.push_back(socket);
   socket->SignalReadPacket.connect(this, &RelayServer::OnInternalPacket);
@@ -114,13 +123,13 @@ void RelayServer::AddInternalSocket(talk_base::AsyncPacketSocket* socket) {
 void RelayServer::RemoveInternalSocket(talk_base::AsyncPacketSocket* socket) {
   SocketList::iterator iter =
       std::find(internal_sockets_.begin(), internal_sockets_.end(), socket);
-  assert(iter != internal_sockets_.end());
+  ASSERT(iter != internal_sockets_.end());
   internal_sockets_.erase(iter);
   socket->SignalReadPacket.disconnect(this);
 }
 
 void RelayServer::AddExternalSocket(talk_base::AsyncPacketSocket* socket) {
-  assert(external_sockets_.end() ==
+  ASSERT(external_sockets_.end() ==
       std::find(external_sockets_.begin(), external_sockets_.end(), socket));
   external_sockets_.push_back(socket);
   socket->SignalReadPacket.connect(this, &RelayServer::OnExternalPacket);
@@ -129,9 +138,45 @@ void RelayServer::AddExternalSocket(talk_base::AsyncPacketSocket* socket) {
 void RelayServer::RemoveExternalSocket(talk_base::AsyncPacketSocket* socket) {
   SocketList::iterator iter =
       std::find(external_sockets_.begin(), external_sockets_.end(), socket);
-  assert(iter != external_sockets_.end());
+  ASSERT(iter != external_sockets_.end());
   external_sockets_.erase(iter);
   socket->SignalReadPacket.disconnect(this);
+}
+
+void RelayServer::AddInternalServerSocket(talk_base::AsyncSocket* socket,
+                                          cricket::ProtocolType proto) {
+  ASSERT(server_sockets_.end() ==
+         server_sockets_.find(socket));
+  server_sockets_[socket] = proto;
+  socket->SignalReadEvent.connect(this, &RelayServer::OnReadEvent);
+}
+
+void RelayServer::RemoveInternalServerSocket(
+    talk_base::AsyncSocket* socket) {
+  ServerSocketMap::iterator iter = server_sockets_.find(socket);
+  ASSERT(iter != server_sockets_.end());
+  server_sockets_.erase(iter);
+  socket->SignalReadEvent.disconnect(this);
+}
+
+int RelayServer::GetConnectionCount() {
+  return connections_.size();
+}
+
+bool RelayServer::HasConnection(const talk_base::SocketAddress& address) {
+  for (ConnectionMap::iterator it = connections_.begin();
+       it != connections_.end(); ++it) {
+    if (it->second->addr_pair().destination() == address) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void RelayServer::OnReadEvent(talk_base::AsyncSocket* socket) {
+  ServerSocketMap::iterator iter = server_sockets_.find(socket);
+  ASSERT(iter != server_sockets_.end());
+  AcceptConnection(socket);
 }
 
 void RelayServer::OnInternalPacket(
@@ -140,7 +185,7 @@ void RelayServer::OnInternalPacket(
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
-  assert(!ap.destination().IsAny());
+  ASSERT(!ap.destination().IsAny());
 
   // If this did not come from an existing connection, it should be a STUN
   // allocate request.
@@ -162,7 +207,7 @@ void RelayServer::OnInternalPacket(
   // that this connection has been locked.  (Otherwise, we would not know what
   // address to forward to.)
   if (!int_conn->locked()) {
-    std::cerr << "Dropping packet: connection not locked" << std::endl;
+    LOG(LS_WARNING) << "Dropping packet: connection not locked";
     return;
   }
 
@@ -174,7 +219,7 @@ void RelayServer::OnInternalPacket(
     ext_conn->Send(bytes, size);
   } else {
     // This happens very often and is not an error.
-    //std::cerr << "Dropping packet: no external connection" << std::endl;
+    LOG(LS_INFO) << "Dropping packet: no external connection";
   }
 }
 
@@ -184,7 +229,7 @@ void RelayServer::OnExternalPacket(
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
-  assert(!ap.destination().IsAny());
+  ASSERT(!ap.destination().IsAny());
 
   // If this connection already exists, then forward the traffic.
   ConnectionMap::iterator piter = connections_.find(ap);
@@ -194,7 +239,7 @@ void RelayServer::OnExternalPacket(
     RelayServerConnection* int_conn =
         ext_conn->binding()->GetInternalConnection(
             ext_conn->addr_pair().source());
-    assert(int_conn);
+    ASSERT(int_conn != NULL);
     int_conn->Send(bytes, size, ext_conn->addr_pair().source());
     ext_conn->Lock();  // allow outgoing packets
     return;
@@ -203,9 +248,9 @@ void RelayServer::OnExternalPacket(
   // The first packet should always be a STUN / TURN packet.  If it isn't, then
   // we should just ignore this packet.
   StunMessage msg;
-  talk_base::ByteBuffer buf = talk_base::ByteBuffer(bytes, size);
+  talk_base::ByteBuffer buf(bytes, size);
   if (!msg.Read(&buf)) {
-    std::cerr << "Dropping packet: first packet not STUN" << std::endl;
+    LOG(LS_WARNING) << "Dropping packet: first packet not STUN";
     return;
   }
 
@@ -213,19 +258,19 @@ void RelayServer::OnExternalPacket(
   const StunByteStringAttribute* username_attr =
       msg.GetByteString(STUN_ATTR_USERNAME);
   if (!username_attr) {
-    std::cerr << "Dropping packet: no username" << std::endl;
+    LOG(LS_WARNING) << "Dropping packet: no username";
     return;
   }
 
-  uint32 length = talk_base::_min(uint32(username_attr->length()), USERNAME_LENGTH);
+  uint32 length = talk_base::_min(static_cast<uint32>(username_attr->length()),
+                                  USERNAME_LENGTH);
   std::string username(username_attr->bytes(), length);
   // TODO: Check the HMAC.
 
   // The binding should already be present.
   BindingMap::iterator biter = bindings_.find(username);
   if (biter == bindings_.end()) {
-    // TODO: Turn this back on.  This is the sign of a client bug.
-    //std::cerr << "Dropping packet: no binding with username" << std::endl;
+    LOG(LS_WARNING) << "Dropping packet: no binding with username";
     return;
   }
 
@@ -242,16 +287,17 @@ void RelayServer::OnExternalPacket(
   // Send this message on the appropriate internal connection.
   RelayServerConnection* int_conn = ext_conn->binding()->GetInternalConnection(
       ext_conn->addr_pair().source());
-  assert(int_conn);
+  ASSERT(int_conn != NULL);
   int_conn->Send(bytes, size, ext_conn->addr_pair().source());
 }
 
 bool RelayServer::HandleStun(
     const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
-    talk_base::AsyncPacketSocket* socket, std::string* username, StunMessage* msg) {
+    talk_base::AsyncPacketSocket* socket, std::string* username,
+    StunMessage* msg) {
 
   // Parse this into a stun message.
-  talk_base::ByteBuffer buf = talk_base::ByteBuffer(bytes, size);
+  talk_base::ByteBuffer buf(bytes, size);
   if (!msg->Read(&buf)) {
     SendStunError(*msg, socket, remote_addr, 400, "Bad Request", "");
     return false;
@@ -303,11 +349,8 @@ void RelayServer::HandleStunAllocate(
 
   BindingMap::iterator biter = bindings_.find(username);
   if (biter != bindings_.end()) {
-
     binding = biter->second;
-
   } else {
-
     // NOTE: In the future, bindings will be created by the bot only.  This
     //       else-branch will then disappear.
 
@@ -323,8 +366,8 @@ void RelayServer::HandleStunAllocate(
     bindings_[username] = binding;
 
     if (log_bindings_) {
-      std::cout << "Added new binding: " << bindings_.size() << " total"
-                << std::endl;
+      LOG(LS_INFO) << "Added new binding " << username << ", "
+                   << bindings_.size() << " total";
     }
   }
 
@@ -382,7 +425,8 @@ void RelayServer::HandleStunAllocate(
   response.AddAttribute(magic_cookie_attr);
 
   size_t index = rand() % external_sockets_.size();
-  talk_base::SocketAddress ext_addr = external_sockets_[index]->GetLocalAddress();
+  talk_base::SocketAddress ext_addr =
+      external_sockets_[index]->GetLocalAddress();
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
@@ -426,7 +470,7 @@ void RelayServer::HandleStunSend(
       int_conn->binding()->GetExternalConnection(ext_addr);
   if (!ext_conn) {
     // Create a new connection to establish the relationship with this binding.
-    assert(external_sockets_.size() == 1);
+    ASSERT(external_sockets_.size() == 1);
     talk_base::AsyncPacketSocket* socket = external_sockets_[0];
     talk_base::SocketAddressPair ap(ext_addr, socket->GetLocalAddress());
     ext_conn = new RelayServerConnection(int_conn->binding(), ap, socket);
@@ -440,7 +484,7 @@ void RelayServer::HandleStunSend(
 
   const StunUInt32Attribute* options_attr =
       request.GetUInt32(STUN_ATTR_OPTIONS);
-  if (options_attr && (options_attr->value() & 0x01 != 0)) {
+  if (options_attr && (options_attr->value() & 0x01)) {
     int_conn->set_default_destination(ext_addr);
     int_conn->Lock();
 
@@ -458,43 +502,74 @@ void RelayServer::HandleStunSend(
       StunAttribute::CreateUInt32(cricket::STUN_ATTR_OPTIONS);
     options2_attr->SetValue(0x01);
     response.AddAttribute(options2_attr);
-    
+
     int_conn->SendStun(response);
   }
 }
 
 void RelayServer::AddConnection(RelayServerConnection* conn) {
-  assert(connections_.find(conn->addr_pair()) == connections_.end());
+  ASSERT(connections_.find(conn->addr_pair()) == connections_.end());
   connections_[conn->addr_pair()] = conn;
 }
 
 void RelayServer::RemoveConnection(RelayServerConnection* conn) {
   ConnectionMap::iterator iter = connections_.find(conn->addr_pair());
-  assert(iter != connections_.end());
+  ASSERT(iter != connections_.end());
   connections_.erase(iter);
 }
 
 void RelayServer::RemoveBinding(RelayServerBinding* binding) {
   BindingMap::iterator iter = bindings_.find(binding->username());
-  assert(iter != bindings_.end());
+  ASSERT(iter != bindings_.end());
   bindings_.erase(iter);
 
   if (log_bindings_) {
-    std::cout << "Removed a binding: " << bindings_.size() << " remaining"
-              << std::endl;
+    LOG(LS_INFO) << "Removed binding " << binding->username() << ", "
+                 << bindings_.size() << " remaining";
   }
 }
 
+void RelayServer::OnMessage(talk_base::Message *pmsg) {
+  ASSERT(pmsg->message_id == kMessageAcceptConnection);
+  talk_base::MessageData* data = pmsg->pdata;
+  talk_base::AsyncSocket* socket =
+      static_cast <talk_base::TypedMessageData<talk_base::AsyncSocket*>*>
+      (data)->data();
+  AcceptConnection(socket);
+  delete data;
+}
+
 void RelayServer::OnTimeout(RelayServerBinding* binding) {
-  // This call will result in all of the necessary clean-up.
-  delete binding;
+  // This call will result in all of the necessary clean-up. We can't call
+  // delete here, because you can't delete an object that is signaling you.
+  thread_->Dispose(binding);
+}
+
+void RelayServer::AcceptConnection(talk_base::AsyncSocket* server_socket) {
+  // Check if someone is trying to connect to us.
+  talk_base::SocketAddress accept_addr;
+  talk_base::AsyncSocket* accepted_socket =
+      server_socket->Accept(&accept_addr);
+  if (accepted_socket != NULL) {
+    // We had someone trying to connect, now check which protocol to
+    // use and create a packet socket.
+    ASSERT(server_sockets_[server_socket] == cricket::PROTO_TCP ||
+           server_sockets_[server_socket] == cricket::PROTO_SSLTCP);
+    if (server_sockets_[server_socket] == cricket::PROTO_SSLTCP) {
+      accepted_socket = new talk_base::AsyncSSLServerSocket(accepted_socket);
+    }
+    talk_base::AsyncTCPSocket* tcp_socket =
+        new talk_base::AsyncTCPSocket(accepted_socket);
+
+    // Finally add the socket so it can start communicating with the client.
+    AddInternalSocket(tcp_socket);
+  }
 }
 
 RelayServerConnection::RelayServerConnection(
     RelayServerBinding* binding, const talk_base::SocketAddressPair& addrs,
     talk_base::AsyncPacketSocket* socket)
   : binding_(binding), addr_pair_(addrs), socket_(socket), locked_(false) {
-
   // The creation of a new connection constitutes a use of the binding.
   binding_->NoteUsed();
 }
@@ -540,7 +615,7 @@ void RelayServerConnection::Send(
 
   StunByteStringAttribute* data_attr =
       StunAttribute::CreateByteString(STUN_ATTR_DATA);
-  assert(size <= 65536);
+  ASSERT(size <= 65536);
   data_attr->CopyBytes(data, uint16(size));
   msg.AddAttribute(data_attr);
 
@@ -580,7 +655,6 @@ RelayServerBinding::RelayServerBinding(
     const std::string& password, uint32 lifetime)
   : server_(server), username_(username), password_(password),
     lifetime_(lifetime) {
-
   // For now, every connection uses the standard magic cookie value.
   magic_cookie_.append(
       reinterpret_cast<const char*>(STUN_MAGIC_COOKIE_VALUE), 4);
@@ -638,7 +712,7 @@ RelayServerConnection* RelayServerBinding::GetInternalConnection(
   }
 
   // If one was not found, we send to the first connection.
-  assert(internal_connections_.size() > 0);
+  ASSERT(internal_connections_.size() > 0);
   return internal_connections_[0];
 }
 
@@ -653,19 +727,20 @@ RelayServerConnection* RelayServerBinding::GetExternalConnection(
 
 void RelayServerBinding::OnMessage(talk_base::Message *pmsg) {
   if (pmsg->message_id == MSG_LIFETIME_TIMER) {
-    assert(!pmsg->pdata);
+    ASSERT(!pmsg->pdata);
 
     // If the lifetime timeout has been exceeded, then send a signal.
     // Otherwise, just keep waiting.
     if (talk_base::Time() >= last_used_ + lifetime_) {
+      LOG(LS_INFO) << "Expiring binding " << username_;
       SignalTimeout(this);
     } else {
       server_->thread()->PostDelayed(lifetime_, this, MSG_LIFETIME_TIMER);
     }
 
   } else {
-    assert(false);
+    ASSERT(false);
   }
 }
 
-} // namespace cricket
+}  // namespace cricket

@@ -33,6 +33,8 @@
 #endif  // WIN32
 
 #include "talk/base/common.h"
+#include "talk/base/fileutils.h"
+#include "talk/base/logging.h"
 #include "talk/base/pathutils.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/urlencode.h"
@@ -62,13 +64,22 @@ bool Pathname::IsFolderDelimiter(char ch) {
   return (NULL != ::strchr(FOLDER_DELIMS, ch));
 }
 
+char Pathname::DefaultFolderDelimiter() {
+  return DEFAULT_FOLDER_DELIM;
+}
+
 Pathname::Pathname()
-  : folder_delimiter_(DEFAULT_FOLDER_DELIM) {
+    : folder_delimiter_(DEFAULT_FOLDER_DELIM) {
 }
 
 Pathname::Pathname(const std::string& pathname)
-  : folder_delimiter_(DEFAULT_FOLDER_DELIM) {
+    : folder_delimiter_(DEFAULT_FOLDER_DELIM) {
   SetPathname(pathname);
+}
+
+Pathname::Pathname(const std::string& folder, const std::string& filename)
+    : folder_delimiter_(DEFAULT_FOLDER_DELIM) {
+  SetPathname(folder, filename);
 }
 
 void Pathname::SetFolderDelimiter(char delimiter) {
@@ -90,29 +101,36 @@ void Pathname::clear() {
   extension_.clear();
 }
 
+bool Pathname::empty() const {
+  return folder_.empty() && basename_.empty() && extension_.empty();
+}
+
 std::string Pathname::pathname() const {
   std::string pathname(folder_);
   pathname.append(basename_);
   pathname.append(extension_);
+  if (pathname.empty()) {
+    // Instead of the empty pathname, return the current working directory.
+    pathname.push_back('.');
+    pathname.push_back(folder_delimiter_);
+  }
   return pathname;
 }
 
 std::string Pathname::url() const {
-  std::string s = "file://";
+  std::string s = "file:///";
   for (size_t i=0; i<folder_.length(); ++i) {
-    if (i == 1 && folder_[i] == ':') // drive letter
-      s += '|';
-    else if (IsFolderDelimiter(folder_[i]))
+    if (IsFolderDelimiter(folder_[i]))
       s += '/';
     else
       s += folder_[i];
   }
   s += basename_;
   s += extension_;
-  return UrlEncodeString(s);
+  return UrlEncodeStringForOnlyUnsafeChars(s);
 }
 
-void Pathname::SetPathname(const std::string &pathname) {
+void Pathname::SetPathname(const std::string& pathname) {
   std::string::size_type pos = pathname.find_last_of(FOLDER_DELIMS);
   if (pos != std::string::npos) {
     SetFolder(pathname.substr(0, pos + 1));
@@ -123,9 +141,15 @@ void Pathname::SetPathname(const std::string &pathname) {
   }
 }
 
-void Pathname::AppendPathname(const Pathname& pathname) {
+void Pathname::SetPathname(const std::string& folder,
+                           const std::string& filename) {
+  SetFolder(folder);
+  SetFilename(filename);
+}
+
+void Pathname::AppendPathname(const std::string& pathname) {
   std::string full_pathname(folder_);
-  full_pathname.append(pathname.pathname());
+  full_pathname.append(pathname);
   SetPathname(full_pathname);
 }
 
@@ -177,23 +201,29 @@ std::string Pathname::basename() const {
   return basename_;
 }
 
-void Pathname::SetBasename(const std::string& basename) {
-  ASSERT(basename.find_first_of(FOLDER_DELIMS) == std::string::npos);
+bool Pathname::SetBasename(const std::string& basename) {
+  if(basename.find_first_of(FOLDER_DELIMS) != std::string::npos) {
+    return false;
+  }
   basename_.assign(basename);
+  return true;
 }
 
 std::string Pathname::extension() const {
   return extension_;
 }
 
-void Pathname::SetExtension(const std::string& extension) {
-  ASSERT(extension.find_first_of(FOLDER_DELIMS) == std::string::npos);
-  ASSERT(extension.find_first_of(EXT_DELIM, 1) == std::string::npos);
+bool Pathname::SetExtension(const std::string& extension) {
+  if (extension.find_first_of(FOLDER_DELIMS) != std::string::npos ||
+    extension.find_first_of(EXT_DELIM, 1) != std::string::npos) {
+      return false;
+  }
   extension_.assign(extension);
   // Ensure extension begins with the extension delimiter
   if (!extension_.empty() && (extension_[0] != EXT_DELIM)) {
     extension_.insert(extension_.begin(), EXT_DELIM);
   }
+  return true;
 } 
 
 std::string Pathname::filename() const {
@@ -202,225 +232,37 @@ std::string Pathname::filename() const {
   return filename;
 }
 
-void Pathname::SetFilename(const std::string& filename) {
+bool Pathname::SetFilename(const std::string& filename) {
   std::string::size_type pos = filename.rfind(EXT_DELIM);
   if ((pos == std::string::npos) || (pos == 0)) {
-    SetBasename(filename);
-    SetExtension(EMPTY_STR);
+    return SetExtension(EMPTY_STR) && SetBasename(filename);
   } else {
-    SetBasename(filename.substr(0, pos));
-    SetExtension(filename.substr(pos));
+    return SetExtension(filename.substr(pos)) && SetBasename(filename.substr(0, pos));
   }
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// CreateUniqueFile
-///////////////////////////////////////////////////////////////////////////////
-
-std::string g_organization_name;
-std::string g_application_name;
-
-void SetOrganizationName(const std::string& organization) {
-  g_organization_name = organization;
-}
-
-void SetApplicationName(const std::string& application) {
-  g_application_name = application;
-}
-
-bool CreateFolder(const talk_base::Pathname& path) {
 #ifdef WIN32
-  if (!path.filename().empty())
-    return false;
-
-  std::wstring pathname16 = ToUtf16(path.pathname());
-  if (!pathname16.empty() && (pathname16[0] != '\\')) {
-    pathname16 = L"\\\\?\\" + pathname16;
-  }
-
-  DWORD res = ::GetFileAttributes(pathname16.c_str());
-  if (res != INVALID_FILE_ATTRIBUTES) {
-    // Something exists at this location, check if it is a directory
-    return ((res & FILE_ATTRIBUTE_DIRECTORY) != 0);
-  } else if ((GetLastError() != ERROR_FILE_NOT_FOUND)
-              && (GetLastError() != ERROR_PATH_NOT_FOUND)) {
-    // Unexpected error
-    return false;
-  }
-
-  // Directory doesn't exist, look up one directory level
-  if (!path.parent_folder().empty()) {
-    talk_base::Pathname parent(path);
-    parent.SetFolder(path.parent_folder());
-    if (!CreateFolder(parent)) {
-      return false;
-    }
-  }
-
-  return (::CreateDirectory(pathname16.c_str(), NULL) != 0);
-#else  // !WIN32
-  return false;
-#endif  // !WIN32
+bool Pathname::GetDrive(char *drive, uint32 bytes) const {
+  return GetDrive(drive, bytes, folder_);
 }
 
-bool FinishPath(talk_base::Pathname& path, bool create,
-                const std::string& append) {
-  if (!append.empty()) {
-    path.AppendFolder(append);
-  }
-  if (create && !CreateFolder(path))
+// static 
+bool Pathname::GetDrive(char *drive, uint32 bytes,
+                        const std::string& pathname) {
+  // need at lease 4 bytes to save c:
+  if (bytes < 4 || pathname.size() < 3) {
     return false;
-  return true;
-}
-
-bool GetTemporaryFolder(talk_base::Pathname& path, bool create,
-                        const std::string& append) {
-  ASSERT(!g_application_name.empty());
-#ifdef WIN32
-  TCHAR buffer[MAX_PATH + 1];
-  if (!::GetTempPath(ARRAY_SIZE(buffer), buffer))
-    return false;
-  if (!::GetLongPathName(buffer, buffer, ARRAY_SIZE(buffer)))
-    return false;
-  size_t len = strlen(buffer);
-  if ((len > 0) && (buffer[len-1] != __T('\\'))) {
-    len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                              __T("\\"));
   }
-  len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                            ToUtf16(g_application_name).c_str());
-  if ((len > 0) && (buffer[len-1] != __T('\\'))) {
-    len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                              __T("\\"));
-  }
-  if (len >= ARRAY_SIZE(buffer) - 1)
-    return false;
-  path.clear();
-  path.SetFolder(ToUtf8(buffer));
-  return FinishPath(path, create, append);
-#else  // !WIN32
-  return false;
-#endif  // !WIN32
-}
-
-bool GetAppDataFolder(talk_base::Pathname& path, bool create,
-                      const std::string& append) {
-  ASSERT(!g_organization_name.empty());
-  ASSERT(!g_application_name.empty());
-#ifdef WIN32
-  TCHAR buffer[MAX_PATH + 1];
-  if (!::SHGetSpecialFolderPath(NULL, buffer, CSIDL_LOCAL_APPDATA, TRUE))
-    return false;
-  if (!::GetLongPathName(buffer, buffer, ARRAY_SIZE(buffer)))
-    return false;
-  size_t len = talk_base::strcatn(buffer, ARRAY_SIZE(buffer), _T("\\"));
-  len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                            ToUtf16(g_organization_name).c_str());
-  if ((len > 0) && (buffer[len-1] != __T('\\'))) {
-    len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                              __T("\\"));
-  }
-  len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                            ToUtf16(g_application_name).c_str());
-  if ((len > 0) && (buffer[len-1] != __T('\\'))) {
-    len += talk_base::strcpyn(buffer + len, ARRAY_SIZE(buffer) - len,
-                              __T("\\"));
-  }
-  if (len >= ARRAY_SIZE(buffer) - 1)
-    return false;
-  path.clear();
-  path.SetFolder(ToUtf8(buffer));
-  return FinishPath(path, create, append);
-#else  // !WIN32
-  return false;
-#endif  // !WIN32
-}
-
-bool CleanupTemporaryFolder() {
-#ifdef WIN32
-  talk_base::Pathname temp_path;
-  if (!GetTemporaryFolder(temp_path, false, ""))
-    return false;
-
-  std::wstring temp_path16 = ToUtf16(temp_path.pathname());
-  temp_path16.append(1, '*');
-  temp_path16.append(1, '\0');
-
-  SHFILEOPSTRUCT file_op = { 0 };
-  file_op.wFunc = FO_DELETE;
-  file_op.pFrom = temp_path16.c_str();
-  file_op.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
-  return (0 == SHFileOperation(&file_op));
-#else  // !WIN32
-  return false;
-#endif  // !WIN32
-}
-#if 0
-bool CreateUnijqueFile(talk_base::Pathname& path, bool create_empty) {
-#ifdef WIN32
-  // If not folder is supplied, use the temporary folder
-  if (path.folder().empty()) {
-    talk_base::Pathname temp_path;
-    if (!GetTemporaryFolder(temp_path, true, "")) {
-    
-      return false;
-    }
-    path.SetFolder(temp_path.folder());
-  }
-  printf("path: %s\n", path.pathname());
-  // If not filename is supplied, use a temporary name
-  if (path.filename().empty()) {
-    TCHAR filename[MAX_PATH];
-    std::wstring folder((ToUtf16)(path.folder()));
-    if (!::GetTempFileName(folder.c_str(), __T("gt"), 0, filename))
-      return false;
-    ASSERT(wcsncmp(folder.c_str(), filename, folder.length()) == 0);
-    path.SetFilename(ToUtf8(filename + folder.length()));
-    if (!create_empty) {
-      VERIFY(::DeleteFile(ToUtf16(path.pathname()).c_str()) != FALSE);
-    }
-    return true;
-  }
-  // Otherwise, create a unique name based on the given filename
-  // foo.txt -> foo-N.txt
-  const std::string basename = path.basename();
-  const size_t MAX_VERSION = 100;
-  size_t version = 0;
-  while (version < MAX_VERSION) {
-    std::string pathname = path.pathname();
-    std::wstring pathname16 = ToUtf16(pathname).c_str();
-
-    if (pathname16[0] != __T('\\'))
-      pathname16 = __T("\\\\?\\") + pathname16;
-
-    HANDLE hfile = CreateFile(pathname16.c_str(), GENERIC_WRITE, 0,
-                              NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hfile != INVALID_HANDLE_VALUE) {
-      CloseHandle(hfile);
-      if (!create_empty) {
-        VERIFY(::DeleteFile(pathname16.c_str()) != FALSE);
-      }
-      return true;
-    } else {
-      int err = GetLastError();
-      if (err != ERROR_FILE_EXISTS && err != ERROR_ACCESS_DENIED) {
-        return false;
-      }
-    }
-
-    version += 1;
-    char version_base[MAX_PATH];
-    talk_base::sprintfn(version_base, ARRAY_SIZE(version_base), "%s-%u",
-                        basename.c_str(), version);
-    path.SetBasename(version_base);
-  }
-  return false;
-#else  // !WIN32
-  // TODO: Make this better.
-  path.SetBasename("/tmp/temp-1");
-#endif  // !WIN32
+  
+  memcpy(drive, pathname.c_str(), 3);
+  drive[3] = 0; 
+  // sanity checking
+  return (isalpha(drive[0]) &&
+          drive[1] == ':' &&
+          drive[2] == '\\');
 }
 #endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 } // namespace talk_base

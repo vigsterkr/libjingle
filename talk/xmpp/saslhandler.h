@@ -29,6 +29,7 @@
 #define _SASLHANDLER_H_
 
 #include <string>
+#include <vector>
 
 namespace buzz {
 
@@ -56,4 +57,3 @@ public:
 }
 
 #endif
-

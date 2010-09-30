@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2006, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -69,7 +69,7 @@ class XmppTask :
   public sigslot::has_slots<>
 {
  public:
-  XmppTask(talk_base::Task* parent, 
+  XmppTask(talk_base::TaskParent* parent,
            XmppEngine::HandlerLevel level = XmppEngine::HL_NONE);
   virtual ~XmppTask();
 
@@ -98,18 +98,18 @@ class XmppTask :
   virtual void QueueStanza(const XmlElement* stanza);
   const XmlElement* NextStanza();
 
-  bool MatchResponseIq(const XmlElement* stanza, const Jid& to, 
+  bool MatchResponseIq(const XmlElement* stanza, const Jid& to,
                        const std::string& task_id);
 
-  bool MatchRequestIq(const XmlElement* stanza, const std::string& type, 
-                      const QName& qn);
-  XmlElement *MakeIqResult(const XmlElement* query);
-  XmlElement *MakeIq(const std::string& type,
-    const Jid& to, const std::string task_id);
+  static bool MatchRequestIq(const XmlElement* stanza, const std::string& type,
+                             const QName& qn);
+  static XmlElement *MakeIqResult(const XmlElement* query);
+  static XmlElement *MakeIq(const std::string& type,
+                            const Jid& to, const std::string& task_id);
 
   // Returns true if the task is under the specified rate limit and updates the
   // rate limit accordingly
-  bool VerifyTaskRateLimit(const std::string task_name, int max_count, 
+  bool VerifyTaskRateLimit(const std::string task_name, int max_count,
                            int per_x_seconds);
 
 private:
@@ -117,12 +117,12 @@ private:
 
   XmppClient* client_;
   std::deque<XmlElement*> stanza_queue_;
-  scoped_ptr<XmlElement> next_stanza_;
+  talk_base::scoped_ptr<XmlElement> next_stanza_;
   std::string id_;
 
 #ifdef _DEBUG
   bool debug_force_timeout_;
-#endif                         
+#endif
 };
 
 }

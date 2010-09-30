@@ -25,13 +25,21 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_BASE_RAWTRANSPORTCHANNEL_H_
-#define _CRICKET_P2P_BASE_RAWTRANSPORTCHANNEL_H_
+#ifndef TALK_P2P_BASE_RAWTRANSPORTCHANNEL_H_
+#define TALK_P2P_BASE_RAWTRANSPORTCHANNEL_H_
 
+#include <string>
+#include <vector>
 #include "talk/base/messagequeue.h"
 #include "talk/p2p/base/transportchannelimpl.h"
 #include "talk/p2p/base/rawtransport.h"
 #include "talk/p2p/base/candidate.h"
+
+#if defined(FEATURE_ENABLE_PSTN)
+
+namespace talk_base {
+class Thread;
+}
 
 namespace cricket {
 
@@ -45,12 +53,13 @@ class PortAllocatorSession;
 // Implements a channel that just sends bare packets once we have received the
 // address of the other side.  We pick a single address to send them based on
 // a simple investigation of NAT type.
-class RawTransportChannel : public TransportChannelImpl, 
+class RawTransportChannel : public TransportChannelImpl,
     public talk_base::MessageHandler {
  public:
   RawTransportChannel(const std::string &name,
-		      const std::string &session_type,
+                      const std::string &content_type,
                       RawTransport* transport,
+                      talk_base::Thread *worker_thread,
                       PortAllocator *allocator);
   virtual ~RawTransportChannel();
 
@@ -62,9 +71,9 @@ class RawTransportChannel : public TransportChannelImpl,
   // Returns the raw transport that created this channel.
   virtual Transport* GetTransport() { return raw_transport_; }
 
-  // Creates an allocator session to start figuring out which type of port we
-  // should send to the other client.  This will send SignalChannelMessage once
-  // we have decided.
+  // Creates an allocator session to start figuring out which type of
+  // port we should send to the other client.  This will send
+  // SignalAvailableCandidate once we have decided.
   virtual void Connect();
 
   // Resets state back to unconnected.
@@ -75,10 +84,14 @@ class RawTransportChannel : public TransportChannelImpl,
 
   // Handles a message setting the remote address.  We are writable once we
   // have this since we now know where to send.
-  virtual void OnChannelMessage(const buzz::XmlElement* msg);
+  virtual void OnCandidate(const Candidate& candidate);
+
+  void OnRemoteAddress(const talk_base::SocketAddress& remote_address);
+
 
  private:
   RawTransport* raw_transport_;
+  talk_base::Thread *worker_thread_;
   PortAllocator* allocator_;
   PortAllocatorSession* allocator_session_;
   StunPort* stun_port_;
@@ -114,4 +127,5 @@ class RawTransportChannel : public TransportChannelImpl,
 
 }  // namespace cricket
 
-#endif  // _CRICKET_P2P_BASE_RAWTRANSPORTCHANNEL_H_
+#endif  // defined(FEATURE_ENABLE_PSTN)
+#endif  // TALK_P2P_BASE_RAWTRANSPORTCHANNEL_H_

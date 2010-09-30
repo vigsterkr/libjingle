@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -36,7 +36,7 @@
 
 namespace buzz {
 
-talk_base::Task* XmppClient::GetParent(int code) {
+talk_base::TaskParent* XmppClient::GetParent(int code) {
   if (code == XMPP_CLIENT_TASK_CODE)
     return this;
   else
@@ -63,9 +63,9 @@ public:
   XmppClient * const client_;
 
   // the two main objects
-  scoped_ptr<AsyncSocket> socket_;
-  scoped_ptr<XmppEngine> engine_;
-  scoped_ptr<PreXmppAuth> pre_auth_;
+  talk_base::scoped_ptr<AsyncSocket> socket_;
+  talk_base::scoped_ptr<XmppEngine> engine_;
+  talk_base::scoped_ptr<PreXmppAuth> pre_auth_;
   talk_base::CryptString pass_;
   std::string auth_cookie_;
   talk_base::SocketAddress server_;
@@ -119,8 +119,9 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   //
   // This is only true when using Gaia auth, so let's say if there's no preauth,
   // we should use the actual server name
-  if ((settings.server().IPAsString() == buzz::STR_TALK_GOOGLE_COM ||
-      settings.server().IPAsString() == buzz::STR_TALKX_L_GOOGLE_COM) && 
+  std::string server_name = settings.server().IPAsString();
+  if ((server_name == buzz::STR_TALK_GOOGLE_COM ||
+      server_name == buzz::STR_TALKX_L_GOOGLE_COM) &&
       pre_auth != NULL) {
     d_->engine_->SetTlsServer(buzz::STR_GMAIL_COM, buzz::STR_GMAIL_COM);
   }
@@ -183,17 +184,6 @@ XmppClient::GetAuthCookie() {
   if (d_->engine_.get() == NULL)
     return "";
   return d_->auth_cookie_;
-}
-
-static void
-ForgetPassword(std::string & to_erase) {
-  size_t len = to_erase.size();
-  for (size_t i = 0; i < len; i++) {
-    // get rid of characters
-    to_erase[i] = 'x';
-  }
-  // get rid of length
-  to_erase.erase();
 }
 
 int
@@ -262,7 +252,7 @@ XmppClient::ProcessStartXmppLogin() {
     EnsureClosed();
     return STATE_ERROR;
   }
-  
+
   return STATE_RESPONSE;
 }
 
@@ -280,11 +270,12 @@ XmppClient::Disconnect() {
   if (d_->socket_.get() == NULL)
     return XMPP_RETURN_BADSTATE;
   d_->engine_->Disconnect();
+  d_->socket_.reset(NULL);
   return XMPP_RETURN_OK;
 }
 
-XmppClient::XmppClient(Task * parent) 
-    : Task(parent), 
+XmppClient::XmppClient(TaskParent * parent)
+    : Task(parent),
       delivering_signal_(false),
       valid_(false) {
   d_.reset(new Private(this));
@@ -354,7 +345,7 @@ XmppClient::Private::OnSocketRead() {
 
 void
 XmppClient::Private::OnSocketClosed() {
-  int code = socket_->GetError();  
+  int code = socket_->GetError();
   engine_->ConnectionClosed(code);
 }
 

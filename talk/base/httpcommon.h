@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 #include "talk/base/basictypes.h"
+#include "talk/base/common.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/stream.h"
@@ -65,12 +66,14 @@ enum HttpCode {
   HC_PROXY_AUTHENTICATION_REQUIRED = 407,
   HC_GONE = 410,
 
-  HC_INTERNAL_SERVER_ERROR = 500 
+  HC_INTERNAL_SERVER_ERROR = 500,
+  HC_NOT_IMPLEMENTED = 501,
+  HC_SERVICE_UNAVAILABLE = 503,
 };
 
 enum HttpVersion {
-  HVER_1_0, HVER_1_1,
-  HVER_LAST = HVER_1_1
+  HVER_1_0, HVER_1_1, HVER_UNKNOWN,
+  HVER_LAST = HVER_UNKNOWN
 };
 
 enum HttpVerb {
@@ -80,8 +83,13 @@ enum HttpVerb {
 
 enum HttpError {
   HE_NONE,
-  HE_PROTOCOL, HE_DISCONNECTED, HE_OVERFLOW,
-  HE_SOCKET, HE_SHUTDOWN, HE_OPERATION_CANCELLED,
+  HE_PROTOCOL,            // Received non-valid HTTP data
+  HE_DISCONNECTED,        // Connection closed unexpectedly
+  HE_OVERFLOW,            // Received too much data for internal buffers
+  HE_CONNECT_FAILED,      // The socket failed to connect.
+  HE_SOCKET_ERROR,        // An error occurred on a connected socket
+  HE_SHUTDOWN,            // Http object is being destroyed
+  HE_OPERATION_CANCELLED, // Connection aborted locally
   HE_AUTH,                // Proxy Authentication Required
   HE_CERTIFICATE_EXPIRED, // During SSL negotiation
   HE_STREAM,              // Problem reading or writing to the document
@@ -93,6 +101,7 @@ enum HttpHeader {
   HH_AGE,
   HH_CACHE_CONTROL,
   HH_CONNECTION,
+  HH_CONTENT_DISPOSITION,
   HH_CONTENT_LENGTH,
   HH_CONTENT_RANGE,
   HH_CONTENT_TYPE,
@@ -156,6 +165,8 @@ bool HttpShouldKeepAlive(const HttpData& data);
 
 typedef std::pair<std::string, std::string> HttpAttribute;
 typedef std::vector<HttpAttribute> HttpAttributeList;
+void HttpComposeAttributes(const HttpAttributeList& attributes, char separator,
+                           std::string* composed);
 void HttpParseAttributes(const char * data, size_t len, 
                          HttpAttributeList& attributes);
 bool HttpHasAttribute(const HttpAttributeList& attributes,
@@ -169,9 +180,12 @@ bool HttpHasNthAttribute(HttpAttributeList& attributes,
 // Convert RFC1123 date (DoW, DD Mon YYYY HH:MM:SS TZ) to unix timestamp
 bool HttpDateToSeconds(const std::string& date, unsigned long* seconds);
 
-inline const uint16 UrlDefaultPort(bool secure) {
+inline uint16 HttpDefaultPort(bool secure) {
   return secure ? HTTP_SECURE_PORT : HTTP_DEFAULT_PORT;
 }
+
+// Returns the http server notation for a given address
+std::string HttpAddress(const SocketAddress& address, bool secure);
 
 // functional for insensitive std::string compare
 struct iless {
@@ -179,6 +193,9 @@ struct iless {
     return (::_stricmp(lhs.c_str(), rhs.c_str()) < 0);
   }
 };
+
+// put quotes around a string and escape any quotes inside it
+std::string quote(const std::string& str);
 
 //////////////////////////////////////////////////////////////////////
 // Url
@@ -195,41 +212,80 @@ public:
   static int Decode(const CTYPE* source, CTYPE* destination, size_t len);
   static int Decode(const string& source, string& destination);
 
-  Url(const string& url);
-  Url(const string& path, const string& server, uint16 port = HTTP_DEFAULT_PORT)
-  : m_server(server), m_path(path), m_port(port),
-    m_secure(HTTP_SECURE_PORT == port)
-  {
-    ASSERT(m_path.empty() || (m_path[0] == static_cast<CTYPE>('/')));
-  }
-  
-  bool valid() const { return !m_server.empty(); }
-  const string& server() const { return m_server; }
-  // Note: path() was renamed to path_, because it now uses the stricter sense
-  // of not including a query string.  I'm trying to think of a clearer name.
-  const string& path_() const { return m_path; }
-  const string& query() const { return m_query; }
-  string full_path();
-  string url();
-  uint16 port() const { return m_port; }
-  bool secure() const { return m_secure; }
+  Url(const string& url) { do_set_url(url.c_str(), url.size()); }
+  Url(const string& path, const string& host, uint16 port = HTTP_DEFAULT_PORT)
+  : host_(host), port_(port), secure_(HTTP_SECURE_PORT == port)
+  { set_full_path(path); }
 
-  void set_server(const string& val) { m_server = val; }
-  void set_path(const string& val) {
-    ASSERT(val.empty() || (val[0] == static_cast<CTYPE>('/')));
-    m_path = val;
+  bool valid() const { return !host_.empty(); }
+  void clear() {
+    host_.clear();
+    port_ = HTTP_DEFAULT_PORT;
+    secure_ = false;
+    path_.assign(1, static_cast<CTYPE>('/'));
+    query_.clear();
   }
+
+  void set_url(const string& val) {
+    do_set_url(val.c_str(), val.size());
+  }
+  string url() const {
+    string val; do_get_url(&val); return val;
+  }
+
+  void set_address(const string& val) {
+    do_set_address(val.c_str(), val.size());
+  }
+  string address() const {
+    string val; do_get_address(&val); return val;
+  }
+
+  void set_full_path(const string& val) {
+    do_set_full_path(val.c_str(), val.size());
+  }
+  string full_path() const {
+    string val; do_get_full_path(&val); return val;
+  }
+
+  void set_host(const string& val) { host_ = val; }
+  const string& host() const { return host_; }
+
+  void set_port(uint16 val) { port_ = val; }
+  uint16 port() const { return port_; }
+
+  void set_secure(bool val) { secure_ = val; }
+  bool secure() const { return secure_; }
+
+  void set_path(const string& val) {
+    if (val.empty()) {
+      path_.assign(1, static_cast<CTYPE>('/'));
+    } else {
+      ASSERT(val[0] == static_cast<CTYPE>('/'));
+      path_ = val;
+    }
+  }
+  const string& path() const { return path_; }
+
   void set_query(const string& val) {
     ASSERT(val.empty() || (val[0] == static_cast<CTYPE>('?')));
-    m_query = val;
+    query_ = val;
   }
-  void set_port(uint16 val) { m_port = val; }
-  void set_secure(bool val) { m_secure = val; }
+  const string& query() const { return query_; }
+
+  bool get_attribute(const string& name, string* value) const;
 
 private:
-  string m_server, m_path, m_query;
-  uint16 m_port;
-  bool m_secure;
+  void do_set_url(const CTYPE* val, size_t len);
+  void do_set_address(const CTYPE* val, size_t len);
+  void do_set_full_path(const CTYPE* val, size_t len);
+
+  void do_get_url(string* val) const;
+  void do_get_address(string* val) const;
+  void do_get_full_path(string* val) const;
+
+  string host_, path_, query_;
+  uint16 port_;
+  bool secure_;
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -239,7 +295,8 @@ private:
 struct HttpData {
   typedef std::multimap<std::string, std::string, iless> HeaderMap;
   typedef HeaderMap::const_iterator const_iterator;
-  
+  typedef HeaderMap::iterator iterator;
+
   HttpVersion version;
   scoped_ptr<StreamInterface> document;
 
@@ -256,24 +313,39 @@ struct HttpData {
                         bool overwrite = true) {
     changeHeader(name, value, overwrite ? HC_REPLACE : HC_NEW);
   }
-  void clearHeader(const std::string& name);
+  // Returns count of erased headers
+  size_t clearHeader(const std::string& name);
+  // Returns iterator to next header
+  iterator clearHeader(iterator header);
 
   // keep in mind, this may not do what you want in the face of multiple headers
   bool hasHeader(const std::string& name, std::string* value) const;
 
   inline const_iterator begin() const {
-    return m_headers.begin();
+    return headers_.begin();
   }
   inline const_iterator end() const {
-    return m_headers.end();
+    return headers_.end();
+  }
+  inline iterator begin() {
+    return headers_.begin();
+  }
+  inline iterator end() {
+    return headers_.end();
   }
   inline const_iterator begin(const std::string& name) const {
-    return m_headers.lower_bound(name);
+    return headers_.lower_bound(name);
   }
   inline const_iterator end(const std::string& name) const {
-    return m_headers.upper_bound(name);
+    return headers_.upper_bound(name);
   }
-  
+  inline iterator begin(const std::string& name) {
+    return headers_.lower_bound(name);
+  }
+  inline iterator end(const std::string& name) {
+    return headers_.upper_bound(name);
+  }
+
   // Convenience methods using HttpHeader
   inline void changeHeader(HttpHeader header, const std::string& value,
                            HeaderCombine combine) {
@@ -294,23 +366,31 @@ struct HttpData {
     return hasHeader(ToString(header), value);
   }
   inline const_iterator begin(HttpHeader header) const {
-    return m_headers.lower_bound(ToString(header));
+    return headers_.lower_bound(ToString(header));
   }
   inline const_iterator end(HttpHeader header) const {
-    return m_headers.upper_bound(ToString(header));
+    return headers_.upper_bound(ToString(header));
+  }
+  inline iterator begin(HttpHeader header) {
+    return headers_.lower_bound(ToString(header));
+  }
+  inline iterator end(HttpHeader header) {
+    return headers_.upper_bound(ToString(header));
   }
 
   void setContent(const std::string& content_type, StreamInterface* document);
+  void setDocumentAndLength(StreamInterface* document);
 
-  virtual size_t formatLeader(char* buffer, size_t size) = 0;
+  virtual size_t formatLeader(char* buffer, size_t size) const = 0;
   virtual HttpError parseLeader(const char* line, size_t len) = 0;
-  
+
 protected:  
   virtual ~HttpData() { }
   void clear(bool release_document);
+  void copy(const HttpData& src);
 
 private:
-  HeaderMap m_headers;
+  HeaderMap headers_;
 };
 
 struct HttpRequestData : public HttpData {
@@ -320,9 +400,13 @@ struct HttpRequestData : public HttpData {
   HttpRequestData() : verb(HV_GET) { }
 
   void clear(bool release_document);
+  void copy(const HttpRequestData& src);
 
-  virtual size_t formatLeader(char* buffer, size_t size);
+  virtual size_t formatLeader(char* buffer, size_t size) const;
   virtual HttpError parseLeader(const char* line, size_t len);
+
+  bool getAbsoluteUri(std::string* uri) const;
+  bool getRelativeUri(std::string* host, std::string* path) const;
 };
 
 struct HttpResponseData : public HttpData {
@@ -331,6 +415,7 @@ struct HttpResponseData : public HttpData {
 
   HttpResponseData() : scode(HC_INTERNAL_SERVER_ERROR) { }
   void clear(bool release_document);
+  void copy(const HttpResponseData& src);
 
   // Convenience methods
   void set_success(uint32 scode = HC_OK);
@@ -340,8 +425,13 @@ struct HttpResponseData : public HttpData {
                     uint32 scode = HC_MOVED_TEMPORARILY);
   void set_error(uint32 scode);
 
-  virtual size_t formatLeader(char* buffer, size_t size);
+  virtual size_t formatLeader(char* buffer, size_t size) const;
   virtual HttpError parseLeader(const char* line, size_t len);
+};
+
+struct HttpTransaction {
+  HttpRequestData request;
+  HttpResponseData response;
 };
 
 //////////////////////////////////////////////////////////////////////

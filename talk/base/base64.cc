@@ -15,182 +15,229 @@
 //*********************************************************************
 
 #include "talk/base/base64.h"
+#include "talk/base/common.h"
 
 using std::string;
+using std::vector;
 
 namespace talk_base {
 
-static const char fillchar = '=';
-static const string::size_type np = string::npos;
+static const char kPad = '=';
+static const unsigned char pd = 0xFD;  // Padding
+static const unsigned char sp = 0xFE;  // Whitespace
+static const unsigned char il = 0xFF;  // Illegal base64 character
 
 const string Base64::Base64Table(
-  // 0000000000111111111122222222223333333333444444444455555555556666
-  // 0123456789012345678901234567890123456789012345678901234567890123
+// 0000000000111111111122222222223333333333444444444455555555556666
+// 0123456789012345678901234567890123456789012345678901234567890123
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
 
-// Decode Table gives the index of any valid base64 character in the 
+// Decode Table gives the index of any valid base64 character in the
 // Base64 table
 // 65 == A, 97 == a, 48 == 0, 43 == +, 47 == /
 
-const string::size_type Base64::DecodeTable[] = {
+const unsigned char Base64::DecodeTable[] = {
 // 0  1  2  3  4  5  6  7  8  9
-  np,np,np,np,np,np,np,np,np,np,  // 0 - 9
-  np,np,np,np,np,np,np,np,np,np,  //10 -19
-  np,np,np,np,np,np,np,np,np,np,  //20 -29
-  np,np,np,np,np,np,np,np,np,np,  //30 -39
-  np,np,np,62,np,np,np,63,52,53,  //40 -49
-  54,55,56,57,58,59,60,61,np,np,  //50 -59
-  np,np,np,np,np, 0, 1, 2, 3, 4,  //60 -69
-   5, 6, 7, 8, 9,10,11,12,13,14,  //70 -79
-  15,16,17,18,19,20,21,22,23,24,  //80 -89
-  25,np,np,np,np,np,np,26,27,28,  //90 -99
-  29,30,31,32,33,34,35,36,37,38,  //100 -109
-  39,40,41,42,43,44,45,46,47,48,  //110 -119
-  49,50,51,np,np,np,np,np,np,np,  //120 -129
-  np,np,np,np,np,np,np,np,np,np,  //130 -139
-  np,np,np,np,np,np,np,np,np,np,  //140 -149
-  np,np,np,np,np,np,np,np,np,np,  //150 -159
-  np,np,np,np,np,np,np,np,np,np,  //160 -169
-  np,np,np,np,np,np,np,np,np,np,  //170 -179
-  np,np,np,np,np,np,np,np,np,np,  //180 -189
-  np,np,np,np,np,np,np,np,np,np,  //190 -199
-  np,np,np,np,np,np,np,np,np,np,  //200 -209
-  np,np,np,np,np,np,np,np,np,np,  //210 -219
-  np,np,np,np,np,np,np,np,np,np,  //220 -229
-  np,np,np,np,np,np,np,np,np,np,  //230 -239
-  np,np,np,np,np,np,np,np,np,np,  //240 -249
-  np,np,np,np,np,np               //250 -256
+  il,il,il,il,il,il,il,il,il,sp,  //   0 -   9
+  sp,sp,sp,sp,il,il,il,il,il,il,  //  10 -  19
+  il,il,il,il,il,il,il,il,il,il,  //  20 -  29
+  il,il,sp,il,il,il,il,il,il,il,  //  30 -  39
+  il,il,il,62,il,il,il,63,52,53,  //  40 -  49
+  54,55,56,57,58,59,60,61,il,il,  //  50 -  59
+  il,pd,il,il,il, 0, 1, 2, 3, 4,  //  60 -  69
+   5, 6, 7, 8, 9,10,11,12,13,14,  //  70 -  79
+  15,16,17,18,19,20,21,22,23,24,  //  80 -  89
+  25,il,il,il,il,il,il,26,27,28,  //  90 -  99
+  29,30,31,32,33,34,35,36,37,38,  // 100 - 109
+  39,40,41,42,43,44,45,46,47,48,  // 110 - 119
+  49,50,51,il,il,il,il,il,il,il,  // 120 - 129
+  il,il,il,il,il,il,il,il,il,il,  // 130 - 139
+  il,il,il,il,il,il,il,il,il,il,  // 140 - 149
+  il,il,il,il,il,il,il,il,il,il,  // 150 - 159
+  il,il,il,il,il,il,il,il,il,il,  // 160 - 169
+  il,il,il,il,il,il,il,il,il,il,  // 170 - 179
+  il,il,il,il,il,il,il,il,il,il,  // 180 - 189
+  il,il,il,il,il,il,il,il,il,il,  // 190 - 199
+  il,il,il,il,il,il,il,il,il,il,  // 200 - 209
+  il,il,il,il,il,il,il,il,il,il,  // 210 - 219
+  il,il,il,il,il,il,il,il,il,il,  // 220 - 229
+  il,il,il,il,il,il,il,il,il,il,  // 230 - 239
+  il,il,il,il,il,il,il,il,il,il,  // 240 - 249
+  il,il,il,il,il,il               // 250 - 255
 };
 
-string Base64::encodeFromArray(const char * data, size_t len) {
-  size_t i;
-  char c;
-  string ret;
-
-  ret.reserve(len * 2);
-
-  for (i = 0; i < len; ++i) {
-    c = (data[i] >> 2) & 0x3f;
-    ret.append(1, Base64Table[c]);
-    c = (data[i] << 4) & 0x3f;
-    if (++i < len) {
-      c |= (data[i] >> 4) & 0x0f;
-    }
-
-    ret.append(1, Base64Table[c]);
-    if (i < len) {
-      c = (data[i] << 2) & 0x3f;
-      if (++i < len) {
-        c |= (data[i] >> 6) & 0x03;
-      }
-      ret.append(1, Base64Table[c]);
-    } else {
-        ++i;
-        ret.append(1, fillchar);
-    }
-
-    if (i < len) {
-        c = data[i] & 0x3f;
-        ret.append(1, Base64Table[c]);
-    } else {
-        ret.append(1, fillchar);
-    }
-  }
-
-  return(ret);
+bool Base64::IsBase64Char(char ch) {
+  return (('A' <= ch) && (ch <= 'Z')) ||
+         (('a' <= ch) && (ch <= 'z')) ||
+         (('0' <= ch) && (ch <= '9')) ||
+         (ch == '+') || (ch == '/');
 }
 
-string Base64::encode(const string& data) {
-  string::size_type i;
-  char c;
-  string::size_type len = data.length();
-  string ret;
+bool Base64::IsBase64Encoded(const std::string& str) {
+  for (size_t i = 0; i < str.size(); ++i) {
+    if (!IsBase64Char(str.at(i)))
+      return false;
+  }
+  return true;
+}
 
-  ret.reserve(len * 2);
+void Base64::EncodeFromArray(const void* data, size_t len, string* result) {
+  ASSERT(NULL != result);
+  result->clear();
+  result->reserve(((len + 2) / 3) * 4);
+  const unsigned char* byte_data = static_cast<const unsigned char*>(data);
 
-  for (i = 0; i < len; ++i) {
-    c = (data[i] >> 2) & 0x3f;
-    ret.append(1, Base64Table[c]);
-    c = (data[i] << 4) & 0x3f;
+  unsigned char c;
+  size_t i = 0;
+  while (i < len) {
+    c = (byte_data[i] >> 2) & 0x3f;
+    result->push_back(Base64Table[c]);
+
+    c = (byte_data[i] << 4) & 0x3f;
     if (++i < len) {
-      c |= (data[i] >> 4) & 0x0f;
+      c |= (byte_data[i] >> 4) & 0x0f;
+    }
+    result->push_back(Base64Table[c]);
+
+    if (i < len) {
+      c = (byte_data[i] << 2) & 0x3f;
+      if (++i < len) {
+        c |= (byte_data[i] >> 6) & 0x03;
+      }
+      result->push_back(Base64Table[c]);
+    } else {
+      result->push_back(kPad);
     }
 
-    ret.append(1, Base64Table[c]);
     if (i < len) {
-      c = (data[i] << 2) & 0x3f;
-      if (++i < len) {
-        c |= (data[i] >> 6) & 0x03;
-      }
-
-      ret.append(1, Base64Table[c]);
-    } else {
+      c = byte_data[i] & 0x3f;
+      result->push_back(Base64Table[c]);
       ++i;
-      ret.append(1, fillchar);
-    }
-
-    if (i < len) {
-      c = data[i] & 0x3f;
-      ret.append(1, Base64Table[c]);
     } else {
-      ret.append(1, fillchar);
+      result->push_back(kPad);
     }
   }
-
-  return(ret);
 }
 
-string Base64::decode(const string& data) {
-  string::size_type i;
-  char c;
-  char c1;
-  string::size_type len = data.length();
-  string ret;
-
-  ret.reserve(len);
-
-  for (i = 0; i < len; ++i) {
-    do {
-      c = static_cast<char>(DecodeTable[static_cast<unsigned char>(data[i])]);
-    } while (c == np && ++i < len);
-
-    ++i;
-
-    do {
-      c1 = static_cast<char>(DecodeTable[static_cast<unsigned char>(data[i])]);
-    } while (c == np && ++i < len);
-
-    c = (c << 2) | ((c1 >> 4) & 0x3);
-    ret.append(1, c);
-    if (++i < len) {
-      c = data[i];
-      if (fillchar == c) {         
+size_t Base64::GetNextQuantum(DecodeFlags parse_flags, bool illegal_pads,
+                              const char* data, size_t len, size_t* dpos,
+                              unsigned char qbuf[4], bool* padded)
+{
+  size_t byte_len = 0, pad_len = 0, pad_start = 0;
+  for (; (byte_len < 4) && (*dpos < len); ++*dpos) {
+    qbuf[byte_len] = DecodeTable[static_cast<unsigned char>(data[*dpos])];
+    if ((il == qbuf[byte_len]) || (illegal_pads && (pd == qbuf[byte_len]))) {
+      if (parse_flags != DO_PARSE_ANY)
         break;
-      }
-
-      do {
-        c = static_cast<char>(DecodeTable[static_cast<unsigned char>(data[i])]);
-      } while (c == np && ++i < len);
-      c1 = ((c1 << 4) & 0xf0) | ((c >> 2) & 0xf);
-      ret.append(1, c1);
-    }
-
-    if (++i < len) {
-      c1 = data[i];
-      if (fillchar == c1) {
+      // Ignore illegal characters
+    } else if (sp == qbuf[byte_len]) {
+      if (parse_flags == DO_PARSE_STRICT)
         break;
+      // Ignore spaces
+    } else if (pd == qbuf[byte_len]) {
+      if (byte_len < 2) {
+        if (parse_flags != DO_PARSE_ANY)
+          break;
+        // Ignore unexpected padding
+      } else if (byte_len + pad_len >= 4) {
+        if (parse_flags != DO_PARSE_ANY)
+          break;
+        // Ignore extra pads
+      } else {
+        if (1 == ++pad_len) {
+          pad_start = *dpos;
+        }
       }
-
-      do {
-        c1 = static_cast<char>(DecodeTable[static_cast<unsigned char>(data[i])]);
-      } while (c == np && ++i < len);
-
-      c = ((c << 6) & 0xc0) | c1;
-      ret.append(1, c);
+    } else {
+      if (pad_len > 0) {
+        if (parse_flags != DO_PARSE_ANY)
+          break;
+        // Ignore pads which are followed by data
+        pad_len = 0;
+      }
+      ++byte_len;
     }
   }
+  for (size_t i = byte_len; i < 4; ++i) {
+    qbuf[i] = 0;
+  }
+  if (4 == byte_len + pad_len) {
+    *padded = true;
+  } else {
+    *padded = false;
+    if (pad_len) {
+      // Roll back illegal padding
+      *dpos = pad_start;
+    }
+  }
+  return byte_len;
+}
 
-  return(ret);
+bool Base64::DecodeFromArray(const char* data, size_t len, DecodeFlags flags,
+                             string* result, size_t* data_used) {
+  return DecodeFromArrayTemplate<string>(data, len, flags, result, data_used);
+}
+
+bool Base64::DecodeFromArray(const char* data, size_t len, DecodeFlags flags,
+                             vector<char>* result, size_t* data_used) {
+  return DecodeFromArrayTemplate<vector<char> >(data, len, flags, result,
+                                                data_used);
+}
+
+template<typename T>
+bool Base64::DecodeFromArrayTemplate(const char* data, size_t len,
+                                     DecodeFlags flags, T* result,
+                                     size_t* data_used)
+{
+  ASSERT(NULL != result);
+  ASSERT(flags <= (DO_PARSE_MASK | DO_PAD_MASK | DO_TERM_MASK));
+
+  const DecodeFlags parse_flags = flags & DO_PARSE_MASK;
+  const DecodeFlags pad_flags   = flags & DO_PAD_MASK;
+  const DecodeFlags term_flags  = flags & DO_TERM_MASK;
+  ASSERT(0 != parse_flags);
+  ASSERT(0 != pad_flags);
+  ASSERT(0 != term_flags);
+
+  result->clear();
+  result->reserve(len);
+
+  size_t dpos = 0;
+  bool success = true, padded;
+  unsigned char c, qbuf[4];
+  while (dpos < len) {
+    size_t qlen = GetNextQuantum(parse_flags, (DO_PAD_NO == pad_flags),
+                                 data, len, &dpos, qbuf, &padded);
+    c = (qbuf[0] << 2) | ((qbuf[1] >> 4) & 0x3);
+    if (qlen >= 2) {
+      result->push_back(c);
+      c = ((qbuf[1] << 4) & 0xf0) | ((qbuf[2] >> 2) & 0xf);
+      if (qlen >= 3) {
+        result->push_back(c);
+        c = ((qbuf[2] << 6) & 0xc0) | qbuf[3];
+        if (qlen >= 4) {
+          result->push_back(c);
+          c = 0;
+        }
+      }
+    }
+    if (qlen < 4) {
+      if ((DO_TERM_ANY != term_flags) && (0 != c)) {
+        success = false;  // unused bits
+      }
+      if ((DO_PAD_YES == pad_flags) && !padded) {
+        success = false;  // expected padding
+      }
+      break;
+    }
+  }
+  if ((DO_TERM_BUFFER == term_flags) && (dpos != len)) {
+    success = false;  // unused chars
+  }
+  if (data_used) {
+    *data_used = dpos;
+  }
+  return success;
 }
 
 } // namespace talk_base

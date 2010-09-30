@@ -25,35 +25,16 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_HOST_H__
-#define TALK_BASE_HOST_H__
+#ifndef TALK_BASE_HOST_H_
+#define TALK_BASE_HOST_H_
 
 #include <string>
-#include <vector>
-#include "talk/base/network.h"
 
 namespace talk_base {
-
-// Provides information about a host in the network.
-class Host {
-public:
-  Host(const std::string& name, std::vector<Network*>* networks)
-      : name_(name), networks_(networks) { }
-
-  const std::string& name() const { return name_; }
-  const std::vector<Network*>& networks() const { return *networks_; }
-
-private:
-  std::string name_;
-  std::vector<Network*>* networks_;
-};
-
-// Returns a reference to the description of the local host.
-const Host& LocalHost();
 
 // Returns the name of the local host.
 std::string GetHostName();
 
 } // namespace talk_base
 
-#endif // TALK_BASE_HOST_H__
+#endif // TALK_BASE_HOST_H_

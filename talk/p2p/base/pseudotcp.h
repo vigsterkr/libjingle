@@ -25,10 +25,11 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __PSEUDOTCP_H__
-#define __PSEUDOTCP_H__
+#ifndef TALK_P2P_BASE_PSEUDOTCP_H_
+#define TALK_P2P_BASE_PSEUDOTCP_H_
 
 #include <list>
+
 #include "talk/base/basictypes.h"
 
 namespace cricket {
@@ -40,16 +41,18 @@ namespace cricket {
 class PseudoTcp;
 
 class IPseudoTcpNotify {
-public:
+ public:
+  virtual ~IPseudoTcpNotify() {}
   // Notification of tcp events
-  virtual void OnTcpOpen(PseudoTcp * tcp) = 0;
-  virtual void OnTcpReadable(PseudoTcp * tcp) = 0;
-  virtual void OnTcpWriteable(PseudoTcp * tcp) = 0;
-  virtual void OnTcpClosed(PseudoTcp * tcp, uint32 nError) = 0;
+  virtual void OnTcpOpen(PseudoTcp* tcp) = 0;
+  virtual void OnTcpReadable(PseudoTcp* tcp) = 0;
+  virtual void OnTcpWriteable(PseudoTcp* tcp) = 0;
+  virtual void OnTcpClosed(PseudoTcp* tcp, uint32 error) = 0;
 
   // Write the packet onto the network
   enum WriteResult { WR_SUCCESS, WR_TOO_LARGE, WR_FAIL };
-  virtual WriteResult TcpWritePacket(PseudoTcp * tcp, const char * buffer, size_t len) = 0;
+  virtual WriteResult TcpWritePacket(PseudoTcp* tcp,
+                                     const char* buffer, size_t len) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -57,19 +60,21 @@ public:
 //////////////////////////////////////////////////////////////////////
 
 class PseudoTcp {
-public:
+ public:
   static uint32 Now();
 
-  PseudoTcp(IPseudoTcpNotify * notify, uint32 conv);
+  PseudoTcp(IPseudoTcpNotify* notify, uint32 conv);
   virtual ~PseudoTcp();
 
   int Connect();
-  int Recv(char * buffer, size_t len);
-  int Send(const char * buffer, size_t len);
+  int Recv(char* buffer, size_t len);
+  int Send(const char* buffer, size_t len);
   void Close(bool force);
   int GetError();
 
-  enum TcpState { TCP_LISTEN, TCP_SYN_SENT, TCP_SYN_RECEIVED, TCP_ESTABLISHED, TCP_CLOSED };
+  enum TcpState {
+    TCP_LISTEN, TCP_SYN_SENT, TCP_SYN_RECEIVED, TCP_ESTABLISHED, TCP_CLOSED
+  };
   TcpState State() const { return m_state; }
 
   // Call this when the PMTU changes.
@@ -87,7 +92,7 @@ public:
   // Returns false if the socket is ready to be destroyed.
   bool GetNextClock(uint32 now, long& timeout);
 
-protected:
+ protected:
   enum SendFlags { sfNone, sfDelayedAck, sfImmediateAck };
   enum {
     // Note: can't go as high as 1024 * 64, because of uint16 precision
@@ -95,7 +100,7 @@ protected:
     // Note: send buffer should be larger to make sure we can always fill the
     // receiver window
     kSndBufSize = 1024 * 90
-  }; 
+  };
 
   struct Segment {
     uint32 conv, seq, ack;
@@ -107,12 +112,13 @@ protected:
   };
 
   struct SSegment {
+    SSegment(uint32 s, uint32 l, bool c)
+        : seq(s), len(l), /*tstamp(0),*/ xmit(0), bCtrl(c) {
+    }
     uint32 seq, len;
     //uint32 tstamp;
     uint8 xmit;
     bool bCtrl;
-
-    SSegment(uint32 s, uint32 l, bool c) : seq(s), len(l), /*tstamp(0),*/ xmit(0), bCtrl(c) { }
   };
   typedef std::list<SSegment> SList;
 
@@ -120,10 +126,11 @@ protected:
     uint32 seq, len;
   };
 
-  uint32 queue(const char * data, uint32 len, bool bCtrl);
+  uint32 queue(const char* data, uint32 len, bool bCtrl);
 
-  IPseudoTcpNotify::WriteResult packet(uint32 seq, uint8 flags, const char * data, uint32 len);
-  bool parse(const uint8 * buffer, uint32 size);
+  IPseudoTcpNotify::WriteResult packet(uint32 seq, uint8 flags,
+                                       const char* data, uint32 len);
+  bool parse(const uint8* buffer, uint32 size);
 
   void attemptSend(SendFlags sflags = sfNone);
 
@@ -136,8 +143,8 @@ protected:
 
   void adjustMTU();
 
-private:
-  IPseudoTcpNotify * m_notify;
+ private:
+  IPseudoTcpNotify* m_notify;
   enum Shutdown { SD_NONE, SD_GRACEFUL, SD_FORCEFUL } m_shutdown;
   int m_error;
 
@@ -175,8 +182,6 @@ private:
   uint32 m_t_ack;
 };
 
-//////////////////////////////////////////////////////////////////////
+}  // namespace cricket
 
-} // namespace cricket
-
-#endif // __PSEUDOTCP_H__
+#endif  // TALK_P2P_BASE_PSEUDOTCP_H_

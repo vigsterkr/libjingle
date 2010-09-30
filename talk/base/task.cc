@@ -25,8 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <algorithm>
-
 #include "talk/base/task.h"
 #include "talk/base/common.h"
 #include "talk/base/taskrunner.h"
@@ -35,35 +33,40 @@ namespace talk_base {
 
 int32 Task::unique_id_seed_ = 0;
 
-Task::Task(Task *parent)
-    : state_(STATE_INIT),
-      parent_(parent),
+Task::Task(TaskParent *parent)
+    : TaskParent(this, parent),
+      state_(STATE_INIT),
       blocked_(false),
       done_(false),
       aborted_(false),
       busy_(false),
       error_(false),
-      child_error_(false),
       start_time_(0),
-      timeout_seconds_(0),
       timeout_time_(0),
+      timeout_seconds_(0),
       timeout_suspended_(false)  {
-  children_.reset(new ChildSet());
-  runner_ = ((parent == NULL) ?
-             reinterpret_cast<TaskRunner *>(this) :
-             parent->GetRunner());
-  if (parent_ != NULL) {
-    parent_->AddChild(this);
-  }
-
   unique_id_ = unique_id_seed_++;
 
   // sanity check that we didn't roll-over our id seed
   ASSERT(unique_id_ < unique_id_seed_);
 }
 
+Task::~Task() {
+  // Is this task being deleted in the correct manner?
+  ASSERT(!done_ || GetRunner()->is_ok_to_delete(this));
+  ASSERT(state_ == STATE_INIT || done_);
+  ASSERT(state_ == STATE_INIT || blocked_);
+
+  // If the task is being deleted without being done, it
+  // means that it hasn't been removed from its parent.
+  // This happens if a task is deleted outside of TaskRunner.
+  if (!done_) {
+    Stop();
+  }
+}
+
 int64 Task::CurrentTime() {
-  return runner_->CurrentTime();
+  return GetRunner()->CurrentTime();
 }
 
 int64 Task::ElapsedTime() {
@@ -82,11 +85,11 @@ void Task::Start() {
 
 void Task::Step() {
   if (done_) {
-#ifdef DEBUG
+#ifdef _DEBUG
     // we do not know how !blocked_ happens when done_ - should be impossible.
     // But it causes problems, so in retail build, we force blocked_, and
     // under debug we assert.
-    assert(blocked_);
+    ASSERT(blocked_);
 #else
     blocked_ = true;
 #endif
@@ -100,7 +103,12 @@ void Task::Step() {
     blocked_ = true;
 //   obsolete - an errored task is not considered done now
 //   SignalDone();
+
     Stop();
+#ifdef _DEBUG
+    // verify that stop removed this from its parent
+    ASSERT(!parent()->IsChildTask(this));
+#endif
     return;
   }
 
@@ -132,22 +140,43 @@ void Task::Step() {
   if (done_) {
 //  obsolete - call this yourself
 //    SignalDone();
+
     Stop();
+#if _DEBUG
+    // verify that stop removed this from its parent
+    ASSERT(!parent()->IsChildTask(this));
+#endif
     blocked_ = true;
   }
 }
 
 void Task::Abort(bool nowake) {
-  if (aborted_ || done_)
+  // Why only check for done_ (instead of "aborted_ || done_")?
+  //
+  // If aborted_ && !done_, it means the logic for aborting still
+  // needs to be executed (because busy_ must have been true when
+  // Abort() was previously called).
+  if (done_)
     return;
   aborted_ = true;
   if (!busy_) {
     done_ = true;
     blocked_ = true;
     error_ = true;
+
+    // "done_" is set before calling "Stop()" to ensure that this code 
+    // doesn't execute more than once (recursively) for the same task.
     Stop();
-    if (!nowake)
-      Wake();  // to self-delete
+#ifdef _DEBUG
+    // verify that stop removed this from its parent
+    ASSERT(!parent()->IsChildTask(this));
+#endif
+    if (!nowake) {
+      // WakeTasks to self-delete.
+      // Don't call Wake() because it is a no-op after "done_" is set.
+      // Even if Wake() did run, it clears "blocked_" which isn't desireable.
+      GetRunner()->WakeTasks();
+    }
   }
 }
 
@@ -214,43 +243,9 @@ int Task::Process(int state) {
   return newstate;
 }
 
-void Task::AddChild(Task *child) {
-  children_->insert(child);
-}
-
-bool Task::AllChildrenDone() {
-  for (ChildSet::iterator it = children_->begin();
-       it != children_->end();
-       ++it) {
-    if (!(*it)->IsDone())
-      return false;
-  }
-  return true;
-}
-
-bool Task::AnyChildError() {
-  return child_error_;
-}
-
-void Task::AbortAllChildren() {
-  if (children_->size() > 0) {
-    ChildSet copy = *children_;
-    for (ChildSet::iterator it = copy.begin(); it != copy.end(); ++it) {
-      (*it)->Abort(true);  // Note we do not wake
-    }
-  }
-}
-
 void Task::Stop() {
   // No need to wake because we're either awake or in abort
-  AbortAllChildren();
-  parent_->OnChildStopped(this);
-}
-
-void Task::OnChildStopped(Task *child) {
-  if (child->HasError())
-    child_error_ = true;
-  children_->erase(child);
+  TaskParent::OnStopped(this);
 }
 
 void Task::set_timeout_seconds(const int timeout_seconds) {
@@ -261,10 +256,11 @@ void Task::set_timeout_seconds(const int timeout_seconds) {
 bool Task::TimedOut() {
   return timeout_seconds_ &&
     timeout_time_ &&
-    CurrentTime() > timeout_time_;
+    CurrentTime() >= timeout_time_;
 }
 
 void Task::ResetTimeout() {
+  int64 previous_timeout_time = timeout_time_;
   bool timeout_allowed = (state_ != STATE_INIT)
                       && (state_ != STATE_DONE)
                       && (state_ != STATE_ERROR);
@@ -274,12 +270,13 @@ void Task::ResetTimeout() {
   else
     timeout_time_ = 0;
 
-  GetRunner()->UpdateTaskTimeout(this);
+  GetRunner()->UpdateTaskTimeout(this, previous_timeout_time);
 }
 
 void Task::ClearTimeout() {
+  int64 previous_timeout_time = timeout_time_;
   timeout_time_ = 0;
-  GetRunner()->UpdateTaskTimeout(this);
+  GetRunner()->UpdateTaskTimeout(this, previous_timeout_time);
 }
 
 void Task::SuspendTimeout() {

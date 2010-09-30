@@ -83,20 +83,31 @@ class CriticalSection {
 public:
   CriticalSection() {
     pthread_mutexattr_t mutex_attribute;
+    pthread_mutexattr_init(&mutex_attribute);
     pthread_mutexattr_settype(&mutex_attribute, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&mutex_, &mutex_attribute);
+    pthread_mutexattr_destroy(&mutex_attribute);
+    TRACK_OWNER(thread_ = 0);
   }
   ~CriticalSection() {
     pthread_mutex_destroy(&mutex_);
   }
   void Enter() {
     pthread_mutex_lock(&mutex_);
+    TRACK_OWNER(thread_ = pthread_self());
   }
   void Leave() {
+    TRACK_OWNER(thread_ = 0);
     pthread_mutex_unlock(&mutex_);
   }
+
+#if CS_TRACK_OWNER
+  bool CurrentThreadIsOwner() const { return pthread_equal(thread_, pthread_self()); }
+#endif  // CS_TRACK_OWNER
+
 private:
   pthread_mutex_t mutex_;
+  TRACK_OWNER(pthread_t thread_);
 };
 #endif // POSIX
 

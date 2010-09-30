@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_XMPP_XMPPLIB_BUZZ_CONSTANTS_H_
-#define _CRICKET_XMPP_XMPPLIB_BUZZ_CONSTANTS_H_
+#ifndef TALK_XMPP_CONSTANTS_H_
+#define TALK_XMPP_CONSTANTS_H_
 
 #include <string>
 #include "talk/xmllite/qname.h"
@@ -171,9 +171,6 @@ extern const QName QN_SASL_MECHANISM_TOO_WEAK;
 extern const QName QN_SASL_NOT_AUTHORIZED;
 extern const QName QN_SASL_TEMPORARY_AUTH_FAILURE;
 
-extern const std::string NS_GOOGLE_AUTH;
-extern const QName QN_MISSING_USERNAME;
-
 extern const QName QN_DIALBACK_RESULT;
 extern const QName QN_DIALBACK_VERIFY;
 
@@ -251,6 +248,28 @@ extern const QName QN_VCARD_PHOTO_BINVAL;
 extern const QName QN_VCARD_AVATAR_HASH;
 extern const QName QN_VCARD_AVATAR_HASH_MODIFIED;
 
+#if defined(FEATURE_ENABLE_PSTN)
+extern const QName QN_VCARD_TEL;
+extern const QName QN_VCARD_VOICE;
+extern const QName QN_VCARD_HOME;
+extern const QName QN_VCARD_WORK;
+extern const QName QN_VCARD_CELL;
+extern const QName QN_VCARD_NUMBER;
+#endif
+
+#if defined(FEATURE_ENABLE_RICHPROFILES)
+extern const QName QN_USER_PROFILE_QUERY;
+extern const QName QN_USER_PROFILE_URL;
+
+extern const QName QN_ATOM_FEED;
+extern const QName QN_ATOM_ENTRY;
+extern const QName QN_ATOM_TITLE;
+extern const QName QN_ATOM_ID;
+extern const QName QN_ATOM_MODIFIED;
+extern const QName QN_ATOM_IMAGE;
+extern const QName QN_ATOM_LINK;
+extern const QName QN_ATOM_HREF;
+#endif
 
 extern const QName QN_XML_LANG;
 
@@ -271,6 +290,8 @@ extern const QName QN_JID;
 extern const QName QN_SUBSCRIPTION;
 extern const QName QN_TITLE1;
 extern const QName QN_TITLE2;
+extern const QName QN_AFFILIATION;
+extern const QName QN_ROLE;
 
 
 extern const QName QN_XMLNS_CLIENT;
@@ -290,6 +311,13 @@ extern const std::string STR_SUBSCRIBED;
 extern const std::string STR_UNSUBSCRIBE;
 extern const std::string STR_UNSUBSCRIBED;
 
+// Google Invite
+extern const std::string NS_GOOGLE_SUBSCRIBE;
+extern const QName QN_INVITATION;
+extern const QName QN_INVITE_NAME;
+extern const QName QN_INVITE_SUBJECT;
+extern const QName QN_INVITE_MESSAGE;
+
 
 // JEP 0030
 extern const QName QN_NODE;
@@ -304,6 +332,21 @@ extern const QName QN_DISCO_FEATURE;
 
 extern const QName QN_DISCO_ITEMS_QUERY;
 extern const QName QN_DISCO_ITEM;
+
+
+// JEP 0045
+extern const std::string NS_MUC;
+extern const QName QN_MUC_X;
+extern const QName QN_MUC_ITEM;
+extern const QName QN_MUC_AFFILIATION;
+extern const QName QN_MUC_ROLE;
+extern const std::string STR_AFFILIATION_NONE;
+extern const std::string STR_ROLE_PARTICIPANT;
+extern const std::string NS_MUC_USER;
+extern const QName QN_MUC_USER_CONTINUE;
+extern const QName QN_MUC_USER_X;
+extern const QName QN_MUC_USER_ITEM;
+extern const QName QN_MUC_USER_STATUS;
 
 
 // JEP 0115
@@ -353,6 +396,41 @@ extern const QName QN_JINGLE_INFO_TCP;
 extern const QName QN_JINGLE_INFO_UDP;
 extern const QName QN_JINGLE_INFO_TCPSSL;
 
-}
+extern const std::string NS_GOOGLE_CALLPERF_STATS;
+extern const QName QN_CALLPERF_STATS;
+extern const QName QN_CALLPERF_SESSIONID;
+extern const QName QN_CALLPERF_LOCALUSER;
+extern const QName QN_CALLPERF_REMOTEUSER;
+extern const QName QN_CALLPERF_STARTTIME;
+extern const QName QN_CALLPERF_CALL_LENGTH;
+extern const QName QN_CALLPERF_DATAPOINT;
+extern const QName QN_CALLPERF_DATAPOINT_TIME;
+extern const QName QN_CALLPERF_DATAPOINT_FRACTION_LOST;
+extern const QName QN_CALLPERF_DATAPOINT_CUM_LOST;
+extern const QName QN_CALLPERF_DATAPOINT_EXT_MAX;
+extern const QName QN_CALLPERF_DATAPOINT_JITTER;
+extern const QName QN_CALLPERF_DATAPOINT_RTT;
+extern const QName QN_CALLPERF_DATAPOINT_BYTES_R;
+extern const QName QN_CALLPERF_DATAPOINT_PACKETS_R;
+extern const QName QN_CALLPERF_DATAPOINT_BYTES_S;
+extern const QName QN_CALLPERF_DATAPOINT_PACKETS_S;
+extern const QName QN_CALLPERF_CONNECTION;
+extern const QName QN_CALLPERF_CONNECTION_LOCAL_ADDRESS;
+extern const QName QN_CALLPERF_CONNECTION_REMOTE_ADDRESS;
 
-#endif // _CRICKET_XMPP_XMPPLIB_BUZZ_CONSTANTS_H_
+// Muc invites.
+extern const QName QN_MUC_USER_INVITE;
+
+// Multiway audio/video.
+extern const std::string NS_GOOGLE_MUC_USER;
+extern const QName QN_GOOGLE_MUC_USER_AVAILABLE_MEDIA;
+extern const QName QN_GOOGLE_MUC_USER_ENTRY;
+extern const QName QN_GOOGLE_MUC_USER_MEDIA;
+extern const QName QN_GOOGLE_MUC_USER_TYPE;
+extern const QName QN_GOOGLE_MUC_USER_SRC_ID;
+extern const QName QN_GOOGLE_MUC_USER_STATUS;
+extern const QName QN_LABEL;
+
+}  // namespace buzz
+
+#endif  // TALK_XMPP_CONSTANTS_H_

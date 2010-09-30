@@ -25,12 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <algorithm>
 #include "talk/examples/login/xmppauth.h"
+
+#include <algorithm>
+
 #include "talk/xmpp/saslcookiemechanism.h"
 #include "talk/xmpp/saslplainmechanism.h"
 
-XmppAuth::XmppAuth() : done_(false), error_(false) {
+XmppAuth::XmppAuth() : done_(false) {
 }
 
 XmppAuth::~XmppAuth() {
@@ -43,7 +45,6 @@ void XmppAuth::StartPreXmppAuth(const buzz::Jid & jid,
   jid_ = jid;
   passwd_ = pass;
   auth_cookie_ = auth_cookie;
-  error_ = auth_cookie.empty();
   done_ = true;
 
   SignalAuthDone();
@@ -56,12 +57,12 @@ std::string XmppAuth::ChooseBestSaslMechanism(
 
   // a token is the weakest auth - 15s, service-limited, so prefer it.
   it = std::find(mechanisms.begin(), mechanisms.end(), "X-GOOGLE-TOKEN");
-  if (it != mechanisms.end())
+  if (it != mechanisms.end() && !auth_cookie_.empty())
     return "X-GOOGLE-TOKEN";
 
   // a cookie is the next weakest - 14 days
   it = std::find(mechanisms.begin(), mechanisms.end(), "X-GOOGLE-COOKIE");
-  if (it != mechanisms.end())
+  if (it != mechanisms.end() && !auth_cookie_.empty())
     return "X-GOOGLE-COOKIE";
 
     it = std::find(mechanisms.begin(), mechanisms.end(), "PLAIN");

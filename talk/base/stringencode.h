@@ -30,6 +30,7 @@
 
 #include <string>
 #include <sstream>
+#include <vector>
 
 namespace talk_base {
 
@@ -40,7 +41,7 @@ namespace talk_base {
 // Convert an unsigned value from 0 to 15 to the hex character equivalent...
 char hex_encode(unsigned char val);
 // ...and vice-versa.
-unsigned char hex_decode(char ch);
+bool hex_decode(char ch, unsigned char* val);
 
 // Convert an unsigned value to it's utf8 representation.  Returns the length
 // of the encoded string, or 0 if the encoding is longer than buflen - 1.
@@ -102,14 +103,16 @@ size_t hex_encode(char * buffer, size_t buflen,
                   const char * source, size_t srclen);
 size_t hex_decode(char * buffer, size_t buflen,
                   const char * source, size_t srclen);
+// helper funtion for hex_encode
+std::string hex_encode(const char * source, size_t srclen);
 
 // Apply any suitable string transform (including the ones above) to an STL
 // string.  Stack-allocated temporary space is used for the transformation,
 // so value and source may refer to the same string.
 typedef size_t (*Transform)(char * buffer, size_t buflen,
                             const char * source, size_t srclen);
-void transform(std::string& value, size_t maxlen, const std::string& source,
-               Transform t);
+size_t transform(std::string& value, size_t maxlen, const std::string& source,
+                 Transform t);
 
 // Return the result of applying transform t to source.
 std::string s_transform(const std::string& source, Transform t);
@@ -121,6 +124,15 @@ inline std::string s_url_encode(const std::string& source) {
 inline std::string s_url_decode(const std::string& source) {
   return s_transform(source, url_decode);
 }
+
+// Splits the source string into multiple fields separated by delimiter.
+size_t split(const std::string& source, char delimiter,
+             std::vector<std::string>* fields);
+
+// Returns the first part of a string separated by delimiter.
+// Index indicates the location to start parsing in the string and
+// is increased to the start of the next substring.
+std::string split_one(const std::string& source, char delimiter, int* index);
 
 // Safe sprintf to std::string
 //void sprintf(std::string& value, size_t maxlen, const char * format, ...)
@@ -153,6 +165,11 @@ static inline std::string ToString(T val) {
 template<typename T>
 static inline T FromString(const std::string& str) {
   T val; FromString(str, &val); return val;
+}
+
+template<typename T>
+static inline T FromString(const T& defaultValue, const std::string& str) {
+  T val(defaultValue); FromString(str, &val); return val;
 }
 
 // simple function to strip out characters which shouldn't be

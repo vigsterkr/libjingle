@@ -25,6 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <list>
+#include <string>
+
 #include "talk/xmpp/ratelimitmanager.h"
 
 namespace buzz {

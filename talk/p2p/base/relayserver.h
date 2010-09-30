@@ -32,6 +32,7 @@
 #include "talk/base/socketaddresspair.h"
 #include "talk/base/thread.h"
 #include "talk/base/time.h"
+#include "talk/p2p/base/port.h"
 #include "talk/p2p/base/stun.h"
 
 #include <string>
@@ -45,7 +46,8 @@ class RelayServerConnection;
 
 // Relays traffic between connections to the server that are "bound" together.
 // All connections created with the same username/password are bound together.
-class RelayServer : public sigslot::has_slots<> {
+class RelayServer : public talk_base::MessageHandler,
+                    public sigslot::has_slots<> {
 public:
   // Creates a server, which will use this thread to post messages to itself.
   RelayServer(talk_base::Thread* thread);
@@ -68,8 +70,23 @@ public:
   void AddExternalSocket(talk_base::AsyncPacketSocket* socket);
   void RemoveExternalSocket(talk_base::AsyncPacketSocket* socket);
 
+  // Starts listening for connections on this sockets. When someone
+  // tries to connect, the connection will be accepted and a new
+  // internal socket will be added.
+  void AddInternalServerSocket(talk_base::AsyncSocket* socket,
+                               cricket::ProtocolType proto);
+
+  // Removes this server socket from the list.
+  void RemoveInternalServerSocket(talk_base::AsyncSocket* socket);
+
+  int GetConnectionCount();
+
+  bool HasConnection(const talk_base::SocketAddress& address);
+
 private:
   typedef std::vector<talk_base::AsyncPacketSocket*> SocketList;
+  typedef std::map<talk_base::AsyncSocket*,
+                   cricket::ProtocolType> ServerSocketMap;
   typedef std::map<std::string,RelayServerBinding*> BindingMap;
   typedef std::map<talk_base::SocketAddressPair,RelayServerConnection*> ConnectionMap;
 
@@ -77,6 +94,7 @@ private:
   bool log_bindings_;
   SocketList internal_sockets_;
   SocketList external_sockets_;
+  ServerSocketMap server_sockets_;
   BindingMap bindings_;
   ConnectionMap connections_;
 
@@ -87,6 +105,8 @@ private:
   void OnExternalPacket(
       const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
       talk_base::AsyncPacketSocket* socket);
+
+  void OnReadEvent(talk_base::AsyncSocket* socket);
 
   // Processes the relevant STUN request types from the client.
   bool HandleStun(const char* bytes, size_t size,
@@ -106,8 +126,14 @@ private:
   void RemoveConnection(RelayServerConnection* conn);
   void RemoveBinding(RelayServerBinding* binding);
 
+  // Handle messages in our worker thread.
+  void OnMessage(talk_base::Message *pmsg);
+
   // Called when the timer for checking lifetime times out.
   void OnTimeout(RelayServerBinding* binding);
+
+  // Accept connections on this server socket.
+  void AcceptConnection(talk_base::AsyncSocket* server_socket);
 
   friend class RelayServerConnection;
   friend class RelayServerBinding;

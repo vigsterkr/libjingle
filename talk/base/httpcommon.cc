@@ -2,39 +2,41 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <time.h>
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#define _WINSOCKAPI_
-#include <windows.h>
 #define SECURITY_WIN32
 #include <security.h>
 #endif
+
+#include "talk/base/httpcommon-inl.h"
 
 #include "talk/base/base64.h"
 #include "talk/base/common.h"
@@ -42,6 +44,7 @@
 #include "talk/base/httpcommon.h"
 #include "talk/base/socketaddress.h"
 #include "talk/base/stringdigest.h"
+#include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 
 namespace talk_base {
@@ -70,7 +73,7 @@ struct Enum {
   static size_t Size;
 
   static inline const char* Name(E val) { return Names[val]; }
-  static inline bool Parse(E& val, const std::string& name) { 
+  static inline bool Parse(E& val, const std::string& name) {
 	size_t index;
 	if (!find_string(index, name, Names, Size))
 	  return false;
@@ -97,7 +100,7 @@ struct Enum {
 //////////////////////////////////////////////////////////////////////
 
 static const char* kHttpVersions[HVER_LAST+1] = {
-  "1.0", "1.1"
+  "1.0", "1.1", "Unknown"
 };
 ENUM(HttpVersion, kHttpVersions);
 
@@ -110,6 +113,7 @@ static const char* kHttpHeaders[HH_LAST+1] = {
   "Age",
   "Cache-Control",
   "Connection",
+  "Content-Disposition",
   "Content-Length",
   "Content-Range",
   "Content-Type",
@@ -163,7 +167,7 @@ bool FromString(HttpHeader& header, const std::string& str) {
 
 bool HttpCodeHasBody(uint32 code) {
   return !HttpCodeIsInformational(code)
-         && (code != HC_NO_CONTENT) || (code != HC_NOT_MODIFIED);
+         && (code != HC_NO_CONTENT) && (code != HC_NOT_MODIFIED);
 }
 
 bool HttpCodeIsCacheable(uint32 code) {
@@ -186,7 +190,7 @@ bool HttpHeaderIsEndToEnd(HttpHeader header) {
   case HH_KEEP_ALIVE:
   case HH_PROXY_AUTHENTICATE:
   case HH_PROXY_AUTHORIZATION:
-  //case HH_PROXY_CONNECTION:??
+  case HH_PROXY_CONNECTION:  // Note part of RFC... this is non-standard header
   case HH_TE:
   case HH_TRAILERS:
   case HH_TRANSFER_ENCODING:
@@ -234,9 +238,34 @@ inline bool IsEndOfAttributeName(size_t pos, size_t len, const char * data) {
   return false;
 }
 
+// TODO: unittest for EscapeAttribute and HttpComposeAttributes.
+
+std::string EscapeAttribute(const std::string& attribute) {
+  const size_t kMaxLength = attribute.length() * 2 + 1;
+  char* buffer = STACK_ARRAY(char, kMaxLength);
+  size_t len = escape(buffer, kMaxLength, attribute.data(), attribute.length(),
+                      "\"", '\\');
+  return std::string(buffer, len);
+}
+
 }  // anonymous namespace
 
-void HttpParseAttributes(const char * data, size_t len, 
+void HttpComposeAttributes(const HttpAttributeList& attributes, char separator,
+                           std::string* composed) {
+  std::stringstream ss;
+  for (size_t i=0; i<attributes.size(); ++i) {
+    if (i > 0) {
+      ss << separator << " ";
+    }
+    ss << attributes[i].first;
+    if (!attributes[i].second.empty()) {
+      ss << "=\"" << EscapeAttribute(attributes[i].second) << "\"";
+    }
+  }
+  *composed = ss.str();
+}
+
+void HttpParseAttributes(const char * data, size_t len,
                          HttpAttributeList& attributes) {
   size_t pos = 0;
   while (true) {
@@ -302,7 +331,7 @@ bool HttpHasAttribute(const HttpAttributeList& attributes,
 }
 
 bool HttpHasNthAttribute(HttpAttributeList& attributes,
-                         size_t index, 
+                         size_t index,
                          std::string* name,
                          std::string* value) {
   if (index >= attributes.size())
@@ -336,7 +365,7 @@ bool HttpDateToSeconds(const std::string& date, unsigned long* seconds) {
 
   if (7 != sscanf(date.c_str(), "%*3s, %d %3s %d %d:%d:%d %5c",
                   &tval.tm_mday, month, &tval.tm_year,
-                  &tval.tm_hour, &tval.tm_min, &tval.tm_sec, &zone)) {
+                  &tval.tm_hour, &tval.tm_min, &tval.tm_sec, zone)) {
     return false;
   }
   switch (toupper(month[2])) {
@@ -369,7 +398,8 @@ bool HttpDateToSeconds(const std::string& date, unsigned long* seconds) {
     }
     gmt = non_gmt + kTimeZoneOffsets[zindex] * 60 * 60;
   }
-#ifdef OSX
+  // TODO: Android should support timezone, see b/2441195
+#if defined(OSX) || defined(ANDROID) || defined(BSD)
   tm *tm_for_timezone = localtime((time_t *)&gmt);
   *seconds = gmt + tm_for_timezone->tm_gmtoff;
 #else
@@ -378,16 +408,28 @@ bool HttpDateToSeconds(const std::string& date, unsigned long* seconds) {
   return true;
 }
 
+std::string HttpAddress(const SocketAddress& address, bool secure) {
+  return (address.port() == HttpDefaultPort(secure))
+          ? address.hostname() : address.ToString();
+}
+
 //////////////////////////////////////////////////////////////////////
 // HttpData
 //////////////////////////////////////////////////////////////////////
 
 void
 HttpData::clear(bool release_document) {
+  // Clear headers first, since releasing a document may have far-reaching
+  // effects.
+  headers_.clear();
   if (release_document) {
     document.reset();
   }
-  m_headers.clear();
+}
+
+void
+HttpData::copy(const HttpData& src) {
+  headers_ = src.headers_;
 }
 
 void
@@ -399,13 +441,13 @@ HttpData::changeHeader(const std::string& name, const std::string& value,
     combine = !FromString(header, name) || HttpHeaderIsCollapsible(header)
               ? HC_YES : HC_NO;
   } else if (combine == HC_REPLACE) {
-    m_headers.erase(name);
+    headers_.erase(name);
     combine = HC_NO;
   }
   // At this point, combine is one of (YES, NO, NEW)
   if (combine != HC_NO) {
-    HeaderMap::iterator it = m_headers.find(name);
-    if (it != m_headers.end()) {
+    HeaderMap::iterator it = headers_.find(name);
+    if (it != headers_.end()) {
       if (combine == HC_YES) {
         it->second.append(",");
         it->second.append(value);
@@ -413,18 +455,23 @@ HttpData::changeHeader(const std::string& name, const std::string& value,
       return;
 	}
   }
-  m_headers.insert(HeaderMap::value_type(name, value));
+  headers_.insert(HeaderMap::value_type(name, value));
 }
 
-void
-HttpData::clearHeader(const std::string& name) {
-  m_headers.erase(name);
+size_t HttpData::clearHeader(const std::string& name) {
+  return headers_.erase(name);
+}
+
+HttpData::iterator HttpData::clearHeader(iterator header) {
+  iterator deprecated = header++;
+  headers_.erase(deprecated);
+  return header;
 }
 
 bool
 HttpData::hasHeader(const std::string& name, std::string* value) const {
-  HeaderMap::const_iterator it = m_headers.find(name);
-  if (it == m_headers.end()) {
+  HeaderMap::const_iterator it = headers_.find(name);
+  if (it == headers_.end()) {
     return false;
   } else if (value) {
     *value = it->second;
@@ -432,14 +479,20 @@ HttpData::hasHeader(const std::string& name, std::string* value) const {
   return true;
 }
 
-void
-HttpData::setContent(const std::string& content_type,
-                     StreamInterface* document) {
+void HttpData::setContent(const std::string& content_type,
+                          StreamInterface* document) {
+  setHeader(HH_CONTENT_TYPE, content_type);
+  setDocumentAndLength(document);
+}
+
+void HttpData::setDocumentAndLength(StreamInterface* document) {
+  // TODO: Consider calling Rewind() here?
+  ASSERT(!hasHeader(HH_CONTENT_LENGTH, NULL));
+  ASSERT(!hasHeader(HH_TRANSFER_ENCODING, NULL));
   ASSERT(document != NULL);
   this->document.reset(document);
-  setHeader(HH_CONTENT_TYPE, content_type);
   size_t content_length = 0;
-  if (this->document->GetSize(&content_length)) {
+  if (this->document->GetAvailable(&content_length)) {
     char buffer[32];
     sprintfn(buffer, sizeof(buffer), "%d", content_length);
     setHeader(HH_CONTENT_LENGTH, buffer);
@@ -454,13 +507,20 @@ HttpData::setContent(const std::string& content_type,
 
 void
 HttpRequestData::clear(bool release_document) {
-  HttpData::clear(release_document);
   verb = HV_GET;
   path.clear();
+  HttpData::clear(release_document);
+}
+
+void
+HttpRequestData::copy(const HttpRequestData& src) {
+  verb = src.verb;
+  path = src.path;
+  HttpData::copy(src);
 }
 
 size_t
-HttpRequestData::formatLeader(char* buffer, size_t size) {
+HttpRequestData::formatLeader(char* buffer, size_t size) const {
   ASSERT(path.find(' ') == std::string::npos);
   return sprintfn(buffer, size, "%s %.*s HTTP/%s", ToString(verb), path.size(),
                   path.data(), ToString(version));
@@ -469,9 +529,9 @@ HttpRequestData::formatLeader(char* buffer, size_t size) {
 HttpError
 HttpRequestData::parseLeader(const char* line, size_t len) {
   UNUSED(len);
-  uint32 vmajor, vminor;
+  unsigned int vmajor, vminor;
   int vend, dstart, dend;
-  if ((sscanf(line, "%*s%n %n%*s%n HTTP/%lu.%lu", &vend, &dstart, &dend,
+  if ((sscanf(line, "%*s%n %n%*s%n HTTP/%u.%u", &vend, &dstart, &dend,
               &vmajor, &vminor) != 2)
       || (vmajor != 1)) {
     return HE_PROTOCOL;
@@ -491,22 +551,63 @@ HttpRequestData::parseLeader(const char* line, size_t len) {
   return HE_NONE;
 }
 
+bool HttpRequestData::getAbsoluteUri(std::string* uri) const {
+  if (HV_CONNECT == verb)
+    return false;
+  Url<char> url(path);
+  if (url.valid()) {
+    uri->assign(path);
+    return true;
+  }
+  std::string host;
+  if (!hasHeader(HH_HOST, &host))
+    return false;
+  url.set_address(host);
+  url.set_full_path(path);
+  uri->assign(url.url());
+  return url.valid();
+}
+
+bool HttpRequestData::getRelativeUri(std::string* host,
+                                     std::string* path) const
+{
+  if (HV_CONNECT == verb)
+    return false;
+  Url<char> url(this->path);
+  if (url.valid()) {
+    host->assign(url.address());
+    path->assign(url.full_path());
+    return true;
+  }
+  if (!hasHeader(HH_HOST, host))
+    return false;
+  path->assign(this->path);
+  return true;
+}
+
 //
 // HttpResponseData
 //
 
 void
 HttpResponseData::clear(bool release_document) {
-  HttpData::clear(release_document);
   scode = HC_INTERNAL_SERVER_ERROR;
   message.clear();
+  HttpData::clear(release_document);
+}
+
+void
+HttpResponseData::copy(const HttpResponseData& src) {
+  scode = src.scode;
+  message = src.message;
+  HttpData::copy(src);
 }
 
 void
 HttpResponseData::set_success(uint32 scode) {
   this->scode = scode;
   message.clear();
-  setHeader(HH_CONTENT_LENGTH, "0");
+  setHeader(HH_CONTENT_LENGTH, "0", false);
 }
 
 void
@@ -523,18 +624,18 @@ HttpResponseData::set_redirect(const std::string& location, uint32 scode) {
   this->scode = scode;
   message.clear();
   setHeader(HH_LOCATION, location);
-  setHeader(HH_CONTENT_LENGTH, "0");
+  setHeader(HH_CONTENT_LENGTH, "0", false);
 }
 
 void
 HttpResponseData::set_error(uint32 scode) {
   this->scode = scode;
   message.clear();
-  setHeader(HH_CONTENT_LENGTH, "0");
+  setHeader(HH_CONTENT_LENGTH, "0", false);
 }
 
 size_t
-HttpResponseData::formatLeader(char* buffer, size_t size) {
+HttpResponseData::formatLeader(char* buffer, size_t size) const {
   size_t len = sprintfn(buffer, size, "HTTP/%s %lu", ToString(version), scode);
   if (!message.empty()) {
     len += sprintfn(buffer + len, size - len, " %.*s",
@@ -546,18 +647,31 @@ HttpResponseData::formatLeader(char* buffer, size_t size) {
 HttpError
 HttpResponseData::parseLeader(const char* line, size_t len) {
   size_t pos = 0;
-  uint32 vmajor, vminor;
-  if ((sscanf(line, "HTTP/%lu.%lu %lu%n", &vmajor, &vminor, &scode, &pos) != 3)
-      || (vmajor != 1)) {
-    return HE_PROTOCOL;
-  }
-  if (vminor == 0) {
-    version = HVER_1_0;
-  } else if (vminor == 1) {
-    version = HVER_1_1;
+  unsigned int vmajor, vminor, temp_scode;
+  int temp_pos;
+  if (sscanf(line, "HTTP %u%n",
+             &temp_scode, &temp_pos) == 1) {
+    // This server's response has no version. :( NOTE: This happens for every
+    // response to requests made from Chrome plugins, regardless of the server's
+    // behaviour.
+    LOG(LS_VERBOSE) << "HTTP version missing from response";
+    version = HVER_UNKNOWN;
+  } else if ((sscanf(line, "HTTP/%u.%u %u%n",
+                     &vmajor, &vminor, &temp_scode, &temp_pos) == 3)
+             && (vmajor == 1)) {
+    // This server's response does have a version.
+    if (vminor == 0) {
+      version = HVER_1_0;
+    } else if (vminor == 1) {
+      version = HVER_1_1;
+    } else {
+      return HE_PROTOCOL;
+    }
   } else {
     return HE_PROTOCOL;
   }
+  scode = temp_scode;
+  pos = static_cast<size_t>(temp_pos);
   while ((pos < len) && isspace(static_cast<unsigned char>(line[pos]))) ++pos;
   message.assign(line + pos, len - pos);
   return HE_NONE;
@@ -598,7 +712,7 @@ const char * const DIGEST_RESPONSE =
   "edffcb0829e755838b073a4a42de06bc";
 #endif
 
-static std::string quote(const std::string& str) {
+std::string quote(const std::string& str) {
   std::string result;
   result.push_back('"');
   for (size_t i=0; i<str.size(); ++i) {
@@ -668,7 +782,7 @@ HttpAuthResult HttpAuthenticate(
     response = auth_method;
     response.append(" ");
     // TODO: create a sensitive-source version of Base64::encode
-    response.append(Base64::encode(sensitive));
+    response.append(Base64::Encode(sensitive));
     memset(sensitive, 0, len);
     delete [] sensitive;
     return HAR_RESPONSE;
@@ -690,7 +804,7 @@ HttpAuthResult HttpAuthenticate(
     cnonce = DIGEST_CNONCE;
 #else
     char buffer[256];
-    sprintf(buffer, "%d", time(0));
+    sprintf(buffer, "%d", static_cast<int>(time(0)));
     cnonce = MD5(buffer);
 #endif
     ncount = "00000001";
@@ -726,7 +840,7 @@ HttpAuthResult HttpAuthenticate(
     std::string dig_response = MD5(HA1 + ":" + middle + ":" + HA2);
 
 #if TEST_DIGEST
-    assert(strcmp(dig_response.c_str(), DIGEST_RESPONSE) == 0);
+    ASSERT(strcmp(dig_response.c_str(), DIGEST_RESPONSE) == 0);
 #endif
 
     std::stringstream ss;
@@ -789,7 +903,7 @@ HttpAuthResult HttpAuthenticate(
       //| ISC_REQ_USE_SUPPLIED_CREDS
       ;
 
-    TimeStamp lifetime;
+    ::TimeStamp lifetime;
     SECURITY_STATUS ret = S_OK;
     ULONG ret_flags = 0, flags = NEG_FLAGS_DEFAULT;
 
@@ -807,10 +921,10 @@ HttpAuthResult HttpAuthenticate(
       }
       steps = neg->steps;
 
-      std::string decoded_challenge;
-      HttpHasNthAttribute(args, 1, &decoded_challenge, NULL);
-      decoded_challenge = Base64::decode(decoded_challenge);
-      if (!decoded_challenge.empty()) {
+      std::string challenge, decoded_challenge;
+      if (HttpHasNthAttribute(args, 1, &challenge, NULL)
+          && Base64::Decode(challenge, Base64::DO_STRICT,
+                            &decoded_challenge, NULL)) {
         SecBuffer in_sec;
         in_sec.pvBuffer   = const_cast<char *>(decoded_challenge.data());
         in_sec.cbBuffer   = static_cast<unsigned long>(decoded_challenge.size());
@@ -822,7 +936,7 @@ HttpAuthResult HttpAuthenticate(
         in_buf_desc.pBuffers  = &in_sec;
 
         ret = InitializeSecurityContextA(&neg->cred, &neg->ctx, spn, flags, 0, SECURITY_NATIVE_DREP, &in_buf_desc, 0, &neg->ctx, &out_buf_desc, &ret_flags, &lifetime);
-        //LOG(INFO) << "$$$ InitializeSecurityContext @ " << TimeDiff(talk_base::Time(), now);
+        //LOG(INFO) << "$$$ InitializeSecurityContext @ " << TimeSince(now);
         if (FAILED(ret)) {
           LOG(LS_ERROR) << "InitializeSecurityContext returned: "
                       << ErrorName(ret, SECURITY_ERRORS);
@@ -886,7 +1000,7 @@ HttpAuthResult HttpAuthenticate(
 
       CredHandle cred;
       ret = AcquireCredentialsHandleA(0, want_negotiate ? NEGOSSP_NAME_A : NTLMSP_NAME_A, SECPKG_CRED_OUTBOUND, 0, pauth_id, 0, 0, &cred, &lifetime);
-      //LOG(INFO) << "$$$ AcquireCredentialsHandle @ " << TimeDiff(talk_base::Time(), now);
+      //LOG(INFO) << "$$$ AcquireCredentialsHandle @ " << TimeSince(now);
       if (ret != SEC_E_OK) {
         LOG(LS_ERROR) << "AcquireCredentialsHandle error: "
                     << ErrorName(ret, SECURITY_ERRORS);
@@ -897,7 +1011,7 @@ HttpAuthResult HttpAuthenticate(
 
       CtxtHandle ctx;
       ret = InitializeSecurityContextA(&cred, 0, spn, flags, 0, SECURITY_NATIVE_DREP, 0, 0, &ctx, &out_buf_desc, &ret_flags, &lifetime);
-      //LOG(INFO) << "$$$ InitializeSecurityContext @ " << TimeDiff(talk_base::Time(), now);
+      //LOG(INFO) << "$$$ InitializeSecurityContext @ " << TimeSince(now);
       if (FAILED(ret)) {
         LOG(LS_ERROR) << "InitializeSecurityContext returned: "
                     << ErrorName(ret, SECURITY_ERRORS);
@@ -905,7 +1019,7 @@ HttpAuthResult HttpAuthenticate(
         return HAR_IGNORE;
       }
 
-      assert(!context);
+      ASSERT(!context);
       context = neg = new NegotiateAuthContext(auth_method, cred, ctx);
       neg->specified_credentials = specify_credentials;
       neg->steps = steps;
@@ -913,7 +1027,7 @@ HttpAuthResult HttpAuthenticate(
 
     if ((ret == SEC_I_COMPLETE_NEEDED) || (ret == SEC_I_COMPLETE_AND_CONTINUE)) {
       ret = CompleteAuthToken(&neg->ctx, &out_buf_desc);
-      //LOG(INFO) << "$$$ CompleteAuthToken @ " << TimeDiff(talk_base::Time(), now);
+      //LOG(INFO) << "$$$ CompleteAuthToken @ " << TimeSince(now);
       LOG(LS_VERBOSE) << "CompleteAuthToken returned: "
                       << ErrorName(ret, SECURITY_ERRORS);
       if (FAILED(ret)) {
@@ -921,12 +1035,12 @@ HttpAuthResult HttpAuthenticate(
       }
     }
 
-    //LOG(INFO) << "$$$ NEGOTIATE took " << TimeDiff(talk_base::Time(), now) << "ms";
+    //LOG(INFO) << "$$$ NEGOTIATE took " << TimeSince(now) << "ms";
 
     std::string decoded(out_buf, out_buf + out_sec.cbBuffer);
     response = auth_method;
     response.append(" ");
-    response.append(Base64::encode(decoded));
+    response.append(Base64::Encode(decoded));
     return HAR_RESPONSE;
   }
 #endif

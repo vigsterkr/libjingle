@@ -2,36 +2,36 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/win32socketserver.h"
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 #include "talk/base/winping.h"
-#include "talk/base/win32socketserver.h"
 #include "talk/base/win32window.h"
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  // NOLINT
 
 namespace talk_base {
 
@@ -39,26 +39,25 @@ namespace talk_base {
 // Win32Socket
 ///////////////////////////////////////////////////////////////////////////////
 
-static const int kfRead  = 0x0001;
-static const int kfWrite = 0x0002;
-
+// TODO: Move this to a common place where PhysicalSocketServer can
+// share it.
 // Standard MTUs
 static const uint16 PACKET_MAXIMUMS[] = {
   65535,    // Theoretical maximum, Hyperchannel
   32000,    // Nothing
   17914,    // 16Mb IBM Token Ring
   8166,     // IEEE 802.4
-  //4464,   // IEEE 802.5 (4Mb max)
+  // 4464   // IEEE 802.5 (4Mb max)
   4352,     // FDDI
-  //2048,   // Wideband Network
+  // 2048,  // Wideband Network
   2002,     // IEEE 802.5 (4Mb recommended)
-  //1536,   // Expermental Ethernet Networks
-  //1500,   // Ethernet, Point-to-Point (default)
+  // 1536,  // Expermental Ethernet Networks
+  // 1500,  // Ethernet, Point-to-Point (default)
   1492,     // IEEE 802.3
   1006,     // SLIP, ARPANET
-  //576,    // X.25 Networks
-  //544,    // DEC IP Portal
-  //512,    // NETBIOS
+  // 576,   // X.25 Networks
+  // 544,   // DEC IP Portal
+  // 512,   // NETBIOS
   508,      // IEEE 802/Source-Rt Bridge, ARCNET
   296,      // Point-to-Point (low delay)
   68,       // Official minimum
@@ -68,7 +67,8 @@ static const uint16 PACKET_MAXIMUMS[] = {
 static const uint32 IP_HEADER_SIZE = 20;
 static const uint32 ICMP_HEADER_SIZE = 8;
 
-#ifdef DEBUG
+// TODO: Enable for production builds also? Use FormatMessage?
+#ifdef _DEBUG
 LPCSTR WSAErrorToString(int error, LPCSTR *description_result) {
   LPCSTR string = "Unspecified";
   LPCSTR description = "Unspecified description";
@@ -136,9 +136,7 @@ LPCSTR WSAErrorToString(int error, LPCSTR *description_result) {
   return string;
 }
 
-void ReportWSAError(LPCSTR context, int error, const sockaddr_in& addr) {
-  talk_base::SocketAddress address;
-  address.FromSockAddr(addr);
+void ReportWSAError(LPCSTR context, int error, const SocketAddress& address) {
   LPCSTR description_string;
   LPCSTR error_string = WSAErrorToString(error, &description_string);
   LOG(LS_INFO) << context << " = " << error
@@ -146,7 +144,7 @@ void ReportWSAError(LPCSTR context, int error, const sockaddr_in& addr) {
     << address.ToString() << "]";
 }
 #else
-void ReportWSAError(LPCSTR context, int error, const sockaddr_in& addr) { }
+void ReportWSAError(LPCSTR context, int error, const SocketAddress& address) {}
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -163,8 +161,8 @@ struct Win32Socket::DnsLookup {
 };
 
 class Win32Socket::EventSink : public Win32Window {
-public:
-  EventSink(Win32Socket * parent) : parent_(parent) { }
+ public:
+  explicit EventSink(Win32Socket * parent) : parent_(parent) { }
 
   void Dispose();
 
@@ -172,15 +170,14 @@ public:
                          LRESULT& result);
   virtual void OnFinalMessage(HWND hWnd);
 
-private:
+ private:
   bool OnSocketNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT& result);
   bool OnDnsNotify(WPARAM wParam, LPARAM lParam, LRESULT& result);
 
   Win32Socket * parent_;
 };
 
-void
-Win32Socket::EventSink::Dispose() {
+void Win32Socket::EventSink::Dispose() {
   parent_ = NULL;
   if (::IsWindow(handle())) {
     ::DestroyWindow(handle());
@@ -189,8 +186,8 @@ Win32Socket::EventSink::Dispose() {
   }
 }
 
-bool Win32Socket::EventSink::OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                       LRESULT& result) {
+bool Win32Socket::EventSink::OnMessage(UINT uMsg, WPARAM wParam,
+                                       LPARAM lParam, LRESULT& result) {
   switch (uMsg) {
   case WM_SOCKETNOTIFY:
   case WM_TIMER:
@@ -201,62 +198,35 @@ bool Win32Socket::EventSink::OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam,
   return false;
 }
 
-bool
-Win32Socket::EventSink::OnSocketNotify(UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                       LRESULT& result) {
+bool Win32Socket::EventSink::OnSocketNotify(UINT uMsg, WPARAM wParam,
+                                            LPARAM lParam, LRESULT& result) {
   result = 0;
 
-  // Make sure the socket isn't already closed
-  if (!parent_ || (parent_->socket_ == INVALID_SOCKET))
-    return true;
-
-  int event = WSAGETSELECTEVENT(lParam);
+  int wsa_event = WSAGETSELECTEVENT(lParam);
   int wsa_error = WSAGETSELECTERROR(lParam);
 
+  // Treat connect timeouts as close notifications
   if (uMsg == WM_TIMER) {
-    event = FD_CLOSE;
+    wsa_event = FD_CLOSE;
     wsa_error = WSAETIMEDOUT;
-  } else if (event == FD_CLOSE) {
-    char ch;
-    if (::recv(parent_->socket_, &ch, 1, MSG_PEEK) > 0) {
-      parent_->signal_close_ = true;
-      return true;
-    }
   }
 
-  parent_->OnSocketNotify(event, wsa_error);
+  if (parent_)
+    parent_->OnSocketNotify(static_cast<SOCKET>(wParam), wsa_event, wsa_error);
   return true;
 }
 
-bool
-Win32Socket::EventSink::OnDnsNotify(WPARAM wParam, LPARAM lParam,
-                                    LRESULT& result) {
+bool Win32Socket::EventSink::OnDnsNotify(WPARAM wParam, LPARAM lParam,
+                                         LRESULT& result) {
   result = 0;
 
-  if (!parent_)
-    return true;
-
-  if (!parent_->dns_ ||
-     (parent_->dns_->handle != reinterpret_cast<HANDLE>(wParam))) {
-    ASSERT(false);  
-    return true;
-  }
-
-  uint32 ip = 0;
   int error = WSAGETASYNCERROR(lParam);
-
-  if (error == 0) {
-    hostent * pHost = reinterpret_cast<hostent *>(parent_->dns_->buffer);
-    uint32 net_ip = *reinterpret_cast<uint32 *>(pHost->h_addr_list[0]);
-    ip = talk_base::NetworkToHost32(net_ip);
-  }
-
-  parent_->OnDnsNotify(ip, error);
+  if (parent_)
+    parent_->OnDnsNotify(reinterpret_cast<HANDLE>(wParam), error);
   return true;
 }
 
-void
-Win32Socket::EventSink::OnFinalMessage(HWND hWnd) {
+void Win32Socket::EventSink::OnFinalMessage(HWND hWnd) {
   delete this;
 }
 
@@ -265,18 +235,29 @@ Win32Socket::EventSink::OnFinalMessage(HWND hWnd) {
 /////////////////////////////////////////////////////////////////////////////
 
 Win32Socket::Win32Socket()
-  : socket_(INVALID_SOCKET), error_(0), state_(CS_CLOSED),
-    signal_close_(false), sink_(NULL), dns_(NULL) {
-  // TODO: replace addr_ with SocketAddress
-  memset(&addr_, 0, sizeof(addr_));
+    : socket_(INVALID_SOCKET), error_(0), state_(CS_CLOSED), connect_time_(0),
+      closing_(false), close_error_(0), sink_(NULL), dns_(NULL) {
 }
 
 Win32Socket::~Win32Socket() {
   Close();
 }
 
-int
-Win32Socket::Attach(SOCKET s) {
+bool Win32Socket::CreateT(int type) {
+  Close();
+  int proto = (SOCK_DGRAM == type) ? IPPROTO_UDP : IPPROTO_TCP;
+  socket_ = ::WSASocket(AF_INET, type, proto, NULL, NULL, 0);
+  if (socket_ == INVALID_SOCKET) {
+    UpdateLastError();
+    return false;
+  }
+  if ((SOCK_DGRAM == type) && !SetAsync(FD_READ | FD_WRITE)) {
+    return false;
+  }
+  return true;
+}
+
+int Win32Socket::Attach(SOCKET s) {
   ASSERT(socket_ == INVALID_SOCKET);
   if (socket_ != INVALID_SOCKET)
     return SOCKET_ERROR;
@@ -288,79 +269,72 @@ Win32Socket::Attach(SOCKET s) {
   socket_ = s;
   state_ = CS_CONNECTED;
 
-  if (!Create(FD_READ | FD_WRITE | FD_CLOSE))
+  if (!SetAsync(FD_READ | FD_WRITE | FD_CLOSE))
     return SOCKET_ERROR;
 
   return 0;
 }
 
-void
-Win32Socket::SetTimeout(int ms) {
-  if (sink_) 
+void Win32Socket::SetTimeout(int ms) {
+  if (sink_)
     ::SetTimer(sink_->handle(), 1, ms, 0);
 }
 
-talk_base::SocketAddress
-Win32Socket::GetLocalAddress() const {
+SocketAddress Win32Socket::GetLocalAddress() const {
   sockaddr_in addr;
   socklen_t addrlen = sizeof(addr);
-  int result = ::getsockname(socket_, (sockaddr*)&addr, &addrlen);
-  ASSERT(addrlen == sizeof(addr));
-  talk_base::SocketAddress address;
+  int result = ::getsockname(socket_, reinterpret_cast<sockaddr*>(&addr),
+                             &addrlen);
+  SocketAddress address;
   if (result >= 0) {
+    ASSERT(addrlen == sizeof(addr));
     address.FromSockAddr(addr);
   } else {
-    ASSERT(result >= 0);
+    LOG(LS_WARNING) << "GetLocalAddress: unable to get local addr, socket="
+                    << socket_;
   }
   return address;
 }
 
-talk_base::SocketAddress 
-Win32Socket::GetRemoteAddress() const {
+SocketAddress Win32Socket::GetRemoteAddress() const {
   sockaddr_in addr;
   socklen_t addrlen = sizeof(addr);
-  int result = ::getpeername(socket_, (sockaddr*)&addr, &addrlen);
+  int result = ::getpeername(socket_, reinterpret_cast<sockaddr*>(&addr),
+                             &addrlen);
   ASSERT(addrlen == sizeof(addr));
-  talk_base::SocketAddress address;
+  SocketAddress address;
   if (result >= 0) {
+    ASSERT(addrlen == sizeof(addr));
     address.FromSockAddr(addr);
   } else {
-    ASSERT(errno == ENOTCONN);
+    LOG(LS_WARNING) << "GetRemoteAddress: unable to get remote addr, socket="
+                    << socket_;
   }
   return address;
 }
 
-int
-Win32Socket::Bind(const talk_base::SocketAddress& addr) {
-  ASSERT(socket_ == INVALID_SOCKET);
-  if (socket_ != INVALID_SOCKET)
-    return SOCKET_ERROR;
-
-  if (!Create(FD_ACCEPT | FD_CLOSE))
+int Win32Socket::Bind(const SocketAddress& addr) {
+  ASSERT(socket_ != INVALID_SOCKET);
+  if (socket_ == INVALID_SOCKET)
     return SOCKET_ERROR;
 
   sockaddr_in saddr;
   addr.ToSockAddr(&saddr);
-  int err = ::bind(socket_, (sockaddr*)&saddr, sizeof(saddr));
+  int err = ::bind(socket_, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr));
   UpdateLastError();
   return err;
 }
 
-int
-Win32Socket::Connect(const talk_base::SocketAddress& addr) {
-  ASSERT(socket_ == INVALID_SOCKET);
-  if (socket_ != INVALID_SOCKET)
+int Win32Socket::Connect(const SocketAddress& addr) {
+  if ((socket_ == INVALID_SOCKET) && !CreateT(SOCK_STREAM))
     return SOCKET_ERROR;
 
-  if (!Create(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE))
+  if (!sink_ && !SetAsync(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE))
     return SOCKET_ERROR;
 
+  // If we have an IP address, connect now.
   if (!addr.IsUnresolved()) {
-    sockaddr_in saddr;
-    addr.ToSockAddr(&saddr);
-
-    // now connect
-    return DoConnect(saddr);
+    return DoConnect(addr);
   }
 
   LOG_F(LS_INFO) << "async dns lookup (" << addr.IPAsString() << ")";
@@ -382,13 +356,19 @@ Win32Socket::Connect(const talk_base::SocketAddress& addr) {
   return 0;
 }
 
-int
-Win32Socket::DoConnect(const sockaddr_in& addr) {
-  connect_time_ = talk_base::GetMillisecondCount();
-  int result = connect(socket_, (SOCKADDR*)&addr, sizeof(addr));
-  if (result == SOCKET_ERROR) {
+int Win32Socket::DoConnect(const SocketAddress& addr) {
+  sockaddr_in saddr;
+  addr.ToSockAddr(&saddr);
+  connect_time_ = Time();
+  int result = connect(socket_, reinterpret_cast<SOCKADDR*>(&saddr),
+                       sizeof(saddr));
+  if (result != SOCKET_ERROR) {
+    state_ = CS_CONNECTED;
+  } else {
     int code = WSAGetLastError();
-    if (code != WSAEWOULDBLOCK) {
+    if (code == WSAEWOULDBLOCK) {
+      state_ = CS_CONNECTING;
+    } else {
       ReportWSAError("WSAAsync:connect", code, addr);
       error_ = code;
       Close();
@@ -396,180 +376,96 @@ Win32Socket::DoConnect(const sockaddr_in& addr) {
     }
   }
   addr_ = addr;
-  state_ = CS_CONNECTING;
+
   return 0;
 }
 
-void
-Win32Socket::OnSocketNotify(int event, int error) {
-  error_ = error;
-  switch (event) {
-    case FD_CONNECT:
-      if (error != ERROR_SUCCESS) {
-        ReportWSAError("WSAAsync:connect notify", error, addr_);
-#ifdef DEBUG
-        int32 duration = talk_base::TimeDiff(talk_base::GetMillisecondCount(), 
-            connect_time_);
-        LOG(LS_INFO) << "WSAAsync:connect error (" << duration
-                     << " ms), faking close";
-#endif
-        Close();
-        // If you get an error connecting, close doesn't really do anything
-        // and it certainly doesn't send back any close notification, but
-        // we really only maintain a few states, so it is easiest to get
-        // back into a known state by pretending that a close happened, even
-        // though the connect event never did occur.
-        SignalCloseEvent(this, error);
-      } else {
-#ifdef DEBUG
-        int32 duration = talk_base::TimeDiff(talk_base::GetMillisecondCount(), 
-            connect_time_);
-        LOG(LS_INFO) << "WSAAsync:connect (" << duration << " ms)";
-#endif
-        state_ = CS_CONNECTED;
-        SignalConnectEvent(this);
-      }
-      break;
-
-    case FD_ACCEPT:
-    case FD_READ:
-      if (error != ERROR_SUCCESS) {
-        ReportWSAError("WSAAsync:read notify", error, addr_);
-        Close();
-      } else {
-        SignalReadEvent(this);
-      }
-      break;
-
-    case FD_WRITE:
-      if (error != ERROR_SUCCESS) {
-        ReportWSAError("WSAAsync:write notify", error, addr_);
-        Close();
-      } else {
-        SignalWriteEvent(this);
-      }
-      break;
-
-    case FD_CLOSE:
-      ReportWSAError("WSAAsync:close notify", error, addr_);
-      Close();
-      SignalCloseEvent(this, error);
-      break;
-  }
-}
-
-void
-Win32Socket::OnDnsNotify(int ip, int error) {
-  LOG_F(LS_INFO) << "(" << talk_base::SocketAddress::IPToString(ip)
-                 << ", " << error << ")";
-  if (error == 0) {
-    talk_base::SocketAddress address(ip, dns_->port);
-    sockaddr_in addr;
-    address.ToSockAddr(&addr);
-    error = DoConnect(addr);
-  } else {
-    Close();
-  }
-
-  if (error) {
-    error_ = error;
-    SignalCloseEvent(this, error_);
-  } else {
-    delete dns_;
-    dns_ = NULL;
-  }
-}
-
-int
-Win32Socket::GetError() const {
+int Win32Socket::GetError() const {
   return error_;
 }
 
-void
-Win32Socket::SetError(int error) {
+void Win32Socket::SetError(int error) {
   error_ = error;
 }
 
-Socket::ConnState 
-Win32Socket::GetState() const {
+Socket::ConnState Win32Socket::GetState() const {
   return state_;
 }
 
-int 
-Win32Socket::SetOption(Option opt, int value) {
-  ASSERT(opt == OPT_DONTFRAGMENT);
-  value = (value == 0) ? 0 : 1;
-  return ::setsockopt(socket_, IPPROTO_IP, IP_DONTFRAGMENT, 
-      reinterpret_cast<char*>(&value), sizeof(value));
+int Win32Socket::GetOption(Option opt, int* value) {
+  int slevel;
+  int sopt;
+  if (TranslateOption(opt, &slevel, &sopt) == -1)
+    return -1;
+
+  char* p = reinterpret_cast<char*>(value);
+  int optlen = sizeof(value);
+  return ::getsockopt(socket_, slevel, sopt, p, &optlen);
 }
 
-int
-Win32Socket::Send(const void *pv, size_t cb) {
-  int sent = ::send(socket_, reinterpret_cast<const char *>(pv), (int)cb, 0);
+int Win32Socket::SetOption(Option opt, int value) {
+  int slevel;
+  int sopt;
+  if (TranslateOption(opt, &slevel, &sopt) == -1)
+    return -1;
+
+  const char* p = reinterpret_cast<const char*>(&value);
+  return ::setsockopt(socket_, slevel, sopt, p, sizeof(value));
+}
+
+int Win32Socket::Send(const void *pv, size_t cb) {
+  int sent = ::send(socket_, reinterpret_cast<const char*>(pv), cb, 0);
   UpdateLastError();
   return sent;
 }
 
-int
-Win32Socket::SendTo(const void *pv, size_t cb, 
-    const talk_base::SocketAddress& addr) {
+int Win32Socket::SendTo(const void *pv, size_t cb,
+                        const SocketAddress& addr) {
   sockaddr_in saddr;
   addr.ToSockAddr(&saddr);
-  int sent = ::sendto(socket_, reinterpret_cast<const char *>(pv), (int)cb, 0, 
-      (sockaddr*)&saddr, sizeof(saddr));
+  int sent = ::sendto(socket_, reinterpret_cast<const char*>(pv), cb, 0,
+                      reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr));
   UpdateLastError();
   return sent;
 }
 
-int 
-Win32Socket::Recv(void *pv, size_t cb) {
-  int received = ::recv(socket_, (char *)pv, (int)cb, 0);
+int Win32Socket::Recv(void *pv, size_t cb) {
+  int received = ::recv(socket_, static_cast<char*>(pv), cb, 0);
   UpdateLastError();
-  if (signal_close_ && (received > 0)) {
-    char ch;
-    if (::recv(socket_, &ch, 1, MSG_PEEK) <= 0) {
-      signal_close_ = false;
-      ::PostMessage(sink_->handle(), WM_SOCKETNOTIFY,
-                    WSAMAKESELECTREPLY(FD_CLOSE, 0), 0);
-    }
-  }
+  if (closing_ && received <= static_cast<int>(cb))
+    PostClosed();
   return received;
 }
 
-int
-Win32Socket::RecvFrom(void *pv, size_t cb, talk_base::SocketAddress *paddr) {
+int Win32Socket::RecvFrom(void *pv, size_t cb,
+                          SocketAddress *paddr) {
   sockaddr_in saddr;
   socklen_t cbAddr = sizeof(saddr);
-  int received = ::recvfrom(socket_, (char *)pv, (int)cb, 0, (sockaddr*)&saddr,
-                            &cbAddr);
+  int received = ::recvfrom(socket_, static_cast<char*>(pv), cb, 0,
+                            reinterpret_cast<sockaddr*>(&saddr), &cbAddr);
   UpdateLastError();
   if (received != SOCKET_ERROR)
     paddr->FromSockAddr(saddr);
-  if (signal_close_ && (received > 0)) {
-    char ch;
-    if (::recv(socket_, &ch, 1, MSG_PEEK) <= 0) {
-      signal_close_ = false;
-      ::PostMessage(sink_->handle(), WM_SOCKETNOTIFY,
-                    WSAMAKESELECTREPLY(FD_CLOSE, 0), 0);
-    }
-  }
+  if (closing_ && received <= static_cast<int>(cb))
+    PostClosed();
   return received;
 }
 
-int 
-Win32Socket::Listen(int backlog) {
+int Win32Socket::Listen(int backlog) {
   int err = ::listen(socket_, backlog);
+  if (!SetAsync(FD_ACCEPT))
+    return SOCKET_ERROR;
+
   UpdateLastError();
   if (err == 0)
     state_ = CS_CONNECTING;
   return err;
 }
 
-talk_base::Socket* 
-Win32Socket::Accept(talk_base::SocketAddress *paddr) {
+Win32Socket* Win32Socket::Accept(SocketAddress *paddr) {
   sockaddr_in saddr;
   socklen_t cbAddr = sizeof(saddr);
-  SOCKET s = ::accept(socket_, (sockaddr*)&saddr, &cbAddr);
+  SOCKET s = ::accept(socket_, reinterpret_cast<sockaddr*>(&saddr), &cbAddr);
   UpdateLastError();
   if (s == INVALID_SOCKET)
     return NULL;
@@ -582,13 +478,13 @@ Win32Socket::Accept(talk_base::SocketAddress *paddr) {
   return NULL;
 }
 
-int 
-Win32Socket::Close() {
+int Win32Socket::Close() {
   int err = 0;
   if (socket_ != INVALID_SOCKET) {
     err = ::closesocket(socket_);
     socket_ = INVALID_SOCKET;
-    signal_close_ = false;
+    closing_ = false;
+    close_error_ = 0;
     UpdateLastError();
   }
   if (dns_) {
@@ -600,34 +496,32 @@ Win32Socket::Close() {
     sink_->Dispose();
     sink_ = NULL;
   }
-  memset(&addr_, 0, sizeof(addr_));        // no longer connected, zero ip/port
+  addr_.Clear();
   state_ = CS_CLOSED;
   return err;
 }
 
-int 
-Win32Socket::EstimateMTU(uint16* mtu) {
-  talk_base::SocketAddress addr = GetRemoteAddress();
+int Win32Socket::EstimateMTU(uint16* mtu) {
+  SocketAddress addr = GetRemoteAddress();
   if (addr.IsAny()) {
     error_ = ENOTCONN;
     return -1;
   }
 
-  talk_base::WinPing ping;
+  WinPing ping;
   if (!ping.IsValid()) {
-    error_ = EINVAL; // can't think of a better error ID
+    error_ = EINVAL;  // can't think of a better error ID
     return -1;
   }
 
   for (int level = 0; PACKET_MAXIMUMS[level + 1] > 0; ++level) {
     int32 size = PACKET_MAXIMUMS[level] - IP_HEADER_SIZE - ICMP_HEADER_SIZE;
-    talk_base::WinPing::PingResult result =
-      ping.Ping(addr.ip(), size, 0, 1, false);
-    if (result == talk_base::WinPing::PING_FAIL) {
-      error_ = EINVAL; // can't think of a better error ID
+    WinPing::PingResult result = ping.Ping(addr.ip(), size, 0, 1, false);
+    if (result == WinPing::PING_FAIL) {
+      error_ = EINVAL;  // can't think of a better error ID
       return -1;
     }
-    if (result != talk_base::WinPing::PING_TOO_LARGE) {
+    if (result != WinPing::PING_TOO_LARGE) {
       *mtu = PACKET_MAXIMUMS[level];
       return 0;
     }
@@ -637,17 +531,8 @@ Win32Socket::EstimateMTU(uint16* mtu) {
   return 0;
 }
 
-bool
-Win32Socket::Create(long events) {
+bool Win32Socket::SetAsync(int events) {
   ASSERT(NULL == sink_);
-
-  if (INVALID_SOCKET == socket_) {
-    socket_ = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, NULL, 0);
-    if (socket_ == INVALID_SOCKET) {
-      UpdateLastError();
-      return false;
-    }
-  }
 
   // Create window
   sink_ = new EventSink(this);
@@ -664,104 +549,263 @@ Win32Socket::Create(long events) {
   return true;
 }
 
-void
-Win32Socket::UpdateLastError() {
+bool Win32Socket::HandleClosed(int close_error) {
+  // WM_CLOSE will be received before all data has been read, so we need to
+  // hold on to it until the read buffer has been drained.
+  char ch;
+  closing_ = true;
+  close_error_ = close_error;
+  return (::recv(socket_, &ch, 1, MSG_PEEK) <= 0);
+}
+
+void Win32Socket::PostClosed() {
+  // If we see that the buffer is indeed drained, then send the close.
+  closing_ = false;
+  ::PostMessage(sink_->handle(), WM_SOCKETNOTIFY,
+                socket_, WSAMAKESELECTREPLY(FD_CLOSE, close_error_));
+}
+
+void Win32Socket::UpdateLastError() {
   error_ = WSAGetLastError();
+}
+
+int Win32Socket::TranslateOption(Option opt, int* slevel, int* sopt) {
+  switch (opt) {
+    case OPT_DONTFRAGMENT:
+      *slevel = IPPROTO_IP;
+      *sopt = IP_DONTFRAGMENT;
+      break;
+    case OPT_RCVBUF:
+      *slevel = SOL_SOCKET;
+      *sopt = SO_RCVBUF;
+      break;
+    case OPT_SNDBUF:
+      *slevel = SOL_SOCKET;
+      *sopt = SO_SNDBUF;
+      break;
+    case OPT_NODELAY:
+      *slevel = IPPROTO_TCP;
+      *sopt = TCP_NODELAY;
+      break;
+    default:
+      ASSERT(false);
+      return -1;
+  }
+  return 0;
+}
+
+void Win32Socket::OnSocketNotify(SOCKET socket, int event, int error) {
+  // Ignore events if we're already closed.
+  if (socket != socket_)
+    return;
+
+  error_ = error;
+  switch (event) {
+    case FD_CONNECT:
+      if (error != ERROR_SUCCESS) {
+        ReportWSAError("WSAAsync:connect notify", error, addr_);
+#ifdef _DEBUG
+        int32 duration = TimeSince(connect_time_);
+        LOG(LS_INFO) << "WSAAsync:connect error (" << duration
+                     << " ms), faking close";
+#endif
+        state_ = CS_CLOSED;
+        // If you get an error connecting, close doesn't really do anything
+        // and it certainly doesn't send back any close notification, but
+        // we really only maintain a few states, so it is easiest to get
+        // back into a known state by pretending that a close happened, even
+        // though the connect event never did occur.
+        SignalCloseEvent(this, error);
+      } else {
+#ifdef _DEBUG
+        int32 duration = TimeSince(connect_time_);
+        LOG(LS_INFO) << "WSAAsync:connect (" << duration << " ms)";
+#endif
+        state_ = CS_CONNECTED;
+        SignalConnectEvent(this);
+      }
+      break;
+
+    case FD_ACCEPT:
+    case FD_READ:
+      if (error != ERROR_SUCCESS) {
+        ReportWSAError("WSAAsync:read notify", error, addr_);
+      } else {
+        SignalReadEvent(this);
+      }
+      break;
+
+    case FD_WRITE:
+      if (error != ERROR_SUCCESS) {
+        ReportWSAError("WSAAsync:write notify", error, addr_);
+      } else {
+        SignalWriteEvent(this);
+      }
+      break;
+
+    case FD_CLOSE:
+      if (HandleClosed(error)) {
+        ReportWSAError("WSAAsync:close notify", error, addr_);
+        state_ = CS_CLOSED;
+        SignalCloseEvent(this, error);
+      }
+      break;
+  }
+}
+
+void Win32Socket::OnDnsNotify(HANDLE task, int error) {
+  if (!dns_ || dns_->handle != task)
+    return;
+
+  uint32 ip = 0;
+  if (error == 0) {
+    hostent* pHost = reinterpret_cast<hostent*>(dns_->buffer);
+    uint32 net_ip = *reinterpret_cast<uint32*>(pHost->h_addr_list[0]);
+    ip = NetworkToHost32(net_ip);
+  }
+
+  LOG_F(LS_INFO) << "(" << SocketAddress::IPToString(ip)
+                 << ", " << error << ")";
+
+  if (error == 0) {
+    SocketAddress address(ip, dns_->port);
+    error = DoConnect(address);
+  } else {
+    Close();
+  }
+
+  if (error) {
+    error_ = error;
+    SignalCloseEvent(this, error_);
+  } else {
+    delete dns_;
+    dns_ = NULL;
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Win32SocketServer
+// Provides cricket base services on top of a win32 gui thread
 ///////////////////////////////////////////////////////////////////////////////
 
-static UINT s_wm_wakeup_id;
+static UINT s_wm_wakeup_id = 0;
+const TCHAR Win32SocketServer::kWindowName[] = L"libjingle Message Window";
 
-LRESULT CALLBACK DummyWndProc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
-
-// A socket server that provides cricket base services on top of a win32 gui thread
-
-Win32SocketServer::Win32SocketServer(MessageQueue *message_queue) {
+Win32SocketServer::Win32SocketServer(MessageQueue *message_queue)
+    : message_queue_(message_queue), wnd_(this), posted_(false) {
   if (s_wm_wakeup_id == 0)
     s_wm_wakeup_id = RegisterWindowMessage(L"WM_WAKEUP");
-  message_queue_ = message_queue;
-  hwnd_ = NULL;
-  CreateDummyWindow();
+  if (!wnd_.Create(NULL, kWindowName, 0, 0, 0, 0, 0, 0)) {
+    LOG_GLE(LS_ERROR) << "Failed to create message window.";
+  }
 }
 
 Win32SocketServer::~Win32SocketServer() {
-  if (hwnd_ != NULL) {
-    KillTimer(hwnd_, 1);
-    ::DestroyWindow(hwnd_);
+  if (wnd_.handle() != NULL) {
+    KillTimer(wnd_.handle(), 1);
+    wnd_.Destroy();
   }
 }
 
 Socket* Win32SocketServer::CreateSocket(int type) {
-  ASSERT(SOCK_STREAM == type);
-  return new Win32Socket;
+  return CreateAsyncSocket(type);
 }
 
 AsyncSocket* Win32SocketServer::CreateAsyncSocket(int type) {
-  ASSERT(SOCK_STREAM == type);
-  return new Win32Socket;
+  Win32Socket* socket = new Win32Socket;
+  if (socket->CreateT(type)) {
+    return socket;
+  }
+  delete socket;
+  return NULL;
+}
+
+void Win32SocketServer::SetMessageQueue(MessageQueue* queue) {
+  message_queue_ = queue;
 }
 
 bool Win32SocketServer::Wait(int cms, bool process_io) {
-  ASSERT(!process_io || (cms == 0));  // Should only be used for Thread::Send, or in Pump, below
-  if (cms == -1) {
+  BOOL b;
+  if (process_io) {
+    // Spin the Win32 message pump at least once, and as long as requested.
+    // This is the Thread::ProcessMessages case.
+    uint32 start = Time();
     MSG msg;
-    GetMessage(&msg, NULL, s_wm_wakeup_id, s_wm_wakeup_id);
+    do {
+      SetTimer(wnd_.handle(), 0, cms, NULL);
+      b = GetMessage(&msg, NULL, 0, 0);
+      if (b) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      }
+      KillTimer(wnd_.handle(), 0);
+    } while (b && TimeSince(start) < cms);
   } else if (cms != 0) {
-    Sleep(cms);
+    // Sit and wait forever for a WakeUp. This is the Thread::Send case.
+    ASSERT(cms == -1);
+    MSG msg;
+    b = GetMessage(&msg, NULL, s_wm_wakeup_id, s_wm_wakeup_id);
+    {
+      CritScope scope(&cs_);
+      posted_ = false;
+    }
+  } else {
+    // No-op (cms == 0 && !process_io). This is the Pump case.
+    b = TRUE;
   }
-  return true;
+  return (b != FALSE);
 }
 
 void Win32SocketServer::WakeUp() {
-  // Always post for every wakeup, so there are no
-  // critical sections
-  if (hwnd_ != NULL)
-    PostMessage(hwnd_, s_wm_wakeup_id, 0, 0);
+  if (wnd_.handle()) {
+    // Set the "message pending" flag, if not already set.
+    {
+      CritScope scope(&cs_);
+      if (posted_)
+        return;
+      posted_ = true;
+    }
+
+    PostMessage(wnd_.handle(), s_wm_wakeup_id, 0, 0);
+  }
 }
 
 void Win32SocketServer::Pump() {
-  // Process messages
+  // Clear the "message pending" flag.
+  {
+    CritScope scope(&cs_);
+    posted_ = false;
+  }
+
+  // Dispatch all the messages that are currently in our queue. If new messages
+  // are posted during the dispatch, they will be handled in the next Pump.
+  // We use max(1, ...) to make sure we try to dispatch at least once, since
+  // this allow us to process "sent" messages, not included in the size() count.
   Message msg;
-  while (message_queue_->Get(&msg, 0))
+  for (size_t max_messages_to_process = _max<size_t>(1, message_queue_->size());
+       max_messages_to_process > 0 && message_queue_->Get(&msg, 0, false);
+       --max_messages_to_process) {
     message_queue_->Dispatch(&msg);
+  }
 
   // Anything remaining?
   int delay = message_queue_->GetDelay();
   if (delay == -1) {
-    KillTimer(hwnd_, 1);
+    KillTimer(wnd_.handle(), 1);
   } else {
-    SetTimer(hwnd_, 1, delay, NULL);
+    SetTimer(wnd_.handle(), 1, delay, NULL);
   }
 }
 
-void Win32SocketServer::CreateDummyWindow()
-{
-  static bool s_registered;
-  if (!s_registered) {
-    ::WNDCLASSW wc;
-    memset(&wc, 0, sizeof(wc));
-    wc.cbWndExtra = sizeof(this);
-    wc.lpszClassName = L"Dummy";
-    wc.lpfnWndProc = DummyWndProc;
-    ::RegisterClassW(&wc);
-    s_registered = true;
-  }
-
-  hwnd_ = ::CreateWindowW(L"Dummy", L"", 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
-  SetWindowLong(hwnd_, GWL_USERDATA, (LONG)(LONG_PTR)this);
-}
-
-LRESULT CALLBACK DummyWndProc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
-{
+bool Win32SocketServer::MessageWindow::OnMessage(UINT wm, WPARAM wp,
+                                                 LPARAM lp, LRESULT& lr) {
+  bool handled = false;
   if (wm == s_wm_wakeup_id || (wm == WM_TIMER && wp == 1)) {
-    Win32SocketServer *ss = (Win32SocketServer *)(LONG_PTR)GetWindowLong(hwnd, GWL_USERDATA);
-    ss->Pump();
-    return 0;
+    ss_->Pump();
+    lr = 0;
+    handled = true;
   }
-  return ::DefWindowProc(hwnd, wm, wp, lp);
+  return handled;
 }
 
-} // namespace talk_base
+}  // namespace talk_base

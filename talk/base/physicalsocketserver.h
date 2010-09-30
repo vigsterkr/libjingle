@@ -42,6 +42,9 @@ namespace talk_base {
 
 class Dispatcher;
 class Signaler;
+#ifdef POSIX
+class PosixSignalDeliveryDispatcher;
+#endif
 
 // A socket server that provides the real sockets of the underlying OS.
 class PhysicalSocketServer : public SocketServer {
@@ -65,15 +68,39 @@ public:
 
 #ifdef POSIX
   AsyncFile* CreateFile(int fd);
+
+  // Sets the function to be executed in response to the specified POSIX signal.
+  // The function is executed from inside Wait() using the "self-pipe trick"--
+  // regardless of which thread receives the signal--and hence can safely
+  // manipulate user-level data structures.
+  // "handler" may be SIG_IGN, SIG_DFL, or a user-specified function, just like
+  // with signal(2).
+  // Only one PhysicalSocketServer may have user-level signal handlers.
+  // Attempting to install a signal handler for a PhysicalSocketServer when
+  // another already owns some will fail.
+  // The signal mask is not modified. It is the caller's responsibily to
+  // maintain it as desired.
+  bool SetPosixSignalHandler(int signum, void (*handler)(int));
 #endif
 
 private:
-  std::vector<Dispatcher*> dispatchers_;
+  typedef std::vector<Dispatcher*> DispatcherList;
+  typedef std::vector<size_t*> IteratorList;
+
+#ifdef POSIX
+  static bool InstallSignal(int signum, void (*handler)(int));
+#endif
+
+  DispatcherList dispatchers_;
+  IteratorList iterators_;
   Signaler* signal_wakeup_;
   CriticalSection crit_;
   bool fWait_;
   uint32 last_tick_tracked_;
   int last_tick_dispatch_count_;
+#ifdef WIN32
+  WSAEVENT socket_ev_;
+#endif
 };
 
 } // namespace talk_base

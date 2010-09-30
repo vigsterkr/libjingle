@@ -25,62 +25,59 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_BASE_P2PTRANSPORT_H_
-#define _CRICKET_P2P_BASE_P2PTRANSPORT_H_
+#ifndef TALK_P2P_BASE_P2PTRANSPORT_H_
+#define TALK_P2P_BASE_P2PTRANSPORT_H_
 
+#include <string>
+#include <vector>
 #include "talk/p2p/base/transport.h"
 
 namespace cricket {
 
-class Candidate;
-
-// Xml names used to name this transport and create our elements
-extern const std::string kNsP2pTransport;
-extern const buzz::QName kQnP2pTransport;
-extern const buzz::QName kQnP2pCandidate;
-
 class P2PTransport: public Transport {
  public:
-  P2PTransport(SessionManager* session_manager);
+  P2PTransport(talk_base::Thread* signaling_thread,
+               talk_base::Thread* worker_thread,
+               PortAllocator* allocator);
   virtual ~P2PTransport();
 
-  // Implements negotiation of the P2P protocol.
-  virtual buzz::XmlElement* CreateTransportOffer();
-  virtual buzz::XmlElement* CreateTransportAnswer();
-  virtual bool OnTransportOffer(const buzz::XmlElement* elem);
-  virtual bool OnTransportAnswer(const buzz::XmlElement* elem);
-
-  // Forwards each candidate message to the appropriate channel.
-  virtual bool OnTransportMessage(const buzz::XmlElement* msg,
-                                  const buzz::XmlElement* stanza);
-  virtual bool OnTransportError(const buzz::XmlElement* session_msg,
-                                const buzz::XmlElement* error);
+  virtual void OnTransportError(const buzz::XmlElement* error);
 
  protected:
   // Creates and destroys P2PTransportChannel.
-  virtual TransportChannelImpl* CreateTransportChannel(const std::string& name, const std::string &session_type);
+  virtual TransportChannelImpl* CreateTransportChannel(
+      const std::string& name, const std::string& content_type);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
-
-  // Sends a given set of channel messages, which each describe a candidate,
-  // to the other client as a single transport message.
-  void OnTransportChannelMessages(
-      const std::vector<buzz::XmlElement*>& candidates);
-
- private:
-  // Attempts to parse the given XML into a candidate.  Returns true if the
-  // XML is valid.  If not, we will signal an error.
-  bool ParseCandidate(const buzz::XmlElement* stanza,
-                      const buzz::XmlElement* elem,
-                      Candidate* candidate);
-
-  // Generates a XML element describing the given candidate.
-  buzz::XmlElement* TranslateCandidate(const Candidate& c);
 
   friend class P2PTransportChannel;
 
   DISALLOW_EVIL_CONSTRUCTORS(P2PTransport);
 };
 
+class P2PTransportParser : public TransportParser {
+ public:
+  P2PTransportParser() {}
+  virtual bool ParseCandidates(SignalingProtocol protocol,
+                               const buzz::XmlElement* elem,
+                               Candidates* candidates,
+                               ParseError* error);
+  virtual bool WriteCandidates(SignalingProtocol protocol,
+                               const Candidates& candidates,
+                               XmlElements* candidate_elems,
+                               WriteError* error);
+ private:
+  bool ParseCandidate(const buzz::XmlElement* elem,
+                      Candidate* candidate,
+                      ParseError* error);
+  bool WriteCandidate(const Candidate& candidate,
+                      buzz::XmlElement* elem,
+                      WriteError* error);
+  bool VerifyUsernameFormat(const std::string& username,
+                            ParseError* error);
+
+  DISALLOW_EVIL_CONSTRUCTORS(P2PTransportParser);
+};
+
 }  // namespace cricket
 
-#endif  // _CRICKET_P2P_BASE_P2PTRANSPORT_H_
+#endif  // TALK_P2P_BASE_P2PTRANSPORT_H_

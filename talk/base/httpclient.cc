@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -38,7 +38,7 @@
 #include "talk/base/socketstream.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
-#include "talk/base/basicdefs.h"
+#include "talk/base/thread.h"
 
 namespace talk_base {
 
@@ -51,11 +51,6 @@ namespace {
 const size_t kCacheHeader = 0;
 const size_t kCacheBody = 1;
 
-std::string HttpAddress(const SocketAddress& address) {
-  return (address.port() == HTTP_DEFAULT_PORT)
-          ? address.hostname() : address.ToString();
-}
-
 // Convert decimal string to integer
 bool HttpStringToInt(const std::string& str, unsigned long* val) {
   ASSERT(NULL != val);
@@ -64,16 +59,15 @@ bool HttpStringToInt(const std::string& str, unsigned long* val) {
   return (*eos == '\0');
 }
 
-bool HttpShouldCache(const HttpRequestData& request, 
-                     const HttpResponseData& response) {
-  bool verb_allows_cache = (request.verb == HV_GET)
-                           || (request.verb == HV_HEAD);
-  bool is_range_response = response.hasHeader(HH_CONTENT_RANGE, NULL);
-  bool has_expires = response.hasHeader(HH_EXPIRES, NULL);
+bool HttpShouldCache(const HttpTransaction& t) {
+  bool verb_allows_cache = (t.request.verb == HV_GET)
+                           || (t.request.verb == HV_HEAD);
+  bool is_range_response = t.response.hasHeader(HH_CONTENT_RANGE, NULL);
+  bool has_expires = t.response.hasHeader(HH_EXPIRES, NULL);
   bool request_allows_cache =
-    has_expires || (std::string::npos != request.path.find('?'));
+    has_expires || (std::string::npos != t.request.path.find('?'));
   bool response_allows_cache =
-    has_expires || HttpCodeIsCacheable(response.scode);
+    has_expires || HttpCodeIsCacheable(t.response.scode);
 
   bool may_cache = verb_allows_cache
                    && request_allows_cache
@@ -81,7 +75,7 @@ bool HttpShouldCache(const HttpRequestData& request,
                    && !is_range_response;
 
   std::string value;
-  if (response.hasHeader(HH_CACHE_CONTROL, &value)) {
+  if (t.response.hasHeader(HH_CACHE_CONTROL, &value)) {
     HttpAttributeList directives;
     HttpParseAttributes(value.data(), value.size(), directives);
     // Response Directives Summary:
@@ -108,8 +102,7 @@ enum HttpCacheState {
   HCS_NONE    // Not in cache
 };
 
-HttpCacheState HttpGetCacheState(const HttpRequestData& request, 
-                                 const HttpResponseData& response) {
+HttpCacheState HttpGetCacheState(const HttpTransaction& t) {
   // Temporaries
   std::string s_temp;
   unsigned long i_temp;
@@ -118,13 +111,13 @@ HttpCacheState HttpGetCacheState(const HttpRequestData& request,
   unsigned long now = time(0);
 
   HttpAttributeList cache_control;
-  if (response.hasHeader(HH_CACHE_CONTROL, &s_temp)) {
+  if (t.response.hasHeader(HH_CACHE_CONTROL, &s_temp)) {
     HttpParseAttributes(s_temp.data(), s_temp.size(), cache_control);
   }
 
   // Compute age of cache document
   unsigned long date;
-  if (!response.hasHeader(HH_DATE, &s_temp)
+  if (!t.response.hasHeader(HH_DATE, &s_temp)
       || !HttpDateToSeconds(s_temp, &date))
     return HCS_NONE;
 
@@ -138,7 +131,7 @@ HttpCacheState HttpGetCacheState(const HttpRequestData& request,
   }
 
   unsigned long corrected_received_age = apparent_age;
-  if (response.hasHeader(HH_AGE, &s_temp)
+  if (t.response.hasHeader(HH_AGE, &s_temp)
       && HttpStringToInt(s_temp, &i_temp)) {
     corrected_received_age = stdmax(apparent_age, i_temp);
   }
@@ -152,10 +145,10 @@ HttpCacheState HttpGetCacheState(const HttpRequestData& request,
   unsigned long lifetime;
   if (HttpHasAttribute(cache_control, "max-age", &s_temp)) {
     lifetime = atoi(s_temp.c_str());
-  } else if (response.hasHeader(HH_EXPIRES, &s_temp)
+  } else if (t.response.hasHeader(HH_EXPIRES, &s_temp)
              && HttpDateToSeconds(s_temp, &i_temp)) {
     lifetime = i_temp - date;
-  } else if (response.hasHeader(HH_LAST_MODIFIED, &s_temp)
+  } else if (t.response.hasHeader(HH_LAST_MODIFIED, &s_temp)
              && HttpDateToSeconds(s_temp, &i_temp)) {
     // TODO: Issue warning 113 if age > 24 hours
     lifetime = (now - i_temp) / 10;
@@ -188,7 +181,7 @@ HttpResponseValidatorLevel(const HttpResponseData& response) {
   }
   if (response.hasHeader(HH_LAST_MODIFIED, &value)) {
     unsigned long last_modified, date;
-    if (HttpDateToSeconds(value, &last_modified) 
+    if (HttpDateToSeconds(value, &last_modified)
         && response.hasHeader(HH_DATE, &value)
         && HttpDateToSeconds(value, &date)
         && (last_modified + 60 < date)) {
@@ -199,46 +192,121 @@ HttpResponseValidatorLevel(const HttpResponseData& response) {
   return HVS_NONE;
 }
 
-std::string GetCacheID(const SocketAddress& server,
-                       const HttpRequestData& request) {
-  std::string url;
-  url.append(ToString(request.verb));
-  url.append("_");
-  if ((_strnicmp(request.path.c_str(), "http://", 7) == 0)
-      || (_strnicmp(request.path.c_str(), "https://", 8) == 0)) {
-    url.append(request.path);
-  } else {
-    url.append("http://");
-    url.append(HttpAddress(server));
-    url.append(request.path);
-  }
-  return url;
+std::string GetCacheID(const HttpRequestData& request) {
+  std::string id, url;
+  id.append(ToString(request.verb));
+  id.append("_");
+  request.getAbsoluteUri(&url);
+  id.append(url);
+  return id;
 }
 
 }  // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////
+// Public Helpers
+//////////////////////////////////////////////////////////////////////
+
+bool HttpWriteCacheHeaders(const HttpResponseData* response,
+                           StreamInterface* output, size_t* size) {
+  size_t length = 0;
+  // Write all unknown and end-to-end headers to a cache file
+  for (HttpData::const_iterator it = response->begin();
+       it != response->end(); ++it) {
+    HttpHeader header;
+    if (FromString(header, it->first) && !HttpHeaderIsEndToEnd(header))
+      continue;
+    length += it->first.length() + 2 + it->second.length() + 2;
+    if (!output)
+      continue;
+    std::string formatted_header(it->first);
+    formatted_header.append(": ");
+    formatted_header.append(it->second);
+    formatted_header.append("\r\n");
+    StreamResult result = output->WriteAll(formatted_header.data(),
+                                           formatted_header.length(),
+                                           NULL, NULL);
+    if (SR_SUCCESS != result) {
+      return false;
+    }
+  }
+  if (output && (SR_SUCCESS != output->WriteAll("\r\n", 2, NULL, NULL))) {
+    return false;
+  }
+  length += 2;
+  if (size)
+    *size = length;
+  return true;
+}
+
+bool HttpReadCacheHeaders(StreamInterface* input, HttpResponseData* response,
+                          HttpData::HeaderCombine combine) {
+  while (true) {
+    std::string formatted_header;
+    StreamResult result = input->ReadLine(&formatted_header);
+    if ((SR_EOS == result) || (1 == formatted_header.size())) {
+      break;
+    }
+    if (SR_SUCCESS != result) {
+      return false;
+    }
+    size_t end_of_name = formatted_header.find(':');
+    if (std::string::npos == end_of_name) {
+      LOG_F(LS_WARNING) << "Malformed cache header";
+      continue;
+    }
+    size_t start_of_value = end_of_name + 1;
+    size_t end_of_value = formatted_header.length();
+    while ((start_of_value < end_of_value)
+           && isspace(formatted_header[start_of_value]))
+      ++start_of_value;
+    while ((start_of_value < end_of_value)
+           && isspace(formatted_header[end_of_value-1]))
+     --end_of_value;
+    size_t value_length = end_of_value - start_of_value;
+
+    std::string name(formatted_header.substr(0, end_of_name));
+    std::string value(formatted_header.substr(start_of_value, value_length));
+    response->changeHeader(name, value, combine);
+  }
+  return true;
+}
+
+//////////////////////////////////////////////////////////////////////
 // HttpClient
 //////////////////////////////////////////////////////////////////////
 
-HttpClient::HttpClient(const std::string& agent, StreamPool* pool)
-: agent_(agent), pool_(pool), fail_redirect_(false), absolute_uri_(false),
-  cache_(NULL), cache_state_(CS_READY)
-{
+const size_t kDefaultRetries = 1;
+const size_t kMaxRedirects = 5;
+
+HttpClient::HttpClient(const std::string& agent, StreamPool* pool,
+                       HttpTransaction* transaction)
+    : agent_(agent), pool_(pool),
+      transaction_(transaction), free_transaction_(false),
+      retries_(kDefaultRetries), attempt_(0), redirects_(0),
+      redirect_action_(REDIRECT_DEFAULT),
+      uri_form_(URI_DEFAULT), cache_(NULL), cache_state_(CS_READY) {
   base_.notify(this);
+  if (NULL == transaction_) {
+    free_transaction_ = true;
+    transaction_ = new HttpTransaction;
+  }
 }
 
 HttpClient::~HttpClient() {
   base_.notify(NULL);
   base_.abort(HE_SHUTDOWN);
   release();
+  if (free_transaction_)
+    delete transaction_;
 }
 
 void HttpClient::reset() {
   server_.Clear();
-  request_.clear(true);
-  response_.clear(true);
+  request().clear(true);
+  response().clear(true);
   context_.reset();
+  redirects_ = 0;
   base_.abort(HE_OPERATION_CANCELLED);
 }
 
@@ -246,7 +314,11 @@ void HttpClient::set_server(const SocketAddress& address) {
   server_ = address;
   // Setting 'Host' here allows it to be overridden before starting the request,
   // if necessary.
-  request_.setHeader(HH_HOST, HttpAddress(server_), true);
+  request().setHeader(HH_HOST, HttpAddress(server_, false), true);
+}
+
+StreamInterface* HttpClient::GetDocumentStream() {
+  return base_.GetDocumentStream();
 }
 
 void HttpClient::start() {
@@ -258,51 +330,69 @@ void HttpClient::start() {
 
   ASSERT(!IsCacheActive());
 
-  if (request_.hasHeader(HH_TRANSFER_ENCODING, NULL)) {
+  if (request().hasHeader(HH_TRANSFER_ENCODING, NULL)) {
     // Exact size must be known on the client.  Instead of using chunked
     // encoding, wrap data with auto-caching file or memory stream.
     ASSERT(false);
     return;
   }
 
+  attempt_ = 0;
+
   // If no content has been specified, using length of 0.
-  request_.setHeader(HH_CONTENT_LENGTH, "0", false);
+  request().setHeader(HH_CONTENT_LENGTH, "0", false);
 
-  request_.setHeader(HH_USER_AGENT, agent_, false);
-  request_.setHeader(HH_CONNECTION, "Keep-Alive", false);
-  if (_strnicmp(request_.path.c_str(), "http", 4) == 0) {
-    request_.setHeader(HH_PROXY_CONNECTION, "Keep-Alive", false);
+  if (!agent_.empty()) {
+    request().setHeader(HH_USER_AGENT, agent_, false);
   }
 
-  bool absolute_uri = absolute_uri_;
+  UriForm uri_form = uri_form_;
   if (PROXY_HTTPS == proxy_.type) {
+    // Proxies require absolute form
+    uri_form = URI_ABSOLUTE;
     request().version = HVER_1_0;
-    // Proxies require canonical form
-    absolute_uri = true;
+    request().setHeader(HH_PROXY_CONNECTION, "Keep-Alive", false);
+  } else {
+    request().setHeader(HH_CONNECTION, "Keep-Alive", false);
   }
 
-  // Convert to canonical form (if not already)
-  if (absolute_uri && (_strnicmp(request().path.c_str(), "http://", 7) != 0)) {
-    std::string canonical_path("http://");
-    canonical_path.append(HttpAddress(server_));
-    canonical_path.append(request().path);
-    request().path = canonical_path;
+  if (URI_ABSOLUTE == uri_form) {
+    // Convert to absolute uri form
+    std::string url;
+    if (request().getAbsoluteUri(&url)) {
+      request().path = url;
+    } else {
+      LOG(LS_WARNING) << "Couldn't obtain absolute uri";
+    }
+  } else if (URI_RELATIVE == uri_form) {
+    // Convert to relative uri form
+    std::string host, path;
+    if (request().getRelativeUri(&host, &path)) {
+      request().setHeader(HH_HOST, host);
+      request().path = path;
+    } else {
+      LOG(LS_WARNING) << "Couldn't obtain relative uri";
+    }
   }
 
   if ((NULL != cache_) && CheckCache()) {
     return;
   }
 
+  connect();
+}
+
+void HttpClient::connect() {
   int stream_err;
   StreamInterface* stream = pool_->RequestConnectedStream(server_, &stream_err);
   if (stream == NULL) {
-    if (stream_err)
-      LOG(LS_ERROR) << "RequestConnectedStream returned: " << stream_err;
-    onHttpComplete(HM_CONNECT, (stream_err == 0) ? HE_NONE : HE_SOCKET);
+    ASSERT(0 != stream_err);
+    LOG(LS_ERROR) << "RequestConnectedStream error: " << stream_err;
+    onHttpComplete(HM_CONNECT, HE_CONNECT_FAILED);
   } else {
     base_.attach(stream);
     if (stream->GetState() == SS_OPEN) {
-      base_.send(&request_);
+      base_.send(&transaction_->request);
     }
   }
 }
@@ -310,7 +400,7 @@ void HttpClient::start() {
 void HttpClient::prepare_get(const std::string& url) {
   reset();
   Url<char> purl(url);
-  set_server(SocketAddress(purl.server(), purl.port(), false));
+  set_server(SocketAddress(purl.host(), purl.port()));
   request().verb = HV_GET;
   request().path = purl.full_path();
 }
@@ -320,7 +410,7 @@ void HttpClient::prepare_post(const std::string& url,
                               StreamInterface* request_doc) {
   reset();
   Url<char> purl(url);
-  set_server(SocketAddress(purl.server(), purl.port(), false));
+  set_server(SocketAddress(purl.host(), purl.port()));
   request().verb = HV_POST;
   request().path = purl.full_path();
   request().setContent(content_type, request_doc);
@@ -332,11 +422,24 @@ void HttpClient::release() {
   }
 }
 
+bool HttpClient::ShouldRedirect(std::string* location) const {
+  // TODO: Unittest redirection.
+  if ((REDIRECT_NEVER == redirect_action_)
+      || !HttpCodeIsRedirection(response().scode)
+      || !response().hasHeader(HH_LOCATION, location)
+      || (redirects_ >= kMaxRedirects))
+    return false;
+  return (REDIRECT_ALWAYS == redirect_action_)
+         || (HC_SEE_OTHER == response().scode)
+         || (HV_HEAD == request().verb)
+         || (HV_GET == request().verb);
+}
+
 bool HttpClient::BeginCacheFile() {
   ASSERT(NULL != cache_);
   ASSERT(CS_READY == cache_state_);
 
-  std::string id = GetCacheID(server_, request_);
+  std::string id = GetCacheID(request());
   CacheLock lock(cache_, id, true);
   if (!lock.IsLocked()) {
     LOG_F(LS_WARNING) << "Couldn't lock cache";
@@ -356,12 +459,12 @@ bool HttpClient::BeginCacheFile() {
 
   // Let's secretly replace the response document with Folgers Crystals,
   // er, StreamTap, so that we can mirror the data to our cache.
-  StreamInterface* output = response_.document.release();
+  StreamInterface* output = response().document.release();
   if (!output) {
     output = new NullStream;
   }
   StreamTap* tap = new StreamTap(output, stream.release());
-  response_.document.reset(tap);
+  response().document.reset(tap);
   return true;
 }
 
@@ -372,23 +475,9 @@ HttpError HttpClient::WriteCacheHeaders(const std::string& id) {
     return HE_CACHE;
   }
 
-  // Write all unknown and end-to-end headers to a cache file
-  for (HttpData::const_iterator it = response_.begin();
-       it != response_.end(); ++it) {
-    HttpHeader header;
-    if (FromString(header, it->first) && !HttpHeaderIsEndToEnd(header))
-      continue;
-    std::string formatted_header(it->first);
-    formatted_header.append(": ");
-    formatted_header.append(it->second);
-    formatted_header.append("\r\n");
-    StreamResult result = stream->WriteAll(formatted_header.data(),
-                                           formatted_header.length(),
-                                           NULL, NULL);
-    if (SR_SUCCESS != result) {
-      LOG_F(LS_ERROR) << "Couldn't write header cache";
-      return HE_CACHE;
-    }
+  if (!HttpWriteCacheHeaders(&transaction_->response, stream.get(), NULL)) {
+    LOG_F(LS_ERROR) << "Couldn't write header cache";
+    return HE_CACHE;
   }
 
   return HE_NONE;
@@ -396,8 +485,8 @@ HttpError HttpClient::WriteCacheHeaders(const std::string& id) {
 
 void HttpClient::CompleteCacheFile() {
   // Restore previous response document
-  StreamTap* tap = static_cast<StreamTap*>(response_.document.release());
-  response_.document.reset(tap->Detach());
+  StreamTap* tap = static_cast<StreamTap*>(response().document.release());
+  response().document.reset(tap->Detach());
 
   int error;
   StreamResult result = tap->GetTapResult(&error);
@@ -407,7 +496,7 @@ void HttpClient::CompleteCacheFile() {
 
   if (SR_SUCCESS != result) {
     LOG(LS_ERROR) << "Cache file error: " << error;
-    cache_->DeleteResource(GetCacheID(server_, request_));
+    cache_->DeleteResource(GetCacheID(request()));
   }
 }
 
@@ -415,7 +504,7 @@ bool HttpClient::CheckCache() {
   ASSERT(NULL != cache_);
   ASSERT(CS_READY == cache_state_);
 
-  std::string id = GetCacheID(server_, request_);
+  std::string id = GetCacheID(request());
   if (!cache_->HasResource(id)) {
     // No cache file available
     return false;
@@ -424,7 +513,7 @@ bool HttpClient::CheckCache() {
   HttpError error = ReadCacheHeaders(id, true);
 
   if (HE_NONE == error) {
-    switch (HttpGetCacheState(request_, response_)) {
+    switch (HttpGetCacheState(*transaction_)) {
     case HCS_FRESH:
       // Cache content is good, read from cache
       break;
@@ -436,7 +525,7 @@ bool HttpClient::CheckCache() {
       // Couldn't validate, fall through.
     case HCS_NONE:
       // Cache content is not useable.  Issue a regular request.
-      response_.clear(false);
+      response().clear(false);
       return false;
     }
   }
@@ -448,7 +537,7 @@ bool HttpClient::CheckCache() {
 
   if (HE_CACHE == error) {
     LOG_F(LS_WARNING) << "Cache failure, continuing with normal request";
-    response_.clear(false);
+    response().clear(false);
     return false;
   }
 
@@ -465,37 +554,12 @@ HttpError HttpClient::ReadCacheHeaders(const std::string& id, bool override) {
   HttpData::HeaderCombine combine =
     override ? HttpData::HC_REPLACE : HttpData::HC_AUTO;
 
-  while (true) {
-    std::string formatted_header;
-    StreamResult result = stream->ReadLine(&formatted_header);
-    if (SR_EOS == result)
-      break;
-
-    if (SR_SUCCESS != result) {
-      LOG_F(LS_ERROR) << "ReadLine error in cache headers";
-      return HE_CACHE;
-    }
-    size_t end_of_name = formatted_header.find(':');
-    if (std::string::npos == end_of_name) {
-      LOG_F(LS_WARNING) << "Malformed cache header";
-      continue;
-    }
-    size_t start_of_value = end_of_name + 1;
-    size_t end_of_value = formatted_header.length();
-    while ((start_of_value < end_of_value)
-           && isspace(formatted_header[start_of_value]))
-      ++start_of_value;
-    while ((start_of_value < end_of_value)
-           && isspace(formatted_header[end_of_value-1]))
-     --end_of_value;
-    size_t value_length = end_of_value - start_of_value;
-
-    std::string name(formatted_header.substr(0, end_of_name));
-    std::string value(formatted_header.substr(start_of_value, value_length));
-    response_.changeHeader(name, value, combine);
+  if (!HttpReadCacheHeaders(stream.get(), &transaction_->response, combine)) {
+    LOG_F(LS_ERROR) << "Error reading cache headers";
+    return HE_CACHE;
   }
 
-  response_.scode = HC_OK;
+  response().scode = HC_OK;
   return HE_NONE;
 }
 
@@ -506,7 +570,7 @@ HttpError HttpClient::ReadCacheBody(const std::string& id) {
 
   size_t data_size;
   scoped_ptr<StreamInterface> stream(cache_->ReadResource(id, kCacheBody));
-  if (!stream.get() || !stream->GetSize(&data_size)) {
+  if (!stream.get() || !stream->GetAvailable(&data_size)) {
     LOG_F(LS_ERROR) << "Unavailable cache body";
     error = HE_CACHE;
   } else {
@@ -514,11 +578,11 @@ HttpError HttpClient::ReadCacheBody(const std::string& id) {
   }
 
   if ((HE_NONE == error)
-      && (HV_HEAD != request_.verb)
-      && (NULL != response_.document.get())) {
+      && (HV_HEAD != request().verb)
+      && (NULL != response().document.get())) {
     char buffer[1024 * 64];
     StreamResult result = Flow(stream.get(), buffer, ARRAY_SIZE(buffer),
-                               response_.document.get());
+                               response().document.get());
     if (SR_SUCCESS != result) {
       error = HE_STREAM;
     }
@@ -529,22 +593,22 @@ HttpError HttpClient::ReadCacheBody(const std::string& id) {
 
 bool HttpClient::PrepareValidate() {
   ASSERT(CS_READY == cache_state_);
-  // At this point, request_ contains the pending request, and response_
+  // At this point, request() contains the pending request, and response()
   // contains the cached response headers.  Reformat the request to validate
   // the cached content.
-  HttpValidatorStrength vs_required = HttpRequestValidatorLevel(request_);
-  HttpValidatorStrength vs_available = HttpResponseValidatorLevel(response_);
+  HttpValidatorStrength vs_required = HttpRequestValidatorLevel(request());
+  HttpValidatorStrength vs_available = HttpResponseValidatorLevel(response());
   if (vs_available < vs_required) {
     return false;
   }
   std::string value;
-  if (response_.hasHeader(HH_ETAG, &value)) {
-    request_.addHeader(HH_IF_NONE_MATCH, value);
+  if (response().hasHeader(HH_ETAG, &value)) {
+    request().addHeader(HH_IF_NONE_MATCH, value);
   }
-  if (response_.hasHeader(HH_LAST_MODIFIED, &value)) {
-    request_.addHeader(HH_IF_MODIFIED_SINCE, value);
+  if (response().hasHeader(HH_LAST_MODIFIED, &value)) {
+    request().addHeader(HH_IF_MODIFIED_SINCE, value);
   }
-  response_.clear(false);
+  response().clear(false);
   cache_state_ = CS_VALIDATING;
   return true;
 }
@@ -552,7 +616,7 @@ bool HttpClient::PrepareValidate() {
 HttpError HttpClient::CompleteValidate() {
   ASSERT(CS_VALIDATING == cache_state_);
 
-  std::string id = GetCacheID(server_, request_);
+  std::string id = GetCacheID(request());
 
   // Merge cached headers with new headers
   HttpError error = ReadCacheHeaders(id, false);
@@ -569,13 +633,18 @@ HttpError HttpClient::CompleteValidate() {
 
 HttpError HttpClient::OnHeaderAvailable(bool ignore_data, bool chunked,
                                         size_t data_size) {
-  if (!ignore_data && !chunked && response_.document.get()) {
+  // If we are ignoring the data, this is an intermediate header.
+  // TODO: don't signal intermediate headers.  Instead, do all header-dependent
+  // processing now, and either set up the next request, or fail outright.
+  // TODO: by default, only write response documents with a success code.
+  SignalHeaderAvailable(this, !ignore_data, ignore_data ? 0 : data_size);
+  if (!ignore_data && !chunked && (data_size != SIZE_UNKNOWN)
+      && response().document.get()) {
     // Attempt to pre-allocate space for the downloaded data.
-    if (!response_.document->ReserveSize(data_size)) {
+    if (!response().document->ReserveSize(data_size)) {
       return HE_OVERFLOW;
     }
   }
-  SignalHeaderAvailable(this, chunked, data_size);
   return HE_NONE;
 }
 
@@ -585,22 +654,22 @@ HttpError HttpClient::OnHeaderAvailable(bool ignore_data, bool chunked,
 
 HttpError HttpClient::onHttpHeaderComplete(bool chunked, size_t& data_size) {
   if (CS_VALIDATING == cache_state_) {
-    if (HC_NOT_MODIFIED == response_.scode) {
+    if (HC_NOT_MODIFIED == response().scode) {
       return CompleteValidate();
     }
     // Should we remove conditional headers from request?
     cache_state_ = CS_READY;
-    cache_->DeleteResource(GetCacheID(server_, request_));
+    cache_->DeleteResource(GetCacheID(request()));
     // Continue processing response as normal
   }
 
   ASSERT(!IsCacheActive());
-  if ((request_.verb == HV_HEAD) || !HttpCodeHasBody(response_.scode)) {
+  if ((request().verb == HV_HEAD) || !HttpCodeHasBody(response().scode)) {
     // HEAD requests and certain response codes contain no body
     data_size = 0;
   }
-  if ((HttpCodeIsRedirection(response_.scode) && !fail_redirect_)
-      || ((HC_PROXY_AUTHENTICATION_REQUIRED == response_.scode)
+  if (ShouldRedirect(NULL)
+      || ((HC_PROXY_AUTHENTICATION_REQUIRED == response().scode)
           && (PROXY_HTTPS == proxy_.type))) {
     // We're going to issue another request, so ignore the incoming data.
     base_.set_ignore_data(true);
@@ -613,7 +682,7 @@ HttpError HttpClient::onHttpHeaderComplete(bool chunked, size_t& data_size) {
 
   if ((NULL != cache_)
       && !base_.ignore_data()
-      && HttpShouldCache(request_, response_)) {
+      && HttpShouldCache(*transaction_)) {
     if (BeginCacheFile()) {
       cache_state_ = CS_WRITING;
     }
@@ -622,65 +691,81 @@ HttpError HttpClient::onHttpHeaderComplete(bool chunked, size_t& data_size) {
 }
 
 void HttpClient::onHttpComplete(HttpMode mode, HttpError err) {
-  if (err != HE_NONE) {
+  if (((HE_DISCONNECTED == err) || (HE_CONNECT_FAILED == err)
+       || (HE_SOCKET_ERROR == err))
+      && (HC_INTERNAL_SERVER_ERROR == response().scode)
+      && (attempt_ < retries_)) {
+    // If the response code has not changed from the default, then we haven't
+    // received anything meaningful from the server, so we are eligible for a
+    // retry.
+    ++attempt_;
+    if (request().document.get() && !request().document->Rewind()) {
+      // Unable to replay the request document.
+      err = HE_STREAM;
+    } else {
+      release();
+      connect();
+      return;
+    }
+  } else if (err != HE_NONE) {
     // fall through
   } else if (mode == HM_CONNECT) {
-    base_.send(&request_);
+    base_.send(&transaction_->request);
     return;
-  } else if ((mode == HM_SEND) || HttpCodeIsInformational(response_.scode)) {
+  } else if ((mode == HM_SEND) || HttpCodeIsInformational(response().scode)) {
     // If you're interested in informational headers, catch
     // SignalHeaderAvailable.
-    base_.recv(&response_);
+    base_.recv(&transaction_->response);
     return;
   } else {
-    if (!HttpShouldKeepAlive(response_)) {
-      LOG(INFO) << "HttpClient: closing socket";
+    if (!HttpShouldKeepAlive(response())) {
+      LOG(LS_VERBOSE) << "HttpClient: closing socket";
       base_.stream()->Close();
     }
-    if (HttpCodeIsRedirection(response_.scode) && !fail_redirect_) {
-      std::string value;
-      if (!response_.hasHeader(HH_LOCATION, &value)) {
-        err = HE_PROTOCOL;
-      } else {
-        Url<char> purl(value);
-        set_server(SocketAddress(purl.server(), purl.port(), false));
-        request_.path = purl.full_path();
-        if (response_.scode == HC_SEE_OTHER) {
-          request_.verb = HV_GET;
-          request_.clearHeader(HH_CONTENT_TYPE);
-          request_.clearHeader(HH_CONTENT_LENGTH);
-          request_.document.reset();
-        } else if (request_.document.get() && !request_.document->Rewind()) {
-          // Unable to replay the request document.
-          err = HE_STREAM;
-        }
+    std::string location;
+    if (ShouldRedirect(&location)) {
+      Url<char> purl(location);
+      set_server(SocketAddress(purl.host(), purl.port()));
+      request().path = purl.full_path();
+      if (response().scode == HC_SEE_OTHER) {
+        request().verb = HV_GET;
+        request().clearHeader(HH_CONTENT_TYPE);
+        request().clearHeader(HH_CONTENT_LENGTH);
+        request().document.reset();
+      } else if (request().document.get() && !request().document->Rewind()) {
+        // Unable to replay the request document.
+        ASSERT(REDIRECT_ALWAYS == redirect_action_);
+        err = HE_STREAM;
       }
       if (err == HE_NONE) {
+        ++redirects_;
         context_.reset();
-        response_.clear(false);
+        response().clear(false);
         release();
         start();
         return;
       }
-    } else if ((HC_PROXY_AUTHENTICATION_REQUIRED == response_.scode)
+    } else if ((HC_PROXY_AUTHENTICATION_REQUIRED == response().scode)
                && (PROXY_HTTPS == proxy_.type)) {
-      std::string response, auth_method;
-      HttpData::const_iterator begin = response_.begin(HH_PROXY_AUTHENTICATE);
-      HttpData::const_iterator end = response_.end(HH_PROXY_AUTHENTICATE);
+      std::string authorization, auth_method;
+      HttpData::const_iterator begin = response().begin(HH_PROXY_AUTHENTICATE);
+      HttpData::const_iterator end = response().end(HH_PROXY_AUTHENTICATE);
       for (HttpData::const_iterator it = begin; it != end; ++it) {
+        HttpAuthContext *context = context_.get();
         HttpAuthResult res = HttpAuthenticate(
           it->second.data(), it->second.size(),
           proxy_.address,
-          ToString(request_.verb), request_.path,
+          ToString(request().verb), request().path,
           proxy_.username, proxy_.password,
-          *context_.use(), response, auth_method);
+          context, authorization, auth_method);
+        context_.reset(context);
         if (res == HAR_RESPONSE) {
-          request_.setHeader(HH_PROXY_AUTHORIZATION, response);
-          if (request_.document.get() && !request_.document->Rewind()) {
+          request().setHeader(HH_PROXY_AUTHORIZATION, authorization);
+          if (request().document.get() && !request().document->Rewind()) {
             err = HE_STREAM;
           } else {
             // Explicitly do not reset the HttpAuthContext
-            response_.clear(false);
+            response().clear(false);
             // TODO: Reuse socket when authenticating?
             release();
             start();
@@ -706,9 +791,23 @@ void HttpClient::onHttpComplete(HttpMode mode, HttpError err) {
 }
 
 void HttpClient::onHttpClosed(HttpError err) {
-  SignalHttpClientClosed(this, err);
+  // This shouldn't occur, since we return the stream to the pool upon command
+  // completion.
+  ASSERT(false);
+}
+
+//////////////////////////////////////////////////////////////////////
+// HttpClientDefault
+//////////////////////////////////////////////////////////////////////
+
+HttpClientDefault::HttpClientDefault(SocketFactory* factory,
+                                     const std::string& agent,
+                                     HttpTransaction* transaction)
+    : ReuseSocketPool(factory ? factory : Thread::Current()->socketserver()),
+      HttpClient(agent, NULL, transaction) {
+  set_pool(this);
 }
 
 //////////////////////////////////////////////////////////////////////
 
-} // namespace talk_base
+}  // namespace talk_base

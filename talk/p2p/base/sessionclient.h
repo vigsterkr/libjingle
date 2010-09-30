@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_BASE_SESSIONCLIENT_H_
-#define _CRICKET_P2P_BASE_SESSIONCLIENT_H_
+#ifndef TALK_P2P_BASE_SESSIONCLIENT_H_
+#define TALK_P2P_BASE_SESSIONCLIENT_H_
 
 namespace buzz {
 class XmlElement;
@@ -34,14 +34,28 @@ class XmlElement;
 
 namespace cricket {
 
+struct ParseError;
 class Session;
 class SessionDescription;
+
+class ContentParser {
+ public:
+  virtual bool ParseContent(SignalingProtocol protocol,
+                            const buzz::XmlElement* elem,
+                            const ContentDescription** content,
+                            ParseError* error) = 0;
+  virtual bool WriteContent(SignalingProtocol protocol,
+                            const ContentDescription* content,
+                            buzz::XmlElement** elem,
+                            WriteError* error) = 0;
+  virtual ~ContentParser() {}
+};
 
 // A SessionClient exists in 1-1 relation with each session.  The implementor
 // of this interface is the one that understands *what* the two sides are
 // trying to send to one another.  The lower-level layers only know how to send
 // data; they do not know what is being sent.
-class SessionClient {
+class SessionClient : public ContentParser {
  public:
   // Notifies the client of the creation / destruction of sessions of this type.
   //
@@ -53,19 +67,19 @@ class SessionClient {
   virtual void OnSessionCreate(Session* session, bool received_initiate) = 0;
   virtual void OnSessionDestroy(Session* session) = 0;
 
-  // Provides functions to convert between the XML description of the session
-  // and the data structures useful to the client.  The resulting objects are
-  // held by the Session for easy access.
-  virtual const SessionDescription* CreateSessionDescription(
-      const buzz::XmlElement* element) = 0;
-  virtual buzz::XmlElement* TranslateSessionDescription(
-      const SessionDescription* description) = 0;
-
-protected:
+  virtual bool ParseContent(SignalingProtocol protocol,
+                            const buzz::XmlElement* elem,
+                            const ContentDescription** content,
+                            ParseError* error) = 0;
+  virtual bool WriteContent(SignalingProtocol protocol,
+                            const ContentDescription* content,
+                            buzz::XmlElement** elem,
+                            WriteError* error) = 0;
+ protected:
   // The SessionClient interface explicitly does not include destructor
   virtual ~SessionClient() { }
 };
 
 }  // namespace cricket
 
-#endif // _CRICKET_P2P_BASE_SESSIONCLIENT_H_
+#endif  // TALK_P2P_BASE_SESSIONCLIENT_H_

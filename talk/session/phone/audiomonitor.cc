@@ -89,7 +89,7 @@ void AudioMonitor::OnMessage(talk_base::Message *message) {
       assert(talk_base::Thread::Current() == monitoring_thread_);
       AudioInfo info = audio_info_;
       crit_.Leave();
-      SignalUpdate(this, audio_info_);
+      SignalUpdate(this, info);
       crit_.Enter();
     }
     break;
@@ -103,6 +103,7 @@ void AudioMonitor::PollVoiceChannel() {
   // Gather connection infos
   audio_info_.input_level = voice_channel_->GetInputLevel_w();
   audio_info_.output_level = voice_channel_->GetOutputLevel_w();
+  voice_channel_->GetActiveStreams_w(&audio_info_.active_streams);
 
   // Signal the monitoring thread, start another poll timer
   monitoring_thread_->Post(this, MSG_MONITOR_SIGNAL);

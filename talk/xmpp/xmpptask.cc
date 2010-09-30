@@ -35,13 +35,14 @@ namespace buzz {
 
 RateLimitManager task_rate_manager;
 
-XmppTask::XmppTask(Task* parent, XmppEngine::HandlerLevel level)
+XmppTask::XmppTask(TaskParent* parent, XmppEngine::HandlerLevel level)
     : Task(parent), client_(NULL) {
 #ifdef _DEBUG
   debug_force_timeout_ = false;
 #endif
 
-  XmppClient* client = (XmppClient*)parent->GetParent(XMPP_CLIENT_TASK_CODE);
+  XmppClient* client =
+      static_cast<XmppClient*>(parent->GetParent(XMPP_CLIENT_TASK_CODE));
   client_ = client;
   id_ = client->NextId();
   client->AddXmppTask(this, level);
@@ -106,7 +107,7 @@ const XmlElement* XmppTask::NextStanza() {
 
 XmlElement* XmppTask::MakeIq(const std::string& type,
                              const buzz::Jid& to,
-                             const std::string id) {
+                             const std::string& id) {
   XmlElement* result = new XmlElement(QN_IQ);
   if (!type.empty())
     result->AddAttr(QN_TYPE, type);
@@ -163,7 +164,7 @@ bool XmppTask::MatchRequestIq(const XmlElement* stanza,
     return false;
 
   return true;
-} 
+}
 
 bool XmppTask::VerifyTaskRateLimit(const std::string task_name, int max_count, 
                                    int per_x_seconds) {

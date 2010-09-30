@@ -29,9 +29,10 @@
 #define TALK_BASE_TASK_H__
 
 #include <string>
-#include "talk/base/scoped_ptr.h"
 #include "talk/base/basictypes.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/taskparent.h"
 
 /////////////////////////////////////////////////////////////////////
 //
@@ -52,13 +53,13 @@
 // STATE_BLOCKED.  If you _could_ do anything, do not return
 // STATE_BLOCKED - even if you end up in the same state, return
 // STATE_mysamestate.  When you are done, return STATE_DONE and then the
-// task will self-delete sometimea afterwards.
+// task will self-delete sometime afterwards.
 //
 // (2) It helps you avoid all those reentrancy problems when you chain
 // too many triggers on one thread.  Basically if you want to tell a task
 // to process something for you, you feed your task some information and
 // then you Wake() it.  Don't tell it to process it right away.  If it
-// might be working on something as you send it infomration, you may want
+// might be working on something as you send it information, you may want
 // to have a queue in the task.
 //
 // (3) Finally it helps manage parent tasks and children.  If a parent
@@ -105,19 +106,13 @@
 
 namespace talk_base {
 
-class TaskRunner;
-
-// A task executes a sequence of steps
-
-class Task;
-class RootTask;
-
-class Task {
+// Executes a sequence of steps
+class Task : public TaskParent {
  public:
-  Task(Task *parent);
-  virtual ~Task() {}
+  Task(TaskParent *parent);
+  virtual ~Task();
 
-  int32 get_unique_id() { return unique_id_; }
+  int32 unique_id() { return unique_id_; }
 
   void Start();
   void Step();
@@ -127,20 +122,13 @@ class Task {
   bool IsDone() const { return done_; }
   int64 ElapsedTime();
 
-  Task *GetParent() { return parent_; }
-  TaskRunner *GetRunner() { return runner_; }
-  virtual Task *GetParent(int code) { return parent_->GetParent(code); }
-
   // Called from outside to stop task without any more callbacks
   void Abort(bool nowake = false);
 
-  // For managing children
-  bool AllChildrenDone();
-  bool AnyChildError();
-
   bool TimedOut();
 
-  int64 get_timeout_time() { return timeout_time_; }
+  int64 timeout_time() const { return timeout_time_; }
+  int timeout_seconds() const { return timeout_seconds_; }
   void set_timeout_seconds(int timeout_seconds);
 
   sigslot::signal0<> SignalTimeout;
@@ -171,10 +159,6 @@ class Task {
   virtual int ProcessStart() = 0;
   virtual int ProcessResponse() { return STATE_DONE; }
 
-  // for managing children (if any)
-  void AddChild(Task *child);
-  void AbortAllChildren();
-
   void ResetTimeout();
   void ClearTimeout();
 
@@ -189,30 +173,22 @@ class Task {
 
  private:
   void Done();
-  void OnChildStopped(Task *child);
 
   int state_;
-  Task *parent_;
-  TaskRunner *runner_;
   bool blocked_;
   bool done_;
   bool aborted_;
   bool busy_;
   bool error_;
-  bool child_error_;
   int64 start_time_;
   int64 timeout_time_;
   int timeout_seconds_;
   bool timeout_suspended_;
   int32 unique_id_;
-
+  
   static int32 unique_id_seed_;
-
-  // for managing children
-  typedef std::set<Task *> ChildSet;
-  scoped_ptr<ChildSet> children_;
 };
 
-} // namespace talk_base
+}  // namespace talk_base
 
 #endif  // TALK_BASE_TASK_H__

@@ -30,15 +30,7 @@
 
 #ifdef WIN32
 
-#if _MSC_VER > 1000
-#pragma once
-#endif // _MSC_VER > 1000
-
-#include <winsock2.h>
-#define _WINSOCKAPI_
-#include <windows.h>
-#undef SetPort
-
+#include "talk/base/win32.h"
 #include "talk/base/basictypes.h"
 
 namespace talk_base {

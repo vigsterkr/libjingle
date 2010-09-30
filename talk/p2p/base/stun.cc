@@ -2,39 +2,35 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/base/logging.h"
 #include "talk/p2p/base/stun.h"
-#include <iostream>
-#include <cassert>
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-namespace std {
-  using ::memcpy;
-}
-#endif
+#include <cstring>
+
+#include "talk/base/common.h"
+#include "talk/base/logging.h"
 
 using talk_base::ByteBuffer;
 
@@ -52,7 +48,7 @@ const std::string STUN_ERROR_REASON_GLOBAL_FAILURE = "GLOBAL FAILURE";
 
 StunMessage::StunMessage() : type_(0), length_(0),
     transaction_id_("0000000000000000") {
-  assert(transaction_id_.size() == 16);
+  ASSERT(transaction_id_.size() == 16);
   attrs_ = new std::vector<StunAttribute*>();
 }
 
@@ -63,7 +59,7 @@ StunMessage::~StunMessage() {
 }
 
 void StunMessage::SetTransactionID(const std::string& str) {
-  assert(str.size() == 16);
+  ASSERT(str.size() == 16);
   transaction_id_ = str;
 }
 
@@ -86,7 +82,7 @@ StunMessage::GetAddress(StunAttributeType type) const {
     return reinterpret_cast<const StunAddressAttribute*>(GetAttribute(type));
 
   default:
-    assert(0);
+    ASSERT(0);
     return 0;
   }
 }
@@ -101,7 +97,7 @@ StunMessage::GetUInt32(StunAttributeType type) const {
     return reinterpret_cast<const StunUInt32Attribute*>(GetAttribute(type));
 
   default:
-    assert(0);
+    ASSERT(0);
     return 0;
   }
 }
@@ -117,7 +113,7 @@ StunMessage::GetByteString(StunAttributeType type) const {
     return reinterpret_cast<const StunByteStringAttribute*>(GetAttribute(type));
 
   default:
-    assert(0);
+    ASSERT(0);
     return 0;
   }
 }
@@ -146,16 +142,22 @@ const StunAttribute* StunMessage::GetAttribute(StunAttributeType type) const {
 }
 
 bool StunMessage::Read(ByteBuffer* buf) {
-  if (!buf->ReadUInt16(type_))
+  if (!buf->ReadUInt16(&type_))
     return false;
 
-  if (!buf->ReadUInt16(length_))
+  if (type_ & 0x8000) {
+    // rtp and rtcp set MSB of first byte, since first two bits are version,
+    // and version is always 2 (10).  If set, this is not a stun packet.
+    return false;
+  }
+
+  if (!buf->ReadUInt16(&length_))
     return false;
 
   std::string transaction_id;
-  if (!buf->ReadString(transaction_id, 16))
+  if (!buf->ReadString(&transaction_id, 16))
     return false;
-  assert(transaction_id.size() == 16);
+  ASSERT(transaction_id.size() == 16);
   transaction_id_ = transaction_id;
 
   if (length_ > buf->Length())
@@ -166,9 +168,9 @@ bool StunMessage::Read(ByteBuffer* buf) {
   size_t rest = buf->Length() - length_;
   while (buf->Length() > rest) {
     uint16 attr_type, attr_length;
-    if (!buf->ReadUInt16(attr_type))
+    if (!buf->ReadUInt16(&attr_type))
       return false;
-    if (!buf->ReadUInt16(attr_length))
+    if (!buf->ReadUInt16(&attr_length))
       return false;
 
     StunAttribute* attr = StunAttribute::Create(attr_type, attr_length);
@@ -180,8 +182,8 @@ bool StunMessage::Read(ByteBuffer* buf) {
 
   if (buf->Length() != rest) {
     // fixme: shouldn't be doing this
-    LOG(LERROR) << "wrong message length" 
-               << " (" << (int)rest << " != " << (int)buf->Length() << ")";
+    LOG(LERROR) << "wrong message length (" << rest << " != " << buf->Length()
+                << ")";
     return false;
   }
 
@@ -247,7 +249,7 @@ StunAttribute* StunAttribute::Create(uint16 type, uint16 length) {
 
   case STUN_ATTR_TRANSPORT_PREFERENCES:
     if ((length != StunTransportPrefsAttribute::SIZE1) &&
-	(length != StunTransportPrefsAttribute::SIZE2))
+        (length != StunTransportPrefsAttribute::SIZE2))
       return 0;
     return new StunTransportPrefsAttribute(type, length);
 
@@ -269,7 +271,7 @@ StunAddressAttribute* StunAttribute::CreateAddress(uint16 type) {
     return new StunAddressAttribute(type);
 
   default:
-    assert(false);
+    ASSERT(false);
     return 0;
   }
 }
@@ -283,7 +285,7 @@ StunUInt32Attribute* StunAttribute::CreateUInt32(uint16 type) {
     return new StunUInt32Attribute(type);
 
   default:
-    assert(false);
+    ASSERT(false);
     return 0;
   }
 }
@@ -298,7 +300,7 @@ StunByteStringAttribute* StunAttribute::CreateByteString(uint16 type) {
     return new StunByteStringAttribute(type, 0);
 
   default:
-    assert(false);
+    ASSERT(false);
     return 0;
   }
 }
@@ -323,13 +325,13 @@ StunAddressAttribute::StunAddressAttribute(uint16 type)
 
 bool StunAddressAttribute::Read(ByteBuffer* buf) {
   uint8 dummy;
-  if (!buf->ReadUInt8(dummy))
+  if (!buf->ReadUInt8(&dummy))
     return false;
-  if (!buf->ReadUInt8(family_))
+  if (!buf->ReadUInt8(&family_))
     return false;
-  if (!buf->ReadUInt16(port_))
+  if (!buf->ReadUInt16(&port_))
     return false;
-  if (!buf->ReadUInt32(ip_))
+  if (!buf->ReadUInt32(&ip_))
     return false;
   return true;
 }
@@ -346,18 +348,18 @@ StunUInt32Attribute::StunUInt32Attribute(uint16 type)
 }
 
 bool StunUInt32Attribute::GetBit(int index) const {
-  assert((0 <= index) && (index < 32));
+  ASSERT((0 <= index) && (index < 32));
   return static_cast<bool>((bits_ >> index) & 0x1);
 }
 
 void StunUInt32Attribute::SetBit(int index, bool value) {
-  assert((0 <= index) && (index < 32));
+  ASSERT((0 <= index) && (index < 32));
   bits_ &= ~(1 << index);
   bits_ |= value ? (1 << index) : 0;
 }
 
 bool StunUInt32Attribute::Read(ByteBuffer* buf) {
-  if (!buf->ReadUInt32(bits_))
+  if (!buf->ReadUInt32(&bits_))
     return false;
   return true;
 }
@@ -381,7 +383,7 @@ void StunByteStringAttribute::SetBytes(char* bytes, uint16 length) {
 }
 
 void StunByteStringAttribute::CopyBytes(const char* bytes) {
-  CopyBytes(bytes, (uint16)strlen(bytes));
+  CopyBytes(bytes, static_cast<uint16>(strlen(bytes)));
 }
 
 void StunByteStringAttribute::CopyBytes(const void* bytes, uint16 length) {
@@ -391,14 +393,14 @@ void StunByteStringAttribute::CopyBytes(const void* bytes, uint16 length) {
 }
 
 uint8 StunByteStringAttribute::GetByte(int index) const {
-  assert(bytes_);
-  assert((0 <= index) && (index < length()));
+  ASSERT(bytes_ != NULL);
+  ASSERT((0 <= index) && (index < length()));
   return static_cast<uint8>(bytes_[index]);
 }
 
 void StunByteStringAttribute::SetByte(int index, uint8 value) {
-  assert(bytes_);
-  assert((0 <= index) && (index < length()));
+  ASSERT(bytes_ != NULL);
+  ASSERT((0 <= index) && (index < length()));
   bytes_[index] = value;
 }
 
@@ -426,13 +428,13 @@ void StunErrorCodeAttribute::SetErrorCode(uint32 code) {
 }
 
 void StunErrorCodeAttribute::SetReason(const std::string& reason) {
-  SetLength(MIN_SIZE + (uint16)reason.size());
+  SetLength(MIN_SIZE + static_cast<uint16>(reason.size()));
   reason_ = reason;
 }
 
 bool StunErrorCodeAttribute::Read(ByteBuffer* buf) {
   uint32 val;
-  if (!buf->ReadUInt32(val))
+  if (!buf->ReadUInt32(&val))
     return false;
 
   if ((val >> 11) != 0)
@@ -440,7 +442,7 @@ bool StunErrorCodeAttribute::Read(ByteBuffer* buf) {
 
   SetErrorCode(val);
 
-  if (!buf->ReadString(reason_, length() - 4))
+  if (!buf->ReadString(&reason_, length() - 4))
     return false;
 
   return true;
@@ -474,13 +476,13 @@ void StunUInt16ListAttribute::SetType(int index, uint16 value) {
 
 void StunUInt16ListAttribute::AddType(uint16 value) {
   attr_types_->push_back(value);
-  SetLength((uint16)attr_types_->size() * 2);
+  SetLength(static_cast<uint16>(attr_types_->size() * 2));
 }
 
 bool StunUInt16ListAttribute::Read(ByteBuffer* buf) {
   for (int i = 0; i < length() / 2; i++) {
     uint16 attr;
-    if (!buf->ReadUInt16(attr))
+    if (!buf->ReadUInt16(&attr))
       return false;
     attr_types_->push_back(attr);
   }
@@ -494,7 +496,7 @@ void StunUInt16ListAttribute::Write(ByteBuffer* buf) const {
 
 StunTransportPrefsAttribute::StunTransportPrefsAttribute(
     uint16 type, uint16 length)
-    : StunAttribute(type, length), preallocate_(false), prefs_(0), addr_(0) { 
+    : StunAttribute(type, length), preallocate_(false), prefs_(0), addr_(0) {
 }
 
 StunTransportPrefsAttribute::~StunTransportPrefsAttribute() {
@@ -516,7 +518,7 @@ void StunTransportPrefsAttribute::SetPreallocateAddress(
 
 bool StunTransportPrefsAttribute::Read(ByteBuffer* buf) {
   uint32 val;
-  if (!buf->ReadUInt32(val))
+  if (!buf->ReadUInt32(&val))
     return false;
 
   if ((val >> 3) != 0)

@@ -25,47 +25,52 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <cassert>
-#include <iostream>
-#include "talk/base/host.h"
+#include <iostream>  // NOLINT
+
 #include "talk/base/thread.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/p2p/base/relayserver.h"
 
-#ifdef POSIX
-extern "C" {
-#include <errno.h>
-}
-#endif // POSIX
-
-using namespace cricket;
-
 int main(int argc, char **argv) {
-  if (argc != 1) {
-    std::cerr << "usage: relayserver" << std::endl;
+  if (argc != 3) {
+    std::cerr << "usage: relayserver internal-address external-address"
+              << std::endl;
     return 1;
   }
 
-  assert(talk_base::LocalHost().networks().size() >= 2);
-  talk_base::SocketAddress int_addr(talk_base::LocalHost().networks()[1]->ip(), 5000);
-  talk_base::SocketAddress ext_addr(talk_base::LocalHost().networks()[1]->ip(), 5001);
-  
-  talk_base::Thread *pthMain = talk_base::Thread::Current(); 
-  
-  talk_base::AsyncUDPSocket* int_socket = talk_base::CreateAsyncUDPSocket(pthMain->socketserver());
+  talk_base::SocketAddress int_addr;
+  if (!int_addr.FromString(argv[1])) {
+    std::cerr << "Unable to parse IP address: " << argv[1];
+    return 1;
+  }
+
+  talk_base::SocketAddress ext_addr;
+  if (!ext_addr.FromString(argv[2])) {
+    std::cerr << "Unable to parse IP address: " << argv[2];
+    return 1;
+  }
+
+  talk_base::Thread *pthMain = talk_base::Thread::Current();
+
+  talk_base::scoped_ptr<talk_base::AsyncUDPSocket> int_socket(
+      talk_base::CreateAsyncUDPSocket(pthMain->socketserver()));
   if (int_socket->Bind(int_addr) < 0) {
-    std::cerr << "bind: " << std::strerror(errno) << std::endl;
+    std::cerr << "Internal socket bind(" << int_addr.ToString() << "): "
+              << std::strerror(int_socket->GetError()) << std::endl;
     return 1;
   }
 
-  talk_base::AsyncUDPSocket* ext_socket = talk_base::CreateAsyncUDPSocket(pthMain->socketserver());
+  talk_base::scoped_ptr<talk_base::AsyncUDPSocket> ext_socket(
+      talk_base::CreateAsyncUDPSocket(pthMain->socketserver()));
   if (ext_socket->Bind(ext_addr) < 0) {
-    std::cerr << "bind: " << std::strerror(errno) << std::endl;
+    std::cerr << "External socket bind(" << ext_addr.ToString() << "): "
+              << std::strerror(ext_socket->GetError()) << std::endl;
     return 1;
   }
 
-  RelayServer server(pthMain);
-  server.AddInternalSocket(int_socket);
-  server.AddExternalSocket(ext_socket);
+  cricket::RelayServer server(pthMain);
+  server.AddInternalSocket(int_socket.get());
+  server.AddExternalSocket(ext_socket.get());
 
   std::cout << "Listening internally at " << int_addr.ToString() << std::endl;
   std::cout << "Listening externally at " << ext_addr.ToString() << std::endl;

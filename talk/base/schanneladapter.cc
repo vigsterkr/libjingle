@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -47,33 +47,6 @@ namespace talk_base {
 
 extern const ConstantLabel SECURITY_ERRORS[];
 
-const ConstantLabel SECURITY_ERRORS[] = {
-  KLABEL(SEC_I_COMPLETE_AND_CONTINUE),
-  KLABEL(SEC_I_COMPLETE_NEEDED),
-  KLABEL(SEC_I_CONTEXT_EXPIRED),
-  KLABEL(SEC_I_CONTINUE_NEEDED),
-  KLABEL(SEC_I_INCOMPLETE_CREDENTIALS),
-  KLABEL(SEC_I_RENEGOTIATE),
-  KLABEL(SEC_E_CERT_EXPIRED),
-  KLABEL(SEC_E_INCOMPLETE_MESSAGE),
-  KLABEL(SEC_E_INSUFFICIENT_MEMORY),
-  KLABEL(SEC_E_INTERNAL_ERROR),
-  KLABEL(SEC_E_INVALID_HANDLE),
-  KLABEL(SEC_E_INVALID_TOKEN),
-  KLABEL(SEC_E_LOGON_DENIED),
-  KLABEL(SEC_E_NO_AUTHENTICATING_AUTHORITY),
-  KLABEL(SEC_E_NO_CREDENTIALS),
-  KLABEL(SEC_E_NOT_OWNER),
-  KLABEL(SEC_E_OK),
-  KLABEL(SEC_E_SECPKG_NOT_FOUND),
-  KLABEL(SEC_E_TARGET_UNKNOWN),
-  KLABEL(SEC_E_UNKNOWN_CREDENTIALS),
-  KLABEL(SEC_E_UNSUPPORTED_FUNCTION),
-  KLABEL(SEC_E_UNTRUSTED_ROOT),
-  KLABEL(SEC_E_WRONG_PRINCIPAL),
-  LASTLABEL
-};
-
 const ConstantLabel SCHANNEL_BUFFER_TYPES[] = {
   KLABEL(SECBUFFER_EMPTY),              //  0
   KLABEL(SECBUFFER_DATA),               //  1
@@ -92,7 +65,7 @@ const ConstantLabel SCHANNEL_BUFFER_TYPES[] = {
 
 void DescribeBuffer(LoggingSeverity severity, const char* prefix,
                     const SecBuffer& sb) {
-  LOG_V(severity) 
+  LOG_V(severity)
     << prefix
     << "(" << sb.cbBuffer
     << ", " << FindLabel(sb.BufferType & ~SECBUFFER_ATTRMASK,
@@ -207,9 +180,9 @@ SChannelAdapter::BeginSSL() {
         PCCRYPT_OID_INFO oinfo = CryptFindOIDInfo(CRYPT_OID_INFO_ALGID_KEY,
                                                   &alg_id, 0);
         LPCWSTR alg_name = (NULL != oinfo) ? oinfo->pwszName : L"Unknown";
-        LOG(LS_VERBOSE) << "  " << talk_base::ToUtf8(alg_name)
-                        << " (" << alg_id << ")";
+        LOG(LS_VERBOSE) << "  " << ToUtf8(alg_name) << " (" << alg_id << ")";
       }
+      CSecBufferBase::FreeSSPI(supported_algs.palgSupportedAlgs);
     }
   }
 
@@ -263,7 +236,7 @@ SChannelAdapter::ProcessContext(long int status, _SecBufferDesc* sbd_in,
       || (status != SEC_E_INCOMPLETE_MESSAGE)) {
     level = LS_VERBOSE;  // Expected messages
   }
-  LOG_V(level) 
+  LOG_V(level)
     << "InitializeSecurityContext error: "
     << ErrorName(status, SECURITY_ERRORS);
   //if (sbd_in)
@@ -275,7 +248,7 @@ SChannelAdapter::ProcessContext(long int status, _SecBufferDesc* sbd_in,
     // Wait for more input from server.
     return Flush();
   }
-  
+
   if (FAILED(status)) {
     // We can't continue.  Common errors:
     // SEC_E_CERT_EXPIRED - Typically, this means the computer clock is wrong.
@@ -404,7 +377,7 @@ SChannelAdapter::DecryptData() {
       }
       continue;
     }
-    
+
     if (status == SEC_E_INCOMPLETE_MESSAGE) {
       break;
     } else {
@@ -604,7 +577,7 @@ SChannelAdapter::Recv(void* pv, size_t cb) {
     SetError(EWOULDBLOCK);
     return SOCKET_ERROR;
   }
-  size_t read = min(cb, readable.size());
+  size_t read = _min(cb, readable.size());
   memcpy(pv, &readable[0], read);
   if (size_t remaining = readable.size() - read) {
     memmove(&readable[0], &readable[read], remaining);

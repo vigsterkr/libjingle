@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_WIN32WINDOW_H__
-#define TALK_BASE_WIN32WINDOW_H__
+#ifndef TALK_BASE_WIN32WINDOW_H_
+#define TALK_BASE_WIN32WINDOW_H_
 
 #ifdef WIN32
 
@@ -39,34 +39,41 @@ namespace talk_base {
 ///////////////////////////////////////////////////////////////////////////////
 
 class Win32Window {
-public:
+ public:
   Win32Window();
   virtual ~Win32Window();
 
-  HWND handle() { return wnd_; }
+  HWND handle() const { return wnd_; }
 
   bool Create(HWND parent, const wchar_t* title, DWORD style, DWORD exstyle,
               int x, int y, int cx, int cy);
   void Destroy();
 
-protected:
+  // Call this first if you are running inside a DLL.
+  static void SetInstance(HINSTANCE instance);
+  // Call this when your DLL unloads.
+  static void Shutdown();
+
+ protected:
   virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam,
                          LRESULT& result);
 
   virtual bool OnClose() { return true; }
   virtual void OnDestroyed() { }
 
-private:
+ private:
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                                   LPARAM lParam);
 
   HWND wnd_;
+  static HINSTANCE instance_;
+  static ATOM window_class_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-} // namespace talk_base
+}  // namespace talk_base
 
 #endif  // WIN32
 
-#endif  // TALK_BASE_WIN32WINDOW_H__
+#endif  // TALK_BASE_WIN32WINDOW_H_

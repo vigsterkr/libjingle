@@ -29,15 +29,15 @@
 #define TALK_BASE_SOCKETPOOL_H__
 
 #include <deque>
-#include <vector>
+#include <list>
 #include "talk/base/logging.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/socketaddress.h"
 
 namespace talk_base {
 
 class AsyncSocket;
 class LoggingAdapter;
-class SocketAddress;
 class SocketFactory;
 class SocketStream;
 class StreamInterface;
@@ -84,11 +84,10 @@ private:
   ConnectedList cached_;
 };
 
-//////////////////////////////////////////////////////////////////////
-// NewSocketPool //
-///////////////////
-// Creates a new PTcpSocket every time
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// NewSocketPool
+// Creates a new stream on every request
+///////////////////////////////////////////////////////////////////////////////
 
 class NewSocketPool : public StreamPool {
 public:
@@ -102,22 +101,18 @@ public:
   
 private:
   SocketFactory* factory_;
-  std::vector<StreamInterface*> used_;
 };
 
-//////////////////////////////////////////////////////////////////////
-// ReuseSocketPool //
-/////////////////////
-// Pass a PTcpSocket chain to the constructor, and if the connection
-// is still open, it will be reused.
-//////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// ReuseSocketPool
+// Maintains a single socket at a time, and will reuse it without closing if
+// the destination address is the same.
+///////////////////////////////////////////////////////////////////////////////
 
-class ReuseSocketPool : public StreamPool {
+class ReuseSocketPool : public StreamPool, public sigslot::has_slots<> {
 public:
-  ReuseSocketPool(SocketFactory* factory, AsyncSocket* socket = 0);
+  ReuseSocketPool(SocketFactory* factory);
   virtual ~ReuseSocketPool();
-
-  void setSocket(AsyncSocket* socket);
 
   // StreamPool Interface
   virtual StreamInterface* RequestConnectedStream(const SocketAddress& remote,
@@ -125,8 +120,12 @@ public:
   virtual void ReturnConnectedStream(StreamInterface* stream);
   
 private:
+  void OnStreamEvent(StreamInterface* stream, int events, int err);
+
   SocketFactory* factory_;
   SocketStream* stream_;
+  SocketAddress remote_;
+  bool checked_out_;  // Whether the stream is currently checked out
 };
 
 ///////////////////////////////////////////////////////////////////////////////

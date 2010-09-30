@@ -2,31 +2,31 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CANDIDATE_H_
-#define _CANDIDATE_H_
+#ifndef TALK_P2P_BASE_CANDIDATE_H_
+#define TALK_P2P_BASE_CANDIDATE_H_
 
 #include <string>
 #include <sstream>
@@ -37,7 +37,16 @@ namespace cricket {
 // Candidate for ICE based connection discovery.
 
 class Candidate {
-public:
+ public:
+  Candidate() : preference_(0), generation_(0) {}
+  Candidate(const std::string& name, const std::string& protocol,
+            const talk_base::SocketAddress& address, float preference,
+            const std::string& username, const std::string& password,
+            const std::string& type, const std::string& network_name,
+            uint32 generation)
+      : name_(name), protocol_(protocol), address_(address),
+        preference_(preference), username_(username), password_(password),
+        type_(type), network_name_(network_name), generation_(generation) {}
 
   const std::string & name() const { return name_; }
   void set_name(const std::string & name) { name_ = name; }
@@ -46,10 +55,11 @@ public:
   void set_protocol(const std::string & protocol) { protocol_ = protocol; }
 
   const talk_base::SocketAddress & address() const { return address_; }
-  void set_address(const talk_base::SocketAddress & address) 
-    { address_ = address; }
+  void set_address(const talk_base::SocketAddress & address) {
+    address_ = address;
+  }
 
-  const float preference() const { return preference_; }
+  float preference() const { return preference_; }
   void set_preference(const float preference) { preference_ = preference; }
   const std::string preference_str() const {
     std::ostringstream ost;
@@ -102,7 +112,15 @@ public:
            (generation_ == c.generation_);
   }
 
-private:
+  std::string ToString() const {
+    std::ostringstream ost;
+    ost << "Cand[" << name_ << ":" << type_ << ":" << protocol_ << ":"
+        << network_name_ << ":" << address_.ToString() << ":"
+        << username_ << ":" << password_ << "]";
+    return ost.str();
+  }
+
+ private:
   std::string name_;
   std::string protocol_;
   talk_base::SocketAddress address_;
@@ -114,6 +132,6 @@ private:
   uint32 generation_;
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // _CANDIDATE_H_
+#endif  // TALK_P2P_BASE_CANDIDATE_H_

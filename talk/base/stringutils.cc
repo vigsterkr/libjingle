@@ -41,6 +41,31 @@ bool memory_check(const void* memory, int c, size_t count) {
   return true;
 }
 
+bool string_match(const char* target, const char* pattern) {
+  while (*pattern) {
+    if (*pattern == '*') {
+      if (!*++pattern) {
+        return true;
+      }
+      while (*target) {
+        if ((toupper(*pattern) == toupper(*target))
+            && string_match(target + 1, pattern + 1)) {
+          return true;
+        }
+        ++target;
+      }
+      return false;
+    } else {
+      if (toupper(*pattern) != toupper(*target)) {
+        return false;
+      }
+      ++target;
+      ++pattern;
+    }
+  }
+  return !*target;
+}
+
 #ifdef WIN32
 int ascii_string_compare(const wchar_t* s1, const char* s2, size_t n,
                          CharacterTransformation transformation) {
@@ -80,5 +105,28 @@ size_t asccpyn(wchar_t* buffer, size_t buflen,
 }
 
 #endif  // WIN32
+
+void replace_substrs(const char *search,
+                     size_t search_len,
+                     const char *replace,
+                     size_t replace_len,
+                     std::string *s) {
+  size_t pos = 0;
+  while ((pos = s->find(search, pos, search_len)) != std::string::npos) {
+    s->replace(pos, search_len, replace, replace_len);
+    pos += replace_len;
+  }
+}
+
+bool starts_with(const char *s1, const char *s2) {
+  while (*s2 != '\0') {
+    if (*s1 != *s2) {
+      return false;
+    }
+    s1++;
+    s2++;
+  }
+  return true;
+}
 
 }  // namespace talk_base

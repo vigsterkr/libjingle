@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -35,12 +35,11 @@ const uint32 MSG_MONITOR_START = 2;
 const uint32 MSG_MONITOR_STOP = 3;
 const uint32 MSG_MONITOR_SIGNAL = 4;
 
-SocketMonitor::SocketMonitor(Session* session,
-                             TransportChannel* channel,
-                             talk_base::Thread *monitor_thread) {
-  session_ = session;
+SocketMonitor::SocketMonitor(TransportChannel* channel,
+                             talk_base::Thread* worker_thread,
+                             talk_base::Thread* monitor_thread) {
   channel_ = channel;
-  channel_thread_ = session->session_manager()->worker_thread();
+  channel_thread_ = worker_thread;
   monitoring_thread_ = monitor_thread;
   monitoring_ = false;
 }
@@ -115,7 +114,6 @@ void SocketMonitor::PollSocket(bool poll) {
   talk_base::CritScope cs(&crit_);
 
   // Gather connection infos
-
   P2PTransportChannel* p2p_channel = GetP2PChannel();
   if (p2p_channel != NULL) {
     connection_infos_.clear();
@@ -125,9 +123,12 @@ void SocketMonitor::PollSocket(bool poll) {
       Connection *connection = *it;
       ConnectionInfo info;
       info.best_connection = p2p_channel->best_connection() == connection;
-      info.readable = connection->read_state() == Connection::STATE_READABLE;
-      info.writable = connection->write_state() == Connection::STATE_WRITABLE;
-      info.timeout = connection->write_state() == Connection::STATE_WRITE_TIMEOUT;
+      info.readable =
+          (connection->read_state() == Connection::STATE_READABLE);
+      info.writable =
+          (connection->write_state() == Connection::STATE_WRITABLE);
+      info.timeout =
+          (connection->write_state() == Connection::STATE_WRITE_TIMEOUT);
       info.new_connection = !connection->reported();
       connection->set_reported(true);
       info.rtt = connection->rtt();
@@ -138,7 +139,7 @@ void SocketMonitor::PollSocket(bool poll) {
       info.local_candidate = connection->local_candidate();
       info.remote_candidate = connection->remote_candidate();
       info.est_quality = connection->port()->network()->quality();
-      info.key = reinterpret_cast<void *>(connection);
+      info.key = connection;
       connection_infos_.push_back(info);
     }
   }
@@ -148,17 +149,6 @@ void SocketMonitor::PollSocket(bool poll) {
   monitoring_thread_->Post(this, MSG_MONITOR_SIGNAL);
   if (poll)
     channel_thread_->PostDelayed(rate_, this, MSG_MONITOR_POLL);
-}
-
-P2PTransportChannel* SocketMonitor::GetP2PChannel() {
-  if (session_->transport() == NULL)
-    return NULL;
-  if (session_->transport()->name() != kNsP2pTransport)
-    return NULL;
-  TransportChannelImpl* impl = session_->GetImplementation(channel_);
-  if (impl == NULL)
-    return NULL;
-  return static_cast<P2PTransportChannel*>(impl);
 }
 
 }

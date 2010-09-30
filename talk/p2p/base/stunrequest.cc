@@ -2,49 +2,46 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#pragma warning(disable:4786)
-#endif
-#include "talk/base/logging.h"
-#include "talk/base/helpers.h"
 #include "talk/p2p/base/stunrequest.h"
-#include <iostream>
-#include <cassert>
+
+#include "talk/base/common.h"
+#include "talk/base/helpers.h"
+#include "talk/base/logging.h"
 
 namespace cricket {
 
 const uint32 MSG_STUN_SEND = 1;
 
 const int MAX_SENDS = 9;
-const int DELAY_UNIT = 100; // 100 milliseconds
+const int DELAY_UNIT = 100;  // 100 milliseconds
 const int DELAY_MAX_FACTOR = 16;
 
-StunRequestManager::StunRequestManager(talk_base::Thread* thread) 
+StunRequestManager::StunRequestManager(talk_base::Thread* thread)
     : thread_(thread) {
-    }
+}
 
 StunRequestManager::~StunRequestManager() {
   while (requests_.begin() != requests_.end()) {
@@ -60,16 +57,17 @@ void StunRequestManager::Send(StunRequest* request) {
 
 void StunRequestManager::SendDelayed(StunRequest* request, int delay) {
   request->set_manager(this);
-  assert(requests_.find(request->id()) == requests_.end());
+  ASSERT(requests_.find(request->id()) == requests_.end());
+  request->Construct();
   requests_[request->id()] = request;
   thread_->PostDelayed(delay, request, MSG_STUN_SEND, NULL);
 }
 
 void StunRequestManager::Remove(StunRequest* request) {
-  assert(request->manager() == this);
+  ASSERT(request->manager() == this);
   RequestMap::iterator iter = requests_.find(request->id());
   if (iter != requests_.end()) {
-    assert(iter->second == request);
+    ASSERT(iter->second == request);
     requests_.erase(iter);
     thread_->Clear(request);
   }
@@ -88,6 +86,7 @@ bool StunRequestManager::CheckResponse(StunMessage* msg) {
   RequestMap::iterator iter = requests_.find(msg->transaction_id());
   if (iter == requests_.end())
     return false;
+
   StunRequest* request = iter->second;
   if (msg->type() == GetStunResponseType(request->type())) {
     request->OnResponse(msg);
@@ -128,17 +127,19 @@ bool StunRequestManager::CheckResponse(const char* data, size_t size) {
 }
 
 StunRequest::StunRequest()
-  : manager_(0), id_(CreateRandomString(16)), msg_(0), count_(0),
-    timeout_(false), tstamp_(0) {
+    : count_(0), timeout_(false), manager_(0),
+      id_(talk_base::CreateRandomString(16)), msg_(new StunMessage()),
+      tstamp_(0) {
+  msg_->SetTransactionID(id_);
 }
 
 StunRequest::StunRequest(StunMessage* request)
-  : manager_(0), id_(request->transaction_id()), msg_(request),
-    count_(0), timeout_(false) {
+  : count_(0), timeout_(false), manager_(0),
+    id_(request->transaction_id()), msg_(request) {
 }
 
 StunRequest::~StunRequest() {
-  assert(manager_ != NULL);
+  ASSERT(manager_ != NULL);
   if (manager_) {
     manager_->Remove(this);
     manager_->thread_->Clear(this);
@@ -146,26 +147,27 @@ StunRequest::~StunRequest() {
   delete msg_;
 }
 
-const StunMessageType StunRequest::type() {
-  assert(msg_);
+void StunRequest::Construct() {
+  if (msg_->type() == 0) {
+    Prepare(msg_);
+    ASSERT(msg_->transaction_id() == id_);
+    ASSERT(msg_->type() != 0);
+  }
+}
+
+StunMessageType StunRequest::type() {
+  ASSERT(msg_ != NULL);
   return msg_->type();
 }
 
 void StunRequest::set_manager(StunRequestManager* manager) {
-  assert(!manager_);
+  ASSERT(!manager_);
   manager_ = manager;
 }
 
 void StunRequest::OnMessage(talk_base::Message* pmsg) {
-  assert(manager_);
-  assert(pmsg->message_id == MSG_STUN_SEND);
-
-  if (!msg_) {
-    msg_ = new StunMessage();
-    msg_->SetTransactionID(id_);
-    Prepare(msg_);
-    assert(msg_->transaction_id() == id_);
-  }
+  ASSERT(manager_ != NULL);
+  ASSERT(pmsg->message_id == MSG_STUN_SEND);
 
   if (timeout_) {
     OnTimeout();
@@ -173,7 +175,7 @@ void StunRequest::OnMessage(talk_base::Message* pmsg) {
     return;
   }
 
-  tstamp_ = talk_base::GetMillisecondCount();
+  tstamp_ = talk_base::Time();
 
   talk_base::ByteBuffer buf;
   msg_->Write(&buf);
@@ -184,7 +186,7 @@ void StunRequest::OnMessage(talk_base::Message* pmsg) {
 }
 
 uint32 StunRequest::Elapsed() const {
-  return (talk_base::GetMillisecondCount() - tstamp_);
+  return talk_base::TimeSince(tstamp_);
 }
 
 int StunRequest::GetNextDelay() {
@@ -195,4 +197,4 @@ int StunRequest::GetNextDelay() {
   return delay;
 }
 
-} // namespace cricket
+}  // namespace cricket
