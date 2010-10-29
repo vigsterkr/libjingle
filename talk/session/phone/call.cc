@@ -441,7 +441,7 @@ void Call::OnConnectionMonitor(VoiceChannel *channel,
   SignalConnectionMonitor(this, infos);
 }
 
-void Call::OnMediaMonitor(VoiceChannel *channel, const MediaInfo& info) {
+void Call::OnMediaMonitor(VoiceChannel *channel, const VoiceMediaInfo& info) {
   SignalMediaMonitor(this, info);
 }
 
@@ -454,7 +454,7 @@ void Call::OnConnectionMonitor(VideoChannel *channel,
   SignalVideoConnectionMonitor(this, infos);
 }
 
-void Call::OnMediaMonitor(VideoChannel *channel, const MediaInfo& info) {
+void Call::OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info) {
   SignalVideoMediaMonitor(this, info);
 }
 

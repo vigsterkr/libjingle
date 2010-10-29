@@ -155,17 +155,20 @@ void Transport::DestroyChannel_w(const std::string& name) {
   }
 
   if (connect_requested_ && channels_.empty()) {
-    // We're not longer attempting to connect.
+    // We're no longer attempting to connect.
     signaling_thread()->Post(this, MSG_CONNECTING, NULL);
   }
 
-  if (impl)
+  if (impl) {
+    // Check in case the deleted channel was the only non-writable channel.
+    OnChannelWritableState(impl);
     DestroyTransportChannel(impl);
+  }
 }
 
 void Transport::ConnectChannels() {
   ASSERT(signaling_thread()->IsCurrent());
-  worker_thread()->Post(this, MSG_CONNECTCHANNELS, NULL);
+  worker_thread()->Send(this, MSG_CONNECTCHANNELS, NULL);
 }
 
 void Transport::ConnectChannels_w() {
@@ -211,7 +214,7 @@ void Transport::DestroyAllChannels_w() {
 
 void Transport::ResetChannels() {
   ASSERT(signaling_thread()->IsCurrent());
-  worker_thread()->Post(this, MSG_RESETCHANNELS, NULL);
+  worker_thread()->Send(this, MSG_RESETCHANNELS, NULL);
 }
 
 void Transport::ResetChannels_w() {

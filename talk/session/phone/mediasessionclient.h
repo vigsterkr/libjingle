@@ -51,8 +51,23 @@ class SessionDescription;
 typedef std::vector<AudioCodec> AudioCodecs;
 typedef std::vector<VideoCodec> VideoCodecs;
 
+// SEC_ENABLED and SEC_REQUIRED should only be used if the session
+// was negotiated over TLS, to protect the inline crypto material
+// exchange.
+// SEC_DISABLED: No crypto in outgoing offer and answer. Fail any
+//               offer with crypto required.
+// SEC_ENABLED: Crypto in outgoing offer and answer. Fail any offer
+//              with unsupported required crypto. Crypto set but not
+//              required in outgoing offer.
+// SEC_REQUIRED: Crypto in outgoing offer and answer with
+//               required='true'. Fail any offer with no or
+//               unsupported crypto (implicit crypto required='true'
+//               in the offer.)
+enum SecureMediaPolicy {SEC_DISABLED, SEC_ENABLED, SEC_REQUIRED};
+
 class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
  public:
+
   MediaSessionClient(const buzz::Jid& jid, SessionManager *manager);
   // Alternative constructor, allowing injection of media_engine
   // and device_manager.
@@ -103,6 +118,9 @@ class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
   SessionDescription* CreateOffer(bool video = false, bool set_ssrc = false);
   SessionDescription* CreateAnswer(const SessionDescription* offer);
 
+  SecureMediaPolicy secure() const { return secure_; }
+  void set_secure(SecureMediaPolicy s) { secure_ = s; }
+
  private:
   void Construct();
   void OnSessionCreate(Session *session, bool received_initiate);
@@ -124,7 +142,7 @@ class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
   ChannelManager *channel_manager_;
   std::map<uint32, Call *> calls_;
   std::map<std::string, Call *> session_map_;
-
+  SecureMediaPolicy secure_;
   friend class Call;
 };
 
@@ -135,8 +153,10 @@ enum MediaType {
 
 class MediaContentDescription : public ContentDescription {
  public:
-  MediaContentDescription() : ssrc_(0), ssrc_set_(false), rtcp_mux_(false),
-                              rtp_headers_disabled_(false) {}
+  MediaContentDescription() : ssrc_(0), bandwidth_bps_(-1),
+                              ssrc_set_(false), auto_bandwidth_(true),
+                              rtcp_mux_(false), rtp_headers_disabled_(false),
+                              crypto_required_(false) {}
 
   virtual MediaType type() const = 0;
 
@@ -161,12 +181,26 @@ class MediaContentDescription : public ContentDescription {
   void AddCrypto(const CryptoParams& params) {
     cryptos_.push_back(params);
   }
+  bool crypto_required() const { return crypto_required_; }
+  void set_crypto_required(bool crypto) {
+    crypto_required_ = crypto;
+  }
 
+  int bandwidth_bps() const { return bandwidth_bps_; }
+  void set_bandwidth_bps(int bps) { bandwidth_bps_ = bps; }
+
+  bool auto_bandwidth() const { return auto_bandwidth_; }
+  void set_auto_bandwidth(bool enable) { auto_bandwidth_ = enable; }
+
+ protected:
   uint32 ssrc_;
+  int bandwidth_bps_;    // fixed or max video bandwidth
   bool ssrc_set_;
+  bool auto_bandwidth_;    // if true, bandwidth_bps_ < 0 flags default limits
   bool rtcp_mux_;
   bool rtp_headers_disabled_;
   std::vector<CryptoParams> cryptos_;
+  bool crypto_required_;
 };
 
 template <class C>
@@ -190,16 +224,22 @@ class MediaContentDescriptionImpl : public MediaContentDescription {
 
 class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
  public:
-  AudioContentDescription()
-      {}
+  AudioContentDescription() :
+      conference_mode_(false) {}
 
   virtual MediaType type() const { return MEDIA_TYPE_AUDIO; }
+
+  bool conference_mode() const { return conference_mode_; }
+  void set_conference_mode(bool enable) {
+    conference_mode_ = enable;
+  }
 
   const std::string &lang() const { return lang_; }
   void set_lang(const std::string &lang) { lang_ = lang; }
 
 
  private:
+  bool conference_mode_;
   std::string lang_;
 };
 

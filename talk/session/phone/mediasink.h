@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2007--2009, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,42 +25,25 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_MACUTILS_H__
-#define TALK_BASE_MACUTILS_H__
+#ifndef TALK_SESSION_PHONE_MEDIASINK_H_
+#define TALK_SESSION_PHONE_MEDIASINK_H_
 
-#include <CoreFoundation/CoreFoundation.h>
-#include <Carbon/Carbon.h>
-#include <string>
+namespace cricket {
 
-namespace talk_base {
+// MediaSinkInterface is a sink to handle RTP and RTCP packets that are sent or
+// received by a channel. Each channel needs two MediaSinkInterface, one for
+// the sent packets and the other for the received packets.
+class MediaSinkInterface {
+ public:
+  virtual ~MediaSinkInterface() {}
 
-///////////////////////////////////////////////////////////////////////////////
-
-bool ToUtf8(const CFStringRef str16, std::string* str8);
-bool ToUtf16(const std::string& str8, CFStringRef* str16);
-
-void DecodeFourChar(UInt32 fc, std::string* out);
-std::string DecodeEvent(EventRef event);
-
-enum MacOSVersionName {
-  kMacOSUnknown,  // ???
-  kMacOSOlder,    // 10.2-
-  kMacOSPanther,  // 10.3
-  kMacOSTiger,    // 10.4
-  kMacOSLeopard,  // 10.5
-  kMacOSNewer,    // 10.6+
+  virtual void SetMaxSize(size_t size) = 0;
+  virtual bool Enable(bool enable) = 0;
+  virtual bool IsEnabled() const = 0;
+  virtual void OnRtpPacket(const void* data, size_t size) = 0;
+  virtual void OnRtcpPacket(const void* data, size_t size) = 0;
 };
 
-bool GetOSVersion(int* major, int* minor, int* bugfix);
-MacOSVersionName GetOSVersionName();
-bool GetQuickTimeVersion(std::string* version);
+}  // namespace cricket
 
-// Runs the given apple script. Only supports scripts that does not
-// require user interaction.
-bool RunAppleScript(const std::string& script);
-
-///////////////////////////////////////////////////////////////////////////////
-
-}  // namespace talk_base
-
-#endif  // TALK_BASE_MACUTILS_H__
+#endif  // TALK_SESSION_PHONE_MEDIASINK_H_

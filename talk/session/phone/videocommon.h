@@ -58,24 +58,17 @@ inline std::string GetFourccName(uint32 fourcc) {
 // Some good pages discussing FourCC codes:
 //   http://developer.apple.com/quicktime/icefloe/dispatch020.html
 //   http://www.fourcc.org/yuv.php
-enum {
+enum FourCC {
+  // Canonical fourccs used in our code.
   FOURCC_I420 = FOURCC('I', '4', '2', '0'),
-  FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420
-  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420
   FOURCC_YUY2 = FOURCC('Y', 'U', 'Y', '2'),
   FOURCC_UYVY = FOURCC('U', 'Y', 'V', 'Y'),
-  FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),
   FOURCC_24BG = FOURCC('2', '4', 'B', 'G'),
-  FOURCC_RGB1 = FOURCC('R', 'G', 'B', '1'),
   FOURCC_RGBA = FOURCC('R', 'G', 'B', 'A'),
-  FOURCC_RGB2 = FOURCC('R', 'G', 'B', '2'),
-  FOURCC_ARGB = FOURCC('A', 'R', 'G', 'B'),
   FOURCC_BGRA = FOURCC('B', 'G', 'R', 'A'),
+  FOURCC_ARGB = FOURCC('A', 'R', 'G', 'B'),
   FOURCC_MJPG = FOURCC('M', 'J', 'P', 'G'),
   FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),
-  FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
-  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2
-  FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2
   FOURCC_RAW  = FOURCC('r', 'a', 'w', ' '),
   // Next five are Bayer RGB formats. The four characters define the order of
   // the colours in each 2x2 pixel grid, going left-to-right and top-to-bottom.
@@ -83,9 +76,25 @@ enum {
   FOURCC_BGGR = FOURCC('B', 'G', 'G', 'R'),
   FOURCC_GRBG = FOURCC('G', 'R', 'B', 'G'),
   FOURCC_GBRG = FOURCC('G', 'B', 'R', 'G'),
+
+  // Aliases for canonical fourccs, replaced with their canonical equivalents by
+  // CanonicalFourCC().
+  FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420
+  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420
+  FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2
+  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2
+  FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY
+  FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
+  FOURCC_RGB1 = FOURCC('R', 'G', 'B', '1'),  // Alias for RGBA
+  FOURCC_RGB2 = FOURCC('R', 'G', 'B', '2'),  // Alias for BGRA
   FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
-  FOURCC_ANY  = 0xFFFFFFFF,  // Match any fourcc.
+
+  // Match any fourcc.
+  FOURCC_ANY  = 0xFFFFFFFF,
 };
+
+// Converts fourcc aliases into canonical ones.
+uint32 CanonicalFourCC(uint32 fourcc);
 
 //////////////////////////////////////////////////////////////////////////////
 // Definition of VideoFormat.

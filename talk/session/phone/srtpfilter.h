@@ -51,6 +51,8 @@ extern const std::string& CS_DEFAULT;
 extern const std::string CS_AES_CM_128_HMAC_SHA1_80;
 // 128-bit AES with 32-bit SHA-1 HMAC.
 extern const std::string CS_AES_CM_128_HMAC_SHA1_32;
+// Key is 128 bits and salt is 112 bits == 30 bytes. B64 bloat => 40 bytes.
+extern const int SRTP_MASTER_KEY_BASE64_LEN;
 
 // Class that wraps a libSRTP session. Used internally by SrtpFilter, below.
 class SrtpSession {

@@ -77,6 +77,12 @@ bool BadWrite(const std::string& text, WriteError* error);
 std::string GetXmlAttr(const buzz::XmlElement* elem,
                        const buzz::QName& name,
                        const std::string& def);
+std::string GetXmlAttr(const buzz::XmlElement* elem,
+                       const buzz::QName& name,
+                       const char* def);
+// Return true if the value is "true" or "1".
+bool GetXmlAttr(const buzz::XmlElement* elem,
+                const buzz::QName& name, bool def);
 int GetXmlAttr(const buzz::XmlElement* elem,
                const buzz::QName& name, int def);
 void AddXmlAttr(buzz::XmlElement* elem,

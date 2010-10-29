@@ -92,11 +92,11 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
       SignalReceivedTerminateReason;
   sigslot::signal2<Call *, const std::vector<ConnectionInfo> &>
       SignalConnectionMonitor;
-  sigslot::signal2<Call *, const MediaInfo&> SignalMediaMonitor;
+  sigslot::signal2<Call *, const VoiceMediaInfo&> SignalMediaMonitor;
   sigslot::signal2<Call *, const AudioInfo&> SignalAudioMonitor;
   sigslot::signal2<Call *, const std::vector<ConnectionInfo> &>
       SignalVideoConnectionMonitor;
-  sigslot::signal2<Call *, const MediaInfo&> SignalVideoMediaMonitor;
+  sigslot::signal2<Call *, const VideoMediaInfo&> SignalVideoMediaMonitor;
 
  private:
   void OnMessage(talk_base::Message *message);
@@ -111,11 +111,11 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void Join(Call *call, bool enable);
   void OnConnectionMonitor(VoiceChannel *channel,
                            const std::vector<ConnectionInfo> &infos);
-  void OnMediaMonitor(VoiceChannel *channel, const MediaInfo& info);
+  void OnMediaMonitor(VoiceChannel *channel, const VoiceMediaInfo& info);
   void OnAudioMonitor(VoiceChannel *channel, const AudioInfo& info);
   void OnConnectionMonitor(VideoChannel *channel,
                            const std::vector<ConnectionInfo> &infos);
-  void OnMediaMonitor(VideoChannel *channel, const MediaInfo& info);
+  void OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info);
   VoiceChannel* GetVoiceChannel(BaseSession* session);
   VideoChannel* GetVideoChannel(BaseSession* session);
   void ContinuePlayDTMF();

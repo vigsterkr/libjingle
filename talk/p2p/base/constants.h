@@ -36,13 +36,6 @@
 
 namespace cricket {
 
-// There are 3 different types of Jingle messages or protocols: Jingle
-// (the spec in XEP-166, etc), Gingle (the legacy protocol) and hybrid
-// (both at the same time).  Gingle2 is a temporary protocol that we
-// are only keeping around right now during this refactoring phase.
-// Once we finish refactoring and start implementing Jingle, we will
-// remove Gingle2.
-
 // NS_ == namespace
 // QN_ == buzz::QName (namespace + name)
 // LN_ == "local name" == QName::LocalPart()
@@ -132,6 +125,17 @@ extern const buzz::QName QN_GINGLE_VIDEO_CONTENT;
 extern const buzz::QName QN_GINGLE_VIDEO_PAYLOADTYPE;
 extern const buzz::QName QN_GINGLE_VIDEO_SRCID;
 extern const buzz::QName QN_GINGLE_VIDEO_BANDWIDTH;
+
+// Crypto support.
+extern const buzz::QName QN_ENCRYPTION;
+extern const buzz::QName QN_ENCRYPTION_REQUIRED;
+extern const buzz::QName QN_CRYPTO;
+extern const buzz::QName QN_GINGLE_AUDIO_CRYPTO_USAGE;
+extern const buzz::QName QN_GINGLE_VIDEO_CRYPTO_USAGE;
+extern const buzz::QName QN_CRYPTO_SUITE;
+extern const buzz::QName QN_CRYPTO_KEY_PARAMS;
+extern const buzz::QName QN_CRYPTO_TAG;
+extern const buzz::QName QN_CRYPTO_SESSION_PARAMS;
 
 // transports and candidates
 extern const std::string LN_TRANSPORT;

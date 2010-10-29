@@ -25,7 +25,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string>
+
 #include "talk/p2p/base/constants.h"
+#include "talk/xmllite/qname.h"
 
 namespace cricket {
 
@@ -106,6 +109,17 @@ const buzz::QName QN_GINGLE_VIDEO_PAYLOADTYPE(
     true, NS_GINGLE_VIDEO, LN_PAYLOADTYPE);
 const buzz::QName QN_GINGLE_VIDEO_SRCID(true, NS_GINGLE_VIDEO, "src-id");
 const buzz::QName QN_GINGLE_VIDEO_BANDWIDTH(true, NS_GINGLE_VIDEO, "bandwidth");
+
+// Crypto support.
+const buzz::QName QN_ENCRYPTION(true, NS_JINGLE_RTP, "encryption");
+const buzz::QName QN_ENCRYPTION_REQUIRED(true, NS_EMPTY, "required");
+const buzz::QName QN_CRYPTO(true, NS_JINGLE_RTP, "crypto");
+const buzz::QName QN_GINGLE_AUDIO_CRYPTO_USAGE(true, NS_GINGLE_AUDIO, "usage");
+const buzz::QName QN_GINGLE_VIDEO_CRYPTO_USAGE(true, NS_GINGLE_VIDEO, "usage");
+const buzz::QName QN_CRYPTO_SUITE(true, NS_EMPTY, "crypto-suite");
+const buzz::QName QN_CRYPTO_KEY_PARAMS(true, NS_EMPTY, "key-params");
+const buzz::QName QN_CRYPTO_TAG(true, NS_EMPTY, "tag");
+const buzz::QName QN_CRYPTO_SESSION_PARAMS(true, NS_EMPTY, "session-params");
 
 // transports and candidates
 const std::string LN_TRANSPORT("transport");

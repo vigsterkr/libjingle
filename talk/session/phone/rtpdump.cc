@@ -35,32 +35,24 @@
 
 namespace cricket {
 
-static const char kRtpDumpFileFirstLine[] = "#!rtpplay1.0 0.0.0.0/0\n";
+const std::string RtpDumpFileHeader::kFirstLine =
+    "#!rtpplay1.0 0.0.0.0/0\n";
 
-struct RtpDumpFileHeader {
-  RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p)
-      : start_sec(start_ms / 1000),
-        start_usec(start_ms % 1000 * 1000),
-        source(s),
-        port(p),
-        padding(0) {
-  }
+RtpDumpFileHeader::RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p)
+    : start_sec(start_ms / 1000),
+      start_usec(start_ms % 1000 * 1000),
+      source(s),
+      port(p),
+      padding(0) {
+}
 
-  void WriteToByteBuffer(talk_base::ByteBuffer* buf) {
-    buf->WriteUInt32(start_sec);
-    buf->WriteUInt32(start_usec);
-    buf->WriteUInt32(source);
-    buf->WriteUInt16(port);
-    buf->WriteUInt16(padding);
-  }
-
-  static const size_t kHeaderLength = 16;
-  uint32 start_sec;   // start of recording, the seconds part.
-  uint32 start_usec;  // start of recording, the microseconds part.
-  uint32 source;      // network source (multicast address).
-  uint16 port;        // UDP port.
-  uint16 padding;     // 2 bytes padding.
-};
+void RtpDumpFileHeader::WriteToByteBuffer(talk_base::ByteBuffer* buf) {
+  buf->WriteUInt32(start_sec);
+  buf->WriteUInt32(start_usec);
+  buf->WriteUInt32(source);
+  buf->WriteUInt16(port);
+  buf->WriteUInt16(padding);
+}
 
 // RTP packet format (http://www.networksorcery.com/enp/protocol/rtp.htm).
 static const int kRtpSeqNumOffset = 2;
@@ -308,7 +300,8 @@ talk_base::StreamResult RtpDumpWriter::WritePacket(
 
 talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
   talk_base::StreamResult res = stream_->WriteAll(
-      kRtpDumpFileFirstLine, strlen(kRtpDumpFileFirstLine), NULL, NULL);
+      RtpDumpFileHeader::kFirstLine.c_str(),
+      RtpDumpFileHeader::kFirstLine.size(), NULL, NULL);
   if (res != talk_base::SR_SUCCESS) {
     return res;
   }

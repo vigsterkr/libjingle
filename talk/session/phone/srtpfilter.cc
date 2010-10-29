@@ -62,6 +62,7 @@ namespace cricket {
 const std::string& CS_DEFAULT = CS_AES_CM_128_HMAC_SHA1_80;
 const std::string CS_AES_CM_128_HMAC_SHA1_80 = "AES_CM_128_HMAC_SHA1_80";
 const std::string CS_AES_CM_128_HMAC_SHA1_32 = "AES_CM_128_HMAC_SHA1_32";
+const int SRTP_MASTER_KEY_BASE64_LEN = SRTP_MASTER_KEY_LEN * 4 / 3;
 
 SrtpFilter::SrtpFilter() : state_(ST_INIT) {
 }

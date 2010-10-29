@@ -36,6 +36,7 @@
 #include "talk/base/stream.h"
 #include "talk/base/ssladapter.h"
 #include "talk/base/win32socketserver.h"
+#include "talk/p2p/base/constants.h"
 #include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
 #include "talk/examples/login/xmppauth.h"
@@ -194,7 +195,7 @@ cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
   // the the input voice and video streams.
   std::vector<cricket::AudioCodec> voice_codecs;
   voice_codecs.push_back(
-      cricket::AudioCodec(9, "G722", 16000, 64000, 1, 0));
+      cricket::AudioCodec(9, "G722", 16000, 0, 1, 0));
   file_media_engine->set_voice_codecs(voice_codecs);
   std::vector<cricket::VideoCodec> video_codecs;
   video_codecs.push_back(
@@ -214,7 +215,11 @@ int main(int argc, char **argv) {
   // define options
   DEFINE_bool(a, false, "Turn on auto accept.");
   DEFINE_bool(d, false, "Turn on debugging.");
+  DEFINE_string(
+      protocol, "hybrid",
+      "Initial signaling protocol to use: jingle, gingle, or hybrid.");
   DEFINE_bool(testserver, false, "Use test server");
+  DEFINE_bool(plainserver, false, "Turn off tls and allow plain password.");
   DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
   DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
   DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
@@ -234,10 +239,24 @@ int main(int argc, char **argv) {
 
   bool auto_accept = FLAG_a;
   bool debug = FLAG_d;
+  std::string protocol = FLAG_protocol;
   bool test_server = FLAG_testserver;
+  bool plain_server = FLAG_plainserver;
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
+
+  cricket::SignalingProtocol initial_protocol = cricket::PROTOCOL_HYBRID;
+  if (protocol == "jingle") {
+    initial_protocol = cricket::PROTOCOL_JINGLE;
+  } else if (protocol == "gingle") {
+    initial_protocol = cricket::PROTOCOL_GINGLE;
+  } else if (protocol == "hybrid") {
+    initial_protocol = cricket::PROTOCOL_HYBRID;
+  } else {
+    printf("Invalid protocol.  Must be jingle, gingle, or hybrid.");
+    return 1;
+  }
 
   // parse username and password, if present
   buzz::Jid jid;
@@ -279,6 +298,10 @@ int main(int argc, char **argv) {
   xcs.set_host(jid.domain());
   xcs.set_use_tls(!test_server);
 
+  if (plain_server) {
+    xcs.set_use_tls(false);
+    xcs.set_allow_plain(true);
+  }
   if (test_server) {
     pass.password() = jid.node();
     xcs.set_allow_plain(true);
@@ -329,6 +352,8 @@ int main(int argc, char **argv) {
   client->SetAutoAccept(auto_accept);
   client->SetPmucDomain(pmuc_domain);
   client->SetPortAllocatorFlags(portallocator_flags);
+  client->SetAllowLocalIps(true);
+  client->SetInitialProtocol(initial_protocol);
   console->Start();
 
   if (debug) {

@@ -149,7 +149,7 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual void SetSendSsrc(uint32 id) {}  // TODO: change RTP packet?
   virtual bool SetRtcpCName(const std::string& cname) { return true; }
   virtual bool Mute(bool on) { return false; }
-  virtual bool SetMaxSendBandwidth(int max_bandwidth) { return true; }
+  virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool SetOptions(int options) { return true; }
 
  private:
@@ -174,7 +174,9 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
     return true;
   }
-  virtual bool GetStats(VoiceMediaInfo* info) { return true; }
+  virtual bool GetStats(VideoMediaInfo* info) { return true; }
+  virtual bool SendIntraFrame() { return false; }
+  virtual bool RequestIntraFrame() { return false; }
 
   // Implement pure virtual methods of MediaChannel.
   virtual void OnPacketReceived(const void* data, int len);
@@ -182,7 +184,7 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual void SetSendSsrc(uint32 id) {}  // TODO: change RTP packet?
   virtual bool SetRtcpCName(const std::string& cname) { return true; }
   virtual bool Mute(bool on) { return false; }
-  virtual bool SetMaxSendBandwidth(int max_bandwidth) { return true; }
+  virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool SetOptions(int options) { return true; }
 
  private:

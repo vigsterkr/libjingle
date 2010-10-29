@@ -6,27 +6,13 @@
 #
 import os
 
-# Keep a global list of what libraries have a 64 bit version.  We use it for
-# replacements when linking a 64 bit dylib or executable.
-libs64 = []
+# Keep a global dictionary of library target params for lookups in
+# ExtendComponent().
+_all_lib_targets = {}
 
-def Library(env, **kwargs):
-  """Extends ComponentLibrary to support multiplatform builds.
-
-  Args:
-    env: The current environment.
-    kwargs: The keyword arguments.
-  """
-  params = CombineDicts(kwargs, {'COMPONENT_STATIC': True})
-  if params.has_key('also64bit'):
-    libs64.append(params['name'])
-
-  return ExtendComponent(env, 'ComponentLibrary', **params)
-
-
-def DynamicLibrary(env, **kwargs):
+def _GenericLibrary(env, static, **kwargs):
   """Extends ComponentLibrary to support multiplatform builds
-     of dynmic libraries. This use COMPONENT_STATIC = false.
+     of dynamic or static libraries.
 
   Args:
     env: The environment object.
@@ -35,8 +21,36 @@ def DynamicLibrary(env, **kwargs):
   Returns:
     See swtoolkit ComponentLibrary
   """
-  params = CombineDicts(kwargs, {'COMPONENT_STATIC': False})
+  params = CombineDicts(kwargs, {'COMPONENT_STATIC': static})
   return ExtendComponent(env, 'ComponentLibrary', **params)
+
+
+def Library(env, **kwargs):
+  """Extends ComponentLibrary to support multiplatform builds of static
+     libraries.
+
+  Args:
+    env: The current environment.
+    kwargs: The keyword arguments.
+
+  Returns:
+    See swtoolkit ComponentLibrary
+  """
+  return _GenericLibrary(env, True, **kwargs)
+
+
+def DynamicLibrary(env, **kwargs):
+  """Extends ComponentLibrary to support multiplatform builds
+     of dynmic libraries.
+
+  Args:
+    env: The environment object.
+    kwargs: The keyword arguments.
+
+  Returns:
+    See swtoolkit ComponentLibrary
+  """
+  return _GenericLibrary(env, False, **kwargs)
 
 
 def Object(env, **kwargs):
@@ -73,9 +87,9 @@ def Unittest(env, **kwargs):
       'ws2_32'
     ]
     common_test_params['lin_libs'] = [
+      'crypto',
       'pthread',
-      ':libssl.so.0.9.8',
-      ':libcrypto.so.0.9.8',
+      'ssl',
     ]
 
   params = CombineDicts(kwargs, common_test_params)
@@ -190,6 +204,7 @@ def AddMediaLibs(env, **kwargs):
   elif env.Bit('linux'):
     ipp_libdir %= 'v_5_2_linux'
 
+
   AddToDict(kwargs, 'libdirs', [
     '$MAIN_DIR/third_party/gips/Libraries/',
     ipp_libdir,
@@ -206,6 +221,7 @@ def AddMediaLibs(env, **kwargs):
     gips_lib = 'VoiceEngine_mac_universal_gcc'
   elif env.Bit('linux'):
     gips_lib = 'VoiceEngine_Linux_external_gcc'
+
 
   AddToDict(kwargs, 'libs', [
     gips_lib,
@@ -367,6 +383,23 @@ def MergeAndFilterByPlatform(env, params):
 
   return merged
 
+# Linux can build both 32 and 64 bit on 64 bit host, but 32 bit host can
+# only build 32 bit.  For 32 bit debian installer a 32 bit host is required.
+
+def Allow64BitCompile(env):
+  return env.Bit('linux') and env.Bit('platform_arch_64bit')
+
+def MergeSettingsFromLibraryDependencies(env, params):
+  if params.has_key('libs'):
+    for lib in params['libs']:
+      if (_all_lib_targets.has_key(lib) and
+          _all_lib_targets[lib].has_key('dependent_target_settings')):
+        params = CombineDicts(
+            params,
+            MergeAndFilterByPlatform(
+                env,
+                _all_lib_targets[lib]['dependent_target_settings']))
+  return params
 
 def ExtendComponent(env, component, **kwargs):
   """A wrapper around a scons builder function that preprocesses and post-
@@ -388,22 +421,27 @@ def ExtendComponent(env, component, **kwargs):
   """
   env = env.Clone()
 
+  # prune parameters intended for other platforms, then merge
+  params = MergeAndFilterByPlatform(env, kwargs)
+
   # get the 'target' field
-  name = GetEntry(kwargs, 'name')
+  name = GetEntry(params, 'name')
+
+  # save pristine params of lib targets for future reference
+  if 'ComponentLibrary' == component:
+    _all_lib_targets[name] = dict(params)
+
+  # add any dependent target settings from library dependencies
+  params = MergeSettingsFromLibraryDependencies(env, params)
 
   # if this is a signed binary we need to make an unsigned version first
-  signed = env.Bit('windows') and GetEntry(kwargs, 'signed')
+  signed = env.Bit('windows') and GetEntry(params, 'signed')
   if signed:
     name = 'unsigned_' + name
 
-  also64bit = env.Bit('linux') and GetEntry(kwargs, 'also64bit')
-
   # add default values
-  if GetEntry(kwargs, 'include_talk_media_libs'):
-    kwargs = AddMediaLibs(env, **kwargs)
-
-  # prune parameters intended for other platforms, then merge
-  params = MergeAndFilterByPlatform(env, kwargs)
+  if GetEntry(params, 'include_talk_media_libs'):
+    params = AddMediaLibs(env, **params)
 
   # potentially exit now
   srcs = GetEntry(params, 'srcs')
@@ -411,7 +449,7 @@ def ExtendComponent(env, component, **kwargs):
     return None
 
   # apply any explicit dependencies
-  dependencies = GetEntry(kwargs, 'depends')
+  dependencies = GetEntry(params, 'depends')
   if dependencies is not None:
     env.Depends(name, dependencies)
 
@@ -442,7 +480,7 @@ def ExtendComponent(env, component, **kwargs):
       env.Prepend(**{var : values})
 
   # workaround for pulse stripping link flag for unknown reason
-  if env.Bit('linux'):
+  if Allow64BitCompile(env):
     env['SHLINKCOM'] = ('$SHLINK -o $TARGET -m32 $SHLINKFLAGS $SOURCES '
                         '$_LIBDIRFLAGS $_LIBFLAGS')
     env['LINKCOM'] = ('$LINK -o $TARGET -m32 $LINKFLAGS $SOURCES '
@@ -458,7 +496,7 @@ def ExtendComponent(env, component, **kwargs):
   node = builder(name, srcs)
 
   # make a parallel 64bit version if requested
-  if also64bit:
+  if Allow64BitCompile(env) and GetEntry(params, 'also64bit'):
     env_64bit = env.Clone()
     env_64bit.FilterOut(CCFLAGS = ['-m32'], LINKFLAGS = ['-m32'])
     env_64bit.Prepend(CCFLAGS = ['-m64', '-fPIC'], LINKFLAGS = ['-m64'])
@@ -471,7 +509,8 @@ def ExtendComponent(env, component, **kwargs):
       # link 64 bit versions of libraries
       libs = []
       for lib in env_64bit['LIBS']:
-        if lib in set(libs64):
+        if (_all_lib_targets.has_key(lib) and
+            _all_lib_targets[lib].has_key('also64bit')):
           libs.append(lib + '64')
         else:
           libs.append(lib)
@@ -495,7 +534,7 @@ def ExtendComponent(env, component, **kwargs):
       target = '$STAGING_DIR/' + target,
     )
     env.Alias('signed_binaries', signed_node)
-    return signed
+    return signed_node
 
   return node
 

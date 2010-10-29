@@ -14,6 +14,10 @@
 
 namespace talk_base {
 
+static const char kCpuInfoFile[] = "/proc/cpuinfo";
+static const char kCpuMaxFreqFile[] =
+    "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
+
 ProcCpuInfo::ProcCpuInfo() {
 }
 
@@ -22,7 +26,7 @@ ProcCpuInfo::~ProcCpuInfo() {
 
 bool ProcCpuInfo::LoadFromSystem() {
   ConfigParser procfs;
-  if (!procfs.Open("/proc/cpuinfo"))
+  if (!procfs.Open(kCpuInfoFile))
     return false;
   return procfs.Parse(&cpu_info_);
 };
@@ -212,6 +216,15 @@ std::string ReadLinuxUname() {
        << buf.version << " "
        << buf.machine;
   return sstr.str();
+}
+
+int ReadCpuMaxFreq() {
+  FileStream fs;
+  std::string str;
+  if (!fs.Open(kCpuMaxFreqFile, "r") || SR_SUCCESS != fs.ReadLine(&str)) {
+    return -1;
+  }
+  return atoi(str.c_str());
 }
 
 }  // namespace talk_base

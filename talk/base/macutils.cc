@@ -144,12 +144,76 @@ bool GetQuickTimeVersion(std::string* out) {
   int ver;
   if (!GetGestalt(gestaltQuickTimeVersion, &ver))
     return false;
-  
+
   std::stringstream ss;
   ss << std::hex << ver;
   *out = ss.str();
   return true;
 }
+
+bool RunAppleScript(const std::string& script) {
+  ComponentInstance component = NULL;
+  AEDesc script_desc;
+  AEDesc result_data;
+  OSStatus err;
+  OSAID script_id, result_id;
+
+  AECreateDesc(typeNull, NULL, 0, &script_desc);
+  AECreateDesc(typeNull, NULL, 0, &result_data);
+  script_id = kOSANullScript;
+  result_id = kOSANullScript;
+
+  component = OpenDefaultComponent(kOSAComponentType, typeAppleScript);
+  if (component == NULL) {
+    LOG(LS_ERROR) << "Failed opening Apple Script component";
+    return false;
+  }
+  err = AECreateDesc(typeUTF8Text, script.data(), script.size(), &script_desc);
+  if (err != noErr) {
+    CloseComponent(component);
+    LOG(LS_ERROR) << "Failed creating Apple Script description";
+    return false;
+  }
+
+  err = OSACompile(component, &script_desc, kOSAModeCanInteract, &script_id);
+  if (err != noErr) {
+    AEDisposeDesc(&script_desc);
+    if (script_id != kOSANullScript) {
+      OSADispose(component, script_id);
+    }
+    CloseComponent(component);
+    LOG(LS_ERROR) << "Error compiling Apple Script";
+    return false;
+  }
+
+  err = OSAExecute(component, script_id, kOSANullScript, kOSAModeCanInteract,
+		   &result_id);
+
+  if (err == errOSAScriptError) {
+    LOG(LS_ERROR) << "Error when executing Apple Script: " << script;
+    AECreateDesc(typeNull, NULL, 0, &result_data);
+    OSAScriptError(component, kOSAErrorMessage, typeChar, &result_data);
+    int len = AEGetDescDataSize(&result_data);
+    char* data = (char*) malloc(len);
+    if (data != NULL) {
+      err = AEGetDescData(&result_data, data, len);
+      LOG(LS_ERROR) << "Script error: " << data;
+    }
+    AEDisposeDesc(&script_desc);
+    AEDisposeDesc(&result_data);
+    return false;
+  }
+  AEDisposeDesc(&script_desc);
+  if (script_id != kOSANullScript) {
+    OSADispose(component, script_id);
+  }
+  if (result_id != kOSANullScript) {
+    OSADispose(component, result_id);
+  }
+  CloseComponent(component);
+  return true;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 

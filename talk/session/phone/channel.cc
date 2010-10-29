@@ -32,6 +32,7 @@
 #include "talk/p2p/base/transportchannel.h"
 #include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/mediasink.h"
 
 namespace cricket {
 
@@ -45,11 +46,19 @@ BaseChannel::BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
                          MediaChannel* media_channel, BaseSession* session,
                          const std::string& content_name,
                          TransportChannel* transport_channel)
-    : worker_thread_(thread), media_engine_(media_engine),
-      session_(session), media_channel_(media_channel),
+    : worker_thread_(thread),
+      media_engine_(media_engine),
+      session_(session),
+      media_channel_(media_channel),
+      received_media_sink_(NULL),
+      sent_media_sink_(NULL),
       content_name_(content_name),
-      transport_channel_(transport_channel), rtcp_transport_channel_(NULL),
-      enabled_(false), writable_(false), has_codec_(false), muted_(false) {
+      transport_channel_(transport_channel),
+      rtcp_transport_channel_(NULL),
+      enabled_(false),
+      writable_(false),
+      has_codec_(false),
+      muted_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   media_channel_->SetInterface(this);
   transport_channel_->SignalWritableState.connect(
@@ -233,6 +242,18 @@ int BaseChannel::SendPacket(bool rtcp, const void* data, size_t len) {
     real_data = reinterpret_cast<const char*>(work);
   }
 
+  {
+    talk_base::CritScope cs(&sink_critical_section_);
+    if (sent_media_sink_) {
+      // Put the sent RTP or RTCP packet to the sink.
+      if (!rtcp) {
+        sent_media_sink_->OnRtpPacket(real_data, real_len);
+      } else {
+        sent_media_sink_->OnRtcpPacket(real_data, real_len);
+      }
+    }
+  }
+
   // Bon voyage. Return a number that the caller can understand.
   return (channel->SendPacket(real_data, real_len) == real_len) ? len : -1;
 }
@@ -270,6 +291,18 @@ void BaseChannel::HandlePacket(bool rtcp, const char* data, size_t len) {
     media_channel_->OnPacketReceived(real_data, real_len);
   } else {
     media_channel_->OnRtcpReceived(real_data, real_len);
+  }
+
+  {
+    talk_base::CritScope cs(&sink_critical_section_);
+    if (received_media_sink_) {
+      // Put the received RTP or RTCP packet to the sink.
+      if (!rtcp) {
+        received_media_sink_->OnRtpPacket(real_data, real_len);
+      } else {
+        received_media_sink_->OnRtcpPacket(real_data, real_len);
+      }
+    }
   }
 }
 
@@ -371,8 +404,9 @@ void BaseChannel::ChannelNotWritable_w() {
   ChangeState();
 }
 
+// Sets the maximum video bandwidth for automatic bandwidth adjustment.
 bool BaseChannel::SetMaxSendBandwidth_w(int max_bandwidth) {
-  return media_channel()->SetMaxSendBandwidth(max_bandwidth);
+  return media_channel()->SetSendBandwidth(true, max_bandwidth);
 }
 
 bool BaseChannel::SetRtcpCName_w(const std::string& cname) {
@@ -670,6 +704,11 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
     ret = media_channel()->SetSendCodecs(audio->codecs());
   }
 
+  int audio_options = audio->conference_mode() ? OPT_CONFERENCE : 0;
+  if (!media_channel()->SetOptions(audio_options)) {
+    // Log an error on failure, but don't abort the call.
+    LOG(LS_ERROR) << "Failed to set voice channel options";
+  }
 
   // update state
   if (ret) {
@@ -786,6 +825,7 @@ VideoChannel::VideoChannel(talk_base::Thread* thread,
   // Can't go in BaseChannel because certain session states will
   // trigger pure virtual functions, such as GetFirstContent()
   OnSessionState(session, session->state());
+
 }
 
 VideoChannel::~VideoChannel() {
@@ -806,6 +846,16 @@ bool VideoChannel::SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
   return true;
 }
 
+
+
+bool VideoChannel::SendIntraFrame() {
+  Send(MSG_SENDINTRAFRAME);
+  return true;
+}
+bool VideoChannel::RequestIntraFrame() {
+  Send(MSG_REQUESTINTRAFRAME);
+  return true;
+}
 
 void VideoChannel::ChangeState() {
   // render incoming data if we are the active call
@@ -890,7 +940,11 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_REMOTE);
   }
-  // TODO: Set bandwidth appropriately here.
+  // Set video bandwidth parameters.
+  if (ret) {
+    ret = media_channel()->SetSendBandwidth(video->auto_bandwidth(),
+                                            video->bandwidth_bps());
+  }
   if (ret) {
     ret = media_channel()->SetSendCodecs(video->codecs());
   }
@@ -927,6 +981,13 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       SetRenderer_w(data->ssrc, data->renderer);
       break;
     }
+    case MSG_SENDINTRAFRAME:
+      SendIntraFrame_w();
+      break;
+    case MSG_REQUESTINTRAFRAME:
+      RequestIntraFrame_w();
+      break;
+
   default:
     BaseChannel::OnMessage(pmsg);
     break;
@@ -943,6 +1004,7 @@ void VideoChannel::OnMediaMonitorUpdate(
   ASSERT(media_channel == this->media_channel());
   SignalMediaMonitor(this, info);
 }
+
 
 // TODO: Move to own file in a future CL.
 // Leaving here for now to avoid having to mess with the Mac build.

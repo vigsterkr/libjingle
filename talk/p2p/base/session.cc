@@ -416,6 +416,42 @@ TransportInfos Session::GetEmptyTransportInfos(
   return tinfos;
 }
 
+
+bool Session::OnRemoteCandidates(
+    const TransportInfos& tinfos, ParseError* error) {
+  for (TransportInfos::const_iterator tinfo = tinfos.begin();
+       tinfo != tinfos.end(); ++tinfo) {
+    TransportProxy* transproxy = GetTransportProxy(tinfo->content_name);
+    if (transproxy == NULL) {
+      return BadParse("Unknown content name: " + tinfo->content_name, error);
+    }
+
+    // Must complete negotiation before sending remote candidates, or
+    // there won't be any channel impls.
+    transproxy->CompleteNegotiation();
+    for (Candidates::const_iterator cand = tinfo->candidates.begin();
+         cand != tinfo->candidates.end(); ++cand) {
+      if (!transproxy->impl()->VerifyCandidate(*cand, error))
+        return false;
+
+      if (!transproxy->impl()->HasChannel(cand->name())) {
+        buzz::XmlElement* extra_info =
+            new buzz::XmlElement(QN_GINGLE_P2P_UNKNOWN_CHANNEL_NAME);
+        extra_info->AddAttr(buzz::QN_NAME, cand->name());
+        error->extra = extra_info;
+
+        return BadParse("channel named in candidate does not exist: " +
+                        cand->name() + " for content: "+ tinfo->content_name,
+                        error);
+      }
+    }
+    transproxy->impl()->OnRemoteCandidates(tinfo->candidates);
+  }
+
+  return true;
+}
+
+
 TransportProxy* Session::GetOrCreateTransportProxy(
     const std::string& content_name) {
   TransportProxy* transproxy = GetTransportProxy(content_name);
@@ -464,16 +500,6 @@ void Session::SpeculativelyConnectAllTransportChannels() {
   for (TransportMap::iterator iter = transports_.begin();
        iter != transports_.end(); ++iter) {
     iter->second->SpeculativelyConnectChannels();
-  }
-}
-
-void Session::CompleteTransportNegotiations(const TransportInfos& transports) {
-  for (TransportInfos::const_iterator transport = transports.begin();
-       transport != transports.end(); ++transport) {
-    TransportProxy* transproxy = GetTransportProxy(transport->content_name);
-    if (transproxy) {
-      transproxy->CompleteNegotiation();
-    }
   }
 }
 
@@ -706,9 +732,8 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
 
   // Users of Session may listen to state change and call Reject().
   if (state_ != STATE_SENTREJECT) {
-    // TODO: Jingle spec allows candidates to be in the
-    // initiate.  We should support receiving them.
-    CompleteTransportNegotiations(init.transports);
+    if (!OnRemoteCandidates(init.transports, error))
+      return false;
   }
   return true;
 }
@@ -728,9 +753,8 @@ bool Session::OnAcceptMessage(const SessionMessage& msg, MessageError* error) {
 
   // Users of Session may listen to state change and call Reject().
   if (state_ != STATE_SENTREJECT) {
-    // TODO: Jingle spec allows candidates to be in the
-    // accept.  We should support receiving them.
-    CompleteTransportNegotiations(accept.transports);
+    if (!OnRemoteCandidates(accept.transports, error))
+      return false;
   }
 
   return true;
@@ -773,31 +797,8 @@ bool Session::OnTransportInfoMessage(const SessionMessage& msg,
                            GetTransportParsers(), &tinfos, error))
     return false;
 
-  for (TransportInfos::iterator tinfo = tinfos.begin();
-       tinfo != tinfos.end(); ++tinfo) {
-    TransportProxy* transproxy = GetTransportProxy(tinfo->content_name);
-    if (transproxy == NULL)
-      return BadParse("Unknown content name: " + tinfo->content_name, error);
-
-    for (Candidates::const_iterator cand = tinfo->candidates.begin();
-         cand != tinfo->candidates.end(); ++cand) {
-      if (!transproxy->impl()->VerifyCandidate(*cand, error))
-        return false;
-
-      if (!transproxy->impl()->HasChannel(cand->name())) {
-        buzz::XmlElement* extra_info =
-            new buzz::XmlElement(QN_GINGLE_P2P_UNKNOWN_CHANNEL_NAME);
-        extra_info->AddAttr(buzz::QN_NAME, cand->name());
-        error->extra = extra_info;
-        return BadParse("channel named in candidate does not exist: " +
-                        cand->name() + " for content: "+ tinfo->content_name,
-                        error);
-      }
-    }
-
-    transproxy->impl()->OnRemoteCandidates(tinfo->candidates);
-    transproxy->CompleteNegotiation();
-  }
+  if (!OnRemoteCandidates(tinfos, error))
+    return false;
 
   return true;
 }

@@ -172,6 +172,17 @@ void CallClient::ParseLine(const std::string& line) {
   } else {
     if ((words.size() == 1) && (words[0] == "roster")) {
       PrintRoster();
+    } else if ((words.size() >= 2) && (words[0] == "send")) {
+      buzz::Jid jid(words[1]);
+      if (jid.IsValid()) {
+        last_sent_to_ = words[1];
+        SendChat(words[1], words[2]);
+      } else if (!last_sent_to_.empty()) {
+        SendChat(last_sent_to_, words[1]);
+      } else {
+        console_->Printf(
+            "Invalid JID. JIDs should be in the form user@domain\n");
+      }
     } else if ((words.size() == 2) && (words[0] == "friend")) {
       InviteFriend(words[1]);
     } else if ((words.size() >= 1) && (words[0] == "call")) {
@@ -201,7 +212,8 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
       call_(NULL), incoming_call_(false),
       auto_accept_(false), pmuc_domain_("groupchat.google.com"),
       local_renderer_(NULL), remote_renderer_(NULL),
-      roster_(new RosterMap), portallocator_flags_(0)
+      roster_(new RosterMap), portallocator_flags_(0),
+      allow_local_ips_(false), initial_protocol_(cricket::PROTOCOL_HYBRID)
 #ifdef USE_TALK_SOUND
       , sound_system_factory_(NULL)
 #endif
@@ -309,6 +321,8 @@ void CallClient::InitPhone() {
       port_allocator_, worker_thread_);
   session_manager_->SignalRequestSignaling.connect(
       this, &CallClient::OnRequestSignaling);
+  session_manager_->SignalSessionCreate.connect(
+      this, &CallClient::OnSessionCreate);
   session_manager_->OnSignalingReady();
 
   session_manager_task_ =
@@ -346,6 +360,11 @@ void CallClient::InitPhone() {
 
 void CallClient::OnRequestSignaling() {
   session_manager_->OnSignalingReady();
+}
+
+void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
+  session->set_allow_local_ips(allow_local_ips_);
+  session->set_current_protocol(initial_protocol_);
 }
 
 void CallClient::OnCallCreate(cricket::Call* call) {
@@ -456,6 +475,19 @@ void CallClient::PrintRoster() {
     iter++;
   }
   console_->SetPrompting(true);
+}
+
+void CallClient::SendChat(const std::string& to, const std::string msg) {
+  buzz::XmlElement* stanza = new buzz::XmlElement(buzz::QN_MESSAGE);
+  stanza->AddAttr(buzz::QN_TO, to);
+  stanza->AddAttr(buzz::QN_ID, talk_base::CreateRandomString(16));
+  stanza->AddAttr(buzz::QN_TYPE, "chat");
+  buzz::XmlElement* body = new buzz::XmlElement(buzz::QN_BODY);
+  body->SetBodyText(msg);
+  stanza->AddElement(body);
+
+  xmpp_client_->SendStanza(stanza);
+  delete stanza;
 }
 
 void CallClient::InviteFriend(const std::string& name) {

@@ -339,6 +339,10 @@ class Filesystem {
     return EnsureDefaultFilesystem()->MoveFile(old_path, new_path);
   }
 
+  static bool CopyFolder(const Pathname &old_path, const Pathname &new_path) {
+    return EnsureDefaultFilesystem()->CopyFolder(old_path, new_path);
+  }
+
   static bool CopyFile(const Pathname &old_path, const Pathname &new_path) {
     return EnsureDefaultFilesystem()->CopyFile(old_path, new_path);
   }

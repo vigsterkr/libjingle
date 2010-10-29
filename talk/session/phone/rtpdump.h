@@ -35,6 +35,10 @@
 #include "talk/base/basictypes.h"
 #include "talk/base/stream.h"
 
+namespace talk_base {
+class ByteBuffer;
+}
+
 namespace cricket {
 
 // We use the RTP dump file format compatible to the format used by rtptools
@@ -43,6 +47,19 @@ namespace cricket {
 // first line "#!rtpplay1.0 address/port\n", followed by a 16 byte file header.
 // For each packet, the file contains a 8 byte dump packet header, followed by
 // the actual RTP or RTCP packet.
+
+struct RtpDumpFileHeader {
+  RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p);
+  void WriteToByteBuffer(talk_base::ByteBuffer* buf);
+
+  static const std::string kFirstLine;
+  static const size_t kHeaderLength = 16;
+  uint32 start_sec;   // start of recording, the seconds part.
+  uint32 start_usec;  // start of recording, the microseconds part.
+  uint32 source;      // network source (multicast address).
+  uint16 port;        // UDP port.
+  uint16 padding;     // 2 bytes padding.
+};
 
 struct RtpDumpPacket {
   RtpDumpPacket() {}
@@ -165,6 +182,12 @@ class RtpDumpWriter {
                        packet.is_rtcp);
   }
   uint32 GetElapsedTime() const;
+
+  bool GetDumpSize(size_t* size) {
+    // Note that we use GetPosition(), rather than GetSize(), to avoid flush the
+    // stream per write.
+    return stream_ && size && stream_->GetPosition(size);
+  }
 
  protected:
   talk_base::StreamResult WriteFileHeader();

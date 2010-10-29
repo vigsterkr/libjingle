@@ -17,6 +17,7 @@
 #
 import talk
 import os
+import platform
 
 #-------------------------------------------------------------------------------
 # The build files/directories to 'build'.
@@ -40,6 +41,7 @@ root_env = Environment(
     'component_setup',
     'replace_strings',
     'talk_noops',
+    #'talk_linux',
   ],
   BUILD_SCONSCRIPTS = components,
   DESTINATION_ROOT = '$MAIN_DIR/build',
@@ -59,6 +61,16 @@ root_env = Environment(
     'HAVE_SRTP',
   ]
 )
+
+# This is where we set common environments
+#
+# Detect if running on 64 bit or 32 bit host.
+DeclareBit('platform_arch_64bit', 'Host Platform is 64 Bit')
+if platform.architecture()[0] == "64bit":
+  root_env.SetBits('platform_arch_64bit')
+
+DeclareBit('use_static_openssl', 'Build OpenSSL as a static library')
+
 
 #-------------------------------------------------------------------------------
 # W I N D O W S
@@ -211,6 +223,8 @@ posix_env.Append(
     'POSIX',
     'DISABLE_DYNAMIC_CAST',
     'HAVE_OPENSSL_SSL_H=1',
+    # The POSIX standard says we have to define this.
+    '_REENTRANT',
   ],
   CCFLAGS = [
     '-m32',
@@ -271,13 +285,9 @@ mac_dbg_env = mac_env.Clone(
   BUILD_TYPE = 'dbg',
   BUILD_TYPE_DESCRIPTION = 'Mac debug build',
   BUILD_GROUPS = ['default', 'all'],
-  tools = ['target_debug']
+  tools = ['target_debug'],
 )
 mac_dbg_env.Append(
-  CPPDEFINES = [
-    'FLAVOR_DBG',
-    'ENABLE_DEBUG',
-  ],
   CCFLAGS = [
     '-O0',
   ]
@@ -288,7 +298,7 @@ mac_opt_env = mac_env.Clone(
   BUILD_TYPE = 'opt',
   BUILD_TYPE_DESCRIPTION = 'Mac opt build',
   BUILD_GROUPS = ['all'],
-  tools = ['target_optimized']
+  tools = ['target_optimized'],
 )
 mac_opt_env.Append(
   CCFLAGS = [
@@ -303,44 +313,91 @@ envs.append(mac_opt_env)
 #-------------------------------------------------------------------------------
 # L I N U X
 #
-linux_env = posix_env.Clone(
-  tools = ['target_platform_linux'],
+linux_common_env = posix_env.Clone(
+  tools = [
+    'target_platform_linux',
+    #'talk_linux',
+  ],
 )
 
-linux_env.Append(
+linux_common_env.Append(
   CPPDEFINES = [
     'LINUX',
     'HAVE_GLIB',
     # TODO() Enable once we figure out multiple defines with gips lib
     # Also consider other linux flags:  64bit, no-strict-aliasing, wrap, etc
+    #'USE_TALK_SOUND',
+  ],
+  CCFLAGS = [
+    # TODO: Some or all of this may be desirable for Mac too.
+    # Needed for link-time dead-code removal to work properly.
+    '-ffunction-sections',
+    '-fdata-sections',
+    # Needed for a clean ABI and for link-time dead-code removal to work
+    # properly.
+    '-fvisibility=hidden',
+    # Generate debugging info in the DWARF2 format.
+    '-gdwarf-2',
+    # Generate maximal debugging information. (It is stripped from what we ship
+    # to users, so we want it for both dbg and opt.)
+    '-g3',
   ],
   LINKFLAGS = [
-    # TODO consider enabling gc-sections.  Perhaps only in opt.
-    #'-Wl,--gc-sections',
+    # Enable dead-code removal.
+    '-Wl,--gc-sections',
     '-Wl,--start-group',
   ],
   _LIBFLAGS = ['-Wl,--end-group'],
 )
 
+# Remove default rpath set by Hammer. Hammer sets it to LIB_DIR, which is wrong.
+# The rpath is the _run-time_ library search path for the resulting binary, i.e.
+# the one used by ld.so at load time. Setting it equal to the path to build
+# output on the build machine is nonsense.
+linux_common_env.Replace(
+  RPATH = [],
+)
+
+#-------------------------------------------------------------------------------
+# L I N U X -- T R A D I T I O N A L
+#
+# Settings that are specific to our desktop Linux targets.
+linux_env = linux_common_env.Clone()
+# OpenSSL has infamously poor ABI stability, so that building against one
+# version and running against a different one often will not work. Since our
+# non-ChromeOS Linux builds are used on many different distros and distro
+# versions, this means we can't safely dynamically link to OpenSSL because the
+# product would end up being broken on any computer with a different version
+# installed. So instead we build it ourself and statically link to it.
+linux_env.SetBits('use_static_openssl')
+
 linux_dbg_env = linux_env.Clone(
   BUILD_TYPE = 'dbg',
   BUILD_TYPE_DESCRIPTION = 'Linux debug build',
   BUILD_GROUPS = ['default', 'all'],
-  tools = ['target_debug']
+  tools = ['target_debug'],
 )
+# Remove -g set by hammer, which is not what we want (we have set -g3 above).
+linux_dbg_env.FilterOut(CCFLAGS = ['-g'])
 envs.append(linux_dbg_env)
 
 linux_opt_env = linux_env.Clone(
   BUILD_TYPE = 'opt',
   BUILD_TYPE_DESCRIPTION = 'Linux optimized build',
   BUILD_GROUPS = ['all'],
-  tools = ['target_optimized']
+  tools = ['target_optimized'],
 )
+# Remove -O2 set by hammer, which is not what we want.
+linux_opt_env.FilterOut(CCFLAGS = ['-O2'])
+linux_opt_env.Append(CCFLAGS = ['-Os'])
 envs.append(linux_opt_env)
 
 
 
 # TODO(): Clone linux envs for 64bit.  See 'variant' documentation.
+
+# Create a group for installers
+AddTargetGroup('all_installers', 'installers that can be built')
 
 # Parse child .scons files
 BuildEnvironments(envs)

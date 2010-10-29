@@ -25,10 +25,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string>
 #include "talk/p2p/base/sessionmessages.h"
 
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/xmllite/xmlconstants.h"
 #include "talk/xmpp/constants.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/p2ptransport.h"
@@ -163,7 +165,7 @@ bool ParseJingleSessionMessage(const buzz::XmlElement* jingle,
   std::string type_string = jingle->Attr(buzz::QN_ACTION);
   msg->type = ToActionType(type_string);
   msg->sid = jingle->Attr(buzz::QN_ID);
-  msg->initiator = GetXmlAttr(jingle, QN_INITIATOR, "");
+  msg->initiator = GetXmlAttr(jingle, QN_INITIATOR, buzz::STR_EMPTY);
   msg->action_elem = jingle;
 
   if (msg->type == ACTION_UNKNOWN)

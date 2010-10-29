@@ -32,7 +32,7 @@
 #include <windows.h>
 #include <ntsecapi.h>
 #else
-#ifdef USE_OPENSSL
+#ifdef SSL_USE_OPENSSL
 #include <openssl/rand.h>
 #endif
 #endif
@@ -98,7 +98,7 @@ class SecureRandomGenerator : public RandomGenerator {
   RtlGenRandomProc rtl_gen_random_;
 };
 #else
-#ifndef USE_OPENSSL
+#ifndef SSL_USE_OPENSSL
 // The old RNG.
 class SecureRandomGenerator : public RandomGenerator {
  public:
@@ -139,14 +139,14 @@ class SecureRandomGenerator : public RandomGenerator {
   virtual bool Init(const void* seed, size_t len) {
     // By default, seed from the system state.
     if (!inited_) {
-      if (RAND_poll() != 0) {
+      if (RAND_poll() <= 0) {
         return false;
       }
       inited_ = true;
     }
     // Allow app data to be mixed in, if provided.
     if (seed) {
-      RAND_add(seed, len);
+      RAND_seed(seed, len);
     }
     return true;
   }
@@ -154,13 +154,13 @@ class SecureRandomGenerator : public RandomGenerator {
     if (!inited_ && !Init(NULL, 0)) {
       return false;
     }
-    return (RAND_bytes(buf, len) == 0);
+    return (RAND_bytes(reinterpret_cast<unsigned char*>(buf), len) > 0);
   }
 
  private:
   bool inited_;
 };
-#endif  // USE_OPENSSL
+#endif  // SSL_USE_OPENSSL
 #endif  // WIN32
 
 // A test random generator, for predictable output.
@@ -220,14 +220,22 @@ bool InitRandom(const char* seed, size_t len) {
 
 std::string CreateRandomString(size_t len) {
   std::string str;
+  CreateRandomString(len, &str);
+  return str;
+}
+
+bool CreateRandomString(size_t len, std::string* str) {
+  str->clear();
   scoped_array<uint8> bytes(new uint8[len]);
   if (!g_rng->Generate(bytes.get(), len)) {
     LOG(LS_ERROR) << "Failed to generate random string!";
+    return false;
   }
-  for (size_t i = 0; i < len; i++) {
-    str.push_back(BASE64[bytes[i] & 63]);
+  str->reserve(len);
+  for (size_t i = 0; i < len; ++i) {
+    str->push_back(BASE64[bytes[i] & 63]);
   }
-  return str;
+  return true;
 }
 
 uint32 CreateRandomId() {

@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "talk/base/asyncudpsocket.h"
+#include "talk/base/criticalsection.h"
 #include "talk/base/network.h"
 #include "talk/base/sigslot.h"
 #include "talk/p2p/client/socketmonitor.h"
@@ -45,6 +46,7 @@
 namespace cricket {
 
 class MediaContentDescription;
+class MediaSinkInterface;
 struct CryptoParams;
 
 enum {
@@ -62,9 +64,9 @@ enum {
   MSG_SETRINGBACKTONE = 13,
   MSG_PLAYRINGBACKTONE = 14,
   MSG_SETMAXSENDBANDWIDTH = 15,
-  MSG_ADDSCREENCAST = 16,
-  MSG_REMOVESCREENCAST = 17,
-  MSG_SETRTCPCNAME = 18
+  MSG_SETRTCPCNAME = 18,
+  MSG_SENDINTRAFRAME = 19,
+  MSG_REQUESTINTRAFRAME = 20,
 };
 
 // TODO: Move to own file.
@@ -108,6 +110,7 @@ class BaseChannel
 
   talk_base::Thread* worker_thread() const { return worker_thread_; }
   BaseSession* session() const { return session_; }
+  const std::string& content_name() { return content_name_; }
   TransportChannel* transport_channel() const {
     return transport_channel_;
   }
@@ -134,6 +137,24 @@ class BaseChannel
   void StartConnectionMonitor(int cms);
   void StopConnectionMonitor();
 
+  // Set and get media sinks for recording media.
+  void set_received_media_sink(MediaSinkInterface* sink) {
+    talk_base::CritScope cs(&sink_critical_section_);
+    received_media_sink_ = sink;
+  }
+  const MediaSinkInterface* received_media_sink() {
+    talk_base::CritScope cs(&sink_critical_section_);
+    return received_media_sink_;
+  }
+  void set_sent_media_sink(MediaSinkInterface* sink) {
+    talk_base::CritScope cs(&sink_critical_section_);
+    sent_media_sink_ = sink;
+  }
+  const MediaSinkInterface* sent_media_sink() {
+    talk_base::CritScope cs(&sink_critical_section_);
+    return sent_media_sink_;
+  }
+
  protected:
   MediaEngine* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
@@ -143,6 +164,7 @@ class BaseChannel
   bool has_codec() const { return has_codec_; }
   void set_has_codec(bool has_codec) { has_codec_ = has_codec; }
   bool muted() const { return muted_; }
+  talk_base::Thread* signaling_thread() { return session_->signaling_thread(); }
 
   void Send(uint32 id, talk_base::MessageData *pdata = NULL);
   void Post(uint32 id, talk_base::MessageData *pdata = NULL);
@@ -230,6 +252,12 @@ class BaseChannel
   MediaEngine *media_engine_;
   BaseSession *session_;
   MediaChannel *media_channel_;
+  // Media sinks to handle the received or sent RTP/RTCP packets. These are
+  // reference to the objects owned by the media recorder.
+  MediaSinkInterface* received_media_sink_;
+  MediaSinkInterface* sent_media_sink_;
+  talk_base::CriticalSection sink_critical_section_;
+
   std::string content_name_;
   TransportChannel *transport_channel_;
   TransportChannel *rtcp_transport_channel_;
@@ -374,6 +402,9 @@ class VideoChannel : public BaseChannel {
   void StopMediaMonitor();
   sigslot::signal2<VideoChannel*, const VideoMediaInfo&> SignalMediaMonitor;
 
+  bool SendIntraFrame();
+  bool RequestIntraFrame();
+
  private:
   // overrides from BaseChannel
   virtual void ChangeState();
@@ -386,6 +417,13 @@ class VideoChannel : public BaseChannel {
 
   void AddStream_w(uint32 ssrc, uint32 voice_ssrc);
   void RemoveStream_w(uint32 ssrc);
+
+  void SendIntraFrame_w() {
+    media_channel()->SendIntraFrame();
+  }
+  void RequestIntraFrame_w() {
+    media_channel()->RequestIntraFrame();
+  }
 
   struct RenderMessageData : public talk_base::MessageData {
     RenderMessageData(uint32 s, VideoRenderer* r) : ssrc(s), renderer(r) {}
@@ -402,7 +440,6 @@ class VideoChannel : public BaseChannel {
       SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
   virtual void OnMediaMonitorUpdate(
       VideoMediaChannel *media_channel, const VideoMediaInfo& info);
-
   VoiceChannel *voice_channel_;
   VideoRenderer *renderer_;
   talk_base::scoped_ptr<VideoMediaMonitor> media_monitor_;

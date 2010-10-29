@@ -27,8 +27,14 @@
 
 #include "talk/p2p/base/parsing.h"
 
+#include <algorithm>
 #include <stdlib.h>
 #include "talk/base/stringutils.h"
+
+namespace {
+std::string kTrue = "true";
+std::string kOne = "1";
+}
 
 namespace cricket {
 
@@ -51,6 +57,20 @@ std::string GetXmlAttr(const buzz::XmlElement* elem,
                        const std::string& def) {
   std::string val = elem->Attr(name);
   return val.empty() ? def : val;
+}
+
+std::string GetXmlAttr(const buzz::XmlElement* elem,
+                       const buzz::QName& name,
+                       const char* def) {
+    return GetXmlAttr(elem, name, std::string(def));
+}
+
+bool GetXmlAttr(const buzz::XmlElement* elem,
+                const buzz::QName& name, bool def) {
+  std::string val = elem->Attr(name);
+  std::transform(val.begin(), val.end(), val.begin(), tolower);
+
+  return val.empty() ? def : (val == kTrue || val == kOne);
 }
 
 int GetXmlAttr(const buzz::XmlElement* elem,

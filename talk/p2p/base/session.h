@@ -251,6 +251,10 @@ class BaseSession : public sigslot::has_slots<>,
   // The worker thread used by the session manager
   virtual talk_base::Thread *worker_thread() = 0;
 
+  talk_base::Thread *signaling_thread() {
+    return signaling_thread_;
+  }
+
   // Returns the JID of this client.
   const std::string& local_name() const { return local_name_; }
 
@@ -382,13 +386,11 @@ class Session : public BaseSession {
   bool CreateTransportProxies(const TransportInfos& tinfos,
                               SessionError* error);
   void SpeculativelyConnectAllTransportChannels();
-  // For each transport proxy with a matching content name, complete
-  // the transport negotiation.
-  void CompleteTransportNegotiations(const TransportInfos& tinfos);
+  bool OnRemoteCandidates(const TransportInfos& tinfos,
+                          ParseError* error);
   // Returns a TransportInfo without candidates for each content name.
   // Uses the transport_type_ of the session.
   TransportInfos GetEmptyTransportInfos(const ContentInfos& contents) const;
-
 
   // Called when the first channel of a transport begins connecting.  We use
   // this to start a timer, to make sure that the connection completes in a
