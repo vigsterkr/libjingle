@@ -1,5 +1,17 @@
 Libjingle
 
+0.5.1 - Nov 2, 2010
+  - Added support for call encryption.
+  - Added addtional XEP-166 and XEP-167 features:
+    - Call redirection
+    - Candidates in session-accept or session-initiate
+  - Added support for bandwidth control.
+  - Added features in examples/call:
+    - bandwidth control on initiate or accept
+    - turn on/off SSL
+    - control signaling protocol
+    - send chat message
+
 0.5.0 - Sep 16, 2010
   - Implemented Jingle protocols XEP-166 and XEP-167.
   - Backward compatible with Google Talk Call Signaling protocol implemented
