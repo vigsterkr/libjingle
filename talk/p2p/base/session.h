@@ -439,6 +439,7 @@ class Session : public BaseSession {
   bool SendTerminateMessage(const std::string& reason, SessionError* error);
   bool SendTransportInfoMessage(const TransportInfo& tinfo,
                                 SessionError* error);
+  bool ResendAllTransportInfoMessages(SessionError* error);
 
   // Both versions of SendMessage send a message of the given type to
   // the other client.  Can pass either a set of elements or an
@@ -509,6 +510,7 @@ class Session : public BaseSession {
   bool OnTerminateMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportInfoMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportAcceptMessage(const SessionMessage& msg, MessageError* error);
+  bool OnRedirectError(const SessionRedirect& redirect, SessionError* error);
 
   // Verifies that we are in the appropriate state to receive this message.
   bool CheckState(State state, MessageError* error);

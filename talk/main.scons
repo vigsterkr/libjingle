@@ -142,6 +142,9 @@ win_env.Append(
     # this NTDDI version or else the headers
     # that LMI includes from it won't compile.
     'NTDDI_VERSION=NTDDI_WINXP',
+
+    # npapi.h requires the following:
+    '_WINDOWS',
   ],
   CPPPATH = [
     '$THIRD_PARTY/wtl_71/include',

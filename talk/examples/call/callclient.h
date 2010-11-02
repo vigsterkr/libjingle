@@ -66,6 +66,7 @@ class MediaEngine;
 class MediaSessionClient;
 class Receiver;
 class Call;
+struct CallOptions;
 class SessionManagerTask;
 enum SignalingProtocol;
 }
@@ -148,8 +149,8 @@ class CallClient: public sigslot::has_slots<> {
   static const std::string strerror(buzz::XmppEngine::Error err);
 
   void PrintRoster();
-  void MakeCallTo(const std::string& name, bool video);
-  void PlaceCall(const buzz::Jid& jid, bool is_muc, bool video);
+  void MakeCallTo(const std::string& name, const cricket::CallOptions& options);
+  void PlaceCall(const buzz::Jid& jid, const cricket::CallOptions& options);
   void CallVoicemail(const std::string& name);
   void Accept();
   void Reject();

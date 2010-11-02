@@ -149,6 +149,10 @@ struct SessionTerminate {
   std::string debug_reason;
 };
 
+struct SessionRedirect {
+  std::string target;
+};
+
 bool IsSessionMessage(const buzz::XmlElement* stanza);
 bool ParseSessionMessage(const buzz::XmlElement* stanza,
                          SessionMessage* msg,
@@ -208,6 +212,9 @@ bool WriteTransportInfos(SignalingProtocol protocol,
                          const TransportParserMap& trans_parsers,
                          XmlElements* elems,
                          WriteError* error);
+// Handles both Gingle and Jingle syntax.
+bool FindSessionRedirect(const buzz::XmlElement* stanza,
+                         SessionRedirect* redirect);
 }  // namespace cricket
 
 #endif  // TALK_P2P_BASE_SESSIONMESSAGES_H_

@@ -32,6 +32,7 @@
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
+#include "talk/base/stringencode.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/session/phone/cryptoparams.h"
@@ -133,7 +134,8 @@ bool GetSupportedVideoCryptos(CryptoParamsVec* cryptos) {
 #endif
 }
 
-SessionDescription* MediaSessionClient::CreateOffer(bool video, bool set_ssrc) {
+SessionDescription* MediaSessionClient::CreateOffer(
+    const CallOptions& options) {
   SessionDescription* offer = new SessionDescription();
   AudioContentDescription* audio = new AudioContentDescription();
 
@@ -144,7 +146,7 @@ SessionDescription* MediaSessionClient::CreateOffer(bool video, bool set_ssrc) {
        codec != audio_codecs.end(); ++codec) {
     audio->AddCodec(*codec);
   }
-  if (set_ssrc) {
+  if (options.is_muc) {
     audio->set_ssrc(0);
   }
   audio->SortCodecs();
@@ -168,7 +170,7 @@ SessionDescription* MediaSessionClient::CreateOffer(bool video, bool set_ssrc) {
   offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio);
 
   // add video codecs, if this is a video call
-  if (video) {
+  if (options.is_video) {
     VideoContentDescription* video = new VideoContentDescription();
     VideoCodecs video_codecs;
     channel_manager_->GetSupportedVideoCodecs(&video_codecs);
@@ -176,9 +178,10 @@ SessionDescription* MediaSessionClient::CreateOffer(bool video, bool set_ssrc) {
          codec != video_codecs.end(); ++codec) {
       video->AddCodec(*codec);
     }
-    if (set_ssrc) {
+    if (options.is_muc) {
       video->set_ssrc(0);
     }
+    video->set_bandwidth(options.video_bandwidth);
     video->SortCodecs();
 
     if (secure() != SEC_DISABLED) {
@@ -329,8 +332,8 @@ SessionDescription* MediaSessionClient::CreateAnswer(
   return accept;
 }
 
-Call *MediaSessionClient::CreateCall(bool video, bool mux) {
-  Call *call = new Call(this, video, mux);
+Call *MediaSessionClient::CreateCall() {
+  Call *call = new Call(this);
   calls_[call->id()] = call;
   SignalCallCreate(call);
   return call;
@@ -359,13 +362,12 @@ void MediaSessionClient::OnSessionState(BaseSession* base_session,
     const SessionDescription* offer = session->remote_description();
     const SessionDescription* accept = CreateAnswer(offer);
     const ContentInfo* audio_content = GetFirstAudioContent(accept);
-    const ContentInfo* video_content = GetFirstVideoContent(accept);
     const AudioContentDescription* audio_accept = (!audio_content) ? NULL :
         static_cast<const AudioContentDescription*>(audio_content->description);
 
     // For some reason, we need to create the call even when we
     // reject.
-    Call *call = CreateCall(video_content != NULL);
+    Call *call = CreateCall();
     session_map_[session->id()] = call;
     call->IncomingSession(session, offer);
 
@@ -526,6 +528,17 @@ bool ParseGingleEncryption(const buzz::XmlElement* desc,
   return true;
 }
 
+void ParseBandwidth(const buzz::XmlElement* parent_elem,
+                    MediaContentDescription* media) {
+  const buzz::XmlElement* bw_elem = GetXmlChild(parent_elem, LN_BANDWIDTH);
+  int bandwidth_kbps;
+  if (bw_elem && FromString(bw_elem->BodyText(), &bandwidth_kbps)) {
+    if (bandwidth_kbps >= 0) {
+      media->set_bandwidth(bandwidth_kbps * 1000);
+    }
+  }
+}
+
 bool ParseGingleAudioContent(const buzz::XmlElement* content_elem,
                              const ContentDescription** content,
                              ParseError* error) {
@@ -575,6 +588,7 @@ bool ParseGingleVideoContent(const buzz::XmlElement* content_elem,
   }
 
   ParseGingleSsrc(content_elem, QN_GINGLE_VIDEO_SRCID, video);
+  ParseBandwidth(content_elem, video);
 
   if (!ParseGingleEncryption(content_elem, QN_GINGLE_VIDEO_CRYPTO_USAGE,
                              video, error)) {
@@ -705,6 +719,8 @@ bool ParseJingleVideoContent(const buzz::XmlElement* content_elem,
     }
   }
 
+  ParseBandwidth(content_elem, video);
+
   if (!ParseJingleEncryption(content_elem, video, error)) {
     return false;
   }
@@ -774,6 +790,15 @@ buzz::XmlElement* CreateGingleSsrcElem(const buzz::QName& name, uint32 ssrc) {
   return elem;
 }
 
+buzz::XmlElement* CreateBandwidthElem(int bps) {
+  int kbps = bps / 1000;
+  buzz::XmlElement* elem = new buzz::XmlElement(
+      buzz::QName(true, "", LN_BANDWIDTH), true);
+  elem->AddAttr(buzz::QN_TYPE, "AS");
+  SetXmlBody(elem, kbps);
+  return elem;
+}
+
 // For Jingle, usage_qname is empty.
 buzz::XmlElement* CreateJingleEncryptionElem(const CryptoParamsVec& cryptos,
                                              bool required) {
@@ -815,7 +840,6 @@ buzz::XmlElement* CreateGingleEncryptionElem(const CryptoParamsVec& cryptos,
   return encryption_elem;
 }
 
-
 buzz::XmlElement* CreateGingleAudioContentElem(
     const AudioContentDescription* audio,
     bool crypto_required) {
@@ -855,6 +879,9 @@ buzz::XmlElement* CreateGingleVideoContentElem(
   if (video->ssrc_set()) {
     elem->AddElement(CreateGingleSsrcElem(
         QN_GINGLE_VIDEO_SRCID, video->ssrc()));
+  }
+  if (video->bandwidth() != kAutoBandwidth) {
+    elem->AddElement(CreateBandwidthElem(video->bandwidth()));
   }
 
   const CryptoParamsVec& cryptos = video->cryptos();
@@ -947,6 +974,10 @@ buzz::XmlElement* CreateJingleVideoContentElem(
   const CryptoParamsVec& cryptos = video->cryptos();
   if (!cryptos.empty()) {
     elem->AddElement(CreateJingleEncryptionElem(cryptos, crypto_required));
+  }
+
+  if (video->bandwidth() != kAutoBandwidth) {
+    elem->AddElement(CreateBandwidthElem(video->bandwidth()));
   }
 
   // TODO: Figure out how to integrate SSRC into Jingle.

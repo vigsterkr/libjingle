@@ -35,6 +35,7 @@
 #include "talk/base/network.h"
 #include "talk/base/socketaddress.h"
 #include "talk/base/stringutils.h"
+#include "talk/base/stringencode.h"
 #include "talk/p2p/base/sessionmanager.h"
 #include "talk/p2p/client/basicportallocator.h"
 #include "talk/p2p/client/sessionmanagertask.h"
@@ -82,6 +83,25 @@ const char* DescribeStatus(buzz::Status::Show show, const std::string& desc) {
   }
 }
 
+std::string GetWord(const std::vector<std::string>& words,
+                    size_t index, const std::string& def) {
+  if (words.size() > index) {
+    return words[index];
+  } else {
+    return def;
+  }
+}
+
+int GetInt(const std::vector<std::string>& words, size_t index, int def) {
+  int val;
+  if (words.size() > index && talk_base::FromString(words[index], &val)) {
+    return val;
+  } else {
+    return def;
+  }
+}
+
+
 }  // namespace
 
 const char* CALL_COMMANDS =
@@ -107,10 +127,10 @@ const char* CONSOLE_COMMANDS =
 "\n"
 "  roster              Prints the online friends from your roster.\n"
 "  friend user         Request to add a user to your roster.\n"
-"  call [jid]          Initiates a call to the user[/room] with the\n"
-"                      given JID.\n"
-"  vcall [jid]         Initiates a video call to the user[/room] with\n"
-"                      the given JID.\n"
+"  call [jid] [bw]     Initiates a call to the user[/room] with the\n"
+"                      given JID and with optional bandwidth.\n"
+"  vcall [jid] [bw]    Initiates a video call to the user[/room] with\n"
+"                      the given JID and with optional bandwidth.\n"
 "  voicemail [jid]     Leave a voicemail for the user with the given JID.\n"
 "  join [room]         Joins a multi-user-chat.\n"
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
@@ -142,37 +162,38 @@ void CallClient::ParseLine(const std::string& line) {
   }
 
   // Global commands
-  if ((words.size() == 1) && (words[0] == "quit")) {
+  const std::string& command = GetWord(words, 0, "");
+  if (command == "quit") {
     Quit();
   } else if (call_ && incoming_call_) {
-    if ((words.size() == 1) && (words[0] == "accept")) {
+    if (command == "accept") {
       Accept();
-    } else if ((words.size() == 1) && (words[0] == "reject")) {
+    } else if (command == "reject") {
       Reject();
     } else {
       console_->Print(RECEIVE_COMMANDS);
     }
   } else if (call_) {
-    if ((words.size() == 1) && (words[0] == "hangup")) {
+    if (command == "hangup") {
       // TODO: do more shutdown here, move to Terminate()
       call_->Terminate();
       call_ = NULL;
       session_ = NULL;
       console_->SetPrompt(NULL);
-    } else if ((words.size() == 1) && (words[0] == "mute")) {
+    } else if (command == "mute") {
       call_->Mute(true);
-    } else if ((words.size() == 1) && (words[0] == "unmute")) {
+    } else if (command == "unmute") {
       call_->Mute(false);
-    } else if ((words.size() == 2) && (words[0] == "dtmf")) {
+    } else if ((command == "dtmf") && (words.size() == 2)) {
       int ev = std::string("0123456789*#").find(words[1][0]);
       call_->PressDTMF(ev);
     } else {
       console_->Print(CALL_COMMANDS);
     }
   } else {
-    if ((words.size() == 1) && (words[0] == "roster")) {
+    if (command == "roster") {
       PrintRoster();
-    } else if ((words.size() >= 2) && (words[0] == "send")) {
+    } else if (command == "send") {
       buzz::Jid jid(words[1]);
       if (jid.IsValid()) {
         last_sent_to_ = words[1];
@@ -183,23 +204,31 @@ void CallClient::ParseLine(const std::string& line) {
         console_->Printf(
             "Invalid JID. JIDs should be in the form user@domain\n");
       }
-    } else if ((words.size() == 2) && (words[0] == "friend")) {
+    } else if ((words.size() == 2) && (command == "friend")) {
       InviteFriend(words[1]);
-    } else if ((words.size() >= 1) && (words[0] == "call")) {
-      MakeCallTo((words.size() >= 2) ? words[1] : "", false);
-    } else if ((words.size() >= 1) && (words[0] == "vcall")) {
-      MakeCallTo((words.size() >= 2) ? words[1] : "", true);
-    } else if ((words.size() >= 1) && (words[0] == "join")) {
-      JoinMuc((words.size() >= 2) ? words[1] : "");
-    } else if ((words.size() >= 2) && (words[0] == "invite")) {
-      InviteToMuc(words[1], (words.size() >= 3) ? words[2] : "");
-    } else if ((words.size() >= 1) && (words[0] == "leave")) {
-      LeaveMuc((words.size() >= 2) ? words[1] : "");
-    } else if ((words.size() == 1) && (words[0] == "getdevs")) {
+    } else if (command == "call") {
+      std::string to = GetWord(words, 1, "");
+      MakeCallTo(to, cricket::CallOptions());
+    } else if (command == "vcall") {
+      std::string to = GetWord(words, 1, "");
+      int bandwidth = GetInt(words, 2, -1);
+      cricket::CallOptions options;
+      options.is_video = true;
+      if (bandwidth > 0) {
+        options.video_bandwidth = bandwidth;
+      }
+      MakeCallTo(to, options);
+    } else if (command == "join") {
+      JoinMuc(GetWord(words, 1, ""));
+    } else if ((words.size() >= 2) && (command == "invite")) {
+      InviteToMuc(words[1], GetWord(words, 2, ""));
+    } else if (command == "leave") {
+      LeaveMuc(GetWord(words, 1, ""));
+    } else if (command == "getdevs") {
       GetDevices();
-    } else if ((words.size() == 2) && (words[0] == "setvol")) {
+    } else if ((words.size() == 2) && (command == "setvol")) {
       SetVolume(words[1]);
-    } else if ((words.size() >= 1) && (words[0] == "voicemail")) {
+    } else if (command == "voicemail") {
       CallVoicemail((words.size() >= 2) ? words[1] : "");
     } else {
       console_->Print(CONSOLE_COMMANDS);
@@ -505,16 +534,20 @@ void CallClient::InviteFriend(const std::string& name) {
   console_->Printf("Requesting to befriend %s.\n", name.c_str());
 }
 
-void CallClient::MakeCallTo(const std::string& name, bool video) {
+void CallClient::MakeCallTo(const std::string& name,
+                            const cricket::CallOptions& given_options) {
+  // Copy so we can change .is_muc.
+  cricket::CallOptions options = given_options;
+
   bool found = false;
-  bool is_muc = false;
+  options.is_muc = false;
   buzz::Jid callto_jid(name);
   buzz::Jid found_jid;
   if (name.length() == 0 && mucs_.size() > 0) {
     // if no name, and in a MUC, establish audio with the MUC
     found_jid = mucs_.begin()->first;
     found = true;
-    is_muc = true;
+    options.is_muc = true;
   } else if (name[0] == '+') {
     // if the first character is a +, assume it's a phone number
     found_jid = callto_jid;
@@ -539,28 +572,29 @@ void CallClient::MakeCallTo(const std::string& name, bool video) {
           mucs_[callto_jid]->state() == buzz::Muc::MUC_JOINED) {
         found = true;
         found_jid = callto_jid;
-        is_muc = true;
+        options.is_muc = true;
       }
     }
   }
 
   if (found) {
-    console_->Printf("Found %s '%s'", is_muc ? "room" : "online friend",
+    console_->Printf("Found %s '%s'", options.is_muc ? "room" : "online friend",
         found_jid.Str().c_str());
-    PlaceCall(found_jid, is_muc, video);
+    PlaceCall(found_jid, options);
   } else {
     console_->Printf("Could not find online friend '%s'", name.c_str());
   }
 }
 
-void CallClient::PlaceCall(const buzz::Jid& jid, bool is_muc, bool video) {
+void CallClient::PlaceCall(const buzz::Jid& jid,
+                           const cricket::CallOptions& options) {
   media_client_->SignalCallDestroy.connect(
       this, &CallClient::OnCallDestroy);
   if (!call_) {
-    call_ = media_client_->CreateCall(video, is_muc);
+    call_ = media_client_->CreateCall();
     console_->SetPrompt(jid.Str().c_str());
-    session_ = call_->InitiateSession(jid);
-    if (is_muc) {
+    session_ = call_->InitiateSession(jid, options);
+    if (options.is_muc) {
       // If people in this room are already in a call, must add all their
       // streams.
       buzz::Muc::MemberMap& members = mucs_[jid]->members();
@@ -598,7 +632,7 @@ void CallClient::CallVoicemail(const std::string& name) {
 void CallClient::OnFoundVoicemailJid(const buzz::Jid& to,
                                      const buzz::Jid& voicemail) {
   console_->Printf("Calling %s's voicemail.\n", to.Str().c_str());
-  PlaceCall(voicemail, false, false);
+  PlaceCall(voicemail, cricket::CallOptions());
 }
 
 void CallClient::OnVoicemailJidError(const buzz::Jid& to) {

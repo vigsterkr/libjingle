@@ -942,8 +942,9 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   }
   // Set video bandwidth parameters.
   if (ret) {
-    ret = media_channel()->SetSendBandwidth(video->auto_bandwidth(),
-                                            video->bandwidth_bps());
+    int bandwidth_bps = video->bandwidth();
+    bool auto_bandwidth = (bandwidth_bps == kAutoBandwidth);
+    ret = media_channel()->SetSendBandwidth(auto_bandwidth, bandwidth_bps);
   }
   if (ret) {
     ret = media_channel()->SetSendCodecs(video->codecs());

@@ -64,6 +64,10 @@ const std::string GINGLE_ACTION_REJECT("reject");
 const std::string GINGLE_ACTION_TERMINATE("terminate");
 const std::string GINGLE_ACTION_CANDIDATES("candidates");
 
+const std::string LN_ERROR("error");
+const buzz::QName QN_GINGLE_REDIRECT(true, NS_GINGLE, "redirect");
+const std::string STR_REDIRECT_PREFIX("xmpp:");
+
 // Session Contents (aka Gingle <session><description>
 //                   or Jingle <content><description>)
 const std::string LN_DESCRIPTION("description");
@@ -84,6 +88,7 @@ const std::string PAYLOADTYPE_PARAMETER_BITRATE("bitrate");
 const std::string PAYLOADTYPE_PARAMETER_HEIGHT("height");
 const std::string PAYLOADTYPE_PARAMETER_WIDTH("width");
 const std::string PAYLOADTYPE_PARAMETER_FRAMERATE("framerate");
+const std::string LN_BANDWIDTH("bandwidth");
 
 const std::string CN_AUDIO("audio");
 const std::string CN_VIDEO("video");
@@ -108,7 +113,6 @@ const buzz::QName QN_GINGLE_VIDEO_CONTENT(
 const buzz::QName QN_GINGLE_VIDEO_PAYLOADTYPE(
     true, NS_GINGLE_VIDEO, LN_PAYLOADTYPE);
 const buzz::QName QN_GINGLE_VIDEO_SRCID(true, NS_GINGLE_VIDEO, "src-id");
-const buzz::QName QN_GINGLE_VIDEO_BANDWIDTH(true, NS_GINGLE_VIDEO, "bandwidth");
 
 // Crypto support.
 const buzz::QName QN_ENCRYPTION(true, NS_JINGLE_RTP, "encryption");

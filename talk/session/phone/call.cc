@@ -30,6 +30,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/thread.h"
 #include "talk/session/phone/call.h"
+#include "talk/session/phone/mediasessionclient.h"
 
 namespace cricket {
 
@@ -45,10 +46,13 @@ const int kNoVoicemailTimeout = 1000*180;
 const int kMediaMonitorInterval = 1000*15;
 }
 
-Call::Call(MediaSessionClient *session_client, bool video, bool mux)
-    : id_(talk_base::CreateRandomId()), session_client_(session_client),
-      local_renderer_(NULL), video_(video), mux_(mux),
-      muted_(false), send_to_voicemail_(true), playing_dtmf_(false) {
+Call::Call(MediaSessionClient* session_client)
+    : id_(talk_base::CreateRandomId()),
+      session_client_(session_client),
+      local_renderer_(NULL),
+      muted_(false),
+      send_to_voicemail_(true),
+      playing_dtmf_(false) {
 }
 
 Call::~Call() {
@@ -60,8 +64,9 @@ Call::~Call() {
   talk_base::Thread::Current()->Clear(this);
 }
 
-Session *Call::InitiateSession(const buzz::Jid &jid) {
-  const SessionDescription* offer = session_client_->CreateOffer(video_, mux_);
+Session *Call::InitiateSession(const buzz::Jid &jid,
+                               const CallOptions& options) {
+  const SessionDescription* offer = session_client_->CreateOffer(options);
 
   Session *session = session_client_->CreateSession(this);
   AddSession(session, offer);
@@ -196,6 +201,9 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
   VideoChannel *video_channel = NULL;
 
   const ContentInfo* audio_offer = GetFirstAudioContent(offer);
+  const ContentInfo* video_offer = GetFirstVideoContent(offer);
+  video_ = (video_offer != NULL);
+
   ASSERT(audio_offer != NULL);
   // Create voice channel and start a media monitor
   voice_channel = session_client_->channel_manager()->CreateVoiceChannel(
@@ -212,8 +220,6 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
 
   // If desired, create video channel and start a media monitor
   if (video_ && succeeded) {
-    const ContentInfo* video_offer = GetFirstVideoContent(offer);
-    ASSERT(video_offer != NULL);
     video_channel = session_client_->channel_manager()->CreateVideoChannel(
         session, video_offer->name, true, voice_channel);
     // video_channel can be NULL in case of NullVideoEngine.

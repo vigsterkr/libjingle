@@ -672,6 +672,20 @@ void Session::OnFailedSend(const buzz::XmlElement* orig_stanza,
     return;
   }
 
+  // If the error is a session redirect, call OnRedirectError, which will
+  // continue the session with a new remote JID.
+  SessionRedirect redirect;
+  if (FindSessionRedirect(error_stanza, &redirect)) {
+    SessionError error;
+    if (!OnRedirectError(redirect, &error)) {
+      // TODO: Should we send a message back?  The standard
+      // says nothing about it.
+      LOG(LS_ERROR) << "Failed to redirect: " << error.text;
+      SetError(ERROR_RESPONSE);
+    }
+    return;
+  }
+
   std::string error_type = "cancel";
 
   const buzz::XmlElement* error = error_stanza->FirstNamed(buzz::QN_ERROR);
@@ -810,6 +824,32 @@ bool Session::OnTransportAcceptMessage(const SessionMessage& msg,
   return true;
 }
 
+bool BareJidsEqual(const std::string& name1,
+                   const std::string& name2) {
+  buzz::Jid jid1(name1);
+  buzz::Jid jid2(name2);
+
+  return jid1.IsValid() && jid2.IsValid() && jid1.BareEquals(jid2);
+}
+
+bool Session::OnRedirectError(const SessionRedirect& redirect,
+                              SessionError* error) {
+  MessageError message_error;
+  if (!CheckState(STATE_SENTINITIATE, &message_error)) {
+    return BadWrite(message_error.text, error);
+  }
+
+  if (!BareJidsEqual(remote_name_, redirect.target))
+    return BadWrite("Redirection not allowed: must be the same bare jid.",
+                    error);
+
+  // When we receive a redirect, we point the session at the new JID
+  // and resend the candidates.
+  remote_name_ = redirect.target;
+  return (SendInitiateMessage(local_description(), error) &&
+          ResendAllTransportInfoMessages(error));
+}
+
 bool Session::CheckState(State state, MessageError* error) {
   ASSERT(state_ == state);
   if (state_ != state) {
@@ -908,6 +948,25 @@ bool Session::WriteSessionAction(SignalingProtocol protocol,
 
   return WriteTransportInfos(protocol, tinfos, parsers,
                              elems, error);
+}
+
+bool Session::ResendAllTransportInfoMessages(SessionError* error) {
+  for (TransportMap::iterator iter = transports_.begin();
+       iter != transports_.end(); ++iter) {
+    TransportProxy* transproxy = iter->second;
+    if (transproxy->sent_candidates().size() > 0) {
+      if (!SendTransportInfoMessage(
+              TransportInfo(
+                  transproxy->content_name(),
+                  transproxy->type(),
+                  transproxy->sent_candidates()),
+              error)) {
+        return false;
+      }
+      transproxy->ClearSentCandidates();
+    }
+  }
+  return true;
 }
 
 bool Session::SendMessage(ActionType type, const XmlElements& action_elems,

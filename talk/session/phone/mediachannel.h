@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2007, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -237,7 +237,7 @@ class VideoFrame {
 
   // Size of an I420 image of given dimensions when stored as a frame buffer.
   static size_t SizeOf(size_t w, size_t h) {
-    return w * h * 3 / 2;
+    return w * h + ((w + 1) / 2) * ((h + 1) / 2) * 2;
   }
 
  protected:

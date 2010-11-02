@@ -36,21 +36,20 @@
 #include "talk/p2p/base/session.h"
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/xmpp/jid.h"
-#include "talk/session/phone/mediasessionclient.h"
-#include "talk/session/phone/voicechannel.h"
 #include "talk/session/phone/audiomonitor.h"
+#include "talk/session/phone/voicechannel.h"
 
 namespace cricket {
 
 class MediaSessionClient;
+struct CallOptions;
 
 class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
  public:
-  Call(MediaSessionClient *session_client,
-       bool video = false, bool mux = false);
+  Call(MediaSessionClient* session_client);
   ~Call();
 
-  Session *InitiateSession(const buzz::Jid &jid);
+  Session *InitiateSession(const buzz::Jid &jid, const CallOptions& options);
   void AcceptSession(BaseSession *session);
   void RejectSession(BaseSession *session);
   void TerminateSession(BaseSession *session);
@@ -127,7 +126,6 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   std::map<std::string, VideoChannel *> video_channel_map_;
   VideoRenderer* local_renderer_;
   bool video_;
-  bool mux_;
   bool muted_;
   bool send_to_voicemail_;
 

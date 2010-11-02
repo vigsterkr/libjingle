@@ -80,6 +80,9 @@ extern const std::string GINGLE_ACTION_REJECT;
 extern const std::string GINGLE_ACTION_TERMINATE;
 extern const std::string GINGLE_ACTION_CANDIDATES;
 
+extern const std::string LN_ERROR;
+extern const buzz::QName QN_GINGLE_REDIRECT;
+extern const std::string STR_REDIRECT_PREFIX;
 
 // Session Contents (aka Gingle <session><description>
 //                   or Jingle <content><description>)
@@ -102,6 +105,7 @@ extern const std::string PAYLOADTYPE_PARAMETER_BITRATE;
 extern const std::string PAYLOADTYPE_PARAMETER_HEIGHT;
 extern const std::string PAYLOADTYPE_PARAMETER_WIDTH;
 extern const std::string PAYLOADTYPE_PARAMETER_FRAMERATE;
+extern const std::string LN_BANDWIDTH;
 
 // CN_ == "content name".  When we initiate a session, we choose the
 // name, and when we receive a Gingle session, we provide default

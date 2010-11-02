@@ -65,6 +65,21 @@ typedef std::vector<VideoCodec> VideoCodecs;
 //               in the offer.)
 enum SecureMediaPolicy {SEC_DISABLED, SEC_ENABLED, SEC_REQUIRED};
 
+const int kAutoBandwidth = -1;
+
+struct CallOptions {
+  CallOptions() :
+      is_video(false),
+      is_muc(false),
+      video_bandwidth(kAutoBandwidth) {
+  }
+
+  bool is_video;
+  bool is_muc;
+  // bps. -1 == auto.
+  int video_bandwidth;
+};
+
 class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
  public:
 
@@ -81,7 +96,7 @@ class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
 
   int GetCapabilities() { return channel_manager_->GetCapabilities(); }
 
-  Call *CreateCall(bool video = false, bool mux = false);
+  Call *CreateCall();
   void DestroyCall(Call *call);
 
   Call *GetFocus();
@@ -115,7 +130,7 @@ class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
   sigslot::signal1<Call *> SignalCallDestroy;
   sigslot::repeater0<> SignalDevicesChange;
 
-  SessionDescription* CreateOffer(bool video = false, bool set_ssrc = false);
+  SessionDescription* CreateOffer(const CallOptions& options);
   SessionDescription* CreateAnswer(const SessionDescription* offer);
 
   SecureMediaPolicy secure() const { return secure_; }
@@ -153,10 +168,14 @@ enum MediaType {
 
 class MediaContentDescription : public ContentDescription {
  public:
-  MediaContentDescription() : ssrc_(0), bandwidth_bps_(-1),
-                              ssrc_set_(false), auto_bandwidth_(true),
-                              rtcp_mux_(false), rtp_headers_disabled_(false),
-                              crypto_required_(false) {}
+  MediaContentDescription()
+      : ssrc_(0),
+        ssrc_set_(false),
+        rtcp_mux_(false), 
+        rtp_headers_disabled_(false),
+        crypto_required_(false),
+        bandwidth_(kAutoBandwidth) {
+  }
 
   virtual MediaType type() const = 0;
 
@@ -186,21 +205,17 @@ class MediaContentDescription : public ContentDescription {
     crypto_required_ = crypto;
   }
 
-  int bandwidth_bps() const { return bandwidth_bps_; }
-  void set_bandwidth_bps(int bps) { bandwidth_bps_ = bps; }
-
-  bool auto_bandwidth() const { return auto_bandwidth_; }
-  void set_auto_bandwidth(bool enable) { auto_bandwidth_ = enable; }
+  int bandwidth() const { return bandwidth_; }
+  void set_bandwidth(int bandwidth) { bandwidth_ = bandwidth; }
 
  protected:
   uint32 ssrc_;
-  int bandwidth_bps_;    // fixed or max video bandwidth
   bool ssrc_set_;
-  bool auto_bandwidth_;    // if true, bandwidth_bps_ < 0 flags default limits
   bool rtcp_mux_;
   bool rtp_headers_disabled_;
   std::vector<CryptoParams> cryptos_;
   bool crypto_required_;
+  int bandwidth_;
 };
 
 template <class C>
