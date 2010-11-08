@@ -117,7 +117,7 @@ const char* CALL_COMMANDS =
 const char* RECEIVE_COMMANDS =
 "Available commands:\n"
 "\n"
-"  accept  Accepts the incoming call and switches to it.\n"
+"  accept [bw] Accepts the incoming call and switches to it.\n"
 "  reject  Rejects the incoming call and stays with the current call.\n"
 "  quit    Quits the application.\n"
 "";
@@ -167,7 +167,9 @@ void CallClient::ParseLine(const std::string& line) {
     Quit();
   } else if (call_ && incoming_call_) {
     if (command == "accept") {
-      Accept();
+      cricket::CallOptions options;
+      options.video_bandwidth = GetInt(words, 1, cricket::kAutoBandwidth);
+      Accept(options);
     } else if (command == "reject") {
       Reject();
     } else {
@@ -211,12 +213,10 @@ void CallClient::ParseLine(const std::string& line) {
       MakeCallTo(to, cricket::CallOptions());
     } else if (command == "vcall") {
       std::string to = GetWord(words, 1, "");
-      int bandwidth = GetInt(words, 2, -1);
+      int bandwidth = GetInt(words, 2, cricket::kAutoBandwidth);
       cricket::CallOptions options;
       options.is_video = true;
-      if (bandwidth > 0) {
-        options.video_bandwidth = bandwidth;
-      }
+      options.video_bandwidth = bandwidth;
       MakeCallTo(to, options);
     } else if (command == "join") {
       JoinMuc(GetWord(words, 1, ""));
@@ -413,8 +413,9 @@ void CallClient::OnSessionState(cricket::Call* call,
     call_ = call;
     session_ = session;
     incoming_call_ = true;
+    cricket::CallOptions options;
     if (auto_accept_) {
-      Accept();
+      Accept(options);
     }
   } else if (state == cricket::Session::STATE_SENTINITIATE) {
     console_->Print("calling...");
@@ -653,10 +654,10 @@ void CallClient::RemoveStream(uint32 audio_src_id, uint32 video_src_id) {
   }
 }
 
-void CallClient::Accept() {
+void CallClient::Accept(const cricket::CallOptions& options) {
   ASSERT(call_ && incoming_call_);
   ASSERT(call_->sessions().size() == 1);
-  call_->AcceptSession(call_->sessions()[0]);
+  call_->AcceptSession(call_->sessions()[0], options);
   media_client_->SetFocus(call_);
   if (call_->video()) {
     call_->SetLocalRenderer(local_renderer_);

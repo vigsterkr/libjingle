@@ -152,7 +152,7 @@ class CallClient: public sigslot::has_slots<> {
   void MakeCallTo(const std::string& name, const cricket::CallOptions& options);
   void PlaceCall(const buzz::Jid& jid, const cricket::CallOptions& options);
   void CallVoicemail(const std::string& name);
-  void Accept();
+  void Accept(const cricket::CallOptions& options);
   void Reject();
   void Quit();
 

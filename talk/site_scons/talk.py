@@ -385,9 +385,12 @@ def MergeAndFilterByPlatform(env, params):
 
 # Linux can build both 32 and 64 bit on 64 bit host, but 32 bit host can
 # only build 32 bit.  For 32 bit debian installer a 32 bit host is required.
-
+# ChromeOS (linux) ebuild don't support 64 bit and requires 32 bit build only
+# for now.
+# TODO: Detect ChromeOS chroot board for ChromeOS x64 build.
 def Allow64BitCompile(env):
-  return env.Bit('linux') and env.Bit('platform_arch_64bit')
+  return (env.Bit('linux') and env.Bit('platform_arch_64bit') and
+          not env.Bit('linux_chromeos'))
 
 def MergeSettingsFromLibraryDependencies(env, params):
   if params.has_key('libs'):

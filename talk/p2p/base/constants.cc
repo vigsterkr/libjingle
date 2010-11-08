@@ -99,6 +99,8 @@ const buzz::QName QN_JINGLE_RTP_CONTENT(
     true, NS_JINGLE_RTP, LN_DESCRIPTION);
 const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE(
     true, NS_JINGLE_RTP, LN_PAYLOADTYPE);
+const buzz::QName QN_JINGLE_RTP_BANDWIDTH(
+    true, NS_JINGLE_RTP, LN_BANDWIDTH);
 const buzz::QName QN_PARAMETER(true, NS_JINGLE_RTP, "parameter");
 
 const std::string NS_GINGLE_AUDIO("http://www.google.com/session/phone");
@@ -113,6 +115,8 @@ const buzz::QName QN_GINGLE_VIDEO_CONTENT(
 const buzz::QName QN_GINGLE_VIDEO_PAYLOADTYPE(
     true, NS_GINGLE_VIDEO, LN_PAYLOADTYPE);
 const buzz::QName QN_GINGLE_VIDEO_SRCID(true, NS_GINGLE_VIDEO, "src-id");
+const buzz::QName QN_GINGLE_VIDEO_BANDWIDTH(
+    true, NS_GINGLE_VIDEO, LN_BANDWIDTH);
 
 // Crypto support.
 const buzz::QName QN_ENCRYPTION(true, NS_JINGLE_RTP, "encryption");

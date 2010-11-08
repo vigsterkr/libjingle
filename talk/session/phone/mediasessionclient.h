@@ -131,7 +131,8 @@ class MediaSessionClient: public SessionClient, public sigslot::has_slots<> {
   sigslot::repeater0<> SignalDevicesChange;
 
   SessionDescription* CreateOffer(const CallOptions& options);
-  SessionDescription* CreateAnswer(const SessionDescription* offer);
+  SessionDescription* CreateAnswer(const SessionDescription* offer,
+                                   const CallOptions& options);
 
   SecureMediaPolicy secure() const { return secure_; }
   void set_secure(SecureMediaPolicy s) { secure_ = s; }

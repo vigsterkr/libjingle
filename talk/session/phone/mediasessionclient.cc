@@ -251,7 +251,7 @@ bool SelectCrypto(const MediaContentDescription* offer, CryptoParams *crypto) {
 }
 
 SessionDescription* MediaSessionClient::CreateAnswer(
-    const SessionDescription* offer) {
+    const SessionDescription* offer, const CallOptions& options) {
   // The answer contains the intersection of the codecs in the offer with the
   // codecs we support, ordered by our local preference. As indicated by
   // XEP-0167, we retain the same payload ids from the offer in the answer.
@@ -312,6 +312,7 @@ SessionDescription* MediaSessionClient::CreateAnswer(
       }
     }
 
+    video_accept->set_bandwidth(options.video_bandwidth);
     video_accept->SortCodecs();
 
     if (secure() != SEC_DISABLED) {
@@ -360,7 +361,7 @@ void MediaSessionClient::OnSessionState(BaseSession* base_session,
 
     // If our accept would have no codecs, then we must reject this call.
     const SessionDescription* offer = session->remote_description();
-    const SessionDescription* accept = CreateAnswer(offer);
+    const SessionDescription* accept = CreateAnswer(offer, CallOptions());
     const ContentInfo* audio_content = GetFirstAudioContent(accept);
     const AudioContentDescription* audio_accept = (!audio_content) ? NULL :
         static_cast<const AudioContentDescription*>(audio_content->description);
@@ -790,10 +791,9 @@ buzz::XmlElement* CreateGingleSsrcElem(const buzz::QName& name, uint32 ssrc) {
   return elem;
 }
 
-buzz::XmlElement* CreateBandwidthElem(int bps) {
+buzz::XmlElement* CreateBandwidthElem(const buzz::QName& name, int bps) {
   int kbps = bps / 1000;
-  buzz::XmlElement* elem = new buzz::XmlElement(
-      buzz::QName(true, "", LN_BANDWIDTH), true);
+  buzz::XmlElement* elem = new buzz::XmlElement(name);
   elem->AddAttr(buzz::QN_TYPE, "AS");
   SetXmlBody(elem, kbps);
   return elem;
@@ -881,7 +881,8 @@ buzz::XmlElement* CreateGingleVideoContentElem(
         QN_GINGLE_VIDEO_SRCID, video->ssrc()));
   }
   if (video->bandwidth() != kAutoBandwidth) {
-    elem->AddElement(CreateBandwidthElem(video->bandwidth()));
+    elem->AddElement(CreateBandwidthElem(QN_GINGLE_VIDEO_BANDWIDTH,
+                                         video->bandwidth()));
   }
 
   const CryptoParamsVec& cryptos = video->cryptos();
@@ -977,7 +978,8 @@ buzz::XmlElement* CreateJingleVideoContentElem(
   }
 
   if (video->bandwidth() != kAutoBandwidth) {
-    elem->AddElement(CreateBandwidthElem(video->bandwidth()));
+    elem->AddElement(CreateBandwidthElem(QN_JINGLE_RTP_BANDWIDTH,
+                                         video->bandwidth()));
   }
 
   // TODO: Figure out how to integrate SSRC into Jingle.

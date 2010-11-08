@@ -119,6 +119,7 @@ extern const std::string CN_OTHER;
 extern const std::string NS_JINGLE_RTP;
 extern const buzz::QName QN_JINGLE_RTP_CONTENT;
 extern const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE;
+extern const buzz::QName QN_JINGLE_RTP_BANDWIDTH;
 
 extern const std::string NS_GINGLE_AUDIO;
 extern const buzz::QName QN_GINGLE_AUDIO_CONTENT;

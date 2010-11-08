@@ -91,13 +91,14 @@ void Call::IncomingSession(
   SignalSessionState(this, session, Session::STATE_RECEIVEDINITIATE);
 }
 
-void Call::AcceptSession(BaseSession *session) {
+void Call::AcceptSession(BaseSession* session,
+                         const cricket::CallOptions& options) {
   std::vector<Session *>::iterator it;
   it = std::find(sessions_.begin(), sessions_.end(), session);
   ASSERT(it != sessions_.end());
   if (it != sessions_.end()) {
     session->Accept(
-        session_client_->CreateAnswer(session->remote_description()));
+        session_client_->CreateAnswer(session->remote_description(), options));
   }
 }
 

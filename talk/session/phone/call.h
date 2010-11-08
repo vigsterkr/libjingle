@@ -50,7 +50,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   ~Call();
 
   Session *InitiateSession(const buzz::Jid &jid, const CallOptions& options);
-  void AcceptSession(BaseSession *session);
+  void AcceptSession(BaseSession *session, const CallOptions& options);
   void RejectSession(BaseSession *session);
   void TerminateSession(BaseSession *session);
   void Terminate();
