@@ -85,7 +85,7 @@ enum FourCC {
   FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2
   FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY
   FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
-  FOURCC_RGB1 = FOURCC('R', 'G', 'B', '1'),  // Alias for RGBA
+  FOURCC_RGB1 = FOURCC('R', 'G', 'B', '1'),  // Alias for ABGR
   FOURCC_RGB2 = FOURCC('R', 'G', 'B', '2'),  // Alias for BGRA
   FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
 

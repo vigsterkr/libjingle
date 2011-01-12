@@ -63,6 +63,8 @@ const std::string GINGLE_ACTION_ACCEPT("accept");
 const std::string GINGLE_ACTION_REJECT("reject");
 const std::string GINGLE_ACTION_TERMINATE("terminate");
 const std::string GINGLE_ACTION_CANDIDATES("candidates");
+const std::string GINGLE_ACTION_NOTIFY("notify");
+const std::string GINGLE_ACTION_UPDATE("update");
 
 const std::string LN_ERROR("error");
 const buzz::QName QN_GINGLE_REDIRECT(true, NS_GINGLE, "redirect");

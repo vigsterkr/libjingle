@@ -30,6 +30,8 @@ illustrate the basic concepts of how the provided classes work.
 Libjingle is built with swtoolkit (http://code.google.com/p/swtoolkit/), which
 is a set of extensions to the open-source SCons build tool (www.scons.org).
   * First, install Python 2.4 or later from http://www.python.org/.
+    Please note that since swtoolkit only works with Python 2.x, you will
+    not be able to use Python 3.x.
 
   * Second, install the stand alone scons-local package 2.0.0 or later from
     http://www.scons.org/download.php and set an environment variable,

@@ -60,6 +60,12 @@ enum ActionType {
 
   ACTION_TRANSPORT_INFO,
   ACTION_TRANSPORT_ACCEPT,
+
+  // TODO: Make better names for these when we think of a
+  // "jingley" way of signaling them.  Even better, remove them from
+  // being needed at all.
+  ACTION_NOTIFY,
+  ACTION_UPDATE,
 };
 
 // Abstraction of a <jingle> element within an <iq> stanza, per XMPP

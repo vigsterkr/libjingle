@@ -55,6 +55,7 @@ class TransportChannelProxy: public TransportChannel {
   virtual int SendPacket(const char *data, size_t len);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError();
+  virtual P2PTransportChannel* GetP2PChannel();
 
  private:
   typedef std::pair<talk_base::Socket::Option, int> OptionPair;

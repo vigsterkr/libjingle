@@ -185,7 +185,7 @@ def ExpandSconsPath(path):
 
 
 def AddMediaLibs(env, **kwargs):
-  lmi_libdir = '$GOOGLE3/third_party/lmi/files/merged/lib/'
+  lmi_libdir = '$GOOGLE3/../googleclient/third_party/lmi/files/lib/'
   if env.Bit('windows'):
     if env.get('COVERAGE_ENABLED'):
       lmi_libdir += 'win32/c_only'
@@ -194,20 +194,11 @@ def AddMediaLibs(env, **kwargs):
   elif env.Bit('mac'):
     lmi_libdir += 'macos'
   elif env.Bit('linux'):
-    lmi_libdir += 'linux/x86'
-
-  ipp_libdir = '$GOOGLE3/third_party/Intel_ipp/%s/ia32/lib'
-  if env.Bit('windows'):
-    ipp_libdir %= 'v_5_2_windows'
-  elif env.Bit('mac'):
-    ipp_libdir %= 'v_5_3_mac_os_x'
-  elif env.Bit('linux'):
-    ipp_libdir %= 'v_5_2_linux'
+      lmi_libdir += 'linux/x86'
 
 
   AddToDict(kwargs, 'libdirs', [
     '$MAIN_DIR/third_party/gips/Libraries/',
-    ipp_libdir,
     lmi_libdir,
   ])
 
@@ -220,7 +211,7 @@ def AddMediaLibs(env, **kwargs):
   elif env.Bit('mac'):
     gips_lib = 'VoiceEngine_mac_universal_gcc'
   elif env.Bit('linux'):
-    gips_lib = 'VoiceEngine_Linux_external_gcc'
+      gips_lib = 'VoiceEngine_Linux_external_gcc'
 
 
   AddToDict(kwargs, 'libs', [
@@ -253,14 +244,6 @@ def AddMediaLibs(env, **kwargs):
     'LmiUtils',
     'LmiVideoCommon',
     'LmiXml',
-    'ippsmerged',
-    'ippsemerged',
-    'ippvcmerged',
-    'ippvcemerged',
-    'ippimerged',
-    'ippiemerged',
-    'ippsrmerged',
-    'ippsremerged',
   ])
 
   if env.Bit('windows'):
@@ -268,32 +251,21 @@ def AddMediaLibs(env, **kwargs):
       'dsound',
       'd3d9',
       'gdi32',
-      'ippcorel',
-      'ippscmerged',
-      'ippscemerged',
       'strmiids',
     ])
-  else:
-    AddToDict(kwargs, 'libs', [
-      'ippcore',
-      'ippacmerged',
-      'ippacemerged',
-      'ippccmerged',
-      'ippccemerged',
-      'ippchmerged',
-      'ippchemerged',
-      'ippcvmerged',
-      'ippcvemerged',
-      'ippdcmerged',
-      'ippdcemerged',
-      'ippjmerged',
-      'ippjemerged',
-      'ippmmerged',
-      'ippmemerged',
-      'ipprmerged',
-      'ippremerged',
-    ])
 
+  if env.Bit('mac'):
+    AddToDict(kwargs, 'FRAMEWORKS', [
+      'AudioToolbox',
+      'AudioUnit',
+      'Cocoa',
+      'CoreAudio',
+      'CoreFoundation',
+      'IOKit',
+      'QTKit',
+      'QuickTime',
+      'QuartzCore',
+    ])
   return kwargs
 
 
@@ -387,10 +359,9 @@ def MergeAndFilterByPlatform(env, params):
 # only build 32 bit.  For 32 bit debian installer a 32 bit host is required.
 # ChromeOS (linux) ebuild don't support 64 bit and requires 32 bit build only
 # for now.
-# TODO: Detect ChromeOS chroot board for ChromeOS x64 build.
 def Allow64BitCompile(env):
-  return (env.Bit('linux') and env.Bit('platform_arch_64bit') and
-          not env.Bit('linux_chromeos'))
+  return (env.Bit('linux') and env.Bit('platform_arch_64bit')
+          )
 
 def MergeSettingsFromLibraryDependencies(env, params):
   if params.has_key('libs'):
@@ -465,9 +436,13 @@ def ExtendComponent(env, component, **kwargs):
     'libs' : 'LIBS',
     'FRAMEWORKS' : 'FRAMEWORKS',
   }
-  prepends = {
-    'ccflags' : 'CCFLAGS',
-  }
+  prepends = {}
+  if env.Bit('windows'):
+    # MSVC compile flags have precedence at the beginning ...
+    prepends['ccflags'] = 'CCFLAGS'
+  else:
+    # ... while GCC compile flags have precedence at the end
+    appends['ccflags'] = 'CCFLAGS'
   if GetEntry(params, 'prepend_includedirs'):
     prepends['includedirs'] = 'CPPPATH'
   else:

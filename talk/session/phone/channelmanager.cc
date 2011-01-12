@@ -237,8 +237,10 @@ bool ChannelManager::Init() {
         audio_out_device_.clear();
       }
       if (!SetVideoOptions(camera_device_)) {
-        // TODO: Consider resetting to the default cam here.
-        camera_device_.clear();
+        // Perhaps it's been unplugged, fall back to default device
+        if (!SetVideoOptions("")) {
+          camera_device_.clear();
+        }
       }
       // Now apply the default video codec that has been set earlier.
       if (default_video_encoder_config_.max_codec.id != 0) {
@@ -501,20 +503,8 @@ bool ChannelManager::SetVideoOptions(const std::string& cam_name) {
 
   // If we're running, tell the media engine about it.
   if (ret && initialized_) {
-#ifdef OSX
-    Device sg_device;
-    ret = device_manager_->QtKitToSgDevice(device.name, &sg_device);
-    if (ret) {
-      device = sg_device;
-    } else {
-      LOG(LS_ERROR) << "Unable to find SG Component for qtkit device "
-                    << device.name;
-    }
-#endif
-    if (ret) {
-      VideoOptions options(&device);
-      ret = (Send(MSG_SETVIDEOOPTIONS, &options) && options.result);
-    }
+    VideoOptions options(&device);
+    ret = (Send(MSG_SETVIDEOOPTIONS, &options) && options.result);
   }
 
   // If everything worked, retain the name of the selected camera.

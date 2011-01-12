@@ -144,8 +144,8 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual bool GetStats(VoiceMediaInfo* info) { return true; }
 
   // Implement pure virtual methods of MediaChannel.
-  virtual void OnPacketReceived(const void* data, int len);
-  virtual void OnRtcpReceived(const void* data, int len) {}
+  virtual void OnPacketReceived(talk_base::Buffer* packet);
+  virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
   virtual void SetSendSsrc(uint32 id) {}  // TODO: change RTP packet?
   virtual bool SetRtcpCName(const std::string& cname) { return true; }
   virtual bool Mute(bool on) { return false; }
@@ -179,8 +179,8 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool RequestIntraFrame() { return false; }
 
   // Implement pure virtual methods of MediaChannel.
-  virtual void OnPacketReceived(const void* data, int len);
-  virtual void OnRtcpReceived(const void* data, int len) {}
+  virtual void OnPacketReceived(talk_base::Buffer* packet);
+  virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
   virtual void SetSendSsrc(uint32 id) {}  // TODO: change RTP packet?
   virtual bool SetRtcpCName(const std::string& cname) { return true; }
   virtual bool Mute(bool on) { return false; }

@@ -75,6 +75,13 @@ int TransportChannelProxy::GetError() {
   return impl_->GetError();
 }
 
+P2PTransportChannel* TransportChannelProxy::GetP2PChannel() {
+  if (impl_) {
+      return impl_->GetP2PChannel();
+  }
+  return NULL;
+}
+
 void TransportChannelProxy::OnReadableState(TransportChannel* channel) {
   ASSERT(channel == impl_);
   set_readable(impl_->readable());

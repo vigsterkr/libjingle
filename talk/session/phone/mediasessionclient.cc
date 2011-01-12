@@ -562,7 +562,7 @@ bool ParseGingleAudioContent(const buzz::XmlElement* content_elem,
     audio->AddCodec(AudioCodec(0, "PCMU", 8000, 64000, 1, 0));
   }
 
-  ParseGingleSsrc(content_elem, QN_GINGLE_VIDEO_SRCID, audio);
+  ParseGingleSsrc(content_elem, QN_GINGLE_AUDIO_SRCID, audio);
 
   if (!ParseGingleEncryption(content_elem, QN_GINGLE_AUDIO_CRYPTO_USAGE,
                              audio, error)) {

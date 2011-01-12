@@ -25,6 +25,9 @@
 
 #include "talk/session/phone/filemediaengine.h"
 
+#include <climits>
+
+#include "talk/base/buffer.h"
 #include "talk/base/event.h"
 #include "talk/base/logging.h"
 #include "talk/base/pathutils.h"
@@ -81,12 +84,15 @@ class RtpSenderReceiver
 
   // Called by media channel. Context: media channel thread.
   bool SetSend(bool send);
-  void OnPacketReceived(const void* data, int len);
+  void OnPacketReceived(talk_base::Buffer* packet);
 
   // Override virtual method of parent MessageHandler. Context: Worker Thread.
   virtual void OnMessage(talk_base::Message* pmsg);
 
  private:
+  // Read the next RTP dump packet, whose RTP SSRC is the same as first_ssrc_.
+  // Return true if successful.
+  bool ReadNextPacket(RtpDumpPacket* packet);
   // Send a RTP packet to the network. The input parameter data points to the
   // start of the RTP packet and len is the packet size. Return true if the sent
   // size is equal to len.
@@ -99,8 +105,10 @@ class RtpSenderReceiver
   talk_base::scoped_ptr<RtpDumpWriter> rtp_dump_writer_;
   // RTP dump packet read from the input stream.
   RtpDumpPacket rtp_dump_packet_;
+  uint32 start_send_time_;
   bool sending_;
   bool first_packet_;
+  uint32 first_ssrc_;
 
   DISALLOW_COPY_AND_ASSIGN(RtpSenderReceiver);
 };
@@ -136,13 +144,14 @@ bool RtpSenderReceiver::SetSend(bool send) {
   sending_ = send;
   if (!was_sending && sending_) {
     PostDelayed(0, this);  // Wake up the send thread.
+    start_send_time_ = talk_base::Time();
   }
   return true;
 }
 
-void RtpSenderReceiver::OnPacketReceived(const void* data, int len) {
+void RtpSenderReceiver::OnPacketReceived(talk_base::Buffer* packet) {
   if (rtp_dump_writer_.get()) {
-    rtp_dump_writer_->WriteRtpPacket(data, len);
+    rtp_dump_writer_->WriteRtpPacket(packet->data(), packet->length());
   }
 }
 
@@ -153,23 +162,36 @@ void RtpSenderReceiver::OnMessage(talk_base::Message* pmsg) {
     return;
   }
 
-  uint32 prev_elapsed_time = 0xFFFFFFFF;
   if (!first_packet_) {
-    prev_elapsed_time = rtp_dump_packet_.elapsed_time;
+    // Send the previously read packet.
     SendRtpPacket(&rtp_dump_packet_.data[0], rtp_dump_packet_.data.size());
-  } else {
-    first_packet_ = false;
   }
 
-  // Read a dump packet and wait for the elapsed time.
-  if (talk_base::SR_SUCCESS ==
-      rtp_dump_reader_->ReadPacket(&rtp_dump_packet_)) {
-    int waiting_time_ms = rtp_dump_packet_.elapsed_time > prev_elapsed_time ?
-        rtp_dump_packet_.elapsed_time - prev_elapsed_time : 0;
-    PostDelayed(waiting_time_ms, this);
+  if (ReadNextPacket(&rtp_dump_packet_)) {
+    int wait = talk_base::TimeUntil(
+        start_send_time_ + rtp_dump_packet_.elapsed_time);
+    wait = talk_base::_max(0, wait);
+    PostDelayed(wait, this);
   } else {
     Quit();
   }
+}
+
+bool RtpSenderReceiver::ReadNextPacket(RtpDumpPacket* packet) {
+  while (talk_base::SR_SUCCESS == rtp_dump_reader_->ReadPacket(packet)) {
+    uint32 ssrc;
+    if (!packet->GetRtpSsrc(&ssrc)) {
+      return false;
+    }
+    if (first_packet_) {
+      first_packet_ = false;
+      first_ssrc_ = ssrc;
+    }
+    if (ssrc == first_ssrc_) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool RtpSenderReceiver::SendRtpPacket(const void* data, size_t len) {
@@ -177,8 +199,8 @@ bool RtpSenderReceiver::SendRtpPacket(const void* data, size_t len) {
     return false;
   }
 
-  return media_channel_->network_interface()->SendPacket(data, len) ==
-        static_cast<int>(len);
+  talk_base::Buffer packet(data, len, kMaxRtpPacketLen);
+  return media_channel_->network_interface()->SendPacket(&packet);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -200,8 +222,8 @@ bool FileVoiceChannel::SetSend(SendFlags flag) {
   return rtp_sender_receiver_->SetSend(flag != SEND_NOTHING);
 }
 
-void FileVoiceChannel::OnPacketReceived(const void* data, int len) {
-  rtp_sender_receiver_->OnPacketReceived(data, len);
+void FileVoiceChannel::OnPacketReceived(talk_base::Buffer* packet) {
+  rtp_sender_receiver_->OnPacketReceived(packet);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -223,8 +245,8 @@ bool FileVideoChannel::SetSend(bool send) {
   return rtp_sender_receiver_->SetSend(send);
 }
 
-void FileVideoChannel::OnPacketReceived(const void* data, int len) {
-  rtp_sender_receiver_->OnPacketReceived(data, len);
+void FileVideoChannel::OnPacketReceived(talk_base::Buffer* packet) {
+  rtp_sender_receiver_->OnPacketReceived(packet);
 }
 
 }  // namespace cricket

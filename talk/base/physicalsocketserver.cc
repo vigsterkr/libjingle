@@ -78,12 +78,6 @@ typedef char* SockOptArg;
 
 namespace talk_base {
 
-const int kfRead    = 0x0001;
-const int kfWrite   = 0x0002;
-const int kfConnect = 0x0004;
-const int kfClose   = 0x0008;
-const int kfAccept  = 0x0010;
-
 // Standard MTUs, from RFC 1191
 const uint16 PACKET_MAXIMUMS[] = {
   65535,    // Theoretical maximum, Hyperchannel
@@ -125,7 +119,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     EnsureWinsockInit();
 #endif
     if (s_ != INVALID_SOCKET) {
-      enabled_events_ = kfRead | kfWrite;
+      enabled_events_ = DE_READ | DE_WRITE;
 
       int type = SOCK_STREAM;
       socklen_t len = sizeof(type);
@@ -145,7 +139,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     udp_ = (SOCK_DGRAM == type);
     UpdateLastError();
     if (udp_)
-      enabled_events_ = kfRead | kfWrite;
+      enabled_events_ = DE_READ | DE_WRITE;
     return s_ != INVALID_SOCKET;
   }
 
@@ -226,12 +220,12 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
       state_ = CS_CONNECTED;
     } else if (IsBlockingError(error_)) {
       state_ = CS_CONNECTING;
-      enabled_events_ |= kfConnect;
+      enabled_events_ |= DE_CONNECT;
     } else {
       return SOCKET_ERROR;
     }
 
-    enabled_events_ |= kfRead | kfWrite;
+    enabled_events_ |= DE_READ | DE_WRITE;
     return 0;
   }
 
@@ -292,7 +286,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Send(" << cb << ") Ret: " << sent << " Error: " << error_;
     ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
     if ((sent < 0) && IsBlockingError(error_)) {
-      enabled_events_ |= kfWrite;
+      enabled_events_ |= DE_WRITE;
     }
     return sent;
   }
@@ -312,7 +306,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     UpdateLastError();
     ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
     if ((sent < 0) && IsBlockingError(error_)) {
-      enabled_events_ |= kfWrite;
+      enabled_events_ |= DE_WRITE;
     }
     //LOG_F(LS_INFO) << cb << ":" << addr.ToString() << ":" << sent << ":" << error_;
     return sent;
@@ -327,14 +321,14 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
       LOG(LS_WARNING) << "EOF from socket; deferring close event";
       // Must turn this back on so that the select() loop will notice the close
       // event.
-      enabled_events_ |= kfRead;
+      enabled_events_ |= DE_READ;
       error_ = EWOULDBLOCK;
       return SOCKET_ERROR;
     }
     UpdateLastError();
     bool success = (received >= 0) || IsBlockingError(error_);
     if (udp_ || success) {
-      enabled_events_ |= kfRead;
+      enabled_events_ |= DE_READ;
     }
     if (!success) {
       LOG_F(LS_VERBOSE) << "Error = " << error_;
@@ -352,7 +346,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
       paddr->FromSockAddr(saddr);
     bool success = (received >= 0) || IsBlockingError(error_);
     if (udp_ || success) {
-      enabled_events_ |= kfRead;
+      enabled_events_ |= DE_READ;
     }
     if (!success) {
       LOG_F(LS_VERBOSE) << "Error = " << error_;
@@ -365,7 +359,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     UpdateLastError();
     if (err == 0) {
       state_ = CS_CONNECTING;
-      enabled_events_ |= kfAccept;
+      enabled_events_ |= DE_ACCEPT;
 #ifdef _DEBUG
       dbg_addr_ = "Listening @ ";
       dbg_addr_.append(GetLocalAddress().ToString());
@@ -381,7 +375,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     UpdateLastError();
     if (s == INVALID_SOCKET)
       return NULL;
-    enabled_events_ |= kfAccept;
+    enabled_events_ |= DE_ACCEPT;
     if (paddr != NULL)
       paddr->FromSockAddr(saddr);
     return ss_->WrapSocket(s);
@@ -528,16 +522,6 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 };
 
 #ifdef POSIX
-class Dispatcher {
- public:
-  virtual ~Dispatcher() { }
-  virtual uint32 GetRequestedEvents() = 0;
-  virtual void OnPreEvent(uint32 ff) = 0;
-  virtual void OnEvent(uint32 ff, int err) = 0;
-  virtual int GetDescriptor() = 0;
-  virtual bool IsDescriptorClosed() = 0;
-};
-
 class EventDispatcher : public Dispatcher {
  public:
   EventDispatcher(PhysicalSocketServer* ss) : ss_(ss), fSignaled_(false) {
@@ -563,7 +547,7 @@ class EventDispatcher : public Dispatcher {
   }
 
   virtual uint32 GetRequestedEvents() {
-    return kfRead;
+    return DE_READ;
   }
 
   virtual void OnPreEvent(uint32 ff) {
@@ -609,7 +593,7 @@ class PosixSignalDeliveryDispatcher : public Dispatcher {
   }
 
   virtual uint32 GetRequestedEvents() {
-    return kfRead;
+    return DE_READ;
   }
 
   virtual void OnPreEvent(uint32 ff) {
@@ -833,30 +817,30 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   }
 
   virtual void OnPreEvent(uint32 ff) {
-    if ((ff & kfConnect) != 0)
+    if ((ff & DE_CONNECT) != 0)
       state_ = CS_CONNECTED;
-    if ((ff & kfClose) != 0)
+    if ((ff & DE_CLOSE) != 0)
       state_ = CS_CLOSED;
   }
 
   virtual void OnEvent(uint32 ff, int err) {
-    if ((ff & kfRead) != 0) {
-      enabled_events_ &= ~kfRead;
+    if ((ff & DE_READ) != 0) {
+      enabled_events_ &= ~DE_READ;
       SignalReadEvent(this);
     }
-    if ((ff & kfWrite) != 0) {
-      enabled_events_ &= ~kfWrite;
+    if ((ff & DE_WRITE) != 0) {
+      enabled_events_ &= ~DE_WRITE;
       SignalWriteEvent(this);
     }
-    if ((ff & kfConnect) != 0) {
-      enabled_events_ &= ~kfConnect;
+    if ((ff & DE_CONNECT) != 0) {
+      enabled_events_ &= ~DE_CONNECT;
       SignalConnectEvent(this);
     }
-    if ((ff & kfAccept) != 0) {
-      enabled_events_ &= ~kfAccept;
+    if ((ff & DE_ACCEPT) != 0) {
+      enabled_events_ &= ~DE_ACCEPT;
       SignalReadEvent(this);
     }
-    if ((ff & kfClose) != 0) {
+    if ((ff & DE_CLOSE) != 0) {
       // The socket is now dead to us, so stop checking it.
       enabled_events_ = 0;
       SignalCloseEvent(this, err);
@@ -904,28 +888,28 @@ class FileDispatcher: public Dispatcher, public AsyncFile {
   }
 
   virtual void OnEvent(uint32 ff, int err) {
-    if ((ff & kfRead) != 0)
+    if ((ff & DE_READ) != 0)
       SignalReadEvent(this);
-    if ((ff & kfWrite) != 0)
+    if ((ff & DE_WRITE) != 0)
       SignalWriteEvent(this);
-    if ((ff & kfClose) != 0)
+    if ((ff & DE_CLOSE) != 0)
       SignalCloseEvent(this, err);
   }
 
   virtual bool readable() {
-    return (flags_ & kfRead) != 0;
+    return (flags_ & DE_READ) != 0;
   }
 
   virtual void set_readable(bool value) {
-    flags_ = value ? (flags_ | kfRead) : (flags_ & ~kfRead);
+    flags_ = value ? (flags_ | DE_READ) : (flags_ & ~DE_READ);
   }
 
   virtual bool writable() {
-    return (flags_ & kfWrite) != 0;
+    return (flags_ & DE_WRITE) != 0;
   }
 
   virtual void set_writable(bool value) {
-    flags_ = value ? (flags_ | kfWrite) : (flags_ & ~kfWrite);
+    flags_ = value ? (flags_ | DE_WRITE) : (flags_ & ~DE_WRITE);
   }
 
  private:
@@ -941,26 +925,15 @@ AsyncFile* PhysicalSocketServer::CreateFile(int fd) {
 #endif // POSIX
 
 #ifdef WIN32
-class Dispatcher {
- public:
-  virtual ~Dispatcher() {}
-  virtual uint32 GetRequestedEvents() = 0;
-  virtual void OnPreEvent(uint32 ff) = 0;
-  virtual void OnEvent(uint32 ff, int err) = 0;
-  virtual WSAEVENT GetWSAEvent() = 0;
-  virtual SOCKET GetSocket() = 0;
-  virtual bool CheckSignalClose() = 0;
-};
-
 static uint32 FlagsToEvents(uint32 events) {
   uint32 ffFD = FD_CLOSE;
-  if (events & kfRead)
+  if (events & DE_READ)
     ffFD |= FD_READ;
-  if (events & kfWrite)
+  if (events & DE_WRITE)
     ffFD |= FD_WRITE;
-  if (events & kfConnect)
+  if (events & DE_CONNECT)
     ffFD |= FD_CONNECT;
-  if (events & kfAccept)
+  if (events & DE_ACCEPT)
     ffFD |= FD_ACCEPT;
   return ffFD;
 }
@@ -1065,36 +1038,36 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   }
 
   virtual void OnPreEvent(uint32 ff) {
-    if ((ff & kfConnect) != 0)
+    if ((ff & DE_CONNECT) != 0)
       state_ = CS_CONNECTED;
     // We set CS_CLOSED from CheckSignalClose.
   }
 
   virtual void OnEvent(uint32 ff, int err) {
     int cache_id = id_;
-    if ((ff & kfRead) != 0) {
-      enabled_events_ &= ~kfRead;
+    if ((ff & DE_READ) != 0) {
+      enabled_events_ &= ~DE_READ;
       SignalReadEvent(this);
     }
-    if (((ff & kfWrite) != 0) && (id_ == cache_id)) {
-      enabled_events_ &= ~kfWrite;
+    if (((ff & DE_WRITE) != 0) && (id_ == cache_id)) {
+      enabled_events_ &= ~DE_WRITE;
       SignalWriteEvent(this);
     }
-    if (((ff & kfConnect) != 0) && (id_ == cache_id)) {
-      if (ff != kfConnect)
-        LOG(LS_VERBOSE) << "Signalled with kfConnect: " << ff;
-      enabled_events_ &= ~kfConnect;
+    if (((ff & DE_CONNECT) != 0) && (id_ == cache_id)) {
+      if (ff != DE_CONNECT)
+        LOG(LS_VERBOSE) << "Signalled with DE_CONNECT: " << ff;
+      enabled_events_ &= ~DE_CONNECT;
 #ifdef _DEBUG
       dbg_addr_ = "Connected @ ";
       dbg_addr_.append(GetRemoteAddress().ToString());
 #endif  // _DEBUG
       SignalConnectEvent(this);
     }
-    if (((ff & kfAccept) != 0) && (id_ == cache_id)) {
-      enabled_events_ &= ~kfAccept;
+    if (((ff & DE_ACCEPT) != 0) && (id_ == cache_id)) {
+      enabled_events_ &= ~DE_ACCEPT;
       SignalReadEvent(this);
     }
-    if (((ff & kfClose) != 0) && (id_ == cache_id)) {
+    if (((ff & DE_CLOSE) != 0) && (id_ == cache_id)) {
       //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] OnClose() Error: " << err;
       signal_close_ = true;
       signal_err_ = err;
@@ -1275,9 +1248,9 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
           fdmax = fd;
 
         uint32 ff = pdispatcher->GetRequestedEvents();
-        if (ff & (kfRead | kfAccept))
+        if (ff & (DE_READ | DE_ACCEPT))
           FD_SET(fd, &fdsRead);
-        if (ff & (kfWrite | kfConnect))
+        if (ff & (DE_WRITE | DE_CONNECT))
           FD_SET(fd, &fdsWrite);
       }
     }
@@ -1323,12 +1296,12 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
         // TODO: Only peek at TCP descriptors.
         if (FD_ISSET(fd, &fdsRead)) {
           FD_CLR(fd, &fdsRead);
-          if (pdispatcher->GetRequestedEvents() & kfAccept) {
-            ff |= kfAccept;
+          if (pdispatcher->GetRequestedEvents() & DE_ACCEPT) {
+            ff |= DE_ACCEPT;
           } else if (errcode || pdispatcher->IsDescriptorClosed()) {
-            ff |= kfClose;
+            ff |= DE_CLOSE;
           } else {
-            ff |= kfRead;
+            ff |= DE_READ;
           }
         }
 
@@ -1336,14 +1309,14 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
         // success versus failure by the reaped error code.
         if (FD_ISSET(fd, &fdsWrite)) {
           FD_CLR(fd, &fdsWrite);
-          if (pdispatcher->GetRequestedEvents() & kfConnect) {
+          if (pdispatcher->GetRequestedEvents() & DE_CONNECT) {
             if (!errcode) {
-              ff |= kfConnect;
+              ff |= DE_CONNECT;
             } else {
-              ff |= kfClose;
+              ff |= DE_CLOSE;
             }
           } else {
-            ff |= kfWrite;
+            ff |= DE_WRITE;
           }
         }
 
@@ -1556,21 +1529,21 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
             uint32 ff = 0;
             int errcode = 0;
             if (wsaEvents.lNetworkEvents & FD_READ)
-              ff |= kfRead;
+              ff |= DE_READ;
             if (wsaEvents.lNetworkEvents & FD_WRITE)
-              ff |= kfWrite;
+              ff |= DE_WRITE;
             if (wsaEvents.lNetworkEvents & FD_CONNECT) {
               if (wsaEvents.iErrorCode[FD_CONNECT_BIT] == 0) {
-                ff |= kfConnect;
+                ff |= DE_CONNECT;
               } else {
-                ff |= kfClose;
+                ff |= DE_CLOSE;
                 errcode = wsaEvents.iErrorCode[FD_CONNECT_BIT];
               }
             }
             if (wsaEvents.lNetworkEvents & FD_ACCEPT)
-              ff |= kfAccept;
+              ff |= DE_ACCEPT;
             if (wsaEvents.lNetworkEvents & FD_CLOSE) {
-              ff |= kfClose;
+              ff |= DE_CLOSE;
               errcode = wsaEvents.iErrorCode[FD_CLOSE_BIT];
             }
             if (ff != 0) {

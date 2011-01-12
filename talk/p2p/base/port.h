@@ -35,6 +35,7 @@
 #include "talk/base/network.h"
 #include "talk/base/socketaddress.h"
 #include "talk/base/proxyinfo.h"
+#include "talk/base/ratetracker.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/candidate.h"
@@ -65,21 +66,6 @@ struct ProtocolAddress {
 
   ProtocolAddress(const talk_base::SocketAddress& a, ProtocolType p)
     : address(a), proto(p) { }
-};
-
-// Computes instantaneous bytes per second.
-class RateTracker {
- public:
-  RateTracker();
-  size_t total_bytes() const;
-  size_t bytes_second();
-  void Update(size_t bytes);
-
- private:
-  size_t total_bytes_;
-  size_t bytes_second_;
-  uint32 last_bytes_second_time_;
-  size_t last_bytes_second_calc_;
 };
 
 // Represents a local communication mechanism that can be used to create
@@ -384,8 +370,8 @@ class Connection : public talk_base::MessageHandler,
                                // side
   std::vector<uint32> pings_since_last_response_;
 
-  RateTracker recv_rate_tracker_;
-  RateTracker send_rate_tracker_;
+  talk_base::RateTracker recv_rate_tracker_;
+  talk_base::RateTracker send_rate_tracker_;
 
   // Callbacks from ConnectionRequest
   void OnConnectionRequestResponse(StunMessage *response, uint32 rtt);

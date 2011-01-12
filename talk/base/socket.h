@@ -50,55 +50,89 @@
 // Win32 compatibility.
 
 #ifdef WIN32
+#undef EWOULDBLOCK  // Remove errno.h's definition for each macro below.
 #define EWOULDBLOCK WSAEWOULDBLOCK
+#undef EINPROGRESS
 #define EINPROGRESS WSAEINPROGRESS
+#undef EALREADY
 #define EALREADY WSAEALREADY
+#undef ENOTSOCK
 #define ENOTSOCK WSAENOTSOCK
+#undef EDESTADDRREQ
 #define EDESTADDRREQ WSAEDESTADDRREQ
+#undef EMSGSIZE
 #define EMSGSIZE WSAEMSGSIZE
+#undef EPROTOTYPE
 #define EPROTOTYPE WSAEPROTOTYPE
+#undef ENOPROTOOPT
 #define ENOPROTOOPT WSAENOPROTOOPT
+#undef EPROTONOSUPPORT
 #define EPROTONOSUPPORT WSAEPROTONOSUPPORT
+#undef ESOCKTNOSUPPORT
 #define ESOCKTNOSUPPORT WSAESOCKTNOSUPPORT
+#undef EOPNOTSUPP
 #define EOPNOTSUPP WSAEOPNOTSUPP
+#undef EPFNOSUPPORT
 #define EPFNOSUPPORT WSAEPFNOSUPPORT
+#undef EAFNOSUPPORT
 #define EAFNOSUPPORT WSAEAFNOSUPPORT
+#undef EADDRINUSE
 #define EADDRINUSE WSAEADDRINUSE
+#undef EADDRNOTAVAIL
 #define EADDRNOTAVAIL WSAEADDRNOTAVAIL
+#undef ENETDOWN
 #define ENETDOWN WSAENETDOWN
+#undef ENETUNREACH
 #define ENETUNREACH WSAENETUNREACH
+#undef ENETRESET
 #define ENETRESET WSAENETRESET
+#undef ECONNABORTED
 #define ECONNABORTED WSAECONNABORTED
+#undef ECONNRESET
 #define ECONNRESET WSAECONNRESET
+#undef ENOBUFS
 #define ENOBUFS WSAENOBUFS
+#undef EISCONN
 #define EISCONN WSAEISCONN
+#undef ENOTCONN
 #define ENOTCONN WSAENOTCONN
+#undef ESHUTDOWN
 #define ESHUTDOWN WSAESHUTDOWN
+#undef ETOOMANYREFS
 #define ETOOMANYREFS WSAETOOMANYREFS
-#undef ETIMEDOUT // remove pthreads.h's definition
+#undef ETIMEDOUT
 #define ETIMEDOUT WSAETIMEDOUT
+#undef ECONNREFUSED
 #define ECONNREFUSED WSAECONNREFUSED
+#undef ELOOP
 #define ELOOP WSAELOOP
-#undef ENAMETOOLONG // remove errno.h's definition
+#undef ENAMETOOLONG
 #define ENAMETOOLONG WSAENAMETOOLONG
+#undef EHOSTDOWN
 #define EHOSTDOWN WSAEHOSTDOWN
+#undef EHOSTUNREACH
 #define EHOSTUNREACH WSAEHOSTUNREACH
-#undef ENOTEMPTY // remove errno.h's definition
+#undef ENOTEMPTY
 #define ENOTEMPTY WSAENOTEMPTY
+#undef EPROCLIM
 #define EPROCLIM WSAEPROCLIM
+#undef EUSERS
 #define EUSERS WSAEUSERS
+#undef EDQUOT
 #define EDQUOT WSAEDQUOT
+#undef ESTALE
 #define ESTALE WSAESTALE
+#undef EREMOTE
 #define EREMOTE WSAEREMOTE
 #undef EACCES
 #define SOCKET_EACCES WSAEACCES
-#endif // WIN32
+#endif  // WIN32
 
 #ifdef POSIX
 #define INVALID_SOCKET (-1)
 #define SOCKET_ERROR (-1)
 #define closesocket(s) close(s)
-#endif // POSIX
+#endif  // POSIX
 
 namespace talk_base {
 
@@ -109,9 +143,9 @@ inline bool IsBlockingError(int e) {
 // General interface for the socket implementations of various networks.  The
 // methods match those of normal UNIX sockets very closely.
 class Socket {
-public:
+ public:
   virtual ~Socket() {}
- 
+
   // Returns the address to which the socket is bound.  If the socket is not
   // bound, then the any-address is returned.
   virtual SocketAddress GetLocalAddress() const = 0;
@@ -146,20 +180,20 @@ public:
 
   enum Option {
     OPT_DONTFRAGMENT,
-    OPT_RCVBUF, // receive buffer size
-    OPT_SNDBUF, // send buffer size
-    OPT_NODELAY // whether Nagle algorithm is enabled
+    OPT_RCVBUF,  // receive buffer size
+    OPT_SNDBUF,  // send buffer size
+    OPT_NODELAY  // whether Nagle algorithm is enabled
   };
   virtual int GetOption(Option opt, int* value) = 0;
   virtual int SetOption(Option opt, int value) = 0;
 
-protected:
+ protected:
   Socket() {}
 
-private:
+ private:
   DISALLOW_EVIL_CONSTRUCTORS(Socket);
 };
 
-} // namespace talk_base
+}  // namespace talk_base
 
-#endif // TALK_BASE_SOCKET_H__
+#endif  // TALK_BASE_SOCKET_H__

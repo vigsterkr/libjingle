@@ -31,7 +31,47 @@
 
 #include "talk/base/logging.h"
 
+@interface DeviceWatcherImpl : NSObject {
+@private
+  cricket::DeviceManager* manager_;
+}
+- (id)init:(cricket::DeviceManager*) dm;
+- (void)onDevicesChanged:(NSNotification *)notification;
+@end
+
+@implementation DeviceWatcherImpl
+- (id)init:(cricket::DeviceManager*) dm {
+  if ((self = [super init])) {
+    manager_ = dm;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+        selector:@selector(onDevicesChanged:)
+        name:QTCaptureDeviceWasConnectedNotification
+        object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+        selector:@selector(onDevicesChanged:)
+        name:QTCaptureDeviceWasDisconnectedNotification
+        object:nil];
+  }
+  return self;
+}
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  [super dealloc];
+}
+- (void)onDevicesChanged:(NSNotification *)notification {
+  manager_->OnDevicesChange();
+}
+@end
+
 namespace cricket {
+
+void* CreateDeviceWatcherCallback(DeviceManager* dm) {
+  return [[DeviceWatcherImpl alloc] init:dm];
+}
+void ReleaseDeviceWatcherCallback(void* watcher) {
+  DeviceWatcherImpl* watcher_impl = static_cast<DeviceWatcherImpl*>(watcher);
+  [watcher_impl release];
+}
 
 bool GetQTKitVideoDevices(std::vector<Device>* devices) {
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
@@ -44,11 +84,12 @@ bool GetQTKitVideoDevices(std::vector<Device>* devices) {
     QTCaptureDevice* qt_capture_device = [qt_capture_devices objectAtIndex:i];
 
     static const NSString* kFormat = @"localizedDisplayName: \"%@\", "
-        "modelUniqueID: \"%@\", isConnected: %d, isOpen: %d, "
+        "modelUniqueID: \"%@\", uniqueID \"%@\", isConnected: %d, isOpen: %d, "
         "isInUseByAnotherApplication: %d";
     NSString* info = [NSString stringWithFormat:kFormat,
         [qt_capture_device localizedDisplayName],
         [qt_capture_device modelUniqueID],
+        [qt_capture_device uniqueID],
         [qt_capture_device isConnected],
         [qt_capture_device isOpen],
         [qt_capture_device isInUseByAnotherApplication]];
@@ -57,7 +98,7 @@ bool GetQTKitVideoDevices(std::vector<Device>* devices) {
     std::string name([[qt_capture_device localizedDisplayName]
                          cStringUsingEncoding:NSUTF8StringEncoding]);
     devices->push_back(Device(name,
-       [[qt_capture_device modelUniqueID]
+       [[qt_capture_device uniqueID]
            cStringUsingEncoding:NSUTF8StringEncoding]));
   }
 

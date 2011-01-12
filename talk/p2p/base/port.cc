@@ -25,9 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#pragma warning(disable:4786)
-#endif
+#include "talk/p2p/base/port.h"
 
 #include <algorithm>
 #include <vector>
@@ -40,13 +38,6 @@
 #include "talk/base/socketadapters.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/common.h"
-#include "talk/p2p/base/port.h"
-
-#if defined(_MSC_VER) && _MSC_VER < 1300
-namespace std {
-  using ::memcmp;
-}
-#endif
 
 namespace {
 
@@ -894,19 +885,19 @@ void Connection::OnMessage(talk_base::Message *pmsg) {
 }
 
 size_t Connection::recv_bytes_second() {
-  return recv_rate_tracker_.bytes_second();
+  return recv_rate_tracker_.units_second();
 }
 
 size_t Connection::recv_total_bytes() {
-  return recv_rate_tracker_.total_bytes();
+  return recv_rate_tracker_.total_units();
 }
 
 size_t Connection::sent_bytes_second() {
-  return send_rate_tracker_.bytes_second();
+  return send_rate_tracker_.units_second();
 }
 
 size_t Connection::sent_total_bytes() {
-  return send_rate_tracker_.total_bytes();
+  return send_rate_tracker_.total_units();
 }
 
 ProxyConnection::ProxyConnection(Port* port, size_t index,
@@ -927,50 +918,6 @@ int ProxyConnection::Send(const void* data, size_t size) {
     send_rate_tracker_.Update(sent);
   }
   return sent;
-}
-
-RateTracker::RateTracker()
-    : total_bytes_(0), bytes_second_(0),
-      last_bytes_second_time_(static_cast<uint32>(-1)),
-      last_bytes_second_calc_(0) {
-}
-
-size_t RateTracker::total_bytes() const {
-  return total_bytes_;
-}
-
-size_t RateTracker::bytes_second() {
-  // Snapshot bytes / second calculator. Determine how many seconds have
-  // elapsed since our last reference point. If over 1 second, establish
-  // a new reference point that is an integer number of seconds since the
-  // last one, and compute the bytes over that interval.
-
-  uint32 current_time = talk_base::Time();
-  if (last_bytes_second_time_ != static_cast<uint32>(-1)) {
-    int delta = talk_base::TimeDiff(current_time, last_bytes_second_time_);
-    if (delta >= 1000) {
-      int fraction_time = delta % 1000;
-      int seconds = delta / 1000;
-      int fraction_bytes =
-          static_cast<int>(total_bytes_ - last_bytes_second_calc_) *
-              fraction_time / delta;
-      // Compute "bytes received during the interval" / "seconds in interval"
-      bytes_second_ =
-          (total_bytes_ - last_bytes_second_calc_ - fraction_bytes) / seconds;
-      last_bytes_second_time_ = current_time - fraction_time;
-      last_bytes_second_calc_ = total_bytes_ - fraction_bytes;
-    }
-  }
-  if (last_bytes_second_time_ == static_cast<uint32>(-1)) {
-    last_bytes_second_time_ = current_time;
-    last_bytes_second_calc_ = total_bytes_;
-  }
-
-  return bytes_second_;
-}
-
-void RateTracker::Update(size_t bytes) {
-  total_bytes_ += bytes;
 }
 
 }  // namespace cricket

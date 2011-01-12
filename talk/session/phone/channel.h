@@ -41,6 +41,7 @@
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/mediamonitor.h"
+#include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/srtpfilter.h"
 
 namespace cricket {
@@ -67,37 +68,13 @@ enum {
   MSG_SETRTCPCNAME = 18,
   MSG_SENDINTRAFRAME = 19,
   MSG_REQUESTINTRAFRAME = 20,
-};
-
-// TODO: Move to own file.
-class RtcpMuxFilter {
- public:
-  RtcpMuxFilter();
-
-  // Whether the filter is active, i.e. has RTCP mux been properly negotiated.
-  bool IsActive() const;
-
-  // Specifies whether the offer indicates the use of RTCP mux.
-  bool SetOffer(bool offer_enable, ContentSource src);
-
-  // Specifies whether the answer indicates the use of RTCP mux.
-  bool SetAnswer(bool answer_enable, ContentSource src);
-
-  // Determines whether the specified packet is RTCP.
-  bool DemuxRtcp(const char* data, int len);
-
- private:
-  enum State { ST_INIT, ST_SENTOFFER, ST_RECEIVEDOFFER, ST_ACTIVE };
-  State state_;
-  bool offer_enable_;
+  MSG_RTPPACKET = 22,
+  MSG_RTCPPACKET = 23
 };
 
 // BaseChannel contains logic common to voice and video, including
 // enable/mute, marshaling calls to a worker thread, and
 // connection and media monitors.
-// TODO: Break the dependency on BaseSession. The only thing we need
-// it for is to Create/Destroy TransportChannels, and set codecs, both of which
-// could be done by the calling class.
 class BaseChannel
     : public talk_base::MessageHandler, public sigslot::has_slots<>,
       public MediaChannel::NetworkInterface {
@@ -174,16 +151,16 @@ class BaseChannel
              talk_base::MessageList* removed = NULL);
 
   // NetworkInterface implementation, called by MediaEngine
-  virtual int SendPacket(const void *data, size_t len);
-  virtual int SendRtcp(const void *data, size_t len);
+  virtual bool SendPacket(talk_base::Buffer* packet);
+  virtual bool SendRtcp(talk_base::Buffer* packet);
   virtual int SetOption(SocketType type, talk_base::Socket::Option o, int val);
 
   // From TransportChannel
   void OnWritableState(TransportChannel* channel);
   void OnChannelRead(TransportChannel* channel, const char *data, size_t len);
 
-  int SendPacket(bool rtcp, const void* data, size_t len);
-  void HandlePacket(bool rtcp, const char* data, size_t len);
+  bool SendPacket(bool rtcp, talk_base::Buffer* packet);
+  void HandlePacket(bool rtcp, talk_base::Buffer* packet);
 
   // Setting the send codec based on the remote description.
   void OnSessionState(BaseSession* session, BaseSession::State state);

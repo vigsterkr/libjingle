@@ -83,9 +83,6 @@ class DeviceManager {
 
   virtual bool GetVideoCaptureDevices(std::vector<Device>* devs);
   virtual bool GetDefaultVideoCaptureDevice(Device* device);
-#ifdef OSX
-  virtual bool QtKitToSgDevice(const std::string& qtkit_name, Device* out);
-#endif
 
   sigslot::signal0<> SignalDevicesChange;
 

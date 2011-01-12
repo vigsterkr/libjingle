@@ -79,6 +79,8 @@ extern const std::string GINGLE_ACTION_ACCEPT;
 extern const std::string GINGLE_ACTION_REJECT;
 extern const std::string GINGLE_ACTION_TERMINATE;
 extern const std::string GINGLE_ACTION_CANDIDATES;
+extern const std::string GINGLE_ACTION_NOTIFY;
+extern const std::string GINGLE_ACTION_UPDATE;
 
 extern const std::string LN_ERROR;
 extern const buzz::QName QN_GINGLE_REDIRECT;

@@ -44,6 +44,7 @@
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
 #include "talk/session/phone/filemediaengine.h"
+#include "talk/session/phone/mediasessionclient.h"
 
 class DebugLog : public sigslot::has_slots<> {
  public:
@@ -218,6 +219,9 @@ int main(int argc, char **argv) {
   DEFINE_string(
       protocol, "hybrid",
       "Initial signaling protocol to use: jingle, gingle, or hybrid.");
+  DEFINE_string(
+      secure, "disable",
+      "Disable or enable encryption: disable, enable, require.");
   DEFINE_bool(testserver, false, "Use test server");
   DEFINE_bool(plainserver, false, "Turn off tls and allow plain password.");
   DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
@@ -245,6 +249,7 @@ int main(int argc, char **argv) {
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
+  std::string secure = FLAG_secure;
 
   cricket::SignalingProtocol initial_protocol = cricket::PROTOCOL_HYBRID;
   if (protocol == "jingle") {
@@ -254,7 +259,19 @@ int main(int argc, char **argv) {
   } else if (protocol == "hybrid") {
     initial_protocol = cricket::PROTOCOL_HYBRID;
   } else {
-    printf("Invalid protocol.  Must be jingle, gingle, or hybrid.");
+    printf("Invalid protocol.  Must be jingle, gingle, or hybrid.\n");
+    return 1;
+  }
+
+  cricket::SecureMediaPolicy secure_policy = cricket::SEC_DISABLED;
+  if (secure == "disable") {
+    secure_policy = cricket::SEC_DISABLED;
+  } else if (secure == "enable") {
+    secure_policy = cricket::SEC_ENABLED;
+  } else if (secure == "require") {
+    secure_policy = cricket::SEC_REQUIRED;
+  } else {
+    printf("Invalid encryption.  Must be enable, disable, or require.\n");
     return 1;
   }
 
@@ -354,6 +371,7 @@ int main(int argc, char **argv) {
   client->SetPortAllocatorFlags(portallocator_flags);
   client->SetAllowLocalIps(true);
   client->SetInitialProtocol(initial_protocol);
+  client->SetSecurePolicy(secure_policy);
   console->Start();
 
   if (debug) {

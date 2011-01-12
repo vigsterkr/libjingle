@@ -30,6 +30,7 @@
 #include <string>
 
 #include "talk/base/bytebuffer.h"
+#include "talk/base/byteorder.h"
 #include "talk/base/logging.h"
 #include "talk/base/time.h"
 
@@ -55,13 +56,35 @@ void RtpDumpFileHeader::WriteToByteBuffer(talk_base::ByteBuffer* buf) {
 }
 
 // RTP packet format (http://www.networksorcery.com/enp/protocol/rtp.htm).
-static const int kRtpSeqNumOffset = 2;
-static const int kRtpSeqNumAndTimestampSize = 6;
+static const size_t kMinimumRtpHeaderSize = 12;
 static const uint32 kDefaultTimeIncrease = 30;
 
 bool RtpDumpPacket::IsValidRtpPacket() const {
-  return !is_rtcp &&
-      data.size() >= kRtpSeqNumOffset + kRtpSeqNumAndTimestampSize;
+  return !is_rtcp && data.size() >= kMinimumRtpHeaderSize;
+}
+
+bool RtpDumpPacket::GetRtpSeqNum(uint16* seq_num) const {
+  if (!seq_num || !IsValidRtpPacket()) {
+    return false;
+  }
+  *seq_num = talk_base::GetBE16(&data[2]);
+  return true;
+}
+
+bool RtpDumpPacket::GetRtpTimestamp(uint32* ts) const {
+  if (!ts || !IsValidRtpPacket()) {
+    return false;
+  }
+  *ts = talk_base::GetBE32(&data[4]);
+  return true;
+}
+
+bool RtpDumpPacket::GetRtpSsrc(uint32* ssrc) const {
+  if (!ssrc || !IsValidRtpPacket()) {
+    return false;
+  }
+  *ssrc = talk_base::GetBE32(&data[8]);
+  return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -197,12 +220,11 @@ talk_base::StreamResult RtpDumpLoopReader::ReadPacket(RtpDumpPacket* packet) {
 void RtpDumpLoopReader::UpdateStreamStatistics(const RtpDumpPacket& packet) {
   // Get the RTP sequence number and timestamp of the dump packet.
   uint16 rtp_seq_num = 0;
+  packet.GetRtpSeqNum(&rtp_seq_num);
   uint32 rtp_timestamp = 0;
-  if (packet.IsValidRtpPacket()) {
-    ReadRtpSeqNumAndTimestamp(packet, &rtp_seq_num, &rtp_timestamp);
-  }
+  packet.GetRtpTimestamp(&rtp_timestamp);
 
-  // Get the timestamps and sequence number for the first dump packet.
+  // Set the timestamps and sequence number for the first dump packet.
   if (0 == packet_count_++) {
     first_elapsed_time_ = packet.elapsed_time;
     first_rtp_seq_num_ = rtp_seq_num;
@@ -241,8 +263,9 @@ void RtpDumpLoopReader::UpdateDumpPacket(RtpDumpPacket* packet) {
   if (packet->IsValidRtpPacket()) {
     // Get the old RTP sequence number and timestamp.
     uint16 sequence;
+    packet->GetRtpSeqNum(&sequence);
     uint32 timestamp;
-    ReadRtpSeqNumAndTimestamp(*packet, &sequence, &timestamp);
+    packet->GetRtpTimestamp(&timestamp);
     // Increase the RTP sequence number and timestamp.
     sequence += loop_count_ * rtp_seq_num_increase_;
     timestamp += loop_count_ * rtp_timestamp_increase_;
@@ -250,29 +273,27 @@ void RtpDumpLoopReader::UpdateDumpPacket(RtpDumpPacket* packet) {
     talk_base::ByteBuffer buffer;
     buffer.WriteUInt16(sequence);
     buffer.WriteUInt32(timestamp);
-    memcpy(&packet->data[0] + kRtpSeqNumOffset, buffer.Data(), buffer.Length());
+    memcpy(&packet->data[2], buffer.Data(), buffer.Length());
   }
-}
-
-void RtpDumpLoopReader::ReadRtpSeqNumAndTimestamp(
-    const RtpDumpPacket& packet, uint16* sequence, uint32* timestamp) {
-  talk_base::ByteBuffer buffer(
-      reinterpret_cast<const char*>(&packet.data[0] + kRtpSeqNumOffset),
-      kRtpSeqNumAndTimestampSize);
-  buffer.ReadUInt16(sequence);
-  buffer.ReadUInt32(timestamp);
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of RtpDumpWriter.
 ///////////////////////////////////////////////////////////////////////////
+
+RtpDumpWriter::RtpDumpWriter(talk_base::StreamInterface* stream)
+    : stream_(stream),
+      file_header_written_(false),
+      start_time_ms_(talk_base::Time()) {
+  }
+
 uint32 RtpDumpWriter::GetElapsedTime() const {
   return talk_base::TimeSince(start_time_ms_);
 }
 
 talk_base::StreamResult RtpDumpWriter::WritePacket(
     const void* data, size_t data_len, uint32 elapsed, bool rtcp) {
-  if (!data || 0 == data_len) return talk_base::SR_ERROR;
+  if (!stream_ || !data || 0 == data_len) return talk_base::SR_ERROR;
 
   talk_base::StreamResult res = talk_base::SR_SUCCESS;
   // Write the file header if it has not been written yet.

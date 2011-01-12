@@ -38,11 +38,19 @@
 // TODO: re-evaluate this include
 #include "talk/session/phone/audiomonitor.h"
 
+namespace talk_base {
+class Buffer;
+}
+
 namespace flute {
-  class MagicCamVideoRenderer;
+class MagicCamVideoRenderer;
 }
 
 namespace cricket {
+
+const size_t kMinRtpPacketLen = 12;
+const size_t kMinRtcpPacketLen = 4;
+const size_t kMaxRtpPacketLen = 2048;
 
 enum VoiceMediaChannelOptions {
   OPT_CONFERENCE = 0x10000,   // tune the audio stream for conference mode
@@ -53,6 +61,8 @@ enum VoiceMediaChannelOptions {
 };
 
 enum VideoMediaChannelOptions {
+  OPT_INTERPOLATE = 0x10000   // Increase the output framerate by 2x by
+                              // interpolating frames
 };
 
 class MediaChannel : public sigslot::has_slots<> {
@@ -60,8 +70,8 @@ class MediaChannel : public sigslot::has_slots<> {
   class NetworkInterface {
    public:
     enum SocketType { ST_RTP, ST_RTCP };
-    virtual int SendPacket(const void *data, size_t len) = 0;
-    virtual int SendRtcp(const void *data, size_t len) = 0;
+    virtual bool SendPacket(talk_base::Buffer* packet) = 0;
+    virtual bool SendRtcp(talk_base::Buffer* packet) = 0;
     virtual int SetOption(SocketType type, talk_base::Socket::Option opt,
                           int option) = 0;
     virtual ~NetworkInterface() {}
@@ -77,9 +87,9 @@ class MediaChannel : public sigslot::has_slots<> {
   }
 
   // Called when a RTP packet is received.
-  virtual void OnPacketReceived(const void *data, int len) = 0;
+  virtual void OnPacketReceived(talk_base::Buffer* packet) = 0;
   // Called when a RTCP packet is received.
-  virtual void OnRtcpReceived(const void *data, int len) = 0;
+  virtual void OnRtcpReceived(talk_base::Buffer* packet) = 0;
   // Sets the SSRC to be used for outgoing data.
   virtual void SetSendSsrc(uint32 id) = 0;
   // Set the CNAME of RTCP
@@ -101,24 +111,78 @@ enum SendFlags {
   SEND_MICROPHONE
 };
 
-struct MediaInfo {
-  int fraction_lost;
-  int cum_lost;
-  int ext_max;
-  int jitter;
-  int RTT;
-  int bytesSent;
-  int packetsSent;
-  int bytesReceived;
-  int packetsReceived;
+struct VoiceSenderInfo {
+  uint32 ssrc;
+  int bytes_sent;
+  int packets_sent;
+  int packets_lost;
+  float fraction_lost;
+  int ext_seqnum;
+  int rtt_ms;
+  int jitter_ms;
+  int audio_level;
 };
 
-struct VoiceMediaInfo : MediaInfo {
+struct VoiceReceiverInfo {
+  uint32 ssrc;
+  int bytes_rcvd;
+  int packets_rcvd;
+  int packets_lost;
+  float fraction_lost;
+  int ext_seqnum;
+  int jitter_ms;
+  int audio_level;
 };
 
-struct VideoMediaInfo : MediaInfo {
-  int receive_framerate;
-  int send_framerate;
+struct VideoSenderInfo {
+  uint32 ssrc;
+  int bytes_sent;
+  int packets_sent;
+  int packets_cached;
+  int packets_lost;
+  float fraction_lost;
+  int firs_rcvd;
+  int nacks_rcvd;
+  int rtt_ms;
+  int frame_width;
+  int frame_height;
+  int framerate_input;
+  int framerate_sent;
+};
+
+struct VideoReceiverInfo {
+  uint32 ssrc;
+  int bytes_rcvd;
+  // vector<int> layer_bytes_rcvd;
+  int packets_rcvd;
+  int packets_lost;
+  int packets_concealed;
+  float fraction_lost;
+  int firs_sent;
+  int nacks_sent;
+  int frame_width;
+  int frame_height;
+  int framerate_rcvd;
+  int framerate_decoded;
+  int framerate_output;
+};
+
+struct VoiceMediaInfo {
+  void Clear() {
+    senders.clear();
+    receivers.clear();
+  }
+  std::vector<VoiceSenderInfo> senders;
+  std::vector<VoiceReceiverInfo> receivers;
+};
+
+struct VideoMediaInfo {
+  void Clear() {
+    senders.clear();
+    receivers.clear();
+  }
+  std::vector<VideoSenderInfo> senders;
+  std::vector<VideoReceiverInfo> receivers;
 };
 
 class VoiceMediaChannel : public MediaChannel {
@@ -195,7 +259,7 @@ class VideoFrame {
   // nothing is written.
   virtual size_t CopyToBuffer(uint8 *buffer, size_t size) const = 0;
 
-  // Converts the I420 data to RGB of a certain type such as BGRA and RGBA.
+  // Converts the I420 data to RGB of a certain type such as ARGB and ABGR.
   // Returns the frame's actual size, regardless of whether it was written or
   // not (like snprintf). Parameters size and pitch_rgb are in units of bytes.
   // If there is insufficient space, nothing is written.

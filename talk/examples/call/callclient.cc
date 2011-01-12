@@ -237,12 +237,20 @@ void CallClient::ParseLine(const std::string& line) {
 }
 
 CallClient::CallClient(buzz::XmppClient* xmpp_client)
-    : xmpp_client_(xmpp_client), media_engine_(NULL), media_client_(NULL),
-      call_(NULL), incoming_call_(false),
-      auto_accept_(false), pmuc_domain_("groupchat.google.com"),
-      local_renderer_(NULL), remote_renderer_(NULL),
-      roster_(new RosterMap), portallocator_flags_(0),
-      allow_local_ips_(false), initial_protocol_(cricket::PROTOCOL_HYBRID)
+    : xmpp_client_(xmpp_client),
+      media_engine_(NULL),
+      media_client_(NULL),
+      call_(NULL),
+      incoming_call_(false),
+      auto_accept_(false),
+      pmuc_domain_("groupchat.google.com"),
+      local_renderer_(NULL),
+      remote_renderer_(NULL),
+      roster_(new RosterMap),
+      portallocator_flags_(0),
+      allow_local_ips_(false),
+      initial_protocol_(cricket::PROTOCOL_HYBRID),
+      secure_policy_(cricket::SEC_DISABLED)
 #ifdef USE_TALK_SOUND
       , sound_system_factory_(NULL)
 #endif
@@ -385,6 +393,7 @@ void CallClient::InitPhone() {
   media_client_->SignalCallCreate.connect(this, &CallClient::OnCallCreate);
   media_client_->SignalDevicesChange.connect(this,
                                              &CallClient::OnDevicesChange);
+  media_client_->set_secure(secure_policy_);
 }
 
 void CallClient::OnRequestSignaling() {

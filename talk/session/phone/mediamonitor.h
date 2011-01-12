@@ -74,10 +74,8 @@ class MediaMonitorT : public MediaMonitor {
  protected:
   // These routines assume the crit_ lock is held by the calling thread.
   virtual void GetStats() {
-    media_info_.packetsReceived = -1;
-    if (!media_channel_->GetStats(&media_info_)) {
-      media_info_.packetsReceived = -1;
-    }
+    media_info_.Clear();
+    media_channel_->GetStats(&media_info_);
   }
   virtual void Update() {
     MI stats(media_info_);

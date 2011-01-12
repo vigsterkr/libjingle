@@ -1,5 +1,13 @@
 Libjingle
 
+0.5.2 - Jan 11, 2010
+  - Fixed build on Windows 7 with VS 2010
+  - Fixed build on Windows x64
+  - Fixed build on Mac OSX
+  - Added option to examples/call to enable encryption
+  - Improved logging
+  - Bug fixes
+
 0.5.1 - Nov 2, 2010
   - Added support for call encryption.
   - Added addtional XEP-166 and XEP-167 features:

@@ -646,6 +646,14 @@ void Session::OnIncomingMessage(const SessionMessage& msg) {
     case ACTION_TRANSPORT_ACCEPT:
       valid = OnTransportAcceptMessage(msg, &error);
       break;
+    case ACTION_NOTIFY:
+    case ACTION_UPDATE:
+      // TODO: Process these non-standard messages, but
+      // only once we figure out how in a jingle-specific way (or
+      // remove the need altogether).  For now, just don't send an
+      // error back, because it disrupts call establishment.
+      valid = true;
+      break;
     default:
       valid = BadMessage(buzz::QN_STANZA_BAD_REQUEST,
                          "unknown session message type",

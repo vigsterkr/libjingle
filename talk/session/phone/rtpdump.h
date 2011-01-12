@@ -71,9 +71,12 @@ struct RtpDumpPacket {
     memcpy(&data[0], d, s);
   }
 
-  // Check if the dumped packet is a valid RTP packet with the sequence number
-  // and timestamp.
   bool IsValidRtpPacket() const;
+  // Get the sequence number, timestampe, and SSRC of the RTP packet. Return
+  // true and set the output parameter if successful.
+  bool GetRtpSeqNum(uint16* seq_num) const;
+  bool GetRtpTimestamp(uint32* ts) const;
+  bool GetRtpSsrc(uint32* ssrc) const;
 
   static const size_t kHeaderLength = 8;
   uint32 elapsed_time;      // Milliseconds since the start of recording.
@@ -121,10 +124,6 @@ class RtpDumpLoopReader : public RtpDumpReader {
   virtual talk_base::StreamResult ReadPacket(RtpDumpPacket* packet);
 
  private:
-  // Read the sequence number and timestamp from the RTP dump packet.
-  static void ReadRtpSeqNumAndTimestamp(const RtpDumpPacket& packet,
-                                        uint16* seq_num, uint32* timestamp);
-
   // During the first loop, update the statistics, including packet count, frame
   // count, timestamps, and sequence number, of the input stream.
   void UpdateStreamStatistics(const RtpDumpPacket& packet);
@@ -164,11 +163,8 @@ class RtpDumpLoopReader : public RtpDumpReader {
 
 class RtpDumpWriter {
  public:
-  explicit RtpDumpWriter(talk_base::StreamInterface* stream)
-      : stream_(stream),
-        file_header_written_(false),
-        start_time_ms_(0) {
-  }
+  explicit RtpDumpWriter(talk_base::StreamInterface* stream);
+
   // Write a RTP or RTCP packet. The parameters data points to the packet and
   // data_len is its length.
   talk_base::StreamResult WriteRtpPacket(const void* data, size_t data_len) {

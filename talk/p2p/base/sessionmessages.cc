@@ -70,6 +70,10 @@ ActionType ToActionType(const std::string& type) {
     return ACTION_TRANSPORT_INFO;
   if (type == JINGLE_ACTION_TRANSPORT_ACCEPT)
     return ACTION_TRANSPORT_ACCEPT;
+  if (type == GINGLE_ACTION_NOTIFY)
+    return ACTION_NOTIFY;
+  if (type == GINGLE_ACTION_UPDATE)
+    return ACTION_UPDATE;
 
   return ACTION_UNKNOWN;
 }

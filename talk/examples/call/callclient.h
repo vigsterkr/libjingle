@@ -34,6 +34,7 @@
 
 #include "talk/p2p/base/session.h"
 #include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/mediasessionclient.h"
 #include "talk/xmpp/xmppclient.h"
 #include "talk/examples/call/status.h"
 #include "talk/examples/call/console.h"
@@ -68,7 +69,6 @@ class Receiver;
 class Call;
 struct CallOptions;
 class SessionManagerTask;
-enum SignalingProtocol;
 }
 
 struct RosterItem {
@@ -112,6 +112,10 @@ class CallClient: public sigslot::has_slots<> {
 
   void SetInitialProtocol(cricket::SignalingProtocol initial_protocol) {
     initial_protocol_ = initial_protocol;
+  }
+
+  void SetSecurePolicy(cricket::SecureMediaPolicy secure_policy) {
+    secure_policy_ = secure_policy;
   }
 
 
@@ -193,6 +197,7 @@ class CallClient: public sigslot::has_slots<> {
 
   bool allow_local_ips_;
   cricket::SignalingProtocol initial_protocol_;
+  cricket::SecureMediaPolicy secure_policy_;
   std::string last_sent_to_;
 #ifdef USE_TALK_SOUND
   cricket::SoundSystemFactory* sound_system_factory_;
