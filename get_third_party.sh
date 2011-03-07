@@ -12,6 +12,8 @@ fi
 
 if [ ! -e talk/third_party/srtp ]; then
 	echo -n "Getting latest srtp..."
+	cd talk/third_party
 	cvs -d:pserver:anonymous@srtp.cvs.sourceforge.net:/cvsroot/srtp co -P srtp
 	echo "done"
+	cd ../../
 fi
