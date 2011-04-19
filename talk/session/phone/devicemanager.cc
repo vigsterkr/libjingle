@@ -113,14 +113,6 @@ class DeviceWatcher {
   DeviceManager* manager_;
   void* impl_;
 };
-#elif defined(IOS) || defined(ANDROID)
-// We don't use DeviceWatcher on iOS or Android, so just stub out a noop class.
-class DeviceWatcher {
- public:
-  explicit DeviceWatcher(DeviceManager* dm) {}
-  bool Start() { return true; }
-  void Stop() {}
-};
 #endif
 
 #if !defined(LINUX) && !defined(IOS)

@@ -347,6 +347,7 @@ envs.append(mac_opt_env)
 linux_common_env = posix_env.Clone(
   tools = [
     'target_platform_linux',
+    'talk_libjingle',
     #'talk_linux',
   ],
 )
