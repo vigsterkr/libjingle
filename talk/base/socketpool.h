@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_SOCKETPOOL_H__
-#define TALK_BASE_SOCKETPOOL_H__
+#ifndef TALK_BASE_SOCKETPOOL_H_
+#define TALK_BASE_SOCKETPOOL_H_
 
 #include <deque>
 #include <list>
@@ -155,6 +155,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////
 
-} // namespace talk_base
+}  // namespace talk_base
 
-#endif // TALK_BASE_SOCKETPOOL_H__
+#endif  // TALK_BASE_SOCKETPOOL_H_

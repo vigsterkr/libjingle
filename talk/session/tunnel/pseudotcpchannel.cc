@@ -31,6 +31,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
+#include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/transportchannel.h"
 #include "pseudotcpchannel.h"
 
@@ -198,6 +199,26 @@ void PseudoTcpChannel::OnSessionTerminate(Session* session) {
     if (stream_ != NULL)
       stream_thread_->Post(this, MSG_ST_EVENT, new EventData(SE_CLOSE, -1));
   }
+
+  // Even though session_ is being destroyed, we mustn't clear the pointer,
+  // since we'll need it to tear down channel_.
+  //
+  // TODO: Is it always the case that if channel_ != NULL then we'll get
+  // a channel-destroyed notification?
+}
+
+void PseudoTcpChannel::GetOption(PseudoTcp::Option opt, int* value) {
+  ASSERT(signal_thread_->IsCurrent());
+  CritScope lock(&cs_);
+  ASSERT(tcp_ != NULL);
+  tcp_->GetOption(opt, value);
+}
+
+void PseudoTcpChannel::SetOption(PseudoTcp::Option opt, int value) {
+  ASSERT(signal_thread_->IsCurrent());
+  CritScope lock(&cs_);
+  ASSERT(tcp_ != NULL);
+  tcp_->SetOption(opt, value);
 }
 
 //
@@ -335,7 +356,7 @@ void PseudoTcpChannel::OnChannelRead(TransportChannel* channel,
 }
 
 void PseudoTcpChannel::OnChannelConnectionChanged(TransportChannel* channel,
-                                                  const SocketAddress& addr) {
+                                                  const Candidate& candidate) {
   LOG_F(LS_VERBOSE) << "[" << channel_name_ << "]";
   ASSERT(worker_thread_->IsCurrent());
   CritScope lock(&cs_);
@@ -352,7 +373,7 @@ void PseudoTcpChannel::OnChannelConnectionChanged(TransportChannel* channel,
   uint16 mtu = 1280;  // safe default
   talk_base::scoped_ptr<Socket> mtu_socket(
       worker_thread_->socketserver()->CreateSocket(SOCK_DGRAM));
-  if (mtu_socket->Connect(addr) < 0 ||
+  if (mtu_socket->Connect(candidate.address()) < 0 ||
       mtu_socket->EstimateMTU(&mtu) < 0) {
     LOG_F(LS_WARNING) << "Failed to estimate MTU, error="
                       << mtu_socket->GetError();

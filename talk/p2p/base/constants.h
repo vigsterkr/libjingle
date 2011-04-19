@@ -71,6 +71,7 @@ extern const std::string JINGLE_ACTION_SESSION_ACCEPT;
 extern const std::string JINGLE_ACTION_SESSION_TERMINATE;
 extern const std::string JINGLE_ACTION_TRANSPORT_INFO;
 extern const std::string JINGLE_ACTION_TRANSPORT_ACCEPT;
+extern const std::string JINGLE_ACTION_DESCRIPTION_INFO;
 
 extern const buzz::QName QN_GINGLE_SESSION;
 extern const std::string GINGLE_ACTION_INITIATE;
@@ -81,6 +82,7 @@ extern const std::string GINGLE_ACTION_TERMINATE;
 extern const std::string GINGLE_ACTION_CANDIDATES;
 extern const std::string GINGLE_ACTION_NOTIFY;
 extern const std::string GINGLE_ACTION_UPDATE;
+extern const std::string GINGLE_ACTION_VIEW;
 
 extern const std::string LN_ERROR;
 extern const buzz::QName QN_GINGLE_REDIRECT;
@@ -91,6 +93,7 @@ extern const std::string STR_REDIRECT_PREFIX;
 extern const std::string LN_DESCRIPTION;
 extern const std::string LN_PAYLOADTYPE;
 extern const buzz::QName QN_ID;
+extern const buzz::QName QN_SID;
 extern const buzz::QName QN_NAME;
 extern const buzz::QName QN_CLOCKRATE;
 extern const buzz::QName QN_BITRATE;
@@ -120,6 +123,7 @@ extern const std::string CN_OTHER;
 
 extern const std::string NS_JINGLE_RTP;
 extern const buzz::QName QN_JINGLE_RTP_CONTENT;
+extern const buzz::QName QN_JINGLE_SSRC;
 extern const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE;
 extern const buzz::QName QN_JINGLE_RTP_BANDWIDTH;
 
@@ -204,6 +208,30 @@ extern const std::string STR_TERMINATE_NUMBER_DISALLOWED;
 extern const std::string STR_TERMINATE_PROTOCOL_ERROR;
 extern const std::string STR_TERMINATE_INTERNAL_SERVER_ERROR;
 extern const std::string STR_TERMINATE_UNKNOWN_ERROR;
+
+// Session notify messages
+extern const buzz::QName QN_GINGLE_NOTIFY;
+extern const buzz::QName QN_GINGLE_NOTIFY_NICK;
+extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE;
+extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE_MTYPE;
+extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE_SSRC;
+extern const std::string GINGLE_NOTIFY_SOURCE_MTYPE_AUDIO;
+extern const std::string GINGLE_NOTIFY_SOURCE_MTYPE_VIDEO;
+
+// Session view messages
+extern const buzz::QName QN_GINGLE_VIEW;
+extern const buzz::QName QN_GINGLE_VIEW_TYPE;
+extern const buzz::QName QN_GINGLE_VIEW_NICK;
+extern const buzz::QName QN_GINGLE_VIEW_MEDIA_TYPE;
+extern const buzz::QName QN_GINGLE_VIEW_SSRC;
+extern const std::string GINGLE_VIEW_TYPE_STATIC;
+extern const std::string GINGLE_VIEW_TYPE_DYNAMIC;
+extern const std::string GINGLE_VIEW_MEDIA_TYPE_AUDIO;
+extern const std::string GINGLE_VIEW_MEDIA_TYPE_VIDEO;
+extern const buzz::QName QN_GINGLE_VIEW_PARAMS;
+extern const buzz::QName QN_GINGLE_VIEW_PARAMS_WIDTH;
+extern const buzz::QName QN_GINGLE_VIEW_PARAMS_HEIGHT;
+extern const buzz::QName QN_GINGLE_VIEW_PARAMS_FRAMERATE;
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

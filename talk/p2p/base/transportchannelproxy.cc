@@ -33,7 +33,7 @@
 namespace cricket {
 
 TransportChannelProxy::TransportChannelProxy(const std::string& name,
-                                             const std::string &content_type)
+                                             const std::string& content_type)
     : TransportChannel(name, content_type), impl_(NULL) {
 }
 
@@ -58,7 +58,7 @@ void TransportChannelProxy::SetImplementation(TransportChannelImpl* impl) {
   pending_options_.clear();
 }
 
-int TransportChannelProxy::SendPacket(const char *data, size_t len) {
+int TransportChannelProxy::SendPacket(const char* data, size_t len) {
   // Fail if we don't have an impl yet.
   return (impl_) ? impl_->SendPacket(data, len) : -1;
 }
@@ -99,9 +99,9 @@ void TransportChannelProxy::OnReadPacket(TransportChannel* channel,
 }
 
 void TransportChannelProxy::OnRouteChange(TransportChannel* channel,
-                                          const talk_base::SocketAddress& address) {
+                                          const Candidate& candidate) {
   ASSERT(channel == impl_);
-  SignalRouteChange(this, address);
+  SignalRouteChange(this, candidate);
 }
 
 }  // namespace cricket

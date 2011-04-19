@@ -19,6 +19,8 @@ create several static libraries you may link to your projects as needed.
   |-phone           - Signaling code specific to making phone calls
     |-testdata      - Samples of RTP voice and video dump
   |-tunnel          - Tunnel session and channel
+|-third_party       - Folder for third party libraries
+  |-libudev         - Folder containing libudev.h
 |-xmllite           - XML parser
 |-xmpp              - XMPP engine
 
@@ -27,29 +29,65 @@ illustrate the basic concepts of how the provided classes work.
 
 2. How to Build
 
+2.1 Prerequisites
+
 Libjingle is built with swtoolkit (http://code.google.com/p/swtoolkit/), which
 is a set of extensions to the open-source SCons build tool (www.scons.org).
+
   * First, install Python 2.4 or later from http://www.python.org/.
     Please note that since swtoolkit only works with Python 2.x, you will
     not be able to use Python 3.x.
 
-  * Second, install the stand alone scons-local package 2.0.0 or later from
+    python --version to confirm that python is in your path, and 2.4 or greater.
+
+  * Second, install the stand alone scons-local zip package 2.0.0 or later from
     http://www.scons.org/download.php and set an environment variable,
-    SCONS_DIR, to point to the directory containing SCons, for example,
-    /src/libjingle/scons-local/scons-local-2.0.0.final.0/.
+    SCONS_DIR, to point to the directory containing SCons.
+    For example, on Windows, download
+    http://sourceforge.net/projects/scons/files/scons-src/2.0.1/scons-local-2.0.1.zip
+    Unzip to C:\src\libjingle\scons-local\
+    set SCONS_DIR=C:\src\libjingle\scons-local\scons-local-2.0.1
 
   * Third, install swtoolkit from http://code.google.com/p/swtoolkit/.
+    For example, on Windows download
+    http://code.google.com/p/swtoolkit/downloads/detail?name=swtoolkit.0.9.1.zip
+    Unzip to C:\src
+    Optionally add swtoolkit to path.  Otherwise call hammer.bat directly.
+    set PATH_TO_SWTOOLKIT=c:\src\swtoolkit
+    set PATH=%PATH_TO_SWTOOLKIT%;%PATH%
 
-  * Finally, Libjingle depends on two open-source projects, expat and srtp.
+2.2 libjingle
+
+Libjingle needs to be downloaded and patched
+
+  * First, install Libjingle.  Since this README lives within Libjingle,
+    this step is normally already done.
+    Libjingle home page is here http://code.google.com/p/libjingle/
+    For example, on Windows, download
+    http://libjingle.googlecode.com/files/libjingle-0.5.2.zip
+    unzip to C:\src\
+
+  * Second, Libjingle depends on two open-source projects, expat and srtp.
     Download expat from http://sourceforge.net/projects/expat/ to
-    talk/third_party/expat-2.0.1/. Follow the instructions at
-    http://sourceforge.net/projects/srtp/develop to download latest srtp to
+    talk/third_party/expat-2.0.1/. Download srtp at
+    http://libjingle.googlecode.com/files/srtp-cvs.zip to
     talk/third_party/srtp. Note that srtp-1.4.4 does not work since it misses
     the extensions used by Libjingle.
     If you put expat or srtp in a different directory, you need to edit
     talk/libjingle.scons correspondingly.
+    rename srtp-cvs to srtp
+    For example, on Windows, download expat
+    http://sourceforge.net/projects/expat/files/expat/2.0.1/expat-2.0.1.tar.gz
+    Unzip to C:\src\libjingle-0.5.2\talk\third_party
+    Download srtp
+    http://libjingle.googlecode.com/files/srtp-cvs.zip
+    Unzip to C:\src\libjingle-0.5.2\talk\third_party
+    rename C:\src\libjingle-0.5.2\talk\third_party\srtp-cvs srtp
 
-2.1 Build Libjingle under Linux or OS X
+  * Third, on Windows, copy config.h
+    copy talk\third_party\srtp\config.hw talk\third_party\srtp\crypto\include\config.h
+
+2.2 Build Libjingle under Linux or OS X
   * First, make sure the SCONS_DIR environment variable is set correctly.
   * Second, run talk/third_party/expat-2.0.1/configure and
     talk/third_party/srtp/configure.
@@ -57,15 +95,21 @@ is a set of extensions to the open-source SCons build tool (www.scons.org).
     $path_to_swtoolkit/hammer.sh --help for information on how to build for
     different modes.
 
-2.2 Build Libjingle under Windows
+2.3 Build Libjingle under Windows
   * First, make sure the SCONS_DIR environment variable is set correctly and
     Microsoft Visual Studio is installed.
-  * Second, copy talk/third_party/srtp/config.hw to
-    talk/third_party/srtp/crypto/include/config.h.
-  * Third, go to the talk/ directory and run $path_to_swtoolkit/hammer.bat. Run
-    $path_to_swtoolkit/hammer.sh --help for information on how to build for
+    dir %SCONS_DIR%
+    Should show a folder containing Scons\
+  * Second, go to the talk\ directory and run %PATH_TO_SWTOOLKIT%\hammer.bat.
+    To get help run:
+    %PATH_TO_SWTOOLKIT%\hammer.bat --help
     different modes. You can run the last step under Visual Studio Command
     Prompt if Visual Studio tools are not under the path environment variable.
+    Example to build call.exe
+    %PATH_TO_SWTOOLKIT%\hammer.bat
+    Example to build opt and dbg all programs
+    %PATH_TO_SWTOOLKIT%\hammer.bat --jobs=6 --verbose --mode=all all_programs
+
 
 The built binaries are under talk/build/dbg/staging or talk/build/opt/staging,
 depending on the build mode. When the build is complete, you can run the
@@ -83,3 +127,20 @@ could not be established. The STUN Server implements the STUN protocol for
 Simple Traversal of UDP over NAT. See the Libjingle Developer Guide at
 http://code.google.com/apis/talk/index.html for information about configuring a
 client to use this relay server and this STUN server.
+
+To use LinphoneMediaEngine, you need to perform the following additional steps:
+  * Download and install the "MediaStreamer" library on your
+    machine.
+  * Add the following lines into the libjingle.scons file.
+    In the "talk.Library(env, name = "libjingle",..." section, you need to add:
+      "HAVE_LINPHONE",
+      "HAVE_SPEEX",
+      "HAVE_ILBC",
+    to the "cppdefines = [".
+
+    In the "talk.App(env, name = "call",..." section, you need to add:
+      "mediastreamer",
+    to the "libs = [".
+  * Add the following line into the "srcs = [ ..." section of the
+    libjingle.scons file.
+      "session/phone/linphonemediaengine.cc",

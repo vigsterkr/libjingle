@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2006, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -40,21 +40,26 @@ class Thread;
 
 namespace cricket {
 
+class Candidate;
 class TransportChannel;
 
 ///////////////////////////////////////////////////////////////////////////////
-// ChannelStream
-// Note: The lifetime of TunnelSession is complicated.  It needs to survive
-// until the following three conditions are true:
-// 1) TunnelStream has called Close (tracked via non-null stream_)
-// 2) PseudoTcp has completed (tracked via non-null tcp_)
-// 3) Session has been destroyed (tracked via non-null session_)
-// This is accomplished by calling CheckDestroy after these indicators change.
+// PseudoTcpChannel
+// Note: The PseudoTcpChannel must persist until both of:
+// 1) The StreamInterface provided via GetStream has been closed.
+//    This is tracked via non-null stream_.
+// 2) The PseudoTcp session has completed.
+//    This is tracked via non-null worker_thread_.  When PseudoTcp is done,
+//    the TransportChannel is signalled to tear-down.  Once the channel is
+//    torn down, the worker thread is purged.
+// These indicators are checked by CheckDestroy, invoked whenever one of them
+// changes.
 ///////////////////////////////////////////////////////////////////////////////
-// TunnelStream
-// Note: Because TunnelStream provides a stream interface, it's lifetime is
-// controlled by the owner of the stream pointer.  As a result, we must support
-// both the TunnelSession disappearing before TunnelStream, and vice versa.
+// PseudoTcpChannel::GetStream
+// Note: The stream pointer returned by GetStream is owned by the caller.
+// They can close & immediately delete the stream while PseudoTcpChannel still
+// has cleanup work to do.  They can also close the stream but not delete it
+// until long after PseudoTcpChannel has finished.  We must cope with both.
 ///////////////////////////////////////////////////////////////////////////////
 
 class PseudoTcpChannel
@@ -72,7 +77,13 @@ public:
 
   sigslot::signal1<PseudoTcpChannel*> SignalChannelClosed;
 
+  // Call this when the Session used to create this channel is being torn
+  // down, to ensure that things get cleaned up properly.
   void OnSessionTerminate(Session* session);
+
+  // See the PseudoTcp class for available options.
+  void GetOption(PseudoTcp::Option opt, int* value);
+  void SetOption(PseudoTcp::Option opt, int value);
 
 private:
   class InternalStream;
@@ -100,7 +111,7 @@ private:
   void OnChannelWritableState(TransportChannel* channel);
   void OnChannelRead(TransportChannel* channel, const char* data, size_t size);
   void OnChannelConnectionChanged(TransportChannel* channel,
-                                  const talk_base::SocketAddress& addr);
+                                  const Candidate& candidate);
 
   virtual void OnTcpOpen(PseudoTcp* ptcp);
   virtual void OnTcpReadable(PseudoTcp* ptcp);

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2010, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -551,7 +551,8 @@ void POpenStream::DoClose() {
 ///////////////////////////////////////////////////////////////////////////////
 
 MemoryStreamBase::MemoryStreamBase()
-  : buffer_(NULL), buffer_length_(0), data_length_(0), seek_position_(0) {
+  : buffer_(NULL), buffer_length_(0), data_length_(0),
+    seek_position_(0) {
 }
 
 StreamState MemoryStreamBase::GetState() const {
@@ -646,25 +647,29 @@ StreamResult MemoryStreamBase::DoReserve(size_t size, int* error) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-MemoryStream::MemoryStream() {
+MemoryStream::MemoryStream()
+  : buffer_alloc_(NULL) {
 }
 
-MemoryStream::MemoryStream(const char* data) {
+MemoryStream::MemoryStream(const char* data)
+  : buffer_alloc_(NULL) {
   SetData(data, strlen(data));
 }
 
-MemoryStream::MemoryStream(const void* data, size_t length) {
+MemoryStream::MemoryStream(const void* data, size_t length)
+  : buffer_alloc_(NULL) {
   SetData(data, length);
 }
 
 MemoryStream::~MemoryStream() {
-  delete [] buffer_;
+  delete [] buffer_alloc_;
 }
 
 void MemoryStream::SetData(const void* data, size_t length) {
   data_length_ = buffer_length_ = length;
-  delete [] buffer_;
-  buffer_ = new char[buffer_length_];
+  delete [] buffer_alloc_;
+  buffer_alloc_ = new char[buffer_length_ + kAlignment];
+  buffer_ = reinterpret_cast<char*>(ALIGNP(buffer_alloc_, kAlignment));
   memcpy(buffer_, data, data_length_);
   seek_position_ = 0;
 }
@@ -673,9 +678,12 @@ StreamResult MemoryStream::DoReserve(size_t size, int* error) {
   if (buffer_length_ >= size)
     return SR_SUCCESS;
 
-  if (char* new_buffer = new char[size]) {
+  if (char* new_buffer_alloc = new char[size + kAlignment]) {
+    char* new_buffer = reinterpret_cast<char*>(
+        ALIGNP(new_buffer_alloc, kAlignment));
     memcpy(new_buffer, buffer_, data_length_);
-    delete [] buffer_;
+    delete [] buffer_alloc_;
+    buffer_alloc_ = new_buffer_alloc;
     buffer_ = new_buffer;
     buffer_length_ = size;
     return SR_SUCCESS;

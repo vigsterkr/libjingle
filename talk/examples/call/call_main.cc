@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  cricket::SecureMediaPolicy secure_policy = cricket::SEC_DISABLED;
+  cricket::SecureMediaPolicy secure_policy = cricket::SEC_ENABLED;
   if (secure == "disable") {
     secure_policy = cricket::SEC_DISABLED;
   } else if (secure == "enable") {

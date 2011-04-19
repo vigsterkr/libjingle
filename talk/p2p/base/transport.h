@@ -178,6 +178,10 @@ class Transport : public talk_base::MessageHandler,
   virtual bool VerifyCandidate(const Candidate& candidate,
                                ParseError* error);
 
+  // Signals when the best connection for a channel changes.
+  sigslot::signal3<Transport*, const std::string&,
+                   const Candidate&> SignalRouteChange;
+
   // A transport message has generated an transport-specific error.  The
   // stanza that caused the error is available in session_msg.  If false is
   // returned, the error is considered unrecoverable, and the session is
@@ -223,6 +227,8 @@ class Transport : public talk_base::MessageHandler,
   // Called when a candidate is ready from channel.
   void OnChannelCandidateReady(TransportChannelImpl* channel,
                                const Candidate& candidate);
+  void OnChannelRouteChange(TransportChannel* channel,
+                            const Candidate& remote_candidate);
 
   // Dispatches messages to the appropriate handler (below).
   void OnMessage(talk_base::Message* msg);
@@ -241,6 +247,8 @@ class Transport : public talk_base::MessageHandler,
   void OnChannelWritableState_s();
   void OnChannelRequestSignaling_s();
   void OnConnecting_s();
+  void OnChannelRouteChange_s(const std::string& name,
+                              const Candidate& remote_candidate);
 
   // Helper function that invokes the given function on every channel.
   typedef void (TransportChannelImpl::* TransportChannelFunc)();

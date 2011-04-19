@@ -72,11 +72,16 @@ struct RtpDumpPacket {
   }
 
   bool IsValidRtpPacket() const;
-  // Get the sequence number, timestampe, and SSRC of the RTP packet. Return
-  // true and set the output parameter if successful.
-  bool GetRtpSeqNum(uint16* seq_num) const;
+  bool IsValidRtcpPacket() const;
+  // Get the payload type, sequence number, timestampe, and SSRC of the RTP
+  // packet. Return true and set the output parameter if successful.
+  bool GetRtpPayloadType(int* pt) const;
+  bool GetRtpSeqNum(int* seq_num) const;
   bool GetRtpTimestamp(uint32* ts) const;
   bool GetRtpSsrc(uint32* ssrc) const;
+  // Get the type of the RTCP packet. Return true and set the output parameter
+  // if successful.
+  bool GetRtcpType(int* type) const;
 
   static const size_t kHeaderLength = 8;
   uint32 elapsed_time;      // Milliseconds since the start of recording.
@@ -142,7 +147,7 @@ class RtpDumpLoopReader : public RtpDumpReader {
   // for each loop. They are calcualted with the variables below during the
   // first loop.
   uint32 elapsed_time_increases_;
-  uint16 rtp_seq_num_increase_;
+  int rtp_seq_num_increase_;
   uint32 rtp_timestamp_increase_;
   // How many RTP packets and how many payload frames in the input stream. RTP
   // packets belong to the same frame have the same RTP timestamp, different
@@ -152,10 +157,10 @@ class RtpDumpLoopReader : public RtpDumpReader {
   // The elapsed time, RTP sequence number, and RTP timestamp of the first and
   // the previous dump packets in the input stream.
   uint32 first_elapsed_time_;
-  uint16 first_rtp_seq_num_;
+  int first_rtp_seq_num_;
   uint32 first_rtp_timestamp_;
   uint32 prev_elapsed_time_;
-  uint16 prev_rtp_seq_num_;
+  int prev_rtp_seq_num_;
   uint32 prev_rtp_timestamp_;
 
   DISALLOW_COPY_AND_ASSIGN(RtpDumpLoopReader);

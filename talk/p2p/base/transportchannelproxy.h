@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_BASE_TRANSPORTCHANNELPROXY_H_
-#define _CRICKET_P2P_BASE_TRANSPORTCHANNELPROXY_H_
+#ifndef TALK_P2P_BASE_TRANSPORTCHANNELPROXY_H_
+#define TALK_P2P_BASE_TRANSPORTCHANNELPROXY_H_
 
 #include <string>
 #include <vector>
@@ -42,17 +42,18 @@ class TransportChannelImpl;
 // when negotiation completes, connect the proxy to the implementaiton.
 class TransportChannelProxy: public TransportChannel {
  public:
-  TransportChannelProxy(const std::string& name, const std::string &content_type);
+  TransportChannelProxy(const std::string& name,
+                        const std::string& content_type);
   virtual ~TransportChannelProxy();
 
-  TransportChannelImpl* impl() const { return impl_; }
+  TransportChannelImpl* impl() { return impl_; }
 
   // Sets the implementation to which we will proxy.
   void SetImplementation(TransportChannelImpl* impl);
 
   // Implementation of the TransportChannel interface.  These simply forward to
   // the implementation.
-  virtual int SendPacket(const char *data, size_t len);
+  virtual int SendPacket(const char* data, size_t len);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError();
   virtual P2PTransportChannel* GetP2PChannel();
@@ -68,11 +69,11 @@ class TransportChannelProxy: public TransportChannel {
   void OnReadableState(TransportChannel* channel);
   void OnWritableState(TransportChannel* channel);
   void OnReadPacket(TransportChannel* channel, const char* data, size_t size);
-  void OnRouteChange(TransportChannel* channel, const talk_base::SocketAddress& address);
+  void OnRouteChange(TransportChannel* channel, const Candidate& candidate);
 
   DISALLOW_EVIL_CONSTRUCTORS(TransportChannelProxy);
 };
 
 }  // namespace cricket
 
-#endif  // _CRICKET_P2P_BASE_TRANSPORTCHANNELPROXY_H_
+#endif  // TALK_P2P_BASE_TRANSPORTCHANNELPROXY_H_

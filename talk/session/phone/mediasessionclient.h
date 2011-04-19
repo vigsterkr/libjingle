@@ -172,10 +172,10 @@ class MediaContentDescription : public ContentDescription {
   MediaContentDescription()
       : ssrc_(0),
         ssrc_set_(false),
-        rtcp_mux_(false), 
-        rtp_headers_disabled_(false),
+        rtcp_mux_(false),
+        bandwidth_(kAutoBandwidth),
         crypto_required_(false),
-        bandwidth_(kAutoBandwidth) {
+        rtp_header_extensions_set_(false) {
   }
 
   virtual MediaType type() const = 0;
@@ -190,12 +190,8 @@ class MediaContentDescription : public ContentDescription {
   bool rtcp_mux() const { return rtcp_mux_; }
   void set_rtcp_mux(bool mux) { rtcp_mux_ = mux; }
 
-  bool rtp_headers_disabled() const {
-    return rtp_headers_disabled_;
-  }
-  void set_rtp_headers_disabled(bool disable) {
-    rtp_headers_disabled_ = disable;
-  }
+  int bandwidth() const { return bandwidth_; }
+  void set_bandwidth(int bandwidth) { bandwidth_ = bandwidth; }
 
   const std::vector<CryptoParams>& cryptos() const { return cryptos_; }
   void AddCrypto(const CryptoParams& params) {
@@ -206,17 +202,35 @@ class MediaContentDescription : public ContentDescription {
     crypto_required_ = crypto;
   }
 
-  int bandwidth() const { return bandwidth_; }
-  void set_bandwidth(int bandwidth) { bandwidth_ = bandwidth; }
+  const std::vector<RtpHeaderExtension>& rtp_header_extensions() const {
+    return rtp_header_extensions_;
+  }
+  void AddRtpHeaderExtension(const RtpHeaderExtension& ext) {
+    rtp_header_extensions_.push_back(ext);
+    rtp_header_extensions_set_ = true;
+  }
+  void ClearRtpHeaderExtensions() {
+    rtp_header_extensions_.clear();
+    rtp_header_extensions_set_ = true;
+  }
+  // We can't always tell if an empty list of header extensions is
+  // because the other side doesn't support them, or just isn't hooked up to
+  // signal them. For now we assume an empty list means no signaling, but
+  // provide the ClearRtpHeaderExtensions method to allow "no support" to be
+  // clearly indicated (i.e. when derived from other information).
+  bool rtp_header_extensions_set() const {
+    return rtp_header_extensions_set_;
+  }
 
  protected:
   uint32 ssrc_;
   bool ssrc_set_;
   bool rtcp_mux_;
-  bool rtp_headers_disabled_;
+  int bandwidth_;
   std::vector<CryptoParams> cryptos_;
   bool crypto_required_;
-  int bandwidth_;
+  std::vector<RtpHeaderExtension> rtp_header_extensions_;
+  bool rtp_header_extensions_set_;
 };
 
 template <class C>

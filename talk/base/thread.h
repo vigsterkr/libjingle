@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -99,10 +99,10 @@ struct _SendMessage {
 };
 
 enum ThreadPriority {
-  PRIORITY_HIGH,
-  PRIORITY_ABOVE_NORMAL,
-  PRIORITY_NORMAL,
-  PRIORITY_IDLE,
+  PRIORITY_IDLE = -1,
+  PRIORITY_NORMAL = 0,
+  PRIORITY_ABOVE_NORMAL = 1,
+  PRIORITY_HIGH = 2,
 };
 
 class Runnable {

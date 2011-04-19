@@ -44,8 +44,8 @@ StunServer::~StunServer() {
 }
 
 void StunServer::OnPacket(
-    const char* buf, size_t size, const talk_base::SocketAddress& remote_addr,
-    talk_base::AsyncPacketSocket* socket) {
+    talk_base::AsyncPacketSocket* socket, const char* buf, size_t size,
+    const talk_base::SocketAddress& remote_addr) {
 
   // TODO: If appropriate, look for the magic cookie before parsing.
 

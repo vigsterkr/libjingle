@@ -94,7 +94,7 @@ bool Win32Filesystem::CreatePrivateFile(const Pathname &filename) {
 
   // Get the current process token.
   HANDLE process_token = INVALID_HANDLE_VALUE;
-  if (!::OpenProcessToken(GetCurrentProcess(),
+  if (!::OpenProcessToken(::GetCurrentProcess(),
                           TOKEN_QUERY,
                           &process_token)) {
     LOG_ERR(LS_ERROR) << "OpenProcessToken() failed";

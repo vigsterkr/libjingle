@@ -180,8 +180,6 @@ void BaseSession::SetError(Error error) {
   if (error != error_) {
     error_ = error;
     SignalError(this, error);
-    if (error_ != ERROR_NONE)
-      signaling_thread_->Post(this, MSG_ERROR);
   }
 }
 
@@ -697,13 +695,16 @@ void Session::OnFailedSend(const buzz::XmlElement* orig_stanza,
   std::string error_type = "cancel";
 
   const buzz::XmlElement* error = error_stanza->FirstNamed(buzz::QN_ERROR);
-  ASSERT(error != NULL);
   if (error) {
     ASSERT(error->HasAttr(buzz::QN_TYPE));
     error_type = error->Attr(buzz::QN_TYPE);
 
     LOG(LS_ERROR) << "Session error:\n" << error->Str() << "\n"
                   << "in response to:\n" << orig_stanza->Str();
+  } else {
+    // don't crash if <error> is missing
+    LOG(LS_ERROR) << "Session error without <error/> element, ignoring";
+    return;
   }
 
   if (msg.type == ACTION_TRANSPORT_INFO) {
@@ -866,6 +867,12 @@ bool Session::CheckState(State state, MessageError* error) {
                       error);
   }
   return true;
+}
+
+void Session::SetError(Error error) {
+  BaseSession::SetError(error);
+  if (error_ != ERROR_NONE)
+    signaling_thread_->Post(this, MSG_ERROR);
 }
 
 void Session::OnMessage(talk_base::Message *pmsg) {

@@ -25,11 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
 #include <string>
 #include "talk/p2p/base/sessionmessages.h"
 
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stringutils.h"
 #include "talk/xmllite/xmlconstants.h"
 #include "talk/xmpp/constants.h"
 #include "talk/p2p/base/constants.h"
@@ -38,6 +40,7 @@
 #include "talk/p2p/base/sessionclient.h"
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/p2p/base/transport.h"
+#include "talk/xmllite/xmlconstants.h"
 
 namespace cricket {
 
@@ -126,7 +129,12 @@ bool IsJingleMessage(const buzz::XmlElement* stanza) {
     return false;
 
   return (jingle->HasAttr(buzz::QN_ACTION) &&
-          jingle->HasAttr(buzz::QN_ID));
+          (jingle->HasAttr(QN_SID)
+           // TODO: This works around a bug in old jingle
+           // clients that set QN_ID instead of QN_SID.  Once we know
+           // there are no clients which have this bug, we can remove
+           // this code.
+           || jingle->HasAttr(QN_ID)));
 }
 
 bool IsGingleMessage(const buzz::XmlElement* stanza) {
@@ -168,7 +176,13 @@ bool ParseJingleSessionMessage(const buzz::XmlElement* jingle,
   msg->protocol = PROTOCOL_JINGLE;
   std::string type_string = jingle->Attr(buzz::QN_ACTION);
   msg->type = ToActionType(type_string);
-  msg->sid = jingle->Attr(buzz::QN_ID);
+  msg->sid = jingle->Attr(QN_SID);
+  // TODO: This works around a bug in old jingle clients
+  // that set QN_ID instead of QN_SID.  Once we know there are no
+  // clients which have this bug, we can remove this code.
+  if (msg->sid.empty()) {
+    msg->sid = jingle->Attr(buzz::QN_ID);
+  }
   msg->initiator = GetXmlAttr(jingle, QN_INITIATOR, buzz::STR_EMPTY);
   msg->action_elem = jingle;
 
@@ -221,7 +235,11 @@ buzz::XmlElement* WriteJingleAction(const SessionMessage& msg,
                                     const XmlElements& action_elems) {
   buzz::XmlElement* jingle = new buzz::XmlElement(QN_JINGLE, true);
   jingle->AddAttr(buzz::QN_ACTION, ToJingleString(msg.type));
-  jingle->AddAttr(buzz::QN_ID, msg.sid);
+  jingle->AddAttr(QN_SID, msg.sid);
+  // TODO: This works around a bug in old jingle clinets
+  // that expected QN_ID instead of QN_SID.  Once we know there are no
+  // clients which have this bug, we can remove this code.
+  jingle->AddAttr(QN_ID, msg.sid);
   // TODO: Right now, the XMPP server rejects a jingle-only
   // (non hybrid) message with "feature-not-implemented" if there is
   // no initiator.  Fix the server, and then only set the initiator on

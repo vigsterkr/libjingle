@@ -48,6 +48,8 @@
 
 #include "talk/base/base64.h"
 #include "talk/base/logging.h"
+#include "talk/base/time.h"
+#include "talk/session/phone/rtputils.h"
 
 // Enable this line to turn on SRTP debugging
 // #define SRTP_DEBUG
@@ -73,7 +75,25 @@ const std::string CS_AES_CM_128_HMAC_SHA1_80 = "AES_CM_128_HMAC_SHA1_80";
 const std::string CS_AES_CM_128_HMAC_SHA1_32 = "AES_CM_128_HMAC_SHA1_32";
 const int SRTP_MASTER_KEY_BASE64_LEN = SRTP_MASTER_KEY_LEN * 4 / 3;
 
-SrtpFilter::SrtpFilter() : state_(ST_INIT) {
+#ifndef HAVE_SRTP
+
+// This helper function is used on systems that don't (yet) have SRTP,
+// to log that the functions that require it won't do anything.
+namespace {
+bool SrtpNotAvailable(const char *func) {
+  LOG(LS_ERROR) << func << ": SRTP is not available on your system.";
+  return false;
+}
+}  // anonymous namespace
+
+#endif  // !HAVE_SRTP
+
+SrtpFilter::SrtpFilter()
+    : state_(ST_INIT),
+      send_session_(new SrtpSession()),
+      recv_session_(new SrtpSession()) {
+  SignalSrtpError.repeat(send_session_->SignalSrtpError);
+  SignalSrtpError.repeat(recv_session_->SignalSrtpError);
 }
 
 SrtpFilter::~SrtpFilter() {
@@ -125,7 +145,7 @@ bool SrtpFilter::ProtectRtp(void* p, int in_len, int max_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to ProtectRtp: SRTP not active";
     return false;
   }
-  return send_session_.ProtectRtp(p, in_len, max_len, out_len);
+  return send_session_->ProtectRtp(p, in_len, max_len, out_len);
 }
 
 bool SrtpFilter::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
@@ -133,7 +153,7 @@ bool SrtpFilter::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to ProtectRtcp: SRTP not active";
     return false;
   }
-  return send_session_.ProtectRtcp(p, in_len, max_len, out_len);
+  return send_session_->ProtectRtcp(p, in_len, max_len, out_len);
 }
 
 bool SrtpFilter::UnprotectRtp(void* p, int in_len, int* out_len) {
@@ -141,7 +161,7 @@ bool SrtpFilter::UnprotectRtp(void* p, int in_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to UnprotectRtp: SRTP not active";
     return false;
   }
-  return recv_session_.UnprotectRtp(p, in_len, out_len);
+  return recv_session_->UnprotectRtp(p, in_len, out_len);
 }
 
 bool SrtpFilter::UnprotectRtcp(void* p, int in_len, int* out_len) {
@@ -149,9 +169,13 @@ bool SrtpFilter::UnprotectRtcp(void* p, int in_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to UnprotectRtcp: SRTP not active";
     return false;
   }
-  return recv_session_.UnprotectRtcp(p, in_len, out_len);
+  return recv_session_->UnprotectRtcp(p, in_len, out_len);
 }
 
+void SrtpFilter::set_signal_silent_time(int signal_silent_time) {
+  send_session_->set_signal_silent_time(signal_silent_time);
+  recv_session_->set_signal_silent_time(signal_silent_time);
+}
 
 bool SrtpFilter::StoreParams(const std::vector<CryptoParams>& params,
                              ContentSource source) {
@@ -195,10 +219,10 @@ bool SrtpFilter::ApplyParams(const CryptoParams& send_params,
   ret = (ParseKeyParams(send_params.key_params, send_key, sizeof(send_key)) &&
          ParseKeyParams(recv_params.key_params, recv_key, sizeof(recv_key)));
   if (ret) {
-    ret = (send_session_.SetSend(send_params.cipher_suite,
-                                 send_key, sizeof(send_key)) &&
-           recv_session_.SetRecv(recv_params.cipher_suite,
-                                 recv_key, sizeof(recv_key)));
+    ret = (send_session_->SetSend(send_params.cipher_suite,
+                                  send_key, sizeof(send_key)) &&
+           recv_session_->SetRecv(recv_params.cipher_suite,
+                                  recv_key, sizeof(recv_key)));
   }
   if (ret) {
     offer_params_.clear();
@@ -249,8 +273,13 @@ bool SrtpSession::inited_ = false;
 std::list<SrtpSession*> SrtpSession::sessions_;
 
 SrtpSession::SrtpSession()
-    : session_(NULL), rtp_auth_tag_len_(0), rtcp_auth_tag_len_(0) {
+    : session_(NULL),
+      rtp_auth_tag_len_(0),
+      rtcp_auth_tag_len_(0),
+      srtp_stat_(new SrtpStat()),
+      last_send_seq_num_(-1) {
   sessions_.push_back(this);
+  SignalSrtpError.repeat(srtp_stat_->SignalSrtpError);
 }
 
 SrtpSession::~SrtpSession() {
@@ -283,10 +312,19 @@ bool SrtpSession::ProtectRtp(void* p, int in_len, int max_len, int* out_len) {
 
   *out_len = in_len;
   int err = srtp_protect(session_, p, out_len);
+  uint32 ssrc;
+  if (GetRtpSsrc(p, in_len, &ssrc)) {
+    srtp_stat_->AddProtectRtpResult(ssrc, err);
+  }
+  int seq_num;
+  GetRtpSeqNum(p, in_len, &seq_num);
   if (err != err_status_ok) {
-    LOG(LS_WARNING) << "Failed to protect SRTP packet, err=" << err;
+    LOG(LS_WARNING) << "Failed to protect SRTP packet, seqnum="
+                    << seq_num << ", err=" << err << ", last seqnum="
+                    << last_send_seq_num_;
     return false;
   }
+  last_send_seq_num_ = seq_num;
   return true;
 }
 
@@ -305,6 +343,7 @@ bool SrtpSession::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
 
   *out_len = in_len;
   int err = srtp_protect_rtcp(session_, p, out_len);
+  srtp_stat_->AddProtectRtcpResult(err);
   if (err != err_status_ok) {
     LOG(LS_WARNING) << "Failed to protect SRTCP packet, err=" << err;
     return false;
@@ -320,6 +359,10 @@ bool SrtpSession::UnprotectRtp(void* p, int in_len, int* out_len) {
 
   *out_len = in_len;
   int err = srtp_unprotect(session_, p, out_len);
+  uint32 ssrc;
+  if (GetRtpSsrc(p, in_len, &ssrc)) {
+    srtp_stat_->AddUnprotectRtpResult(ssrc, err);
+  }
   if (err != err_status_ok) {
     LOG(LS_WARNING) << "Failed to unprotect SRTP packet, err=" << err;
     return false;
@@ -335,11 +378,16 @@ bool SrtpSession::UnprotectRtcp(void* p, int in_len, int* out_len) {
 
   *out_len = in_len;
   int err = srtp_unprotect_rtcp(session_, p, out_len);
+  srtp_stat_->AddUnprotectRtcpResult(err);
   if (err != err_status_ok) {
     LOG(LS_WARNING) << "Failed to unprotect SRTCP packet, err=" << err;
     return false;
   }
   return true;
+}
+
+void SrtpSession::set_signal_silent_time(int signal_silent_time) {
+  srtp_stat_->set_signal_silent_time(signal_silent_time);
 }
 
 bool SrtpSession::SetKey(int type, const std::string& cs,
@@ -449,12 +497,6 @@ void SrtpSession::HandleEventThunk(srtp_event_data_t* ev) {
 
 #else   // !HAVE_SRTP
 
-namespace {
-bool SrtpNotAvailable(const char *func) {
-  LOG(LS_ERROR) << func << ": SRTP is not available on your system.";
-  return false;
-}
-}  // anonymous namespace
 
 SrtpSession::SrtpSession() {
   LOG(WARNING) << "SRTP implementation is missing.";
@@ -489,5 +531,140 @@ bool SrtpSession::UnprotectRtcp(void* data, int in_len, int* out_len) {
   return SrtpNotAvailable(__FUNCTION__);
 }
 
+void SrtpSession::set_signal_silent_time(int signal_silent_time) {
+  // Do nothing.
+}
+
 #endif  // HAVE_SRTP
+
+///////////////////////////////////////////////////////////////////////////////
+// SrtpStat
+
+#ifdef HAVE_SRTP
+
+SrtpStat::SrtpStat()
+    : signal_silent_time_(1000) {
+}
+
+void SrtpStat::AddProtectRtpResult(uint32 ssrc, int result) {
+  FailureKey key;
+  key.ssrc = ssrc;
+  key.mode = SrtpFilter::PROTECT;
+  switch (result) {
+    case err_status_ok:
+      key.error = SrtpFilter::ERROR_NONE;
+      break;
+    case err_status_auth_fail:
+      key.error = SrtpFilter::ERROR_AUTH;
+      break;
+    default:
+      key.error = SrtpFilter::ERROR_FAIL;
+  }
+  HandleSrtpResult(key);
+}
+
+void SrtpStat::AddUnprotectRtpResult(uint32 ssrc, int result) {
+  FailureKey key;
+  key.ssrc = ssrc;
+  key.mode = SrtpFilter::UNPROTECT;
+  switch (result) {
+    case err_status_ok:
+      key.error = SrtpFilter::ERROR_NONE;
+      break;
+    case err_status_auth_fail:
+      key.error = SrtpFilter::ERROR_AUTH;
+      break;
+    case err_status_replay_fail:
+    case err_status_replay_old:
+      key.error = SrtpFilter::ERROR_REPLAY;
+      break;
+    default:
+      key.error = SrtpFilter::ERROR_FAIL;
+  }
+  HandleSrtpResult(key);
+}
+
+void SrtpStat::AddProtectRtcpResult(int result) {
+  FailureKey key;
+  key.mode = SrtpFilter::PROTECT;
+  switch (result) {
+    case err_status_ok:
+      key.error = SrtpFilter::ERROR_NONE;
+      break;
+    case err_status_auth_fail:
+      key.error = SrtpFilter::ERROR_AUTH;
+      break;
+    default:
+      key.error = SrtpFilter::ERROR_FAIL;
+  }
+  HandleSrtpResult(key);
+}
+
+void SrtpStat::AddUnprotectRtcpResult(int result) {
+  FailureKey key;
+  key.mode = SrtpFilter::UNPROTECT;
+  switch (result) {
+    case err_status_ok:
+      key.error = SrtpFilter::ERROR_NONE;
+      break;
+    case err_status_auth_fail:
+      key.error = SrtpFilter::ERROR_AUTH;
+      break;
+    case err_status_replay_fail:
+    case err_status_replay_old:
+      key.error = SrtpFilter::ERROR_REPLAY;
+      break;
+    default:
+      key.error = SrtpFilter::ERROR_FAIL;
+  }
+  HandleSrtpResult(key);
+}
+
+void SrtpStat::HandleSrtpResult(const SrtpStat::FailureKey& key) {
+  // Handle some cases where error should be signalled right away. For other
+  // errors, trigger error for the first time seeing it.  After that, silent
+  // the same error for a certain amount of time (default 1 sec).
+  if (key.error != SrtpFilter::ERROR_NONE) {
+    // For errors, signal first time and wait for 1 sec.
+    FailureStat* stat = &(failures_[key]);
+    uint32 current_time = talk_base::Time();
+    if (stat->last_signal_time == 0 ||
+        talk_base::TimeDiff(current_time, stat->last_signal_time) >
+        signal_silent_time_) {
+      SignalSrtpError(key.ssrc, key.mode, key.error);
+      stat->last_signal_time = current_time;
+    }
+  }
+}
+
+#else   // !HAVE_SRTP
+
+
+SrtpStat::SrtpStat()
+    : signal_silent_time_(1000) {
+  LOG(WARNING) << "SRTP implementation is missing.";
+}
+
+void SrtpStat::AddProtectRtpResult(uint32 ssrc, int result) {
+  SrtpNotAvailable(__FUNCTION__);
+}
+
+void SrtpStat::AddUnprotectRtpResult(uint32 ssrc, int result) {
+  SrtpNotAvailable(__FUNCTION__);
+}
+
+void SrtpStat::AddProtectRtcpResult(int result) {
+  SrtpNotAvailable(__FUNCTION__);
+}
+
+void SrtpStat::AddUnprotectRtcpResult(int result) {
+  SrtpNotAvailable(__FUNCTION__);
+}
+
+void SrtpStat::HandleSrtpResult(const SrtpStat::FailureKey& key) {
+  SrtpNotAvailable(__FUNCTION__);
+}
+
+#endif  // HAVE_SRTP
+
 }  // namespace cricket

@@ -106,8 +106,12 @@ class Win32Socket : public AsyncSocket {
 
 class Win32SocketServer : public SocketServer {
  public:
-  explicit Win32SocketServer(MessageQueue *message_queue);
+  explicit Win32SocketServer(MessageQueue* message_queue);
   virtual ~Win32SocketServer();
+
+  void set_modeless_dialog(HWND hdlg) {
+    hdlg_ = hdlg;
+  }
 
   // SocketServer Interface
   virtual Socket* CreateSocket(int type);
@@ -134,6 +138,7 @@ class Win32SocketServer : public SocketServer {
   MessageWindow wnd_;
   CriticalSection cs_;
   bool posted_;
+  HWND hdlg_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -149,12 +154,8 @@ class Win32Thread : public Thread {
     set_socketserver(NULL);
   }
   virtual void Run() {
-    MSG msg;
     id_ = GetCurrentThreadId();
-    while (GetMessage(&msg, NULL, 0, 0)) {
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
-    }
+    Thread::Run();
     id_ = 0;
   }
   virtual void Quit() {

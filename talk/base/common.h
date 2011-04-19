@@ -124,8 +124,8 @@ inline bool ImplicitCastToBool(bool result) { return result; }
 #endif // !ENABLE_DEBUG
 
 #define COMPILE_TIME_ASSERT(expr)       char CTA_UNIQUE_NAME[expr]
-#define CTA_UNIQUE_NAME                 MAKE_NAME(__LINE__)
-#define CTA_MAKE_NAME(line)             MAKE_NAME2(line)
+#define CTA_UNIQUE_NAME                 CTA_MAKE_NAME(__LINE__)
+#define CTA_MAKE_NAME(line)             CTA_MAKE_NAME2(line)
 #define CTA_MAKE_NAME2(line)            constraint_ ## line
 
 #ifdef __GNUC__

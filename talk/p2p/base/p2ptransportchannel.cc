@@ -90,7 +90,9 @@ int CompareConnectionCandidates(cricket::Connection* a,
   if (a_pref < b_pref)
     return -1;
 
-  return 0;
+  // If we're still tied at this point, prefer a younger generation.
+  return (a->remote_candidate().generation() + a->port()->generation()) -
+         (b->remote_candidate().generation() + b->port()->generation());
 }
 
 // Compare two connections based on their writability and static preferences.
@@ -552,6 +554,11 @@ void P2PTransportChannel::SortConnections() {
 
   ConnectionCompare cmp;
   std::stable_sort(connections_.begin(), connections_.end(), cmp);
+  LOG(LS_VERBOSE) << "Sorting available connections:";
+  for (uint32 i = 0; i < connections_.size(); ++i) {
+    LOG(LS_VERBOSE) << connections_[i]->ToString();
+  }
+
   Connection* top_connection = NULL;
   if (connections_.size() > 0)
     top_connection = connections_[0];
@@ -621,12 +628,21 @@ void P2PTransportChannel::SortConnections() {
 
 // Track the best connection, and let listeners know
 void P2PTransportChannel::SwitchBestConnectionTo(Connection* conn) {
-  // Note: the previous best_connection_ may be destroyed by now, so don't
+  // Note: if conn is NULL, the previous best_connection_ has been destroyed,
+  // so don't use it.
   // use it.
+  Connection* old_best_connection = best_connection_;
   best_connection_ = conn;
   if (best_connection_) {
-    LOG_J(LS_INFO, this) << "New best connection: " << conn->ToString();
-    SignalRouteChange(this, best_connection_->remote_candidate().address());
+    if (old_best_connection) {
+      LOG_J(LS_INFO, this) << "Previous best connection: "
+                           << old_best_connection->ToString();
+    }
+    LOG_J(LS_INFO, this) << "New best connection: "
+                         << best_connection_->ToString();
+    SignalRouteChange(this, best_connection_->remote_candidate());
+  } else {
+    LOG_J(LS_INFO, this) << "No best connection";
   }
 }
 

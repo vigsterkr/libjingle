@@ -29,9 +29,13 @@
 #define TALK_SESSION_PHONE_SRTPFILTER_H_
 
 #include <list>
+#include <map>
 #include <string>
 #include <vector>
+
 #include "talk/base/basictypes.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/sigslotrepeater.h"
 #include "talk/session/phone/cryptoparams.h"
 #include "talk/p2p/base/sessiondescription.h"
 
@@ -54,40 +58,8 @@ extern const std::string CS_AES_CM_128_HMAC_SHA1_32;
 // Key is 128 bits and salt is 112 bits == 30 bytes. B64 bloat => 40 bytes.
 extern const int SRTP_MASTER_KEY_BASE64_LEN;
 
-// Class that wraps a libSRTP session. Used internally by SrtpFilter, below.
-class SrtpSession {
- public:
-  SrtpSession();
-  ~SrtpSession();
-
-  // Configures the session for sending data using the specified
-  // cipher-suite and key. Receiving must be done by a separate session.
-  bool SetSend(const std::string& cs, const uint8* key, int len);
-  // Configures the session for receiving data using the specified
-  // cipher-suite and key. Sending must be done by a separate session.
-  bool SetRecv(const std::string& cs, const uint8* key, int len);
-
-  // Encrypts/signs an individual RTP/RTCP packet, in-place.
-  // If an HMAC is used, this will increase the packet size.
-  bool ProtectRtp(void* data, int in_len, int max_len, int* out_len);
-  bool ProtectRtcp(void* data, int in_len, int max_len, int* out_len);
-  // Decrypts/verifies an invidiual RTP/RTCP packet.
-  // If an HMAC is used, this will decrease the packet size.
-  bool UnprotectRtp(void* data, int in_len, int* out_len);
-  bool UnprotectRtcp(void* data, int in_len, int* out_len);
-
- private:
-  bool SetKey(int type, const std::string& cs, const uint8* key, int len);
-  static bool Init();
-  void HandleEvent(const srtp_event_data_t* ev);
-  static void HandleEventThunk(srtp_event_data_t* ev);
-
-  srtp_t session_;
-  int rtp_auth_tag_len_;
-  int rtcp_auth_tag_len_;
-  static bool inited_;
-  static std::list<SrtpSession*> sessions_;
-};
+class SrtpSession;
+class SrtpStat;
 
 // Class to transform SRTP to/from RTP.
 // Initialize by calling SetSend with the local security params, then call
@@ -96,6 +68,17 @@ class SrtpSession {
 // TODO: Figure out concurrency policy for SrtpFilter.
 class SrtpFilter {
  public:
+  enum Mode {
+    PROTECT,
+    UNPROTECT
+  };
+  enum Error {
+    ERROR_NONE,
+    ERROR_FAIL,
+    ERROR_AUTH,
+    ERROR_REPLAY,
+  };
+
   SrtpFilter();
   ~SrtpFilter();
 
@@ -124,6 +107,11 @@ class SrtpFilter {
   bool UnprotectRtp(void* data, int in_len, int* out_len);
   bool UnprotectRtcp(void* data, int in_len, int* out_len);
 
+  // Update the silent threshold for signaling errors.
+  void set_signal_silent_time(int signal_silent_time);
+
+  sigslot::repeater3<uint32, Mode, Error> SignalSrtpError;
+
  protected:
   bool StoreParams(const std::vector<CryptoParams>& offer_params,
                    ContentSource source);
@@ -138,8 +126,113 @@ class SrtpFilter {
   enum State { ST_INIT, ST_SENTOFFER, ST_RECEIVEDOFFER, ST_ACTIVE };
   State state_;
   std::vector<CryptoParams> offer_params_;
-  SrtpSession send_session_;
-  SrtpSession recv_session_;
+  talk_base::scoped_ptr<SrtpSession> send_session_;
+  talk_base::scoped_ptr<SrtpSession> recv_session_;
+};
+
+// Class that wraps a libSRTP session.
+class SrtpSession {
+ public:
+  SrtpSession();
+  ~SrtpSession();
+
+  // Configures the session for sending data using the specified
+  // cipher-suite and key. Receiving must be done by a separate session.
+  bool SetSend(const std::string& cs, const uint8* key, int len);
+  // Configures the session for receiving data using the specified
+  // cipher-suite and key. Sending must be done by a separate session.
+  bool SetRecv(const std::string& cs, const uint8* key, int len);
+
+  // Encrypts/signs an individual RTP/RTCP packet, in-place.
+  // If an HMAC is used, this will increase the packet size.
+  bool ProtectRtp(void* data, int in_len, int max_len, int* out_len);
+  bool ProtectRtcp(void* data, int in_len, int max_len, int* out_len);
+  // Decrypts/verifies an invidiual RTP/RTCP packet.
+  // If an HMAC is used, this will decrease the packet size.
+  bool UnprotectRtp(void* data, int in_len, int* out_len);
+  bool UnprotectRtcp(void* data, int in_len, int* out_len);
+
+  // Update the silent threshold for signaling errors.
+  void set_signal_silent_time(int signal_silent_time);
+
+  sigslot::repeater3<uint32, SrtpFilter::Mode, SrtpFilter::Error>
+      SignalSrtpError;
+
+ private:
+  bool SetKey(int type, const std::string& cs, const uint8* key, int len);
+  static bool Init();
+  void HandleEvent(const srtp_event_data_t* ev);
+  static void HandleEventThunk(srtp_event_data_t* ev);
+
+  srtp_t session_;
+  int rtp_auth_tag_len_;
+  int rtcp_auth_tag_len_;
+  talk_base::scoped_ptr<SrtpStat> srtp_stat_;
+  static bool inited_;
+  static std::list<SrtpSession*> sessions_;
+  int last_send_seq_num_;
+};
+
+// Class that collects failures of SRTP.
+class SrtpStat {
+ public:
+  SrtpStat();
+  void AddProtectRtpResult(uint32 ssrc, int result);
+  void AddUnprotectRtpResult(uint32 ssrc, int result);
+  void AddProtectRtcpResult(int result);
+  void AddUnprotectRtcpResult(int result);
+  uint32 signal_silent_time() const { return signal_silent_time_; }
+  void set_signal_silent_time(uint32 signal_silent_time) {
+    signal_silent_time_ = signal_silent_time;
+  }
+
+  sigslot::signal3<uint32, SrtpFilter::Mode, SrtpFilter::Error>
+      SignalSrtpError;
+
+ private:
+  // For each different ssrc and error, we collect statistics separately.
+  struct FailureKey {
+    FailureKey()
+        : ssrc(0),
+          mode(SrtpFilter::PROTECT),
+          error(SrtpFilter::ERROR_NONE) {
+    }
+    FailureKey(uint32 in_ssrc, SrtpFilter::Mode in_mode,
+               SrtpFilter::Error in_error)
+        : ssrc(in_ssrc),
+          mode(in_mode),
+          error(in_error) {
+    }
+    bool operator <(const FailureKey& key) const {
+      return ssrc < key.ssrc || mode < key.mode || error < key.error;
+    }
+    uint32 ssrc;
+    SrtpFilter::Mode mode;
+    SrtpFilter::Error error;
+  };
+  // For tracing conditions for signaling, currently we only use
+  // last_signal_time.  Wrap this as a struct so that later on, if we need any
+  // other improvements, it will be easier.
+  struct FailureStat {
+    FailureStat()
+        : last_signal_time(0) {
+    }
+    FailureStat(uint32 in_last_signal_time)
+        : last_signal_time(in_last_signal_time) {
+    }
+    void Reset() {
+      last_signal_time = 0;
+    }
+    uint32 last_signal_time;
+  };
+
+  void HandleSrtpResult(const FailureKey& key);
+
+  std::map<FailureKey, FailureStat> failures_;
+  // Threshold in ms to silent the signaling errors.
+  int signal_silent_time_;
+
+  DISALLOW_EVIL_CONSTRUCTORS(SrtpStat);
 };
 
 }  // namespace cricket

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004--2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,10 @@
 #elif defined(ANDROID)
 #include <android/log.h>
 static const char kLibjingle[] = "libjingle";
+// Android has a 1024 limit on log inputs. We use 60 chars as an
+// approx for the header/tag portion.
+// See android/system/core/liblog/logd_write.c
+static const int kMaxLogLineSize = 1024 - 60;
 #endif  // OSX || ANDROID
 
 #include <iostream>
@@ -270,7 +274,7 @@ void LogMessage::ConfigureLogging(const char* params, const char* filename) {
   int file_level = GetLogToStream();
 
   std::vector<std::string> tokens;
-  split(params, ' ', &tokens);
+  tokenize(params, ' ', &tokens);
 
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i].empty())
@@ -429,6 +433,10 @@ void LogMessage::OutputToDebug(const std::string& str,
   switch (severity) {
     case LS_SENSITIVE:
       __android_log_write(ANDROID_LOG_INFO, kLibjingle, "SENSITIVE");
+      if (log_to_stderr) {
+        std::cerr << "SENSITIVE";
+        std::cerr.flush();
+      }
       return;
     case LS_VERBOSE:
       prio = ANDROID_LOG_VERBOSE;
@@ -445,8 +453,26 @@ void LogMessage::OutputToDebug(const std::string& str,
     default:
       prio = ANDROID_LOG_UNKNOWN;
   }
-  // Use the size of the string in the format (str may have \0 in the middle).
-  __android_log_print(prio, kLibjingle, "%.*s", str.size(), str.c_str());
+
+  int size = str.size();
+  int line = 0;
+  int idx = 0;
+  const int max_lines = size / kMaxLogLineSize + 1;
+  if (max_lines == 1) {
+    __android_log_print(prio, kLibjingle, "%.*s", size, str.c_str());
+  } else {
+    while (size > 0) {
+      const int len = std::min(size, kMaxLogLineSize);
+      // Use the size of the string in the format (str may have \0 in the
+      // middle).
+      __android_log_print(prio, kLibjingle, "[%d/%d] %.*s",
+                          line + 1, max_lines,
+                          len, str.c_str() + idx);
+      idx += len;
+      size -= len;
+      ++line;
+    }
+  }
 #endif  // ANDROID
   if (log_to_stderr) {
     std::cerr << str;

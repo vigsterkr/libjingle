@@ -218,11 +218,25 @@ ReuseSocketPool::ReturnConnectedStream(StreamInterface* stream) {
 
 void
 ReuseSocketPool::OnStreamEvent(StreamInterface* stream, int events, int err) {
-  LOG_F(LS_VERBOSE) << "Connection closed with error: " << err;
   ASSERT(stream == stream_);
   ASSERT(!checked_out_);
-  ASSERT(0 != (events & SE_CLOSE));
-  // Socket has closed.  We'll reconnect it the next time it is used.
+
+  // If the stream was written to and then immediately returned to us then
+  // we may get a writable notification for it, which we should ignore.
+  if (events == SE_WRITE) {
+    LOG_F(LS_VERBOSE) << "Pooled Socket unexpectedly writable: ignoring";
+    return;
+  }
+
+  // If the peer sent data, we can't process it, so drop the connection.
+  // If the socket has closed, clean it up.
+  // In either case, we'll reconnect it the next time it is used.
+  ASSERT(0 != (events & (SE_READ|SE_CLOSE)));
+  if (0 != (events & SE_CLOSE)) {
+    LOG_F(LS_VERBOSE) << "Connection closed with error: " << err;
+  } else {
+    LOG_F(LS_VERBOSE) << "Pooled Socket unexpectedly readable: closing";
+  }
   stream_->Close();
 }
 

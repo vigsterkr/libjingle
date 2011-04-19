@@ -530,6 +530,9 @@ class MemoryStream : public MemoryStreamBase {
 
  protected:
   virtual StreamResult DoReserve(size_t size, int* error);
+  // Memory Streams are aligned for efficiency.
+  static const int kAlignment = 16;
+  char* buffer_alloc_;
 };
 
 // ExternalMemoryStream adapts an external memory buffer, so writes which would

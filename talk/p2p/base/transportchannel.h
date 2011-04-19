@@ -35,6 +35,7 @@
 
 namespace cricket {
 
+class Candidate;
 class P2PTransportChannel;
 
 // A TransportChannel represents one logical stream of packets that are sent
@@ -73,15 +74,13 @@ class TransportChannel: public sigslot::has_slots<> {
   // TODO: Generalize network monitoring.
   virtual P2PTransportChannel* GetP2PChannel() { return NULL; }
 
-  // Signalled each time a packet is received  on this channel.
+  // Signalled each time a packet is received on this channel.
   sigslot::signal3<TransportChannel*, const char*, size_t> SignalReadPacket;
 
   // This signal occurs when there is a change in the way that packets are
-  // being routed.  The address indicates the address of the first hop in the
-  // new route, if this is known.  If this cannot be determined or is not well-
-  // defined, then the channel may give an address of 0.
-  sigslot::signal2<TransportChannel*, const talk_base::SocketAddress&>
-      SignalRouteChange;
+  // being routed, i.e. to a different remote location. The candidate
+  // indicates where and how we are currently sending media.
+  sigslot::signal2<TransportChannel*, const Candidate&> SignalRouteChange;
 
   // Invoked when the channel is being destroyed.
   sigslot::signal1<TransportChannel*> SignalDestroyed;

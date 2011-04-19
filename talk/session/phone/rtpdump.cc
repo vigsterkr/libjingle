@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2010, Google Inc.
+ * Copyright 2010 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,6 +33,7 @@
 #include "talk/base/byteorder.h"
 #include "talk/base/logging.h"
 #include "talk/base/time.h"
+#include "talk/session/phone/rtputils.h"
 
 namespace cricket {
 
@@ -55,36 +56,39 @@ void RtpDumpFileHeader::WriteToByteBuffer(talk_base::ByteBuffer* buf) {
   buf->WriteUInt16(padding);
 }
 
-// RTP packet format (http://www.networksorcery.com/enp/protocol/rtp.htm).
-static const size_t kMinimumRtpHeaderSize = 12;
 static const uint32 kDefaultTimeIncrease = 30;
 
 bool RtpDumpPacket::IsValidRtpPacket() const {
-  return !is_rtcp && data.size() >= kMinimumRtpHeaderSize;
+  return !is_rtcp && data.size() >= kMinRtpPacketLen;
 }
 
-bool RtpDumpPacket::GetRtpSeqNum(uint16* seq_num) const {
-  if (!seq_num || !IsValidRtpPacket()) {
-    return false;
-  }
-  *seq_num = talk_base::GetBE16(&data[2]);
-  return true;
+bool RtpDumpPacket::IsValidRtcpPacket() const {
+  return is_rtcp && data.size() >= kMinRtcpPacketLen;
+}
+
+bool RtpDumpPacket::GetRtpPayloadType(int* pt) const {
+  return IsValidRtpPacket() &&
+      cricket::GetRtpPayloadType(&data[0], data.size(), pt);
+}
+
+bool RtpDumpPacket::GetRtpSeqNum(int* seq_num) const {
+  return IsValidRtpPacket() &&
+      cricket::GetRtpSeqNum(&data[0], data.size(), seq_num);
 }
 
 bool RtpDumpPacket::GetRtpTimestamp(uint32* ts) const {
-  if (!ts || !IsValidRtpPacket()) {
-    return false;
-  }
-  *ts = talk_base::GetBE32(&data[4]);
-  return true;
+  return IsValidRtpPacket() &&
+      cricket::GetRtpTimestamp(&data[0], data.size(), ts);
 }
 
 bool RtpDumpPacket::GetRtpSsrc(uint32* ssrc) const {
-  if (!ssrc || !IsValidRtpPacket()) {
-    return false;
-  }
-  *ssrc = talk_base::GetBE32(&data[8]);
-  return true;
+  return IsValidRtpPacket() &&
+      cricket::GetRtpSsrc(&data[0], data.size(), ssrc);
+}
+
+bool RtpDumpPacket::GetRtcpType(int* type) const {
+  return IsValidRtcpPacket() &&
+      cricket::GetRtcpType(&data[0], data.size(), type);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -219,7 +223,7 @@ talk_base::StreamResult RtpDumpLoopReader::ReadPacket(RtpDumpPacket* packet) {
 
 void RtpDumpLoopReader::UpdateStreamStatistics(const RtpDumpPacket& packet) {
   // Get the RTP sequence number and timestamp of the dump packet.
-  uint16 rtp_seq_num = 0;
+  int rtp_seq_num = 0;
   packet.GetRtpSeqNum(&rtp_seq_num);
   uint32 rtp_timestamp = 0;
   packet.GetRtpTimestamp(&rtp_timestamp);
@@ -262,9 +266,9 @@ void RtpDumpLoopReader::UpdateDumpPacket(RtpDumpPacket* packet) {
 
   if (packet->IsValidRtpPacket()) {
     // Get the old RTP sequence number and timestamp.
-    uint16 sequence;
+    int sequence = 0;
     packet->GetRtpSeqNum(&sequence);
-    uint32 timestamp;
+    uint32 timestamp = 0;
     packet->GetRtpTimestamp(&timestamp);
     // Increase the RTP sequence number and timestamp.
     sequence += loop_count_ * rtp_seq_num_increase_;

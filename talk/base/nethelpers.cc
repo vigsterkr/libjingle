@@ -32,6 +32,11 @@
 
 namespace talk_base {
 
+#if defined(LINUX) || defined(ANDROID)
+static const size_t kInitHostentLen = 1024;
+static const size_t kMaxHostentLen = kInitHostentLen * 8;
+#endif
+
 // AsyncResolver
 
 AsyncResolver::AsyncResolver() : result_(NULL), error_(0) {
@@ -55,17 +60,16 @@ void AsyncResolver::OnWorkDone() {
 // The functions below are used to do gethostbyname, but with an allocated
 // instead of a static buffer.
 hostent* SafeGetHostByName(const char* hostname, int* herrno) {
+  if (NULL == hostname || NULL == herrno) {
+    return NULL;
+  }
   hostent* result = NULL;
-#if defined(WIN32) || (defined(POSIX) && !defined(OSX))
+#if defined(WIN32)
   // On Windows we have to allocate a buffer, and manually copy the hostent,
   // along with its embedded pointers.
   hostent* ent = gethostbyname(hostname);
   if (!ent) {
-#ifdef WIN32
     *herrno = WSAGetLastError();
-#else  // POSIX
-    *herrno = h_errno;
-#endif
     return NULL;
   }
 
@@ -85,6 +89,9 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
   total_len += sizeof(char*);
 
   result = static_cast<hostent*>(malloc(total_len));
+  if (NULL == result) {
+    return NULL;
+  }
   char* p = reinterpret_cast<char*>(result) + sizeof(hostent);
 
   // Copy the hostent into it, along with its embedded pointers.
@@ -114,7 +121,37 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
   result->h_addr_list[num_addrs] = NULL;
 
   *herrno = 0;
-#elif defined(OSX)
+#elif defined(LINUX) || defined(ANDROID)
+  // gethostbyname() is not thread safe, so we need to call gethostbyname_r()
+  // which is a reentrant version of gethostbyname().
+  ASSERT(kInitHostentLen > sizeof(hostent));
+  size_t size = kInitHostentLen;
+  int ret;
+  void* buf = malloc(size);
+  if (NULL == buf) {
+    return NULL;
+  }
+  char* aux = static_cast<char*>(buf) + sizeof(hostent);
+  size_t aux_len = size - sizeof(hostent);
+  while ((ret = gethostbyname_r(hostname, reinterpret_cast<hostent*>(buf), aux,
+      aux_len, &result, herrno)) == ERANGE) {
+    size *= 2;
+    if (size > kMaxHostentLen) {
+      break;  // Just to be safe.
+    }
+    buf = realloc(buf, size);
+    if (NULL == buf) {
+      return NULL;
+    }
+    aux = static_cast<char*>(buf) + sizeof(hostent);
+    aux_len = size - sizeof(hostent);
+  }
+  if (ret != 0 || buf != result) {
+    free(buf);
+    return NULL;
+  }
+  *herrno = 0;
+#elif defined(OSX) || defined(IOS)
   // Mac OS returns an object with everything allocated.
   result = getipnodebyname(hostname, AF_INET, AI_DEFAULT, herrno);
 #else
@@ -126,10 +163,10 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
 // This function should mirror the above function, and free any resources
 // allocated by the above.
 void FreeHostEnt(hostent* host) {
-#if defined(WIN32) || (defined(POSIX) && !defined(OSX))
-  free(host);
-#elif defined(OSX)
+#if defined(OSX) || defined(IOS)
   freehostent(host);
+#elif defined(WIN32) || defined(POSIX)
+  free(host);
 #else
 #error "I don't know how to free a hostent on your system."
 #endif

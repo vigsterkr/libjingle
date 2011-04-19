@@ -92,6 +92,7 @@ class FileMediaEngine : public MediaEngine {
     return true;
   }
   virtual bool SetVideoCaptureDevice(const Device* cam_device) { return true; }
+  virtual bool GetOutputVolume(int* level) { *level = 0; return true; }
   virtual bool SetOutputVolume(int level) { return true; }
   virtual int GetInputLevel() { return 0; }
   virtual bool SetLocalMonitor(bool enable) { return true; }
@@ -132,14 +133,24 @@ class FileVoiceChannel : public VoiceMediaChannel {
     return true;
   }
   virtual bool SetSendCodecs(const std::vector<AudioCodec>& codecs);
+  virtual bool SetRecvRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) {
+    return true;
+  }
+  virtual bool SetSendRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) {
+    return true;
+  }
   virtual bool SetPlayout(bool playout) { return true; }
   virtual bool SetSend(SendFlags flag);
   virtual bool AddStream(uint32 ssrc) { return true; }
   virtual bool RemoveStream(uint32 ssrc) { return true; }
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) { return true; }
   virtual int GetOutputLevel() { return 0; }
-  virtual void SetRingbackTone(const char* buf, int len) {}
-  virtual bool PlayRingbackTone(bool play, bool loop) { return true; }
+  virtual bool SetRingbackTone(const char* buf, int len) { return true; }
+  virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
+    return true;
+  }
   virtual bool PressDTMF(int event, bool playout) { return true; }
   virtual bool GetStats(VoiceMediaInfo* info) { return true; }
 
@@ -167,6 +178,14 @@ class FileVideoChannel : public VideoMediaChannel {
     return true;
   }
   virtual bool SetSendCodecs(const std::vector<VideoCodec>& codecs);
+  virtual bool SetRecvRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) {
+    return true;
+  }
+  virtual bool SetSendRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) {
+    return true;
+  }
   virtual bool SetRender(bool render) { return true; }
   virtual bool SetSend(bool send);
   virtual bool AddStream(uint32 ssrc, uint32 voice_ssrc) { return true; }

@@ -33,6 +33,7 @@
 
 #include "talk/base/messagequeue.h"
 #include "talk/base/network.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/portallocator.h"
 
@@ -40,7 +41,9 @@ namespace cricket {
 
 class BasicPortAllocator : public PortAllocator {
  public:
-  explicit BasicPortAllocator(talk_base::NetworkManager* network_manager);
+  BasicPortAllocator(talk_base::NetworkManager* network_manager,
+                     talk_base::PacketSocketFactory* socket_factory);
+  BasicPortAllocator(talk_base::NetworkManager* network_manager);
   BasicPortAllocator(talk_base::NetworkManager* network_manager,
                      const talk_base::SocketAddress& stun_server,
                      const talk_base::SocketAddress& relay_server_udp,
@@ -49,6 +52,10 @@ class BasicPortAllocator : public PortAllocator {
   virtual ~BasicPortAllocator();
 
   talk_base::NetworkManager* network_manager() { return network_manager_; }
+
+  // If socket_factory() is set to NULL each PortAllocatorSession
+  // creates its own socket factory.
+  talk_base::PacketSocketFactory* socket_factory() { return socket_factory_; }
 
   const talk_base::SocketAddress& stun_address() const {
     return stun_address_;
@@ -83,7 +90,10 @@ class BasicPortAllocator : public PortAllocator {
   }
 
  private:
+  void Construct();
+
   talk_base::NetworkManager* network_manager_;
+  talk_base::PacketSocketFactory* socket_factory_;
   const talk_base::SocketAddress stun_address_;
   const talk_base::SocketAddress relay_address_udp_;
   const talk_base::SocketAddress relay_address_tcp_;
@@ -107,6 +117,7 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   const std::string& name() const { return name_; }
   const std::string& session_type() const { return session_type_; }
   talk_base::Thread* network_thread() { return network_thread_; }
+  talk_base::PacketSocketFactory* socket_factory() { return socket_factory_; }
 
   virtual void GetInitialPorts();
   virtual void StartGetAllPorts();
@@ -144,6 +155,8 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   std::string name_;
   std::string session_type_;
   talk_base::Thread* network_thread_;
+  talk_base::scoped_ptr<talk_base::PacketSocketFactory> owned_socket_factory_;
+  talk_base::PacketSocketFactory* socket_factory_;
   bool configuration_done_;
   bool allocation_started_;
   bool running_;  // set when StartGetAllPorts is called

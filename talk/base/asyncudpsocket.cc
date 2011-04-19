@@ -68,7 +68,7 @@ void AsyncUDPSocket::OnReadEvent(AsyncSocket* socket) {
 
   // TODO: Make sure that we got all of the packet.
   // If we did not, then we should resize our buffer to be large enough.
-  SignalReadPacket(buf_, (size_t)len, remote_addr, this);
+  SignalReadPacket(this, buf_, (size_t)len, remote_addr);
 }
 
 }  // namespace talk_base

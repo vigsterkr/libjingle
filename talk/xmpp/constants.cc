@@ -317,6 +317,7 @@ const QName QN_ORDER(true, STR_EMPTY, "order");
 const QName QN_MECHANISM(true, STR_EMPTY, "mechanism");
 const QName QN_ASK(true, STR_EMPTY, "ask");
 const QName QN_JID(true, STR_EMPTY, "jid");
+const QName QN_NICK(true, STR_EMPTY, "nick");
 const QName QN_SUBSCRIPTION(true, STR_EMPTY, "subscription");
 const QName QN_TITLE1(true, STR_EMPTY, "title1");
 const QName QN_TITLE2(true, STR_EMPTY, "title2");
@@ -348,8 +349,23 @@ const QName QN_INVITE_NAME(true, NS_GOOGLE_INVITE, "name");
 const QName QN_INVITE_SUBJECT(true, NS_GOOGLE_INVITE, "subject");
 const QName QN_INVITE_MESSAGE(true, NS_GOOGLE_INVITE, "body");
 
-// JEP 0030
+// PubSub: http://xmpp.org/extensions/xep-0060.html
+const std::string NS_PUBSUB("http://jabber.org/protocol/pubsub");
+const QName QN_PUBSUB(true, NS_PUBSUB, "pubsub");
+const QName QN_PUBSUB_ITEMS(true, NS_PUBSUB, "items");
+const QName QN_PUBSUB_ITEM(true, NS_PUBSUB, "item");
+
+const std::string NS_PUBSUB_EVENT("http://jabber.org/protocol/pubsub#event");
 const QName QN_NODE(true, STR_EMPTY, "node");
+const QName QN_PUBSUB_EVENT(true, NS_PUBSUB_EVENT, "event");
+const QName QN_PUBSUB_EVENT_ITEMS(true, NS_PUBSUB_EVENT, "items");
+const QName QN_PUBSUB_EVENT_ITEM(true, NS_PUBSUB_EVENT, "item");
+const QName QN_PUBSUB_EVENT_RETRACT(true, NS_PUBSUB_EVENT, "retract");
+
+
+
+
+// JEP 0030
 const QName QN_CATEGORY(true, STR_EMPTY, "category");
 const QName QN_VAR(true, STR_EMPTY, "var");
 const std::string NS_DISCO_INFO("http://jabber.org/protocol/disco#info");

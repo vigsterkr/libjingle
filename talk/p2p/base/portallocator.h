@@ -25,13 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PORTALLOCATOR_H_
-#define _PORTALLOCATOR_H_
+#ifndef TALK_P2P_BASE_PORTALLOCATOR_H_
+#define TALK_P2P_BASE_PORTALLOCATOR_H_
+
+#include <string>
+#include <vector>
 
 #include "talk/base/sigslot.h"
 #include "talk/p2p/base/port.h"
-#include <string>
-#undef SetPort
 
 namespace cricket {
 
@@ -50,8 +51,8 @@ const uint32 PORTALLOCATOR_ENABLE_SHAKER = 0x10;
 const uint32 kDefaultPortAllocatorFlags = 0;
 
 class PortAllocatorSession : public sigslot::has_slots<> {
-public:
-  PortAllocatorSession(uint32 flags) : flags_(flags) {}
+ public:
+  explicit PortAllocatorSession(uint32 flags) : flags_(flags) {}
 
   // Subclasses should clean up any ports created.
   virtual ~PortAllocatorSession() {}
@@ -68,22 +69,28 @@ public:
   virtual bool IsGettingAllPorts() = 0;
 
   sigslot::signal2<PortAllocatorSession*, Port*> SignalPortReady;
-  sigslot::signal2<PortAllocatorSession*, const std::vector<Candidate>&> SignalCandidatesReady;
+  sigslot::signal2<PortAllocatorSession*,
+                   const std::vector<Candidate>&> SignalCandidatesReady;
 
   uint32 generation() { return generation_; }
   void set_generation(uint32 generation) { generation_ = generation; }
 
-private:
+ private:
   uint32 flags_;
   uint32 generation_;
 };
 
 class PortAllocator {
-public:
-  PortAllocator() : flags_(kDefaultPortAllocatorFlags) {}
+ public:
+  PortAllocator() :
+      flags_(kDefaultPortAllocatorFlags),
+      min_port_(0),
+      max_port_(0) {
+  }
   virtual ~PortAllocator() {}
 
-    virtual PortAllocatorSession *CreateSession(const std::string &name, const std::string &session_type) = 0;
+  virtual PortAllocatorSession *CreateSession(const std::string &name,
+      const std::string &session_type) = 0;
 
   uint32 flags() const { return flags_; }
   void set_flags(uint32 flags) { flags_ = flags; }
@@ -91,15 +98,31 @@ public:
   const std::string& user_agent() const { return agent_; }
   const talk_base::ProxyInfo& proxy() const { return proxy_; }
   void set_proxy(const std::string& agent, const talk_base::ProxyInfo& proxy) {
-    agent_ = agent; proxy_ = proxy;
+    agent_ = agent;
+    proxy_ = proxy;
   }
 
-protected:
+  // Gets/Sets the port range to use when choosing client ports.
+  int min_port() const { return min_port_; }
+  int max_port() const { return max_port_; }
+  bool SetPortRange(int min_port, int max_port) {
+    if (min_port > max_port) {
+      return false;
+    }
+
+    min_port_ = min_port;
+    max_port_ = max_port;
+    return true;
+  }
+
+ protected:
   uint32 flags_;
   std::string agent_;
   talk_base::ProxyInfo proxy_;
+  int min_port_;
+  int max_port_;
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // _PORTALLOCATOR_H_
+#endif  // TALK_P2P_BASE_PORTALLOCATOR_H_

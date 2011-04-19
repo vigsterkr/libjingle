@@ -211,7 +211,7 @@ def AddMediaLibs(env, **kwargs):
   elif env.Bit('mac'):
     gips_lib = 'VoiceEngine_mac_universal_gcc'
   elif env.Bit('linux'):
-      gips_lib = 'VoiceEngine_Linux_external_gcc'
+      gips_lib = 'VoiceEngine_Linux_gcc'
 
 
   AddToDict(kwargs, 'libs', [
@@ -507,6 +507,15 @@ def ExtendComponent(env, component, **kwargs):
     # version from it.  We need the output path since we don't know the file
     # extension beforehand.
     target = node[0].path.split('_', 1)[1]
+    # postsignprefix: If defined, postsignprefix is a string that should be
+    # prepended to the target executable.  This is to provide a work around
+    # for EXEs and DLLs with the same name, which thus have PDBs with the
+    # same name.  Setting postsignprefix allows the EXE and its PDB
+    # to be renamed and copied in a previous step; then the desired
+    # name of the EXE (but not PDB) is reconstructed after signing.
+    postsignprefix = GetEntry(params, 'postsignprefix')
+    if postsignprefix is not None:
+        target = postsignprefix + target
     signed_node = env.SignedBinary(
       source = node,
       target = '$STAGING_DIR/' + target,

@@ -33,10 +33,11 @@
 #include <map>
 
 #include "talk/base/network.h"
-#include "talk/base/socketaddress.h"
+#include "talk/base/packetsocketfactory.h"
 #include "talk/base/proxyinfo.h"
 #include "talk/base/ratetracker.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/socketaddress.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/stun.h"
@@ -49,6 +50,7 @@ class AsyncPacketSocket;
 namespace cricket {
 
 class Connection;
+class ConnectionRequest;
 
 enum ProtocolType {
   PROTO_UDP,
@@ -73,17 +75,19 @@ struct ProtocolAddress {
 // one add support for specific mechanisms like local UDP ports.
 class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
  public:
-  Port(talk_base::Thread* thread, const std::string &type,
-       talk_base::SocketFactory* factory, talk_base::Network* network);
+  Port(talk_base::Thread* thread, const std::string& type,
+       talk_base::PacketSocketFactory* factory, talk_base::Network* network,
+       uint32 ip, int min_port, int max_port);
   virtual ~Port();
 
   // The thread on which this port performs its I/O.
   talk_base::Thread* thread() { return thread_; }
 
   // The factory used to create the sockets of this port.
-  talk_base::SocketFactory* socket_factory() const { return factory_; }
-  void set_socket_factory(talk_base::SocketFactory* factory)
-    { factory_ = factory; }
+  talk_base::PacketSocketFactory* socket_factory() const { return factory_; }
+  void set_socket_factory(talk_base::PacketSocketFactory* factory) {
+    factory_ = factory;
+  }
 
   // Each port is identified by a name (for debugging purposes).
   const std::string& name() const { return name_; }
@@ -110,7 +114,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void set_preference(float preference) { preference_ = preference; }
 
   // Identifies the port type.
-  //const std::string& protocol() const { return proto_; }
   const std::string& type() const { return type_; }
 
   // Identifies network that this port was allocated on.
@@ -185,8 +188,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   const std::string& user_agent() { return user_agent_; }
   const talk_base::ProxyInfo& proxy() { return proxy_; }
 
-  talk_base::AsyncPacketSocket * CreatePacketSocket(ProtocolType proto);
-
   // Normally, packets arrive through a connection (or they result signaling of
   // unknown address).  Calling this method turns off delivery of packets
   // through their respective connection and instead delivers every packet
@@ -212,20 +213,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   std::string ToString() const;
 
  protected:
-  talk_base::Thread* thread_;
-  talk_base::SocketFactory* factory_;
-  std::string type_;
-  talk_base::Network* network_;
-  uint32 generation_;
-  std::string name_;
-  std::string username_frag_;
-  std::string password_;
-  float preference_;
-  std::vector<Candidate> candidates_;
-  AddressMap connections_;
-  enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
-  bool enable_port_packets_;
-
   // Fills in the local address of the port.
   void AddAddress(const talk_base::SocketAddress& address,
                   const std::string& protocol, bool final);
@@ -239,8 +226,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnReadPacket(const char* data, size_t size,
                     const talk_base::SocketAddress& addr);
 
-  // Constructs a STUN binding request for the given connection and sends it.
-  void SendBindingRequest(Connection* conn);
 
   // If the given data comprises a complete and correct STUN message then the
   // return value is true, otherwise false. If the message username corresponds
@@ -249,9 +234,25 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // remote_username contains the remote fragment of the STUN username.
   bool GetStunMessage(const char* data, size_t size,
                       const talk_base::SocketAddress& addr,
-                      StunMessage *& msg, std::string& remote_username);
+                      StunMessage** out_msg, std::string* out_username);
 
-  friend class Connection;
+  // TODO: make these members private
+  talk_base::Thread* thread_;
+  talk_base::PacketSocketFactory* factory_;
+  std::string type_;
+  talk_base::Network* network_;
+  uint32 ip_;
+  int min_port_;
+  int max_port_;
+  uint32 generation_;
+  std::string name_;
+  std::string username_frag_;
+  std::string password_;
+  float preference_;
+  std::vector<Candidate> candidates_;
+  AddressMap connections_;
+  enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
+  bool enable_port_packets_;
 
  private:
   // Called when one of our connections deletes itself.
@@ -263,6 +264,8 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Information to use when going through a proxy.
   std::string user_agent_;
   talk_base::ProxyInfo proxy_;
+
+  friend class Connection;
 };
 
 // Represents a communication link between a port on the local client and a
@@ -331,7 +334,7 @@ class Connection : public talk_base::MessageHandler,
   // still keep it around in case the other side wants to use it.  But we can
   // safely stop pinging on it and we can allow it to time out if the other
   // side stops using it as well.
-  bool pruned() { return pruned_; }
+  bool pruned() const { return pruned_; }
   void Prune();
 
   // Makes the connection go away.
@@ -342,7 +345,7 @@ class Connection : public talk_base::MessageHandler,
   void UpdateState(uint32 now);
 
   // Called when this connection should try checking writability again.
-  uint32 last_ping_sent() { return last_ping_sent_; }
+  uint32 last_ping_sent() const { return last_ping_sent_; }
   void Ping(uint32 now);
 
   // Called whenever a valid ping is received on this connection.  This is
@@ -352,10 +355,33 @@ class Connection : public talk_base::MessageHandler,
   // Debugging description of this connection
   std::string ToString() const;
 
-  bool reported() { return reported_; }
+  bool reported() const { return reported_; }
   void set_reported(bool reported) { reported_ = reported;}
 
  protected:
+  // Constructs a new connection to the given remote port.
+  Connection(Port* port, size_t index, const Candidate& candidate);
+
+  // Called back when StunRequestManager has a stun packet to send
+  void OnSendStunPacket(const void* data, size_t size, StunRequest* req);
+
+  // Callbacks from ConnectionRequest
+  void OnConnectionRequestResponse(ConnectionRequest* req,
+                                   StunMessage* response);
+  void OnConnectionRequestErrorResponse(ConnectionRequest* req,
+                                        StunMessage* response);
+  void OnConnectionRequestTimeout(ConnectionRequest* req);
+
+  // Changes the state and signals if necessary.
+  void set_read_state(ReadState value);
+  void set_write_state(WriteState value);
+  void set_connected(bool value);
+
+  // Checks if this connection is useless, and hence, should be destroyed.
+  void CheckTimeout();
+
+  void OnMessage(talk_base::Message *pmsg);
+
   Port* port_;
   size_t local_candidate_index_;
   Candidate remote_candidate_;
@@ -368,36 +394,17 @@ class Connection : public talk_base::MessageHandler,
   uint32 last_ping_sent_;      // last time we sent a ping to the other side
   uint32 last_ping_received_;  // last time we received a ping from the other
                                // side
+  uint32 last_data_received_;
   std::vector<uint32> pings_since_last_response_;
 
   talk_base::RateTracker recv_rate_tracker_;
   talk_base::RateTracker send_rate_tracker_;
 
-  // Callbacks from ConnectionRequest
-  void OnConnectionRequestResponse(StunMessage *response, uint32 rtt);
-  void OnConnectionRequestErrorResponse(StunMessage *response, uint32 rtt);
-
-  // Called back when StunRequestManager has a stun packet to send
-  void OnSendStunPacket(const void* data, size_t size, StunRequest* req);
-
-  // Constructs a new connection to the given remote port.
-  Connection(Port* port, size_t index, const Candidate& candidate);
-
-  // Changes the state and signals if necessary.
-  void set_read_state(ReadState value);
-  void set_write_state(WriteState value);
-  void set_connected(bool value);
-
-  // Checks if this connection is useless, and hence, should be destroyed.
-  void CheckTimeout();
-
-  void OnMessage(talk_base::Message *pmsg);
+ private:
+  bool reported_;
 
   friend class Port;
   friend class ConnectionRequest;
-
- private:
-  bool reported_;
 };
 
 // ProxyConnection defers all the interesting work to the port

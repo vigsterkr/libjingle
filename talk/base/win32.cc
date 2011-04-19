@@ -158,7 +158,7 @@ bool GetOsVersion(int* major, int* minor, int* build) {
 
 bool GetCurrentProcessIntegrityLevel(int* level) {
   bool ret = false;
-  HANDLE process = GetCurrentProcess(), token;
+  HANDLE process = ::GetCurrentProcess(), token;
   if (OpenProcessToken(process, TOKEN_QUERY | TOKEN_QUERY_SOURCE, &token)) {
     DWORD size;
     if (!GetTokenInformation(token, TokenIntegrityLevel, NULL, 0, &size) &&

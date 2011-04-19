@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,9 +38,9 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/time.h"
 
-#ifdef OSX_USE_COCOA
-#ifndef OSX
-#error OSX_USE_COCOA is defined but not OSX
+#ifdef USE_COCOA_THREADING
+#if !defined(OSX) && !defined(IOS)
+#error USE_COCOA_THREADING is defined but not OSX nor IOS
 #endif
 #include "talk/base/maccocoathreadhelper.h"
 #include "talk/base/scoped_autorelease_pool.h"
@@ -56,13 +56,13 @@ pthread_key_t ThreadManager::key_;
 ThreadManager::ThreadManager() {
   pthread_key_create(&key_, NULL);
   main_thread_ = WrapCurrentThread();
-#if defined(OSX_USE_COCOA)
+#ifdef USE_COCOA_THREADING
   InitCocoaMultiThreading();
 #endif
 }
 
 ThreadManager::~ThreadManager() {
-#ifdef OSX_USE_COCOA
+#ifdef USE_COCOA_THREADING
   // This is called during exit, at which point apparently no NSAutoreleasePools
   // are available; but we might still need them to do cleanup (or we get the
   // "no autoreleasepool in place, just leaking" warning when exiting).
@@ -217,9 +217,30 @@ bool Thread::SetName(const std::string& name, const void* obj) {
 }
 
 bool Thread::SetPriority(ThreadPriority priority) {
+#if defined(WIN32)
+  if (started_) {
+    BOOL ret = FALSE;
+    if (priority == PRIORITY_NORMAL) {
+      ret = ::SetThreadPriority(thread_, THREAD_PRIORITY_NORMAL);
+    } else if (priority == PRIORITY_HIGH) {
+      ret = ::SetThreadPriority(thread_, THREAD_PRIORITY_HIGHEST);
+    } else if (priority == PRIORITY_ABOVE_NORMAL) {
+      ret = ::SetThreadPriority(thread_, THREAD_PRIORITY_ABOVE_NORMAL);
+    } else if (priority == PRIORITY_IDLE) {
+      ret = ::SetThreadPriority(thread_, THREAD_PRIORITY_IDLE);
+    }
+    if (!ret) {
+      return false;
+    }
+  }
+  priority_ = priority;
+  return true;
+#else
+  // TODO: Implement for Linux/Mac if possible.
   if (started_) return false;
   priority_ = priority;
   return true;
+#endif
 }
 
 bool Thread::Start(Runnable* runnable) {
@@ -239,14 +260,9 @@ bool Thread::Start(Runnable* runnable) {
   thread_ = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)PreRun, init, flags,
                          NULL);
   if (thread_) {
+    started_ = true;
     if (priority_ != PRIORITY_NORMAL) {
-      if (priority_ == PRIORITY_HIGH) {
-        ::SetThreadPriority(thread_, THREAD_PRIORITY_HIGHEST);
-      } else if (priority_ == PRIORITY_ABOVE_NORMAL) {
-        ::SetThreadPriority(thread_, THREAD_PRIORITY_ABOVE_NORMAL);
-      } else if (priority_ == PRIORITY_IDLE) {
-        ::SetThreadPriority(thread_, THREAD_PRIORITY_IDLE);
-      }
+      SetPriority(priority_);
       ::ResumeThread(thread_);
     }
   } else {
@@ -287,8 +303,8 @@ bool Thread::Start(Runnable* runnable) {
     LOG(LS_ERROR) << "Unable to create pthread, error " << error_code;
     return false;
   }
-#endif
   started_ = true;
+#endif
   return true;
 }
 
@@ -342,7 +358,7 @@ void* Thread::PreRun(void* pv) {
 #elif defined(POSIX)
   // TODO: See if naming exists for pthreads.
 #endif
-#ifdef OSX_USE_COCOA
+#ifdef USE_COCOA_THREADING
   // Make sure the new thread has an autoreleasepool
   ScopedAutoreleasePool pool;
 #endif
@@ -486,6 +502,13 @@ bool Thread::ProcessMessages(int cmsLoop) {
   int cmsNext = cmsLoop;
 
   while (true) {
+#ifdef USE_COCOA_THREADING
+    // see: http://developer.apple.com/library/mac/#documentation/Cocoa/Reference/Foundation/Classes/NSAutoreleasePool_Class/Reference/Reference.html
+    // Each thread is supposed to have an autorelease pool. Also for event loops
+    // like this, autorelease pool needs to be created and drained/released
+    // for each cycle.
+    ScopedAutoreleasePool pool;
+#endif
     Message msg;
     if (!Get(&msg, cmsNext))
       return !IsQuitting();

@@ -167,6 +167,7 @@ FilesystemInterface *Filesystem::EnsureDefaultFilesystem() {
 
 bool FilesystemInterface::CopyFolder(const Pathname &old_path,
                                      const Pathname &new_path) {
+  bool success = true;
   VERIFY(IsFolder(old_path));
   Pathname new_dir;
   new_dir.SetFolder(new_path.pathname());
@@ -174,44 +175,51 @@ bool FilesystemInterface::CopyFolder(const Pathname &old_path,
   old_dir.SetFolder(old_path.pathname());
   if (!CreateFolder(new_dir))
     return false;
-  DirectoryIterator di;
-  di.Iterate(old_dir.pathname());
-  while (di.Next()) {
-    if (di.Name() == "." || di.Name() == "..")
-      continue;
-    Pathname source;
-    Pathname dest;
-    source.SetFolder(old_dir.pathname());
-    dest.SetFolder(new_path.pathname());
-    source.SetFilename(di.Name());
-    dest.SetFilename(di.Name());
-    if (!CopyFileOrFolder(source, dest))
-      return false;
+  DirectoryIterator *di = IterateDirectory();
+  if (!di)
+    return false;
+  if (di->Iterate(old_dir.pathname())) {
+    do {
+      if (di->Name() == "." || di->Name() == "..")
+        continue;
+      Pathname source;
+      Pathname dest;
+      source.SetFolder(old_dir.pathname());
+      dest.SetFolder(new_path.pathname());
+      source.SetFilename(di->Name());
+      dest.SetFilename(di->Name());
+      if (!CopyFileOrFolder(source, dest))
+        success = false;
+    } while (di->Next());
   }
-  return true;
+  delete di;
+  return success;
 }
 
 bool FilesystemInterface::DeleteFolderContents(const Pathname &folder) {
   bool success = true;
   VERIFY(IsFolder(folder));
   DirectoryIterator *di = IterateDirectory();
-  di->Iterate(folder);
-  while (di->Next()) {
-    if (di->Name() == "." || di->Name() == "..")
-      continue;
-    Pathname subdir;
-    subdir.SetFolder(folder.pathname());
-    if (di->IsDirectory()) {
-      subdir.AppendFolder(di->Name());
-      if (!DeleteFolderAndContents(subdir)) {
-        success = false;
+  if (!di)
+    return false;
+  if (di->Iterate(folder)) {
+    do {
+      if (di->Name() == "." || di->Name() == "..")
+        continue;
+      Pathname subdir;
+      subdir.SetFolder(folder.pathname());
+      if (di->IsDirectory()) {
+        subdir.AppendFolder(di->Name());
+        if (!DeleteFolderAndContents(subdir)) {
+          success = false;
+        }
+      } else {
+        subdir.SetFilename(di->Name());
+        if (!DeleteFile(subdir)) {
+          success = false;
+        }
       }
-    } else {
-      subdir.SetFilename(di->Name());
-      if (!DeleteFile(subdir)) {
-        success = false;
-      }
-    }
+    } while (di->Next());
   }
   delete di;
   return success;

@@ -92,6 +92,18 @@ class PseudoTcp {
   // Returns false if the socket is ready to be destroyed.
   bool GetNextClock(uint32 now, long& timeout);
 
+  // Call these to get/set option values to tailor this PseudoTcp
+  // instance's behaviour for the kind of data it will carry.
+  // If an unrecognized option is set or got, an assertion will fire.
+  enum Option {
+    OPT_NODELAY,      // Whether to enable Nagle's algorithm (0 == off)
+    OPT_ACKDELAY,     // The Delayed ACK timeout (0 == off).
+    //kOptRcvBuf,     // Set the receive buffer size, in bytes.
+    //kOptSndBuf,     // Set the send buffer size, in bytes.
+  };
+  void GetOption(Option opt, int* value);
+  void SetOption(Option opt, int value);
+
  protected:
   enum SendFlags { sfNone, sfDelayedAck, sfImmediateAck };
   enum {
@@ -180,6 +192,10 @@ class PseudoTcp {
   uint8 m_dup_acks;
   uint32 m_recover;
   uint32 m_t_ack;
+
+  // Configuration options
+  bool m_use_nagling;
+  uint32 m_ack_delay;
 };
 
 }  // namespace cricket

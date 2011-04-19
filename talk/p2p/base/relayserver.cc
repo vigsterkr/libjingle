@@ -159,12 +159,24 @@ void RelayServer::RemoveInternalServerSocket(
   socket->SignalReadEvent.disconnect(this);
 }
 
-int RelayServer::GetConnectionCount() {
+int RelayServer::GetConnectionCount() const {
   return connections_.size();
 }
 
-bool RelayServer::HasConnection(const talk_base::SocketAddress& address) {
-  for (ConnectionMap::iterator it = connections_.begin();
+talk_base::SocketAddressPair RelayServer::GetConnection(int connection) const {
+  int i = 0;
+  for (ConnectionMap::const_iterator it = connections_.begin();
+       it != connections_.end(); ++it) {
+    if (i == connection) {
+      return it->second->addr_pair();
+    }
+    ++i;
+  }
+  return talk_base::SocketAddressPair();
+}
+
+bool RelayServer::HasConnection(const talk_base::SocketAddress& address) const {
+  for (ConnectionMap::const_iterator it = connections_.begin();
        it != connections_.end(); ++it) {
     if (it->second->addr_pair().destination() == address) {
       return true;
@@ -180,8 +192,8 @@ void RelayServer::OnReadEvent(talk_base::AsyncSocket* socket) {
 }
 
 void RelayServer::OnInternalPacket(
-    const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
-    talk_base::AsyncPacketSocket* socket) {
+    talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
+    const talk_base::SocketAddress& remote_addr) {
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
@@ -224,8 +236,8 @@ void RelayServer::OnInternalPacket(
 }
 
 void RelayServer::OnExternalPacket(
-    const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
-    talk_base::AsyncPacketSocket* socket) {
+    talk_base::AsyncPacketSocket* socket, const char* bytes, size_t size,
+    const talk_base::SocketAddress& remote_addr) {
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
@@ -559,7 +571,7 @@ void RelayServer::AcceptConnection(talk_base::AsyncSocket* server_socket) {
       accepted_socket = new talk_base::AsyncSSLServerSocket(accepted_socket);
     }
     talk_base::AsyncTCPSocket* tcp_socket =
-        new talk_base::AsyncTCPSocket(accepted_socket);
+        new talk_base::AsyncTCPSocket(accepted_socket, false);
 
     // Finally add the socket so it can start communicating with the client.
     AddInternalSocket(tcp_socket);

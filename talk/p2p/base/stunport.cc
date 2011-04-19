@@ -124,24 +124,25 @@ class StunPortBindingRequest : public StunRequest {
 
 const std::string STUN_PORT_TYPE("stun");
 
-StunPort::StunPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
+StunPort::StunPort(talk_base::Thread* thread,
+                   talk_base::PacketSocketFactory* factory,
                    talk_base::Network* network,
+                   uint32 ip, int min_port, int max_port,
                    const talk_base::SocketAddress& server_addr)
-    : Port(thread, STUN_PORT_TYPE, factory, network),
-      server_addr_(server_addr), requests_(thread), socket_(NULL), error_(0),
+    : Port(thread, STUN_PORT_TYPE, factory, network, ip, min_port, max_port),
+      server_addr_(server_addr),
+      requests_(thread),
+      socket_(NULL),
+      error_(0),
       resolver_(NULL) {
   requests_.SignalSendPacket.connect(this, &StunPort::OnSendPacket);
 }
 
-bool StunPort::Init(const talk_base::SocketAddress& local_addr) {
-  socket_ = CreatePacketSocket(PROTO_UDP);
+bool StunPort::Init() {
+  socket_ = factory_->CreateUdpSocket(
+      talk_base::SocketAddress(ip_, 0), min_port_, max_port_);
   if (!socket_) {
     LOG_J(LS_WARNING, this) << "UDP socket creation failed";
-    return false;
-  }
-  if (socket_->Bind(local_addr) < 0) {
-    LOG_J(LS_WARNING, this) << "UDP bind failed with error "
-                            << socket_->GetError();
     return false;
   }
   socket_->SignalReadPacket.connect(this, &StunPort::OnReadPacket);
@@ -200,14 +201,20 @@ int StunPort::GetError() {
   return error_;
 }
 
-void StunPort::OnReadPacket(
-    const char* data, size_t size, const talk_base::SocketAddress& remote_addr,
-    talk_base::AsyncPacketSocket* socket) {
+void StunPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                            const char* data, size_t size,
+                            const talk_base::SocketAddress& remote_addr) {
   ASSERT(socket == socket_);
 
-  // Look for a response to a binding request.
-  if (requests_.CheckResponse(data, size))
+  // Look for a response from the STUN server.
+  // Even if the response doesn't match one of our outstanding requests, we
+  // will eat it because it might be a response to a retransmitted packet, and
+  // we already cleared the request when we got the first response.
+  ASSERT(!server_addr_.IsUnresolved());
+  if (remote_addr == server_addr_ || remote_addr == server_addr2_) {
+    requests_.CheckResponse(data, size);
     return;
+  }
 
   if (Connection* conn = GetConnection(remote_addr)) {
     conn->OnReadPacket(data, size);

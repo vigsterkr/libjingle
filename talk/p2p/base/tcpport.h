@@ -30,7 +30,7 @@
 
 #include <string>
 #include <list>
-#include "talk/base/asynctcpsocket.h"
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/p2p/base/port.h"
 
 namespace cricket {
@@ -48,19 +48,18 @@ extern const std::string LOCAL_PORT_TYPE;  // type of TCP ports
 class TCPPort : public Port {
  public:
   static TCPPort* Create(talk_base::Thread* thread,
-                         talk_base::SocketFactory* factory,
+                         talk_base::PacketSocketFactory* factory,
                          talk_base::Network* network,
-                         const talk_base::SocketAddress& local_addr,
+                         uint32 ip, int min_port, int max_port,
                          bool allow_listen) {
-    TCPPort* port = new TCPPort(thread, factory, network, local_addr,
-                                allow_listen);
+    TCPPort* port = new TCPPort(thread, factory, network,
+                                ip, min_port, max_port, allow_listen);
     if (!port->Init()) {
       delete port;
       port = NULL;
     }
     return port;
   }
-  bool Init();
   virtual ~TCPPort();
 
   virtual Connection* CreateConnection(const Candidate& address,
@@ -68,40 +67,42 @@ class TCPPort : public Port {
 
   virtual void PrepareAddress();
 
+  virtual int GetOption(talk_base::Socket::Option opt, int* value);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError();
 
  protected:
-  TCPPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
-          talk_base::Network* network, const talk_base::SocketAddress& address,
+  TCPPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+          talk_base::Network* network, uint32 ip, int min_port, int max_port,
           bool allow_listen);
+  bool Init();
 
   // Handles sending using the local TCP socket.
   virtual int SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& addr, bool payload);
 
-  // Creates TCPConnection for incoming sockets
-  void OnAcceptEvent(talk_base::AsyncSocket* socket);
+  // Accepts incoming TCP connection.
+  void OnNewConnection(talk_base::AsyncPacketSocket* socket,
+                       talk_base::AsyncPacketSocket* new_socket);
 
  private:
   struct Incoming {
     talk_base::SocketAddress addr;
-    talk_base::AsyncTCPSocket * socket;
+    talk_base::AsyncPacketSocket* socket;
   };
 
-  talk_base::AsyncTCPSocket* GetIncoming(const talk_base::SocketAddress& addr,
-                                         bool remove = false);
+  talk_base::AsyncPacketSocket* GetIncoming(
+      const talk_base::SocketAddress& addr, bool remove = false);
 
   // Receives packet signal from the local TCP Socket.
-  void OnReadPacket(const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr,
-                    talk_base::AsyncPacketSocket* socket);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
 
-  // Note: use this until Network ips are stable, then use network->ip
-  talk_base::SocketAddress address_;
+  // TODO: Is this still needed?
   bool incoming_only_;
   bool allow_listen_;
-  talk_base::AsyncSocket* socket_;
+  talk_base::AsyncPacketSocket* socket_;
   int error_;
   std::list<Incoming> incoming_;
 
@@ -112,22 +113,22 @@ class TCPConnection : public Connection {
  public:
   // Connection is outgoing unless socket is specified
   TCPConnection(TCPPort* port, const Candidate& candidate,
-    talk_base::AsyncTCPSocket* socket = 0);
+                talk_base::AsyncPacketSocket* socket = 0);
   virtual ~TCPConnection();
 
   virtual int Send(const void* data, size_t size);
   virtual int GetError();
 
-  talk_base::AsyncTCPSocket * socket() { return socket_; }
+  talk_base::AsyncPacketSocket* socket() { return socket_; }
 
  private:
-  void OnConnect(talk_base::AsyncTCPSocket* socket);
-  void OnClose(talk_base::AsyncTCPSocket* socket, int error);
-  void OnReadPacket(const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr,
-                    talk_base::AsyncPacketSocket* socket);
+  void OnConnect(talk_base::AsyncPacketSocket* socket);
+  void OnClose(talk_base::AsyncPacketSocket* socket, int error);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
 
-  talk_base::AsyncTCPSocket* socket_;
+  talk_base::AsyncPacketSocket* socket_;
   int error_;
 
   friend class TCPPort;

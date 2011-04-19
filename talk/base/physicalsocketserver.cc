@@ -215,7 +215,6 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     addr.ToSockAddr(&saddr);
     int err = ::connect(s_, (sockaddr*)&saddr, sizeof(saddr));
     UpdateLastError();
-    //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Connect(" << addr2.ToString() << ") Ret: " << err << " Error: " << error_;
     if (err == 0) {
       state_ = CS_CONNECTED;
     } else if (IsBlockingError(error_)) {
@@ -283,8 +282,8 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 #endif
         );
     UpdateLastError();
-    //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Send(" << cb << ") Ret: " << sent << " Error: " << error_;
-    ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
+    // We have seen minidumps where this may be false.
+    ASSERT(sent <= static_cast<int>(cb));
     if ((sent < 0) && IsBlockingError(error_)) {
       enabled_events_ |= DE_WRITE;
     }
@@ -304,11 +303,11 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 #endif
         (sockaddr*)&saddr, sizeof(saddr));
     UpdateLastError();
-    ASSERT(sent <= static_cast<int>(cb));  // We have seen minidumps where this may be false
+    // We have seen minidumps where this may be false.
+    ASSERT(sent <= static_cast<int>(cb));
     if ((sent < 0) && IsBlockingError(error_)) {
       enabled_events_ |= DE_WRITE;
     }
-    //LOG_F(LS_INFO) << cb << ":" << addr.ToString() << ":" << sent << ":" << error_;
     return sent;
   }
 
@@ -386,7 +385,6 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
       return 0;
     int err = ::closesocket(s_);
     UpdateLastError();
-    //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] Close() Ret: " << err << " Error: " << error_;
     s_ = INVALID_SOCKET;
     state_ = CS_CLOSED;
     enabled_events_ = 0;
@@ -426,14 +424,14 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 
     ASSERT(false);
     return -1;
-#elif defined(OSX)
+#elif defined(IOS) || defined(OSX)
     // No simple way to do this on Mac OS X.
     // SIOCGIFMTU would work if we knew which interface would be used, but
     // figuring that out is pretty complicated. For now we'll return an error
     // and let the caller pick a default MTU.
     error_ = EINVAL;
     return -1;
-#elif defined(LINUX)
+#elif defined(LINUX) || defined(ANDROID)
     // Gets the path MTU.
     int value;
     socklen_t vlen = sizeof(value);
@@ -481,7 +479,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
         *slevel = IPPROTO_IP;
         *sopt = IP_DONTFRAGMENT;
         break;
-#elif defined(OSX) || defined(BSD)
+#elif defined(IOS) || defined(OSX) || defined(BSD)
         LOG(LS_WARNING) << "Socket::OPT_DONTFRAGMENT not supported.";
         return -1;
 #elif defined(POSIX)
@@ -581,15 +579,130 @@ class EventDispatcher : public Dispatcher {
   CriticalSection crit_;
 };
 
-// This is a class customized to use the self-pipe trick to deliver POSIX
-// signals. This is the only safe, reliable, cross-platform way to do
-// non-trivial things with a POSIX signal (until proper pselect()
-// implementations become ubiquitous).
-class PosixSignalDeliveryDispatcher : public Dispatcher {
+// These two classes use the self-pipe trick to deliver POSIX signals to our
+// select loop. This is the only safe, reliable, cross-platform way to do
+// non-trivial things with a POSIX signal in an event-driven program (until
+// proper pselect() implementations become ubiquitous).
+
+class PosixSignalHandler {
  public:
-  virtual ~PosixSignalDeliveryDispatcher() {
-    close(afd_[0]);
-    close(afd_[1]);
+  // POSIX only specifies 32 signals, but in principle the system might have
+  // more and the programmer might choose to use them, so we size our array
+  // for 128.
+  static const int kNumPosixSignals = 128;
+
+  static PosixSignalHandler *Instance() { return &instance_; }
+
+  // Returns true if the given signal number is set.
+  bool IsSignalSet(int signum) const {
+    ASSERT(signum < ARRAY_SIZE(received_signal_));
+    if (signum < ARRAY_SIZE(received_signal_)) {
+      return received_signal_[signum];
+    } else {
+      return false;
+    }
+  }
+
+  // Clears the given signal number.
+  void ClearSignal(int signum) {
+    ASSERT(signum < ARRAY_SIZE(received_signal_));
+    if (signum < ARRAY_SIZE(received_signal_)) {
+      received_signal_[signum] = false;
+    }
+  }
+
+  // Returns the file descriptor to monitor for signal events.
+  int GetDescriptor() const {
+    return afd_[0];
+  }
+
+  // This is called directly from our real signal handler, so it must be
+  // signal-handler-safe. That means it cannot assume anything about the
+  // user-level state of the process, since the handler could be executed at any
+  // time on any thread.
+  void OnPosixSignalReceived(int signum) {
+    if (signum >= ARRAY_SIZE(received_signal_)) {
+      // We don't have space in our array for this.
+      return;
+    }
+    // Set a flag saying we've seen this signal.
+    received_signal_[signum] = true;
+    // Notify application code that we got a signal.
+    const uint8 b[1] = { 0 };
+    if (-1 == write(afd_[1], b, sizeof(b))) {
+      // Nothing we can do here. If there's an error somehow then there's
+      // nothing we can safely do from a signal handler.
+      // No, we can't even safely log it.
+      // But, we still have to check the return value here. Otherwise,
+      // GCC 4.4.1 complains ignoring return value. Even (void) doesn't help.
+      return;
+    }
+  }
+
+ private:
+  PosixSignalHandler() {
+    if (pipe(afd_) < 0) {
+      LOG_ERR(LS_ERROR) << "pipe failed";
+      return;
+    }
+    if (fcntl(afd_[0], F_SETFL, O_NONBLOCK) < 0) {
+      LOG_ERR(LS_WARNING) << "fcntl #1 failed";
+    }
+    if (fcntl(afd_[1], F_SETFL, O_NONBLOCK) < 0) {
+      LOG_ERR(LS_WARNING) << "fcntl #2 failed";
+    }
+    memset(const_cast<void *>(static_cast<volatile void *>(received_signal_)),
+           0,
+           sizeof(received_signal_));
+  }
+
+  ~PosixSignalHandler() {
+    int fd1 = afd_[0];
+    int fd2 = afd_[1];
+    // We clobber the stored file descriptor numbers here or else in principle
+    // a signal that happens to be delivered during application termination
+    // could erroneously write a zero byte to an unrelated file handle in
+    // OnPosixSignalReceived() if some other file happens to be opened later
+    // during shutdown and happens to be given the same file descriptor number
+    // as our pipe had. Unfortunately even with this precaution there is still a
+    // race where that could occur if said signal happens to be handled
+    // concurrently with this code and happens to have already read the value of
+    // afd_[1] from memory before we clobber it, but that's unlikely.
+    afd_[0] = -1;
+    afd_[1] = -1;
+    close(fd1);
+    close(fd2);
+  }
+
+  // There is just a single global instance. (Signal handlers do not get any
+  // sort of user-defined void * parameter, so they can't access anything that
+  // isn't global.)
+  static PosixSignalHandler instance_;
+
+  int afd_[2];
+  // These are boolean flags that will be set in our signal handler and read
+  // and cleared from Wait(). There is a race involved in this, but it is
+  // benign. The signal handler sets the flag before signaling the pipe, so
+  // we'll never end up blocking in select() while a flag is still true.
+  // However, if two of the same signal arrive close to each other then it's
+  // possible that the second time the handler may set the flag while it's still
+  // true, meaning that signal will be missed. But the first occurrence of it
+  // will still be handled, so this isn't a problem.
+  // Volatile is not necessary here for correctness, but this data _is_ volatile
+  // so I've marked it as such.
+  volatile uint8 received_signal_[kNumPosixSignals];
+};
+
+PosixSignalHandler PosixSignalHandler::instance_;
+
+class PosixSignalDispatcher : public Dispatcher {
+ public:
+  PosixSignalDispatcher(PhysicalSocketServer *owner) : owner_(owner) {
+    owner_->Add(this);
+  }
+
+  virtual ~PosixSignalDispatcher() {
+    owner_->Remove(this);
   }
 
   virtual uint32 GetRequestedEvents() {
@@ -600,7 +713,7 @@ class PosixSignalDeliveryDispatcher : public Dispatcher {
     // Events might get grouped if signals come very fast, so we read out up to
     // 16 bytes to make sure we keep the pipe empty.
     uint8 b[16];
-    ssize_t ret = read(afd_[0], b, sizeof(b));
+    ssize_t ret = read(GetDescriptor(), b, sizeof(b));
     if (ret < 0) {
       LOG_ERR(LS_WARNING) << "Error in read()";
     } else if (ret == 0) {
@@ -609,17 +722,18 @@ class PosixSignalDeliveryDispatcher : public Dispatcher {
   }
 
   virtual void OnEvent(uint32 ff, int err) {
-    for (int signum = 0; signum < ARRAY_SIZE(received_signal_); ++signum) {
-      if (received_signal_[signum]) {
-        received_signal_[signum] = false;
+    for (int signum = 0; signum < PosixSignalHandler::kNumPosixSignals;
+         ++signum) {
+      if (PosixSignalHandler::Instance()->IsSignalSet(signum)) {
+        PosixSignalHandler::Instance()->ClearSignal(signum);
         HandlerMap::iterator i = handlers_.find(signum);
         if (i == handlers_.end()) {
           // This can happen if a signal is delivered to our process at around
           // the same time as we unset our handler for it. It is not an error
-          // condidion, but it's unusual enough to be worth logging.
+          // condition, but it's unusual enough to be worth logging.
           LOG(LS_INFO) << "Received signal with no handler: " << signum;
         } else {
-          // Otherwise, execute the handler.
+          // Otherwise, execute our handler.
           (*i->second)(signum);
         }
       }
@@ -627,7 +741,7 @@ class PosixSignalDeliveryDispatcher : public Dispatcher {
   }
 
   virtual int GetDescriptor() {
-    return afd_[0];
+    return PosixSignalHandler::Instance()->GetDescriptor();
   }
 
   virtual bool IsDescriptorClosed() {
@@ -646,107 +760,13 @@ class PosixSignalDeliveryDispatcher : public Dispatcher {
     return !handlers_.empty();
   }
 
-  // This is called directly from our real signal handler, so it must be
-  // signal-handler-safe. That means it cannot assume anything about the
-  // user-level state of the process, since the handler could be executed at any
-  // time on any thread.
-  void OnPosixSignalReceived(int signum) {
-    if (signum >= ARRAY_SIZE(received_signal_)) {
-      // We don't have space in our array for this.
-      return;
-    }
-    // Set a flag saying we've seen this signal.
-    received_signal_[signum] = true;
-    // Tell the thread running our PhysicalSocketServer that we got a signal.
-    const uint8 b[1] = { 0 };
-    if (-1 == write(afd_[1], b, sizeof(b))) {
-      // Nothing we can do here. If there's an error somehow then there's
-      // nothing we can safely do from a signal handler.
-      // No, we can't even safely log it.
-      // But, we still have to check the return value here. Otherwise,
-      // GCC 4.4.1 complains ignoring return value. Even (void) doesn't help.
-      return;
-    }
-  }
-
-  // Sets a PhysicalSocketServer to own signal delivery, or fails if already
-  // owned.
-  bool SetOwner(PhysicalSocketServer *owner) {
-    CritScope cs(&owner_critsec_);
-    if (owner == owner_) {
-      return true;
-    } else if (owner_) {
-      return false;
-    } else {
-      owner_ = owner;
-      owner_->Add(this);
-      return true;
-    }
-  }
-
-  bool IsOwner(PhysicalSocketServer *ss) {
-    CritScope cs(&owner_critsec_);
-    return owner_ == ss;
-  }
-
-  void ClearOwner(PhysicalSocketServer *ss) {
-    CritScope cs(&owner_critsec_);
-    if (owner_ != ss) {
-      return;
-    }
-    owner_->Remove(this);
-    owner_ = NULL;
-  }
-
-  // There is just a single global instance. (Signal handlers do not get any
-  // sort of user-defined void * parameter, so they can't access anything that
-  // isn't global.)
-  static PosixSignalDeliveryDispatcher instance_;
-
  private:
-  // POSIX only specifies 32 signals, but in principle the system might have
-  // more and the programmer might choose to use them, so we size our array
-  // for 128.
-  static const int kNumPosixSignals = 128;
-
   typedef std::map<int, void (*)(int)> HandlerMap;
 
-  PosixSignalDeliveryDispatcher() : owner_(NULL) {
-    if (pipe(afd_) < 0) {
-      LOG_ERR(LS_ERROR) << "pipe failed";
-      return;
-    }
-    if (fcntl(afd_[0], F_SETFL, O_NONBLOCK) < 0) {
-      LOG_ERR(LS_WARNING) << "fcntl #1 failed";
-    }
-    if (fcntl(afd_[1], F_SETFL, O_NONBLOCK) < 0) {
-      LOG_ERR(LS_WARNING) << "fcntl #2 failed";
-    }
-    memset(const_cast<void *>(static_cast<volatile void *>(received_signal_)),
-           0,
-           sizeof(received_signal_));
-  }
-
-  int afd_[2];
   HandlerMap handlers_;
-  // These are boolean flags that will be set in our signal handler and read
-  // and cleared from Wait(). There is a race involved in this, but it is
-  // benign. The signal handler sets the flag before signaling the pipe, so
-  // we'll never end up blocking in select() while a flag is still true.
-  // However, if two of the same signal arrive close to each other then it's
-  // possible that the second time the handler may set the flag while it's still
-  // true, meaning that signal will be missed. But the first occurrence of it
-  // will still be handled, so this isn't a problem.
-  // Volatile is not necessary here for correctness, but this data _is_ volatile
-  // so I've marked it as such.
-  volatile uint8 received_signal_[kNumPosixSignals];
   // Our owner.
   PhysicalSocketServer *owner_;
-  // To synchronize ownership changes.
-  CriticalSection owner_critsec_;
 };
-
-PosixSignalDeliveryDispatcher PosixSignalDeliveryDispatcher::instance_;
 
 class SocketDispatcher : public Dispatcher, public PhysicalSocket {
  public:
@@ -993,9 +1013,16 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   bool signal_close_;
   int signal_err_;
 
-  SocketDispatcher(PhysicalSocketServer* ss) : PhysicalSocket(ss), id_(0), signal_close_(false) {
+  SocketDispatcher(PhysicalSocketServer* ss)
+      : PhysicalSocket(ss),
+        id_(0),
+        signal_close_(false) {
   }
-  SocketDispatcher(SOCKET s, PhysicalSocketServer* ss) : PhysicalSocket(ss, s), id_(0), signal_close_(false) {
+
+  SocketDispatcher(SOCKET s, PhysicalSocketServer* ss)
+      : PhysicalSocket(ss, s),
+        id_(0),
+        signal_close_(false) {
   }
 
   virtual ~SocketDispatcher() {
@@ -1068,7 +1095,6 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
       SignalReadEvent(this);
     }
     if (((ff & DE_CLOSE) != 0) && (id_ == cache_id)) {
-      //LOG(INFO) << "SOCK[" << static_cast<int>(s_) << "] OnClose() Error: " << err;
       signal_close_ = true;
       signal_err_ = err;
     }
@@ -1133,7 +1159,7 @@ PhysicalSocketServer::~PhysicalSocketServer() {
   WSACloseEvent(socket_ev_);
 #endif
 #ifdef POSIX
-  PosixSignalDeliveryDispatcher::instance_.ClearOwner(this);
+  signal_dispatcher_.reset();
 #endif
   delete signal_wakeup_;
   ASSERT(dispatchers_.empty());
@@ -1354,7 +1380,7 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
 }
 
 static void GlobalSignalHandler(int signum) {
-  PosixSignalDeliveryDispatcher::instance_.OnPosixSignalReceived(signum);
+  PosixSignalHandler::Instance()->OnPosixSignalReceived(signum);
 }
 
 bool PhysicalSocketServer::SetPosixSignalHandler(int signum,
@@ -1365,19 +1391,17 @@ bool PhysicalSocketServer::SetPosixSignalHandler(int signum,
     if (!InstallSignal(signum, handler)) {
       return false;
     }
-    if (PosixSignalDeliveryDispatcher::instance_.IsOwner(this)) {
-      PosixSignalDeliveryDispatcher::instance_.ClearHandler(signum);
-      if (!PosixSignalDeliveryDispatcher::instance_.HasHandlers()) {
-        PosixSignalDeliveryDispatcher::instance_.ClearOwner(this);
+    if (signal_dispatcher_.get()) {
+      signal_dispatcher_->ClearHandler(signum);
+      if (!signal_dispatcher_->HasHandlers()) {
+        signal_dispatcher_.reset();
       }
     }
   } else {
-    if (!PosixSignalDeliveryDispatcher::instance_.SetOwner(this)) {
-      LOG(LS_ERROR) <<
-        "Cannot do POSIX signal delivery on more than one PhysicalSocketServer";
-      return false;
+    if (!signal_dispatcher_.get()) {
+      signal_dispatcher_.reset(new PosixSignalDispatcher(this));
     }
-    PosixSignalDeliveryDispatcher::instance_.SetHandler(signum, handler);
+    signal_dispatcher_->SetHandler(signum, handler);
     if (!InstallSignal(signum, &GlobalSignalHandler)) {
       return false;
     }
@@ -1438,7 +1462,9 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
         if (disp->CheckSignalClose()) {
           // We just signalled close, don't poll this socket
         } else if (s != INVALID_SOCKET) {
-          WSAEventSelect(s, events[0], FlagsToEvents(disp->GetRequestedEvents()));
+          WSAEventSelect(s,
+                         events[0],
+                         FlagsToEvents(disp->GetRequestedEvents()));
         } else {
           events.push_back(disp->GetWSAEvent());
           event_owners.push_back(disp);
@@ -1458,14 +1484,19 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
     }
 
     // Wait for one of the events to signal
-    DWORD dw = WSAWaitForMultipleEvents(static_cast<DWORD>(events.size()), &events[0], false, cmsNext, false);
+    DWORD dw = WSAWaitForMultipleEvents(static_cast<DWORD>(events.size()),
+                                        &events[0],
+                                        false,
+                                        cmsNext,
+                                        false);
 
 #if 0  // LOGGING
     // we track this information purely for logging purposes.
     last_tick_dispatch_count_++;
     if (last_tick_dispatch_count_ >= 1000) {
       int32 elapsed = TimeSince(last_tick_tracked_);
-      LOG(INFO) << "PhysicalSocketServer took " << elapsed << "ms for 1000 events";
+      LOG(INFO) << "PhysicalSocketServer took " << elapsed
+                << "ms for 1000 events";
 
       // If we get more than 1000 events in a second, we are spinning badly
       // (normally it should take about 8-20 seconds).
@@ -1509,20 +1540,30 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
 
 #if LOGGING
             {
-              if ((wsaEvents.lNetworkEvents & FD_READ) && wsaEvents.iErrorCode[FD_READ_BIT] != 0) {
-                LOG(WARNING) << "PhysicalSocketServer got FD_READ_BIT error " << wsaEvents.iErrorCode[FD_READ_BIT];
+              if ((wsaEvents.lNetworkEvents & FD_READ) &&
+                  wsaEvents.iErrorCode[FD_READ_BIT] != 0) {
+                LOG(WARNING) << "PhysicalSocketServer got FD_READ_BIT error "
+                             << wsaEvents.iErrorCode[FD_READ_BIT];
               }
-              if ((wsaEvents.lNetworkEvents & FD_WRITE) && wsaEvents.iErrorCode[FD_WRITE_BIT] != 0) {
-                LOG(WARNING) << "PhysicalSocketServer got FD_WRITE_BIT error " << wsaEvents.iErrorCode[FD_WRITE_BIT];
+              if ((wsaEvents.lNetworkEvents & FD_WRITE) &&
+                  wsaEvents.iErrorCode[FD_WRITE_BIT] != 0) {
+                LOG(WARNING) << "PhysicalSocketServer got FD_WRITE_BIT error "
+                             << wsaEvents.iErrorCode[FD_WRITE_BIT];
               }
-              if ((wsaEvents.lNetworkEvents & FD_CONNECT) && wsaEvents.iErrorCode[FD_CONNECT_BIT] != 0) {
-                LOG(WARNING) << "PhysicalSocketServer got FD_CONNECT_BIT error " << wsaEvents.iErrorCode[FD_CONNECT_BIT];
+              if ((wsaEvents.lNetworkEvents & FD_CONNECT) &&
+                  wsaEvents.iErrorCode[FD_CONNECT_BIT] != 0) {
+                LOG(WARNING) << "PhysicalSocketServer got FD_CONNECT_BIT error "
+                             << wsaEvents.iErrorCode[FD_CONNECT_BIT];
               }
-              if ((wsaEvents.lNetworkEvents & FD_ACCEPT) && wsaEvents.iErrorCode[FD_ACCEPT_BIT] != 0) {
-                LOG(WARNING) << "PhysicalSocketServer got FD_ACCEPT_BIT error " << wsaEvents.iErrorCode[FD_ACCEPT_BIT];
+              if ((wsaEvents.lNetworkEvents & FD_ACCEPT) &&
+                  wsaEvents.iErrorCode[FD_ACCEPT_BIT] != 0) {
+                LOG(WARNING) << "PhysicalSocketServer got FD_ACCEPT_BIT error "
+                             << wsaEvents.iErrorCode[FD_ACCEPT_BIT];
               }
-              if ((wsaEvents.lNetworkEvents & FD_CLOSE) && wsaEvents.iErrorCode[FD_CLOSE_BIT] != 0) {
-                LOG(WARNING) << "PhysicalSocketServer got FD_CLOSE_BIT error " << wsaEvents.iErrorCode[FD_CLOSE_BIT];
+              if ((wsaEvents.lNetworkEvents & FD_CLOSE) &&
+                  wsaEvents.iErrorCode[FD_CLOSE_BIT] != 0) {
+                LOG(WARNING) << "PhysicalSocketServer got FD_CLOSE_BIT error "
+                             << wsaEvents.iErrorCode[FD_CLOSE_BIT];
               }
             }
 #endif

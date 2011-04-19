@@ -32,7 +32,7 @@
 
 namespace cricket {
 
-// Parameters for SRTP negotiation, as described in RFC 4586.
+// Parameters for SRTP negotiation, as described in RFC 4568.
 struct CryptoParams {
   CryptoParams() : tag(0) {}
   CryptoParams(int t, const std::string& cs,

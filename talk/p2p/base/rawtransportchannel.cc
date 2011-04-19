@@ -251,7 +251,9 @@ void RawTransportChannel::SetWritable() {
 
   set_writable(true);
 
-  SignalRouteChange(this, remote_address_);
+  Candidate remote_candidate;
+  remote_candidate.set_address(remote_address_);
+  SignalRouteChange(this, remote_candidate);
 }
 
 void RawTransportChannel::OnReadPacket(

@@ -28,9 +28,12 @@
 #ifndef TALK_SESSION_PHONE_CODEC_H_
 #define TALK_SESSION_PHONE_CODEC_H_
 
+#include <map>
 #include <string>
 
 namespace cricket {
+
+typedef std::map<std::string, std::string> CodecParameterMap;
 
 struct AudioCodec {
   int id;
@@ -38,8 +41,8 @@ struct AudioCodec {
   int clockrate;
   int bitrate;
   int channels;
-
   int preference;
+  CodecParameterMap params;
 
   // Creates a codec with the given parameters.
   AudioCodec(int pt, const std::string& nm, int cr, int br, int cs, int pr)
@@ -66,6 +69,7 @@ struct AudioCodec {
     bitrate = c.bitrate;
     channels = c.channels;
     preference =  c.preference;
+    params = c.params;
     return *this;
   }
 
@@ -75,7 +79,8 @@ struct AudioCodec {
            clockrate == c.clockrate &&
            bitrate == c.bitrate &&
            channels == c.channels &&
-           preference == c.preference;
+           preference == c.preference &&
+           params == c.params;
   }
 
   bool operator!=(const AudioCodec& c) const {
@@ -89,8 +94,8 @@ struct VideoCodec {
   int width;
   int height;
   int framerate;
-
   int preference;
+  CodecParameterMap params;
 
   // Creates a codec with the given parameters.
   VideoCodec(int pt, const std::string& nm, int w, int h, int fr, int pr)
@@ -116,6 +121,7 @@ struct VideoCodec {
     height = c.height;
     framerate = c.framerate;
     preference =  c.preference;
+    params = c.params;
     return *this;
   }
 
@@ -125,7 +131,8 @@ struct VideoCodec {
            width == c.width &&
            height == c.height &&
            framerate == c.framerate &&
-           preference == c.preference;
+           preference == c.preference &&
+           params == c.params;
   }
 
   bool operator!=(const VideoCodec& c) const {

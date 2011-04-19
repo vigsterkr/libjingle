@@ -1,5 +1,5 @@
 // libjingle
-// Copyright 2004--2005, Google Inc.
+// Copyright 2004 Google Inc.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -59,34 +59,35 @@ inline std::string GetFourccName(uint32 fourcc) {
 //   http://developer.apple.com/quicktime/icefloe/dispatch020.html
 //   http://www.fourcc.org/yuv.php
 enum FourCC {
-  // Canonical fourccs used in our code.
+  // Canonical fourcc codes used in our code.
   FOURCC_I420 = FOURCC('I', '4', '2', '0'),
   FOURCC_YUY2 = FOURCC('Y', 'U', 'Y', '2'),
   FOURCC_UYVY = FOURCC('U', 'Y', 'V', 'Y'),
+  FOURCC_M420 = FOURCC('M', '4', '2', '0'),
   FOURCC_24BG = FOURCC('2', '4', 'B', 'G'),
-  FOURCC_RGBA = FOURCC('R', 'G', 'B', 'A'),
+  FOURCC_ABGR = FOURCC('A', 'B', 'G', 'R'),
   FOURCC_BGRA = FOURCC('B', 'G', 'R', 'A'),
   FOURCC_ARGB = FOURCC('A', 'R', 'G', 'B'),
   FOURCC_MJPG = FOURCC('M', 'J', 'P', 'G'),
-  FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),
   FOURCC_RAW  = FOURCC('r', 'a', 'w', ' '),
-  // Next five are Bayer RGB formats. The four characters define the order of
+  FOURCC_NV21 = FOURCC('N', 'V', '2', '1'),
+  FOURCC_NV12 = FOURCC('N', 'V', '1', '2'),
+  // Next four are Bayer RGB formats. The four characters define the order of
   // the colours in each 2x2 pixel grid, going left-to-right and top-to-bottom.
   FOURCC_RGGB = FOURCC('R', 'G', 'G', 'B'),
   FOURCC_BGGR = FOURCC('B', 'G', 'G', 'R'),
   FOURCC_GRBG = FOURCC('G', 'R', 'B', 'G'),
   FOURCC_GBRG = FOURCC('G', 'B', 'R', 'G'),
 
-  // Aliases for canonical fourccs, replaced with their canonical equivalents by
-  // CanonicalFourCC().
+  // Aliases for canonical fourcc codes, replaced with their canonical
+  // equivalents by CanonicalFourCC().
   FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420
   FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420
   FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2
-  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2
+  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2 on Mac
   FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY
   FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
-  FOURCC_RGB1 = FOURCC('R', 'G', 'B', '1'),  // Alias for ABGR
-  FOURCC_RGB2 = FOURCC('R', 'G', 'B', '2'),  // Alias for BGRA
+  FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),  // Alias for MJPG
   FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
 
   // Match any fourcc.

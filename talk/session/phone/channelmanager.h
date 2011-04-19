@@ -38,9 +38,6 @@
 #include "talk/session/phone/voicechannel.h"
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/devicemanager.h"
-#ifdef USE_TALK_SOUND
-#include "talk/sound/soundsystemfactory.h"
-#endif
 
 namespace cricket {
 
@@ -133,6 +130,7 @@ class ChannelManager : public talk_base::MessageHandler,
                        std::string* wave_out_device, int* opts);
   bool SetAudioOptions(const std::string& wave_in_device,
                        const std::string& wave_out_device, int opts);
+  bool GetOutputVolume(int* level);
   bool SetOutputVolume(int level);
   bool GetVideoOptions(std::string* cam_device);
   bool SetVideoOptions(const std::string& cam_device);
@@ -157,7 +155,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool GetAudioOutputDevices(std::vector<std::string>* names);
   bool GetVideoCaptureDevices(std::vector<std::string>* names);
   sigslot::repeater0<> SignalDevicesChange;
-  sigslot::signal1<bool> SignalVideoCaptureResult;
+  sigslot::signal1<CaptureResult> SignalVideoCaptureResult;
 
  private:
   typedef std::vector<VoiceChannel*> VoiceChannels;
@@ -177,6 +175,7 @@ class ChannelManager : public talk_base::MessageHandler,
   void DestroySoundclip_w(Soundclip* soundclip);
   bool SetAudioOptions_w(int opts, const Device* in_dev,
                          const Device* out_dev);
+  bool GetOutputVolume_w(int* level);
   bool SetOutputVolume_w(int level);
   bool SetLocalMonitor_w(bool enable);
   bool SetVideoOptions_w(const Device* cam_device);
@@ -185,13 +184,10 @@ class ChannelManager : public talk_base::MessageHandler,
   CaptureResult SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);
-  void OnVideoCaptureResult(bool result);
+  void OnVideoCaptureResult(CaptureResult result);
   void OnMessage(talk_base::Message *message);
 
   talk_base::CriticalSection crit_;
-#ifdef USE_TALK_SOUND
-  talk_base::scoped_ptr<SoundSystemFactory> sound_system_factory_;
-#endif
   talk_base::scoped_ptr<MediaEngine> media_engine_;
   talk_base::scoped_ptr<DeviceManager> device_manager_;
   bool initialized_;

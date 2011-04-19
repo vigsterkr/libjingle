@@ -1,6 +1,29 @@
-// Copyright 2008 Google Inc. All Rights Reserved.
-
-//
+/*
+ * libjingle
+ * Copyright 2008 Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #ifdef LINUX
 #include "talk/base/linux.h"
@@ -9,6 +32,7 @@
 #include <sys/utsname.h>
 
 #include <cstdio>
+#include <set>
 
 #include "talk/base/stringencode.h"
 
@@ -26,40 +50,110 @@ ProcCpuInfo::~ProcCpuInfo() {
 
 bool ProcCpuInfo::LoadFromSystem() {
   ConfigParser procfs;
-  if (!procfs.Open(kCpuInfoFile))
+  if (!procfs.Open(kCpuInfoFile)) {
     return false;
-  return procfs.Parse(&cpu_info_);
+  }
+  return procfs.Parse(&sections_);
 };
 
-bool ProcCpuInfo::GetNumCpus(int *num) {
-  if (cpu_info_.size() == 0)
+bool ProcCpuInfo::GetSectionCount(size_t* count) {
+  if (sections_.empty()) {
     return false;
-  *num = cpu_info_.size();
+  }
+  if (count) {
+    *count = sections_.size();
+  }
   return true;
 }
 
-bool ProcCpuInfo::GetCpuStringValue(int cpu_id, const std::string& key,
-                                    std::string *result) {
-  if (cpu_id >= static_cast<int>(cpu_info_.size()))
+bool ProcCpuInfo::GetNumCpus(int* num) {
+  if (sections_.empty()) {
     return false;
-  ConfigParser::SimpleMap::iterator iter = cpu_info_[cpu_id].find(key);
-  if (iter == cpu_info_[cpu_id].end())
+  }
+  int total_cpus = 0;
+#if defined(__arm__)
+  // Count the number of blocks that have a "processor" key defined. On ARM,
+  // there may be extra blocks of information that aren't per-processor.
+  size_t section_count = sections_.size();
+  for (size_t i = 0; i < section_count; ++i) {
+    int processor_id;
+    if (GetSectionIntValue(i, "processor", &processor_id)) {
+      ++total_cpus;
+    }
+  }
+  // Single core ARM systems don't include "processor" keys at all, so return
+  // that we have a single core if we didn't find any explicitly above.
+  if (total_cpus == 0) {
+    total_cpus = 1;
+  }
+#else
+  // On X86, there is exactly one info section per processor.
+  total_cpus = static_cast<int>(sections_.size());
+#endif
+  if (num) {
+    *num = total_cpus;
+  }
+  return true;
+}
+
+bool ProcCpuInfo::GetNumPhysicalCpus(int* num) {
+  if (sections_.empty()) {
     return false;
+  }
+  // TODO: /proc/cpuinfo only reports cores that are currently
+  // _online_, so this may underreport the number of physical cores.
+#if defined(__arm__)
+  // ARM (currently) has no hyperthreading, so just return the same value
+  // as GetNumCpus.
+  return GetNumCpus(num);
+#else
+  int total_cores = 0;
+  std::set<int> physical_ids;
+  size_t section_count = sections_.size();
+  for (size_t i = 0; i < section_count; ++i) {
+    int physical_id;
+    int cores;
+    // Count the cores for the physical id only if we have not counted the id.
+    if (GetSectionIntValue(i, "physical id", &physical_id) &&
+        GetSectionIntValue(i, "cpu cores", &cores) &&
+        physical_ids.find(physical_id) == physical_ids.end()) {
+      physical_ids.insert(physical_id);
+      total_cores += cores;
+    }
+  }
+
+  if (num) {
+    *num = total_cores;
+  }
+  return true;
+#endif
+}
+
+bool ProcCpuInfo::GetSectionStringValue(size_t section_num,
+                                        const std::string& key,
+                                        std::string* result) {
+  if (section_num >= sections_.size()) {
+    return false;
+  }
+  ConfigParser::SimpleMap::iterator iter = sections_[section_num].find(key);
+  if (iter == sections_[section_num].end()) {
+    return false;
+  }
   *result = iter->second;
   return true;
 }
 
-bool ProcCpuInfo::GetCpuIntValue(int cpu_id, const std::string& key,
-                                 int *result) {
-  if (cpu_id >= static_cast<int>(cpu_info_.size())) {
+bool ProcCpuInfo::GetSectionIntValue(size_t section_num,
+                                     const std::string& key,
+                                     int* result) {
+  if (section_num >= sections_.size()) {
     return false;
   }
-  ConfigParser::SimpleMap::iterator iter = cpu_info_[cpu_id].find(key);
-  if (iter == cpu_info_[cpu_id].end()) {
+  ConfigParser::SimpleMap::iterator iter = sections_[section_num].find(key);
+  if (iter == sections_[section_num].end()) {
     return false;
   }
-  *result = atoi((iter->second).c_str());
-  return true;
+  return FromString(iter->second, result);
 }
 
 ConfigParser::ConfigParser() {}
@@ -67,9 +161,10 @@ ConfigParser::ConfigParser() {}
 ConfigParser::~ConfigParser() {}
 
 bool ConfigParser::Open(const std::string& filename) {
-  FileStream *fs = new FileStream();
-  if (!fs->Open(filename, "r"))
+  FileStream* fs = new FileStream();
+  if (!fs->Open(filename, "r")) {
     return false;
+  }
   instream_.reset(fs);
   return true;
 }
@@ -78,7 +173,7 @@ void ConfigParser::Attach(StreamInterface* stream) {
   instream_.reset(stream);
 }
 
-bool ConfigParser::Parse(MapVector *key_val_pairs) {
+bool ConfigParser::Parse(MapVector* key_val_pairs) {
   // Parses the file and places the found key-value pairs into key_val_pairs.
   SimpleMap section;
   while (ParseSection(&section)) {
@@ -88,7 +183,7 @@ bool ConfigParser::Parse(MapVector *key_val_pairs) {
   return (!key_val_pairs->empty());
 }
 
-bool ConfigParser::ParseSection(SimpleMap *key_val_pair) {
+bool ConfigParser::ParseSection(SimpleMap* key_val_pair) {
   // Parses the next section in the filestream and places the found key-value
   // pairs into key_val_pair.
   std::string key, value;
@@ -98,32 +193,36 @@ bool ConfigParser::ParseSection(SimpleMap *key_val_pair) {
   return (!key_val_pair->empty());
 }
 
-bool ConfigParser::ParseLine(std::string *key, std::string *value) {
+bool ConfigParser::ParseLine(std::string* key, std::string* value) {
   // Parses the next line in the filestream and places the found key-value
   // pair into key and val.
   std::string line;
-  if ((instream_->ReadLine(&line)) == EOF)
+  if ((instream_->ReadLine(&line)) == EOF) {
     return false;
+  }
   std::vector<std::string> tokens;
-  if (2 != split(line, ':', &tokens))
+  if (2 != split(line, ':', &tokens)) {
     return false;
+  }
   // Removes whitespace at the end of Key name
   size_t pos = tokens[0].length() - 1;
-  while ((pos > 0) && isspace(tokens[0][pos]))
+  while ((pos > 0) && isspace(tokens[0][pos])) {
     pos--;
+  }
   tokens[0].erase(pos + 1);
   // Removes whitespace at the start of value
   pos = 0;
-  while (pos < tokens[1].length() && isspace(tokens[1][pos]))
+  while (pos < tokens[1].length() && isspace(tokens[1][pos])) {
     pos++;
+  }
   tokens[1].erase(0, pos);
   *key = tokens[0];
   *value = tokens[1];
   return true;
 }
 
-static bool ExpectLineFromStream(FileStream *stream,
-                                 std::string *out) {
+static bool ExpectLineFromStream(FileStream* stream,
+                                 std::string* out) {
   StreamResult res = stream->ReadLine(out);
   if (res != SR_SUCCESS) {
     if (res != SR_EOS) {
@@ -136,7 +235,7 @@ static bool ExpectLineFromStream(FileStream *stream,
   return true;
 }
 
-static void ExpectEofFromStream(FileStream *stream) {
+static void ExpectEofFromStream(FileStream* stream) {
   std::string unused;
   StreamResult res = stream->ReadLine(&unused);
   if (res == SR_SUCCESS) {
@@ -221,10 +320,13 @@ std::string ReadLinuxUname() {
 int ReadCpuMaxFreq() {
   FileStream fs;
   std::string str;
-  if (!fs.Open(kCpuMaxFreqFile, "r") || SR_SUCCESS != fs.ReadLine(&str)) {
+  int freq = -1;
+  if (!fs.Open(kCpuMaxFreqFile, "r") ||
+      SR_SUCCESS != fs.ReadLine(&str) ||
+      !FromString(str, &freq)) {
     return -1;
   }
-  return atoi(str.c_str());
+  return freq;
 }
 
 }  // namespace talk_base

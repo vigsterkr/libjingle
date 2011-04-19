@@ -124,6 +124,9 @@ class SessionManager : public sigslot::has_slots<> {
   sigslot::signal0<> SignalRequestSignaling;
   void OnSignalingReady();
 
+  // Signaled when this SessionManager is deleted.
+  sigslot::signal0<> SignalDestroyed;
+
  private:
   typedef std::map<std::string, Session*> SessionMap;
   typedef std::map<std::string, SessionClient*> ClientMap;

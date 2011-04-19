@@ -25,11 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#pragma warning(disable:4786)
-#endif
-
-#include "talk/base/asynctcpsocket.h"
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/p2p/base/relayport.h"
@@ -96,8 +92,7 @@ class RelayConnection : public sigslot::has_slots<> {
 class RelayEntry : public talk_base::MessageHandler,
                    public sigslot::has_slots<> {
  public:
-  RelayEntry(RelayPort* port, const talk_base::SocketAddress& ext_addr,
-             const talk_base::SocketAddress& local_addr);
+  RelayEntry(RelayPort* port, const talk_base::SocketAddress& ext_addr);
   ~RelayEntry();
 
   RelayPort* port() { return port_; }
@@ -148,21 +143,20 @@ class RelayEntry : public talk_base::MessageHandler,
 
  private:
   RelayPort* port_;
-  talk_base::SocketAddress ext_addr_, local_addr_;
+  talk_base::SocketAddress ext_addr_;
   size_t server_index_;
   bool connected_;
   bool locked_;
   RelayConnection* current_connection_;
 
   // Called when a TCP connection is established or fails
-  void OnSocketConnect(talk_base::AsyncTCPSocket* socket);
-  void OnSocketClose(talk_base::AsyncTCPSocket* socket, int error);
+  void OnSocketConnect(talk_base::AsyncPacketSocket* socket);
+  void OnSocketClose(talk_base::AsyncPacketSocket* socket, int error);
 
   // Called when a packet is received on this socket.
-  void OnReadPacket(
-      const char* data, size_t size,
-      const talk_base::SocketAddress& remote_addr,
-      talk_base::AsyncPacketSocket* socket);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
 
   // Sends the given data on the socket to the server with no wrapping.  This
   // returns the number of bytes written or -1 if an error occurred.
@@ -192,14 +186,16 @@ class AllocateRequest : public StunRequest {
 const std::string RELAY_PORT_TYPE("relay");
 
 RelayPort::RelayPort(
-    talk_base::Thread* thread, talk_base::SocketFactory* factory,
-    talk_base::Network* network, const talk_base::SocketAddress& local_addr,
+    talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+    talk_base::Network* network, uint32 ip, int min_port, int max_port,
     const std::string& username, const std::string& password,
     const std::string& magic_cookie)
-    : Port(thread, RELAY_PORT_TYPE, factory, network), local_addr_(local_addr),
-      ready_(false), magic_cookie_(magic_cookie), error_(0) {
+    : Port(thread, RELAY_PORT_TYPE, factory, network, ip, min_port, max_port),
+      ready_(false),
+      magic_cookie_(magic_cookie),
+      error_(0) {
   entries_.push_back(
-      new RelayEntry(this, talk_base::SocketAddress(), local_addr_));
+      new RelayEntry(this, talk_base::SocketAddress()));
 
   set_username_fragment(username);
   set_password(password);
@@ -316,7 +312,7 @@ int RelayPort::SendTo(const void* data, size_t size,
   // If we did not find one, then we make a new one.  This will not be useable
   // until it becomes connected, however.
   if (!entry && payload) {
-    entry = new RelayEntry(this, addr, local_addr_);
+    entry = new RelayEntry(this, addr);
     if (!entries_.empty()) {
       entry->SetServerIndex(entries_[0]->ServerIndex());
     }
@@ -345,7 +341,7 @@ int RelayPort::SendTo(const void* data, size_t size,
   }
   // The caller of the function is expecting the number of user data bytes,
   // rather than the size of the packet.
-  return (int)size;
+  return size;
 }
 
 int RelayPort::SetOption(talk_base::Socket::Option opt, int value) {
@@ -420,9 +416,8 @@ void RelayConnection::SendAllocateRequest(RelayEntry* entry, int delay) {
 }
 
 RelayEntry::RelayEntry(RelayPort* port,
-                       const talk_base::SocketAddress& ext_addr,
-                       const talk_base::SocketAddress& local_addr)
-    : port_(port), ext_addr_(ext_addr), local_addr_(local_addr),
+                       const talk_base::SocketAddress& ext_addr)
+    : port_(port), ext_addr_(ext_addr),
       server_index_(0), connected_(false), locked_(false),
       current_connection_(NULL) {
 }
@@ -455,13 +450,23 @@ void RelayEntry::Connect() {
   LOG(LS_INFO) << "Connecting to relay via " << ProtoToString(ra->proto) <<
       " @ " << ra->address.ToString();
 
-  talk_base::AsyncPacketSocket* socket = port_->CreatePacketSocket(ra->proto);
+  talk_base::AsyncPacketSocket* socket = NULL;
+
+  if (ra->proto == PROTO_UDP) {
+    // UDP sockets are simple.
+    socket = port_->socket_factory()->CreateUdpSocket(
+        talk_base::SocketAddress(port_->ip_, 0),
+        port_->min_port_, port_->max_port_);
+  } else if (ra->proto == PROTO_TCP || ra->proto == PROTO_SSLTCP) {
+    socket = port_->socket_factory()->CreateClientTcpSocket(
+        talk_base::SocketAddress(port_->ip_, 0), ra->address,
+        port_->proxy(), port_->user_agent(), ra->proto == PROTO_SSLTCP);
+  } else {
+    LOG(LS_WARNING) << "Unknown protocol (" << ra->proto << ")";
+  }
+
   if (!socket) {
     LOG(LS_WARNING) << "Socket creation failed";
-  } else if (socket->Bind(local_addr_) < 0) {
-    LOG(LS_WARNING) << "Socket bind failed with error " << socket->GetError();
-    delete socket;
-    socket = NULL;
   }
 
   // If we failed to get a socket, move on to the next protocol.
@@ -479,13 +484,10 @@ void RelayEntry::Connect() {
   }
 
   // If we're trying UDP, start binding requests.
-  // If we're trying TCP, initiate a connection with a fixed timeout.
+  // If we're trying TCP, wait for connection with a fixed timeout.
   if ((ra->proto == PROTO_TCP) || (ra->proto == PROTO_SSLTCP)) {
-    talk_base::AsyncTCPSocket* tcp =
-        static_cast<talk_base::AsyncTCPSocket*>(socket);
-    tcp->SignalClose.connect(this, &RelayEntry::OnSocketClose);
-    tcp->SignalConnect.connect(this, &RelayEntry::OnSocketConnect);
-    tcp->Connect(ra->address);
+    socket->SignalClose.connect(this, &RelayEntry::OnSocketClose);
+    socket->SignalConnect.connect(this, &RelayEntry::OnSocketConnect);
     port()->thread()->PostDelayed(kSoftConnectTimeoutMs, this,
                                   kMessageConnectTimeout);
   } else {
@@ -538,13 +540,13 @@ int RelayEntry::SendTo(const void* data, size_t size,
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
   magic_cookie_attr->CopyBytes(port_->magic_cookie().c_str(),
-                               (uint16)port_->magic_cookie().size());
+                               port_->magic_cookie().size());
   request.AddAttribute(magic_cookie_attr);
 
   StunByteStringAttribute* username_attr =
       StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(port_->username_fragment().c_str(),
-                           (uint16)port_->username_fragment().size());
+                           port_->username_fragment().size());
   request.AddAttribute(username_attr);
 
   StunAddressAttribute* addr_attr =
@@ -564,7 +566,7 @@ int RelayEntry::SendTo(const void* data, size_t size,
 
   StunByteStringAttribute* data_attr =
       StunAttribute::CreateByteString(STUN_ATTR_DATA);
-  data_attr->CopyBytes(data, (uint16)size);
+  data_attr->CopyBytes(data, size);
   request.AddAttribute(data_attr);
 
   // TODO: compute the HMAC.
@@ -616,8 +618,8 @@ void RelayEntry::OnMessage(talk_base::Message *pmsg) {
     // the next address, otherwise give this connection more time and
     // await the real timeout.
     //
-    // TODO: Connect to servers in pararel to speed up connect time
-    // and to avoid giving up to early.
+    // TODO: Connect to servers in parallel to speed up connect time
+    // and to avoid giving up too early.
     port_->SignalSoftTimeout(ra);
     HandleConnectFailure(current_connection_->socket());
   } else {
@@ -625,7 +627,7 @@ void RelayEntry::OnMessage(talk_base::Message *pmsg) {
   }
 }
 
-void RelayEntry::OnSocketConnect(talk_base::AsyncTCPSocket* socket) {
+void RelayEntry::OnSocketConnect(talk_base::AsyncPacketSocket* socket) {
   LOG(INFO) << "relay tcp connected to " <<
       socket->GetRemoteAddress().ToString();
   if (current_connection_ != NULL) {
@@ -633,14 +635,15 @@ void RelayEntry::OnSocketConnect(talk_base::AsyncTCPSocket* socket) {
   }
 }
 
-void RelayEntry::OnSocketClose(talk_base::AsyncTCPSocket* socket, int error) {
+void RelayEntry::OnSocketClose(talk_base::AsyncPacketSocket* socket,
+                               int error) {
   PLOG(LERROR, error) << "Relay connection failed: socket closed";
   HandleConnectFailure(socket);
 }
 
-void RelayEntry::OnReadPacket(const char* data, size_t size,
-                              const talk_base::SocketAddress& remote_addr,
-                              talk_base::AsyncPacketSocket* socket) {
+void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                              const char* data, size_t size,
+                              const talk_base::SocketAddress& remote_addr) {
   // ASSERT(remote_addr == port_->server_addr());
   // TODO: are we worried about this?
 
@@ -732,14 +735,14 @@ void AllocateRequest::Prepare(StunMessage* request) {
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
   magic_cookie_attr->CopyBytes(
       entry_->port()->magic_cookie().c_str(),
-      (uint16)entry_->port()->magic_cookie().size());
+      entry_->port()->magic_cookie().size());
   request->AddAttribute(magic_cookie_attr);
 
   StunByteStringAttribute* username_attr =
       StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(
       entry_->port()->username_fragment().c_str(),
-      (uint16)entry_->port()->username_fragment().size());
+      entry_->port()->username_fragment().size());
   request->AddAttribute(username_attr);
 }
 

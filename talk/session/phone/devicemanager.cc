@@ -45,9 +45,6 @@
 #elif LINUX
 #include <libudev.h>
 #include <unistd.h>
-#ifndef USE_TALK_SOUND
-#include <alsa/asoundlib.h>
-#endif
 #include "talk/base/linux.h"
 #include "talk/base/fileutils.h"
 #include "talk/base/pathutils.h"
@@ -55,16 +52,15 @@
 #include "talk/base/stream.h"
 #include "talk/session/phone/libudevsymboltable.h"
 #include "talk/session/phone/v4llookup.h"
+#include "talk/sound/platformsoundsystem.h"
+#include "talk/sound/platformsoundsystemfactory.h"
+#include "talk/sound/sounddevicelocator.h"
+#include "talk/sound/soundsysteminterface.h"
 #endif
 
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
 #include "talk/session/phone/mediaengine.h"
-#if USE_TALK_SOUND
-#include "talk/sound/platformsoundsystem.h"
-#include "talk/sound/sounddevicelocator.h"
-#include "talk/sound/soundsysteminterface.h"
-#endif
 
 namespace cricket {
 // Initialize to empty string.
@@ -117,9 +113,17 @@ class DeviceWatcher {
   DeviceManager* manager_;
   void* impl_;
 };
+#elif defined(IOS) || defined(ANDROID)
+// We don't use DeviceWatcher on iOS or Android, so just stub out a noop class.
+class DeviceWatcher {
+ public:
+  explicit DeviceWatcher(DeviceManager* dm) {}
+  bool Start() { return true; }
+  void Stop() {}
+};
 #endif
 
-#ifndef LINUX
+#if !defined(LINUX) && !defined(IOS)
 static bool ShouldDeviceBeIgnored(const std::string& device_name);
 #endif
 #ifndef OSX
@@ -143,15 +147,14 @@ static bool GetAudioDeviceIDs(bool inputs, std::vector<AudioDeviceID>* out);
 static bool GetAudioDeviceName(AudioDeviceID id, bool input, std::string* out);
 #endif
 
-DeviceManager::DeviceManager(
-#ifdef USE_TALK_SOUND
-    SoundSystemFactory *factory
-#endif
-    )
+DeviceManager::DeviceManager()
     : initialized_(false),
+#if defined(WIN32)
+      need_couninitialize_(false),
+#endif
       watcher_(new DeviceWatcher(this))
-#ifdef USE_TALK_SOUND
-      , sound_system_(factory)
+#ifdef LINUX
+      , sound_system_(new PlatformSoundSystemFactory())
 #endif
     {
 }
@@ -165,6 +168,16 @@ DeviceManager::~DeviceManager() {
 
 bool DeviceManager::Init() {
   if (!initialized_) {
+#if defined(WIN32)
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    need_couninitialize_ = SUCCEEDED(hr);
+    if (FAILED(hr)) {
+      LOG(LS_ERROR) << "CoInitialize failed, hr=" << hr;
+      if (hr != RPC_E_CHANGED_MODE) {
+        return false;
+      }
+    }
+#endif
     if (!watcher_->Start()) {
       return false;
     }
@@ -176,6 +189,12 @@ bool DeviceManager::Init() {
 void DeviceManager::Terminate() {
   if (initialized_) {
     watcher_->Stop();
+#if defined(WIN32)
+    if (need_couninitialize_) {
+      CoUninitialize();
+      need_couninitialize_ = false;
+    }
+#endif
     initialized_ = false;
   }
 }
@@ -260,6 +279,28 @@ bool DeviceManager::GetDefaultVideoCaptureDevice(Device* device) {
   return ret;
 }
 
+bool DeviceManager::GetVideoCaptureDevice(const std::string& name,
+                                          Device* out) {
+  // If the name is empty, return the default device.
+  if (name.empty() || name == kDefaultDeviceName) {
+    return GetDefaultVideoCaptureDevice(out);
+  }
+
+  std::vector<Device> devices;
+  if (!GetVideoCaptureDevices(&devices)) {
+    return false;
+  }
+
+  for (std::vector<Device>::const_iterator it = devices.begin();
+      it != devices.end(); ++it) {
+    if (name == it->name) {
+      *out = *it;
+      return true;
+    }
+  }
+
+  return false;
+}
 
 bool DeviceManager::GetAudioDevice(bool is_input, const std::string& name,
                                    Device* out) {
@@ -288,7 +329,8 @@ bool DeviceManager::GetAudioDevice(bool is_input, const std::string& name,
 bool DeviceManager::GetAudioDevicesByPlatform(bool input,
                                               std::vector<Device>* devs) {
   devs->clear();
-#if defined(USE_TALK_SOUND)
+
+#if defined(LINUX)
   if (!sound_system_.get()) {
     return false;
   }
@@ -304,7 +346,10 @@ bool DeviceManager::GetAudioDevicesByPlatform(bool input,
     sound_system_.release();
     return false;
   }
-  int index = 0;
+  // We have to start the index at 1 because GIPS VoiceEngine puts the default
+  // device at index 0, but Enumerate(Capture|Playback)Devices does not include
+  // a locator for the default device.
+  int index = 1;
   for (SoundSystemInterface::SoundDeviceLocatorList::iterator i = list.begin();
        i != list.end();
        ++i, ++index) {
@@ -334,51 +379,6 @@ bool DeviceManager::GetAudioDevicesByPlatform(bool input,
   }
   return ret;
 
-#elif defined(LINUX)
-  int card = -1, dev = -1;
-  snd_ctl_t *handle = NULL;
-  snd_pcm_info_t *pcminfo = NULL;
-
-  snd_pcm_info_malloc(&pcminfo);
-
-  while (true) {
-    if (snd_card_next(&card) != 0 || card < 0)
-      break;
-
-    char *card_name;
-    if (snd_card_get_name(card, &card_name) != 0)
-      continue;
-
-    char card_string[7];
-    snprintf(card_string, sizeof(card_string), "hw:%d", card);
-    if (snd_ctl_open(&handle, card_string, 0) != 0)
-      continue;
-
-    while (true) {
-      if (snd_ctl_pcm_next_device(handle, &dev) < 0 || dev < 0)
-        break;
-      snd_pcm_info_set_device(pcminfo, dev);
-      snd_pcm_info_set_subdevice(pcminfo, 0);
-      snd_pcm_info_set_stream(pcminfo, input ? SND_PCM_STREAM_CAPTURE :
-                                               SND_PCM_STREAM_PLAYBACK);
-      if (snd_ctl_pcm_info(handle, pcminfo) != 0)
-        continue;
-
-      char name[128];
-      talk_base::sprintfn(name, sizeof(name), "%s (%s)", card_name,
-          snd_pcm_info_get_name(pcminfo));
-      // TODO: We might want to identify devices with something
-      // more specific than just their card number (e.g., the PCM names that
-      // aplay -L prints out).
-      devs->push_back(Device(name, card));
-
-      LOG(LS_INFO) << "Found device: id = " << card << ", name = "
-          << name;
-    }
-    snd_ctl_close(handle);
-  }
-  snd_pcm_info_free(pcminfo);
-  return true;
 #else
   return false;
 #endif
@@ -386,20 +386,7 @@ bool DeviceManager::GetAudioDevicesByPlatform(bool input,
 
 #if defined(WIN32)
 bool GetVideoDevices(std::vector<Device>* devices) {
-  // TODO: Move the CoInit stuff to Initialize/Terminate.
-  HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-  if (FAILED(hr)) {
-    LOG(LS_ERROR) << "CoInitialize failed, hr=" << hr;
-    if (hr != RPC_E_CHANGED_MODE) {
-      return false;
-    }
-  }
-
-  bool ret = GetDevices(CLSID_VideoInputDeviceCategory, devices);
-  if (SUCCEEDED(hr)) {
-    CoUninitialize();
-  }
-  return ret;
+  return GetDevices(CLSID_VideoInputDeviceCategory, devices);
 }
 
 bool GetDevices(const CLSID& catid, std::vector<Device>* devices) {
@@ -978,7 +965,7 @@ bool DeviceWatcher::IsDescriptorClosed() {
 
 // TODO: Try to get hold of a copy of Final Cut to understand why we
 //               crash while scanning their components on OS X.
-#ifndef LINUX
+#if !defined(LINUX) && !defined(IOS)
 static bool ShouldDeviceBeIgnored(const std::string& device_name) {
   static const char* const kFilteredDevices[] =  {
       "Google Camera Adapter",   // Our own magiccams

@@ -42,8 +42,6 @@
 #include "talk/xmllite/xmlelement.h"
 #include "talk/xmpp/constants.h"
 
-class JingleMessageHandler;
-
 namespace cricket {
 
 class P2PTransportChannel;
@@ -163,6 +161,7 @@ class BaseSession : public sigslot::has_slots<>,
     ERROR_TIME = 1,      // no response to signaling
     ERROR_RESPONSE = 2,  // error during signaling
     ERROR_NETWORK = 3,   // network error, could not allocate network resources
+    ERROR_CONTENT = 4,   // channel errors in SetLocalContent/SetRemoteContent
   };
 
   explicit BaseSession(talk_base::Thread *signaling_thread);
@@ -172,7 +171,7 @@ class BaseSession : public sigslot::has_slots<>,
   void SetState(State state);
 
   // Updates the error state, signaling if necessary.
-  void SetError(Error error);
+  virtual void SetError(Error error);
 
   // Handles messages posted to us.
   virtual void OnMessage(talk_base::Message *pmsg);
@@ -363,6 +362,9 @@ class Session : public BaseSession {
   // Destroys the channel with the given names.
   virtual void DestroyChannel(const std::string& content_name,
                               const std::string& channel_name);
+
+  // Updates the error state, signaling if necessary.
+  virtual void SetError(Error error);
 
   // Handles messages posted to us.
   virtual void OnMessage(talk_base::Message *pmsg);

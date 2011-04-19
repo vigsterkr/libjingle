@@ -25,8 +25,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __RELAYSERVER_H__
-#define __RELAYSERVER_H__
+#ifndef TALK_P2P_BASE_RELAYSERVER_H_
+#define TALK_P2P_BASE_RELAYSERVER_H_
+
+#include <string>
+#include <vector>
+#include <map>
 
 #include "talk/base/asyncudpsocket.h"
 #include "talk/base/socketaddresspair.h"
@@ -34,10 +38,6 @@
 #include "talk/base/time.h"
 #include "talk/p2p/base/port.h"
 #include "talk/p2p/base/stun.h"
-
-#include <string>
-#include <vector>
-#include <map>
 
 namespace cricket {
 
@@ -48,9 +48,9 @@ class RelayServerConnection;
 // All connections created with the same username/password are bound together.
 class RelayServer : public talk_base::MessageHandler,
                     public sigslot::has_slots<> {
-public:
+ public:
   // Creates a server, which will use this thread to post messages to itself.
-  RelayServer(talk_base::Thread* thread);
+  explicit RelayServer(talk_base::Thread* thread);
   ~RelayServer();
 
   talk_base::Thread* thread() { return thread_; }
@@ -79,16 +79,18 @@ public:
   // Removes this server socket from the list.
   void RemoveInternalServerSocket(talk_base::AsyncSocket* socket);
 
-  int GetConnectionCount();
+  // Methods for testing and debuging.
+  int GetConnectionCount() const;
+  talk_base::SocketAddressPair GetConnection(int connection) const;
+  bool HasConnection(const talk_base::SocketAddress& address) const;
 
-  bool HasConnection(const talk_base::SocketAddress& address);
-
-private:
+ private:
   typedef std::vector<talk_base::AsyncPacketSocket*> SocketList;
   typedef std::map<talk_base::AsyncSocket*,
                    cricket::ProtocolType> ServerSocketMap;
-  typedef std::map<std::string,RelayServerBinding*> BindingMap;
-  typedef std::map<talk_base::SocketAddressPair,RelayServerConnection*> ConnectionMap;
+  typedef std::map<std::string, RelayServerBinding*> BindingMap;
+  typedef std::map<talk_base::SocketAddressPair,
+                   RelayServerConnection*> ConnectionMap;
 
   talk_base::Thread* thread_;
   bool log_bindings_;
@@ -99,18 +101,19 @@ private:
   ConnectionMap connections_;
 
   // Called when a packet is received by the server on one of its sockets.
-  void OnInternalPacket(
-      const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
-      talk_base::AsyncPacketSocket* socket);
-  void OnExternalPacket(
-      const char* bytes, size_t size, const talk_base::SocketAddress& remote_addr,
-      talk_base::AsyncPacketSocket* socket);
+  void OnInternalPacket(talk_base::AsyncPacketSocket* socket,
+                        const char* bytes, size_t size,
+                        const talk_base::SocketAddress& remote_addr);
+  void OnExternalPacket(talk_base::AsyncPacketSocket* socket,
+                        const char* bytes, size_t size,
+                        const talk_base::SocketAddress& remote_addr);
 
   void OnReadEvent(talk_base::AsyncSocket* socket);
 
   // Processes the relevant STUN request types from the client.
   bool HandleStun(const char* bytes, size_t size,
-                  const talk_base::SocketAddress& remote_addr, talk_base::AsyncPacketSocket* socket,
+                  const talk_base::SocketAddress& remote_addr,
+                  talk_base::AsyncPacketSocket* socket,
                   std::string* username, StunMessage* msg);
   void HandleStunAllocate(const char* bytes, size_t size,
                           const talk_base::SocketAddressPair& ap,
@@ -142,7 +145,7 @@ private:
 // Maintains information about a connection to the server.  Each connection is
 // part of one and only one binding.
 class RelayServerConnection {
-public:
+ public:
   RelayServerConnection(RelayServerBinding* binding,
                         const talk_base::SocketAddressPair& addrs,
                         talk_base::AsyncPacketSocket* socket);
@@ -158,7 +161,8 @@ public:
   // Sends a packet to the connected client.  If an address is provided, then
   // we make sure the internal client receives it, wrapping if necessary.
   void Send(const char* data, size_t size);
-  void Send(const char* data, size_t size, const talk_base::SocketAddress& ext_addr);
+  void Send(const char* data, size_t size,
+            const talk_base::SocketAddress& ext_addr);
 
   // Sends a STUN message to the connected client with no wrapping.
   void SendStun(const StunMessage& msg);
@@ -172,12 +176,14 @@ public:
 
   // Records the address that raw packets should be forwarded to (for internal
   // packets only; for external, we already know where they go).
-  const talk_base::SocketAddress& default_destination() const { return default_dest_; }
+  const talk_base::SocketAddress& default_destination() const {
+    return default_dest_;
+  }
   void set_default_destination(const talk_base::SocketAddress& addr) {
     default_dest_ = addr;
   }
 
-private:
+ private:
   RelayServerBinding* binding_;
   talk_base::SocketAddressPair addr_pair_;
   talk_base::AsyncPacketSocket* socket_;
@@ -188,7 +194,7 @@ private:
 // Records a set of internal and external connections that we relay between,
 // or in other words, that are "bound" together.
 class RelayServerBinding : public talk_base::MessageHandler {
-public:
+ public:
   RelayServerBinding(
       RelayServer* server, const std::string& username,
       const std::string& password, uint32 lifetime);
@@ -215,13 +221,15 @@ public:
 
   // Determines the connection to use to send packets to or from the given
   // external address.
-  RelayServerConnection* GetInternalConnection(const talk_base::SocketAddress& ext_addr);
-  RelayServerConnection* GetExternalConnection(const talk_base::SocketAddress& ext_addr);
+  RelayServerConnection* GetInternalConnection(
+      const talk_base::SocketAddress& ext_addr);
+  RelayServerConnection* GetExternalConnection(
+      const talk_base::SocketAddress& ext_addr);
 
   // MessageHandler:
   void OnMessage(talk_base::Message *pmsg);
 
-private:
+ private:
   RelayServer* server_;
 
   std::string username_;
@@ -236,6 +244,6 @@ private:
   // TODO: bandwidth
 };
 
-} // namespace cricket
+}  // namespace cricket
 
-#endif // __RELAYSERVER_H__
+#endif  // TALK_P2P_BASE_RELAYSERVER_H_

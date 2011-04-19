@@ -118,7 +118,7 @@ const uint32 PACKET_OVERHEAD = HEADER_SIZE + UDP_HEADER_SIZE + IP_HEADER_SIZE + 
 const uint32 MIN_RTO   =   250; // 250 ms (RFC1122, Sec 4.2.3.1 "fractions of a second")
 const uint32 DEF_RTO   =  3000; // 3 seconds (RFC1122, Sec 4.2.3.1)
 const uint32 MAX_RTO   = 60000; // 60 seconds
-const uint32 ACK_DELAY =   100; // 100 milliseconds
+const uint32 DEF_ACK_DELAY = 100; // 100 milliseconds
 
 const uint8 FLAG_CTL = 0x02;
 const uint8 FLAG_RST = 0x04;
@@ -256,6 +256,9 @@ PseudoTcp::PseudoTcp(IPseudoTcpNotify* notify, uint32 conv)
 
   m_rx_rto = DEF_RTO;
   m_rx_srtt = m_rx_rttvar = 0;
+
+  m_use_nagling = true;
+  m_ack_delay = DEF_ACK_DELAY;
 }
 
 PseudoTcp::~PseudoTcp() {
@@ -337,7 +340,7 @@ void PseudoTcp::NotifyClock(uint32 now) {
   }
 
   // Check if it's time to send delayed acks
-  if (m_t_ack && (talk_base::TimeDiff(m_t_ack + ACK_DELAY, now) <= 0)) {
+  if (m_t_ack && (talk_base::TimeDiff(m_t_ack + m_ack_delay, now) <= 0)) {
     packet(m_snd_nxt, 0, 0, 0);
   }
 
@@ -365,6 +368,26 @@ bool PseudoTcp::NotifyPacket(const char* buffer, size_t len) {
 
 bool PseudoTcp::GetNextClock(uint32 now, long& timeout) {
   return clock_check(now, timeout);
+}
+
+void PseudoTcp::GetOption(Option opt, int* value) {
+  if (opt == OPT_NODELAY) {
+    *value = m_use_nagling ? 0 : 1;
+  } else if (opt == OPT_ACKDELAY) {
+    *value = m_ack_delay;
+  } else {
+    ASSERT(false);
+  }
+}
+
+void PseudoTcp::SetOption(Option opt, int value) {
+  if (opt == OPT_NODELAY) {
+    m_use_nagling = value == 0;
+  } else if (opt == OPT_ACKDELAY) {
+    m_ack_delay = value;
+  } else {
+    ASSERT(false);
+  }
 }
 
 //
@@ -554,7 +577,7 @@ bool PseudoTcp::clock_check(uint32 now, long& nTimeout) {
 
   if (m_t_ack) {
     nTimeout = talk_base::_min<int32>(nTimeout,
-      talk_base::TimeDiff(m_t_ack + ACK_DELAY, now));
+      talk_base::TimeDiff(m_t_ack + m_ack_delay, now));
   }
   if (m_rto_base) {
     nTimeout = talk_base::_min<int32>(nTimeout,
@@ -774,7 +797,11 @@ bool PseudoTcp::process(Segment& seg) {
   if (seg.seq != m_rcv_nxt) {
     sflags = sfImmediateAck; // (Fast Recovery)
   } else if (seg.len != 0) {
-    sflags = sfDelayedAck;
+    if (m_ack_delay == 0) {
+      sflags = sfImmediateAck;
+    } else {
+      sflags = sfDelayedAck;
+    }
   }
 #if _DEBUGMSG >= _DBG_NORMAL
   if (sflags == sfImmediateAck) {
@@ -992,8 +1019,11 @@ void PseudoTcp::attemptSend(SendFlags sflags) {
       return;
     }
 
-    // Nagle algorithm
-    if ((m_snd_nxt > m_snd_una) && (nAvailable < m_mss))  {
+    // Nagle's algorithm.
+    // If there is data already in-flight, and we haven't a full segment of
+    // data ready to send then hold off until we get more to send, or the
+    // in-flight data is acknowledged.
+    if (m_use_nagling && (m_snd_nxt > m_snd_una) && (nAvailable < m_mss))  {
       return;
     }
 

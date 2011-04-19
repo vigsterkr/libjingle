@@ -29,7 +29,8 @@
 #define TALK_P2P_BASE_STUNPORT_H_
 
 #include <string>
-#include "talk/base/asyncudpsocket.h"
+
+#include "talk/base/asyncpacketsocket.h"
 #include "talk/p2p/base/udpport.h"
 #include "talk/p2p/base/stunrequest.h"
 
@@ -46,21 +47,18 @@ extern const std::string STUN_PORT_TYPE;
 class StunPort : public Port {
  public:
   static StunPort* Create(talk_base::Thread* thread,
-                          talk_base::SocketFactory* factory,
+                          talk_base::PacketSocketFactory* factory,
                           talk_base::Network* network,
-                          const talk_base::SocketAddress& local_addr,
+                          uint32 ip, int min_port, int max_port,
                           const talk_base::SocketAddress& server_addr) {
-    StunPort* port = new StunPort(thread, factory, network, server_addr);
-    if (!port->Init(local_addr)) {
+    StunPort* port = new StunPort(thread, factory, network,
+                                  ip, min_port, max_port, server_addr);
+    if (!port->Init()) {
       delete port;
       port = NULL;
     }
     return port;
   }
-  StunPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
-           talk_base::Network* network,
-           const talk_base::SocketAddress& server_addr);
-  bool Init(const talk_base::SocketAddress& local_addr);
   virtual ~StunPort();
 
   talk_base::SocketAddress GetLocalAddress() const {
@@ -89,13 +87,17 @@ class StunPort : public Port {
   virtual int GetError();
 
  protected:
+  StunPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+           talk_base::Network* network, uint32 ip, int min_port, int max_port,
+           const talk_base::SocketAddress& server_addr);
+  bool Init();
+
   virtual int SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& addr, bool payload);
 
-  void OnReadPacket(
-      const char* data, size_t size,
-      const talk_base::SocketAddress& remote_addr,
-      talk_base::AsyncPacketSocket* socket);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
 
  private:
   // DNS resolution of the STUN server.

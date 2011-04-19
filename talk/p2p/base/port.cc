@@ -30,12 +30,9 @@
 #include <algorithm>
 #include <vector>
 
-#include "talk/base/asyncudpsocket.h"
-#include "talk/base/asynctcpsocket.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/base/socketadapters.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/common.h"
 
@@ -128,11 +125,19 @@ bool StringToProto(const char* value, ProtocolType* proto) {
 }
 
 Port::Port(talk_base::Thread* thread, const std::string& type,
-           talk_base::SocketFactory* factory, talk_base::Network* network)
-  : thread_(thread), factory_(factory), type_(type), network_(network),
-    preference_(-1), lifetime_(LT_PRESTART), enable_port_packets_(false) {
-  if (factory_ == NULL)
-    factory_ = thread_->socketserver();
+           talk_base::PacketSocketFactory* factory, talk_base::Network* network,
+           uint32 ip, int min_port, int max_port)
+    : thread_(thread),
+      factory_(factory),
+      type_(type),
+      network_(network),
+      ip_(ip),
+      min_port_(min_port),
+      max_port_(max_port),
+      preference_(-1),
+      lifetime_(LT_PRESTART),
+      enable_port_packets_(false) {
+  ASSERT(factory_ != NULL);
 
   set_username_fragment(talk_base::CreateRandomString(16));
   set_password(talk_base::CreateRandomString(16));
@@ -200,7 +205,7 @@ void Port::OnReadPacket(
   // send back a proper binding response.
   StunMessage* msg;
   std::string remote_username;
-  if (!GetStunMessage(data, size, addr, msg, remote_username)) {
+  if (!GetStunMessage(data, size, addr, &msg, &remote_username)) {
     LOG_J(LS_ERROR, this) << "Received non-STUN packet from unknown address ("
                           << addr.ToString() << ")";
   } else if (!msg) {
@@ -212,41 +217,23 @@ void Port::OnReadPacket(
     // connection for this port while it had STUN requests in flight, because
     // we then get back responses for them, which this code correctly does not
     // handle.
-    LOG_J(LS_ERROR, this) << "Received unexpected STUN message type ("
-                          << msg->type() << ") from unknown address ("
-                          << addr.ToString() << ")";
+    LOG_J(LS_INFO, this) << "Received unexpected STUN message type ("
+                         << msg->type() << ") from unknown address ("
+                         << addr.ToString() << ")";
     delete msg;
   }
 }
 
-void Port::SendBindingRequest(Connection* conn) {
-  // Construct the request message.
-  StunMessage request;
-  request.SetType(STUN_BINDING_REQUEST);
-  request.SetTransactionID(talk_base::CreateRandomString(16));
-
-  StunByteStringAttribute* username_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-  std::string username = conn->remote_candidate().username();
-  username.append(username_frag_);
-  username_attr->CopyBytes(username.c_str(), username.size());
-  request.AddAttribute(username_attr);
-
-  // Send the request message.
-  // NOTE: If we wanted to, this is where we would add the HMAC.
-  talk_base::ByteBuffer buf;
-  request.Write(&buf);
-  SendTo(buf.Data(), buf.Length(), conn->remote_candidate().address(), false);
-}
-
 bool Port::GetStunMessage(const char* data, size_t size,
                           const talk_base::SocketAddress& addr,
-                          StunMessage *& msg, std::string& remote_username) {
+                          StunMessage** out_msg, std::string* out_username) {
   // NOTE: This could clearly be optimized to avoid allocating any memory.
   //       However, at the data rates we'll be looking at on the client side,
   //       this probably isn't worth worrying about.
-
-  msg = 0;
+  ASSERT(out_msg != NULL);
+  ASSERT(out_username != NULL);
+  *out_msg = NULL;
+  out_username->clear();
 
   // Parse the request message.  If the packet is not a complete and correct
   // STUN message, then ignore it.
@@ -268,68 +255,75 @@ bool Port::GetStunMessage(const char* data, size_t size,
   if (stun_msg->type() == STUN_BINDING_REQUEST) {
     if (remote_frag_len < 0) {
       // Username not present or corrupted, don't reply.
-      LOG_J(LS_ERROR, this) << "Received STUN request without username";
+      LOG_J(LS_ERROR, this) << "Received STUN request without username from "
+                            << addr.ToString();
       return true;
     } else if (std::memcmp(username_attr->bytes(), username_frag_.c_str(),
                            username_frag_.size()) != 0) {
-      LOG_J(LS_ERROR, this) << "Received STUN request with bad username";
+      LOG_J(LS_ERROR, this) << "Received STUN request with bad local username "
+                            << std::string(username_attr->bytes(),
+                                           username_attr->length())
+                            << " from "
+                            << addr.ToString();
       SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_BAD_REQUEST,
                                STUN_ERROR_REASON_BAD_REQUEST);
       return true;
     }
 
-    remote_username.assign(username_attr->bytes() + username_frag_.size(),
-      username_attr->bytes() + username_attr->length());
+    out_username->assign(username_attr->bytes() + username_frag_.size(),
+                         username_attr->bytes() + username_attr->length());
   } else if ((stun_msg->type() == STUN_BINDING_RESPONSE)
       || (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE)) {
     if (remote_frag_len < 0) {
-      // NOTE(tschmelcher): This is benign. It occurs when the response to a
-      // StunBindingRequest to the real STUN server (which involves no
-      // usernames) took too long to reach us and so the base StunRequest
-      // re-sent itself, resulting in us getting an extraneous second response
-      // that gets forwarded on to this code and correctly discarded.
-      LOG_J(LS_ERROR, this) << "Received STUN response without username";
+      LOG_J(LS_ERROR, this) << "Received STUN response without username from "
+                            << addr.ToString();
       // Do not send error response to a response
       return true;
     } else if (std::memcmp(username_attr->bytes() + remote_frag_len,
                            username_frag_.c_str(),
                            username_frag_.size()) != 0) {
-      LOG_J(LS_ERROR, this) << "Received STUN response with bad username";
+      LOG_J(LS_ERROR, this) << "Received STUN response with bad local username "
+                            << std::string(username_attr->bytes(),
+                                           username_attr->length())
+                            << " from "
+                            << addr.ToString();
       // Do not send error response to a response
       return true;
     }
 
-    remote_username.assign(username_attr->bytes(),
-      username_attr->bytes() + remote_frag_len);
+    out_username->assign(username_attr->bytes(),
+                         username_attr->bytes() + remote_frag_len);
 
     if (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE) {
       if (const StunErrorCodeAttribute* error_code = stun_msg->GetErrorCode()) {
         LOG_J(LS_ERROR, this) << "Received STUN binding error:"
-                              << " class=" << error_code->error_class()
-                              << " number=" << error_code->number()
-                              << " reason='" << error_code->reason() << "'";
+                              << " class="
+                              << static_cast<int>(error_code->error_class())
+                              << " number="
+                              << static_cast<int>(error_code->number())
+                              << " reason='" << error_code->reason() << "'"
+                              << " from " << addr.ToString();
         // Return message to allow error-specific processing
       } else {
-        LOG_J(LS_ERROR, this)
-          << "Received STUN error response with no error code";
+        LOG_J(LS_ERROR, this) << "Received STUN binding error without a error "
+                              << "code from " << addr.ToString();
         // Drop corrupt message
         return true;
       }
     }
   } else {
     LOG_J(LS_ERROR, this) << "Received STUN packet with invalid type ("
-                          << stun_msg->type() << ")";
+                          << stun_msg->type() << ") from " << addr.ToString();
     return true;
   }
 
   // Return the STUN message found.
-  msg = stun_msg.release();
+  *out_msg = stun_msg.release();
   return true;
 }
 
-void Port::SendBindingResponse(
-    StunMessage* request, const talk_base::SocketAddress& addr) {
-
+void Port::SendBindingResponse(StunMessage* request,
+                               const talk_base::SocketAddress& addr) {
   ASSERT(request->type() == STUN_BINDING_REQUEST);
 
   // Retrieve the username from the request.
@@ -362,7 +356,10 @@ void Port::SendBindingResponse(
   // NOTE: If we wanted to, this is where we would add the HMAC.
   talk_base::ByteBuffer buf;
   response.Write(&buf);
-  SendTo(buf.Data(), buf.Length(), addr, false);
+  if (SendTo(buf.Data(), buf.Length(), addr, false) < 0) {
+    LOG_J(LS_ERROR, this) << "Failed to send STUN ping response to "
+                          << addr.ToString();
+  }
 
   // The fact that we received a successful request means that this connection
   // (if one exists) should now be readable.
@@ -372,13 +369,12 @@ void Port::SendBindingResponse(
     conn->ReceivedPing();
 }
 
-void Port::SendBindingErrorResponse(
-    StunMessage* request, const talk_base::SocketAddress& addr, int error_code,
-    const std::string& reason) {
-
+void Port::SendBindingErrorResponse(StunMessage* request,
+                                    const talk_base::SocketAddress& addr,
+                                    int error_code, const std::string& reason) {
   ASSERT(request->type() == STUN_BINDING_REQUEST);
 
-  // Retrieve the username from the request.  If it didn't have one, we
+  // Retrieve the username from the request. If it didn't have one, we
   // shouldn't be responding at all.
   const StunByteStringAttribute* username_attr =
       request->GetByteString(STUN_ATTR_USERNAME);
@@ -408,41 +404,8 @@ void Port::SendBindingErrorResponse(
   talk_base::ByteBuffer buf;
   response.Write(&buf);
   SendTo(buf.Data(), buf.Length(), addr, false);
-}
-
-talk_base::AsyncPacketSocket* Port::CreatePacketSocket(ProtocolType proto) {
-  if (proto == PROTO_UDP) {
-    // UDP sockets are simple.
-    return talk_base::AsyncUDPSocket::Create(factory_);
-  } else if (proto == PROTO_TCP || proto == PROTO_SSLTCP) {
-    // Create the base TCP socket. Bail out if this fails.
-    talk_base::AsyncSocket* socket = factory_->CreateAsyncSocket(SOCK_STREAM);
-    if (!socket) {
-      return NULL;
-    }
-
-    // If using a proxy, wrap the socket in a proxy socket.
-    if (proxy().type == talk_base::PROXY_SOCKS5) {
-      socket = new talk_base::AsyncSocksProxySocket(
-          socket, proxy().address, proxy().username, proxy().password);
-    } else if (proxy().type == talk_base::PROXY_HTTPS) {
-      socket = new talk_base::AsyncHttpsProxySocket(
-          socket, user_agent(), proxy().address,
-          proxy().username, proxy().password);
-    }
-
-    // If using SSLTCP, wrap the TCP socket in a pseudo-SSL socket.
-    if (proto == PROTO_SSLTCP) {
-      socket = new talk_base::AsyncSSLSocket(socket);
-    }
-
-    // Finally, wrap that socket in a TCP packet socket.
-    // [Insert obligatory Taco Town reference here]
-    return new talk_base::AsyncTCPSocket(socket);
-  } else {
-    LOG_J(LS_ERROR, this) << "Unknown protocol (" << proto << ")";
-    return NULL;
-  }
+  LOG_J(LS_INFO, this) << "Sending STUN binding error: reason=" << reason
+                       << " to " << addr.ToString();
 }
 
 void Port::OnMessage(talk_base::Message *pmsg) {
@@ -454,7 +417,8 @@ void Port::OnMessage(talk_base::Message *pmsg) {
 
 std::string Port::ToString() const {
   std::stringstream ss;
-  ss << "Port[" << name_ << ":" << type_ << ":" << network_->ToString() << "]";
+  ss << "Port[" << name_ << ":" << generation_ << ":" << type_
+     << ":" << network_->ToString() << "]";
   return ss.str();
 }
 
@@ -519,15 +483,15 @@ class ConnectionRequest : public StunRequest {
   }
 
   virtual void OnResponse(StunMessage* response) {
-    connection_->OnConnectionRequestResponse(response, Elapsed());
+    connection_->OnConnectionRequestResponse(this, response);
   }
 
   virtual void OnErrorResponse(StunMessage* response) {
-    connection_->OnConnectionRequestErrorResponse(response, Elapsed());
+    connection_->OnConnectionRequestErrorResponse(this, response);
   }
 
   virtual void OnTimeout() {
-    LOG_J(LS_VERBOSE, connection_) << "Timing-out STUN ping " << id();
+    connection_->OnConnectionRequestTimeout(this);
   }
 
   virtual int GetNextDelay() {
@@ -551,7 +515,8 @@ Connection::Connection(Port* port, size_t index,
     remote_candidate_(remote_candidate), read_state_(STATE_READ_TIMEOUT),
     write_state_(STATE_WRITE_CONNECT), connected_(true), pruned_(false),
     requests_(port->thread()), rtt_(DEFAULT_RTT),
-    last_ping_sent_(0), last_ping_received_(0), reported_(false) {
+    last_ping_sent_(0), last_ping_received_(0), last_data_received_(0),
+    reported_(false) {
   // Wire up to send stun packets
   requests_.SignalSendPacket.connect(this, &Connection::OnSendStunPacket);
   LOG_J(LS_INFO, this) << "Connection created";
@@ -596,16 +561,18 @@ void Connection::set_connected(bool value) {
   }
 }
 
-void Connection::OnSendStunPacket(
-    const void* data, size_t size, StunRequest* req) {
-  port_->SendTo(data, size, remote_candidate_.address(), false);
+void Connection::OnSendStunPacket(const void* data, size_t size,
+                                  StunRequest* req) {
+  if (port_->SendTo(data, size, remote_candidate_.address(), false) < 0) {
+    LOG_J(LS_WARNING, this) << "Failed to send STUN ping " << req->id();
+  }
 }
 
 void Connection::OnReadPacket(const char* data, size_t size) {
   StunMessage* msg;
   std::string remote_username;
   const talk_base::SocketAddress& addr(remote_candidate_.address());
-  if (!port_->GetStunMessage(data, size, addr, msg, remote_username)) {
+  if (!port_->GetStunMessage(data, size, addr, &msg, &remote_username)) {
     // The packet did not parse as a valid STUN message
 
     // If this connection is readable, then pass along the packet.
@@ -613,6 +580,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       // readable means data from this address is acceptable
       // Send it on!
 
+      last_data_received_ = talk_base::Time();
       recv_rate_tracker_.Update(size);
       SignalReadPacket(this, data, size);
 
@@ -620,24 +588,30 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
         set_write_state(STATE_WRITE_CONNECT);
     } else {
-      // Not readable means the remote address hasn't send a valid
+      // Not readable means the remote address hasn't sent a valid
       // binding request yet.
 
       LOG_J(LS_WARNING, this)
         << "Received non-STUN packet from an unreadable connection.";
     }
   } else if (!msg) {
-    // The packet was STUN, but was already handled
+    // The packet was STUN, but was already handled internally.
   } else if (remote_username != remote_candidate_.username()) {
-    // Not destined this connection
-    LOG_J(LS_ERROR, this) << "Received STUN packet on wrong address.";
+    // The packet had the right local username, but the remote username was
+    // not the right one for the remote address.
     if (msg->type() == STUN_BINDING_REQUEST) {
+      LOG_J(LS_ERROR, this) << "Received STUN request with bad remote username "
+                            << remote_username;
       port_->SendBindingErrorResponse(msg, addr, STUN_ERROR_BAD_REQUEST,
                                       STUN_ERROR_REASON_BAD_REQUEST);
+    } else if (msg->type() == STUN_BINDING_RESPONSE ||
+               msg->type() == STUN_BINDING_ERROR_RESPONSE) {
+      LOG_J(LS_ERROR, this) << "Received STUN response with bad remote username"
+                            " " << remote_username;
     }
     delete msg;
   } else {
-    // The packet is STUN, with the current username
+    // The packet is STUN, with the right username.
     // If this is a STUN request, then update the readable bit and respond.
     // If this is a STUN response, then update the writable bit.
 
@@ -688,6 +662,18 @@ void Connection::Destroy() {
 }
 
 void Connection::UpdateState(uint32 now) {
+  uint32 rtt = ConservativeRTTEstimate(rtt_);
+
+  std::string pings;
+  for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
+    char buf[32];
+    talk_base::sprintfn(buf, sizeof(buf), "%u",
+        pings_since_last_response_[i]);
+    pings.append(buf).append(" ");
+  }
+  LOG_J(LS_VERBOSE, this) << "UpdateState(): pings_since_last_response_=" <<
+      pings << ", rtt=" << rtt << ", now=" << now;
+
   // Check the readable state.
   //
   // Since we don't know how many pings the other side has attempted, the best
@@ -695,6 +681,9 @@ void Connection::UpdateState(uint32 now) {
 
   if ((read_state_ == STATE_READABLE) &&
       (last_ping_received_ + CONNECTION_READ_TIMEOUT <= now)) {
+    LOG_J(LS_INFO, this) << "Unreadable after "
+                         << now - last_ping_received_
+                         << " ms without a ping, rtt=" << rtt;
     set_read_state(STATE_READ_TIMEOUT);
   }
 
@@ -707,18 +696,6 @@ void Connection::UpdateState(uint32 now) {
   // Before timing out writability, we give a fixed amount of time.  This is to
   // allow for changes in network conditions.
 
-  uint32 rtt = ConservativeRTTEstimate(rtt_);
-
-  std::string pings;
-  for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
-    char buf[32];
-    talk_base::sprintfn(buf, sizeof(buf), "%u",
-        pings_since_last_response_[i]);
-    pings.append(buf).append(" ");
-  }
-  LOG_J(LS_VERBOSE, this) << "UpdateState(): pings_since_last_response_ = " <<
-      pings << ", rtt = " << rtt << ", now = " << now;
-
   if ((write_state_ == STATE_WRITABLE) &&
       TooManyFailures(pings_since_last_response_,
                       CONNECTION_WRITE_CONNECT_FAILURES,
@@ -727,6 +704,16 @@ void Connection::UpdateState(uint32 now) {
       TooLongWithoutResponse(pings_since_last_response_,
                              CONNECTION_WRITE_CONNECT_TIMEOUT,
                              now)) {
+    uint32 max_pings = CONNECTION_WRITE_CONNECT_FAILURES;
+    LOG_J(LS_INFO, this) << "Unwritable after " << max_pings
+                         << " ping failures and "
+                         << now - pings_since_last_response_[0]
+                         << " ms without a response,"
+                         << " ms since last received ping="
+                         << now - last_ping_received_
+                         << " ms since last received data="
+                         << now - last_data_received_
+                         << " rtt=" << rtt;
     set_write_state(STATE_WRITE_CONNECT);
   }
 
@@ -734,6 +721,9 @@ void Connection::UpdateState(uint32 now) {
       TooLongWithoutResponse(pings_since_last_response_,
                              CONNECTION_WRITE_TIMEOUT,
                              now)) {
+    LOG_J(LS_INFO, this) << "Timed out after "
+                         << now - pings_since_last_response_[0]
+                         << " ms without a response, rtt=" << rtt;
     set_write_state(STATE_WRITE_TIMEOUT);
   }
 }
@@ -769,88 +759,56 @@ std::string Connection::ToString() const {
   const Candidate& local = local_candidate();
   const Candidate& remote = remote_candidate();
   std::stringstream ss;
-  ss << "Conn[" << local.generation()
-     << ":" << local.name() << ":" << local.type() << ":"
-     << local.protocol() << ":" << local.address().ToString()
-     << "->" << remote.name() << ":" << remote.type() << ":"
+  ss << "Conn[" << local.name() << ":" << local.generation()
+     << ":" << local.type() << ":" << local.protocol()
+     << ":" << local.address().ToString()
+     << "->" << remote.name() << ":" << remote.generation()
+     << ":" << remote.type() << ":"
      << remote.protocol() << ":" << remote.address().ToString()
      << "|"
      << CONNECT_STATE_ABBREV[connected()]
      << READ_STATE_ABBREV[read_state()]
      << WRITE_STATE_ABBREV[write_state()]
-     << "|" << rtt_ << "]";
+     << "|";
+  if (rtt_ < DEFAULT_RTT) {
+    ss << rtt_ << "]";
+  } else {
+    ss << "-]";
+  }
   return ss.str();
 }
 
-void Connection::OnConnectionRequestResponse(StunMessage* response,
-                                             uint32 rtt) {
-  // We have a potentially valid reply from the remote address.
-  // The packet must include a username that ends with our fragment,
-  // since it is a response.
+void Connection::OnConnectionRequestResponse(ConnectionRequest* request,
+                                             StunMessage* response) {
+  // We've already validated that this is a STUN binding response with
+  // the correct local and remote username for this connection.
+  // So if we're not already, become writable. We may be bringing a pruned
+  // connection back to life, but if we don't really want it, we can always
+  // prune it again.
+  uint32 rtt = request->Elapsed();
+  set_write_state(STATE_WRITABLE);
 
-  // Check exact message type
-  bool valid = true;
-  if (response->type() != STUN_BINDING_RESPONSE)
-    valid = false;
-
-  // Must have username attribute
-  const StunByteStringAttribute* username_attr =
-      response->GetByteString(STUN_ATTR_USERNAME);
-  if (valid) {
-    if (!username_attr) {
-      LOG_J(LS_ERROR, this) << "Received likely STUN packet with no username";
-      valid = false;
-    }
+  std::string pings;
+  for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
+    char buf[32];
+    talk_base::sprintfn(buf, sizeof(buf), "%u",
+        pings_since_last_response_[i]);
+    pings.append(buf).append(" ");
   }
 
-  // Length must be at least the size of our fragment (actually, should
-  // be bigger since our fragment is at the end!)
-  if (valid) {
-    if (username_attr->length() <= port_->username_fragment().size()) {
-      LOG_J(LS_ERROR, this) << "Received likely STUN packet with short username";
-      valid = false;
-    }
-  }
+  LOG_J(LS_VERBOSE, this) << "Received STUN ping response " << request->id()
+                          << ", pings_since_last_response_=" << pings
+                          << ", rtt=" << rtt;
 
-  // Compare our fragment with the end of the username - must be exact match
-  if (valid) {
-    std::string username_fragment = port_->username_fragment();
-    int offset = (int)(username_attr->length() - username_fragment.size());
-    if (std::memcmp(username_attr->bytes() + offset,
-        username_fragment.c_str(), username_fragment.size()) != 0) {
-      LOG_J(LS_ERROR, this) << "Received STUN response with bad username";
-      valid = false;
-    }
-  }
-
-  if (valid) {
-    // Valid response. If we're not already, become writable.  We may be
-    // bringing a pruned connection back to life, but if we don't really want
-    // it, we can always prune it again.
-    set_write_state(STATE_WRITABLE);
-
-    std::string pings;
-    for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
-      char buf[32];
-      talk_base::sprintfn(buf, sizeof(buf), "%u",
-          pings_since_last_response_[i]);
-      pings.append(buf).append(" ");
-    }
-    LOG_J(LS_VERBOSE, this) << "OnConnectionRequestResponse(): "
-        "pings_since_last_response_ = " << pings << ", rtt = " << rtt;
-
-    pings_since_last_response_.clear();
-    rtt_ = (RTT_RATIO * rtt_ + rtt) / (RTT_RATIO + 1);
-
-    LOG_J(LS_VERBOSE, this) << "Received STUN ping response " <<
-        response->transaction_id() << " after rtt = " << rtt;
-  }
+  pings_since_last_response_.clear();
+  rtt_ = (RTT_RATIO * rtt_ + rtt) / (RTT_RATIO + 1);
 }
 
-void Connection::OnConnectionRequestErrorResponse(StunMessage *response,
-                                                  uint32 rtt) {
+void Connection::OnConnectionRequestErrorResponse(ConnectionRequest* request,
+                                                  StunMessage* response) {
   const StunErrorCodeAttribute* error = response->GetErrorCode();
-  uint32 error_code = error ? error->error_code() : STUN_ERROR_GLOBAL_FAILURE;
+  uint32 error_code = error ?
+      error->error_code() : static_cast<uint32>(STUN_ERROR_GLOBAL_FAILURE);
 
   if ((error_code == STUN_ERROR_UNKNOWN_ATTRIBUTE)
       || (error_code == STUN_ERROR_SERVER_ERROR)
@@ -860,16 +818,25 @@ void Connection::OnConnectionRequestErrorResponse(StunMessage *response,
     // Race failure, retry
   } else {
     // This is not a valid connection.
-    LOG_J(LS_ERROR, this) << "Received STUN error response; killing connection";
+    LOG_J(LS_ERROR, this) << "Received STUN error response, code="
+                          << error_code << "; killing connection";
     set_write_state(STATE_WRITE_TIMEOUT);
   }
+}
+
+void Connection::OnConnectionRequestTimeout(ConnectionRequest* request) {
+  // Log at LS_INFO if we miss a ping on a writable connection.
+  talk_base::LoggingSeverity sev = (write_state_ == STATE_WRITABLE) ?
+      talk_base::LS_INFO : talk_base::LS_VERBOSE;
+  LOG_JV(sev, this) << "Timing-out STUN ping " << request->id()
+                    << " after " << request->Elapsed() << " ms";
 }
 
 void Connection::CheckTimeout() {
   // If both read and write have timed out, then this connection can contribute
   // no more to p2p socket unless at some later date readability were to come
   // back.  However, we gave readability a long time to timeout, so at this
-  // point, it seems fair to get rid of this connectoin.
+  // point, it seems fair to get rid of this connection.
   if ((read_state_ == STATE_READ_TIMEOUT) &&
       (write_state_ == STATE_WRITE_TIMEOUT)) {
     port_->thread()->Post(this, MSG_DELETE);

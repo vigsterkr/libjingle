@@ -71,6 +71,11 @@ if platform.architecture()[0] == "64bit":
 
 DeclareBit('use_static_openssl', 'Build OpenSSL as a static library')
 
+DeclareBit('have_dbus_glib',
+           'Whether the build system has the dbus-glib-1 package')
+DeclareBit('have_libpulse',
+           'Whether the build system has the libpulse package')
+
 
 #-------------------------------------------------------------------------------
 # W I N D O W S
@@ -83,7 +88,7 @@ win_env = root_env.Clone(
     'directx_9_0_c',
     #'grid_builder',
     'midl',
-    'target_platform_windows',
+    'target_platform_windows'
   ],
   # Don't use default vc80 midl.exe.  It doesn't understand vista_sdk idl files.
   MIDL = '$PLATFORM_SDK_VISTA_6_0_DIR/Bin/midl.exe ',
@@ -188,7 +193,7 @@ win_dbg_env = win_env.Clone(
 )
 
 win_dbg_env.Prepend(
-  CCFLAGS=[
+  CCFLAGS = [
       '/ZI',     # enable debugging
       '/Od',     # disable optimizations
       '/MTd',    # link with LIBCMTD.LIB debug lib
@@ -197,6 +202,21 @@ win_dbg_env.Prepend(
 )
 
 envs.append(win_dbg_env)
+
+win_coverage_env = win_dbg_env.Clone(
+  tools = ['code_coverage'],
+  BUILD_TYPE = 'coverage',
+  BUILD_TYPE_DESCRIPTION = 'Windows code coverage build',
+  BUILD_GROUPS = ['all'],
+)
+
+win_coverage_env.Append(
+  CPPDEFINES = [
+    'COVERAGE_ENABLED',
+  ],
+)
+
+envs.append(win_coverage_env)
 
 win_opt_env = win_env.Clone(
   BUILD_TYPE = 'opt',
@@ -285,6 +305,7 @@ mac_env.Append(
     'SystemConfiguration',
     'OpenGL',
     'CoreAudio',
+    'Quartz',
     'QuickTime',
     'Cocoa',
     'QTKit',
@@ -333,10 +354,6 @@ linux_common_env = posix_env.Clone(
 linux_common_env.Append(
   CPPDEFINES = [
     'LINUX',
-    'HAVE_GLIB',
-    # TODO() Enable once we figure out multiple defines with gips lib
-    # Also consider other linux flags:  64bit, no-strict-aliasing, wrap, etc
-    #'USE_TALK_SOUND',
   ],
   CCFLAGS = [
     # TODO: Some or all of this may be desirable for Mac too.
@@ -368,6 +385,12 @@ linux_common_env.Replace(
   RPATH = [],
 )
 
+# Enable the optional DBus-GLib code if the build machine has the required
+# dependency.
+linux_common_env.EnableFeatureWherePackagePresent('have_dbus_glib',
+                                                  'HAVE_DBUS_GLIB',
+                                                  'dbus-glib-1')
+
 #-------------------------------------------------------------------------------
 # L I N U X -- T R A D I T I O N A L
 #
@@ -380,6 +403,12 @@ linux_env = linux_common_env.Clone()
 # product would end up being broken on any computer with a different version
 # installed. So instead we build it ourself and statically link to it.
 linux_env.SetBits('use_static_openssl')
+# Enable the optional PulseAudio code if the build machine has the required
+# dependency. (Not doing this for linux_common_env because we don't want
+# PulseAudio used on ChromeOS.)
+linux_env.EnableFeatureWherePackagePresent('have_libpulse',
+                                           'HAVE_LIBPULSE',
+                                           'libpulse')
 linux_env.Append(
   CCFLAGS = [
     '-m32',
@@ -469,6 +498,7 @@ if win_env.Bit('vsproj'):
 
   # Solution and target projects
   s = vs_env.ComponentVSSolution(
+    # 'libjingle',  # Please uncomment this line if you build VS proj files.
     ['all_libraries', 'all_programs', 'all_test_programs'],
     projects = [p],
   )

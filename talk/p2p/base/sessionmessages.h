@@ -35,6 +35,7 @@
 #include "talk/xmllite/xmlelement.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"  // Needed to delete contents.
+#include "talk/base/basictypes.h"
 
 namespace cricket {
 

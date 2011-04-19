@@ -50,6 +50,7 @@ Call::Call(MediaSessionClient* session_client)
     : id_(talk_base::CreateRandomId()),
       session_client_(session_client),
       local_renderer_(NULL),
+      video_(false),
       muted_(false),
       send_to_voicemail_(true),
       playing_dtmf_(false) {

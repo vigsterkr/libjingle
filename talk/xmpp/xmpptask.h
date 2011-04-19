@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _XMPPTASK_H_
-#define _XMPPTASK_H_
+#ifndef TALK_XMPP_XMPPTASK_H_
+#define TALK_XMPP_XMPPTASK_H_
 
 #include <string>
 #include <deque>
@@ -98,6 +98,8 @@ class XmppTask :
   virtual void QueueStanza(const XmlElement* stanza);
   const XmlElement* NextStanza();
 
+  bool MatchStanzaFrom(const XmlElement* stanza, const Jid& match_jid);
+
   bool MatchResponseIq(const XmlElement* stanza, const Jid& to,
                        const std::string& task_id);
 
@@ -125,6 +127,6 @@ private:
 #endif
 };
 
-}
+}  // namespace buzz
 
-#endif
+#endif // TALK_XMPP_XMPPTASK_H_

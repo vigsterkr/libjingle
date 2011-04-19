@@ -55,6 +55,7 @@ const std::string JINGLE_ACTION_SESSION_ACCEPT("session-accept");
 const std::string JINGLE_ACTION_SESSION_TERMINATE("session-terminate");
 const std::string JINGLE_ACTION_TRANSPORT_INFO("transport-info");
 const std::string JINGLE_ACTION_TRANSPORT_ACCEPT("transport-accept");
+const std::string JINGLE_ACTION_DESCRIPTION_INFO("description-info");
 
 const buzz::QName QN_GINGLE_SESSION(true, NS_GINGLE, "session");
 const std::string GINGLE_ACTION_INITIATE("initiate");
@@ -65,6 +66,7 @@ const std::string GINGLE_ACTION_TERMINATE("terminate");
 const std::string GINGLE_ACTION_CANDIDATES("candidates");
 const std::string GINGLE_ACTION_NOTIFY("notify");
 const std::string GINGLE_ACTION_UPDATE("update");
+const std::string GINGLE_ACTION_VIEW("view");
 
 const std::string LN_ERROR("error");
 const buzz::QName QN_GINGLE_REDIRECT(true, NS_GINGLE, "redirect");
@@ -75,6 +77,7 @@ const std::string STR_REDIRECT_PREFIX("xmpp:");
 const std::string LN_DESCRIPTION("description");
 const std::string LN_PAYLOADTYPE("payload-type");
 const buzz::QName QN_ID(true, NS_EMPTY, "id");
+const buzz::QName QN_SID(true, NS_EMPTY, "sid");
 const buzz::QName QN_NAME(true, NS_EMPTY, "name");
 const buzz::QName QN_CLOCKRATE(true, NS_EMPTY, "clockrate");
 const buzz::QName QN_BITRATE(true, NS_EMPTY, "bitrate");
@@ -99,6 +102,7 @@ const std::string CN_OTHER("main");
 const std::string NS_JINGLE_RTP("urn:xmpp:jingle:apps:rtp:1");
 const buzz::QName QN_JINGLE_RTP_CONTENT(
     true, NS_JINGLE_RTP, LN_DESCRIPTION);
+const buzz::QName QN_JINGLE_SSRC(true, NS_EMPTY, "ssrc");
 const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE(
     true, NS_JINGLE_RTP, LN_PAYLOADTYPE);
 const buzz::QName QN_JINGLE_RTP_BANDWIDTH(
@@ -189,6 +193,34 @@ const std::string STR_TERMINATE_NUMBER_DISALLOWED("number-disallowed");
 const std::string STR_TERMINATE_PROTOCOL_ERROR("protocol-error");
 const std::string STR_TERMINATE_INTERNAL_SERVER_ERROR("internal-server-error");
 const std::string STR_TERMINATE_UNKNOWN_ERROR("unknown-error");
+
+// Session notify messages
+const buzz::QName QN_GINGLE_NOTIFY(true, NS_GINGLE, "notify");
+const buzz::QName QN_GINGLE_NOTIFY_NICK(true, cricket::NS_EMPTY, "nick");
+const buzz::QName QN_GINGLE_NOTIFY_SOURCE(true, NS_GINGLE, "source");
+const buzz::QName QN_GINGLE_NOTIFY_SOURCE_MTYPE(
+    true, cricket::NS_EMPTY, "mtype");
+const buzz::QName QN_GINGLE_NOTIFY_SOURCE_SSRC(true, cricket::NS_EMPTY, "ssrc");
+const std::string GINGLE_NOTIFY_SOURCE_MTYPE_AUDIO("audio");
+const std::string GINGLE_NOTIFY_SOURCE_MTYPE_VIDEO("video");
+
+// Session view messages
+const buzz::QName QN_GINGLE_VIEW(true, cricket::NS_EMPTY, "view");
+const buzz::QName QN_GINGLE_VIEW_TYPE(true, cricket::NS_EMPTY, "type");
+const buzz::QName QN_GINGLE_VIEW_NICK(true, cricket::NS_EMPTY, "nick");
+const buzz::QName QN_GINGLE_VIEW_MEDIA_TYPE(true, cricket::NS_EMPTY, "mtype");
+const buzz::QName QN_GINGLE_VIEW_SSRC(true, cricket::NS_EMPTY, "ssrc");
+const std::string GINGLE_VIEW_TYPE_STATIC("static");
+const std::string GINGLE_VIEW_TYPE_DYNAMIC("dynamic");
+const std::string GINGLE_VIEW_MEDIA_TYPE_AUDIO("audio");
+const std::string GINGLE_VIEW_MEDIA_TYPE_VIDEO("video");
+const buzz::QName QN_GINGLE_VIEW_PARAMS(true, cricket::NS_EMPTY, "params");
+const buzz::QName QN_GINGLE_VIEW_PARAMS_WIDTH(true, cricket::NS_EMPTY, "width");
+const buzz::QName QN_GINGLE_VIEW_PARAMS_HEIGHT(
+    true, cricket::NS_EMPTY, "height");
+const buzz::QName QN_GINGLE_VIEW_PARAMS_FRAMERATE(
+    true, cricket::NS_EMPTY, "framerate");
+
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

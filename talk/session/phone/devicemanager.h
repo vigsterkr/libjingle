@@ -33,7 +33,7 @@
 
 #include "talk/base/sigslot.h"
 #include "talk/base/stringencode.h"
-#ifdef USE_TALK_SOUND
+#ifdef LINUX
 #include "talk/sound/soundsystemfactory.h"
 #endif
 
@@ -59,11 +59,7 @@ struct Device {
 // Methods are virtual to allow for easy stubbing/mocking in tests.
 class DeviceManager {
  public:
-  DeviceManager(
-#ifdef USE_TALK_SOUND
-      SoundSystemFactory *factory
-#endif
-      );
+  DeviceManager();
   virtual ~DeviceManager();
 
   // Initialization
@@ -82,7 +78,7 @@ class DeviceManager {
   bool GetAudioOutputDevice(const std::string& name, Device* out);
 
   virtual bool GetVideoCaptureDevices(std::vector<Device>* devs);
-  virtual bool GetDefaultVideoCaptureDevice(Device* device);
+  bool GetVideoCaptureDevice(const std::string& name, Device* out);
 
   sigslot::signal0<> SignalDevicesChange;
 
@@ -93,12 +89,17 @@ class DeviceManager {
  protected:
   virtual bool GetAudioDevice(bool is_input, const std::string& name,
                               Device* out);
+  virtual bool GetDefaultVideoCaptureDevice(Device* device);
+
  private:
   bool GetAudioDevicesByPlatform(bool input, std::vector<Device>* devs);
 
   bool initialized_;
+#ifdef WIN32
+  bool need_couninitialize_;
+#endif
   DeviceWatcher* watcher_;
-#ifdef USE_TALK_SOUND
+#ifdef LINUX
   SoundSystemHandle sound_system_;
 #endif
 };

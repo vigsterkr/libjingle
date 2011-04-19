@@ -1,27 +1,27 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004--2011, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -168,7 +168,7 @@ const unsigned char HTML_UNSAFE = 0x2; // "&'<>
 
 //  ! " # $ % & ' ( ) * + , - . / 0 1 2 3 4 6 5 7 8 9 : ; < = > ?
 //@ A B C D E F G H I J K L M N O P Q R S T U V W X Y Z [ \ ] ^ _
-//` a b c d e f g h i j k l m n o p q r s t u v w x y z { | } ~ 
+//` a b c d e f g h i j k l m n o p q r s t u v w x y z { | } ~
 
 const unsigned char ASCII_CLASS[128] = {
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -251,7 +251,7 @@ size_t utf8_decode(const char* source, size_t srclen, unsigned long* value) {
     return 0;
   }
   value16 = (value16 << 6) | (s[2] & 0x3F);
-  if ((s[0] & 0xF0) == 0xE0) {                    // Check s[0] == 1110xxxx 
+  if ((s[0] & 0xF0) == 0xE0) {                    // Check s[0] == 1110xxxx
     *value = ((s[0] & 0x0F) << 12) | value16;
     return 3;
   }
@@ -259,7 +259,7 @@ size_t utf8_decode(const char* source, size_t srclen, unsigned long* value) {
     return 0;
   }
   value16 = (value16 << 6) | (s[3] & 0x3F);
-  if ((s[0] & 0xF8) == 0xF0) {                    // Check s[0] == 11110xxx 
+  if ((s[0] & 0xF8) == 0xF0) {                    // Check s[0] == 11110xxx
     *value = ((s[0] & 0x07) << 18) | value16;
     return 4;
   }
@@ -511,8 +511,8 @@ std::string s_transform(const std::string& source, Transform t) {
   return result;
 }
 
-size_t split(const std::string& source, char delimiter,
-             std::vector<std::string>* fields) {
+size_t tokenize(const std::string& source, char delimiter,
+                std::vector<std::string>* fields) {
   ASSERT(NULL != fields);
   fields->clear();
   size_t last = 0;
@@ -530,20 +530,19 @@ size_t split(const std::string& source, char delimiter,
   return fields->size();
 }
 
-std::string split_one(const std::string& source, char delimiter, int* index) {
-  std::string substring;
-  size_t start = source.find_first_not_of(delimiter, *index);
-  size_t end = source.find_first_of(delimiter, start);
-  if (start != std::string::npos) {
-    if (end == std::string::npos) {
-      substring = source.substr(start);
-      *index = source.length();
-    } else {
-      substring = source.substr(start, end - start);
-      *index = source.find_first_not_of(delimiter, end);
+size_t split(const std::string& source, char delimiter,
+             std::vector<std::string>* fields) {
+  ASSERT(NULL != fields);
+  fields->clear();
+  size_t last = 0;
+  for (size_t i = 0; i < source.length(); ++i) {
+    if (source[i] == delimiter) {
+      fields->push_back(source.substr(last, i - last));
+      last = i + 1;
     }
   }
-  return substring;
+  fields->push_back(source.substr(last, source.length() - last));
+  return fields->size();
 }
 
 char make_char_safe_for_filename(char c) {

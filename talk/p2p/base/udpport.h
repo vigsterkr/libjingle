@@ -30,7 +30,6 @@
 
 #include <string>
 
-#include "talk/base/asyncudpsocket.h"
 #include "talk/p2p/base/port.h"
 
 namespace talk_base {
@@ -47,19 +46,17 @@ extern const std::string LOCAL_PORT_TYPE;  // type of UDP ports
 class UDPPort : public Port {
  public:
   static UDPPort* Create(talk_base::Thread* thread,
-                         talk_base::SocketFactory* factory,
+                         talk_base::PacketSocketFactory* factory,
                          talk_base::Network* network,
-                         const talk_base::SocketAddress& local_addr) {
-    UDPPort* port = new UDPPort(thread, factory, network);
-    if (!port->Init(local_addr)) {
+                         uint32 ip, int min_port, int max_port) {
+    UDPPort* port = new UDPPort(thread, factory, network,
+                                ip, min_port, max_port);
+    if (!port->Init()) {
       delete port;
       port = NULL;
     }
     return port;
   }
-  UDPPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
-          talk_base::Network* network);
-  bool Init(const talk_base::SocketAddress& local_addr);
   virtual ~UDPPort();
 
   virtual void PrepareAddress();
@@ -70,14 +67,18 @@ class UDPPort : public Port {
   virtual int GetError();
 
  protected:
+  UDPPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+          talk_base::Network* network, uint32 ip, int min_port, int max_port);
+  bool Init();
+
   // Handles sending using the local UDP socket.
   virtual int SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& remote_addr, bool payload);
 
   // Dispatches the given packet to the port or connection as appropriate.
-  void OnReadPacket(const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr,
-                    talk_base::AsyncPacketSocket* socket);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
 
  private:
   talk_base::AsyncPacketSocket* socket_;

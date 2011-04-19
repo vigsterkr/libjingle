@@ -29,6 +29,7 @@
 
 #include "talk/base/common.h"
 #include "talk/base/helpers.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/stringencode.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/session.h"
@@ -55,6 +56,7 @@ SessionManager::~SessionManager() {
   // delete them now.  They better be all gone.
   ASSERT(session_map_.empty());
   // TerminateAll();
+  SignalDestroyed();
 }
 
 void SessionManager::AddClient(const std::string& content_type,

@@ -33,6 +33,7 @@
 #include "talk/base/pathutils.h"
 #include "talk/base/stream.h"
 #include "talk/session/phone/rtpdump.h"
+#include "talk/session/phone/rtputils.h"
 
 namespace cricket {
 

@@ -39,9 +39,6 @@
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/devicemanager.h"
 #include "talk/session/phone/mediachannel.h"
-#ifdef USE_TALK_SOUND
-#include "talk/sound/soundsystemfactory.h"
-#endif
 #include "talk/session/phone/videocommon.h"
 
 namespace cricket {
@@ -88,11 +85,7 @@ class MediaEngine {
   };
 
   virtual ~MediaEngine() {}
-  static MediaEngine* Create(
-#ifdef USE_TALK_SOUND
-      SoundSystemFactory *factory
-#endif
-      );
+  static MediaEngine* Create();
 
   // Initialization
   // Starts the engine.
@@ -130,6 +123,8 @@ class MediaEngine {
   virtual bool SetVideoCaptureDevice(const Device* cam_device) = 0;
 
   // Device configuration
+  // Gets the current speaker volume, as a value between 0 and 255.
+  virtual bool GetOutputVolume(int* level) = 0;
   // Sets the current speaker volume, as a value between 0 and 255.
   virtual bool SetOutputVolume(int level) = 0;
 
@@ -154,7 +149,7 @@ class MediaEngine {
   virtual void SetVoiceLogging(int min_sev, const char* filter) = 0;
   virtual void SetVideoLogging(int min_sev, const char* filter) = 0;
 
-  sigslot::repeater1<bool> SignalVideoCaptureResult;
+  sigslot::repeater1<CaptureResult> SignalVideoCaptureResult;
 };
 
 // CompositeMediaEngine constructs a MediaEngine from separate
@@ -162,11 +157,6 @@ class MediaEngine {
 template<class VOICE, class VIDEO>
 class CompositeMediaEngine : public MediaEngine {
  public:
-#ifdef USE_TALK_SOUND
-  explicit CompositeMediaEngine(SoundSystemFactory *factory)
-      : voice_(factory) {
-  }
-#endif
   CompositeMediaEngine() {}
   virtual bool Init() {
     if (!voice_.Init())
@@ -214,6 +204,9 @@ class CompositeMediaEngine : public MediaEngine {
     return video_.SetCaptureDevice(cam_device);
   }
 
+  virtual bool GetOutputVolume(int* level) {
+    return voice_.GetOutputVolume(level);
+  }
   virtual bool SetOutputVolume(int level) {
     return voice_.SetOutputVolume(level);
   }
@@ -264,6 +257,7 @@ class NullVoiceEngine {
   bool Init() { return true; }
   void Terminate() {}
   int GetCapabilities() { return 0; }
+  // If you need this to return an actual channel, use FakeMediaEngine instead.
   VoiceMediaChannel* CreateChannel() {
     return NULL;
   }
@@ -274,6 +268,7 @@ class NullVoiceEngine {
   bool SetDevices(const Device* in_device, const Device* out_device) {
     return true;
   }
+  bool GetOutputVolume(int* level) { *level = 0; return true; }
   bool SetOutputVolume(int level) { return true; }
   int GetInputLevel() { return 0; }
   bool SetLocalMonitor(bool enable) { return true; }
@@ -291,6 +286,7 @@ class NullVideoEngine {
   bool Init() { return true; }
   void Terminate() {}
   int GetCapabilities() { return 0; }
+  // If you need this to return an actual channel, use FakeMediaEngine instead.
   VideoMediaChannel* CreateChannel(VoiceMediaChannel* voice_media_channel) {
     return NULL;
   }
@@ -304,7 +300,7 @@ class NullVideoEngine {
   const std::vector<VideoCodec>& codecs() { return codecs_; }
   bool FindCodec(const VideoCodec&) { return false; }
   void SetLogging(int min_sev, const char* filter) {}
-  sigslot::signal1<bool> SignalCaptureResult;
+  sigslot::signal1<CaptureResult> SignalCaptureResult;
  private:
   std::vector<VideoCodec> codecs_;
 };

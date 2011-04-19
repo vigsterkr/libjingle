@@ -39,20 +39,30 @@
 
 namespace talk_base {
 
-const size_t MAX_PACKET_SIZE = 64 * 1024;
+static const size_t MAX_PACKET_SIZE = 64 * 1024;
 
 typedef uint16 PacketLength;
-const size_t PKT_LEN_SIZE = sizeof(PacketLength);
+static const size_t PKT_LEN_SIZE = sizeof(PacketLength);
 
-const size_t BUF_SIZE = MAX_PACKET_SIZE + PKT_LEN_SIZE;
+static const size_t BUF_SIZE = MAX_PACKET_SIZE + PKT_LEN_SIZE;
 
-AsyncTCPSocket* AsyncTCPSocket::Create(SocketFactory* factory) {
+static const int LISTEN_BACKLOG = 5;
+
+AsyncTCPSocket* AsyncTCPSocket::Create(SocketFactory* factory, bool listen) {
   AsyncSocket* sock = factory->CreateAsyncSocket(SOCK_STREAM);
-  return (sock) ? new AsyncTCPSocket(sock) : NULL;
+  // This will still return a socket even if we failed to listen on
+  // it. It is neccessary because even if we can't accept new
+  // connections on this socket, the corresponding port is still
+  // useful for outgoing connections.
+  //
+  // TODO: It might be better to pass listen() error to the
+  // upper layer and let it handle the problem.
+  return (sock) ? new AsyncTCPSocket(sock, listen) : NULL;
 }
 
-AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket)
+AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket, bool listen)
     : AsyncPacketSocket(socket),
+      listen_(listen),
       insize_(BUF_SIZE),
       inpos_(0),
       outsize_(BUF_SIZE),
@@ -65,6 +75,12 @@ AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket)
   socket_->SignalReadEvent.connect(this, &AsyncTCPSocket::OnReadEvent);
   socket_->SignalWriteEvent.connect(this, &AsyncTCPSocket::OnWriteEvent);
   socket_->SignalCloseEvent.connect(this, &AsyncTCPSocket::OnCloseEvent);
+
+  if (listen_) {
+    if (socket_->Listen(LISTEN_BACKLOG) < 0) {
+      LOG(LS_ERROR) << "Listen() failed with error " << socket_->GetError();
+    }
+  }
 }
 
 AsyncTCPSocket::~AsyncTCPSocket() {
@@ -134,7 +150,7 @@ void AsyncTCPSocket::ProcessInput(char * data, size_t& len) {
     if (len < PKT_LEN_SIZE + pkt_len)
       return;
 
-    SignalReadPacket(data + PKT_LEN_SIZE, pkt_len, remote_addr, this);
+    SignalReadPacket(this, data + PKT_LEN_SIZE, pkt_len, remote_addr);
 
     len -= PKT_LEN_SIZE + pkt_len;
     if (len > 0) {
@@ -167,23 +183,39 @@ void AsyncTCPSocket::OnConnectEvent(AsyncSocket* socket) {
 void AsyncTCPSocket::OnReadEvent(AsyncSocket* socket) {
   ASSERT(socket == socket_);
 
-  int len = socket_->Recv(inbuf_ + inpos_, insize_ - inpos_);
-  if (len < 0) {
-    // TODO: Do something better like forwarding the error to the user.
-    if (!socket_->IsBlocking()) {
-      LOG_ERR(LS_ERROR) << "recvfrom";
+  if (listen_) {
+    talk_base::SocketAddress address;
+    talk_base::AsyncSocket* new_socket = socket->Accept(&address);
+    if (!new_socket) {
+      // TODO: Do something better like forwarding the error
+      // to the user.
+      LOG(LS_ERROR) << "TCP accept failed with error " << socket_->GetError();
+      return;
     }
-    return;
-  }
 
-  inpos_ += len;
+    SignalNewConnection(this, new AsyncTCPSocket(new_socket, false));
 
-  ProcessInput(inbuf_, inpos_);
+    // Prime a read event in case data is waiting.
+    new_socket->SignalReadEvent(new_socket);
+  } else {
+    int len = socket_->Recv(inbuf_ + inpos_, insize_ - inpos_);
+    if (len < 0) {
+      // TODO: Do something better like forwarding the error to the user.
+      if (!socket_->IsBlocking()) {
+        LOG(LS_ERROR) << "Recv() returned error: " << socket_->GetError();
+      }
+      return;
+    }
 
-  if (inpos_ >= insize_) {
-    LOG(INFO) << "input buffer overflow";
-    ASSERT(false);
-    inpos_ = 0;
+    inpos_ += len;
+
+    ProcessInput(inbuf_, inpos_);
+
+    if (inpos_ >= insize_) {
+      LOG(LS_ERROR) << "input buffer overflow";
+      ASSERT(false);
+      inpos_ = 0;
+    }
   }
 }
 

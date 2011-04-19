@@ -48,15 +48,18 @@ class MagicCamVideoRenderer;
 
 namespace cricket {
 
-const size_t kMinRtpPacketLen = 12;
-const size_t kMinRtcpPacketLen = 4;
-const size_t kMaxRtpPacketLen = 2048;
+const int kMinRtpHeaderExtensionId = 1;
+const int kMaxRtpHeaderExtensionId = 255;
+
+struct RtpHeaderExtension {
+  RtpHeaderExtension(const std::string& u, int i) : uri(u), id(i) {}
+  std::string uri;
+  int id;
+  // TODO: SendRecv direction;
+};
 
 enum VoiceMediaChannelOptions {
   OPT_CONFERENCE = 0x10000,   // tune the audio stream for conference mode
-  OPT_ENERGYLEVEL = 0x20000,  // include the energy level in RTP packets, as
-                              // defined in https://datatracker.ietf.org/drafts/
-                              // draft-lennox-avt-rtp-audio-level-exthdr/
 
 };
 
@@ -97,8 +100,14 @@ class MediaChannel : public sigslot::has_slots<> {
   // Mutes the channel.
   virtual bool Mute(bool on) = 0;
 
-  virtual bool SetRtpExtensionHeaders(bool enable_all) { return true; }
+  // Sets the RTP extension headers and IDs to use when sending RTP.
+  virtual bool SetRecvRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) = 0;
+  virtual bool SetSendRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) = 0;
+  // Sets the rate control to use when sending data.
   virtual bool SetSendBandwidth(bool autobw, int bps) = 0;
+  // Sets the media options to use.
   virtual bool SetOptions(int options) = 0;
 
  protected:
@@ -148,6 +157,8 @@ struct VideoSenderInfo {
   int frame_height;
   int framerate_input;
   int framerate_sent;
+  int nominal_bitrate;
+  int preferred_bitrate;
 };
 
 struct VideoReceiverInfo {
@@ -167,6 +178,16 @@ struct VideoReceiverInfo {
   int framerate_output;
 };
 
+struct BandwidthEstimationInfo {
+  int available_send_bandwidth;
+  int available_recv_bandwidth;
+  int target_enc_bitrate;
+  int actual_enc_bitrate;
+  int retransmit_bitrate;
+  int transmit_bitrate;
+  int bucket_delay;
+};
+
 struct VoiceMediaInfo {
   void Clear() {
     senders.clear();
@@ -180,13 +201,36 @@ struct VideoMediaInfo {
   void Clear() {
     senders.clear();
     receivers.clear();
+    bw_estimations.clear();
   }
   std::vector<VideoSenderInfo> senders;
   std::vector<VideoReceiverInfo> receivers;
+  std::vector<BandwidthEstimationInfo> bw_estimations;
 };
 
 class VoiceMediaChannel : public MediaChannel {
  public:
+  enum Error {
+    ERROR_NONE = 0,                       // No error.
+    ERROR_OTHER,                          // Other errors.
+    ERROR_REC_DEVICE_OPEN_FAILED = 100,   // Could not open mic.
+    ERROR_REC_DEVICE_MUTED,               // Mic was muted by OS.
+    ERROR_REC_DEVICE_SILENT,              // No background noise picked up.
+    ERROR_REC_DEVICE_SATURATION,          // Mic input is clipping.
+    ERROR_REC_DEVICE_REMOVED,             // Mic was removed while active.
+    ERROR_REC_RUNTIME_ERROR,              // Processing is encountering errors.
+    ERROR_REC_SRTP_ERROR,                 // Generic SRTP failure.
+    ERROR_REC_SRTP_AUTH_FAILED,           // Failed to authenticate packets.
+    ERROR_REC_TYPING_NOISE_DETECTED,      // Typing noise is detected.
+    ERROR_PLAY_DEVICE_OPEN_FAILED = 200,  // Could not open playout.
+    ERROR_PLAY_DEVICE_MUTED,              // Playout muted by OS.
+    ERROR_PLAY_DEVICE_REMOVED,            // Playout removed while active.
+    ERROR_PLAY_RUNTIME_ERROR,             // Errors in voice processing.
+    ERROR_PLAY_SRTP_ERROR,                // Generic SRTP failure.
+    ERROR_PLAY_SRTP_AUTH_FAILED,          // Failed to authenticate packets.
+    ERROR_PLAY_SRTP_REPLAY,               // Packet replay detected.
+  };
+
   VoiceMediaChannel() {}
   virtual ~VoiceMediaChannel() {}
   // Sets the codecs/payload types to be used for incoming media.
@@ -206,13 +250,23 @@ class VoiceMediaChannel : public MediaChannel {
   // Get the current energy level for the outgoing stream.
   virtual int GetOutputLevel() = 0;
   // Specifies a ringback tone to be played during call setup.
-  virtual void SetRingbackTone(const char *buf, int len) = 0;
+  virtual bool SetRingbackTone(const char *buf, int len) = 0;
   // Plays or stops the aforementioned ringback tone
-  virtual bool PlayRingbackTone(bool play, bool loop) = 0;
+  virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) = 0;
   // Sends a out-of-band DTMF signal using the specified event.
   virtual bool PressDTMF(int event, bool playout) = 0;
   // Gets quality stats for the channel.
   virtual bool GetStats(VoiceMediaInfo* info) = 0;
+  // Gets last reported error for this media channel.
+  virtual void GetLastMediaError(uint32* ssrc,
+                                 VoiceMediaChannel::Error* error) {
+    ASSERT(error != NULL);
+    *error = ERROR_NONE;
+  }
+
+  // Signal errors from MediaChannel.  Arguments are:
+  //     ssrc(uint32), and error(VoiceMediaChannel::Error).
+  sigslot::signal2<uint32, VoiceMediaChannel::Error> SignalMediaError;
 };
 
 // Represents a YUV420 (a.k.a. I420) video frame.
@@ -390,6 +444,20 @@ class NullVideoRenderer : public VideoRenderer {
 
 class VideoMediaChannel : public MediaChannel {
  public:
+  enum Error {
+    ERROR_NONE = 0,                       // No error.
+    ERROR_OTHER,                          // Other errors.
+    ERROR_REC_DEVICE_OPEN_FAILED = 100,   // Could not open camera.
+    ERROR_REC_DEVICE_NO_DEVICE,           // No camera.
+    ERROR_REC_DEVICE_IN_USE,              // Device is in already use.
+    ERROR_REC_DEVICE_REMOVED,             // Device is removed.
+    ERROR_REC_SRTP_ERROR,                 // Generic sender SRTP failure.
+    ERROR_REC_SRTP_AUTH_FAILED,           // Failed to authenticate packets.
+    ERROR_PLAY_SRTP_ERROR = 200,          // Generic receiver SRTP failure.
+    ERROR_PLAY_SRTP_AUTH_FAILED,          // Failed to authenticate packets.
+    ERROR_PLAY_SRTP_REPLAY,               // Packet replay detected.
+  };
+
   VideoMediaChannel() { renderer_ = NULL; }
   virtual ~VideoMediaChannel() {}
   // Sets the codecs/payload types to be used for incoming media.
@@ -415,6 +483,7 @@ class VideoMediaChannel : public MediaChannel {
   // Reuqest each of the remote senders to send an intra frame.
   virtual bool RequestIntraFrame() = 0;
 
+  sigslot::signal2<uint32, Error> SignalMediaError;
 
  protected:
   VideoRenderer *renderer_;

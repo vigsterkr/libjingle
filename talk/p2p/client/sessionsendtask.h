@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_P2P_CLIENT_SESSIONSENDTASK_H_
-#define _CRICKET_P2P_CLIENT_SESSIONSENDTASK_H_
+#ifndef TALK_P2P_CLIENT_SESSIONSENDTASK_H_
+#define TALK_P2P_CLIENT_SESSIONSENDTASK_H_
 
 #include "talk/base/common.h"
 #include "talk/xmpp/constants.h"
@@ -44,11 +44,13 @@ namespace cricket {
 // task will quietly go away.
 
 class SessionSendTask : public buzz::XmppTask {
-public:
+ public:
   SessionSendTask(TaskParent *parent, SessionManager *session_manager)
     : buzz::XmppTask(parent, buzz::XmppEngine::HL_SINGLE),
       session_manager_(session_manager) {
     set_timeout_seconds(15);
+    session_manager_->SignalDestroyed.connect(
+        this, &SessionSendTask::OnSessionManagerDestroyed);
   }
 
   virtual ~SessionSendTask() {
@@ -78,11 +80,19 @@ public:
     }
   }
 
+  void OnSessionManagerDestroyed() {
+    // If the session manager doesn't exist anymore, we should still try to
+    // send the message, but avoid calling back into the SessionManager.
+    session_manager_ = NULL;
+  }
+
   sigslot::signal1<SessionSendTask *> SignalDone;
 
-protected:
+ protected:
   virtual int OnTimeout() {
-    session_manager_->OnFailedSend(stanza_.get(), NULL);
+    if (session_manager_ != NULL) {
+      session_manager_->OnFailedSend(stanza_.get(), NULL);
+    }
 
     return XmppTask::OnTimeout();
   }
@@ -105,10 +115,12 @@ protected:
     if (next == NULL)
       return STATE_BLOCKED;
 
-    if (next->Attr(buzz::QN_TYPE) == buzz::STR_RESULT) {
-      session_manager_->OnIncomingResponse(stanza_.get(), next);
-    } else {
-      session_manager_->OnFailedSend(stanza_.get(), next);
+    if (session_manager_ != NULL) {
+      if (next->Attr(buzz::QN_TYPE) == buzz::STR_RESULT) {
+        session_manager_->OnIncomingResponse(stanza_.get(), next);
+      } else {
+        session_manager_->OnFailedSend(stanza_.get(), next);
+      }
     }
 
     return STATE_DONE;
@@ -126,7 +138,7 @@ protected:
     return false;
   }
 
-private:
+ private:
   SessionManager *session_manager_;
   talk_base::scoped_ptr<buzz::XmlElement> stanza_;
   bool timed_out_;
@@ -134,4 +146,4 @@ private:
 
 }
 
-#endif // _CRICKET_P2P_CLIENT_SESSIONSENDTASK_H_
+#endif // TALK_P2P_CLIENT_SESSIONSENDTASK_H_

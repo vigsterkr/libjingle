@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -87,6 +87,12 @@ namespace talk_base {
   // unlimited time.
   const int kForever = -1;
 }
+
+// Detect compiler is for x86 or x64.
+#if defined(__x86_64__) || defined(_M_X64) || \
+    defined(__i386__) || defined(_M_IX86)
+#define CPU_X86 1
+#endif
 
 #ifdef WIN32
 #define alignof(t) __alignof(t)

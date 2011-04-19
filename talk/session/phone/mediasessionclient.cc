@@ -147,7 +147,7 @@ SessionDescription* MediaSessionClient::CreateOffer(
     audio->AddCodec(*codec);
   }
   if (options.is_muc) {
-    audio->set_ssrc(0);
+    audio->set_ssrc(talk_base::CreateRandomNonZeroId());
   }
   audio->SortCodecs();
 
@@ -179,7 +179,7 @@ SessionDescription* MediaSessionClient::CreateOffer(
       video->AddCodec(*codec);
     }
     if (options.is_muc) {
-      video->set_ssrc(0);
+      video->set_ssrc(talk_base::CreateRandomNonZeroId());
     }
     video->set_bandwidth(options.video_bandwidth);
     video->SortCodecs();
@@ -467,12 +467,26 @@ bool ParseGingleVideoCodec(const buzz::XmlElement* element, VideoCodec* out) {
   return true;
 }
 
+uint32 parse_ssrc(const std::string& ssrc) {
+  // TODO: Return an error rather than defaulting to 0.
+  uint32 default_ssrc = 0U;
+  return FromString(default_ssrc, ssrc);
+}
+
 void ParseGingleSsrc(const buzz::XmlElement* parent_elem,
                      const buzz::QName& name,
                      MediaContentDescription* content) {
   const buzz::XmlElement* ssrc_elem = parent_elem->FirstNamed(name);
   if (ssrc_elem) {
-    content->set_ssrc(strtoul(ssrc_elem->BodyText().c_str(), NULL, 10));
+    content->set_ssrc(parse_ssrc(ssrc_elem->BodyText()));
+  }
+}
+
+void ParseJingleSsrc(const buzz::XmlElement* desc_elem,
+                     MediaContentDescription* content) {
+  const std::string ssrc = desc_elem->Attr(QN_JINGLE_SSRC);
+  if (!ssrc.empty()) {
+    content->set_ssrc(parse_ssrc(ssrc));
   }
 }
 
@@ -697,6 +711,8 @@ bool ParseJingleAudioContent(const buzz::XmlElement* content_elem,
     }
   }
 
+  ParseJingleSsrc(content_elem, audio);
+
   if (!ParseJingleEncryption(content_elem, audio, error)) {
     return false;
   }
@@ -720,6 +736,7 @@ bool ParseJingleVideoContent(const buzz::XmlElement* content_elem,
     }
   }
 
+  ParseJingleSsrc(content_elem, video);
   ParseBandwidth(content_elem, video);
 
   if (!ParseJingleEncryption(content_elem, video, error)) {
@@ -939,12 +956,25 @@ buzz::XmlElement* CreateJingleVideoCodecElem(const VideoCodec& codec) {
   return elem;
 }
 
+void WriteJingleSsrc(const MediaContentDescription* media,
+                     buzz::XmlElement* elem) {
+  // TODO: Right now, we have an ssrc=0 to mean "let the
+  // server choose".  In Jingle, it would make the most sense to just
+  // leave off the attribute.  But then we can't have an ssrc of 0.
+  // Once we have initiator-choosen ssrcs, we can remove this check
+  // and write out ssrc=0.
+  if (media->ssrc_set() && (media->ssrc() != 0)) {
+    AddXmlAttr(elem, QN_JINGLE_SSRC, media->ssrc());
+  }
+}
+
 buzz::XmlElement* CreateJingleAudioContentElem(
     const AudioContentDescription* audio, bool crypto_required) {
   buzz::XmlElement* elem =
       new buzz::XmlElement(QN_JINGLE_RTP_CONTENT, true);
 
   elem->SetAttr(QN_JINGLE_CONTENT_MEDIA, JINGLE_CONTENT_MEDIA_AUDIO);
+  WriteJingleSsrc(audio, elem);
 
   for (AudioCodecs::const_iterator codec = audio->codecs().begin();
        codec != audio->codecs().end(); ++codec) {
@@ -966,6 +996,7 @@ buzz::XmlElement* CreateJingleVideoContentElem(
       new buzz::XmlElement(QN_JINGLE_RTP_CONTENT, true);
 
   elem->SetAttr(QN_JINGLE_CONTENT_MEDIA, JINGLE_CONTENT_MEDIA_VIDEO);
+  WriteJingleSsrc(video, elem);
 
   for (VideoCodecs::const_iterator codec = video->codecs().begin();
        codec != video->codecs().end(); ++codec) {

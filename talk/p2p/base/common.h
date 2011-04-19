@@ -25,12 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CRICKET_P2P_BASE_COMMON_H__
-#define CRICKET_P2P_BASE_COMMON_H__
+#ifndef TALK_P2P_BASE_COMMON_H_
+#define TALK_P2P_BASE_COMMON_H_
 
 #include "talk/base/logging.h"
 
 // Common log description format for jingle messages
-#define LOG_J(sev,obj) LOG(sev) << "Jingle:" << obj->ToString() << ": "
+#define LOG_J(sev, obj) LOG(sev) << "Jingle:" << obj->ToString() << ": "
+#define LOG_JV(sev, obj) LOG_V(sev) << "Jingle:" << obj->ToString() << ": "
 
-#endif  // CRICKET_P2P_BASE_COMMON_H__
+#endif  // TALK_P2P_BASE_COMMON_H_

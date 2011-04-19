@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "talk/base/asyncfile.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/socketserver.h"
 #include "talk/base/criticalsection.h"
 
@@ -51,7 +52,7 @@ enum DispatcherEvent {
 
 class Signaler;
 #ifdef POSIX
-class PosixSignalDeliveryDispatcher;
+class PosixSignalDispatcher;
 #endif
 
 class Dispatcher {
@@ -99,9 +100,8 @@ public:
   // manipulate user-level data structures.
   // "handler" may be SIG_IGN, SIG_DFL, or a user-specified function, just like
   // with signal(2).
-  // Only one PhysicalSocketServer may have user-level signal handlers.
-  // Attempting to install a signal handler for a PhysicalSocketServer when
-  // another already owns some will fail.
+  // Only one PhysicalSocketServer should have user-level signal handlers.
+  // Dispatching signals on multiple PhysicalSocketServers is not reliable.
   // The signal mask is not modified. It is the caller's responsibily to
   // maintain it as desired.
   bool SetPosixSignalHandler(int signum, void (*handler)(int));
@@ -113,8 +113,9 @@ private:
 
 #ifdef POSIX
   static bool InstallSignal(int signum, void (*handler)(int));
-#endif
 
+  scoped_ptr<PosixSignalDispatcher> signal_dispatcher_;
+#endif
   DispatcherList dispatchers_;
   IteratorList iterators_;
   Signaler* signal_wakeup_;

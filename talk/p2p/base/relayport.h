@@ -28,8 +28,11 @@
 #ifndef TALK_P2P_BASE_RELAYPORT_H_
 #define TALK_P2P_BASE_RELAYPORT_H_
 
+#include <deque>
 #include <string>
+#include <utility>
 #include <vector>
+
 #include "talk/p2p/base/port.h"
 #include "talk/p2p/base/stunrequest.h"
 
@@ -51,18 +54,13 @@ class RelayPort : public Port {
 
   // RelayPort doesn't yet do anything fancy in the ctor.
   static RelayPort* Create(
-    talk_base::Thread* thread, talk_base::SocketFactory* factory,
-    talk_base::Network* network, const talk_base::SocketAddress& local_addr,
-    const std::string& username, const std::string& password,
-    const std::string& magic_cookie) {
-    return new RelayPort(thread, factory, network, local_addr,
+      talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+      talk_base::Network* network, uint32 ip, int min_port, int max_port,
+      const std::string& username, const std::string& password,
+      const std::string& magic_cookie) {
+    return new RelayPort(thread, factory, network, ip, min_port, max_port,
                          username, password, magic_cookie);
   }
-  RelayPort(talk_base::Thread* thread, talk_base::SocketFactory* factory,
-            talk_base::Network*, const talk_base::SocketAddress& local_addr,
-            const std::string& username, const std::string& password,
-            const std::string& magic_cookie);
-  bool Init();
   virtual ~RelayPort();
 
   void AddServerAddress(const ProtocolAddress& addr);
@@ -86,6 +84,12 @@ class RelayPort : public Port {
   sigslot::signal1<const ProtocolAddress*> SignalSoftTimeout;
 
  protected:
+  RelayPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+            talk_base::Network*, uint32 ip, int min_port, int max_port,
+            const std::string& username, const std::string& password,
+            const std::string& magic_cookie);
+  bool Init();
+
   void SetReady();
 
   virtual int SendTo(const void* data, size_t size,
@@ -98,7 +102,6 @@ class RelayPort : public Port {
  private:
   friend class RelayEntry;
 
-  talk_base::SocketAddress local_addr_;
   std::deque<ProtocolAddress> server_addr_;
   bool ready_;
   std::vector<RelayEntry*> entries_;

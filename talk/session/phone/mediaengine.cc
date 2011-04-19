@@ -26,6 +26,9 @@
 //
 
 #include "talk/session/phone/mediaengine.h"
+#ifdef HAVE_LINPHONE
+#include "talk/session/phone/linphonemediaengine.h"
+#endif
 
 
 namespace cricket {
@@ -33,12 +36,11 @@ namespace cricket {
 // TODO: according to thaloun, HAVE_GIPSVIDEO will always
 // be false, so we can get rid of it.
 
-MediaEngine* MediaEngine::Create(
-#ifdef USE_TALK_SOUND
-    SoundSystemFactory *factory
-#endif
-    ) {
+MediaEngine* MediaEngine::Create() {
+#ifdef HAVE_LINPHONE
+  return new LinphoneMediaEngine("", "");
+#else
   return new NullMediaEngine();
+#endif
 }
-
 };  // namespace cricket

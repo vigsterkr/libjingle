@@ -39,26 +39,38 @@ namespace talk_base {
 static const int DEFAULT_SIZE = 4096;
 
 ByteBuffer::ByteBuffer() {
-  start_ = 0;
-  end_   = 0;
-  size_  = DEFAULT_SIZE;
-  bytes_ = new char[size_];
+  Construct(NULL, DEFAULT_SIZE, ORDER_NETWORK);
+}
+
+ByteBuffer::ByteBuffer(ByteOrder byte_order) {
+  Construct(NULL, DEFAULT_SIZE, byte_order);
 }
 
 ByteBuffer::ByteBuffer(const char* bytes, size_t len) {
-  start_ = 0;
-  end_   = len;
-  size_  = len;
-  bytes_ = new char[size_];
-  memcpy(bytes_, bytes, end_);
+  Construct(bytes, len, ORDER_NETWORK);
+}
+
+ByteBuffer::ByteBuffer(const char* bytes, size_t len, ByteOrder byte_order) {
+  Construct(bytes, len, byte_order);
 }
 
 ByteBuffer::ByteBuffer(const char* bytes) {
-  start_ = 0;
-  end_   = strlen(bytes);
-  size_  = end_;
-  bytes_ = new char[size_];
-  memcpy(bytes_, bytes, end_);
+  Construct(bytes, strlen(bytes), ORDER_NETWORK);
+}
+
+void ByteBuffer::Construct(const char* bytes, size_t len,
+                           ByteOrder byte_order) {
+  start_      = 0;
+  size_       = len;
+  byte_order_ = byte_order;
+  bytes_      = new char[size_];
+
+  if (bytes) {
+    end_ = len;
+    memcpy(bytes_, bytes, end_);
+  } else {
+    end_ = 0;
+  }
 }
 
 ByteBuffer::~ByteBuffer() {
@@ -78,7 +90,7 @@ bool ByteBuffer::ReadUInt16(uint16* val) {
   if (!ReadBytes(reinterpret_cast<char*>(&v), 2)) {
     return false;
   } else {
-    *val = NetworkToHost16(v);
+    *val = (byte_order_ == ORDER_NETWORK) ? NetworkToHost16(v) : v;
     return true;
   }
 }
@@ -87,10 +99,15 @@ bool ByteBuffer::ReadUInt24(uint32* val) {
   if (!val) return false;
 
   uint32 v = 0;
-  if (!ReadBytes(reinterpret_cast<char*>(&v) + 1, 3)) {
+  char* read_into = reinterpret_cast<char*>(&v);
+  if (byte_order_ == ORDER_NETWORK || IsHostBigEndian()) {
+    ++read_into;
+  }
+
+  if (!ReadBytes(read_into, 3)) {
     return false;
   } else {
-    *val = NetworkToHost32(v);
+    *val = (byte_order_ == ORDER_NETWORK) ? NetworkToHost32(v) : v;
     return true;
   }
 }
@@ -102,7 +119,7 @@ bool ByteBuffer::ReadUInt32(uint32* val) {
   if (!ReadBytes(reinterpret_cast<char*>(&v), 4)) {
     return false;
   } else {
-    *val = NetworkToHost32(v);
+    *val = (byte_order_ == ORDER_NETWORK) ? NetworkToHost32(v) : v;
     return true;
   }
 }
@@ -114,7 +131,7 @@ bool ByteBuffer::ReadUInt64(uint64* val) {
   if (!ReadBytes(reinterpret_cast<char*>(&v), 8)) {
     return false;
   } else {
-    *val = NetworkToHost64(v);
+    *val = (byte_order_ == ORDER_NETWORK) ? NetworkToHost64(v) : v;
     return true;
   }
 }
@@ -146,22 +163,26 @@ void ByteBuffer::WriteUInt8(uint8 val) {
 }
 
 void ByteBuffer::WriteUInt16(uint16 val) {
-  uint16 v = HostToNetwork16(val);
+  uint16 v = (byte_order_ == ORDER_NETWORK) ? HostToNetwork16(val) : val;
   WriteBytes(reinterpret_cast<const char*>(&v), 2);
 }
 
 void ByteBuffer::WriteUInt24(uint32 val) {
-  uint32 v = HostToNetwork32(val);
-  WriteBytes(reinterpret_cast<const char*>(&v) + 1, 3);
+  uint32 v = (byte_order_ == ORDER_NETWORK) ? HostToNetwork32(val) : val;
+  char* start = reinterpret_cast<char*>(&v);
+  if (byte_order_ == ORDER_NETWORK || IsHostBigEndian()) {
+    ++start;
+  }
+  WriteBytes(start, 3);
 }
 
 void ByteBuffer::WriteUInt32(uint32 val) {
-  uint32 v = HostToNetwork32(val);
+  uint32 v = (byte_order_ == ORDER_NETWORK) ? HostToNetwork32(val) : val;
   WriteBytes(reinterpret_cast<const char*>(&v), 4);
 }
 
 void ByteBuffer::WriteUInt64(uint64 val) {
-  uint64 v = HostToNetwork64(val);
+  uint64 v = (byte_order_ == ORDER_NETWORK) ? HostToNetwork64(val) : val;
   WriteBytes(reinterpret_cast<const char*>(&v), 8);
 }
 

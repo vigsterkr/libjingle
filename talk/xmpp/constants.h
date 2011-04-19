@@ -287,6 +287,7 @@ extern const QName QN_ORDER;
 extern const QName QN_MECHANISM;
 extern const QName QN_ASK;
 extern const QName QN_JID;
+extern const QName QN_NICK;
 extern const QName QN_SUBSCRIPTION;
 extern const QName QN_TITLE1;
 extern const QName QN_TITLE2;
@@ -318,9 +319,23 @@ extern const QName QN_INVITE_NAME;
 extern const QName QN_INVITE_SUBJECT;
 extern const QName QN_INVITE_MESSAGE;
 
+// PubSub: http://xmpp.org/extensions/xep-0060.html
+extern const std::string NS_PUBSUB;
+extern const QName QN_PUBSUB;
+extern const QName QN_PUBSUB_ITEMS;
+extern const QName QN_PUBSUB_ITEM;
+
+extern const std::string NS_PUBSUB_EVENT;
+extern const QName QN_NODE;
+extern const QName QN_PUBSUB_EVENT;
+extern const QName QN_PUBSUB_EVENT_ITEMS;
+extern const QName QN_PUBSUB_EVENT_ITEM;
+extern const QName QN_PUBSUB_EVENT_RETRACT;
+
+
+
 
 // JEP 0030
-extern const QName QN_NODE;
 extern const QName QN_CATEGORY;
 extern const QName QN_VAR;
 extern const std::string NS_DISCO_INFO;

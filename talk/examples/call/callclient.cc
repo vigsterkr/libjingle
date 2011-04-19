@@ -29,19 +29,13 @@
 
 #include <string>
 
-#include "talk/xmpp/constants.h"
 #include "talk/base/helpers.h"
-#include "talk/base/thread.h"
+#include "talk/base/logging.h"
 #include "talk/base/network.h"
 #include "talk/base/socketaddress.h"
-#include "talk/base/stringutils.h"
 #include "talk/base/stringencode.h"
-#include "talk/p2p/base/sessionmanager.h"
-#include "talk/p2p/client/basicportallocator.h"
-#include "talk/p2p/client/sessionmanagertask.h"
-#include "talk/session/phone/devicemanager.h"
-#include "talk/session/phone/mediaengine.h"
-#include "talk/session/phone/mediasessionclient.h"
+#include "talk/base/stringutils.h"
+#include "talk/base/thread.h"
 #include "talk/examples/call/console.h"
 #include "talk/examples/call/presencepushtask.h"
 #include "talk/examples/call/presenceouttask.h"
@@ -50,25 +44,14 @@
 #include "talk/examples/call/friendinvitesendtask.h"
 #include "talk/examples/call/muc.h"
 #include "talk/examples/call/voicemailjidrequester.h"
-#ifdef USE_TALK_SOUND
-#include "talk/sound/platformsoundsystemfactory.h"
-#endif
-
-#include "talk/base/logging.h"
-
-class NullRenderer : public cricket::VideoRenderer {
- public:
-  explicit NullRenderer(const char* s) : s_(s) {}
- private:
-  bool SetSize(int width, int height, int reserved) {
-    LOG(LS_INFO) << "Video size for " << s_ << ": " << width << "x" << height;
-    return true;
-  }
-  bool RenderFrame(const cricket::VideoFrame *frame) {
-    return true;
-  }
-  const char* s_;
-};
+#include "talk/p2p/base/sessionmanager.h"
+#include "talk/p2p/client/basicportallocator.h"
+#include "talk/p2p/client/sessionmanagertask.h"
+#include "talk/session/phone/devicemanager.h"
+#include "talk/session/phone/mediaengine.h"
+#include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/videorendererfactory.h"
+#include "talk/xmpp/constants.h"
 
 namespace {
 
@@ -177,11 +160,7 @@ void CallClient::ParseLine(const std::string& line) {
     }
   } else if (call_) {
     if (command == "hangup") {
-      // TODO: do more shutdown here, move to Terminate()
       call_->Terminate();
-      call_ = NULL;
-      session_ = NULL;
-      console_->SetPrompt(NULL);
     } else if (command == "mute") {
       call_->Mute(true);
     } else if (command == "unmute") {
@@ -250,11 +229,7 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
       portallocator_flags_(0),
       allow_local_ips_(false),
       initial_protocol_(cricket::PROTOCOL_HYBRID),
-      secure_policy_(cricket::SEC_DISABLED)
-#ifdef USE_TALK_SOUND
-      , sound_system_factory_(NULL)
-#endif
-    {
+      secure_policy_(cricket::SEC_DISABLED) {
   xmpp_client_->SignalStateChange.connect(this, &CallClient::OnStateChange);
 }
 
@@ -342,14 +317,16 @@ void CallClient::InitPhone() {
   // dispatched by it.
   worker_thread_->Start();
 
+  // TODO: It looks like we are leaking many objects. E.g.
+  // |network_manager_| is never deleted.
+
   network_manager_ = new talk_base::NetworkManager();
 
   // TODO: Decide if the relay address should be specified here.
   talk_base::SocketAddress stun_addr("stun.l.google.com", 19302);
-  port_allocator_ =
-      new cricket::BasicPortAllocator(network_manager_, stun_addr,
-          talk_base::SocketAddress(), talk_base::SocketAddress(),
-          talk_base::SocketAddress());
+  port_allocator_ =  new cricket::BasicPortAllocator(
+      network_manager_, stun_addr, talk_base::SocketAddress(),
+      talk_base::SocketAddress(), talk_base::SocketAddress());
 
   if (portallocator_flags_ != 0) {
     port_allocator_->set_flags(portallocator_flags_);
@@ -367,30 +344,17 @@ void CallClient::InitPhone() {
   session_manager_task_->EnableOutgoingMessages();
   session_manager_task_->Start();
 
-#ifdef USE_TALK_SOUND
-  if (!sound_system_factory_) {
-    sound_system_factory_ = new cricket::PlatformSoundSystemFactory();
-  }
-#endif
-
   if (!media_engine_) {
-    media_engine_ = cricket::MediaEngine::Create(
-#ifdef USE_TALK_SOUND
-        sound_system_factory_
-#endif
-        );
+    media_engine_ = cricket::MediaEngine::Create();
   }
 
   media_client_ = new cricket::MediaSessionClient(
       xmpp_client_->jid(),
       session_manager_,
       media_engine_,
-      new cricket::DeviceManager(
-#ifdef USE_TALK_SOUND
-          sound_system_factory_
-#endif
-          ));
+      new cricket::DeviceManager());
   media_client_->SignalCallCreate.connect(this, &CallClient::OnCallCreate);
+  media_client_->SignalCallDestroy.connect(this, &CallClient::OnCallDestroy);
   media_client_->SignalDevicesChange.connect(this,
                                              &CallClient::OnDevicesChange);
   media_client_->set_secure(secure_policy_);
@@ -407,10 +371,6 @@ void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
 
 void CallClient::OnCallCreate(cricket::Call* call) {
   call->SignalSessionState.connect(this, &CallClient::OnSessionState);
-  if (call->video()) {
-    local_renderer_ = new NullRenderer("local");
-    remote_renderer_ = new NullRenderer("remote");
-  }
 }
 
 void CallClient::OnSessionState(cricket::Call* call,
@@ -422,11 +382,23 @@ void CallClient::OnSessionState(cricket::Call* call,
     call_ = call;
     session_ = session;
     incoming_call_ = true;
+    if (call->video()) {
+      local_renderer_ =
+          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
+      remote_renderer_ =
+          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
+    }
     cricket::CallOptions options;
     if (auto_accept_) {
       Accept(options);
     }
   } else if (state == cricket::Session::STATE_SENTINITIATE) {
+    if (call->video()) {
+      local_renderer_ =
+          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
+      remote_renderer_ =
+          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
+    }
     console_->Print("calling...");
   } else if (state == cricket::Session::STATE_RECEIVEDACCEPT) {
     console_->Print("call answered");
@@ -598,8 +570,6 @@ void CallClient::MakeCallTo(const std::string& name,
 
 void CallClient::PlaceCall(const buzz::Jid& jid,
                            const cricket::CallOptions& options) {
-  media_client_->SignalCallDestroy.connect(
-      this, &CallClient::OnCallDestroy);
   if (!call_) {
     call_ = media_client_->CreateCall();
     console_->SetPrompt(jid.Str().c_str());

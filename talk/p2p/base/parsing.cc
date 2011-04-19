@@ -79,19 +79,6 @@ int GetXmlAttr(const buzz::XmlElement* elem,
   return val.empty() ? def : atoi(val.c_str());
 }
 
-void AddXmlAttr(buzz::XmlElement* elem,
-                const buzz::QName& name, int n) {
-  char buf[32];
-  talk_base::sprintfn(buf, sizeof(buf), "%d", n);
-  elem->AddAttr(name, buf);
-}
-
-void SetXmlBody(buzz::XmlElement* elem, uint32 u) {
-  char buf[16];
-  talk_base::sprintfn(buf, sizeof(buf), "%u", u);
-  elem->SetBodyText(buf);
-}
-
 const buzz::XmlElement* GetXmlChild(const buzz::XmlElement* parent,
                                     const std::string& name) {
   for (const buzz::XmlElement* child = parent->FirstElement();

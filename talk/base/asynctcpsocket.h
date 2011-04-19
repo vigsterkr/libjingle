@@ -38,15 +38,12 @@ namespace talk_base {
 // buffer them in user space.
 class AsyncTCPSocket : public AsyncPacketSocket {
  public:
-  static AsyncTCPSocket* Create(SocketFactory* factory);
-  explicit AsyncTCPSocket(AsyncSocket* socket);
+  static AsyncTCPSocket* Create(SocketFactory* factory, bool listen);
+  explicit AsyncTCPSocket(AsyncSocket* socket, bool listen);
   virtual ~AsyncTCPSocket();
 
   virtual int Send(const void* pv, size_t cb);
   virtual int SendTo(const void* pv, size_t cb, const SocketAddress& addr);
-
-  sigslot::signal1<AsyncTCPSocket*> SignalConnect;
-  sigslot::signal2<AsyncTCPSocket*, int> SignalClose;
 
  protected:
   int SendRaw(const void* pv, size_t cb);
@@ -61,8 +58,11 @@ class AsyncTCPSocket : public AsyncPacketSocket {
   void OnWriteEvent(AsyncSocket* socket);
   void OnCloseEvent(AsyncSocket* socket, int error);
 
+  bool listen_;
   char* inbuf_, * outbuf_;
   size_t insize_, inpos_, outsize_, outpos_;
+
+  DISALLOW_EVIL_CONSTRUCTORS(AsyncTCPSocket);
 };
 
 }  // namespace talk_base
