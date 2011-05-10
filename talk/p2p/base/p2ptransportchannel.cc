@@ -169,6 +169,7 @@ P2PTransportChannel::P2PTransportChannel(const std::string &name,
     transport_(transport),
     allocator_(allocator),
     worker_thread_(talk_base::Thread::Current()),
+    incoming_only_(false),
     waiting_for_signaling_(false),
     error_(0),
     best_connection_(NULL),
@@ -282,8 +283,9 @@ void P2PTransportChannel::OnPortReady(PortAllocatorSession *session,
 
   std::vector<RemoteCandidate>::iterator iter;
   for (iter = remote_candidates_.begin(); iter != remote_candidates_.end();
-       ++iter)
+       ++iter) {
     CreateConnection(port, *iter, iter->origin_port(), false);
+  }
 
   SortConnections();
 }
@@ -419,6 +421,12 @@ bool P2PTransportChannel::CreateConnection(Port* port,
     }
   } else {
     Port::CandidateOrigin origin = GetOrigin(port, origin_port);
+
+    // Don't create connection if this is a candidate we received in a
+    // message and we are not allowed to make outgoing connections.
+    if (origin == cricket::Port::ORIGIN_MESSAGE && incoming_only_)
+      return false;
+
     connection = port->CreateConnection(remote_candidate, origin);
     if (!connection)
       return false;

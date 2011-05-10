@@ -32,8 +32,6 @@
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
-#include "talk/xmllite/xmlconstants.h"
-#include "talk/xmpp/constants.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/p2ptransport.h"
 #include "talk/p2p/base/parsing.h"
@@ -41,6 +39,7 @@
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/p2p/base/transport.h"
 #include "talk/xmllite/xmlconstants.h"
+#include "talk/xmpp/constants.h"
 
 namespace cricket {
 
@@ -73,8 +72,8 @@ ActionType ToActionType(const std::string& type) {
     return ACTION_TRANSPORT_INFO;
   if (type == JINGLE_ACTION_TRANSPORT_ACCEPT)
     return ACTION_TRANSPORT_ACCEPT;
-  if (type == GINGLE_ACTION_NOTIFY)
-    return ACTION_NOTIFY;
+  if (type == JINGLE_ACTION_DESCRIPTION_INFO)
+    return ACTION_UPDATE;
   if (type == GINGLE_ACTION_UPDATE)
     return ACTION_UPDATE;
 

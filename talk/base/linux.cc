@@ -129,6 +129,17 @@ bool ProcCpuInfo::GetNumPhysicalCpus(int* num) {
 #endif
 }
 
+bool ProcCpuInfo::GetCpuFamily(int* id) {
+  int cpu_family = 0;
+
+  GetSectionIntValue(0, "cpu family", &cpu_family);
+
+  if (id) {
+    *id = cpu_family;
+  }
+  return true;
+}
+
 bool ProcCpuInfo::GetSectionStringValue(size_t section_num,
                                         const std::string& key,
                                         std::string* result) {

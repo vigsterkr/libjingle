@@ -142,8 +142,6 @@ class MediaEngine {
 
   virtual const std::vector<AudioCodec>& audio_codecs() = 0;
   virtual const std::vector<VideoCodec>& video_codecs() = 0;
-  virtual bool FindAudioCodec(const AudioCodec &codec) = 0;
-  virtual bool FindVideoCodec(const VideoCodec &codec) = 0;
 
   // Logging control
   virtual void SetVoiceLogging(int min_sev, const char* filter) = 0;
@@ -158,6 +156,7 @@ template<class VOICE, class VIDEO>
 class CompositeMediaEngine : public MediaEngine {
  public:
   CompositeMediaEngine() {}
+  virtual ~CompositeMediaEngine() {}
   virtual bool Init() {
     if (!voice_.Init())
       return false;
@@ -231,13 +230,6 @@ class CompositeMediaEngine : public MediaEngine {
     return video_.codecs();
   }
 
-  virtual bool FindAudioCodec(const AudioCodec &codec) {
-    return voice_.FindCodec(codec);
-  }
-  virtual bool FindVideoCodec(const VideoCodec &codec) {
-    return video_.FindCodec(codec);
-  }
-
   virtual void SetVoiceLogging(int min_sev, const char* filter) {
     return voice_.SetLogging(min_sev, filter);
   }
@@ -245,7 +237,7 @@ class CompositeMediaEngine : public MediaEngine {
     return video_.SetLogging(min_sev, filter);
   }
 
- private:
+ protected:
   VOICE voice_;
   VIDEO video_;
 };
@@ -273,7 +265,6 @@ class NullVoiceEngine {
   int GetInputLevel() { return 0; }
   bool SetLocalMonitor(bool enable) { return true; }
   const std::vector<AudioCodec>& codecs() { return codecs_; }
-  bool FindCodec(const AudioCodec&) { return false; }
   void SetLogging(int min_sev, const char* filter) {}
  private:
   std::vector<AudioCodec> codecs_;
@@ -287,7 +278,8 @@ class NullVideoEngine {
   void Terminate() {}
   int GetCapabilities() { return 0; }
   // If you need this to return an actual channel, use FakeMediaEngine instead.
-  VideoMediaChannel* CreateChannel(VoiceMediaChannel* voice_media_channel) {
+  VideoMediaChannel* CreateChannel(
+      VoiceMediaChannel* voice_media_channel) {
     return NULL;
   }
   bool SetOptions(int opts) { return true; }
@@ -298,7 +290,6 @@ class NullVideoEngine {
   bool SetLocalRenderer(VideoRenderer* renderer) { return true; }
   CaptureResult SetCapture(bool capture) { return CR_SUCCESS;  }
   const std::vector<VideoCodec>& codecs() { return codecs_; }
-  bool FindCodec(const VideoCodec&) { return false; }
   void SetLogging(int min_sev, const char* filter) {}
   sigslot::signal1<CaptureResult> SignalCaptureResult;
  private:

@@ -213,42 +213,7 @@ void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
 
 void PresencePushTask::FillMucStatus(const Jid& from, const XmlElement* stanza,
                                      MucStatus* s) {
-  // First get the normal user status info. Happily, this is in the same
-  // format as it is for user presence.
   FillStatus(from, stanza, s);
-
-  // Now look for src IDs, which will be present if this user is in a
-  // multiway call to this MUC.
-  const XmlElement* xstanza = stanza->FirstNamed(QN_MUC_USER_X);
-  if (xstanza) {
-    const XmlElement* media;
-    for (media = xstanza->FirstNamed(QN_GOOGLE_MUC_USER_MEDIA);
-        media; media = media->NextNamed(QN_GOOGLE_MUC_USER_MEDIA)) {
-
-      const XmlElement* type = media->FirstNamed(QN_GOOGLE_MUC_USER_TYPE);
-      if (!type) continue; // Shouldn't happen
-
-      const XmlElement* src_id = media->FirstNamed(QN_GOOGLE_MUC_USER_SRC_ID);
-      if (!src_id) continue; // Shouldn't happen
-
-      char *endptr;
-      uint32 src_id_num = strtoul(src_id->BodyText().c_str(), &endptr, 10);
-      if (src_id->BodyText().c_str()[0] == '\0' || endptr[0] != '\0') {
-        // String is not composed exclusively of leading whitespace plus a
-        // number (shouldn't happen). Ignore it.
-        continue;
-      }
-      // Else it's valid. Set it.
-
-      if (type->BodyText() == "audio") {
-        // This is the audio media element. Get the src-id.
-        s->set_audio_src_id(src_id_num);
-      } else if (type->BodyText() == "video") {
-        // This is the video media element. Get the src-id.
-        s->set_video_src_id(src_id_num);
-      }
-    }
-  }
 }
 
 }

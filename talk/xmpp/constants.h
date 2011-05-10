@@ -91,14 +91,6 @@ extern const std::string STR_TO;
 extern const std::string STR_BOTH;
 extern const std::string STR_REMOVE;
 
-extern const std::string STR_MESSAGE;
-extern const std::string STR_BODY;
-extern const std::string STR_PRESENCE;
-extern const std::string STR_STATUS;
-extern const std::string STR_SHOW;
-extern const std::string STR_PRIOIRTY;
-extern const std::string STR_IQ;
-
 extern const std::string STR_TYPE;
 extern const std::string STR_NAME;
 extern const std::string STR_ID;
@@ -119,6 +111,7 @@ extern const std::string STR_OUTGOINGVOICEMAIL;
 #endif
 
 extern const std::string STR_UNAVAILABLE;
+
 
 extern const QName QN_STREAM_STREAM;
 extern const QName QN_STREAM_FEATURES;
@@ -357,6 +350,10 @@ extern const QName QN_MUC_AFFILIATION;
 extern const QName QN_MUC_ROLE;
 extern const std::string STR_AFFILIATION_NONE;
 extern const std::string STR_ROLE_PARTICIPANT;
+
+extern const std::string NS_MUC_OWNER;
+extern const QName QN_MUC_OWNER_QUERY;
+
 extern const std::string NS_MUC_USER;
 extern const QName QN_MUC_USER_CONTINUE;
 extern const QName QN_MUC_USER_X;

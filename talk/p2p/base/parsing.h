@@ -36,6 +36,8 @@
 
 namespace cricket {
 
+typedef std::vector<buzz::XmlElement*> XmlElements;
+
 // We decided "bool Parse(in, out*, error*)" is generally the best
 // parse signature.  "out Parse(in)" doesn't allow for errors.
 // "error* Parse(in, out*)" doesn't allow flexible memory management.

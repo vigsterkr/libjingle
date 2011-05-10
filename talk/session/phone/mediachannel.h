@@ -64,8 +64,10 @@ enum VoiceMediaChannelOptions {
 };
 
 enum VideoMediaChannelOptions {
-  OPT_INTERPOLATE = 0x10000   // Increase the output framerate by 2x by
-                              // interpolating frames
+  // Increase the output framerate by 2x by interpolating frames
+  OPT_INTERPOLATE = 0x10000,
+  // Enable video adaptation due to cpu load.
+  OPT_CPU_ADAPTATION = 0x20000
 };
 
 class MediaChannel : public sigslot::has_slots<> {
@@ -109,6 +111,7 @@ class MediaChannel : public sigslot::has_slots<> {
   virtual bool SetSendBandwidth(bool autobw, int bps) = 0;
   // Sets the media options to use.
   virtual bool SetOptions(int options) = 0;
+  // TODO: add virtual int GetOptions() = 0;
 
  protected:
   NetworkInterface *network_interface_;
@@ -140,6 +143,9 @@ struct VoiceReceiverInfo {
   float fraction_lost;
   int ext_seqnum;
   int jitter_ms;
+  int jitter_buffer_ms;
+  int jitter_buffer_preferred_ms;
+  int delay_estimate_ms;
   int audio_level;
 };
 

@@ -32,10 +32,11 @@
 #include <vector>
 #include <map>
 
-#include "talk/xmllite/xmlelement.h"
-#include "talk/p2p/base/constants.h"
-#include "talk/p2p/base/sessiondescription.h"  // Needed to delete contents.
 #include "talk/base/basictypes.h"
+#include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/parsing.h"
+#include "talk/p2p/base/sessiondescription.h"  // Needed to delete contents.
+#include "talk/xmllite/xmlelement.h"
 
 namespace cricket {
 
@@ -45,7 +46,6 @@ class Candidate;
 class ContentParser;
 class TransportParser;
 
-typedef std::vector<buzz::XmlElement*> XmlElements;
 typedef std::vector<Candidate> Candidates;
 typedef std::map<std::string, ContentParser*> ContentParserMap;
 typedef std::map<std::string, TransportParser*> TransportParserMap;
@@ -62,10 +62,6 @@ enum ActionType {
   ACTION_TRANSPORT_INFO,
   ACTION_TRANSPORT_ACCEPT,
 
-  // TODO: Make better names for these when we think of a
-  // "jingley" way of signaling them.  Even better, remove them from
-  // being needed at all.
-  ACTION_NOTIFY,
   ACTION_UPDATE,
 };
 
@@ -159,6 +155,7 @@ struct SessionTerminate {
 struct SessionRedirect {
   std::string target;
 };
+
 
 bool IsSessionMessage(const buzz::XmlElement* stanza);
 bool ParseSessionMessage(const buzz::XmlElement* stanza,

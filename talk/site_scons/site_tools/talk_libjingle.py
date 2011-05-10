@@ -6,6 +6,7 @@
 
 import subprocess
 
+
 # We need this in libjingle because main.scons depends on it and
 # libjingle depends on main.scons.
 def EnableFeatureWherePackagePresent(env, bit, cpp_flag, package):
@@ -23,9 +24,10 @@ def EnableFeatureWherePackagePresent(env, bit, cpp_flag, package):
     env.SetBits(bit)
     env.Append(CPPDEFINES = [cpp_flag])
   else:
-    print ("Warning: Package \"%s\" not found. Feature \"%s\" will not be "
-           "built. To build with this feature, install the package that "
-           "provides the \"%s.pc\" file.") % (package, bit, package)
+    print ('Warning: Package \"%s\" not found. Feature \"%s\" will not be '
+           'built. To build with this feature, install the package that '
+           'provides the \"%s.pc\" file.') % (package, bit, package)
+
 
 def _HavePackage(package):
   """Whether the given pkg-config package name is present on the build system.
@@ -33,13 +35,15 @@ def _HavePackage(package):
   Args:
     package: The name of the package.
 
-  Return:
+  Returns:
     True if the package is present, else False
   """
-  return subprocess.call(["pkg-config", "--exists", package]) == 0
+  return subprocess.call(['pkg-config', '--exists', package]) == 0
 
-def generate(env):
+
+def generate(env):  # pylint: disable-msg=C6409
   env.AddMethod(EnableFeatureWherePackagePresent)
 
-def exists(env):
+
+def exists(env):  # pylint: disable-msg=C6409,W0613
   return 1

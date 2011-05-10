@@ -79,15 +79,6 @@ class ChannelManager : public talk_base::MessageHandler,
   void GetSupportedAudioCodecs(std::vector<AudioCodec>* codecs) const;
   void GetSupportedVideoCodecs(std::vector<VideoCodec>* codecs) const;
 
-  // Determines if a specific audio or video codec is supported.
-  // Can be called before starting the media engine.
-  bool FindAudioCodec(const AudioCodec& codec) const {
-    return media_engine_->FindAudioCodec(codec);
-  }
-  bool FindVideoCodec(const VideoCodec& video_codec) const {
-    return media_engine_->FindVideoCodec(video_codec);
-  }
-
   // Indicates whether the media engine is started.
   bool initialized() const { return initialized_; }
   // Starts up the media engine.

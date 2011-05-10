@@ -58,20 +58,61 @@ int FileMediaEngine::GetCapabilities() {
 }
 
 VoiceMediaChannel* FileMediaEngine::CreateChannel() {
-  if (!voice_input_filename_.empty() || !voice_output_filename_.empty()) {
-    return new FileVoiceChannel(voice_input_filename_, voice_output_filename_);
-  } else {
+  talk_base::FileStream* input_file_stream = NULL;
+  talk_base::FileStream* output_file_stream = NULL;
+
+  if (voice_input_filename_.empty() && voice_output_filename_.empty())
     return NULL;
+  if (!voice_input_filename_.empty()) {
+    input_file_stream = talk_base::Filesystem::OpenFile(
+        talk_base::Pathname(voice_input_filename_), "rb");
+    if (!input_file_stream) {
+      LOG(LS_ERROR) << "Not able to open the input audio stream file.";
+      return NULL;
+    }
   }
+
+  if (!voice_output_filename_.empty()) {
+    output_file_stream = talk_base::Filesystem::OpenFile(
+        talk_base::Pathname(voice_output_filename_), "wb");
+    if (!output_file_stream) {
+      delete input_file_stream;
+      LOG(LS_ERROR) << "Not able to open the output audio stream file.";
+      return NULL;
+    }
+  }
+
+  return new FileVoiceChannel(input_file_stream, output_file_stream);
 }
 
 VideoMediaChannel* FileMediaEngine::CreateVideoChannel(
     VoiceMediaChannel* voice_ch) {
-  if (!video_input_filename_.empty() || !video_output_filename_.empty()) {
-    return new FileVideoChannel(video_input_filename_, video_output_filename_);
-  } else {
-    return NULL;
+  talk_base::FileStream* input_file_stream = NULL;
+  talk_base::FileStream* output_file_stream = NULL;
+
+  if (video_input_filename_.empty() && video_output_filename_.empty())
+      return NULL;
+
+  if (!video_input_filename_.empty()) {
+    input_file_stream = talk_base::Filesystem::OpenFile(
+        talk_base::Pathname(video_input_filename_), "rb");
+    if (!input_file_stream) {
+      LOG(LS_ERROR) << "Not able to open the input video stream file.";
+      return NULL;
+    }
   }
+
+  if (!video_output_filename_.empty()) {
+    output_file_stream = talk_base::Filesystem::OpenFile(
+        talk_base::Pathname(video_output_filename_), "wb");
+    if (!output_file_stream) {
+      delete input_file_stream;
+      LOG(LS_ERROR) << "Not able to open the output video stream file.";
+      return NULL;
+    }
+  }
+
+  return new FileVideoChannel(input_file_stream, output_file_stream);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -80,8 +121,9 @@ VideoMediaChannel* FileMediaEngine::CreateVideoChannel(
 class RtpSenderReceiver
     : public talk_base::Thread, public talk_base::MessageHandler {
  public:
-  RtpSenderReceiver(MediaChannel* channel, const std::string& in_file,
-                    const std::string& out_file);
+  RtpSenderReceiver(MediaChannel* channel,
+                    talk_base::StreamInterface* input_file_stream,
+                    talk_base::StreamInterface* output_file_stream);
 
   // Called by media channel. Context: media channel thread.
   bool SetSend(bool send);
@@ -117,14 +159,14 @@ class RtpSenderReceiver
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of RtpSenderReceiver.
 ///////////////////////////////////////////////////////////////////////////
-RtpSenderReceiver::RtpSenderReceiver(MediaChannel* channel,
-                                     const std::string& in_file,
-                                     const std::string& out_file)
+RtpSenderReceiver::RtpSenderReceiver(
+    MediaChannel* channel,
+    talk_base::StreamInterface* input_file_stream,
+    talk_base::StreamInterface* output_file_stream)
     : media_channel_(channel),
       sending_(false),
       first_packet_(true) {
-  input_stream_.reset(talk_base::Filesystem::OpenFile(
-      talk_base::Pathname(in_file), "rb"));
+  input_stream_.reset(input_file_stream);
   if (input_stream_.get()) {
     rtp_dump_reader_.reset(new RtpDumpLoopReader(input_stream_.get()));
     // Start the sender thread, which reads rtp dump records, waits based on
@@ -133,8 +175,7 @@ RtpSenderReceiver::RtpSenderReceiver(MediaChannel* channel,
   }
 
   // Create a rtp dump writer for the output RTP dump stream.
-  output_stream_.reset(talk_base::Filesystem::OpenFile(
-      talk_base::Pathname(out_file), "wb"));
+  output_stream_.reset(output_file_stream);
   if (output_stream_.get()) {
     rtp_dump_writer_.reset(new RtpDumpWriter(output_stream_.get()));
   }
@@ -207,10 +248,11 @@ bool RtpSenderReceiver::SendRtpPacket(const void* data, size_t len) {
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of FileVoiceChannel.
 ///////////////////////////////////////////////////////////////////////////
-FileVoiceChannel::FileVoiceChannel(const std::string& in_file,
-                                   const std::string& out_file)
-    : rtp_sender_receiver_(new RtpSenderReceiver(this, in_file, out_file)) {
-}
+FileVoiceChannel::FileVoiceChannel(
+    talk_base::StreamInterface* input_file_stream,
+    talk_base::StreamInterface* output_file_stream)
+    : rtp_sender_receiver_(new RtpSenderReceiver(this, input_file_stream,
+                                                 output_file_stream)) {}
 
 FileVoiceChannel::~FileVoiceChannel() {}
 
@@ -230,10 +272,11 @@ void FileVoiceChannel::OnPacketReceived(talk_base::Buffer* packet) {
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of FileVideoChannel.
 ///////////////////////////////////////////////////////////////////////////
-FileVideoChannel::FileVideoChannel(const std::string& in_file,
-                                   const std::string& out_file)
-    : rtp_sender_receiver_(new RtpSenderReceiver(this, in_file, out_file)) {
-}
+FileVideoChannel::FileVideoChannel(
+    talk_base::StreamInterface* input_file_stream,
+    talk_base::StreamInterface* output_file_stream)
+    : rtp_sender_receiver_(new RtpSenderReceiver(this, input_file_stream,
+                                                 output_file_stream)) {}
 
 FileVideoChannel::~FileVideoChannel() {}
 

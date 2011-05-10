@@ -206,6 +206,24 @@ SessionDescription* MediaSessionClient::CreateOffer(
   return offer;
 }
 
+bool IsMediaContent(const ContentInfo* content, MediaType media_type) {
+  if (content == NULL || content->type != NS_JINGLE_RTP) {
+    return false;
+  }
+
+  const MediaContentDescription* media =
+      static_cast<const MediaContentDescription*>(content->description);
+  return media->type() == media_type;
+}
+
+bool IsAudioContent(const ContentInfo* content) {
+  return IsMediaContent(content, MEDIA_TYPE_AUDIO);
+}
+
+bool IsVideoContent(const ContentInfo* content) {
+  return IsMediaContent(content, MEDIA_TYPE_VIDEO);
+}
+
 const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
                                         MediaType media_type) {
   if (sdesc == NULL)
@@ -214,12 +232,8 @@ const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
   const ContentInfos& contents = sdesc->contents();
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); content++) {
-    if (content->type == NS_JINGLE_RTP) {
-      const MediaContentDescription* media =
-          static_cast<const MediaContentDescription*>(content->description);
-      if (media->type() == media_type) {
-        return &*content;
-      }
+    if (IsMediaContent(&*content, media_type)) {
+      return &*content;
     }
   }
   return NULL;

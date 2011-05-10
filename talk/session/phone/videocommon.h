@@ -61,6 +61,7 @@ inline std::string GetFourccName(uint32 fourcc) {
 enum FourCC {
   // Canonical fourcc codes used in our code.
   FOURCC_I420 = FOURCC('I', '4', '2', '0'),
+  FOURCC_YV12 = FOURCC('Y', 'V', '1', '2'),
   FOURCC_YUY2 = FOURCC('Y', 'U', 'Y', '2'),
   FOURCC_UYVY = FOURCC('U', 'Y', 'V', 'Y'),
   FOURCC_M420 = FOURCC('M', '4', '2', '0'),
@@ -89,6 +90,8 @@ enum FourCC {
   FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
   FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),  // Alias for MJPG
   FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
+  FOURCC_RGB3 = FOURCC('R', 'G', 'B', '3'),  // Alias for RAW
+  FOURCC_BGR3 = FOURCC('B', 'G', 'R', '3'),  // Alias for 24BG
 
   // Match any fourcc.
   FOURCC_ANY  = 0xFFFFFFFF,
@@ -151,6 +154,19 @@ struct VideoFormat {
   }
 
   int framerate() const { return IntervalToFps(interval); }
+
+  // Check if both width and height are 0.
+  bool IsSize0x0() const { return 0 == width && 0 == height; }
+
+  // Check if this format is less than another one by comparing the resolution
+  // and frame rate.
+  bool IsPixelRateLess(const VideoFormat& format) const {
+    return width * height * framerate() <
+        format.width * format.height * format.framerate();
+  }
+
+  // Get a string presentation in the form of "fourcc width x height x fps"
+  std::string ToString() const;
 
   int    width;     // in number of pixels
   int    height;    // in number of pixels

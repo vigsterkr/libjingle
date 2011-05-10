@@ -38,12 +38,7 @@ namespace cricket {
 
 class GtkVideoRenderer : public VideoRenderer {
  public:
-  GtkVideoRenderer(int x, int y)
-      : window_(NULL),
-        draw_area_(NULL),
-        initial_x_(x),
-        initial_y_(y) {
-  }
+  GtkVideoRenderer(int x, int y);
   virtual ~GtkVideoRenderer();
 
   // Implementation of pure virtual methods of VideoRenderer.

@@ -100,6 +100,9 @@ class ProcCpuInfo {
   // Obtains the number of physical CPU cores and places the value num.
   virtual bool GetNumPhysicalCpus(int* num);
 
+  // Obtains the CPU family id.
+  virtual bool GetCpuFamily(int* id);
+
   // Obtains the number of sections in /proc/cpuinfo, which may be greater
   // than the number of CPUs (e.g. on ARM)
   virtual bool GetSectionCount(size_t* count);

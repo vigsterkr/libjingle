@@ -279,9 +279,10 @@ class VideoContentDescription : public MediaContentDescriptionImpl<VideoCodec> {
 };
 
 // Convenience functions.
+bool IsAudioContent(const ContentInfo* content);
+bool IsVideoContent(const ContentInfo* content);
 const ContentInfo* GetFirstAudioContent(const SessionDescription* sdesc);
 const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc);
-
 
 }  // namespace cricket
 

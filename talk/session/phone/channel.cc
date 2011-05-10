@@ -1018,9 +1018,14 @@ bool VideoChannel::SendIntraFrame() {
   Send(MSG_SENDINTRAFRAME);
   return true;
 }
+
 bool VideoChannel::RequestIntraFrame() {
   Send(MSG_REQUESTINTRAFRAME);
   return true;
+}
+
+void VideoChannel::EnableCpuAdaptation(bool enable) {
+  Send(enable ? MSG_ENABLECPUADAPTATION : MSG_DISABLECPUADAPTATION);
 }
 
 void VideoChannel::ChangeState() {
@@ -1166,6 +1171,12 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       break;
     case MSG_REQUESTINTRAFRAME:
       RequestIntraFrame_w();
+      break;
+    case MSG_ENABLECPUADAPTATION:
+      EnableCpuAdaptation_w(true);
+      break;
+    case MSG_DISABLECPUADAPTATION:
+      EnableCpuAdaptation_w(false);
       break;
     case MSG_CHANNEL_ERROR: {
       const VideoChannelErrorMessageData* data =

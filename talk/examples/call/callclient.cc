@@ -225,6 +225,7 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
       pmuc_domain_("groupchat.google.com"),
       local_renderer_(NULL),
       remote_renderer_(NULL),
+      static_views_accumulated_count_(0),
       roster_(new RosterMap),
       portallocator_flags_(0),
       allow_local_ips_(false),
@@ -277,6 +278,7 @@ void CallClient::OnCallDestroy(cricket::Call* call) {
       delete local_renderer_;
       local_renderer_ = NULL;
     }
+    RemoveAllStaticRenderedViews();
     console_->SetPrompt(NULL);
     console_->Print("call destroyed");
     call_ = NULL;
@@ -371,6 +373,8 @@ void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
 
 void CallClient::OnCallCreate(cricket::Call* call) {
   call->SignalSessionState.connect(this, &CallClient::OnSessionState);
+  call->SignalMediaSourcesUpdate.connect(
+      this, &CallClient::OnMediaSourcesUpdate);
 }
 
 void CallClient::OnSessionState(cricket::Call* call,
@@ -574,23 +578,13 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
     call_ = media_client_->CreateCall();
     console_->SetPrompt(jid.Str().c_str());
     session_ = call_->InitiateSession(jid, options);
-    if (options.is_muc) {
-      // If people in this room are already in a call, must add all their
-      // streams.
-      buzz::Muc::MemberMap& members = mucs_[jid]->members();
-      for (buzz::Muc::MemberMap::iterator elem = members.begin();
-           elem != members.end();
-           ++elem) {
-        AddStream(elem->second.audio_src_id(), elem->second.video_src_id());
-      }
-    }
   }
   media_client_->SetFocus(call_);
   if (call_->video()) {
-    call_->SetLocalRenderer(local_renderer_);
-    // TODO: Call this once for every different remote SSRC
-    // once we get to testing multiway video.
-    call_->SetVideoRenderer(session_, 0, remote_renderer_);
+    if (!options.is_muc) {
+      call_->SetLocalRenderer(local_renderer_);
+      call_->SetVideoRenderer(session_, 0, remote_renderer_);
+    }
   }
 }
 
@@ -617,20 +611,6 @@ void CallClient::OnFoundVoicemailJid(const buzz::Jid& to,
 
 void CallClient::OnVoicemailJidError(const buzz::Jid& to) {
   console_->Printf("Unable to voicemail %s.\n", to.Str().c_str());
-}
-
-void CallClient::AddStream(uint32 audio_src_id, uint32 video_src_id) {
-  if (audio_src_id || video_src_id) {
-    console_->Printf("Adding stream (%u, %u)\n", audio_src_id, video_src_id);
-    call_->AddStream(session_, audio_src_id, video_src_id);
-  }
-}
-
-void CallClient::RemoveStream(uint32 audio_src_id, uint32 video_src_id) {
-  if (audio_src_id || video_src_id) {
-    console_->Printf("Removing stream (%u, %u)\n", audio_src_id, video_src_id);
-    call_->RemoveStream(session_, audio_src_id, video_src_id);
-  }
 }
 
 void CallClient::Accept(const cricket::CallOptions& options) {
@@ -744,53 +724,8 @@ void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
   }
 
   if (!status.available()) {
-    // User is leaving the room.
-    buzz::Muc::MemberMap::iterator elem =
-      muc->members().find(status.jid().resource());
-
-    ASSERT(elem != muc->members().end());
-
-    // If user had src-ids, they have the left the room without explicitly
-    // hanging-up; must tear down the stream if in a call to this room.
-    if (call_ && session_->remote_name() == muc->jid().Str()) {
-      RemoveStream(elem->second.audio_src_id(), elem->second.video_src_id());
-    }
-
     // Remove them from the room.
-    muc->members().erase(elem);
-  } else {
-    // Either user has joined or something changed about them.
-    // Note: The [] operator here will create a new entry if it does not
-    // exist, which is what we want.
-    buzz::MucStatus& member_status(
-        muc->members()[status.jid().resource()]);
-    if (call_ && session_->remote_name() == muc->jid().Str()) {
-      // We are in a call to this muc. Must potentially update our streams.
-      // The following code will correctly update our streams regardless of
-      // whether the SSRCs have been removed, added, or changed and regardless
-      // of whether that has been done to both or just one. This relies on the
-      // fact that AddStream/RemoveStream do nothing for SSRC arguments that are
-      // zero.
-      uint32 remove_audio_src_id = 0;
-      uint32 remove_video_src_id = 0;
-      uint32 add_audio_src_id = 0;
-      uint32 add_video_src_id = 0;
-      if (member_status.audio_src_id() != status.audio_src_id()) {
-        remove_audio_src_id = member_status.audio_src_id();
-        add_audio_src_id = status.audio_src_id();
-      }
-      if (member_status.video_src_id() != status.video_src_id()) {
-        remove_video_src_id = member_status.video_src_id();
-        add_video_src_id = status.video_src_id();
-      }
-      // Remove the old SSRCs, if any.
-      RemoveStream(remove_audio_src_id, remove_video_src_id);
-      // Add the new SSRCs, if any.
-      AddStream(add_audio_src_id, add_video_src_id);
-    }
-    // Update the status. This will use the compiler-generated copy
-    // constructor, which is perfectly adequate for this class.
-    member_status = status;
+    muc->members().erase(status.jid().resource());
   }
 }
 
@@ -904,4 +839,67 @@ void CallClient::OnDevicesChange() {
 
 void CallClient::SetVolume(const std::string& level) {
   media_client_->SetOutputVolume(strtol(level.c_str(), NULL, 10));
+}
+
+void CallClient::OnMediaSourcesUpdate(cricket::Call* call,
+                                      cricket::Session* session,
+                                      const cricket::MediaSources& sources) {
+  for (cricket::NamedSources::const_iterator it = sources.video.begin();
+       it != sources.video.end(); ++it) {
+    if (it->removed) {
+      RemoveStaticRenderedView(it->ssrc);
+    } else {
+      // TODO: Make dimensions and positions more configurable.
+      int offset = (50 * static_views_accumulated_count_) % 300;
+      AddStaticRenderedView(session, it->ssrc, 640, 400, 30,
+                            offset, offset);
+    }
+  }
+
+  SendViewRequest(session);
+}
+
+// TODO: Would these methods to add and remove views make
+// more sense in call.cc?  Would other clients use them?
+void CallClient::AddStaticRenderedView(
+    cricket::Session* session,
+    uint32 ssrc, int width, int height, int framerate,
+    int x_offset, int y_offset) {
+  StaticRenderedView rendered_view(
+      cricket::StaticVideoView(ssrc, width, height, framerate),
+      cricket::VideoRendererFactory::CreateGuiVideoRenderer(
+          x_offset, y_offset));
+  rendered_view.renderer->SetSize(width, height, 0);
+  call_->SetVideoRenderer(session, ssrc, rendered_view.renderer);
+  static_rendered_views_.push_back(rendered_view);
+  ++static_views_accumulated_count_;
+}
+
+bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
+  for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
+       it != static_rendered_views_.end(); ++it) {
+    if (it->view.ssrc == ssrc) {
+      delete it->renderer;
+      static_rendered_views_.erase(it);
+      return true;
+    }
+  }
+  return false;
+}
+
+void CallClient::RemoveAllStaticRenderedViews() {
+  for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
+       it != static_rendered_views_.end(); ++it) {
+    delete it->renderer;
+  }
+  static_rendered_views_.clear();
+}
+
+void CallClient::SendViewRequest(cricket::Session* session) {
+  cricket::ViewRequest request;
+  for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
+       it != static_rendered_views_.end(); ++it) {
+    request.static_video_views.push_back(it->view);
+  }
+  call_->SendViewRequest(session, request);
 }

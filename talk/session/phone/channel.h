@@ -70,7 +70,9 @@ enum {
   MSG_REQUESTINTRAFRAME = 20,
   MSG_RTPPACKET = 22,
   MSG_RTCPPACKET = 23,
-  MSG_CHANNEL_ERROR = 24
+  MSG_CHANNEL_ERROR = 24,
+  MSG_ENABLECPUADAPTATION = 25,
+  MSG_DISABLECPUADAPTATION = 26
 };
 
 // BaseChannel contains logic common to voice and video, including
@@ -402,6 +404,7 @@ class VideoChannel : public BaseChannel {
 
   bool SendIntraFrame();
   bool RequestIntraFrame();
+  void EnableCpuAdaptation(bool enable);
 
   sigslot::signal3<VideoChannel*, uint32, VideoMediaChannel::Error>
       SignalMediaError;
@@ -424,6 +427,12 @@ class VideoChannel : public BaseChannel {
   }
   void RequestIntraFrame_w() {
     media_channel()->RequestIntraFrame();
+  }
+  void EnableCpuAdaptation_w(bool enable) {
+    // TODO: The following call will clear all other options, which is
+    // OK now since SetOptions is not used in video media channel. In the
+    // future, add GetOptions() method and change the options.
+    media_channel()->SetOptions(enable ? OPT_CPU_ADAPTATION : 0);
   }
 
   struct RenderMessageData : public talk_base::MessageData {

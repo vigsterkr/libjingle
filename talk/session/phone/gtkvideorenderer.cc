@@ -33,24 +33,39 @@
 
 namespace cricket {
 
+GtkVideoRenderer::GtkVideoRenderer(int x, int y)
+    : window_(NULL),
+      draw_area_(NULL),
+      initial_x_(x),
+      initial_y_(y) {
+  g_thread_init(NULL);
+  gdk_threads_init();
+}
+
 GtkVideoRenderer::~GtkVideoRenderer() {
   if (window_) {
+    gdk_threads_enter();
     gtk_widget_destroy(window_);
     // Run the Gtk main loop to tear down the window.
     Pump();
+    gdk_threads_leave();
   }
   // Don't need to destroy draw_area_ because it is not top-level, so it is
   // implicitly destroyed by the above.
 }
 
 bool GtkVideoRenderer::SetSize(int width, int height, int reserved) {
+  gdk_threads_enter();
+
   // For the first frame, initialize the GTK window
   if (!window_ && !Initialize(width, height)) {
+    gdk_threads_leave();
     return false;
   }
 
   image_.reset(new uint8[width * height * 4]);
   gtk_window_resize(GTK_WINDOW(window_), width, height);
+  gdk_threads_leave();
   return true;
 }
 
@@ -70,6 +85,7 @@ bool GtkVideoRenderer::RenderFrame(const VideoFrame* frame) {
                             frame->GetWidth() * frame->GetHeight() * 4,
                             frame->GetWidth() * 4);
 
+  gdk_threads_enter();
   // draw the ABGR image
   gdk_draw_rgb_32_image(draw_area_->window,
                         draw_area_->style->fg_gc[GTK_STATE_NORMAL],
@@ -83,6 +99,7 @@ bool GtkVideoRenderer::RenderFrame(const VideoFrame* frame) {
 
   // Run the Gtk main loop to refresh the window.
   Pump();
+  gdk_threads_leave();
   return true;
 }
 

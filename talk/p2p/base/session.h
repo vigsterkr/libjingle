@@ -339,11 +339,12 @@ class Session : public BaseSession {
   virtual bool Reject(const std::string& reason);
   virtual bool TerminateWithReason(const std::string& reason);
 
-  // The two clients in the session may also send one another arbitrary XML
-  // messages, which are called "info" messages.  Both of these functions take
-  // ownership of the XmlElements and delete them when done.
+  // The two clients in the session may also send one another
+  // arbitrary XML messages, which are called "info" messages. Sending
+  // takes ownership of the given elements.  The signal does not; the
+  // parent element will be deleted after the signal.
   bool SendInfoMessage(const XmlElements& elems);
-  sigslot::signal2<Session*, const XmlElements&> SignalInfoMessage;
+  sigslot::signal2<Session*, const buzz::XmlElement*> SignalInfoMessage;
 
   // Maps passed to serialization functions.
   TransportParserMap GetTransportParsers();
@@ -512,6 +513,7 @@ class Session : public BaseSession {
   bool OnTerminateMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportInfoMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportAcceptMessage(const SessionMessage& msg, MessageError* error);
+  bool OnUpdateMessage(const SessionMessage& msg, MessageError* error);
   bool OnRedirectError(const SessionRedirect& redirect, SessionError* error);
 
   // Verifies that we are in the appropriate state to receive this message.

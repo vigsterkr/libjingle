@@ -1,5 +1,11 @@
 Libjingle
 
+0.5.3 - May 10, 2011
+  - Stream notification and selection.
+  - Better XEP-0045 support.
+  - Easier to create composite media engines where one part is fake.
+  - Make GtkVideoRenderer thread-safe.
+
 0.5.2 - Jan 11, 2010
   - Fixed build on Windows 7 with VS 2010
   - Fixed build on Windows x64

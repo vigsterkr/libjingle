@@ -37,6 +37,7 @@
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/xmpp/jid.h"
 #include "talk/session/phone/audiomonitor.h"
+#include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/voicechannel.h"
 
 namespace cricket {
@@ -54,11 +55,11 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void RejectSession(BaseSession *session);
   void TerminateSession(BaseSession *session);
   void Terminate();
+  bool SendViewRequest(Session* session,
+                       const ViewRequest& view_request);
   void SetLocalRenderer(VideoRenderer* renderer);
   void SetVideoRenderer(BaseSession *session, uint32 ssrc,
                         VideoRenderer* renderer);
-  void AddStream(BaseSession *session, uint32 voice_ssrc, uint32 video_ssrc);
-  void RemoveStream(BaseSession *session, uint32 voice_ssrc, uint32 video_ssrc);
   void StartConnectionMonitor(BaseSession *session, int cms);
   void StopConnectionMonitor(BaseSession *session);
   void StartAudioMonitor(BaseSession *session, int cms);
@@ -96,11 +97,15 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   sigslot::signal2<Call *, const std::vector<ConnectionInfo> &>
       SignalVideoConnectionMonitor;
   sigslot::signal2<Call *, const VideoMediaInfo&> SignalVideoMediaMonitor;
+  sigslot::signal3<Call *,
+                   Session *,
+                   const MediaSources&> SignalMediaSourcesUpdate;
 
  private:
   void OnMessage(talk_base::Message *message);
   void OnSessionState(BaseSession *session, BaseSession::State state);
   void OnSessionError(BaseSession *session, Session::Error error);
+  void OnSessionInfo(Session *session, const buzz::XmlElement* action_elem);
   void OnReceivedTerminateReason(Session *session, const std::string &reason);
   void IncomingSession(Session *session, const SessionDescription* offer);
   // Returns true on success.
@@ -117,11 +122,16 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info);
   VoiceChannel* GetVoiceChannel(BaseSession* session);
   VideoChannel* GetVideoChannel(BaseSession* session);
+  void AddVoiceStream(BaseSession *session, uint32 voice_ssrc);
+  void AddVideoStream(BaseSession *session, uint32 video_ssrc);
+  void RemoveVoiceStream(BaseSession *session, uint32 voice_ssrc);
+  void RemoveVideoStream(BaseSession *session, uint32 video_ssrc);
   void ContinuePlayDTMF();
 
   uint32 id_;
   MediaSessionClient *session_client_;
   std::vector<Session *> sessions_;
+  MediaSources media_sources;
   std::map<std::string, VoiceChannel *> voice_channel_map_;
   std::map<std::string, VideoChannel *> video_channel_map_;
   VideoRenderer* local_renderer_;

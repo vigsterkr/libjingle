@@ -44,6 +44,7 @@ namespace cricket {
 
 extern const std::string NS_EMPTY;
 extern const std::string NS_JINGLE;
+extern const std::string NS_JINGLE_DRAFT;
 extern const std::string NS_GINGLE;
 
 enum SignalingProtocol {
@@ -80,9 +81,7 @@ extern const std::string GINGLE_ACTION_ACCEPT;
 extern const std::string GINGLE_ACTION_REJECT;
 extern const std::string GINGLE_ACTION_TERMINATE;
 extern const std::string GINGLE_ACTION_CANDIDATES;
-extern const std::string GINGLE_ACTION_NOTIFY;
 extern const std::string GINGLE_ACTION_UPDATE;
-extern const std::string GINGLE_ACTION_VIEW;
 
 extern const std::string LN_ERROR;
 extern const buzz::QName QN_GINGLE_REDIRECT;
@@ -209,29 +208,29 @@ extern const std::string STR_TERMINATE_PROTOCOL_ERROR;
 extern const std::string STR_TERMINATE_INTERNAL_SERVER_ERROR;
 extern const std::string STR_TERMINATE_UNKNOWN_ERROR;
 
-// Session notify messages
-extern const buzz::QName QN_GINGLE_NOTIFY;
-extern const buzz::QName QN_GINGLE_NOTIFY_NICK;
-extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE;
-extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE_MTYPE;
-extern const buzz::QName QN_GINGLE_NOTIFY_SOURCE_SSRC;
-extern const std::string GINGLE_NOTIFY_SOURCE_MTYPE_AUDIO;
-extern const std::string GINGLE_NOTIFY_SOURCE_MTYPE_VIDEO;
-
-// Session view messages
-extern const buzz::QName QN_GINGLE_VIEW;
-extern const buzz::QName QN_GINGLE_VIEW_TYPE;
-extern const buzz::QName QN_GINGLE_VIEW_NICK;
-extern const buzz::QName QN_GINGLE_VIEW_MEDIA_TYPE;
-extern const buzz::QName QN_GINGLE_VIEW_SSRC;
-extern const std::string GINGLE_VIEW_TYPE_STATIC;
-extern const std::string GINGLE_VIEW_TYPE_DYNAMIC;
-extern const std::string GINGLE_VIEW_MEDIA_TYPE_AUDIO;
-extern const std::string GINGLE_VIEW_MEDIA_TYPE_VIDEO;
-extern const buzz::QName QN_GINGLE_VIEW_PARAMS;
-extern const buzz::QName QN_GINGLE_VIEW_PARAMS_WIDTH;
-extern const buzz::QName QN_GINGLE_VIEW_PARAMS_HEIGHT;
-extern const buzz::QName QN_GINGLE_VIEW_PARAMS_FRAMERATE;
+// Draft view and notify messages.
+extern const buzz::QName QN_JINGLE_DRAFT_CONTENT_NAME;
+extern const std::string STR_JINGLE_DRAFT_CONTENT_NAME_VIDEO;
+extern const std::string STR_JINGLE_DRAFT_CONTENT_NAME_AUDIO;
+extern const buzz::QName QN_JINGLE_DRAFT_NOTIFY;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE_NICK;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE_NAME;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE_USAGE;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE_STATE;
+extern const std::string STR_JINGLE_DRAFT_SOURCE_STATE_REMOVED;
+extern const buzz::QName QN_JINGLE_DRAFT_SOURCE_SSRC;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_NAME;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_TYPE;
+extern const std::string STR_JINGLE_DRAFT_VIEW_TYPE_NONE;
+extern const std::string STR_JINGLE_DRAFT_VIEW_TYPE_STATIC;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_SSRC;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_WIDTH;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_HEIGHT;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_FRAMERATE;
+extern const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_PREFERENCE;
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

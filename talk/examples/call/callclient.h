@@ -74,6 +74,19 @@ struct RosterItem {
   std::string status;
 };
 
+struct StaticRenderedView {
+  StaticRenderedView(const cricket::StaticVideoView& view,
+                     cricket::VideoRenderer* renderer) :
+      view(view),
+      renderer(renderer) {
+  }
+
+  cricket::StaticVideoView view;
+  cricket::VideoRenderer* renderer;
+};
+
+typedef std::vector<StaticRenderedView> StaticRenderedViews;
+
 class CallClient: public sigslot::has_slots<> {
  public:
   explicit CallClient(buzz::XmppClient* xmpp_client);
@@ -144,6 +157,18 @@ class CallClient: public sigslot::has_slots<> {
   void OnDevicesChange();
   void OnFoundVoicemailJid(const buzz::Jid& to, const buzz::Jid& voicemail);
   void OnVoicemailJidError(const buzz::Jid& to);
+  void OnMediaSourcesUpdate(cricket::Call* call,
+                            cricket::Session* session,
+                            const cricket::MediaSources& sources);
+
+  void AddStaticRenderedView(
+      cricket::Session* session,
+      uint32 ssrc, int width, int height, int framerate,
+      int x_offset, int y_offset);
+  bool RemoveStaticRenderedView(uint32 ssrc);
+  void RemoveAllStaticRenderedViews();
+  void SendViewRequest(cricket::Session* session);
+
 
   static const std::string strerror(buzz::XmppEngine::Error err);
 
@@ -180,6 +205,8 @@ class CallClient: public sigslot::has_slots<> {
   std::string pmuc_domain_;
   cricket::VideoRenderer* local_renderer_;
   cricket::VideoRenderer* remote_renderer_;
+  StaticRenderedViews static_rendered_views_;
+  uint32 static_views_accumulated_count_;
 
   buzz::Status my_status_;
   buzz::PresencePushTask* presence_push_;

@@ -78,8 +78,9 @@
 #ifndef TALK_BASE_SIGSLOT_H__
 #define TALK_BASE_SIGSLOT_H__
 
-#include <set>
 #include <list>
+#include <set>
+#include <stdlib.h>
 
 // On our copy of sigslot.h, we force single threading
 #define SIGSLOT_PURE_ISO

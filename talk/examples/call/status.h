@@ -224,19 +224,6 @@ private:
 };
 
 class MucStatus : public Status {
-public:
-  MucStatus() : audio_src_id_(0), video_src_id_(0) {}
-  uint32 audio_src_id() const { return audio_src_id_; }
-  uint32 video_src_id() const { return video_src_id_; }
-  void set_audio_src_id(uint32 audio_src_id) {
-    audio_src_id_ = audio_src_id;
-  }
-  void set_video_src_id(uint32 video_src_id) {
-    video_src_id_ = video_src_id;
-  }
-private:
-  uint32 audio_src_id_;
-  uint32 video_src_id_;
 };
 
 }

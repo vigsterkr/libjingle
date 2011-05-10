@@ -93,6 +93,8 @@ class P2PTransportChannel : public TransportChannelImpl,
   const std::vector<Connection *>& connections() const { return connections_; }
   Connection* best_connection() const { return best_connection_; }
 
+  void set_incoming_only(bool value) { incoming_only_ = value; }
+
   // Handler for internal messages.
   virtual void OnMessage(talk_base::Message *pmsg);
 
@@ -141,6 +143,7 @@ class P2PTransportChannel : public TransportChannelImpl,
   P2PTransport* transport_;
   PortAllocator *allocator_;
   talk_base::Thread *worker_thread_;
+  bool incoming_only_;
   bool waiting_for_signaling_;
   int error_;
   std::vector<PortAllocatorSession*> allocator_sessions_;

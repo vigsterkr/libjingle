@@ -34,6 +34,7 @@ namespace cricket {
 
 const std::string NS_EMPTY("");
 const std::string NS_JINGLE("urn:xmpp:jingle:1");
+const std::string NS_JINGLE_DRAFT("google:jingle");
 const std::string NS_GINGLE("http://www.google.com/session");
 
 // actions (aka <session> or <jingle>)
@@ -64,9 +65,7 @@ const std::string GINGLE_ACTION_ACCEPT("accept");
 const std::string GINGLE_ACTION_REJECT("reject");
 const std::string GINGLE_ACTION_TERMINATE("terminate");
 const std::string GINGLE_ACTION_CANDIDATES("candidates");
-const std::string GINGLE_ACTION_NOTIFY("notify");
 const std::string GINGLE_ACTION_UPDATE("update");
-const std::string GINGLE_ACTION_VIEW("view");
 
 const std::string LN_ERROR("error");
 const buzz::QName QN_GINGLE_REDIRECT(true, NS_GINGLE, "redirect");
@@ -194,33 +193,33 @@ const std::string STR_TERMINATE_PROTOCOL_ERROR("protocol-error");
 const std::string STR_TERMINATE_INTERNAL_SERVER_ERROR("internal-server-error");
 const std::string STR_TERMINATE_UNKNOWN_ERROR("unknown-error");
 
-// Session notify messages
-const buzz::QName QN_GINGLE_NOTIFY(true, NS_GINGLE, "notify");
-const buzz::QName QN_GINGLE_NOTIFY_NICK(true, cricket::NS_EMPTY, "nick");
-const buzz::QName QN_GINGLE_NOTIFY_SOURCE(true, NS_GINGLE, "source");
-const buzz::QName QN_GINGLE_NOTIFY_SOURCE_MTYPE(
-    true, cricket::NS_EMPTY, "mtype");
-const buzz::QName QN_GINGLE_NOTIFY_SOURCE_SSRC(true, cricket::NS_EMPTY, "ssrc");
-const std::string GINGLE_NOTIFY_SOURCE_MTYPE_AUDIO("audio");
-const std::string GINGLE_NOTIFY_SOURCE_MTYPE_VIDEO("video");
-
-// Session view messages
-const buzz::QName QN_GINGLE_VIEW(true, cricket::NS_EMPTY, "view");
-const buzz::QName QN_GINGLE_VIEW_TYPE(true, cricket::NS_EMPTY, "type");
-const buzz::QName QN_GINGLE_VIEW_NICK(true, cricket::NS_EMPTY, "nick");
-const buzz::QName QN_GINGLE_VIEW_MEDIA_TYPE(true, cricket::NS_EMPTY, "mtype");
-const buzz::QName QN_GINGLE_VIEW_SSRC(true, cricket::NS_EMPTY, "ssrc");
-const std::string GINGLE_VIEW_TYPE_STATIC("static");
-const std::string GINGLE_VIEW_TYPE_DYNAMIC("dynamic");
-const std::string GINGLE_VIEW_MEDIA_TYPE_AUDIO("audio");
-const std::string GINGLE_VIEW_MEDIA_TYPE_VIDEO("video");
-const buzz::QName QN_GINGLE_VIEW_PARAMS(true, cricket::NS_EMPTY, "params");
-const buzz::QName QN_GINGLE_VIEW_PARAMS_WIDTH(true, cricket::NS_EMPTY, "width");
-const buzz::QName QN_GINGLE_VIEW_PARAMS_HEIGHT(
+// Draft view and notify messages.
+const buzz::QName QN_JINGLE_DRAFT_CONTENT_NAME(true, cricket::NS_EMPTY, "name");
+const std::string STR_JINGLE_DRAFT_CONTENT_NAME_VIDEO("video");
+const std::string STR_JINGLE_DRAFT_CONTENT_NAME_AUDIO("audio");
+const buzz::QName QN_JINGLE_DRAFT_NOTIFY(true, NS_JINGLE_DRAFT, "notify");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE(
+    true, NS_JINGLE_DRAFT, "source");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE_NICK(true, cricket::NS_EMPTY, "nick");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE_NAME(true, cricket::NS_EMPTY, "name");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE_USAGE(true, cricket::NS_EMPTY, "usage");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE_STATE(true, cricket::NS_EMPTY, "state");
+const std::string STR_JINGLE_DRAFT_SOURCE_STATE_REMOVED("removed");
+const buzz::QName QN_JINGLE_DRAFT_SOURCE_SSRC(true, NS_JINGLE_DRAFT, "ssrc");
+const buzz::QName QN_JINGLE_DRAFT_VIEW(true, NS_JINGLE_DRAFT, "view");
+const buzz::QName QN_JINGLE_DRAFT_VIEW_TYPE(true, cricket::NS_EMPTY, "type");
+const std::string STR_JINGLE_DRAFT_VIEW_TYPE_NONE("none");
+const std::string STR_JINGLE_DRAFT_VIEW_TYPE_STATIC("static");
+const buzz::QName QN_JINGLE_DRAFT_VIEW_SSRC(true, cricket::NS_EMPTY, "ssrc");
+const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS(true, NS_JINGLE_DRAFT, "params");
+const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_WIDTH(
+    true, cricket::NS_EMPTY, "width");
+const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_HEIGHT(
     true, cricket::NS_EMPTY, "height");
-const buzz::QName QN_GINGLE_VIEW_PARAMS_FRAMERATE(
+const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_FRAMERATE(
     true, cricket::NS_EMPTY, "framerate");
-
+const buzz::QName QN_JINGLE_DRAFT_VIEW_PARAMS_PREFERENCE(
+    true, cricket::NS_EMPTY, "preference");
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

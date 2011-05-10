@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stream.h"
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/mediaengine.h"
@@ -125,7 +126,8 @@ class RtpSenderReceiver;  // Forward declaration. Defined in the .cc file.
 
 class FileVoiceChannel : public VoiceMediaChannel {
  public:
-  FileVoiceChannel(const std::string& in_file, const std::string& out_file);
+  FileVoiceChannel(talk_base::StreamInterface* input_file_stream,
+      talk_base::StreamInterface* output_file_stream);
   virtual ~FileVoiceChannel();
 
   // Implement pure virtual methods of VoiceMediaChannel.
@@ -170,7 +172,8 @@ class FileVoiceChannel : public VoiceMediaChannel {
 
 class FileVideoChannel : public VideoMediaChannel {
  public:
-  FileVideoChannel(const std::string& in_file, const std::string& out_file);
+  FileVideoChannel(talk_base::StreamInterface* input_file_stream,
+      talk_base::StreamInterface* output_file_stream);
   virtual ~FileVideoChannel();
 
   // Implement pure virtual methods of VideoMediaChannel.

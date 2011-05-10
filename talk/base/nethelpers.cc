@@ -57,22 +57,8 @@ void AsyncResolver::OnWorkDone() {
   }
 }
 
-// The functions below are used to do gethostbyname, but with an allocated
-// instead of a static buffer.
-hostent* SafeGetHostByName(const char* hostname, int* herrno) {
-  if (NULL == hostname || NULL == herrno) {
-    return NULL;
-  }
-  hostent* result = NULL;
-#if defined(WIN32)
-  // On Windows we have to allocate a buffer, and manually copy the hostent,
-  // along with its embedded pointers.
-  hostent* ent = gethostbyname(hostname);
-  if (!ent) {
-    *herrno = WSAGetLastError();
-    return NULL;
-  }
-
+#if defined(WIN32) || defined(ANDROID)
+static hostent* DeepCopyHostent(const hostent* ent) {
   // Get the total number of bytes we need to copy, and allocate our buffer.
   int num_aliases = 0, num_addrs = 0;
   int total_len = sizeof(hostent);
@@ -88,7 +74,7 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
   }
   total_len += sizeof(char*);
 
-  result = static_cast<hostent*>(malloc(total_len));
+  hostent* result = static_cast<hostent*>(malloc(total_len));
   if (NULL == result) {
     return NULL;
   }
@@ -119,7 +105,27 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
     p += ent->h_length;
   }
   result->h_addr_list[num_addrs] = NULL;
+  
+  return result;
+}
+#endif
 
+// The functions below are used to do gethostbyname, but with an allocated
+// instead of a static buffer.
+hostent* SafeGetHostByName(const char* hostname, int* herrno) {
+  if (NULL == hostname || NULL == herrno) {
+    return NULL;
+  }
+  hostent* result = NULL;
+#if defined(WIN32)
+  // On Windows we have to allocate a buffer, and manually copy the hostent,
+  // along with its embedded pointers.
+  hostent* ent = gethostbyname(hostname);
+  if (!ent) {
+    *herrno = WSAGetLastError();
+    return NULL;
+  }
+  result = DeepCopyHostent(ent);
   *herrno = 0;
 #elif defined(LINUX) || defined(ANDROID)
   // gethostbyname() is not thread safe, so we need to call gethostbyname_r()
@@ -150,6 +156,14 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
     free(buf);
     return NULL;
   }
+#if defined(ANDROID)
+  // Note that Android's version of gethostbyname_r has a bug such that the
+  // returned hostent contains pointers into thread-local storage.  (See bug
+  // 4383723.)  So we deep copy the result before returning.
+  hostent* deep_copy = DeepCopyHostent(result);
+  FreeHostEnt(result);
+  result = deep_copy;
+#endif
   *herrno = 0;
 #elif defined(OSX) || defined(IOS)
   // Mac OS returns an object with everything allocated.

@@ -213,13 +213,15 @@ void Port::OnReadPacket(
   } else if (msg->type() == STUN_BINDING_REQUEST) {
     SignalUnknownAddress(this, addr, msg, remote_username);
   } else {
-    // NOTE(tschmelcher): This is benign. It occurs if we pruned a
-    // connection for this port while it had STUN requests in flight, because
-    // we then get back responses for them, which this code correctly does not
-    // handle.
-    LOG_J(LS_INFO, this) << "Received unexpected STUN message type ("
-                         << msg->type() << ") from unknown address ("
-                         << addr.ToString() << ")";
+    // NOTE(tschmelcher): STUN_BINDING_RESPONSE is benign. It occurs if we
+    // pruned a connection for this port while it had STUN requests in flight,
+    // because we then get back responses for them, which this code correctly
+    // does not handle.
+    if (msg->type() != STUN_BINDING_RESPONSE) {
+      LOG_J(LS_ERROR, this) << "Received unexpected STUN message type ("
+                            << msg->type() << ") from unknown address ("
+                            << addr.ToString() << ")";
+    }
     delete msg;
   }
 }

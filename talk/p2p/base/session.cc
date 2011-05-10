@@ -644,13 +644,8 @@ void Session::OnIncomingMessage(const SessionMessage& msg) {
     case ACTION_TRANSPORT_ACCEPT:
       valid = OnTransportAcceptMessage(msg, &error);
       break;
-    case ACTION_NOTIFY:
     case ACTION_UPDATE:
-      // TODO: Process these non-standard messages, but
-      // only once we figure out how in a jingle-specific way (or
-      // remove the need altogether).  For now, just don't send an
-      // error back, because it disrupts call establishment.
-      valid = true;
+      valid = OnUpdateMessage(msg, &error);
       break;
     default:
       valid = BadMessage(buzz::QN_STANZA_BAD_REQUEST,
@@ -791,9 +786,8 @@ bool Session::OnRejectMessage(const SessionMessage& msg, MessageError* error) {
   return true;
 }
 
-// Only used by app/win32/fileshare.cc.
 bool Session::OnInfoMessage(const SessionMessage& msg) {
-  SignalInfoMessage(this, CopyOfXmlChildren(msg.action_elem));
+  SignalInfoMessage(this, msg.action_elem);
   return true;
 }
 
@@ -830,6 +824,13 @@ bool Session::OnTransportAcceptMessage(const SessionMessage& msg,
                                        MessageError* error) {
   // TODO: Currently here only for compatibility with
   // Gingle 1.1 clients (notably, Google Voice).
+  return true;
+}
+
+bool Session::OnUpdateMessage(const SessionMessage& msg,
+                              MessageError* error) {
+  // TODO: Once someone needs it, parse the message
+  // into a data structure and signal out.
   return true;
 }
 
