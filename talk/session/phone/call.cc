@@ -548,8 +548,12 @@ void Call::OnSessionInfo(Session *session,
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
         found = media_sources.GetFirstAudioSourceByNick(it->nick);
-        it->SetSsrc(found->ssrc);
-        it->removed = true;
+        if (found) {
+          it->SetSsrc(found->ssrc);
+          it->removed = true;
+        } else {
+          continue;  // No ssrc to remove.
+        }
       }
       if (it->removed && found) {
         LOG(LS_INFO) << "Remove voice stream:  " << found->ssrc;
@@ -571,8 +575,12 @@ void Call::OnSessionInfo(Session *session,
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
         found = media_sources.GetFirstVideoSourceByNick(it->nick);
-        it->SetSsrc(found->ssrc);
-        it->removed = true;
+        if (found) {
+          it->SetSsrc(found->ssrc);
+          it->removed = true;
+        } else {
+          continue;  // No ssrc to remove.
+        }
       }
       if (it->removed && found) {
         LOG(LS_INFO) << "Remove video stream:  " << found->ssrc;

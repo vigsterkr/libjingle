@@ -158,6 +158,7 @@ const std::string STR_OUTGOINGVOICEMAIL("outgoingvoicemail");
 
 const std::string STR_UNAVAILABLE("unavailable");
 
+const std::string STR_MUC_LOOKUP_DOMAIN("lookup.groupchat.google.com");
 
 const QName QN_STREAM_STREAM(true, NS_STREAM, STR_STREAM);
 const QName QN_STREAM_FEATURES(true, NS_STREAM, "features");
@@ -393,6 +394,15 @@ const QName QN_MUC_USER_CONTINUE(true, NS_MUC_USER, "continue");
 const QName QN_MUC_USER_X(true, NS_MUC_USER, "x");
 const QName QN_MUC_USER_ITEM(true, NS_MUC_USER, "item");
 const QName QN_MUC_USER_STATUS(true, NS_MUC_USER, "status");
+
+
+// JEP 0055 - Jabber Search
+const std::string NS_SEARCH("jabber:iq:search");
+const QName QN_SEARCH_QUERY(true, NS_SEARCH, "query");
+const QName QN_SEARCH_ITEM(true, NS_SEARCH, "item");
+const QName QN_SEARCH_ROOM_NAME(true, NS_SEARCH, "room-name");
+const QName QN_SEARCH_ORGANIZERS_DOMAIN(true, NS_SEARCH, "organizers-domain");
+const QName QN_SEARCH_ROOM_JID(true, NS_SEARCH, "room-jid");
 
 
 // JEP 0115

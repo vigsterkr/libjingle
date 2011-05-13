@@ -1,5 +1,9 @@
 Libjingle
 
+0.5.4 - May 13, 2011
+  - Support for MUC lookup by name
+  - Bug fixes
+
 0.5.3 - May 10, 2011
   - Stream notification and selection.
   - Better XEP-0045 support.

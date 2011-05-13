@@ -127,13 +127,7 @@ bool IsJingleMessage(const buzz::XmlElement* stanza) {
   if (jingle == NULL)
     return false;
 
-  return (jingle->HasAttr(buzz::QN_ACTION) &&
-          (jingle->HasAttr(QN_SID)
-           // TODO: This works around a bug in old jingle
-           // clients that set QN_ID instead of QN_SID.  Once we know
-           // there are no clients which have this bug, we can remove
-           // this code.
-           || jingle->HasAttr(QN_ID)));
+  return (jingle->HasAttr(buzz::QN_ACTION) && jingle->HasAttr(QN_SID));
 }
 
 bool IsGingleMessage(const buzz::XmlElement* stanza) {
@@ -176,12 +170,6 @@ bool ParseJingleSessionMessage(const buzz::XmlElement* jingle,
   std::string type_string = jingle->Attr(buzz::QN_ACTION);
   msg->type = ToActionType(type_string);
   msg->sid = jingle->Attr(QN_SID);
-  // TODO: This works around a bug in old jingle clients
-  // that set QN_ID instead of QN_SID.  Once we know there are no
-  // clients which have this bug, we can remove this code.
-  if (msg->sid.empty()) {
-    msg->sid = jingle->Attr(buzz::QN_ID);
-  }
   msg->initiator = GetXmlAttr(jingle, QN_INITIATOR, buzz::STR_EMPTY);
   msg->action_elem = jingle;
 
@@ -235,15 +223,9 @@ buzz::XmlElement* WriteJingleAction(const SessionMessage& msg,
   buzz::XmlElement* jingle = new buzz::XmlElement(QN_JINGLE, true);
   jingle->AddAttr(buzz::QN_ACTION, ToJingleString(msg.type));
   jingle->AddAttr(QN_SID, msg.sid);
-  // TODO: This works around a bug in old jingle clinets
-  // that expected QN_ID instead of QN_SID.  Once we know there are no
-  // clients which have this bug, we can remove this code.
-  jingle->AddAttr(QN_ID, msg.sid);
-  // TODO: Right now, the XMPP server rejects a jingle-only
-  // (non hybrid) message with "feature-not-implemented" if there is
-  // no initiator.  Fix the server, and then only set the initiator on
-  // session-initiate messages here.
-  jingle->AddAttr(QN_INITIATOR, msg.initiator);
+  if (msg.type == ACTION_SESSION_INITIATE) {
+    jingle->AddAttr(QN_INITIATOR, msg.initiator);
+  }
   AddXmlChildren(jingle, action_elems);
   return jingle;
 }

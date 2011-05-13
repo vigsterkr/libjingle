@@ -49,8 +49,11 @@ class VoicemailJidRequester;
 class DiscoInfoQueryTask;
 class Muc;
 class Status;
+class MucRoomLookupTask;
 class MucStatus;
+class XmlElement;
 struct AvailableMediaEntry;
+struct MucRoomInfo;
 }
 
 namespace talk_base {
@@ -110,7 +113,9 @@ class CallClient: public sigslot::has_slots<> {
 
   void SendChat(const std::string& to, const std::string msg);
   void InviteFriend(const std::string& user);
-  void JoinMuc(const std::string& room);
+  void JoinMuc(const buzz::Jid& room_jid);
+  void JoinMuc(const std::string& room_jid_str);
+  void LookupAndJoinMuc(const std::string& room_name);
   void InviteToMuc(const std::string& user, const std::string& room);
   void LeaveMuc(const std::string& room);
   void SetPortAllocatorFlags(uint32 flags) { portallocator_flags_ = flags; }
@@ -160,6 +165,9 @@ class CallClient: public sigslot::has_slots<> {
   void OnMediaSourcesUpdate(cricket::Call* call,
                             cricket::Session* session,
                             const cricket::MediaSources& sources);
+  void OnRoomLookupResponse(const buzz::MucRoomInfo& room_info);
+  void OnRoomLookupError(const buzz::XmlElement* stanza);
+  buzz::Jid GenerateRandomMucJid();
 
   void AddStaticRenderedView(
       cricket::Session* session,

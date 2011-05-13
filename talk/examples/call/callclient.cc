@@ -52,6 +52,7 @@
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/videorendererfactory.h"
 #include "talk/xmpp/constants.h"
+#include "talk/xmpp/mucroomlookuptask.h"
 
 namespace {
 
@@ -115,7 +116,8 @@ const char* CONSOLE_COMMANDS =
 "  vcall [jid] [bw]    Initiates a video call to the user[/room] with\n"
 "                      the given JID and with optional bandwidth.\n"
 "  voicemail [jid]     Leave a voicemail for the user with the given JID.\n"
-"  join [room]         Joins a multi-user-chat.\n"
+"  join [room_jid]     Joins a multi-user-chat with room JID.\n"
+"  ljoin [room_name]   Joins a MUC by looking up JID from room name.\n"
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
 "  leave [room]        Leaves a multi-user-chat.\n"
 "  getdevs             Prints the available media devices.\n"
@@ -199,6 +201,8 @@ void CallClient::ParseLine(const std::string& line) {
       MakeCallTo(to, options);
     } else if (command == "join") {
       JoinMuc(GetWord(words, 1, ""));
+    } else if (command == "ljoin") {
+      LookupAndJoinMuc(GetWord(words, 1, ""));
     } else if ((words.size() >= 2) && (command == "invite")) {
       InviteToMuc(words[1], GetWord(words, 2, ""));
     } else if (command == "leave") {
@@ -637,30 +641,46 @@ void CallClient::Quit() {
   talk_base::Thread::Current()->Quit();
 }
 
-void CallClient::JoinMuc(const std::string& room) {
-  buzz::Jid room_jid;
-  if (room.length() > 0) {
-    room_jid = buzz::Jid(room);
-  } else {
-    // generate a GUID of the form XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX,
-    // for an eventual JID of private-chat-<GUID>@groupchat.google.com
-    char guid[37], guid_room[256];
-    for (size_t i = 0; i < ARRAY_SIZE(guid) - 1;) {
-      if (i == 8 || i == 13 || i == 18 || i == 23) {
-        guid[i++] = '-';
-      } else {
-        sprintf(guid + i, "%04x", rand());
-        i += 4;
-      }
-    }
-
-    talk_base::sprintfn(guid_room, ARRAY_SIZE(guid_room),
-                        "private-chat-%s@%s", guid, pmuc_domain_.c_str());
-    room_jid = buzz::Jid(guid_room);
+void CallClient::LookupAndJoinMuc(const std::string& room_name) {
+  // The room_name can't be empty for lookup task.
+  if (room_name.empty()) {
+    console_->Print("Please provide a room name or room jid.");
+    return;
   }
 
+  std::string room = room_name;
+  std::string domain =  xmpp_client_->jid().domain();
+  if (room_name.find("@") != std::string::npos) {
+    // Assume the room_name is a fully qualified room name.
+    // We'll find the room name string and domain name string from it.
+    room = room_name.substr(0, room_name.find("@") - 1);
+    domain = room_name.substr(room_name.find("@") + 1);
+  }
+
+  buzz::MucRoomLookupTask* lookup_query_task =
+      new buzz::MucRoomLookupTask(xmpp_client_, room, domain);
+  lookup_query_task->SignalRoomLookupResponse.connect(this,
+      &CallClient::OnRoomLookupResponse);
+  lookup_query_task->SignalRoomLookupError.connect(this,
+      &CallClient::OnRoomLookupError);
+  lookup_query_task->Start();
+}
+
+void CallClient::JoinMuc(const std::string& room_jid_str) {
+  if (room_jid_str.empty()) {
+    buzz::Jid room_jid = GenerateRandomMucJid();
+    console_->Printf("Generated a random room jid: %s",
+                     room_jid.Str().c_str());
+    JoinMuc(room_jid);
+  } else {
+    JoinMuc(buzz::Jid(room_jid_str));
+  }
+}
+
+void CallClient::JoinMuc(const buzz::Jid& room_jid) {
   if (!room_jid.IsValid()) {
-    console_->Printf("Unable to make valid muc endpoint for %s", room.c_str());
+    console_->Printf("Unable to make valid muc endpoint for %s",
+                     room_jid.Str().c_str());
     return;
   }
 
@@ -673,6 +693,15 @@ void CallClient::JoinMuc(const std::string& room) {
   buzz::Muc* muc = new buzz::Muc(room_jid, xmpp_client_->jid().node());
   mucs_[room_jid] = muc;
   presence_out_->SendDirected(muc->local_jid(), my_status_);
+}
+
+void CallClient::OnRoomLookupResponse(const buzz::MucRoomInfo& room_info) {
+  JoinMuc(room_info.room_jid);
+}
+
+void CallClient::OnRoomLookupError(const buzz::XmlElement* stanza) {
+  console_->Printf("%s\n", "Failed to look up the room_jid.",
+      stanza->Str().c_str());
 }
 
 void CallClient::OnMucInviteReceived(const buzz::Jid& inviter,
@@ -695,7 +724,7 @@ void CallClient::OnMucInviteReceived(const buzz::Jid& inviter,
     console_->Printf("  None\n");
   }
   // We automatically join the room.
-  JoinMuc(room.Str());
+  JoinMuc(room);
 }
 
 void CallClient::OnMucJoined(const buzz::Jid& endpoint) {
@@ -902,4 +931,25 @@ void CallClient::SendViewRequest(cricket::Session* session) {
     request.static_video_views.push_back(it->view);
   }
   call_->SendViewRequest(session, request);
+}
+
+buzz::Jid CallClient::GenerateRandomMucJid() {
+  // Generate a GUID of the form XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX,
+  // for an eventual JID of private-chat-<GUID>@groupchat.google.com.
+  char guid[37], guid_room[256];
+  for (size_t i = 0; i < ARRAY_SIZE(guid) - 1;) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      guid[i++] = '-';
+    } else {
+      sprintf(guid + i, "%04x", rand());
+      i += 4;
+    }
+  }
+
+  talk_base::sprintfn(guid_room,
+                      ARRAY_SIZE(guid_room),
+                      "private-chat-%s@%s",
+                      guid,
+                      pmuc_domain_.c_str());
+  return buzz::Jid(guid_room);
 }
