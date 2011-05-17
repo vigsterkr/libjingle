@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
       protocol, "hybrid",
       "Initial signaling protocol to use: jingle, gingle, or hybrid.");
   DEFINE_string(
-      secure, "disable",
+      secure, "enable",
       "Disable or enable encryption: disable, enable, require.");
   DEFINE_bool(testserver, false, "Use test server");
   DEFINE_bool(plainserver, false, "Turn off tls and allow plain password.");

@@ -742,8 +742,7 @@ void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
 
   // Look up this muc.
   MucMap::iterator elem = mucs_.find(jid);
-  ASSERT(elem != mucs_.end() &&
-         elem->second->state() == buzz::Muc::MUC_JOINED);
+  ASSERT(elem != mucs_.end());
 
   buzz::Muc* muc = elem->second;
 

@@ -28,7 +28,7 @@
 #ifndef TALK_BASE_LINUX_H_
 #define TALK_BASE_LINUX_H_
 
-#ifdef LINUX
+#if defined(LINUX) || defined(ANDROID)
 #include <string>
 #include <map>
 #include <vector>
@@ -134,5 +134,5 @@ int ReadCpuMaxFreq();
 
 }  // namespace talk_base
 
-#endif  // LINUX
+#endif  // defined(LINUX) || defined(ANDROID)
 #endif  // TALK_BASE_LINUX_H_

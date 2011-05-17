@@ -144,6 +144,7 @@ class BaseChannel
   virtual MediaChannel* media_channel() const { return media_channel_; }
   void set_rtcp_transport_channel(TransportChannel* transport);
   bool writable() const { return writable_; }
+  bool was_ever_writable() const { return was_ever_writable_; }
   bool has_codec() const { return has_codec_; }
   void set_has_codec(bool has_codec) { has_codec_ = has_codec; }
   bool muted() const { return muted_; }
@@ -254,6 +255,7 @@ class BaseChannel
   talk_base::scoped_ptr<SocketMonitor> socket_monitor_;
   bool enabled_;
   bool writable_;
+  bool was_ever_writable_;
   bool has_codec_;
   bool muted_;
 };

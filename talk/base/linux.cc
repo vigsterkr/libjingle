@@ -25,11 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef LINUX
+#if defined(LINUX) || defined(ANDROID)
 #include "talk/base/linux.h"
+
+#include <ctype.h>
 
 #include <errno.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 
 #include <cstdio>
 #include <set>
@@ -342,4 +345,4 @@ int ReadCpuMaxFreq() {
 
 }  // namespace talk_base
 
-#endif  // LINUX
+#endif  // defined(LINUX) || defined(ANDROID)

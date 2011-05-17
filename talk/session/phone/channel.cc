@@ -88,6 +88,7 @@ BaseChannel::BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
       rtcp_transport_channel_(NULL),
       enabled_(false),
       writable_(false),
+      was_ever_writable_(false),
       has_codec_(false),
       muted_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
@@ -238,6 +239,11 @@ bool BaseChannel::PacketIsRtcp(const TransportChannel* channel,
 }
 
 bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
+  // Ensure we have a path capable of sending packets.
+  if (!writable_) {
+    return false;
+  }
+
   // SendPacket gets called from MediaEngine, typically on an encoder thread.
   // If the thread is not our worker thread, we will post to our worker
   // so that the real work happens on our worker. This avoids us having to
@@ -254,12 +260,13 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
     return true;
   }
 
-  // Make sure we have a place to send this packet before doing anything.
-  // (We might get RTCP packets that we don't intend to send.)
-  // If we've negotiated RTCP mux, send RTCP over the RTP transport.
+  // Now that we are on the correct thread, ensure we have a place to send this
+  // packet before doing anything. (We might get RTCP packets that we don't
+  // intend to send.) If we've negotiated RTCP mux, send RTCP over the RTP
+  // transport.
   TransportChannel* channel = (!rtcp || rtcp_mux_filter_.IsActive()) ?
       transport_channel_ : rtcp_transport_channel_;
-  if (!channel) {
+  if (!channel || !channel->writable()) {
     return false;
   }
 
@@ -465,7 +472,9 @@ void BaseChannel::ChannelWritable_w() {
   if (writable_)
     return;
   LOG(LS_INFO) << "Channel socket writable ("
-               << transport_channel_->name().c_str() << ")";
+               << transport_channel_->name().c_str() << ")"
+               << (was_ever_writable_ ? "" : " for the first time");
+  was_ever_writable_ = true;
   writable_ = true;
   ChangeState();
 }
@@ -739,10 +748,9 @@ void VoiceChannel::ChangeState() {
     SendLastMediaError();
   }
 
-  // send outgoing data if we are the active call, have the
-  // remote party's codec, and have a writable transport
-  // we only send data on the default channel
-  bool send = enabled() && has_codec() && writable();
+  // Send outgoing data if we are the active call and we know their codec, and
+  // we have had some form of connectivity.
+  bool send = enabled() && has_codec() && was_ever_writable();
   SendFlags send_flag = send ? SEND_MICROPHONE : SEND_NOTHING;
   if (!media_channel()->SetSend(send_flag)) {
     LOG(LS_ERROR) << "Failed to SetSend " << send_flag << " on voice channel";
@@ -1037,10 +1045,9 @@ void VideoChannel::ChangeState() {
     // TODO: Report error back to server.
   }
 
-  // send outgoing data if we are the active call, have the
-  // remote party's codec, and have a writable transport
-  // we only send data on the default channel
-  bool send = enabled() && has_codec() && writable();
+  // Send outgoing data if we are the active call and we know their codec, and
+  // we have had some form of connectivity.
+  bool send = enabled() && has_codec() && was_ever_writable();
   if (!media_channel()->SetSend(send)) {
     LOG(LS_ERROR) << "Failed to SetSend on video channel";
     // TODO: Report error back to server.
