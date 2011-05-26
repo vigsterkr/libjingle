@@ -130,6 +130,13 @@ void TransportProxy::AddSentCandidates(const Candidates& candidates) {
   }
 }
 
+void TransportProxy::AddUnsentCandidates(const Candidates& candidates) {
+  for (Candidates::const_iterator cand = candidates.begin();
+       cand != candidates.end(); ++cand) {
+    unsent_candidates_.push_back(*cand);
+  }
+}
+
 
 TransportChannelProxy* TransportProxy::GetProxy(const std::string& name) {
   ChannelMap::iterator iter = channels_.find(name);
@@ -237,6 +244,7 @@ Session::Session(SessionManager *session_manager,
   error_ = ERROR_NONE;
   state_ = STATE_INIT;
   initiator_ = false;
+  initiate_acked_ = false;
   current_protocol_ = PROTOCOL_HYBRID;
 }
 
@@ -577,17 +585,22 @@ void Session::OnTransportCandidatesReady(Transport* transport,
   ASSERT(signaling_thread_->IsCurrent());
   TransportProxy* transproxy = GetTransportProxy(transport);
   if (transproxy != NULL) {
-    if (!transproxy->negotiated()) {
-      transproxy->AddSentCandidates(candidates);
-    }
-    SessionError error;
-    if (!SendTransportInfoMessage(
-            TransportInfo(transproxy->content_name(), transproxy->type(),
-                          candidates),
-            &error)) {
-      LOG(LS_ERROR) << "Could not send transport info message: "
-                    << error.text;
-      return;
+    if (initiator_ && !initiate_acked_) {
+      // TODO: This is to work around server re-ordering
+      // messages.  We send the candidates once the session-initiate
+      // is acked.  Once we have fixed the server to guarantee message
+      // order, we can remove this case.
+      transproxy->AddUnsentCandidates(candidates);
+    } else {
+      if (!transproxy->negotiated()) {
+        transproxy->AddSentCandidates(candidates);
+      }
+      SessionError error;
+      if (!SendTransportInfoMessage(transproxy, candidates, &error)) {
+        LOG(LS_ERROR) << "Could not send transport info message: "
+                      << error.text;
+        return;
+      }
     }
   }
 }
@@ -658,6 +671,22 @@ void Session::OnIncomingMessage(const SessionMessage& msg) {
   } else {
     SignalErrorMessage(this, msg.stanza, error.type,
                        "modify", error.text, NULL);
+  }
+}
+
+void Session::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
+                                 const buzz::XmlElement* response_stanza,
+                                 const SessionMessage& msg) {
+  ASSERT(signaling_thread_->IsCurrent());
+
+  if (msg.type == ACTION_SESSION_INITIATE) {
+    initiate_acked_ = true;
+    // TODO: This is to work around server re-ordering
+    // messages.  We send the candidates once the session-initiate
+    // is acked.  Once we have fixed the server to guarantee message
+    // order, we can remove this case.
+    SessionError error;
+    SendAllUnsentTransportInfoMessages(&error);
   }
 }
 
@@ -955,6 +984,15 @@ bool Session::SendTransportInfoMessage(const TransportInfo& tinfo,
   return SendMessage(ACTION_TRANSPORT_INFO, tinfo, error);
 }
 
+bool Session::SendTransportInfoMessage(const TransportProxy* transproxy,
+                                       const Candidates& candidates,
+                                       SessionError* error) {
+  return SendTransportInfoMessage(TransportInfo(transproxy->content_name(),
+                                                transproxy->type(),
+                                                candidates),
+                                  error);
+}
+
 bool Session::WriteSessionAction(SignalingProtocol protocol,
                                  const TransportInfo& tinfo,
                                  XmlElements* elems, WriteError* error) {
@@ -972,14 +1010,29 @@ bool Session::ResendAllTransportInfoMessages(SessionError* error) {
     TransportProxy* transproxy = iter->second;
     if (transproxy->sent_candidates().size() > 0) {
       if (!SendTransportInfoMessage(
-              TransportInfo(
-                  transproxy->content_name(),
-                  transproxy->type(),
-                  transproxy->sent_candidates()),
-              error)) {
+              transproxy, transproxy->sent_candidates(), error)) {
+        LOG(LS_ERROR) << "Could not resend transport info messages: "
+                      << error->text;
         return false;
       }
       transproxy->ClearSentCandidates();
+    }
+  }
+  return true;
+}
+
+bool Session::SendAllUnsentTransportInfoMessages(SessionError* error) {
+  for (TransportMap::iterator iter = transports_.begin();
+       iter != transports_.end(); ++iter) {
+    TransportProxy* transproxy = iter->second;
+    if (transproxy->unsent_candidates().size() > 0) {
+      if (!SendTransportInfoMessage(
+              transproxy, transproxy->unsent_candidates(), error)) {
+        LOG(LS_ERROR) << "Could not send unsent transport info messages: "
+                      << error->text;
+        return false;
+      }
+      transproxy->ClearUnsentCandidates();
     }
   }
   return true;

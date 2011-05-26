@@ -29,6 +29,7 @@
 
 #include "talk/base/common.h"
 #include "talk/base/helpers.h"
+#include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringencode.h"
 #include "talk/p2p/base/constants.h"
@@ -188,9 +189,18 @@ void SessionManager::OnIncomingMessage(const buzz::XmlElement* stanza) {
 
 void SessionManager::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
     const buzz::XmlElement* response_stanza) {
-  // We don't do anything with the response now.  If we need to we can forward
-  // it to the session.
-  return;
+  SessionMessage msg;
+  ParseError error;
+  if (!ParseSessionMessage(orig_stanza, &msg, &error)) {
+    LOG(LS_WARNING) << "Error parsing incoming response: " << error.text
+                    << ":" << orig_stanza;
+    return;
+  }
+
+  Session* session = FindSession(msg.sid, msg.to);
+  if (session) {
+    session->OnIncomingResponse(orig_stanza, response_stanza, msg);
+  }
 }
 
 void SessionManager::OnFailedSend(const buzz::XmlElement* orig_stanza,

@@ -684,14 +684,20 @@ void CallClient::JoinMuc(const buzz::Jid& room_jid) {
     return;
   }
 
+  std::string room_nick = room_jid.resource();
+  if (room_nick.empty()) {
+    room_nick = (xmpp_client_->jid().node()
+                 + "_" + xmpp_client_->jid().resource());
+  }
+
   MucMap::iterator elem = mucs_.find(room_jid);
   if (elem != mucs_.end()) {
     console_->Printf("This MUC already exists.");
     return;
   }
 
-  buzz::Muc* muc = new buzz::Muc(room_jid, xmpp_client_->jid().node());
-  mucs_[room_jid] = muc;
+  buzz::Muc* muc = new buzz::Muc(room_jid.BareJid(), room_nick);
+  mucs_[muc->jid()] = muc;
   presence_out_->SendDirected(muc->local_jid(), my_status_);
 }
 

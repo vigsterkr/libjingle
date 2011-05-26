@@ -1,5 +1,11 @@
 Libjingle
 
+0.5.5 - May 26, 2011
+  - Refactor async sockets
+  - Improve MUC joining
+  - Add OSX video renderer
+  - Bug fixes
+
 0.5.4 - May 13, 2011
   - Support for MUC lookup by name
   - Bug fixes

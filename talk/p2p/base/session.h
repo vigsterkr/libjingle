@@ -90,13 +90,16 @@ class TransportProxy {
   std::string type() const;
   bool negotiated() const { return state_ == STATE_NEGOTIATED; }
   const Candidates& sent_candidates() const { return sent_candidates_; }
+  const Candidates& unsent_candidates() const { return unsent_candidates_; }
 
   TransportChannel* GetChannel(const std::string& name);
   TransportChannel* CreateChannel(const std::string& name,
                                   const std::string& content_type);
   void DestroyChannel(const std::string& name);
   void AddSentCandidates(const Candidates& candidates);
+  void AddUnsentCandidates(const Candidates& candidates);
   void ClearSentCandidates() { sent_candidates_.clear(); }
+  void ClearUnsentCandidates() { unsent_candidates_.clear(); }
   void SpeculativelyConnectChannels();
   void CompleteNegotiation();
 
@@ -119,6 +122,7 @@ class TransportProxy {
   TransportState state_;
   ChannelMap channels_;
   Candidates sent_candidates_;
+  Candidates unsent_candidates_;
 };
 
 typedef std::map<std::string, TransportProxy*> TransportMap;
@@ -442,7 +446,12 @@ class Session : public BaseSession {
   bool SendTerminateMessage(const std::string& reason, SessionError* error);
   bool SendTransportInfoMessage(const TransportInfo& tinfo,
                                 SessionError* error);
+  bool SendTransportInfoMessage(const TransportProxy* transproxy,
+                                const Candidates& candidates,
+                                SessionError* error);
+
   bool ResendAllTransportInfoMessages(SessionError* error);
+  bool SendAllUnsentTransportInfoMessages(SessionError* error);
 
   // Both versions of SendMessage send a message of the given type to
   // the other client.  Can pass either a set of elements or an
@@ -492,6 +501,9 @@ class Session : public BaseSession {
   sigslot::signal2<Session *, const buzz::XmlElement*> SignalOutgoingMessage;
   void OnIncomingMessage(const SessionMessage& msg);
 
+  void OnIncomingResponse(const buzz::XmlElement* orig_stanza,
+                          const buzz::XmlElement* response_stanza,
+                          const SessionMessage& msg);
   void OnFailedSend(const buzz::XmlElement* orig_stanza,
                     const buzz::XmlElement* error_stanza);
 
@@ -521,6 +533,7 @@ class Session : public BaseSession {
 
   SessionManager *session_manager_;
   bool initiator_;
+  bool initiate_acked_;
   std::string initiator_name_;
   std::string content_type_;
   SessionClient* client_;
