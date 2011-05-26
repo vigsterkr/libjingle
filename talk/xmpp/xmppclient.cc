@@ -121,7 +121,9 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   // we should use the actual server name
   std::string server_name = settings.server().IPAsString();
   if ((server_name == buzz::STR_TALK_GOOGLE_COM ||
-      server_name == buzz::STR_TALKX_L_GOOGLE_COM) &&
+      server_name == buzz::STR_TALKX_L_GOOGLE_COM ||
+      server_name == buzz::STR_XMPP_GOOGLE_COM ||
+      server_name == buzz::STR_XMPPX_L_GOOGLE_COM) &&
       pre_auth != NULL) {
     d_->engine_->SetTlsServer(buzz::STR_GMAIL_COM, buzz::STR_GMAIL_COM);
   }

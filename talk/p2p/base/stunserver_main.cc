@@ -52,9 +52,9 @@ int main(int argc, char* argv[]) {
   talk_base::Thread *pthMain = talk_base::Thread::Current();
 
   talk_base::AsyncUDPSocket* server_socket =
-      talk_base::CreateAsyncUDPSocket(pthMain->socketserver());
-  if (server_socket->Bind(server_addr) < 0) {
-    std::cerr << "bind: " << std::strerror(errno) << std::endl;
+      talk_base::AsyncUDPSocket::Create(pthMain->socketserver(), server_addr);
+  if (!server_socket) {
+    std::cerr << "Failed to create a UDP socket" << std::endl;
     return 1;
   }
 

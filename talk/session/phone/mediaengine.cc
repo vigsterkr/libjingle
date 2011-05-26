@@ -26,19 +26,22 @@
 //
 
 #include "talk/session/phone/mediaengine.h"
+
 #ifdef HAVE_LINPHONE
 #include "talk/session/phone/linphonemediaengine.h"
 #endif
-
+#ifdef HAVE_WEBRTC
+#include "talk/session/phone/webrtcvoiceengine.h"
+#include "talk/session/phone/webrtcvideoengine.h"
+#endif
 
 namespace cricket {
 
-// TODO: according to thaloun, HAVE_GIPSVIDEO will always
-// be false, so we can get rid of it.
-
 MediaEngine* MediaEngine::Create() {
-#ifdef HAVE_LINPHONE
+#if defined(HAVE_LINPHONE)
   return new LinphoneMediaEngine("", "");
+#elif defined(HAVE_WEBRTC)
+  return new CompositeMediaEngine<WebRtcVoiceEngine, WebRtcVideoEngine>();
 #else
   return new NullMediaEngine();
 #endif

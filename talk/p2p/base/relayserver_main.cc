@@ -53,18 +53,18 @@ int main(int argc, char **argv) {
   talk_base::Thread *pthMain = talk_base::Thread::Current();
 
   talk_base::scoped_ptr<talk_base::AsyncUDPSocket> int_socket(
-      talk_base::CreateAsyncUDPSocket(pthMain->socketserver()));
-  if (int_socket->Bind(int_addr) < 0) {
-    std::cerr << "Internal socket bind(" << int_addr.ToString() << "): "
-              << std::strerror(int_socket->GetError()) << std::endl;
+      talk_base::AsyncUDPSocket::Create(pthMain->socketserver(), int_addr));
+  if (!int_socket.get()) {
+    std::cerr << "Failed to create a UDP socket bound at"
+              << int_addr.ToString() << std::endl;
     return 1;
   }
 
   talk_base::scoped_ptr<talk_base::AsyncUDPSocket> ext_socket(
-      talk_base::CreateAsyncUDPSocket(pthMain->socketserver()));
-  if (ext_socket->Bind(ext_addr) < 0) {
-    std::cerr << "External socket bind(" << ext_addr.ToString() << "): "
-              << std::strerror(ext_socket->GetError()) << std::endl;
+      talk_base::AsyncUDPSocket::Create(pthMain->socketserver(), ext_addr));
+  if (!ext_socket.get()) {
+    std::cerr << "Failed to create a UDP socket bound at"
+              << ext_addr.ToString() << std::endl;
     return 1;
   }
 

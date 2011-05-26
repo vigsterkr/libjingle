@@ -48,20 +48,27 @@ static const size_t BUF_SIZE = MAX_PACKET_SIZE + PKT_LEN_SIZE;
 
 static const int LISTEN_BACKLOG = 5;
 
-AsyncTCPSocket* AsyncTCPSocket::Create(SocketFactory* factory, bool listen) {
-  AsyncSocket* sock = factory->CreateAsyncSocket(SOCK_STREAM);
-  // This will still return a socket even if we failed to listen on
-  // it. It is neccessary because even if we can't accept new
-  // connections on this socket, the corresponding port is still
-  // useful for outgoing connections.
-  //
-  // TODO: It might be better to pass listen() error to the
-  // upper layer and let it handle the problem.
-  return (sock) ? new AsyncTCPSocket(sock, listen) : NULL;
+// Binds and connects |socket| and creates AsyncTCPSocket for
+// it. Takes ownership of |socket|. Returns NULL if bind() or
+// connect() fail (|socket| is destroyed in that case).
+AsyncTCPSocket* AsyncTCPSocket::Create(
+    AsyncSocket* socket,
+    const SocketAddress& bind_address,
+    const SocketAddress& remote_address) {
+  scoped_ptr<AsyncSocket> owned_socket(socket);
+  if (socket->Bind(bind_address) < 0) {
+    LOG(LS_ERROR) << "Bind() failed with error " << socket->GetError();
+    return NULL;
+  }
+  if (socket->Connect(remote_address) < 0) {
+    LOG(LS_ERROR) << "Connect() failed with error " << socket->GetError();
+    return NULL;
+  }
+  return new AsyncTCPSocket(owned_socket.release(), false);
 }
 
 AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket, bool listen)
-    : AsyncPacketSocket(socket),
+    : socket_(socket),
       listen_(listen),
       insize_(BUF_SIZE),
       inpos_(0),
@@ -70,7 +77,7 @@ AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket, bool listen)
   inbuf_ = new char[insize_];
   outbuf_ = new char[outsize_];
 
-  ASSERT(socket_ != NULL);
+  ASSERT(socket_.get() != NULL);
   socket_->SignalConnectEvent.connect(this, &AsyncTCPSocket::OnConnectEvent);
   socket_->SignalReadEvent.connect(this, &AsyncTCPSocket::OnReadEvent);
   socket_->SignalWriteEvent.connect(this, &AsyncTCPSocket::OnWriteEvent);
@@ -86,6 +93,14 @@ AsyncTCPSocket::AsyncTCPSocket(AsyncSocket* socket, bool listen)
 AsyncTCPSocket::~AsyncTCPSocket() {
   delete [] inbuf_;
   delete [] outbuf_;
+}
+
+SocketAddress AsyncTCPSocket::GetLocalAddress() const {
+  return socket_->GetLocalAddress();
+}
+
+SocketAddress AsyncTCPSocket::GetRemoteAddress() const {
+  return socket_->GetRemoteAddress();
 }
 
 int AsyncTCPSocket::Send(const void *pv, size_t cb) {
@@ -122,6 +137,44 @@ int AsyncTCPSocket::SendTo(const void *pv, size_t cb,
   ASSERT(false);
   socket_->SetError(ENOTCONN);
   return -1;
+}
+
+int AsyncTCPSocket::Close() {
+  return socket_->Close();
+}
+
+AsyncTCPSocket::State AsyncTCPSocket::GetState() const {
+  switch (socket_->GetState()) {
+    case Socket::CS_CLOSED:
+      return STATE_CLOSED;
+    case Socket::CS_CONNECTING:
+      if (listen_) {
+        return STATE_BOUND;
+      } else {
+        return STATE_CONNECTING;
+      }
+    case Socket::CS_CONNECTED:
+      return STATE_CONNECTED;
+    default:
+      ASSERT(false);
+      return STATE_CLOSED;
+  }
+}
+
+int AsyncTCPSocket::GetOption(Socket::Option opt, int* value) {
+  return socket_->GetOption(opt, value);
+}
+
+int AsyncTCPSocket::SetOption(Socket::Option opt, int value) {
+  return socket_->SetOption(opt, value);
+}
+
+int AsyncTCPSocket::GetError() const {
+  return socket_->GetError();
+}
+
+void AsyncTCPSocket::SetError(int error) {
+  return socket_->SetError(error);
 }
 
 int AsyncTCPSocket::SendRaw(const void * pv, size_t cb) {
@@ -181,7 +234,7 @@ void AsyncTCPSocket::OnConnectEvent(AsyncSocket* socket) {
 }
 
 void AsyncTCPSocket::OnReadEvent(AsyncSocket* socket) {
-  ASSERT(socket == socket_);
+  ASSERT(socket_.get() == socket);
 
   if (listen_) {
     talk_base::SocketAddress address;
@@ -220,7 +273,7 @@ void AsyncTCPSocket::OnReadEvent(AsyncSocket* socket) {
 }
 
 void AsyncTCPSocket::OnWriteEvent(AsyncSocket* socket) {
-  ASSERT(socket == socket_);
+  ASSERT(socket_.get() == socket);
 
   if (outpos_ > 0) {
     Flush();

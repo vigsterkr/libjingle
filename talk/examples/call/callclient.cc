@@ -653,7 +653,7 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
   if (room_name.find("@") != std::string::npos) {
     // Assume the room_name is a fully qualified room name.
     // We'll find the room name string and domain name string from it.
-    room = room_name.substr(0, room_name.find("@") - 1);
+    room = room_name.substr(0, room_name.find("@"));
     domain = room_name.substr(room_name.find("@") + 1);
   }
 
@@ -901,6 +901,7 @@ void CallClient::AddStaticRenderedView(
   call_->SetVideoRenderer(session, ssrc, rendered_view.renderer);
   static_rendered_views_.push_back(rendered_view);
   ++static_views_accumulated_count_;
+  console_->Printf("Added renderer for ssrc %d", ssrc);
 }
 
 bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
@@ -909,6 +910,7 @@ bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
     if (it->view.ssrc == ssrc) {
       delete it->renderer;
       static_rendered_views_.erase(it);
+      console_->Printf("Removed renderer for ssrc %d", ssrc);
       return true;
     }
   }

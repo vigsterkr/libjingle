@@ -1,5 +1,5 @@
 // libjingle
-// Copyright 2004--2005, Google Inc.
+// Copyright 2010 Google Inc. All Rights Reserved
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -28,10 +28,13 @@
 #ifndef TALK_SESSION_PHONE_VIDEORENDERERFACTORY_H_
 #define TALK_SESSION_PHONE_VIDEORENDERERFACTORY_H_
 
-#ifdef WIN32
-#include "talk/session/phone/gdivideorenderer.h"
-#endif  // WIN32
+#if defined(LINUX)
 #include "talk/session/phone/gtkvideorenderer.h"
+#elif defined(OSX)
+#include "talk/session/phone/carbonvideorenderer.h"
+#elif defined(WIN32)
+#include "talk/session/phone/gdivideorenderer.h"
+#endif
 
 namespace cricket {
 
@@ -40,6 +43,15 @@ class VideoRendererFactory {
   static VideoRenderer* CreateGuiVideoRenderer(int x, int y) {
   #if defined(LINUX)
     return new GtkVideoRenderer(x, y);
+  #elif defined(OSX)
+    CarbonVideoRenderer* renderer = new CarbonVideoRenderer(x, y);
+    // Needs to be initialized on the main thread.
+    if (renderer->Initialize()) {
+      return renderer;
+    } else {
+      delete renderer;
+      return NULL;
+    }
   #elif defined(WIN32)
     return new GdiVideoRenderer(x, y);
   #else

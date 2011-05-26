@@ -29,6 +29,7 @@
 #define TALK_BASE_ASYNCTCPSOCKET_H_
 
 #include "talk/base/asyncpacketsocket.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/socketfactory.h"
 
 namespace talk_base {
@@ -38,12 +39,26 @@ namespace talk_base {
 // buffer them in user space.
 class AsyncTCPSocket : public AsyncPacketSocket {
  public:
-  static AsyncTCPSocket* Create(SocketFactory* factory, bool listen);
+  // Binds and connects |socket| and creates AsyncTCPSocket for
+  // it. Takes ownership of |socket|. Returns NULL if bind() or
+  // connect() fail (|socket| is destroyed in that case).
+  static AsyncTCPSocket* Create(AsyncSocket* socket,
+                                const SocketAddress& bind_address,
+                                const SocketAddress& remote_address);
   explicit AsyncTCPSocket(AsyncSocket* socket, bool listen);
   virtual ~AsyncTCPSocket();
 
-  virtual int Send(const void* pv, size_t cb);
-  virtual int SendTo(const void* pv, size_t cb, const SocketAddress& addr);
+  virtual SocketAddress GetLocalAddress() const;
+  virtual SocketAddress GetRemoteAddress() const;
+  virtual int Send(const void *pv, size_t cb);
+  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr);
+  virtual int Close();
+
+  virtual State GetState() const;
+  virtual int GetOption(Socket::Option opt, int* value);
+  virtual int SetOption(Socket::Option opt, int value);
+  virtual int GetError() const;
+  virtual void SetError(int error);
 
  protected:
   int SendRaw(const void* pv, size_t cb);
@@ -58,6 +73,7 @@ class AsyncTCPSocket : public AsyncPacketSocket {
   void OnWriteEvent(AsyncSocket* socket);
   void OnCloseEvent(AsyncSocket* socket, int error);
 
+  scoped_ptr<AsyncSocket> socket_;
   bool listen_;
   char* inbuf_, * outbuf_;
   size_t insize_, inpos_, outsize_, outpos_;

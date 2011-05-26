@@ -168,6 +168,10 @@ void Call::SetVideoRenderer(BaseSession *session, uint32 ssrc,
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel) {
     video_channel->SetRenderer(ssrc, renderer);
+    LOG(LS_INFO) << "Set renderer of ssrc " << ssrc
+                 << " to " << renderer << ".";
+  } else {
+    LOG(LS_INFO) << "Failed to set renderer of ssrc " << ssrc << ".";
   }
 }
 
@@ -556,15 +560,15 @@ void Call::OnSessionInfo(Session *session,
         }
       }
       if (it->removed && found) {
-        LOG(LS_INFO) << "Remove voice stream:  " << found->ssrc;
         RemoveVoiceStream(session, found->ssrc);
         media_sources.RemoveAudioSourceBySsrc(it->ssrc);
         updates.audio.push_back(*it);
+        LOG(LS_INFO) << "Removed voice stream:  " << found->ssrc;
       } else if (!it->removed && !found) {
-        LOG(LS_INFO) << "Add voice stream:  " << it->ssrc;
         AddVoiceStream(session, it->ssrc);
         media_sources.AddAudioSource(*it);
         updates.audio.push_back(*it);
+        LOG(LS_INFO) << "Added voice stream:  " << it->ssrc;
       }
     }
     for (it = sources.video.begin(); it != sources.video.end(); ++it) {
@@ -583,15 +587,15 @@ void Call::OnSessionInfo(Session *session,
         }
       }
       if (it->removed && found) {
-        LOG(LS_INFO) << "Remove video stream:  " << found->ssrc;
         RemoveVideoStream(session, found->ssrc);
         media_sources.RemoveVideoSourceBySsrc(it->ssrc);
         updates.video.push_back(*it);
+        LOG(LS_INFO) << "Removed video stream:  " << found->ssrc;
       } else if (!it->removed && !found) {
-        LOG(LS_INFO) << "Add video stream:  " << it->ssrc;
         AddVideoStream(session, it->ssrc);
         media_sources.AddVideoSource(*it);
         updates.video.push_back(*it);
+        LOG(LS_INFO) << "Added video stream:  " << it->ssrc;
       }
     }
 

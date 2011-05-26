@@ -56,6 +56,7 @@ bool TCPPort::Init() {
       return false;
     }
     socket_->SignalNewConnection.connect(this, &TCPPort::OnNewConnection);
+    socket_->SignalAddressReady.connect(this, &TCPPort::OnAddressReady);
   }
   return true;
 }
@@ -96,7 +97,13 @@ Connection* TCPPort::CreateConnection(const Candidate& address,
 
 void TCPPort::PrepareAddress() {
   if (socket_) {
-    AddAddress(socket_->GetLocalAddress(), "tcp", true);
+    // If socket isn't bound yet the address will be added in
+    // OnAddressReady(). Socket may be in the CLOSED state if Listed()
+    // failed, we still want ot add the socket address.
+    LOG(LS_ERROR) << socket_->GetState();
+    if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND ||
+        socket_->GetState() == talk_base::AsyncPacketSocket::STATE_CLOSED)
+      AddAddress(socket_->GetLocalAddress(), "tcp", true);
   } else {
     LOG_J(LS_INFO, this) << "Not listening due to firewall restrictions.";
     // Note: We still add the address, since otherwise the remote side won't
@@ -183,6 +190,11 @@ void TCPPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   Port::OnReadPacket(data, size, remote_addr);
 }
 
+void TCPPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
+                             const talk_base::SocketAddress& address) {
+  AddAddress(address, "tcp", true);
+}
+
 TCPConnection::TCPConnection(TCPPort* port, const Candidate& candidate,
                              talk_base::AsyncPacketSocket* socket)
     : Connection(port, 0, candidate), socket_(socket), error_(0) {
@@ -205,7 +217,7 @@ TCPConnection::TCPConnection(TCPPort* port, const Candidate& candidate,
                               << candidate.address().ToString();
     }
   } else {
-    // Incoming connections should match the network address
+    // Incoming connections should match the network address.
     ASSERT(socket_->GetLocalAddress().ip() == port->ip_);
   }
 

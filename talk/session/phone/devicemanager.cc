@@ -115,8 +115,11 @@ class DeviceWatcher {
 };
 #endif
 
+#if defined(CHROMEOS)
+static bool ShouldAudioDeviceBeIgnored(const std::string& device_name);
+#endif
 #if !defined(LINUX) && !defined(IOS)
-static bool ShouldDeviceBeIgnored(const std::string& device_name);
+static bool ShouldVideoDeviceBeIgnored(const std::string& device_name);
 #endif
 #ifndef OSX
 static bool GetVideoDevices(std::vector<Device>* out);
@@ -224,7 +227,7 @@ bool DeviceManager::GetAudioOutputDevice(const std::string& name, Device* out) {
 
 #ifdef OSX
 static bool FilterDevice(const Device& d) {
-  return ShouldDeviceBeIgnored(d.name);
+  return ShouldVideoDeviceBeIgnored(d.name);
 }
 #endif
 
@@ -345,7 +348,14 @@ bool DeviceManager::GetAudioDevicesByPlatform(bool input,
   for (SoundSystemInterface::SoundDeviceLocatorList::iterator i = list.begin();
        i != list.end();
        ++i, ++index) {
-    devs->push_back(Device((*i)->name(), index));
+#if defined(CHROMEOS)
+    // On ChromeOS, we ignore ALSA surround and S/PDIF devices.
+    if (!ShouldAudioDeviceBeIgnored((*i)->device_name())) {
+#endif
+      devs->push_back(Device((*i)->name(), index));
+#if defined(CHROMEOS)
+    }
+#endif
   }
   SoundSystemInterface::ClearSoundDeviceLocatorList(&list);
   sound_system_.release();
@@ -408,7 +418,7 @@ bool GetDevices(const CLSID& catid, std::vector<Device>* devices) {
         if (SUCCEEDED(bag->Read(kFriendlyName, &name, 0)) &&
             name.vt == VT_BSTR) {
           name_str = talk_base::ToUtf8(name.bstrVal);
-          if (!ShouldDeviceBeIgnored(name_str)) {
+          if (!ShouldVideoDeviceBeIgnored(name_str)) {
             // Get the device id if one exists.
             if (SUCCEEDED(bag->Read(kDevicePath, &path, 0)) &&
                 path.vt == VT_BSTR) {
@@ -955,11 +965,32 @@ bool DeviceWatcher::IsDescriptorClosed() {
 
 #endif
 
+#if defined(CHROMEOS)
+// Checks if we want to ignore this audio device.
+static bool ShouldAudioDeviceBeIgnored(const std::string& device_name) {
+  static const char* const kFilteredAudioDevicesName[] =  {
+      "surround40:",
+      "surround41:",
+      "surround50:",
+      "surround51:",
+      "surround71:",
+      "iec958:"       // S/PDIF
+  };
+  for (int i = 0; i < ARRAY_SIZE(kFilteredAudioDevicesName); ++i) {
+    if (0 == device_name.find(kFilteredAudioDevicesName[i])) {
+      LOG(LS_INFO) << "Ignoring device " << device_name;
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
 // TODO: Try to get hold of a copy of Final Cut to understand why we
 //               crash while scanning their components on OS X.
 #if !defined(LINUX) && !defined(IOS)
-static bool ShouldDeviceBeIgnored(const std::string& device_name) {
-  static const char* const kFilteredDevices[] =  {
+static bool ShouldVideoDeviceBeIgnored(const std::string& device_name) {
+  static const char* const kFilteredVideoDevicesName[] =  {
       "Google Camera Adapter",   // Our own magiccams
 #ifdef WIN32
       "Asus virtual Camera",     // Bad Asus desktop virtual cam
@@ -970,9 +1001,9 @@ static bool ShouldDeviceBeIgnored(const std::string& device_name) {
 #endif
   };
 
-  for (int i = 0; i < ARRAY_SIZE(kFilteredDevices); ++i) {
-    if (strnicmp(device_name.c_str(), kFilteredDevices[i],
-        strlen(kFilteredDevices[i])) == 0) {
+  for (int i = 0; i < ARRAY_SIZE(kFilteredVideoDevicesName); ++i) {
+    if (strnicmp(device_name.c_str(), kFilteredVideoDevicesName[i],
+        strlen(kFilteredVideoDevicesName[i])) == 0) {
       LOG(LS_INFO) << "Ignoring device " << device_name;
       return true;
     }

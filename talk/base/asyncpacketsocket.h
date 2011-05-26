@@ -28,50 +28,75 @@
 #ifndef TALK_BASE_ASYNCPACKETSOCKET_H_
 #define TALK_BASE_ASYNCPACKETSOCKET_H_
 
-// TODO: Remove dependency on AsyncSocket. AsyncPacketSocket
-// should be a pure interface.
-#include "talk/base/asyncsocket.h"
+#include "talk/base/sigslot.h"
+#include "talk/base/socket.h"
 
 namespace talk_base {
 
-// Provides the ability to receive packets asynchronously.  Sends are not
+// Provides the ability to receive packets asynchronously. Sends are not
 // buffered since it is acceptable to drop packets under high load.
 class AsyncPacketSocket : public sigslot::has_slots<> {
  public:
-  explicit AsyncPacketSocket(AsyncSocket* socket);
-  virtual ~AsyncPacketSocket();
+  enum State {
+    STATE_CLOSED,
+    STATE_BINDING,
+    STATE_BOUND,
+    STATE_CONNECTING,
+    STATE_CONNECTED
+  };
 
-  // TODO: Remove these two methods.
-  virtual int Bind(const SocketAddress& addr);
-  virtual int Connect(const SocketAddress& addr);
+  AsyncPacketSocket() { }
+  virtual ~AsyncPacketSocket() { }
 
-  // Relevant socket methods:
-  virtual SocketAddress GetLocalAddress() const;
-  virtual SocketAddress GetRemoteAddress() const;
-  virtual int Send(const void *pv, size_t cb);
-  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr);
-  virtual int Close();
+  // Returns current local address. Address may be set to NULL if the
+  // socket is not bound yet (GetState() returns STATE_BINDING).
+  virtual SocketAddress GetLocalAddress() const = 0;
 
-  virtual Socket::ConnState GetState() const;
-  virtual int GetOption(Socket::Option opt, int* value);
-  virtual int SetOption(Socket::Option opt, int value);
-  virtual int GetError() const;
-  virtual void SetError(int error);
+  // Returns remote address. Returns zeroes if this is not a client TCP socket.
+  virtual SocketAddress GetRemoteAddress() const = 0;
+
+  // Send a packet.
+  virtual int Send(const void *pv, size_t cb) = 0;
+  virtual int SendTo(const void *pv, size_t cb, const SocketAddress& addr) = 0;
+
+  // Close the socket.
+  virtual int Close() = 0;
+
+  // Returns current state of the socket.
+  virtual State GetState() const = 0;
+
+  // Get/set options.
+  virtual int GetOption(Socket::Option opt, int* value) = 0;
+  virtual int SetOption(Socket::Option opt, int value) = 0;
+
+  // Get/Set current error.
+  // TODO: Remove SetError().
+  virtual int GetError() const = 0;
+  virtual void SetError(int error) = 0;
 
   // Emitted each time a packet is read. Used only for UDP and
   // connected TCP sockets.
   sigslot::signal4<AsyncPacketSocket*, const char*, size_t,
                    const SocketAddress&> SignalReadPacket;
 
-  // Used only for connected TCP sockets.
+  // Emitted after address for the socket is allocated, i.e. binding
+  // is finished. State of the socket is changed from BINDING to BOUND
+  // (for UDP and server TCP sockets) or CONNECTING (for client TCP
+  // sockets).
+  sigslot::signal2<AsyncPacketSocket*, const SocketAddress&> SignalAddressReady;
+
+  // Emitted for client TCP sockets when state is changed from
+  // CONNECTING to CONNECTED.
   sigslot::signal1<AsyncPacketSocket*> SignalConnect;
+
+  // Emitted for client TCP sockets when state is changed from
+  // CONNECTED to CLOSED.
   sigslot::signal2<AsyncPacketSocket*, int> SignalClose;
 
   // Used only for listening TCP sockets.
   sigslot::signal2<AsyncPacketSocket*, AsyncPacketSocket*> SignalNewConnection;
 
- protected:
-  AsyncSocket* socket_;
+ private:
   DISALLOW_EVIL_CONSTRUCTORS(AsyncPacketSocket);
 };
 

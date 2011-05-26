@@ -142,18 +142,12 @@ class PulseAudioDeviceLocator : public SoundDeviceLocator {
  public:
   PulseAudioDeviceLocator(const std::string &name,
                           const std::string &device_name)
-      : SoundDeviceLocator(name), device_name_(device_name) {
+      : SoundDeviceLocator(name, device_name) {
   }
-
-  // The name Pulse uses to locate this device.
-  const std::string &device_name() const { return device_name_; }
 
   virtual SoundDeviceLocator *Copy() const {
     return new PulseAudioDeviceLocator(*this);
   }
-
- private:
-  std::string device_name_;
 };
 
 // Accesses Pulse functions through our late-binding symbol table instead of

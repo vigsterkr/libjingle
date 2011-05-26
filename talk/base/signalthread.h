@@ -120,8 +120,10 @@ class SignalThread : public sigslot::has_slots<>, protected MessageHandler {
   friend class Worker;
   class Worker : public Thread {
    public:
-    SignalThread* parent_;
+    explicit Worker(SignalThread* parent) : parent_(parent) {}
     virtual void Run() { parent_->Run(); }
+   private:
+    SignalThread* parent_;
   };
 
   friend class EnterExit;
@@ -129,10 +131,13 @@ class SignalThread : public sigslot::has_slots<>, protected MessageHandler {
    public:
     explicit EnterExit(SignalThread* t) : t_(t) {
       t_->cs_.Enter();
-      t_->refcount_ += 1;
+      // If refcount_ is zero then the object has already been deleted and we
+      // will be double-deleting it in ~EnterExit()! (shouldn't happen)
+      ASSERT(t_->refcount_ != 0);
+      ++t_->refcount_;
     }
     ~EnterExit() {
-      bool d = (0 == (--(t_->refcount_)));
+      bool d = (0 == --t_->refcount_);
       t_->cs_.Leave();
       if (d)
         delete t_;

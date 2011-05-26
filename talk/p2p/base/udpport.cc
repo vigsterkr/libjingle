@@ -45,12 +45,13 @@ UDPPort::UDPPort(talk_base::Thread* thread,
 }
 
 bool UDPPort::Init() {
-  socket_ =  factory_->CreateUdpSocket(
+  socket_ = factory_->CreateUdpSocket(
       talk_base::SocketAddress(ip_, 0), min_port_, max_port_);
   if (!socket_) {
     LOG_J(LS_WARNING, this) << "UDP socket creation failed";
     return false;
   }
+  socket_->SignalAddressReady.connect(this, &UDPPort::OnAddressReady);
   socket_->SignalReadPacket.connect(this, &UDPPort::OnReadPacket);
   return true;
 }
@@ -60,7 +61,8 @@ UDPPort::~UDPPort() {
 }
 
 void UDPPort::PrepareAddress() {
-  AddAddress(socket_->GetLocalAddress(), "udp", true);
+  if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND)
+    AddAddress(socket_->GetLocalAddress(), "udp", true);
 }
 
 Connection* UDPPort::CreateConnection(const Candidate& address,
@@ -90,6 +92,11 @@ int UDPPort::SetOption(talk_base::Socket::Option opt, int value) {
 
 int UDPPort::GetError() {
   return error_;
+}
+
+void UDPPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
+                             const talk_base::SocketAddress& address) {
+  AddAddress(address, "udp", true);
 }
 
 void UDPPort::OnReadPacket(

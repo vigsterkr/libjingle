@@ -94,7 +94,6 @@ talk.Library(env, name = "libjingle",
              srcs = [
                "base/asyncfile.cc",
                "base/asynchttprequest.cc",
-               "base/asyncpacketsocket.cc",
                "base/asyncsocket.cc",
                "base/asynctcpsocket.cc",
                "base/asyncudpsocket.cc",

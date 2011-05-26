@@ -25,20 +25,35 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#pragma warning(disable:4786)
-#endif
-
 #include "talk/base/asyncudpsocket.h"
 #include "talk/base/logging.h"
 
 namespace talk_base {
 
-const int BUF_SIZE = 64 * 1024;
+static const int BUF_SIZE = 64 * 1024;
+
+AsyncUDPSocket* AsyncUDPSocket::Create(
+    AsyncSocket* socket,
+    const SocketAddress& bind_address) {
+  scoped_ptr<AsyncSocket> owned_socket(socket);
+  if (socket->Bind(bind_address) < 0) {
+    LOG(LS_ERROR) << "Bind() failed with error " << socket->GetError();
+    return NULL;
+  }
+  return new AsyncUDPSocket(owned_socket.release());
+}
+
+AsyncUDPSocket* AsyncUDPSocket::Create(SocketFactory* factory,
+                                       const SocketAddress& bind_address) {
+  AsyncSocket* socket = factory->CreateAsyncSocket(SOCK_DGRAM);
+  if (!socket)
+    return NULL;
+  return Create(socket, bind_address);
+}
 
 AsyncUDPSocket::AsyncUDPSocket(AsyncSocket* socket)
-    : AsyncPacketSocket(socket) {
-  ASSERT(socket_ != NULL);
+    : socket_(socket) {
+  ASSERT(socket_.get() != NULL);
   size_ = BUF_SIZE;
   buf_ = new char[size_];
 
@@ -50,8 +65,49 @@ AsyncUDPSocket::~AsyncUDPSocket() {
   delete [] buf_;
 }
 
+SocketAddress AsyncUDPSocket::GetLocalAddress() const {
+  return socket_->GetLocalAddress();
+}
+
+SocketAddress AsyncUDPSocket::GetRemoteAddress() const {
+  return socket_->GetRemoteAddress();
+}
+
+int AsyncUDPSocket::Send(const void *pv, size_t cb) {
+  return socket_->Send(pv, cb);
+}
+
+int AsyncUDPSocket::SendTo(
+    const void *pv, size_t cb, const SocketAddress& addr) {
+  return socket_->SendTo(pv, cb, addr);
+}
+
+int AsyncUDPSocket::Close() {
+  return socket_->Close();
+}
+
+AsyncUDPSocket::State AsyncUDPSocket::GetState() const {
+  return STATE_BOUND;
+}
+
+int AsyncUDPSocket::GetOption(Socket::Option opt, int* value) {
+  return socket_->GetOption(opt, value);
+}
+
+int AsyncUDPSocket::SetOption(Socket::Option opt, int value) {
+  return socket_->SetOption(opt, value);
+}
+
+int AsyncUDPSocket::GetError() const {
+  return socket_->GetError();
+}
+
+void AsyncUDPSocket::SetError(int error) {
+  return socket_->SetError(error);
+}
+
 void AsyncUDPSocket::OnReadEvent(AsyncSocket* socket) {
-  ASSERT(socket == socket_);
+  ASSERT(socket_.get() == socket);
 
   SocketAddress remote_addr;
   int len = socket_->RecvFrom(buf_, size_, &remote_addr);

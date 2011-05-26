@@ -150,6 +150,8 @@ const std::string STR_GOOGLEMAIL_COM("googlemail.com");
 const std::string STR_DEFAULT_DOMAIN("default.talk.google.com");
 const std::string STR_TALK_GOOGLE_COM("talk.google.com");
 const std::string STR_TALKX_L_GOOGLE_COM("talkx.l.google.com");
+const std::string STR_XMPP_GOOGLE_COM("xmpp.google.com");
+const std::string STR_XMPPX_L_GOOGLE_COM("xmppx.l.google.com");
 
 #ifdef FEATURE_ENABLE_VOICEMAIL
 const std::string STR_VOICEMAIL("voicemail");

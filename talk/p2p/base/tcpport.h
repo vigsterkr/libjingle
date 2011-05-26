@@ -99,6 +99,9 @@ class TCPPort : public Port {
                     const char* data, size_t size,
                     const talk_base::SocketAddress& remote_addr);
 
+  void OnAddressReady(talk_base::AsyncPacketSocket* socket,
+                      const talk_base::SocketAddress& address);
+
   // TODO: Is this still needed?
   bool incoming_only_;
   bool allow_listen_;

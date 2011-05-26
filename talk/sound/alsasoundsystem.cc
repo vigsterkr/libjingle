@@ -70,7 +70,7 @@ class AlsaDeviceLocator : public SoundDeviceLocator {
  public:
   AlsaDeviceLocator(const std::string &name,
                     const std::string &device_name)
-      : SoundDeviceLocator(name), device_name_(device_name) {
+      : SoundDeviceLocator(name, device_name) {
     // The ALSA descriptions have newlines in them, which won't show up in
     // a drop-down box. Replace them with hyphens.
     talk_base::replace_substrs(kAlsaDescriptionSearch,
@@ -80,15 +80,9 @@ class AlsaDeviceLocator : public SoundDeviceLocator {
                                &name_);
   }
 
-  // The name ALSA uses to locate this device.
-  const std::string &device_name() const { return device_name_; }
-
   virtual SoundDeviceLocator *Copy() const {
     return new AlsaDeviceLocator(*this);
   }
-
- private:
-  std::string device_name_;
 };
 
 // Accesses ALSA functions through our late-binding symbol table instead of

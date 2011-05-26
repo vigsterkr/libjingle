@@ -45,16 +45,22 @@ class SoundDeviceLocator {
   // Human-readable name for the device.
   const std::string &name() const { return name_; }
 
+  // Name sound system uses to locate this device.
+  const std::string &device_name() const { return device_name_; }
+
   // Makes a duplicate of this locator.
   virtual SoundDeviceLocator *Copy() const = 0;
 
  protected:
-  explicit SoundDeviceLocator(const std::string &name) : name_(name) {}
+  SoundDeviceLocator(const std::string &name,
+                     const std::string &device_name)
+      : name_(name), device_name_(device_name) {}
 
   explicit SoundDeviceLocator(const SoundDeviceLocator &that)
-      : name_(that.name_) {}
+      : name_(that.name_), device_name_(that.device_name_) {}
 
   std::string name_;
+  std::string device_name_;
 
  private:
   DISALLOW_ASSIGN(SoundDeviceLocator);

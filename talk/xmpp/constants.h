@@ -104,6 +104,8 @@ extern const std::string STR_GOOGLEMAIL_COM;
 extern const std::string STR_DEFAULT_DOMAIN;
 extern const std::string STR_TALK_GOOGLE_COM;
 extern const std::string STR_TALKX_L_GOOGLE_COM;
+extern const std::string STR_XMPP_GOOGLE_COM;
+extern const std::string STR_XMPPX_L_GOOGLE_COM;
 
 #ifdef FEATURE_ENABLE_VOICEMAIL
 extern const std::string STR_VOICEMAIL;

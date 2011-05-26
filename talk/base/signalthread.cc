@@ -35,11 +35,13 @@ namespace talk_base {
 // SignalThread
 ///////////////////////////////////////////////////////////////////////////////
 
-SignalThread::SignalThread() : main_(Thread::Current()), state_(kInit) {
+SignalThread::SignalThread()
+    : main_(Thread::Current()),
+      worker_(this),
+      state_(kInit),
+      refcount_(1) {
   main_->SignalQueueDestroyed.connect(this,
                                       &SignalThread::OnMainThreadDestroyed);
-  refcount_ = 1;
-  worker_.parent_ = this;
   worker_.SetName("SignalThread", this);
 }
 
