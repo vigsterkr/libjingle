@@ -1,6 +1,7 @@
 Libjingle
 
 0.5.6 - Jun 2, 2011
+  - Improved mac socket server
   - Add IqTask
   - Flush output in examples/call
   - Bug fixes
