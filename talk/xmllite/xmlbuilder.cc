@@ -25,16 +25,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/xmllite/xmlbuilder.h"
+
 #include <vector>
 #include <set>
 #include "talk/base/common.h"
 #include "talk/xmllite/xmlelement.h"
-#include "talk/xmllite/xmlbuilder.h"
-#ifdef EXPAT_RELATIVE_PATH
-#include "lib/expat.h"
-#else
-#include "third_party/expat/v2_0_1/Source/lib/expat.h"
-#endif  // EXPAT_RELATIVE_PATH
 
 namespace buzz {
 

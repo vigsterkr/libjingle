@@ -62,7 +62,7 @@ struct ChannelParams {
   cricket::Candidate* candidate;
 };
 // TODO: Merge ChannelParams and ChannelMessage.
-typedef talk_base::TypedMessageData<ChannelParams*> ChannelMessage;
+typedef talk_base::ScopedMessageData<ChannelParams> ChannelMessage;
 
 enum {
   MSG_CREATECHANNEL = 1,
@@ -97,8 +97,7 @@ Transport::~Transport() {
 
 TransportChannelImpl* Transport::CreateChannel(
     const std::string& name, const std::string& content_type) {
-  ChannelParams params(name, content_type);
-  ChannelMessage msg(&params);
+  ChannelMessage msg(new ChannelParams(name, content_type));
   worker_thread()->Send(this, MSG_CREATECHANNEL, &msg);
   return msg.data()->channel;
 }
@@ -142,8 +141,7 @@ bool Transport::HasChannels() {
 }
 
 void Transport::DestroyChannel(const std::string& name) {
-  ChannelParams params(name);
-  ChannelMessage msg(&params);
+  ChannelMessage msg(new ChannelParams(name));
   worker_thread()->Send(this, MSG_DESTROYCHANNEL, &msg);
 }
 
@@ -300,9 +298,8 @@ void Transport::OnRemoteCandidate(const Candidate& candidate) {
     return;
   }
 
-  // new candidate deleted when params is deleted
-  ChannelParams* params = new ChannelParams(new Candidate(candidate));
-  ChannelMessage* msg = new ChannelMessage(params);
+  ChannelMessage* msg = new ChannelMessage(
+      new ChannelParams(new Candidate(candidate)));
   worker_thread()->Post(this, MSG_ONREMOTECANDIDATE, msg);
 }
 
@@ -413,13 +410,15 @@ void Transport::OnMessage(talk_base::Message* msg) {
   switch (msg->message_id) {
   case MSG_CREATECHANNEL:
     {
-      ChannelParams* params = static_cast<ChannelMessage*>(msg->pdata)->data();
+      ChannelParams* params =
+          static_cast<ChannelMessage*>(msg->pdata)->data().get();
       params->channel = CreateChannel_w(params->name, params->content_type);
     }
     break;
   case MSG_DESTROYCHANNEL:
     {
-      ChannelParams* params = static_cast<ChannelMessage*>(msg->pdata)->data();
+      ChannelParams* params =
+          static_cast<ChannelMessage*>(msg->pdata)->data().get();
       DestroyChannel_w(params->name);
     }
     break;
@@ -438,9 +437,7 @@ void Transport::OnMessage(talk_base::Message* msg) {
   case MSG_ONREMOTECANDIDATE:
     {
       ChannelMessage* channel_msg = static_cast<ChannelMessage*>(msg->pdata);
-      ChannelParams* params = channel_msg->data();
-      OnRemoteCandidate_w(*(params->candidate));
-      delete params;
+      OnRemoteCandidate_w(*(channel_msg->data()->candidate));
       delete channel_msg;
     }
     break;
@@ -462,9 +459,8 @@ void Transport::OnMessage(talk_base::Message* msg) {
   case MSG_ROUTECHANGE:
     {
       ChannelMessage* channel_msg = static_cast<ChannelMessage*>(msg->pdata);
-      ChannelParams* params = channel_msg->data();
+      ChannelParams* params = channel_msg->data().get();
       OnChannelRouteChange_s(params->name, *params->candidate);
-      delete params;
       delete channel_msg;
     }
     break;

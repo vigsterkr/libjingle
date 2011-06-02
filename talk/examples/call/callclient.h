@@ -143,7 +143,7 @@ class CallClient: public sigslot::has_slots<> {
   void RemoveStream(uint32 audio_src_id, uint32 video_src_id);
   void OnStateChange(buzz::XmppEngine::State state);
 
-  void InitPhone();
+  void InitMedia();
   void InitPresence();
   void RefreshStatus();
   void OnRequestSignaling();

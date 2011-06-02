@@ -284,7 +284,7 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
   bool has_video = FindContentInfoByName(contents, CN_VIDEO) != NULL;
 
   // If we don't have media, no need to separate the candidates.
-  if (!has_audio && !has_audio) {
+  if (!has_audio && !has_video) {
     tinfos->push_back(tinfo);
     return true;
   }

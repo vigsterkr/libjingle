@@ -1,5 +1,10 @@
 Libjingle
 
+0.5.6 - Jun 2, 2011
+  - Add IqTask
+  - Flush output in examples/call
+  - Bug fixes
+
 0.5.5 - May 26, 2011
   - Refactor async sockets
   - Improve MUC joining

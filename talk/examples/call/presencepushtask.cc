@@ -193,7 +193,7 @@ void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
       }
 
       if (ListContainsToken(exts, "voice-v1")) {
-        s->set_phone_capability(true);
+        s->set_voice_capability(true);
       }
       if (ListContainsToken(exts, "video-v1")) {
         s->set_video_capability(true);

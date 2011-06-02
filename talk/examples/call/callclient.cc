@@ -158,7 +158,7 @@ void CallClient::ParseLine(const std::string& line) {
     } else if (command == "reject") {
       Reject();
     } else {
-      console_->Print(RECEIVE_COMMANDS);
+      console_->PrintLine(RECEIVE_COMMANDS);
     }
   } else if (call_) {
     if (command == "hangup") {
@@ -171,7 +171,7 @@ void CallClient::ParseLine(const std::string& line) {
       int ev = std::string("0123456789*#").find(words[1][0]);
       call_->PressDTMF(ev);
     } else {
-      console_->Print(CALL_COMMANDS);
+      console_->PrintLine(CALL_COMMANDS);
     }
   } else {
     if (command == "roster") {
@@ -184,8 +184,8 @@ void CallClient::ParseLine(const std::string& line) {
       } else if (!last_sent_to_.empty()) {
         SendChat(last_sent_to_, words[1]);
       } else {
-        console_->Printf(
-            "Invalid JID. JIDs should be in the form user@domain\n");
+        console_->PrintLine(
+            "Invalid JID. JIDs should be in the form user@domain");
       }
     } else if ((words.size() == 2) && (command == "friend")) {
       InviteFriend(words[1]);
@@ -214,7 +214,7 @@ void CallClient::ParseLine(const std::string& line) {
     } else if (command == "voicemail") {
       CallVoicemail((words.size() >= 2) ? words[1] : "");
     } else {
-      console_->Print(CONSOLE_COMMANDS);
+      console_->PrintLine(CONSOLE_COMMANDS);
     }
   }
 }
@@ -283,8 +283,7 @@ void CallClient::OnCallDestroy(cricket::Call* call) {
       local_renderer_ = NULL;
     }
     RemoveAllStaticRenderedViews();
-    console_->SetPrompt(NULL);
-    console_->Print("call destroyed");
+    console_->PrintLine("call destroyed");
     call_ = NULL;
     session_ = NULL;
   }
@@ -293,27 +292,27 @@ void CallClient::OnCallDestroy(cricket::Call* call) {
 void CallClient::OnStateChange(buzz::XmppEngine::State state) {
   switch (state) {
   case buzz::XmppEngine::STATE_START:
-    console_->Print("connecting...");
+    console_->PrintLine("connecting...");
     break;
 
   case buzz::XmppEngine::STATE_OPENING:
-    console_->Print("logging in...");
+    console_->PrintLine("logging in...");
     break;
 
   case buzz::XmppEngine::STATE_OPEN:
-    console_->Print("logged in...");
-    InitPhone();
+    console_->PrintLine("logged in...");
+    InitMedia();
     InitPresence();
     break;
 
   case buzz::XmppEngine::STATE_CLOSED:
     buzz::XmppEngine::Error error = xmpp_client_->GetError(NULL);
-    console_->Print("logged out..." + strerror(error));
+    console_->PrintLine("logged out... %s", strerror(error).c_str());
     Quit();
   }
 }
 
-void CallClient::InitPhone() {
+void CallClient::InitMedia() {
   std::string client_unique = xmpp_client_->jid().Str();
   talk_base::InitRandom(client_unique.c_str(), client_unique.size());
 
@@ -386,7 +385,7 @@ void CallClient::OnSessionState(cricket::Call* call,
                                 cricket::BaseSession::State state) {
   if (state == cricket::Session::STATE_RECEIVEDINITIATE) {
     buzz::Jid jid(session->remote_name());
-    console_->Printf("Incoming call from '%s'", jid.Str().c_str());
+    console_->PrintLine("Incoming call from '%s'", jid.Str().c_str());
     call_ = call;
     session_ = session;
     incoming_call_ = true;
@@ -407,15 +406,15 @@ void CallClient::OnSessionState(cricket::Call* call,
       remote_renderer_ =
           cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
     }
-    console_->Print("calling...");
+    console_->PrintLine("calling...");
   } else if (state == cricket::Session::STATE_RECEIVEDACCEPT) {
-    console_->Print("call answered");
+    console_->PrintLine("call answered");
   } else if (state == cricket::Session::STATE_RECEIVEDREJECT) {
-    console_->Print("call not answered");
+    console_->PrintLine("call not answered");
   } else if (state == cricket::Session::STATE_INPROGRESS) {
-    console_->Print("call in progress");
+    console_->PrintLine("call in progress");
   } else if (state == cricket::Session::STATE_RECEIVEDTERMINATE) {
-    console_->Print("other side hung up");
+    console_->PrintLine("other side hung up");
   }
 }
 
@@ -453,7 +452,7 @@ void CallClient::RefreshStatus() {
   my_status_.set_priority(0);
   my_status_.set_know_capabilities(true);
   my_status_.set_pmuc_capability(true);
-  my_status_.set_phone_capability(
+  my_status_.set_voice_capability(
       (media_caps & cricket::MediaEngine::AUDIO_RECV) != 0);
   my_status_.set_video_capability(
       (media_caps & cricket::MediaEngine::VIDEO_RECV) != 0);
@@ -472,11 +471,11 @@ void CallClient::OnStatusUpdate(const buzz::Status& status) {
 
   std::string key = item.jid.Str();
 
-  if (status.available() && status.phone_capability()) {
-     console_->Printf("Adding to roster: %s", key.c_str());
+  if (status.available() && status.voice_capability()) {
+     console_->PrintLine("Adding to roster: %s", key.c_str());
     (*roster_)[key] = item;
   } else {
-    console_->Printf("Removing from roster: %s", key.c_str());
+    console_->PrintLine("Removing from roster: %s", key.c_str());
     RosterMap::iterator iter = roster_->find(key);
     if (iter != roster_->end())
       roster_->erase(iter);
@@ -484,16 +483,14 @@ void CallClient::OnStatusUpdate(const buzz::Status& status) {
 }
 
 void CallClient::PrintRoster() {
-  console_->SetPrompting(false);
-  console_->Printf("Roster contains %d callable", roster_->size());
+  console_->PrintLine("Roster contains %d callable", roster_->size());
   RosterMap::iterator iter = roster_->begin();
   while (iter != roster_->end()) {
-    console_->Printf("%s - %s",
-                     iter->second.jid.BareJid().Str().c_str(),
-                     DescribeStatus(iter->second.show, iter->second.status));
+    console_->PrintLine("%s - %s",
+                        iter->second.jid.BareJid().Str().c_str(),
+                        DescribeStatus(iter->second.show, iter->second.status));
     iter++;
   }
-  console_->SetPrompting(true);
 }
 
 void CallClient::SendChat(const std::string& to, const std::string msg) {
@@ -512,7 +509,7 @@ void CallClient::SendChat(const std::string& to, const std::string msg) {
 void CallClient::InviteFriend(const std::string& name) {
   buzz::Jid jid(name);
   if (!jid.IsValid() || jid.node() == "") {
-    console_->Printf("Invalid JID. JIDs should be in the form user@domain\n");
+    console_->PrintLine("Invalid JID. JIDs should be in the form user@domain.");
     return;
   }
   // Note: for some reason the Buzz backend does not forward our presence
@@ -521,7 +518,7 @@ void CallClient::InviteFriend(const std::string& name) {
   // run the friend command as the other user too to create the linkage
   // (and you won't be notified to do so).
   friend_invite_send_->Send(jid);
-  console_->Printf("Requesting to befriend %s.\n", name.c_str());
+  console_->PrintLine("Requesting to befriend %s.", name.c_str());
 }
 
 void CallClient::MakeCallTo(const std::string& name,
@@ -568,11 +565,12 @@ void CallClient::MakeCallTo(const std::string& name,
   }
 
   if (found) {
-    console_->Printf("Found %s '%s'", options.is_muc ? "room" : "online friend",
-        found_jid.Str().c_str());
+    console_->PrintLine("Found %s '%s'",
+                        options.is_muc ? "room" : "online friend",
+                        found_jid.Str().c_str());
     PlaceCall(found_jid, options);
   } else {
-    console_->Printf("Could not find online friend '%s'", name.c_str());
+    console_->PrintLine("Could not find online friend '%s'", name.c_str());
   }
 }
 
@@ -580,7 +578,6 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
                            const cricket::CallOptions& options) {
   if (!call_) {
     call_ = media_client_->CreateCall();
-    console_->SetPrompt(jid.Str().c_str());
     session_ = call_->InitiateSession(jid, options);
   }
   media_client_->SetFocus(call_);
@@ -595,7 +592,7 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
 void CallClient::CallVoicemail(const std::string& name) {
   buzz::Jid jid(name);
   if (!jid.IsValid() || jid.node() == "") {
-    console_->Printf("Invalid JID. JIDs should be in the form user@domain\n");
+    console_->PrintLine("Invalid JID. JIDs should be in the form user@domain.");
     return;
   }
   buzz::VoicemailJidRequester *request =
@@ -609,12 +606,12 @@ void CallClient::CallVoicemail(const std::string& name) {
 
 void CallClient::OnFoundVoicemailJid(const buzz::Jid& to,
                                      const buzz::Jid& voicemail) {
-  console_->Printf("Calling %s's voicemail.\n", to.Str().c_str());
+  console_->PrintLine("Calling %s's voicemail.", to.Str().c_str());
   PlaceCall(voicemail, cricket::CallOptions());
 }
 
 void CallClient::OnVoicemailJidError(const buzz::Jid& to) {
-  console_->Printf("Unable to voicemail %s.\n", to.Str().c_str());
+  console_->PrintLine("Unable to voicemail %s.", to.Str().c_str());
 }
 
 void CallClient::Accept(const cricket::CallOptions& options) {
@@ -644,7 +641,7 @@ void CallClient::Quit() {
 void CallClient::LookupAndJoinMuc(const std::string& room_name) {
   // The room_name can't be empty for lookup task.
   if (room_name.empty()) {
-    console_->Print("Please provide a room name or room jid.");
+    console_->PrintLine("Please provide a room name or room jid.");
     return;
   }
 
@@ -659,9 +656,9 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
 
   buzz::MucRoomLookupTask* lookup_query_task =
       new buzz::MucRoomLookupTask(xmpp_client_, room, domain);
-  lookup_query_task->SignalRoomLookupResponse.connect(this,
+  lookup_query_task->SignalResult.connect(this,
       &CallClient::OnRoomLookupResponse);
-  lookup_query_task->SignalRoomLookupError.connect(this,
+  lookup_query_task->SignalError.connect(this,
       &CallClient::OnRoomLookupError);
   lookup_query_task->Start();
 }
@@ -669,8 +666,8 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
 void CallClient::JoinMuc(const std::string& room_jid_str) {
   if (room_jid_str.empty()) {
     buzz::Jid room_jid = GenerateRandomMucJid();
-    console_->Printf("Generated a random room jid: %s",
-                     room_jid.Str().c_str());
+    console_->PrintLine("Generated a random room jid: %s",
+                        room_jid.Str().c_str());
     JoinMuc(room_jid);
   } else {
     JoinMuc(buzz::Jid(room_jid_str));
@@ -679,8 +676,8 @@ void CallClient::JoinMuc(const std::string& room_jid_str) {
 
 void CallClient::JoinMuc(const buzz::Jid& room_jid) {
   if (!room_jid.IsValid()) {
-    console_->Printf("Unable to make valid muc endpoint for %s",
-                     room_jid.Str().c_str());
+    console_->PrintLine("Unable to make valid muc endpoint for %s",
+                        room_jid.Str().c_str());
     return;
   }
 
@@ -692,7 +689,7 @@ void CallClient::JoinMuc(const buzz::Jid& room_jid) {
 
   MucMap::iterator elem = mucs_.find(room_jid);
   if (elem != mucs_.end()) {
-    console_->Printf("This MUC already exists.");
+    console_->PrintLine("This MUC already exists.");
     return;
   }
 
@@ -706,28 +703,28 @@ void CallClient::OnRoomLookupResponse(const buzz::MucRoomInfo& room_info) {
 }
 
 void CallClient::OnRoomLookupError(const buzz::XmlElement* stanza) {
-  console_->Printf("%s\n", "Failed to look up the room_jid.",
-      stanza->Str().c_str());
+  console_->PrintLine("Failed to look up the room_jid. %s",
+                    stanza->Str().c_str());
 }
 
 void CallClient::OnMucInviteReceived(const buzz::Jid& inviter,
     const buzz::Jid& room,
     const std::vector<buzz::AvailableMediaEntry>& avail) {
 
-  console_->Printf("Invited to join %s by %s.\n", room.Str().c_str(),
+  console_->PrintLine("Invited to join %s by %s.", room.Str().c_str(),
       inviter.Str().c_str());
-  console_->Printf("Available media:\n");
+  console_->PrintLine("Available media:");
   if (avail.size() > 0) {
     for (std::vector<buzz::AvailableMediaEntry>::const_iterator i =
             avail.begin();
         i != avail.end();
         ++i) {
-      console_->Printf("  %s, %s\n",
-          buzz::AvailableMediaEntry::TypeAsString(i->type),
-          buzz::AvailableMediaEntry::StatusAsString(i->status));
+      console_->PrintLine("  %s, %s",
+                          buzz::AvailableMediaEntry::TypeAsString(i->type),
+                          buzz::AvailableMediaEntry::StatusAsString(i->status));
     }
   } else {
-    console_->Printf("  None\n");
+    console_->PrintLine("  None");
   }
   // We automatically join the room.
   JoinMuc(room);
@@ -740,7 +737,7 @@ void CallClient::OnMucJoined(const buzz::Jid& endpoint) {
 
   buzz::Muc* muc = elem->second;
   muc->set_state(buzz::Muc::MUC_JOINED);
-  console_->Printf("Joined \"%s\"", muc->jid().Str().c_str());
+  console_->PrintLine("Joined \"%s\"", muc->jid().Str().c_str());
 }
 
 void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
@@ -773,13 +770,13 @@ void CallClient::LeaveMuc(const std::string& room) {
   }
 
   if (!room_jid.IsValid()) {
-    console_->Printf("Invalid MUC JID.");
+    console_->PrintLine("Invalid MUC JID.");
     return;
   }
 
   MucMap::iterator elem = mucs_.find(room_jid);
   if (elem == mucs_.end()) {
-    console_->Printf("No such MUC.");
+    console_->PrintLine("No such MUC.");
     return;
   }
 
@@ -802,11 +799,11 @@ void CallClient::OnMucLeft(const buzz::Jid& endpoint, int error) {
 
   buzz::Muc* muc = elem->second;
   if (muc->state() == buzz::Muc::MUC_JOINING) {
-    console_->Printf("Failed to join \"%s\", code=%d",
-                     muc->jid().Str().c_str(), error);
+    console_->PrintLine("Failed to join \"%s\", code=%d",
+                        muc->jid().Str().c_str(), error);
   } else if (muc->state() == buzz::Muc::MUC_JOINED) {
-    console_->Printf("Kicked from \"%s\"",
-                     muc->jid().Str().c_str());
+    console_->PrintLine("Kicked from \"%s\"",
+                        muc->jid().Str().c_str());
   }
 
   delete muc;
@@ -818,7 +815,7 @@ void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
   const buzz::Muc* found_muc;
   if (room.length() == 0) {
     if (mucs_.size() == 0) {
-      console_->Printf("Not in a room yet; can't invite.\n");
+      console_->PrintLine("Not in a room yet; can't invite.");
       return;
     }
     // Invite to the first muc
@@ -826,7 +823,7 @@ void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
   } else {
     MucMap::iterator elem = mucs_.find(buzz::Jid(room));
     if (elem == mucs_.end()) {
-      console_->Printf("Not in room %s.\n", room.c_str());
+      console_->PrintLine("Not in room %s.", room.c_str());
       return;
     }
     found_muc = elem->second;
@@ -842,7 +839,7 @@ void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
     }
   }
   if (!found_user) {
-    console_->Printf("No such friend as %s.\n", user.c_str());
+    console_->PrintLine("No such friend as %s.", user.c_str());
     return;
   }
 }
@@ -850,24 +847,24 @@ void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
 void CallClient::GetDevices() {
   std::vector<std::string> names;
   media_client_->GetAudioInputDevices(&names);
-  printf("Audio input devices:\n");
+  console_->PrintLine("Audio input devices:");
   PrintDevices(names);
   media_client_->GetAudioOutputDevices(&names);
-  printf("Audio output devices:\n");
+  console_->PrintLine("Audio output devices:");
   PrintDevices(names);
   media_client_->GetVideoCaptureDevices(&names);
-  printf("Video capture devices:\n");
+  console_->PrintLine("Video capture devices:");
   PrintDevices(names);
 }
 
 void CallClient::PrintDevices(const std::vector<std::string>& names) {
   for (size_t i = 0; i < names.size(); ++i) {
-    printf("%d: %s\n", static_cast<int>(i), names[i].c_str());
+    console_->PrintLine("%d: %s", static_cast<int>(i), names[i].c_str());
   }
 }
 
 void CallClient::OnDevicesChange() {
-  printf("Devices changed.\n");
+  console_->PrintLine("Devices changed.");
   RefreshStatus();
 }
 
@@ -907,7 +904,7 @@ void CallClient::AddStaticRenderedView(
   call_->SetVideoRenderer(session, ssrc, rendered_view.renderer);
   static_rendered_views_.push_back(rendered_view);
   ++static_views_accumulated_count_;
-  console_->Printf("Added renderer for ssrc %d", ssrc);
+  console_->PrintLine("Added renderer for ssrc %d", ssrc);
 }
 
 bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
@@ -916,7 +913,7 @@ bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
     if (it->view.ssrc == ssrc) {
       delete it->renderer;
       static_rendered_views_.erase(it);
-      console_->Printf("Removed renderer for ssrc %d", ssrc);
+      console_->PrintLine("Removed renderer for ssrc %d", ssrc);
       return true;
     }
   }

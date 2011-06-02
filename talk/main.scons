@@ -482,7 +482,7 @@ if win_env.Bit('vsproj'):
   p = vs_env.ComponentVSDirProject(
     'flute_source',
     ['$MAIN_DIR',
-     '$THIRD_PARTY'],
+    ],
     COMPONENT_VS_SOURCE_FOLDERS = [
       # Files are assigned to first matching folder. Folder names of None
       # are filters.

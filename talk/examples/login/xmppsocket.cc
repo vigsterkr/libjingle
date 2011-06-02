@@ -231,13 +231,11 @@ bool XmppSocket::StartTls(const std::string & domainname) {
 #ifndef USE_SSLSTREAM
   talk_base::SSLAdapter* ssl_adapter =
     static_cast<talk_base::SSLAdapter *>(cricket_socket_);
-  ssl_adapter->set_ignore_bad_cert(true);
   if (ssl_adapter->StartSSL(domainname.c_str(), false) != 0)
     return false;
 #else  // USE_SSLSTREAM
   talk_base::SSLStreamAdapter* ssl_stream =
     static_cast<talk_base::SSLStreamAdapter *>(stream_);
-  ssl_stream->set_ignore_bad_cert(true);
   if (ssl_stream->StartSSLWithServer(domainname.c_str()) != 0)
     return false;
 #endif  // USE_SSLSTREAM

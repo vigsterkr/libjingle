@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,45 +25,37 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_EXAMPLES_CALL_CONSOLE_H_
-#define TALK_EXAMPLES_CALL_CONSOLE_H_
+#ifndef TALK_XMPP_IQTASK_H_
+#define TALK_XMPP_IQTASK_H_
 
-#include <cstdio>
+#include <string>
 
-#include "talk/base/thread.h"
-#include "talk/base/messagequeue.h"
-#include "talk/base/scoped_ptr.h"
+#include "talk/xmpp/xmpptask.h"
+#include "talk/xmpp/xmppengine.h"
 
-class CallClient;
+namespace buzz {
 
-class Console : public talk_base::MessageHandler {
+class IqTask : public buzz::XmppTask {
  public:
-  Console(talk_base::Thread *thread, CallClient *client);
-  ~Console();
+  IqTask(talk_base::Task* parent, const std::string& verb, const buzz::Jid& to,
+         buzz::XmlElement* el);
+  virtual ~IqTask() {}
 
-  // Starts reading lines from the console and giving them to the CallClient.
-  void Start();
-  // Stops reading lines. Cannot be restarted.
-  void Stop();
+  sigslot::signal1<const XmlElement*> SignalError;
 
-  virtual void OnMessage(talk_base::Message *msg);
-
-  void PrintLine(const char* format, ...);
-
-  static void SetEcho(bool on);
+ protected:
+  virtual void HandleResult(const buzz::XmlElement* element) = 0;
 
  private:
-  enum {
-    MSG_START,
-    MSG_INPUT,
-  };
+  virtual int ProcessStart();
+  virtual bool HandleStanza(const buzz::XmlElement* stanza);
+  virtual int ProcessResponse();
+  virtual int OnTimeout();
 
-  void RunConsole();
-  void ParseLine(std::string &str);
-
-  CallClient *client_;
-  talk_base::Thread *client_thread_;
-  talk_base::scoped_ptr<talk_base::Thread> console_thread_;
+  buzz::Jid to_;
+  talk_base::scoped_ptr<buzz::XmlElement> stanza_;
 };
 
-#endif // TALK_EXAMPLES_CALL_CONSOLE_H_
+}  // namespace buzz
+
+#endif  // TALK_XMPP_IQTASK_H_

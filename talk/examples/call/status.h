@@ -44,7 +44,7 @@ public:
     e_code_(0),
     feedback_probation_(false),
     know_capabilities_(false),
-    phone_capability_(false),
+    voice_capability_(false),
     pmuc_capability_(false),
     video_capability_(false),
     camera_capability_(false),
@@ -74,7 +74,7 @@ public:
   int error_code() const { return e_code_; }
   const std::string & error_string() const { return e_str_; }
   bool know_capabilities() const { return know_capabilities_; }
-  bool phone_capability() const { return phone_capability_; }
+  bool voice_capability() const { return voice_capability_; }
   bool pmuc_capability() const { return pmuc_capability_; }
   bool video_capability() const { return video_capability_; }
   bool camera_capability() const { return camera_capability_; }
@@ -91,7 +91,7 @@ public:
   void set_error(int e_code, const std::string e_str)
       { e_code_ = e_code; e_str_ = e_str; }
   void set_know_capabilities(bool f) { know_capabilities_ = f; }
-  void set_phone_capability(bool f) { phone_capability_ = f; }
+  void set_voice_capability(bool f) { voice_capability_ = f; }
   void set_pmuc_capability(bool f) { pmuc_capability_ = f; }
   void set_video_capability(bool f) { video_capability_ = f; }
   void set_camera_capability(bool f) { camera_capability_ = f; }
@@ -104,14 +104,14 @@ public:
     if (!new_value.know_capabilities()) {
        bool k = know_capabilities();
        bool i = is_google_client();
-       bool p = phone_capability();
+       bool p = voice_capability();
        std::string v = version();
 
        *this = new_value;
 
        set_know_capabilities(k);
        set_is_google_client(i);
-       set_phone_capability(p);
+       set_voice_capability(p);
        set_version(v);
     }
     else {
@@ -213,7 +213,7 @@ private:
 
   // capabilities (valid only if know_capabilities_
   bool know_capabilities_;
-  bool phone_capability_;
+  bool voice_capability_;
   bool pmuc_capability_;
   bool video_capability_;
   bool camera_capability_;

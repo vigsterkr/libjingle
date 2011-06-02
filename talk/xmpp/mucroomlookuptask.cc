@@ -34,82 +34,17 @@
 
 namespace buzz {
 
-static const int kLookupTimeout = 15;
-
 MucRoomLookupTask::MucRoomLookupTask(Task* parent,
                                      const std::string& room_name,
                                      const std::string& organizer_domain)
-    : XmppTask(parent, XmppEngine::HL_SINGLE),
-      room_name_(room_name),
-      organizer_domain_(organizer_domain) {
-  set_timeout_seconds(kLookupTimeout);
+    : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
+             MakeRoomQuery(room_name, organizer_domain)) {
 }
 
 MucRoomLookupTask::MucRoomLookupTask(Task* parent,
                                      const Jid& room_jid)
-    : XmppTask(parent, XmppEngine::HL_SINGLE), room_jid_(room_jid) {
-  set_timeout_seconds(kLookupTimeout);
-}
-
-int MucRoomLookupTask::ProcessStart() {
-  talk_base::scoped_ptr<XmlElement> lookup(MakeIq(STR_SET,
-      Jid(STR_MUC_LOOKUP_DOMAIN), task_id()));
-  if (room_jid_ != JID_EMPTY) {
-    // TODO: need to test the jid query calling code below.
-    XmlElement* query_elem = MakeJidQuery(room_jid_.Str());
-    lookup->AddElement(query_elem);
-  } else {
-    // We do room query if room jid is unknown.
-    XmlElement* query_elem = MakeRoomQuery(room_name_, organizer_domain_);
-    lookup->AddElement(query_elem);
-  }
-
-  if (SendStanza(lookup.get()) != XMPP_RETURN_OK) {
-    SignalRoomLookupError(NULL);
-    return STATE_ERROR;
-  }
-  return STATE_RESPONSE;
-}
-
-int MucRoomLookupTask::ProcessResponse() {
-  const XmlElement* stanza = NextStanza();
-
-  if (stanza == NULL)
-    return STATE_BLOCKED;
-
-  if (stanza->Attr(QN_TYPE) == STR_ERROR) {
-    SignalRoomLookupError(stanza->FirstNamed(QN_ERROR));
-    return STATE_DONE;
-  }
-
-  const XmlElement* query_elem = stanza->FirstNamed(QN_SEARCH_QUERY);
-  if (query_elem != NULL) {
-    const XmlElement* item_elem =
-        query_elem->FirstNamed(QN_SEARCH_ITEM);
-    if (item_elem != NULL && item_elem->HasAttr(QN_JID)) {
-      MucRoomInfo room_info;
-      if (GetRoomInfoFromResponse(item_elem, &room_info)) {
-        SignalRoomLookupResponse(room_info);
-        return STATE_DONE;
-      }
-    }
-  }
-
-  SignalRoomLookupError(NULL);
-  return STATE_DONE;
-}
-
-int MucRoomLookupTask::OnTimeout() {
-  SignalRoomLookupError(NULL);
-  return XmppTask::OnTimeout();
-}
-
-bool MucRoomLookupTask::HandleStanza(const XmlElement* stanza) {
-  if (MatchResponseIq(stanza, Jid(STR_MUC_LOOKUP_DOMAIN), task_id())) {
-    QueueStanza(stanza);
-    return true;
-  }
-  return false;
+    : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
+             MakeJidQuery(room_jid)) {
 }
 
 XmlElement* MucRoomLookupTask::MakeRoomQuery(const std::string& room_name,
@@ -123,18 +58,33 @@ XmlElement* MucRoomLookupTask::MakeRoomQuery(const std::string& room_name,
   XmlElement* query = new XmlElement(QN_SEARCH_QUERY, true);
   query->AddElement(room_elem);
   query->AddElement(domain_elem);
-
   return query;
 }
 
-XmlElement* MucRoomLookupTask::MakeJidQuery(const std::string& room_jid) {
+XmlElement* MucRoomLookupTask::MakeJidQuery(const Jid& room_jid) {
   XmlElement* jid_elem = new XmlElement(QN_SEARCH_ROOM_JID);
-  jid_elem->SetBodyText(room_jid);
+  jid_elem->SetBodyText(room_jid.Str());
 
   XmlElement* query = new XmlElement(QN_SEARCH_QUERY);
   query->AddElement(jid_elem);
-
   return query;
+}
+
+void MucRoomLookupTask::HandleResult(const XmlElement* stanza) {
+  const XmlElement* query_elem = stanza->FirstNamed(QN_SEARCH_QUERY);
+  if (query_elem != NULL) {
+    const XmlElement* item_elem =
+        query_elem->FirstNamed(QN_SEARCH_ITEM);
+    if (item_elem != NULL && item_elem->HasAttr(QN_JID)) {
+      MucRoomInfo room_info;
+      if (GetRoomInfoFromResponse(item_elem, &room_info)) {
+        SignalResult(room_info);
+        return;
+      }
+    }
+  }
+
+  SignalError(NULL);
 }
 
 bool MucRoomLookupTask::GetRoomInfoFromResponse(
@@ -154,4 +104,5 @@ bool MucRoomLookupTask::GetRoomInfoFromResponse(
 
   return true;
 }
+
 }  // namespace buzz

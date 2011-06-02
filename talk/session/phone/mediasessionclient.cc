@@ -71,7 +71,7 @@ MediaSessionClient::MediaSessionClient(
 
 
 void MediaSessionClient::Construct() {
-  // Register ourselves as the handler of phone and video sessions.
+  // Register ourselves as the handler of audio and video sessions.
   session_manager_->AddClient(NS_JINGLE_RTP, this);
   // Forward device notifications.
   SignalDevicesChange.repeat(channel_manager_->SignalDevicesChange);

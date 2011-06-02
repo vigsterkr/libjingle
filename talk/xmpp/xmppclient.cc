@@ -111,21 +111,23 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   d_->engine_->SetUseTls(settings.use_tls());
 
   //
-  // The talk.google.com server expects you to use "gmail.com" in the
-  // stream, and expects the domain certificate to be "gmail.com" as well.
-  // For all other servers, we leave the strings empty, which causes
-  // the jid's domain to be used.  "foo@example.com" -> stream to="example.com"
-  // tls certificate for "example.com"
+  // The talk.google.com server returns a certificate of "talk.google.com"
+  // for non-Gmail accounts, so we tweak this as needed:
+  // "foo@example.com" -> stream to="example.com"
+  // tls certificate for "talk.google.com"
+  // For Gmail accounts, and all other servers, we leave the strings empty,
+  // which causes the jid's domain to be used:
+  // "foo@gmail.com" -> stream to="gmail.com"
+  // tls certificate for "gmail.com"
   //
-  // This is only true when using Gaia auth, so let's say if there's no preauth,
-  // we should use the actual server name
   std::string server_name = settings.server().IPAsString();
-  if ((server_name == buzz::STR_TALK_GOOGLE_COM ||
+  if (server_name == buzz::STR_TALK_GOOGLE_COM ||
       server_name == buzz::STR_TALKX_L_GOOGLE_COM ||
       server_name == buzz::STR_XMPP_GOOGLE_COM ||
-      server_name == buzz::STR_XMPPX_L_GOOGLE_COM) &&
-      pre_auth != NULL) {
-    d_->engine_->SetTlsServer(buzz::STR_GMAIL_COM, buzz::STR_GMAIL_COM);
+      server_name == buzz::STR_XMPPX_L_GOOGLE_COM) {
+    if (settings.host() != STR_GMAIL_COM) {
+      d_->engine_->SetTlsServer("", STR_TALK_GOOGLE_COM);
+    }
   }
 
   // Set language

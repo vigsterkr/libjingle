@@ -504,6 +504,7 @@ class Session : public BaseSession {
   void OnIncomingResponse(const buzz::XmlElement* orig_stanza,
                           const buzz::XmlElement* response_stanza,
                           const SessionMessage& msg);
+  void OnInitiateAcked();
   void OnFailedSend(const buzz::XmlElement* orig_stanza,
                     const buzz::XmlElement* error_stanza);
 

@@ -680,11 +680,17 @@ void Session::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
   ASSERT(signaling_thread_->IsCurrent());
 
   if (msg.type == ACTION_SESSION_INITIATE) {
-    initiate_acked_ = true;
+    OnInitiateAcked();
+  }
+}
+
+void Session::OnInitiateAcked() {
     // TODO: This is to work around server re-ordering
     // messages.  We send the candidates once the session-initiate
     // is acked.  Once we have fixed the server to guarantee message
     // order, we can remove this case.
+  if (!initiate_acked_) {
+    initiate_acked_ = true;
     SessionError error;
     SendAllUnsentTransportInfoMessages(&error);
   }
@@ -720,7 +726,6 @@ void Session::OnFailedSend(const buzz::XmlElement* orig_stanza,
 
   const buzz::XmlElement* error = error_stanza->FirstNamed(buzz::QN_ERROR);
   if (error) {
-    ASSERT(error->HasAttr(buzz::QN_TYPE));
     error_type = error->Attr(buzz::QN_TYPE);
 
     LOG(LS_ERROR) << "Session error:\n" << error->Str() << "\n"
@@ -792,8 +797,13 @@ bool Session::OnAcceptMessage(const SessionMessage& msg, MessageError* error) {
   SessionAccept accept;
   if (!ParseSessionAccept(msg.protocol, msg.action_elem,
                           GetContentParsers(), GetTransportParsers(),
-                          &accept, error))
+                          &accept, error)) {
     return false;
+  }
+
+  // If we get an accept, we can assume the initiate has been
+  // received, even if we haven't gotten an IQ response.
+  OnInitiateAcked();
 
   set_remote_description(new SessionDescription(accept.ClearContents()));
   SetState(STATE_RECEIVEDACCEPT);

@@ -32,6 +32,9 @@
 #include <vector>
 #include "talk/base/logging.h"
 #include "talk/base/flags.h"
+#ifdef OSX
+#include "talk/base/macsocketserver.h"
+#endif
 #include "talk/base/pathutils.h"
 #include "talk/base/stream.h"
 #include "talk/base/ssladapter.h"
@@ -206,6 +209,12 @@ cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
   return file_media_engine;
 }
 
+// TODO: Move this into Console.
+void Print(const char* chars) {
+  printf("%s", chars);
+  fflush(stdout);
+}
+
 int main(int argc, char **argv) {
   // This app has three threads. The main thread will run the XMPP client,
   // which will print to the screen in its own thread. A second thread
@@ -259,7 +268,7 @@ int main(int argc, char **argv) {
   } else if (protocol == "hybrid") {
     initial_protocol = cricket::PROTOCOL_HYBRID;
   } else {
-    printf("Invalid protocol.  Must be jingle, gingle, or hybrid.\n");
+    Print("Invalid protocol.  Must be jingle, gingle, or hybrid.\n");
     return 1;
   }
 
@@ -271,7 +280,7 @@ int main(int argc, char **argv) {
   } else if (secure == "require") {
     secure_policy = cricket::SEC_REQUIRED;
   } else {
-    printf("Invalid encryption.  Must be enable, disable, or require.\n");
+    Print("Invalid encryption.  Must be enable, disable, or require.\n");
     return 1;
   }
 
@@ -290,7 +299,7 @@ int main(int argc, char **argv) {
     talk_base::LogMessage::LogToDebug(talk_base::LS_VERBOSE);
 
   if (username.empty()) {
-    std::cout << "JID: ";
+    Print("JID: ");
     std::cin >> username;
   }
   if (username.find('@') == std::string::npos) {
@@ -298,15 +307,15 @@ int main(int argc, char **argv) {
   }
   jid = buzz::Jid(username);
   if (!jid.IsValid() || jid.node() == "") {
-    printf("Invalid JID. JIDs should be in the form user@domain\n");
+    Print("Invalid JID. JIDs should be in the form user@domain\n");
     return 1;
   }
   if (pass.password().empty() && !test_server) {
     Console::SetEcho(false);
-    std::cout << "Password: ";
+    Print("Password: ");
     std::cin >> pass.password();
     Console::SetEcho(true);
-    std::cout << std::endl;
+    Print("\n");
   }
 
   buzz::XmppClientSettings xcs;
@@ -338,7 +347,7 @@ int main(int argc, char **argv) {
   }
 
   xcs.set_server(talk_base::SocketAddress(host, port));
-  printf("Logging in to %s as %s\n", server.c_str(), jid.Str().c_str());
+  Print(("Logging in to " + server + " as " + jid.Str() + "\n").c_str());
 
   talk_base::InitializeSSL();
 
@@ -349,6 +358,10 @@ int main(int argc, char **argv) {
   talk_base::ThreadManager::SetCurrent(&w32_thread);
 #endif
   talk_base::Thread* main_thread = talk_base::Thread::Current();
+#ifdef OSX
+  talk_base::MacCarbonAppSocketServer ss;
+  talk_base::SocketServerScope ss_scope(&ss);
+#endif
 
   XmppPump pump;
   CallClient *client = new CallClient(pump.client());

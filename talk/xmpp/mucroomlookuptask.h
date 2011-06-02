@@ -29,39 +29,31 @@
 #define TALK_XMPP_MUCROOMLOOKUPTASK_H_
 
 #include <string>
-#include "talk/xmpp/xmpptask.h"
+#include "talk/xmpp/iqtask.h"
 
 namespace buzz {
 
 struct MucRoomInfo {
-  buzz::Jid room_jid;
+  Jid room_jid;
   std::string room_name;
   std::string organizer_domain;
 };
 
-class MucRoomLookupTask : public XmppTask {
+class MucRoomLookupTask : public IqTask {
  public:
   MucRoomLookupTask(Task* parent, const std::string& room_name,
       const std::string& organizer_domain);
   MucRoomLookupTask(Task* parent, const Jid& room_jid);
 
-  sigslot::signal1<const MucRoomInfo&> SignalRoomLookupResponse;
-  sigslot::signal1<const XmlElement*> SignalRoomLookupError;
-
- protected:
-  virtual bool HandleStanza(const XmlElement* stanza);
-  virtual int ProcessStart();
-  virtual int ProcessResponse();
-  virtual int OnTimeout();
+  sigslot::signal1<const MucRoomInfo&> SignalResult;
 
  private:
-  XmlElement* MakeRoomQuery(const std::string& room_name,
-      const std::string& org_domain);
-  XmlElement* MakeJidQuery(const std::string& room_jid);
-  bool GetRoomInfoFromResponse(const XmlElement* stanza, MucRoomInfo* info);
-  const std::string room_name_;
-  const std::string organizer_domain_;
-  const Jid room_jid_;
+  static XmlElement* MakeRoomQuery(const std::string& room_name,
+                                   const std::string& org_domain);
+  static XmlElement* MakeJidQuery(const Jid& room_jid);
+  virtual void HandleResult(const XmlElement* element);
+  static bool GetRoomInfoFromResponse(const XmlElement* stanza,
+                                      MucRoomInfo* info);
 };
 
 }  // namespace buzz

@@ -189,6 +189,10 @@ void SessionManager::OnIncomingMessage(const buzz::XmlElement* stanza) {
 
 void SessionManager::OnIncomingResponse(const buzz::XmlElement* orig_stanza,
     const buzz::XmlElement* response_stanza) {
+  if (orig_stanza == NULL || response_stanza == NULL) {
+    return;
+  }
+
   SessionMessage msg;
   ParseError error;
   if (!ParseSessionMessage(orig_stanza, &msg, &error)) {

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,54 +25,60 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _xmlbuilder_h_
-#define _xmlbuilder_h_
+#include "talk/xmpp/iqtask.h"
 
-#include <string>
-#include <vector>
-#include "talk/base/scoped_ptr.h"
-#include "talk/xmllite/xmlparser.h"
-
-#ifdef EXPAT_RELATIVE_PATH
-#include "expat.h"
-#else
-#include "third_party/expat/v2_0_1/Source/lib/expat.h"
-#endif  // EXPAT_RELATIVE_PATH
+#include "talk/xmpp/xmppclient.h"
+#include "talk/xmpp/constants.h"
 
 namespace buzz {
 
-class XmlElement;
-class XmlParseContext;
+static const int kDefaultIqTimeoutSecs = 15;
 
-
-class XmlBuilder : public XmlParseHandler {
-public:
-  XmlBuilder();
-
-  static XmlElement * BuildElement(XmlParseContext * pctx,
-                                  const char * name, const char ** atts);
-  virtual void StartElement(XmlParseContext * pctx,
-                            const char * name, const char ** atts);
-  virtual void EndElement(XmlParseContext * pctx, const char * name);
-  virtual void CharacterData(XmlParseContext * pctx,
-                             const char * text, int len);
-  virtual void Error(XmlParseContext * pctx, XML_Error);
-  virtual ~XmlBuilder();
-
-  void Reset();
-
-  // Take ownership of the built element; second call returns NULL
-  XmlElement * CreateElement();
-
-  // Peek at the built element without taking ownership
-  XmlElement * BuiltElement();
-
-private:
-  XmlElement * pelCurrent_;
-  talk_base::scoped_ptr<XmlElement> pelRoot_;
-  talk_base::scoped_ptr<std::vector<XmlElement*> > pvParents_;
-};
-
+IqTask::IqTask(talk_base::Task* parent, const std::string& verb,
+               const buzz::Jid& to, buzz::XmlElement* el)
+    : buzz::XmppTask(parent, buzz::XmppEngine::HL_SINGLE),
+      to_(to),
+      stanza_(MakeIq(verb, to_, task_id())) {
+  stanza_->AddElement(el);
+  set_timeout_seconds(kDefaultIqTimeoutSecs);
 }
 
-#endif
+int IqTask::ProcessStart() {
+  buzz::XmppReturnStatus ret = SendStanza(stanza_.get());
+  // TODO: HandleError(NULL) if SendStanza fails?
+  return (ret == buzz::XMPP_RETURN_OK) ? STATE_RESPONSE : STATE_ERROR;
+}
+
+bool IqTask::HandleStanza(const buzz::XmlElement* stanza) {
+  if (!MatchResponseIq(stanza, to_, task_id()))
+    return false;
+
+  if (stanza->Attr(buzz::QN_TYPE) != buzz::STR_RESULT &&
+      stanza->Attr(buzz::QN_TYPE) != buzz::STR_ERROR) {
+    return false;
+  }
+
+  QueueStanza(stanza);
+  return true;
+}
+
+int IqTask::ProcessResponse() {
+  const buzz::XmlElement* stanza = NextStanza();
+  if (stanza == NULL)
+    return STATE_BLOCKED;
+
+  bool success = (stanza->Attr(buzz::QN_TYPE) == buzz::STR_RESULT);
+  if (success) {
+    HandleResult(stanza);
+  } else {
+    SignalError(stanza->FirstNamed(QN_ERROR));
+  }
+  return STATE_DONE;
+}
+
+int IqTask::OnTimeout() {
+  SignalError(NULL);
+  return XmppTask::OnTimeout();
+}
+
+}  // namespace buzz

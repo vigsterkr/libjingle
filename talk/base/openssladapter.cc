@@ -1,3 +1,30 @@
+/*
+ * libjingle
+ * Copyright 2008, Google Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *  2. Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *  3. The name of the author may not be used to endorse or promote products
+ *     derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif  // HAVE_CONFIG_H
@@ -15,8 +42,8 @@
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 #include "talk/base/openssladapter.h"
+#include "talk/base/sslroots.h"
 #include "talk/base/stringutils.h"
-#include "talk/base/Equifax_Secure_Global_eBusiness_CA-1.h"
 
 // TODO: Use a nicer abstraction for mutex.
 
@@ -56,94 +83,94 @@ static int socket_new(BIO* h);
 static int socket_free(BIO* data);
 
 static BIO_METHOD methods_socket = {
-	BIO_TYPE_BIO,
-	"socket",
-	socket_write,
-	socket_read,
-	socket_puts,
-	0,
-	socket_ctrl,
-	socket_new,
-	socket_free,
-	NULL,
+  BIO_TYPE_BIO,
+  "socket",
+  socket_write,
+  socket_read,
+  socket_puts,
+  0,
+  socket_ctrl,
+  socket_new,
+  socket_free,
+  NULL,
 };
 
 BIO_METHOD* BIO_s_socket2() { return(&methods_socket); }
 
 BIO* BIO_new_socket(talk_base::AsyncSocket* socket) {
-	BIO* ret = BIO_new(BIO_s_socket2());
-	if (ret == NULL) {
+  BIO* ret = BIO_new(BIO_s_socket2());
+  if (ret == NULL) {
           return NULL;
-	}
-	ret->ptr = socket;
-	return ret;
+  }
+  ret->ptr = socket;
+  return ret;
 }
 
 static int socket_new(BIO* b) {
-	b->shutdown = 0;
-	b->init = 1;
-	b->num = 0; // 1 means socket closed
-	b->ptr = 0;
-	return 1;
+  b->shutdown = 0;
+  b->init = 1;
+  b->num = 0; // 1 means socket closed
+  b->ptr = 0;
+  return 1;
 }
 
 static int socket_free(BIO* b) {
-	if (b == NULL)
-		return 0;
-	return 1;
+  if (b == NULL)
+    return 0;
+  return 1;
 }
 
 static int socket_read(BIO* b, char* out, int outl) {
-	if (!out)
-		return -1;
-	talk_base::AsyncSocket* socket = static_cast<talk_base::AsyncSocket*>(b->ptr);
-	BIO_clear_retry_flags(b);
+  if (!out)
+    return -1;
+  talk_base::AsyncSocket* socket = static_cast<talk_base::AsyncSocket*>(b->ptr);
+  BIO_clear_retry_flags(b);
   int result = socket->Recv(out, outl);
   if (result > 0) {
     return result;
   } else if (result == 0) {
-		b->num = 1;
+    b->num = 1;
   } else if (socket->IsBlocking()) {
-		BIO_set_retry_read(b);
-	}
-	return -1;
+    BIO_set_retry_read(b);
+  }
+  return -1;
 }
 
 static int socket_write(BIO* b, const char* in, int inl) {
-	if (!in)
-		return -1;
-	talk_base::AsyncSocket* socket = static_cast<talk_base::AsyncSocket*>(b->ptr);
-	BIO_clear_retry_flags(b);
+  if (!in)
+    return -1;
+  talk_base::AsyncSocket* socket = static_cast<talk_base::AsyncSocket*>(b->ptr);
+  BIO_clear_retry_flags(b);
   int result = socket->Send(in, inl);
   if (result > 0) {
     return result;
   } else if (socket->IsBlocking()) {
-		BIO_set_retry_write(b);
-	}
-	return -1;
+    BIO_set_retry_write(b);
+  }
+  return -1;
 }
 
 static int socket_puts(BIO* b, const char* str) {
-	return socket_write(b, str, strlen(str));
+  return socket_write(b, str, strlen(str));
 }
 
 static long socket_ctrl(BIO* b, int cmd, long num, void* ptr) {
   UNUSED(num);
   UNUSED(ptr);
 
-	switch (cmd) {
-	case BIO_CTRL_RESET:
-		return 0;
-	case BIO_CTRL_EOF:
-		return b->num;
-	case BIO_CTRL_WPENDING:
-	case BIO_CTRL_PENDING:
-		return 0;
-	case BIO_CTRL_FLUSH:
-		return 1;
-	default:
-		return 0;
-	}
+  switch (cmd) {
+  case BIO_CTRL_RESET:
+    return 0;
+  case BIO_CTRL_EOF:
+    return b->num;
+  case BIO_CTRL_WPENDING:
+  case BIO_CTRL_PENDING:
+    return 0;
+  case BIO_CTRL_FLUSH:
+    return 1;
+  default:
+    return 0;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -194,7 +221,7 @@ VerificationCallback OpenSSLAdapter::custom_verify_callback_ = NULL;
 
 bool OpenSSLAdapter::InitializeSSL(VerificationCallback callback) {
   if (!InitializeSSLThread() || !SSL_library_init())
-  	  return false;
+      return false;
   SSL_load_error_strings();
   ERR_load_BIO_strings();
   OpenSSL_add_all_algorithms();
@@ -372,7 +399,7 @@ OpenSSLAdapter::ContinueSSL() {
 
 void
 OpenSSLAdapter::Error(const char* context, int err, bool signal) {
-  LOG(LS_WARNING) << "SChannelAdapter::Error("
+  LOG(LS_WARNING) << "OpenSSLAdapter::Error("
                   << context << ", " << err << ")";
   state_ = SSL_ERROR;
   SetError(err);
@@ -822,15 +849,15 @@ OpenSSLAdapter::SSLVerifyCallback(int ok, X509_STORE_CTX* store) {
 }
 
 bool OpenSSLAdapter::ConfigureTrustedRootCertificates(SSL_CTX* ctx) {
-  // Add the root cert to the SSL context
-  // TODO: this cert appears to be the wrong one.
+  // Add the root cert that we care about to the SSL context
 #if OPENSSL_VERSION_NUMBER >= 0x0090800fL
    const unsigned char* cert_buffer
 #else
    unsigned char* cert_buffer
 #endif
-    = EquifaxSecureGlobalEBusinessCA1_certificate;
-  size_t cert_buffer_len = sizeof(EquifaxSecureGlobalEBusinessCA1_certificate);
+    = Equifax_Secure_Certificate_Authority_certificate;
+  size_t cert_buffer_len =
+      sizeof(Equifax_Secure_Certificate_Authority_certificate);
   X509* cert = d2i_X509(NULL, &cert_buffer, cert_buffer_len);
   if (cert == NULL)
     return false;

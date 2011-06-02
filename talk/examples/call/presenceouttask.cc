@@ -118,7 +118,7 @@ PresenceOutTask::TranslateStatus(const Status & s) {
       result->AddAttr(QN_VER, s.version(), 1);
 
       std::string caps;
-      caps.append(s.phone_capability() ? "voice-v1" : "");
+      caps.append(s.voice_capability() ? "voice-v1" : "");
       caps.append(s.pmuc_capability() ? " pmuc-v1" : "");
       caps.append(s.video_capability() ? " video-v1" : "");
       caps.append(s.camera_capability() ? " camera-v1" : "");

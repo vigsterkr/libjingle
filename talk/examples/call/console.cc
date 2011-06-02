@@ -28,6 +28,8 @@
 #define _CRT_SECURE_NO_DEPRECATE 1
 
 #ifdef POSIX
+#include <signal.h>
+#include <termios.h>
 #include <unistd.h>
 #endif  // POSIX
 #include <cassert>
@@ -38,16 +40,13 @@
 #include "talk/examples/call/callclient.h"
 
 #ifdef POSIX
-#include <signal.h>
-
 static void DoNothing(int unused) {}
 #endif
 
 Console::Console(talk_base::Thread *thread, CallClient *client) :
-  client_(client), client_thread_(thread),
-  console_thread_(new talk_base::Thread()), prompt_(std::string("call")),
-  prompting_(true) {
-}
+  client_(client),
+  client_thread_(thread),
+  console_thread_(new talk_base::Thread()) {}
 
 Console::~Console() {
   Stop();
@@ -100,27 +99,25 @@ void Console::SetEcho(bool on) {
 
   SetConsoleMode(hIn, mode);
 #else
-  int re;
-  if (on)
-    re = system("stty echo");
-  else
-    re = system("stty -echo");
-  if (-1 == re)
+  const int fd = fileno(stdin);
+  if (fd == -1)
+   return;
+
+  struct termios tcflags;
+  if (tcgetattr(fd, &tcflags) == -1)
     return;
+
+  if (on) {
+    tcflags.c_lflag |= ECHO;
+  } else {
+    tcflags.c_lflag &= ~ECHO;
+  }
+
+  tcsetattr(fd, TCSANOW, &tcflags);
 #endif
 }
 
-void Console::Print(const char* str) {
-  printf("\n%s", str);
-  if (prompting_)
-    printf("\n(%s) ", prompt_.c_str());
-}
-
-void Console::Print(const std::string& str) {
-  Print(str.c_str());
-}
-
-void Console::Printf(const char* format, ...) {
+void Console::PrintLine(const char* format, ...) {
   va_list ap;
   va_start(ap, format);
 
@@ -129,7 +126,8 @@ void Console::Printf(const char* format, ...) {
   assert(size >= 0);
   assert(size < static_cast<int>(sizeof(buf)));
   buf[size] = '\0';
-  Print(buf);
+  printf("%s\n", buf);
+  fflush(stdout);
 
   va_end(ap);
 }
