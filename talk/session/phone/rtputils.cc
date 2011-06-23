@@ -54,6 +54,23 @@ bool GetRtpSsrc(const void* data, size_t len, uint32* value) {
   return true;
 }
 
+bool GetRtpHeaderLen(const void* data, size_t len, size_t* value) {
+  if (!data || len < kMinRtpPacketLen || !value) return false;
+  const uint8* header = static_cast<const uint8*>(data);
+  // Get base header size + length of CSRCs (not counting extension yet).
+  size_t header_size = kMinRtpPacketLen + (header[0] & 0xF) * sizeof(uint32);
+  if (len < header_size) return false;
+  // If there's an extension, read and add in the extension size.
+  if (header[0] & 0x10) {
+    if (len < header_size + sizeof(uint32)) return false;
+    header_size += ((talk_base::GetBE16(header + header_size + 2) + 1) *
+                    sizeof(uint32));
+    if (len < header_size) return false;
+  }
+  *value = header_size;
+  return true;
+}
+
 bool GetRtcpType(const void* data, size_t len, int* value) {
   if (!data || len < kMinRtcpPacketLen || !value) return false;
   *value = static_cast<int>(*(static_cast<const uint8*>(data) + 1));

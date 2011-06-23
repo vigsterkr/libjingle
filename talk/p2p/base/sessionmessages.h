@@ -114,10 +114,12 @@ struct TransportInfo {
 
 typedef std::vector<TransportInfo> TransportInfos;
 
-struct SessionInitiate {
-  SessionInitiate() : owns_contents(false) {}
+// TODO: Break up this class so we don't have to typedef it into
+// different classes.
+struct ContentMessage {
+  ContentMessage() : owns_contents(false) {}
 
-  ~SessionInitiate() {
+  ~ContentMessage() {
     if (owns_contents) {
       for (ContentInfos::iterator content = contents.begin();
            content != contents.end(); content++) {
@@ -139,8 +141,10 @@ struct SessionInitiate {
   TransportInfos transports;
 };
 
-// Right now, a SessionAccept is functionally equivalent to a SessionInitiate.
-typedef SessionInitiate SessionAccept;
+typedef ContentMessage SessionInitiate;
+typedef ContentMessage SessionAccept;
+// Note that a DescriptionInfo does not have TransportInfos.
+typedef ContentMessage DescriptionInfo;
 
 struct SessionTerminate {
   SessionTerminate() {}
@@ -202,6 +206,12 @@ bool ParseSessionTerminate(SignalingProtocol protocol,
 void WriteSessionTerminate(SignalingProtocol protocol,
                            const SessionTerminate& term,
                            XmlElements* elems);
+bool ParseDescriptionInfo(SignalingProtocol protocol,
+                          const buzz::XmlElement* action_elem,
+                          const ContentParserMap& content_parsers,
+                          const TransportParserMap& transport_parsers,
+                          DescriptionInfo* description_info,
+                          ParseError* error);
 // Since a TransportInfo is not a transport-info message, and a
 // transport-info message is just a collection of TransportInfos, we
 // say Parse/Write TransportInfos for transport-info messages.

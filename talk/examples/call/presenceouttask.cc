@@ -106,6 +106,11 @@ PresenceOutTask::TranslateStatus(const Status & s) {
     result->AddElement(new XmlElement(QN_STATUS));
     result->AddText(s.status(), 1);
 
+    if (!s.nick().empty()) {
+      result->AddElement(new XmlElement(QN_NICKNAME));
+      result->AddText(s.nick(), 1);
+    }
+
     std::string pri;
     talk_base::ToString(s.priority(), &pri);
 

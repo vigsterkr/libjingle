@@ -138,7 +138,7 @@ bool Call::SendViewRequest(Session* session,
   for (it = view_request.static_video_views.begin();
        it != view_request.static_video_views.end(); ++it) {
     const NamedSource* found_source =
-        media_sources.GetVideoSourceBySsrc(it->ssrc);
+        media_sources_.GetVideoSourceBySsrc(it->ssrc);
     if (!found_source) {
       LOG(LS_WARNING) <<
           "Tried sending view request for bad ssrc: " << it->ssrc;
@@ -547,11 +547,11 @@ void Call::OnSessionInfo(Session *session,
     for (it = sources.audio.begin(); it != sources.audio.end(); ++it) {
       const NamedSource* found;
       if (it->ssrc_set) {
-        found = media_sources.GetAudioSourceBySsrc(it->ssrc);
+        found = media_sources_.GetAudioSourceBySsrc(it->ssrc);
       } else {
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
-        found = media_sources.GetFirstAudioSourceByNick(it->nick);
+        found = media_sources_.GetFirstAudioSourceByNick(it->nick);
         if (found) {
           it->SetSsrc(found->ssrc);
           it->removed = true;
@@ -561,12 +561,12 @@ void Call::OnSessionInfo(Session *session,
       }
       if (it->removed && found) {
         RemoveVoiceStream(session, found->ssrc);
-        media_sources.RemoveAudioSourceBySsrc(it->ssrc);
+        media_sources_.RemoveAudioSourceBySsrc(it->ssrc);
         updates.audio.push_back(*it);
         LOG(LS_INFO) << "Removed voice stream:  " << found->ssrc;
       } else if (!it->removed && !found) {
         AddVoiceStream(session, it->ssrc);
-        media_sources.AddAudioSource(*it);
+        media_sources_.AddAudioSource(*it);
         updates.audio.push_back(*it);
         LOG(LS_INFO) << "Added voice stream:  " << it->ssrc;
       }
@@ -574,11 +574,11 @@ void Call::OnSessionInfo(Session *session,
     for (it = sources.video.begin(); it != sources.video.end(); ++it) {
       const NamedSource* found;
       if (it->ssrc_set) {
-        found = media_sources.GetVideoSourceBySsrc(it->ssrc);
+        found = media_sources_.GetVideoSourceBySsrc(it->ssrc);
       } else {
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
-        found = media_sources.GetFirstVideoSourceByNick(it->nick);
+        found = media_sources_.GetFirstVideoSourceByNick(it->nick);
         if (found) {
           it->SetSsrc(found->ssrc);
           it->removed = true;
@@ -588,12 +588,12 @@ void Call::OnSessionInfo(Session *session,
       }
       if (it->removed && found) {
         RemoveVideoStream(session, found->ssrc);
-        media_sources.RemoveVideoSourceBySsrc(it->ssrc);
+        media_sources_.RemoveVideoSourceBySsrc(it->ssrc);
         updates.video.push_back(*it);
         LOG(LS_INFO) << "Removed video stream:  " << found->ssrc;
       } else if (!it->removed && !found) {
         AddVideoStream(session, it->ssrc);
-        media_sources.AddVideoSource(*it);
+        media_sources_.AddVideoSource(*it);
         updates.video.push_back(*it);
         LOG(LS_INFO) << "Added video stream:  " << it->ssrc;
       }

@@ -69,4 +69,17 @@ void SessionDescription::AddContent(const std::string& name,
   contents_.push_back(ContentInfo(name, type, description));
 }
 
+bool SessionDescription::RemoveContentByName(const std::string& name) {
+  for (ContentInfos::iterator content = contents_.begin();
+       content != contents_.end(); ++content) {
+    if (content->name == name) {
+      delete content->description;
+      contents_.erase(content);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 }  // namespace cricket

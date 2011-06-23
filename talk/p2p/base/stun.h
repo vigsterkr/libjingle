@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __STUN_H__
-#define __STUN_H__
+#ifndef TALK_P2P_BASE_STUN_H_
+#define TALK_P2P_BASE_STUN_H_
 
 // This file contains classes for dealing with the STUN and TURN protocols.
 // Both protocols use the same wire format.
@@ -38,6 +38,9 @@
 #include "talk/base/bytebuffer.h"
 
 namespace cricket {
+
+// TODO: Remove message types and attributes that are no
+// longer suppored in RFC5389 (see section 18.2).
 
 // These are the types of STUN & TURN messages as of last check.
 enum StunMessageType {
@@ -103,6 +106,16 @@ extern const std::string STUN_ERROR_REASON_USE_TLS;
 extern const std::string STUN_ERROR_REASON_SERVER_ERROR;
 extern const std::string STUN_ERROR_REASON_GLOBAL_FAILURE;
 
+// Following values correspond to RFC5389.
+const size_t kStunTransactionIdOffset = 8;
+const size_t kStunTransactionIdLength = 12;
+extern const char kStunMagicCookie[4];
+const size_t kStunMagicCookieLength = sizeof(kStunMagicCookie);
+
+// Following value corresponds to an earlier version of STUN from
+// RFC3489.
+const size_t kStunLegacyTransactionIdLength = 16;
+
 class StunAttribute;
 class StunAddressAttribute;
 class StunUInt32Attribute;
@@ -119,10 +132,16 @@ class StunMessage {
 public:
   StunMessage();
   ~StunMessage();
-
   StunMessageType type() const { return static_cast<StunMessageType>(type_); }
   uint16 length() const { return length_; }
   const std::string& transaction_id() const { return transaction_id_; }
+
+  // Returns true if the message confirms to RFC3489 rather than
+  // RFC5389. The main difference between two version of the STUN
+  // protocol is the presence of the magic cookie and different length
+  // of transaction ID. For outgoing packets version of the protocol
+  // is determined by the lengths of the transaction ID.
+  bool IsLegacy() const;
 
   void SetType(StunMessageType type) { type_ = type; }
   void SetTransactionID(const std::string& str);
@@ -140,7 +159,7 @@ public:
   // return value indicates whether this was successful.
   bool Read(talk_base::ByteBuffer* buf);
 
-  // Writes this object into a STUN/TURN packet.  Return value is true if
+  // Writes this object into a STUN/TURN packet. Return value is true if
   // successful.
   void Write(talk_base::ByteBuffer* buf) const;
 
@@ -151,6 +170,7 @@ private:
   std::vector<StunAttribute*>* attrs_;
 
   const StunAttribute* GetAttribute(StunAttributeType type) const;
+  static bool IsValidTransactionId(const std::string& transaction_id);
 };
 
 // Base class for all STUN/TURN attributes.
@@ -160,7 +180,7 @@ public:
 
   StunAttributeType type() const {
     return static_cast<StunAttributeType>(type_);
-  } 
+  }
   uint16 length() const { return length_; }
 
   // Reads the body (not the type or length) for this type of attribute from
@@ -195,7 +215,7 @@ private:
 // Implements STUN/TURN attributes that record an Internet address.
 class StunAddressAttribute : public StunAttribute {
 public:
-  StunAddressAttribute(uint16 type);
+  explicit StunAddressAttribute(uint16 type);
 
 #if (_MSC_VER < 1300)
   enum { SIZE = 8 };
@@ -223,7 +243,7 @@ private:
 // Implements STUN/TURN attributs that record a 32-bit integer.
 class StunUInt32Attribute : public StunAttribute {
 public:
-  StunUInt32Attribute(uint16 type);
+  explicit StunUInt32Attribute(uint16 type);
 
 #if (_MSC_VER < 1300)
   enum { SIZE = 4 };
@@ -352,7 +372,9 @@ private:
 
 // The special MAGIC-COOKIE attribute is used to distinguish TURN packets from
 // other kinds of traffic.
-const char STUN_MAGIC_COOKIE_VALUE[] = { 0x72, char(0xc6), 0x4b, char(0xc6) };
+// TODO: This value has nothing to do with STUN. Move it to a
+// separate file.
+extern const char TURN_MAGIC_COOKIE_VALUE[4];
 
 // Returns the (successful) response type for the given request type.
 StunMessageType GetStunResponseType(StunMessageType request_type);
@@ -362,4 +384,4 @@ StunMessageType GetStunErrorResponseType(StunMessageType request_type);
 
 } // namespace cricket
 
-#endif // __STUN_H__
+#endif  // TALK_P2P_BASE_STUN_H_

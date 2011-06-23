@@ -75,9 +75,7 @@ class SessionDescription {
   void AddContent(const std::string& name,
                   const std::string& type,
                   const ContentDescription* description);
-  // TODO: Implement RemoveContent when it's needed for
-  // content-remove Jingle messages.
-  // void RemoveContent(const std::string& name);
+  bool RemoveContentByName(const std::string& name);
   const ContentInfos& contents() const { return contents_; }
 
   ~SessionDescription() {

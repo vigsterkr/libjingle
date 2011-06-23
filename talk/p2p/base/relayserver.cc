@@ -79,10 +79,12 @@ void SendStunError(const StunMessage& msg, talk_base::AsyncPacketSocket* socket,
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(cricket::STUN_ATTR_MAGIC_COOKIE);
-  if (magic_cookie.size() == 0)
-    magic_cookie_attr->CopyBytes(cricket::STUN_MAGIC_COOKIE_VALUE, 4);
-  else
+  if (magic_cookie.size() == 0) {
+    magic_cookie_attr->CopyBytes(cricket::TURN_MAGIC_COOKIE_VALUE,
+                                 sizeof(cricket::TURN_MAGIC_COOKIE_VALUE));
+  } else {
     magic_cookie_attr->CopyBytes(magic_cookie.c_str(), magic_cookie.size());
+  }
   err_msg.AddAttribute(magic_cookie_attr);
 
   StunErrorCodeAttribute* err_code = StunAttribute::CreateErrorCode();
@@ -610,7 +612,6 @@ void RelayServerConnection::Send(
 
   StunMessage msg;
   msg.SetType(STUN_DATA_INDICATION);
-  msg.SetTransactionID("0000000000000000");
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(cricket::STUN_ATTR_MAGIC_COOKIE);
@@ -669,7 +670,8 @@ RelayServerBinding::RelayServerBinding(
     lifetime_(lifetime) {
   // For now, every connection uses the standard magic cookie value.
   magic_cookie_.append(
-      reinterpret_cast<const char*>(STUN_MAGIC_COOKIE_VALUE), 4);
+      reinterpret_cast<const char*>(TURN_MAGIC_COOKIE_VALUE),
+      sizeof(TURN_MAGIC_COOKIE_VALUE));
 
   // Initialize the last-used time to now.
   NoteUsed();

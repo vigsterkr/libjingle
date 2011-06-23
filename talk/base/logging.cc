@@ -333,7 +333,7 @@ void LogMessage::ConfigureLogging(const char* params, const char* filename) {
   scoped_ptr<FileStream> stream;
   if (NO_LOGGING != file_level) {
     stream.reset(new FileStream);
-    if (!stream->Open(filename, "wb") || !stream->DisableBuffering()) {
+    if (!stream->Open(filename, "wb", NULL) || !stream->DisableBuffering()) {
       stream.reset();
     }
   }

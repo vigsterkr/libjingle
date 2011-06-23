@@ -39,7 +39,7 @@ public:
   MucInviteSendTask(Task* parent) : XmppTask(parent) {}
   virtual ~MucInviteSendTask() {}
 
-  XmppReturnStatus Send(const Jid& user, const Muc& muc);
+  XmppReturnStatus Send(const Jid& to, const Jid& invitee);
 
   virtual int ProcessStart();
 };

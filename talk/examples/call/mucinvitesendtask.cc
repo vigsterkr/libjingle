@@ -32,18 +32,18 @@
 namespace buzz {
 
 XmppReturnStatus
-MucInviteSendTask::Send(const Jid& user, const Muc& muc) {
+MucInviteSendTask::Send(const Jid& to, const Jid& invitee) {
   if (GetState() != STATE_INIT && GetState() != STATE_START)
     return XMPP_RETURN_BADSTATE;
 
   XmlElement* message = new XmlElement(QN_MESSAGE);
-  message->AddAttr(QN_TO, muc.jid().Str());
+  message->AddAttr(QN_TO, to.Str());
   XmlElement* xstanza = new XmlElement(QN_MUC_USER_X);
   XmlElement* invite = new XmlElement(QN_MUC_USER_INVITE);
-  invite->AddAttr(QN_TO, user.Str());
+  invite->AddAttr(QN_TO, invitee.Str());
   xstanza->AddElement(invite);
   message->AddElement(xstanza);
-  
+
   QueueStanza(message);
   return XMPP_RETURN_OK;
 }

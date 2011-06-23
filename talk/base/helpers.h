@@ -50,6 +50,12 @@ std::string CreateRandomString(size_t length);
 // Return false if the random number generator failed.
 bool CreateRandomString(size_t length, std::string* str);
 
+// Generates a (cryptographically) random string of the given length,
+// with characters from the given table. Return false if the random
+// number generator failed.
+bool CreateRandomString(size_t length, const std::string& table,
+                        std::string* str);
+
 // Generates a random id.
 uint32 CreateRandomId();
 

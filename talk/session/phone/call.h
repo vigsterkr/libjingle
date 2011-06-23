@@ -131,7 +131,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   uint32 id_;
   MediaSessionClient *session_client_;
   std::vector<Session *> sessions_;
-  MediaSources media_sources;
+  MediaSources media_sources_;
   std::map<std::string, VoiceChannel *> voice_channel_map_;
   std::map<std::string, VideoChannel *> video_channel_map_;
   VideoRenderer* local_renderer_;

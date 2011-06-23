@@ -868,8 +868,38 @@ bool Session::OnTransportAcceptMessage(const SessionMessage& msg,
 
 bool Session::OnUpdateMessage(const SessionMessage& msg,
                               MessageError* error) {
-  // TODO: Once someone needs it, parse the message
-  // into a data structure and signal out.
+  if (!CheckState(STATE_INPROGRESS, error))
+    return false;
+
+  DescriptionInfo description_info;
+  if (!ParseDescriptionInfo(msg.protocol, msg.action_elem,
+                            GetContentParsers(), GetTransportParsers(),
+                            &description_info, error)) {
+    return false;
+  }
+
+  ContentInfos updated_contents = description_info.ClearContents();
+  ContentInfos::iterator it;
+
+  // First, ensure all updates are valid before modifying remote_description_.
+  for (it = updated_contents.begin(); it != updated_contents.end(); ++it) {
+    if (remote_description_->GetContentByName(it->name) == NULL) {
+      return false;
+    }
+
+    // TODO: We should add a check to ensure that the updated
+    // contents are compatible with the original contents.
+  }
+
+  // Merge the updates into the remote description.
+  for (it = updated_contents.begin(); it != updated_contents.end(); ++it) {
+    LOG(LS_INFO) << "Updating content " << it->name;
+    remote_description_->RemoveContentByName(it->name);
+    remote_description_->AddContent(it->name, it->type, it->description);
+  }
+
+  SignalRemoteDescriptionUpdate(this);
+
   return true;
 }
 

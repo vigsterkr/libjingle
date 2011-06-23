@@ -110,7 +110,7 @@ bool StunRequestManager::CheckResponse(const char* data, size_t size) {
     return false;
 
   std::string id;
-  id.append(data + 4, 16);
+  id.append(data + kStunTransactionIdOffset, kStunTransactionIdLength);
 
   RequestMap::iterator iter = requests_.find(id);
   if (iter == requests_.end())
@@ -128,7 +128,8 @@ bool StunRequestManager::CheckResponse(const char* data, size_t size) {
 
 StunRequest::StunRequest()
     : count_(0), timeout_(false), manager_(0),
-      id_(talk_base::CreateRandomString(16)), msg_(new StunMessage()),
+      id_(talk_base::CreateRandomString(kStunTransactionIdLength)),
+      msg_(new StunMessage()),
       tstamp_(0) {
   msg_->SetTransactionID(id_);
 }

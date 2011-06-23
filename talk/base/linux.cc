@@ -176,7 +176,7 @@ ConfigParser::~ConfigParser() {}
 
 bool ConfigParser::Open(const std::string& filename) {
   FileStream* fs = new FileStream();
-  if (!fs->Open(filename, "r")) {
+  if (!fs->Open(filename, "r", NULL)) {
     return false;
   }
   instream_.reset(fs);
@@ -335,7 +335,7 @@ int ReadCpuMaxFreq() {
   FileStream fs;
   std::string str;
   int freq = -1;
-  if (!fs.Open(kCpuMaxFreqFile, "r") ||
+  if (!fs.Open(kCpuMaxFreqFile, "r", NULL) ||
       SR_SUCCESS != fs.ReadLine(&str) ||
       !FromString(str, &freq)) {
     return -1;

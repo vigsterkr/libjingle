@@ -93,7 +93,6 @@ class XmppTask :
   virtual void Stop();
   virtual bool HandleStanza(const XmlElement* stanza) { return false; }
   virtual void OnDisconnect();
-  virtual int ProcessReponse() { return STATE_DONE; }
 
   virtual void QueueStanza(const XmlElement* stanza);
   const XmlElement* NextStanza();

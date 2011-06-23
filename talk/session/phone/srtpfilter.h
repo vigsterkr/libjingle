@@ -107,8 +107,8 @@ class SrtpFilter {
   bool UnprotectRtp(void* data, int in_len, int* out_len);
   bool UnprotectRtcp(void* data, int in_len, int* out_len);
 
-  // Update the silent threshold for signaling errors.
-  void set_signal_silent_time(int signal_silent_time);
+  // Update the silent threshold (in ms) for signaling errors.
+  void set_signal_silent_time(uint32 signal_silent_time_in_ms);
 
   sigslot::repeater3<uint32, Mode, Error> SignalSrtpError;
 
@@ -152,8 +152,8 @@ class SrtpSession {
   bool UnprotectRtp(void* data, int in_len, int* out_len);
   bool UnprotectRtcp(void* data, int in_len, int* out_len);
 
-  // Update the silent threshold for signaling errors.
-  void set_signal_silent_time(int signal_silent_time);
+  // Update the silent threshold (in ms) for signaling errors.
+  void set_signal_silent_time(uint32 signal_silent_time_in_ms);
 
   sigslot::repeater3<uint32, SrtpFilter::Mode, SrtpFilter::Error>
       SignalSrtpError;
@@ -171,21 +171,31 @@ class SrtpSession {
   static bool inited_;
   static std::list<SrtpSession*> sessions_;
   int last_send_seq_num_;
+  DISALLOW_COPY_AND_ASSIGN(SrtpSession);
 };
 
 // Class that collects failures of SRTP.
 class SrtpStat {
  public:
   SrtpStat();
+
+  // Report RTP protection results to the handler.
   void AddProtectRtpResult(uint32 ssrc, int result);
+  // Report RTP unprotection results to the handler.
   void AddUnprotectRtpResult(uint32 ssrc, int result);
+  // Report RTCP protection results to the handler.
   void AddProtectRtcpResult(int result);
+  // Report RTCP unprotection results to the handler.
   void AddUnprotectRtcpResult(int result);
+
+  // Get silent time (in ms) for SRTP statistics handler.
   uint32 signal_silent_time() const { return signal_silent_time_; }
+  // Set silent time (in ms) for SRTP statistics handler.
   void set_signal_silent_time(uint32 signal_silent_time) {
     signal_silent_time_ = signal_silent_time;
   }
 
+  // Sigslot for reporting errors.
   sigslot::signal3<uint32, SrtpFilter::Mode, SrtpFilter::Error>
       SignalSrtpError;
 
@@ -226,13 +236,14 @@ class SrtpStat {
     uint32 last_signal_time;
   };
 
+  // Inspect SRTP result and signal error if needed.
   void HandleSrtpResult(const FailureKey& key);
 
   std::map<FailureKey, FailureStat> failures_;
   // Threshold in ms to silent the signaling errors.
-  int signal_silent_time_;
+  uint32 signal_silent_time_;
 
-  DISALLOW_EVIL_CONSTRUCTORS(SrtpStat);
+  DISALLOW_COPY_AND_ASSIGN(SrtpStat);
 };
 
 }  // namespace cricket

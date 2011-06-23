@@ -118,6 +118,8 @@ class FilesystemInterface {
 
   // Opens a file. Returns an open StreamInterface if function succeeds.
   // Otherwise, returns NULL.
+  // TODO: Add an error param to indicate failure reason, similar to
+  // FileStream::Open
   virtual FileStream *OpenFile(const Pathname &filename,
                                const std::string &mode) = 0;
 

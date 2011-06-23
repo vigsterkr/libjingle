@@ -172,9 +172,9 @@ bool SrtpFilter::UnprotectRtcp(void* p, int in_len, int* out_len) {
   return recv_session_->UnprotectRtcp(p, in_len, out_len);
 }
 
-void SrtpFilter::set_signal_silent_time(int signal_silent_time) {
-  send_session_->set_signal_silent_time(signal_silent_time);
-  recv_session_->set_signal_silent_time(signal_silent_time);
+void SrtpFilter::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
+  send_session_->set_signal_silent_time(signal_silent_time_in_ms);
+  recv_session_->set_signal_silent_time(signal_silent_time_in_ms);
 }
 
 bool SrtpFilter::StoreParams(const std::vector<CryptoParams>& params,
@@ -386,8 +386,8 @@ bool SrtpSession::UnprotectRtcp(void* p, int in_len, int* out_len) {
   return true;
 }
 
-void SrtpSession::set_signal_silent_time(int signal_silent_time) {
-  srtp_stat_->set_signal_silent_time(signal_silent_time);
+void SrtpSession::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
+  srtp_stat_->set_signal_silent_time(signal_silent_time_in_ms);
 }
 
 bool SrtpSession::SetKey(int type, const std::string& cs,
@@ -531,7 +531,7 @@ bool SrtpSession::UnprotectRtcp(void* data, int in_len, int* out_len) {
   return SrtpNotAvailable(__FUNCTION__);
 }
 
-void SrtpSession::set_signal_silent_time(int signal_silent_time) {
+void SrtpSession::set_signal_silent_time(uint32 signal_silent_time) {
   // Do nothing.
 }
 
@@ -585,39 +585,11 @@ void SrtpStat::AddUnprotectRtpResult(uint32 ssrc, int result) {
 }
 
 void SrtpStat::AddProtectRtcpResult(int result) {
-  FailureKey key;
-  key.mode = SrtpFilter::PROTECT;
-  switch (result) {
-    case err_status_ok:
-      key.error = SrtpFilter::ERROR_NONE;
-      break;
-    case err_status_auth_fail:
-      key.error = SrtpFilter::ERROR_AUTH;
-      break;
-    default:
-      key.error = SrtpFilter::ERROR_FAIL;
-  }
-  HandleSrtpResult(key);
+  AddProtectRtpResult(0U, result);
 }
 
 void SrtpStat::AddUnprotectRtcpResult(int result) {
-  FailureKey key;
-  key.mode = SrtpFilter::UNPROTECT;
-  switch (result) {
-    case err_status_ok:
-      key.error = SrtpFilter::ERROR_NONE;
-      break;
-    case err_status_auth_fail:
-      key.error = SrtpFilter::ERROR_AUTH;
-      break;
-    case err_status_replay_fail:
-    case err_status_replay_old:
-      key.error = SrtpFilter::ERROR_REPLAY;
-      break;
-    default:
-      key.error = SrtpFilter::ERROR_FAIL;
-  }
-  HandleSrtpResult(key);
+  AddUnprotectRtpResult(0U, result);
 }
 
 void SrtpStat::HandleSrtpResult(const SrtpStat::FailureKey& key) {
@@ -630,7 +602,7 @@ void SrtpStat::HandleSrtpResult(const SrtpStat::FailureKey& key) {
     uint32 current_time = talk_base::Time();
     if (stat->last_signal_time == 0 ||
         talk_base::TimeDiff(current_time, stat->last_signal_time) >
-        signal_silent_time_) {
+        static_cast<int>(signal_silent_time_)) {
       SignalSrtpError(key.ssrc, key.mode, key.error);
       stat->last_signal_time = current_time;
     }

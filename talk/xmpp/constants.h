@@ -289,6 +289,7 @@ extern const QName QN_TITLE1;
 extern const QName QN_TITLE2;
 extern const QName QN_AFFILIATION;
 extern const QName QN_ROLE;
+extern const QName QN_TIME;
 
 
 extern const QName QN_XMLNS_CLIENT;
@@ -386,8 +387,8 @@ extern const QName kQnVCardX;
 extern const QName kQnVCardPhoto;
 
 // JEP 0172 User Nickname
-extern const std::string kNSNickname;
-extern const QName kQnNickname;
+extern const std::string NS_NICKNAME;
+extern const QName QN_NICKNAME;
 
 
 // JEP 0085 chat state

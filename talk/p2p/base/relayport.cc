@@ -199,8 +199,10 @@ RelayPort::RelayPort(
 
   set_username_fragment(username);
   set_password(password);
-  if (magic_cookie_.size() == 0)
-    magic_cookie_.append(STUN_MAGIC_COOKIE_VALUE, 4);
+  if (magic_cookie_.size() == 0) {
+    magic_cookie_.append(TURN_MAGIC_COOKIE_VALUE,
+                         sizeof(TURN_MAGIC_COOKIE_VALUE));
+  }
 }
 
 RelayPort::~RelayPort() {
@@ -535,7 +537,8 @@ int RelayEntry::SendTo(const void* data, size_t size,
 
   StunMessage request;
   request.SetType(STUN_SEND_REQUEST);
-  request.SetTransactionID(talk_base::CreateRandomString(16));
+  request.SetTransactionID(
+      talk_base::CreateRandomString(kStunTransactionIdLength));
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);

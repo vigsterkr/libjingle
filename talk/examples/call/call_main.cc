@@ -200,6 +200,12 @@ cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
   std::vector<cricket::AudioCodec> voice_codecs;
   voice_codecs.push_back(
       cricket::AudioCodec(9, "G722", 16000, 0, 1, 0));
+  voice_codecs.push_back(
+      cricket::AudioCodec(0, "PCMU", 8000, 0, 1, 0));
+  voice_codecs.push_back(
+      cricket::AudioCodec(13, "CN", 8000, 0, 1, 0));
+  voice_codecs.push_back(
+      cricket::AudioCodec(105, "CN", 16000, 0, 1, 0));    
   file_media_engine->set_voice_codecs(voice_codecs);
   std::vector<cricket::VideoCodec> video_codecs;
   video_codecs.push_back(

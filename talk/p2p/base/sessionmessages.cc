@@ -675,12 +675,13 @@ bool ParseContentType(SignalingProtocol protocol,
   return true;
 }
 
-bool ParseSessionInitiate(SignalingProtocol protocol,
-                          const buzz::XmlElement* action_elem,
-                          const ContentParserMap& content_parsers,
-                          const TransportParserMap& trans_parsers,
-                          SessionInitiate* init,
-                          ParseError* error) {
+static bool ParseContentMessage(
+    SignalingProtocol protocol,
+    const buzz::XmlElement* action_elem,
+    const ContentParserMap& content_parsers,
+    const TransportParserMap& trans_parsers,
+    SessionInitiate* init,
+    ParseError* error) {
   init->owns_contents = true;
   if (protocol == PROTOCOL_GINGLE) {
     if (!ParseGingleContentInfos(action_elem, content_parsers,
@@ -703,14 +704,14 @@ bool ParseSessionInitiate(SignalingProtocol protocol,
   return true;
 }
 
-
-bool WriteSessionInitiate(SignalingProtocol protocol,
-                          const ContentInfos& contents,
-                          const TransportInfos& tinfos,
-                          const ContentParserMap& content_parsers,
-                          const TransportParserMap& transport_parsers,
-                          XmlElements* elems,
-                          WriteError* error) {
+static bool WriteContentMessage(
+    SignalingProtocol protocol,
+    const ContentInfos& contents,
+    const TransportInfos& tinfos,
+    const ContentParserMap& content_parsers,
+    const TransportParserMap& transport_parsers,
+    XmlElements* elems,
+    WriteError* error) {
   if (protocol == PROTOCOL_GINGLE) {
     if (!WriteGingleContentInfos(contents, content_parsers, elems, error))
       return false;
@@ -728,15 +729,39 @@ bool WriteSessionInitiate(SignalingProtocol protocol,
   return true;
 }
 
+bool ParseSessionInitiate(SignalingProtocol protocol,
+                          const buzz::XmlElement* action_elem,
+                          const ContentParserMap& content_parsers,
+                          const TransportParserMap& trans_parsers,
+                          SessionInitiate* init,
+                          ParseError* error) {
+  return ParseContentMessage(protocol, action_elem,
+                             content_parsers, trans_parsers,
+                             init, error);
+}
+
+
+bool WriteSessionInitiate(SignalingProtocol protocol,
+                          const ContentInfos& contents,
+                          const TransportInfos& tinfos,
+                          const ContentParserMap& content_parsers,
+                          const TransportParserMap& transport_parsers,
+                          XmlElements* elems,
+                          WriteError* error) {
+  return WriteContentMessage(protocol, contents, tinfos,
+                             content_parsers, transport_parsers,
+                             elems, error);
+}
+
 bool ParseSessionAccept(SignalingProtocol protocol,
                         const buzz::XmlElement* action_elem,
                         const ContentParserMap& content_parsers,
                         const TransportParserMap& transport_parsers,
                         SessionAccept* accept,
                         ParseError* error) {
-  return ParseSessionInitiate(protocol, action_elem,
-                              content_parsers, transport_parsers,
-                              accept, error);
+  return ParseContentMessage(protocol, action_elem,
+                             content_parsers, transport_parsers,
+                             accept, error);
 }
 
 bool WriteSessionAccept(SignalingProtocol protocol,
@@ -746,9 +771,9 @@ bool WriteSessionAccept(SignalingProtocol protocol,
                         const TransportParserMap& transport_parsers,
                         XmlElements* elems,
                         WriteError* error) {
-  return WriteSessionInitiate(protocol, contents, tinfos,
-                              content_parsers, transport_parsers,
-                              elems, error);
+  return WriteContentMessage(protocol, contents, tinfos,
+                             content_parsers, transport_parsers,
+                             elems, error);
 }
 
 bool ParseSessionTerminate(SignalingProtocol protocol,
@@ -792,6 +817,17 @@ void WriteSessionTerminate(SignalingProtocol protocol,
       elems->push_back(reason_elem);
     }
   }
+}
+
+bool ParseDescriptionInfo(SignalingProtocol protocol,
+                          const buzz::XmlElement* action_elem,
+                          const ContentParserMap& content_parsers,
+                          const TransportParserMap& transport_parsers,
+                          DescriptionInfo* description_info,
+                          ParseError* error) {
+  return ParseContentMessage(protocol, action_elem,
+                             content_parsers, transport_parsers,
+                             description_info, error);
 }
 
 bool ParseTransportInfos(SignalingProtocol protocol,

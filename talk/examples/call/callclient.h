@@ -118,6 +118,7 @@ class CallClient: public sigslot::has_slots<> {
   void LookupAndJoinMuc(const std::string& room_name);
   void InviteToMuc(const std::string& user, const std::string& room);
   void LeaveMuc(const std::string& room);
+  void SetNick(const std::string& muc_nick);
   void SetPortAllocatorFlags(uint32 flags) { portallocator_flags_ = flags; }
   void SetAllowLocalIps(bool allow_local_ips) {
     allow_local_ips_ = allow_local_ips;

@@ -176,6 +176,7 @@ class BaseChannel
 
   // Setting the send codec based on the remote description.
   void OnSessionState(BaseSession* session, BaseSession::State state);
+  void OnRemoteDescriptionUpdate(BaseSession* session);
 
   void EnableMedia_w();
   void DisableMedia_w();

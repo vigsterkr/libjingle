@@ -120,6 +120,7 @@ const char* CONSOLE_COMMANDS =
 "  ljoin [room_name]   Joins a MUC by looking up JID from room name.\n"
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
 "  leave [room]        Leaves a multi-user-chat.\n"
+"  nick [nick]         Sets the nick.\n"
 "  getdevs             Prints the available media devices.\n"
 "  quit                Quits the application.\n"
 "";
@@ -207,6 +208,8 @@ void CallClient::ParseLine(const std::string& line) {
       InviteToMuc(words[1], GetWord(words, 2, ""));
     } else if (command == "leave") {
       LeaveMuc(GetWord(words, 1, ""));
+    } else if (command == "nick") {
+      SetNick(GetWord(words, 1, ""));
     } else if (command == "getdevs") {
       GetDevices();
     } else if ((words.size() == 2) && (command == "setvol")) {
@@ -638,6 +641,20 @@ void CallClient::Quit() {
   talk_base::Thread::Current()->Quit();
 }
 
+void CallClient::SetNick(const std::string& muc_nick) {
+  my_status_.set_nick(muc_nick);
+
+  // TODO: We might want to re-send presence, but right
+  // now, it appears to be ignored by the MUC.
+  //
+  // presence_out_->Send(my_status_); for (MucMap::const_iterator itr
+  // = mucs_.begin(); itr != mucs_.end(); ++itr) {
+  // presence_out_->SendDirected(itr->second->local_jid(),
+  // my_status_); }
+
+  console_->PrintLine("Nick set to '%s'.", muc_nick.c_str());
+}
+
 void CallClient::LookupAndJoinMuc(const std::string& room_name) {
   // The room_name can't be empty for lookup task.
   if (room_name.empty()) {
@@ -810,7 +827,10 @@ void CallClient::OnMucLeft(const buzz::Jid& endpoint, int error) {
   mucs_.erase(elem);
 }
 
-void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
+void CallClient::InviteToMuc(const std::string& given_user,
+                             const std::string& room) {
+  std::string user = given_user;
+
   // First find the room.
   const buzz::Muc* found_muc;
   if (room.length() == 0) {
@@ -828,19 +848,23 @@ void CallClient::InviteToMuc(const std::string& user, const std::string& room) {
     }
     found_muc = elem->second;
   }
+
+  buzz::Jid invite_to = found_muc->jid();
+
   // Now find the user. We invite all of their resources.
   bool found_user = false;
   buzz::Jid user_jid(user);
   for (RosterMap::iterator iter = roster_->begin();
        iter != roster_->end(); ++iter) {
     if (iter->second.jid.BareEquals(user_jid)) {
-      muc_invite_send_->Send(iter->second.jid, *found_muc);
+      buzz::Jid invitee = iter->second.jid;
+      muc_invite_send_->Send(invite_to, invitee);
       found_user = true;
     }
   }
   if (!found_user) {
-    console_->PrintLine("No such friend as %s.", user.c_str());
-    return;
+    buzz::Jid invitee = user_jid;
+    muc_invite_send_->Send(invite_to, invitee);
   }
 }
 

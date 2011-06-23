@@ -86,6 +86,11 @@ bool RtpDumpPacket::GetRtpSsrc(uint32* ssrc) const {
       cricket::GetRtpSsrc(&data[0], data.size(), ssrc);
 }
 
+bool RtpDumpPacket::GetRtpHeaderLen(size_t* len) const {
+  return IsValidRtpPacket() &&
+      cricket::GetRtpHeaderLen(&data[0], data.size(), len);
+}
+
 bool RtpDumpPacket::GetRtcpType(int* type) const {
   return IsValidRtcpPacket() &&
       cricket::GetRtcpType(&data[0], data.size(), type);
@@ -287,12 +292,27 @@ void RtpDumpLoopReader::UpdateDumpPacket(RtpDumpPacket* packet) {
 
 RtpDumpWriter::RtpDumpWriter(talk_base::StreamInterface* stream)
     : stream_(stream),
+      packet_filter_(PF_ALL),
       file_header_written_(false),
       start_time_ms_(talk_base::Time()) {
   }
 
 uint32 RtpDumpWriter::GetElapsedTime() const {
   return talk_base::TimeSince(start_time_ms_);
+}
+
+talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
+  talk_base::StreamResult res = stream_->WriteAll(
+      RtpDumpFileHeader::kFirstLine.c_str(),
+      RtpDumpFileHeader::kFirstLine.size(), NULL, NULL);
+  if (res != talk_base::SR_SUCCESS) {
+    return res;
+  }
+
+  talk_base::ByteBuffer buf;
+  RtpDumpFileHeader file_header(talk_base::Time(), 0, 0);
+  file_header.WriteToByteBuffer(&buf);
+  return stream_->WriteAll(buf.Data(), buf.Length(), NULL, NULL);
 }
 
 talk_base::StreamResult RtpDumpWriter::WritePacket(
@@ -309,9 +329,16 @@ talk_base::StreamResult RtpDumpWriter::WritePacket(
     file_header_written_ = true;
   }
 
+  // Figure out what to write.
+  size_t write_len = FilterPacket(data, data_len, rtcp);
+  if (write_len == 0) {
+    return talk_base::SR_SUCCESS;
+  }
+
   // Write the dump packet header.
   talk_base::ByteBuffer buf;
-  buf.WriteUInt16(static_cast<uint16>(RtpDumpPacket::kHeaderLength + data_len));
+  buf.WriteUInt16(static_cast<uint16>(
+                      RtpDumpPacket::kHeaderLength + write_len));
   buf.WriteUInt16(static_cast<uint16>(rtcp ? 0 : data_len));
   buf.WriteUInt32(elapsed);
   res = stream_->WriteAll(buf.Data(), buf.Length(), NULL, NULL);
@@ -319,22 +346,32 @@ talk_base::StreamResult RtpDumpWriter::WritePacket(
     return res;
   }
 
-  // Write the actual RTP or RTCP packet.
-  return stream_->WriteAll(data, data_len, NULL, NULL);
+  // Write the header or full packet as indicated by write_len.
+  return stream_->WriteAll(data, write_len, NULL, NULL);
 }
 
-talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
-  talk_base::StreamResult res = stream_->WriteAll(
-      RtpDumpFileHeader::kFirstLine.c_str(),
-      RtpDumpFileHeader::kFirstLine.size(), NULL, NULL);
-  if (res != talk_base::SR_SUCCESS) {
-    return res;
+size_t RtpDumpWriter::FilterPacket(const void* data, size_t data_len,
+                                   bool rtcp) {
+  size_t filtered_len = 0;
+  if (!rtcp) {
+    if ((packet_filter_ & PF_RTPPACKET) == PF_RTPPACKET) {
+      // RTP header + payload
+      filtered_len = data_len;
+    } else if ((packet_filter_ & PF_RTPHEADER) == PF_RTPHEADER) {
+      // RTP header only
+      size_t header_len;
+      if (GetRtpHeaderLen(data, data_len, &header_len)) {
+        filtered_len = header_len;
+      }
+    }
+  } else {
+    if ((packet_filter_ & PF_RTCPPACKET) == PF_RTCPPACKET) {
+      // RTCP header + payload
+      filtered_len = data_len;
+    }
   }
 
-  talk_base::ByteBuffer buf;
-  RtpDumpFileHeader file_header(talk_base::Time(), 0, 0);
-  file_header.WriteToByteBuffer(&buf);
-  return stream_->WriteAll(buf.Data(), buf.Length(), NULL, NULL);
+  return filtered_len;
 }
 
 }  // namespace cricket

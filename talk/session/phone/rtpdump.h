@@ -48,6 +48,15 @@ namespace cricket {
 // For each packet, the file contains a 8 byte dump packet header, followed by
 // the actual RTP or RTCP packet.
 
+enum RtpDumpPacketFilter {
+  PF_NONE = 0x0,
+  PF_RTPHEADER = 0x1,
+  PF_RTPPACKET = 0x3,  // includes header
+  // PF_RTCPHEADER = 0x4,  // TODO
+  PF_RTCPPACKET = 0xC,  // includes header
+  PF_ALL = 0xF
+};
+
 struct RtpDumpFileHeader {
   RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p);
   void WriteToByteBuffer(talk_base::ByteBuffer* buf);
@@ -79,6 +88,7 @@ struct RtpDumpPacket {
   bool GetRtpSeqNum(int* seq_num) const;
   bool GetRtpTimestamp(uint32* ts) const;
   bool GetRtpSsrc(uint32* ssrc) const;
+  bool GetRtpHeaderLen(size_t* len) const;
   // Get the type of the RTCP packet. Return true and set the output parameter
   // if successful.
   bool GetRtcpType(int* type) const;
@@ -170,6 +180,11 @@ class RtpDumpWriter {
  public:
   explicit RtpDumpWriter(talk_base::StreamInterface* stream);
 
+  // Filter to control what packets we actually record.
+  void set_packet_filter(int filter) {
+    packet_filter_ = filter;
+  }
+
   // Write a RTP or RTCP packet. The parameters data points to the packet and
   // data_len is its length.
   talk_base::StreamResult WriteRtpPacket(const void* data, size_t data_len) {
@@ -196,8 +211,10 @@ class RtpDumpWriter {
  private:
   talk_base::StreamResult WritePacket(const void* data, size_t data_len,
                                       uint32 elapsed, bool rtcp);
+  size_t FilterPacket(const void* data, size_t data_len, bool rtcp);
 
   talk_base::StreamInterface* stream_;
+  int packet_filter_;
   bool file_header_written_;
   uint32 start_time_ms_;  // Time when the record starts.
   DISALLOW_COPY_AND_ASSIGN(RtpDumpWriter);

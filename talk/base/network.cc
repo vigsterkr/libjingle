@@ -208,7 +208,7 @@ void NetworkManager::SetState(const std::string& str) {
 // Gets the default gateway for the specified interface.
 uint32 GetDefaultGateway(const std::string& name) {
 #ifdef OSX
-  // TODO: /proc/net/route doesn't exist, 
+  // TODO: /proc/net/route doesn't exist,
   // Use ioctl to get the routing table
   return 0xFFFFFFFF;
 #endif
@@ -216,7 +216,7 @@ uint32 GetDefaultGateway(const std::string& name) {
   uint32 gateway_ip = 0;
 
   FileStream fs;
-  if (fs.Open("/proc/net/route", "r")) {
+  if (fs.Open("/proc/net/route", "r", NULL)) {
     std::string line;
     while (fs.ReadLine(&line) == SR_SUCCESS && gateway_ip == 0) {
       char iface[16];

@@ -80,7 +80,7 @@ bool Win32Filesystem::CreateFolder(const Pathname &pathname) {
 FileStream *Win32Filesystem::OpenFile(const Pathname &filename,
                                       const std::string &mode) {
   FileStream *fs = new FileStream();
-  if (fs && !fs->Open(filename.pathname().c_str(), mode.c_str())) {
+  if (fs && !fs->Open(filename.pathname().c_str(), mode.c_str(), NULL)) {
     delete fs;
     fs = NULL;
   }

@@ -410,9 +410,9 @@ class FileStream : public StreamInterface {
   virtual ~FileStream();
 
   // The semantics of filename and mode are the same as stdio's fopen
-  virtual bool Open(const std::string& filename, const char* mode);
+  virtual bool Open(const std::string& filename, const char* mode, int* error);
   virtual bool OpenShare(const std::string& filename, const char* mode,
-                         int shflag);
+                         int shflag, int* error);
 
   // By default, reads and writes are buffered for efficiency.  Disabling
   // buffering causes writes to block until the bytes on disk are updated.

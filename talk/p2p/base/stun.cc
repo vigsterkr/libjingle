@@ -40,15 +40,21 @@ const std::string STUN_ERROR_REASON_BAD_REQUEST = "BAD REQUEST";
 const std::string STUN_ERROR_REASON_UNAUTHORIZED = "UNAUTHORIZED";
 const std::string STUN_ERROR_REASON_UNKNOWN_ATTRIBUTE = "UNKNOWN ATTRIBUTE";
 const std::string STUN_ERROR_REASON_STALE_CREDENTIALS = "STALE CREDENTIALS";
-const std::string STUN_ERROR_REASON_INTEGRITY_CHECK_FAILURE = "INTEGRITY CHECK FAILURE";
+const std::string STUN_ERROR_REASON_INTEGRITY_CHECK_FAILURE =
+    "INTEGRITY CHECK FAILURE";
 const std::string STUN_ERROR_REASON_MISSING_USERNAME = "MISSING USERNAME";
 const std::string STUN_ERROR_REASON_USE_TLS = "USE TLS";
 const std::string STUN_ERROR_REASON_SERVER_ERROR = "SERVER ERROR";
 const std::string STUN_ERROR_REASON_GLOBAL_FAILURE = "GLOBAL FAILURE";
 
-StunMessage::StunMessage() : type_(0), length_(0),
-    transaction_id_("0000000000000000") {
-  ASSERT(transaction_id_.size() == 16);
+const char kStunMagicCookie[] = { '\x21', '\x12', '\xA4', '\x42' };
+
+const char TURN_MAGIC_COOKIE_VALUE[] = { '\x72', '\xC6', '\x4B', '\xC6' };
+
+StunMessage::StunMessage()
+    : type_(0), length_(0),
+      transaction_id_("000000000000") {
+  ASSERT(IsValidTransactionId(transaction_id_));
   attrs_ = new std::vector<StunAttribute*>();
 }
 
@@ -58,8 +64,15 @@ StunMessage::~StunMessage() {
   delete attrs_;
 }
 
+bool StunMessage::IsLegacy() const {
+  if (transaction_id_.size() == kStunLegacyTransactionIdLength)
+    return true;
+  ASSERT(transaction_id_.size() == kStunTransactionIdLength);
+  return false;
+}
+
 void StunMessage::SetTransactionID(const std::string& str) {
-  ASSERT(str.size() == 16);
+  ASSERT(IsValidTransactionId(str));
   transaction_id_ = str;
 }
 
@@ -154,10 +167,20 @@ bool StunMessage::Read(ByteBuffer* buf) {
   if (!buf->ReadUInt16(&length_))
     return false;
 
-  std::string transaction_id;
-  if (!buf->ReadString(&transaction_id, 16))
+  std::string magic_cookie;
+  if (!buf->ReadString(&magic_cookie, kStunMagicCookieLength))
     return false;
-  ASSERT(transaction_id.size() == 16);
+
+  std::string transaction_id;
+  if (!buf->ReadString(&transaction_id, kStunTransactionIdLength))
+    return false;
+  if (magic_cookie != std::string(kStunMagicCookie,
+                                  kStunMagicCookie + kStunMagicCookieLength)) {
+    // If magic cookie is invalid it means that the peer implements
+    // RFC3489 instead of RFC5389.
+    transaction_id.insert(0, magic_cookie);
+  }
+  ASSERT(IsValidTransactionId(transaction_id));
   transaction_id_ = transaction_id;
 
   if (length_ > buf->Length())
@@ -193,6 +216,8 @@ bool StunMessage::Read(ByteBuffer* buf) {
 void StunMessage::Write(ByteBuffer* buf) const {
   buf->WriteUInt16(type_);
   buf->WriteUInt16(length_);
+  if (!IsLegacy())
+    buf->WriteBytes(kStunMagicCookie, kStunMagicCookieLength);
   buf->WriteString(transaction_id_);
 
   for (unsigned i = 0; i < attrs_->size(); i++) {
@@ -200,6 +225,11 @@ void StunMessage::Write(ByteBuffer* buf) const {
     buf->WriteUInt16((*attrs_)[i]->length());
     (*attrs_)[i]->Write(buf);
   }
+}
+
+bool StunMessage::IsValidTransactionId(const std::string& transaction_id) {
+  return transaction_id.size() == kStunTransactionIdLength ||
+      transaction_id.size() == kStunLegacyTransactionIdLength;
 }
 
 StunAttribute::StunAttribute(uint16 type, uint16 length)

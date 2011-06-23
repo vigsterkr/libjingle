@@ -233,7 +233,7 @@ class BaseSession : public sigslot::has_slots<>,
     return remote_description_;
   }
   // Takes ownership of SessionDescription*
-  bool set_remote_description(const SessionDescription* sdesc) {
+  bool set_remote_description(SessionDescription* sdesc) {
     if (sdesc != remote_description_) {
       delete remote_description_;
       remote_description_ = sdesc;
@@ -273,11 +273,14 @@ class BaseSession : public sigslot::has_slots<>,
 
   const std::string& id() const { return sid_; }
 
+  // Fired when the remote description is updated.
+  sigslot::signal1<BaseSession *> SignalRemoteDescriptionUpdate;
+
  protected:
   State state_;
   Error error_;
   const SessionDescription* local_description_;
-  const SessionDescription* remote_description_;
+  SessionDescription* remote_description_;
   std::string sid_;
   // We don't use buzz::Jid because changing to buzz:Jid here has a
   // cascading effect that requires an enormous number places to

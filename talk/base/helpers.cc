@@ -224,7 +224,9 @@ std::string CreateRandomString(size_t len) {
   return str;
 }
 
-bool CreateRandomString(size_t len, std::string* str) {
+bool CreateRandomString(size_t len,
+                        const char* table, int table_size,
+                        std::string* str) {
   str->clear();
   scoped_array<uint8> bytes(new uint8[len]);
   if (!g_rng->Generate(bytes.get(), len)) {
@@ -233,9 +235,18 @@ bool CreateRandomString(size_t len, std::string* str) {
   }
   str->reserve(len);
   for (size_t i = 0; i < len; ++i) {
-    str->push_back(BASE64[bytes[i] & 63]);
+    str->push_back(table[bytes[i] % table_size]);
   }
   return true;
+}
+
+bool CreateRandomString(size_t len, std::string* str) {
+  return CreateRandomString(len, BASE64, 64, str);
+}
+
+bool CreateRandomString(size_t len, const std::string& table,
+                        std::string* str) {
+  return CreateRandomString(len, table.c_str(), table.size(), str);
 }
 
 uint32 CreateRandomId() {

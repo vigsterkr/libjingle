@@ -40,6 +40,7 @@ bool GetRtpPayloadType(const void* data, size_t len, int* value);
 bool GetRtpSeqNum(const void* data, size_t len, int* value);
 bool GetRtpTimestamp(const void* data, size_t len, uint32* value);
 bool GetRtpSsrc(const void* data, size_t len, uint32* value);
+bool GetRtpHeaderLen(const void* data, size_t len, size_t* value);
 bool GetRtcpType(const void* data, size_t len, int* value);
 
 }  // namespace cricket

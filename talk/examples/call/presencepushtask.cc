@@ -208,6 +208,11 @@ void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
       std::string stamp = delay->Attr(kQnStamp);
       s->set_sent_time(stamp);
     }
+
+    const XmlElement* nick = stanza->FirstNamed(QN_NICKNAME);
+    if (nick) {
+      s->set_nick(nick->BodyText());
+    }
   }
 }
 

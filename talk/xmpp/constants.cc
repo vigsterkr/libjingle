@@ -290,9 +290,9 @@ const QName QN_VCARD_PHOTO_BINVAL(true, NS_VCARD, "BINVAL");
 const QName QN_VCARD_AVATAR_HASH(true, NS_AVATAR_HASH, "hash");
 const QName QN_VCARD_AVATAR_HASH_MODIFIED(true, NS_AVATAR_HASH, "modified");
 
-const buzz::QName QN_NAME(true, STR_EMPTY, "name");
-const buzz::QName QN_AFFILIATION(true, STR_EMPTY, "affiliation");
-const buzz::QName QN_ROLE(true, STR_EMPTY, "role");
+const QName QN_NAME(true, STR_EMPTY, "name");
+const QName QN_AFFILIATION(true, STR_EMPTY, "affiliation");
+const QName QN_ROLE(true, STR_EMPTY, "role");
 
 #if defined(FEATURE_ENABLE_PSTN)
 const QName QN_VCARD_TEL(true, NS_VCARD, "TEL");
@@ -324,6 +324,7 @@ const QName QN_SUBSCRIPTION(true, STR_EMPTY, "subscription");
 const QName QN_TITLE1(true, STR_EMPTY, "title1");
 const QName QN_TITLE2(true, STR_EMPTY, "title2");
 const QName QN_SOURCE(true, STR_EMPTY, "source");
+const QName QN_TIME(true, STR_EMPTY, "time");
 
 const QName QN_XMLNS_CLIENT(true, NS_XMLNS, STR_CLIENT);
 const QName QN_XMLNS_SERVER(true, NS_XMLNS, STR_SERVER);
@@ -419,8 +420,8 @@ const QName kQnVCardX(true, kNSVCard, "x");
 const QName kQnVCardPhoto(true, kNSVCard, "photo");
 
 // JEP 0172 User Nickname
-const std::string kNSNickname("http://jabber.org/protocol/nick");
-const QName kQnNickname(true, kNSNickname, "nick");
+const std::string NS_NICKNAME("http://jabber.org/protocol/nick");
+const QName QN_NICKNAME(true, NS_NICKNAME, "nick");
 
 
 // JEP 0085 chat state

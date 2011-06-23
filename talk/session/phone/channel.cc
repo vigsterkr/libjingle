@@ -101,6 +101,8 @@ BaseChannel::BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
   LOG(LS_INFO) << "Created channel";
 
   session->SignalState.connect(this, &BaseChannel::OnSessionState);
+  session->SignalRemoteDescriptionUpdate.connect(this,
+      &BaseChannel::OnRemoteDescriptionUpdate);
 }
 
 BaseChannel::~BaseChannel() {
@@ -422,6 +424,16 @@ void BaseChannel::OnSessionState(BaseSession* session,
       break;
     default:
       break;
+  }
+}
+
+void BaseChannel::OnRemoteDescriptionUpdate(BaseSession* session) {
+  const MediaContentDescription* content =
+      GetFirstContent(session->remote_description());
+
+  if (content && !SetRemoteContent(content, CA_UPDATE)) {
+    LOG(LS_ERROR) << "Failure in SetRemoteContent with CA_UPDATE";
+    session->SetError(BaseSession::ERROR_CONTENT);
   }
 }
 

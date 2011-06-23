@@ -48,7 +48,7 @@ namespace talk_base {
 class Thread;
 
 class ThreadManager {
-public:
+ public:
   ThreadManager();
   ~ThreadManager();
 
@@ -75,7 +75,7 @@ public:
 
   static void StopAllThreads_();  // Experimental
 
-private:
+ private:
   Thread *main_thread_;
   std::vector<Thread *> threads_;
   CriticalSection crit_;
@@ -112,7 +112,7 @@ class Runnable {
 };
 
 class Thread : public MessageQueue {
-public:
+ public:
   Thread(SocketServer* ss = NULL);
   virtual ~Thread();
 
@@ -184,10 +184,12 @@ public:
   }
 #endif
 
-private:
-  static void *PreRun(void *pv);
+ protected:
   // Blocks the calling thread until this thread has terminated.
   void Join();
+
+ private:
+  static void *PreRun(void *pv);
 
   std::list<_SendMessage> sendlist_;
   std::string name_;

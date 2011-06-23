@@ -33,15 +33,35 @@
 #ifdef HAVE_WEBRTC
 #include "talk/session/phone/webrtcvoiceengine.h"
 #include "talk/session/phone/webrtcvideoengine.h"
+#if defined(PLATFORM_CHROMIUM)
+#include "content/renderer/renderer_webrtc_audio_device_impl.h"
+#else
+// Other browsers
+#endif
 #endif
 
 namespace cricket {
+#if defined(PLATFORM_CHROMIUM)
+class ChromiumWebRtcVoiceEngine : public WebRtcVoiceEngine {
+ public:
+  // TODO: where should we get the AudioDevice initial configuration
+  ChromiumWebRtcVoiceEngine() : WebRtcVoiceEngine(
+      new RendererWebRtcAudioDeviceImpl(1440, 1440, 1, 1, 48000, 48000)) {}
+};
+#else
+// Other browsers
+#endif
 
 MediaEngine* MediaEngine::Create() {
 #if defined(HAVE_LINPHONE)
   return new LinphoneMediaEngine("", "");
 #elif defined(HAVE_WEBRTC)
+#if defined(PLATFORM_CHROMIUM)
+  return new CompositeMediaEngine<ChromiumWebRtcVoiceEngine,
+                                  WebRtcVideoEngine>();
+#else
   return new CompositeMediaEngine<WebRtcVoiceEngine, WebRtcVideoEngine>();
+#endif
 #else
   return new NullMediaEngine();
 #endif

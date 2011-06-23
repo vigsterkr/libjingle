@@ -390,7 +390,7 @@ bool HttpDateToSeconds(const std::string& date, unsigned long* seconds) {
     int hours = (zone[1] - '0') * 10 + (zone[2] - '0');
     int minutes = (zone[3] - '0') * 10 + (zone[4] - '0');
     int offset = (hours * 60 + minutes) * 60;
-    gmt = non_gmt + (zone[0] == '+') ? offset : -offset;
+    gmt = non_gmt + ((zone[0] == '+') ? offset : -offset);
   } else {
     size_t zindex;
     if (!find_string(zindex, zone, kTimeZones, ARRAY_SIZE(kTimeZones))) {

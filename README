@@ -94,6 +94,7 @@ Libjingle needs to be downloaded and patched
   * Third, go to the talk/ directory and run $path_to_swtoolkit/hammer.sh. Run
     $path_to_swtoolkit/hammer.sh --help for information on how to build for
     different modes.
+  * On Linux, you need to install libssl-dev, libasound2-dev and gtk+2.0.
 
 2.3 Build Libjingle under Windows
   * First, make sure the SCONS_DIR environment variable is set correctly and
@@ -141,6 +142,6 @@ To use LinphoneMediaEngine, you need to perform the following additional steps:
     In the "talk.App(env, name = "call",..." section, you need to add:
       "mediastreamer",
     to the "libs = [".
-  * Add the following line into the "srcs = [ ..." section of the
-    libjingle.scons file.
+  * In the libjingle.scons file, add the following line into the "srcs = [ ..."
+    section of the "libjingle" Library.
       "session/phone/linphonemediaengine.cc",

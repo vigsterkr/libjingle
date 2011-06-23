@@ -139,7 +139,7 @@ StreamInterface* DiskCache::WriteResource(const std::string& id, size_t index) {
   }
 
   scoped_ptr<FileStream> file(new FileStream);
-  if (!file->Open(filename, "wb")) {
+  if (!file->Open(filename, "wb", NULL)) {
     LOG_F(LS_ERROR) << "Couldn't create cache file";
     return NULL;
   }
@@ -177,7 +177,7 @@ StreamInterface* DiskCache::ReadResource(const std::string& id,
     return NULL;
 
   scoped_ptr<FileStream> file(new FileStream);
-  if (!file->Open(IdToFilename(id, index), "rb"))
+  if (!file->Open(IdToFilename(id, index), "rb", NULL))
     return NULL;
 
   entry->accessors += 1;

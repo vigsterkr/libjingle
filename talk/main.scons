@@ -77,6 +77,14 @@ DeclareBit('have_libpulse',
            'Whether the build system has the libpulse package')
 
 
+# List all the locales we localize to.
+root_env.AppendUnique(locales = [
+    'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en-GB', 'es', 'es-419',
+    'et', 'fa', 'fi', 'fil', 'fr', 'gu', 'hi', 'hr', 'hu', 'id', 'is', 'it',
+    'iw', 'ja', 'kn', 'ko', 'lt', 'lv', 'ml', 'mr', 'ms', 'nl', 'no', 'or',
+    'pl', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'ta', 'te',
+    'th', 'tl', 'tr', 'uk', 'ur', 'vi', 'zh-CN', 'zh-TW'])
+
 #-------------------------------------------------------------------------------
 # W I N D O W S
 #

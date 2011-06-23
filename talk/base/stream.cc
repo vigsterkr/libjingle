@@ -349,35 +349,49 @@ FileStream::~FileStream() {
   FileStream::Close();
 }
 
-bool FileStream::Open(const std::string& filename, const char* mode) {
+bool FileStream::Open(const std::string& filename, const char* mode,
+                      int* error) {
   Close();
 #ifdef WIN32
   std::wstring wfilename;
   if (Utf8ToWindowsFilename(filename, &wfilename)) {
     file_ = _wfopen(wfilename.c_str(), ToUtf16(mode).c_str());
   } else {
-    file_ = NULL;
+    if (error) {
+      *error = -1;
+      return false;
+    }
   }
 #else
   file_ = fopen(filename.c_str(), mode);
 #endif
+  if (!file_ && error) {
+    *error = errno;
+  }
   return (file_ != NULL);
 }
 
 bool FileStream::OpenShare(const std::string& filename, const char* mode,
-                           int shflag) {
+                           int shflag, int* error) {
   Close();
 #ifdef WIN32
   std::wstring wfilename;
   if (Utf8ToWindowsFilename(filename, &wfilename)) {
     file_ = _wfsopen(wfilename.c_str(), ToUtf16(mode).c_str(), shflag);
+    if (!file_ && error) {
+      *error = errno;
+      return false;
+    }
+    return file_ != NULL;
   } else {
-    file_ = NULL;
+    if (error) {
+      *error = -1;
+    }
+    return false;
   }
 #else
-  return Open(filename, mode);
+  return Open(filename, mode, error);
 #endif
-  return (file_ != NULL);
 }
 
 bool FileStream::DisableBuffering() {
