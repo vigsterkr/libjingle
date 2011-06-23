@@ -1,5 +1,11 @@
 Libjingle
 
+0.5.7 - Jun 23, 2011
+  - Support for setting MUC display name
+  - Update STUN support to RFC5389
+  - Handle description-info message
+  - New call flag: --debugsrtp
+
 0.5.6 - Jun 2, 2011
   - Improved mac socket server
   - Add IqTask

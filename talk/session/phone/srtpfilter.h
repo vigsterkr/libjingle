@@ -61,6 +61,8 @@ extern const int SRTP_MASTER_KEY_BASE64_LEN;
 class SrtpSession;
 class SrtpStat;
 
+void EnableSrtpDebugging();
+
 // Class to transform SRTP to/from RTP.
 // Initialize by calling SetSend with the local security params, then call
 // SetRecv once the remote security params are received. At that point

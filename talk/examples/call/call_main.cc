@@ -48,6 +48,7 @@
 #include "talk/examples/call/console.h"
 #include "talk/session/phone/filemediaengine.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/srtpfilter.h"
 
 class DebugLog : public sigslot::has_slots<> {
  public:
@@ -247,6 +248,7 @@ int main(int argc, char **argv) {
   DEFINE_string(voiceoutput, NULL, "RTP dump file for voice output.");
   DEFINE_string(videoinput, NULL, "RTP dump file for video input.");
   DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
+  DEFINE_bool(debugsrtp, false, "Enable debugging for srtp.");
   DEFINE_bool(help, false, "Prints this message");
 
   // parse options
@@ -265,6 +267,11 @@ int main(int argc, char **argv) {
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
   std::string secure = FLAG_secure;
+  bool debugsrtp = FLAG_debugsrtp;
+
+  if (debugsrtp) {
+    cricket::EnableSrtpDebugging();
+  }
 
   cricket::SignalingProtocol initial_protocol = cricket::PROTOCOL_HYBRID;
   if (protocol == "jingle") {

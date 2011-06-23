@@ -62,6 +62,12 @@
 #endif  // SRTP_RELATIVE_PATH
 #ifdef _DEBUG
 extern "C" debug_module_t mod_srtp;
+extern "C" debug_module_t mod_auth;
+extern "C" debug_module_t mod_cipher;
+extern "C" debug_module_t mod_stat;
+extern "C" debug_module_t mod_alloc;
+extern "C" debug_module_t mod_aes_icm;
+extern "C" debug_module_t mod_aes_hmac;
 #endif
 #else
 // SrtpFilter needs that constant.
@@ -87,6 +93,17 @@ bool SrtpNotAvailable(const char *func) {
 }  // anonymous namespace
 
 #endif  // !HAVE_SRTP
+
+void EnableSrtpDebugging() {
+  debug_on(mod_srtp);
+  debug_on(mod_auth);
+  debug_on(mod_cipher);
+  debug_on(mod_stat);
+  debug_on(mod_alloc);
+  debug_on(mod_aes_icm);
+  // debug_on(mod_aes_cbc);
+  // debug_on(mod_hmac);
+}
 
 SrtpFilter::SrtpFilter()
     : state_(ST_INIT),
@@ -444,9 +461,6 @@ bool SrtpSession::SetKey(int type, const std::string& cs,
 bool SrtpSession::Init() {
   if (!inited_) {
     int err;
-#ifdef DEBUG_SRTP
-    debug_on(mod_srtp);
-#endif
     err = srtp_init();
     if (err != err_status_ok) {
       LOG(LS_ERROR) << "Failed to init SRTP, err=" << err;
