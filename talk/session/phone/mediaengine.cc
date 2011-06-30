@@ -51,18 +51,18 @@ class ChromiumWebRtcVoiceEngine : public WebRtcVoiceEngine {
 #endif  // PLATFORM_CHROMIUM
 
 MediaEngine* MediaEngine::Create() {
-#if defined(ANDROID)
-  return AndroidMediaEngineFactory::Create();
+#if defined(HAVE_LINPHONE)
+  return new LinphoneMediaEngine("", "");
+#elif defined(HAVE_WEBRTC) && defined(PLATFORM_CHROMIUM)
+  return new CompositeMediaEngine<ChromiumWebRtcVoiceEngine,
+      WebRtcVideoEngine>();
 #elif defined(HAVE_WEBRTC)
   return new CompositeMediaEngine<WebRtcVoiceEngine, WebRtcVideoEngine>();
-#elif defined(PLATFORM_CHROMIUM)
-  return new CompositeMediaEngine<ChromiumWebRtcVoiceEngine,
-                                  WebRtcVideoEngine>();
-#elif defined(HAVE_LINPHONE)
-  return new LinphoneMediaEngine("", "");
+#elif defined(ANDROID)
+  return AndroidMediaEngineFactory::Create();
 #else
   return new NullMediaEngine();
-#endif  // ANDROID or HAVE_WEBRTC or PLATFORM_CHROMIUM or HAVE_LINPHONE
+#endif  // HAVE_LINPHONE HAVE_WEBRTC PLATFORM_CHROMIUM ANDROID
 }
 
 };  // namespace cricket
