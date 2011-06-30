@@ -95,6 +95,7 @@ bool SrtpNotAvailable(const char *func) {
 #endif  // !HAVE_SRTP
 
 void EnableSrtpDebugging() {
+#ifdef _DEBUG
   debug_on(mod_srtp);
   debug_on(mod_auth);
   debug_on(mod_cipher);
@@ -103,6 +104,7 @@ void EnableSrtpDebugging() {
   debug_on(mod_aes_icm);
   // debug_on(mod_aes_cbc);
   // debug_on(mod_hmac);
+#endif
 }
 
 SrtpFilter::SrtpFilter()

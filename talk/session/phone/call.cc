@@ -137,9 +137,9 @@ bool Call::SendViewRequest(Session* session,
   StaticVideoViews::const_iterator it;
   for (it = view_request.static_video_views.begin();
        it != view_request.static_video_views.end(); ++it) {
-    const NamedSource* found_source =
-        media_sources_.GetVideoSourceBySsrc(it->ssrc);
-    if (!found_source) {
+    NamedSource found_source;
+    bool found = media_sources_.GetVideoSourceBySsrc(it->ssrc, &found_source);
+    if (!found) {
       LOG(LS_WARNING) <<
           "Tried sending view request for bad ssrc: " << it->ssrc;
       return false;
@@ -544,62 +544,68 @@ void Call::OnSessionInfo(Session *session,
     }
 
     NamedSources::iterator it;
-    for (it = sources.audio.begin(); it != sources.audio.end(); ++it) {
-      const NamedSource* found;
+    for (it = sources.mutable_audio()->begin();
+         it != sources.mutable_audio()->end(); ++it) {
+      bool found = false;
+      NamedSource found_source;
       if (it->ssrc_set) {
-        found = media_sources_.GetAudioSourceBySsrc(it->ssrc);
+        found = media_sources_.GetAudioSourceBySsrc(it->ssrc, &found_source);
       } else {
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
-        found = media_sources_.GetFirstAudioSourceByNick(it->nick);
+        found = media_sources_.GetFirstAudioSourceByNick(it->nick,
+                                                         &found_source);
         if (found) {
-          it->SetSsrc(found->ssrc);
+          it->SetSsrc(found_source.ssrc);
           it->removed = true;
         } else {
           continue;  // No ssrc to remove.
         }
       }
       if (it->removed && found) {
-        RemoveVoiceStream(session, found->ssrc);
+        RemoveVoiceStream(session, found_source.ssrc);
         media_sources_.RemoveAudioSourceBySsrc(it->ssrc);
-        updates.audio.push_back(*it);
-        LOG(LS_INFO) << "Removed voice stream:  " << found->ssrc;
+        updates.mutable_audio()->push_back(*it);
+        LOG(LS_INFO) << "Removed voice stream:  " << found_source.ssrc;
       } else if (!it->removed && !found) {
         AddVoiceStream(session, it->ssrc);
         media_sources_.AddAudioSource(*it);
-        updates.audio.push_back(*it);
+        updates.mutable_audio()->push_back(*it);
         LOG(LS_INFO) << "Added voice stream:  " << it->ssrc;
       }
     }
-    for (it = sources.video.begin(); it != sources.video.end(); ++it) {
-      const NamedSource* found;
+    for (it = sources.mutable_video()->begin();
+         it != sources.mutable_video()->end(); ++it) {
+      bool found = false;
+      NamedSource found_source;
       if (it->ssrc_set) {
-        found = media_sources_.GetVideoSourceBySsrc(it->ssrc);
+        found = media_sources_.GetVideoSourceBySsrc(it->ssrc, &found_source);
       } else {
         // For backwards compatibility, we remove by nick.
         // TODO: Remove once all senders use explicit remove by ssrc.
-        found = media_sources_.GetFirstVideoSourceByNick(it->nick);
+        found = media_sources_.GetFirstVideoSourceByNick(it->nick,
+                                                         &found_source);
         if (found) {
-          it->SetSsrc(found->ssrc);
+          it->SetSsrc(found_source.ssrc);
           it->removed = true;
         } else {
           continue;  // No ssrc to remove.
         }
       }
       if (it->removed && found) {
-        RemoveVideoStream(session, found->ssrc);
+        RemoveVideoStream(session, found_source.ssrc);
         media_sources_.RemoveVideoSourceBySsrc(it->ssrc);
-        updates.video.push_back(*it);
-        LOG(LS_INFO) << "Removed video stream:  " << found->ssrc;
+        updates.mutable_video()->push_back(*it);
+        LOG(LS_INFO) << "Removed video stream:  " << found_source.ssrc;
       } else if (!it->removed && !found) {
         AddVideoStream(session, it->ssrc);
         media_sources_.AddVideoSource(*it);
-        updates.video.push_back(*it);
+        updates.mutable_video()->push_back(*it);
         LOG(LS_INFO) << "Added video stream:  " << it->ssrc;
       }
     }
 
-    if (!updates.audio.empty() || !updates.video.empty()) {
+    if (!updates.audio().empty() || !updates.video().empty()) {
       SignalMediaSourcesUpdate(this, session, updates);
     }
   }

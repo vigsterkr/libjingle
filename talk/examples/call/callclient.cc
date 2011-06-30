@@ -899,8 +899,8 @@ void CallClient::SetVolume(const std::string& level) {
 void CallClient::OnMediaSourcesUpdate(cricket::Call* call,
                                       cricket::Session* session,
                                       const cricket::MediaSources& sources) {
-  for (cricket::NamedSources::const_iterator it = sources.video.begin();
-       it != sources.video.end(); ++it) {
+  for (cricket::NamedSources::const_iterator it = sources.video().begin();
+       it != sources.video().end(); ++it) {
     if (it->removed) {
       RemoveStaticRenderedView(it->ssrc);
     } else {
