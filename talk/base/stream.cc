@@ -543,15 +543,22 @@ POpenStream::~POpenStream() {
   POpenStream::Close();
 }
 
-bool POpenStream::Open(const std::string& subcommand, const char* mode) {
+bool POpenStream::Open(const std::string& subcommand,
+                       const char* mode,
+                       int *error) {
   Close();
   file_ = popen(subcommand.c_str(), mode);
-  return file_ != NULL;
+  if (file_ == NULL) {
+    if (error)
+      *error = errno;
+    return false;
+  }
+  return true;
 }
 
 bool POpenStream::OpenShare(const std::string& subcommand, const char* mode,
-                            int shflag) {
-  return Open(subcommand, mode);
+                            int shflag, int* error) {
+  return Open(subcommand, mode, error);
 }
 
 void POpenStream::DoClose() {

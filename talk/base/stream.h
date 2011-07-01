@@ -460,10 +460,11 @@ class POpenStream : public FileStream {
   POpenStream() : wait_status_(-1) {}
   virtual ~POpenStream();
 
-  virtual bool Open(const std::string& subcommand, const char* mode);
+  virtual bool Open(const std::string& subcommand, const char* mode,
+                    int* error);
   // Same as Open(). shflag is ignored.
   virtual bool OpenShare(const std::string& subcommand, const char* mode,
-                         int shflag);
+                         int shflag, int* error);
 
   // Returns the wait status from the last Close() of an Open()'ed stream, or
   // -1 if no Open()+Close() has been done on this object. Meaning of the number

@@ -272,7 +272,7 @@ std::string ReadLinuxLsbRelease() {
   }
   // No cached result. Run lsb_release and parse output.
   POpenStream lsb_release_output;
-  if (!lsb_release_output.Open("lsb_release -idrcs", "r")) {
+  if (!lsb_release_output.Open("lsb_release -idrcs", "r", NULL)) {
     LOG_ERR(LS_ERROR) << "Can't run lsb_release";
     return lsb_release_string;  // empty
   }
