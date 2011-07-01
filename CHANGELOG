@@ -1,5 +1,8 @@
 Libjingle
 
+0.5.8 - July 1, 2011
+  - Support for loudest speaker detection
+
 0.5.7 - Jun 23, 2011
   - Support for setting MUC display name
   - Update STUN support to RFC5389

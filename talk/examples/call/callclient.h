@@ -34,6 +34,7 @@
 
 #include "talk/p2p/base/session.h"
 #include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/xmpp/xmppclient.h"
 #include "talk/examples/call/status.h"
@@ -65,6 +66,7 @@ namespace cricket {
 class PortAllocator;
 class MediaEngine;
 class MediaSessionClient;
+class NamedSource;
 class Receiver;
 class Call;
 struct CallOptions;
@@ -166,6 +168,9 @@ class CallClient: public sigslot::has_slots<> {
   void OnMediaSourcesUpdate(cricket::Call* call,
                             cricket::Session* session,
                             const cricket::MediaSources& sources);
+  void OnSpeakerChanged(cricket::Call* call,
+                        cricket::BaseSession* session,
+                        const cricket::NamedSource& speaker_source);
   void OnRoomLookupResponse(const buzz::MucRoomInfo& room_info);
   void OnRoomLookupError(const buzz::XmlElement* stanza);
   buzz::Jid GenerateRandomMucJid();

@@ -37,6 +37,7 @@
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/xmpp/jid.h"
 #include "talk/session/phone/audiomonitor.h"
+#include "talk/session/phone/currentspeakermonitor.h"
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/voicechannel.h"
 
@@ -64,6 +65,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void StopConnectionMonitor(BaseSession *session);
   void StartAudioMonitor(BaseSession *session, int cms);
   void StopAudioMonitor(BaseSession *session);
+  bool IsAudioMonitorRunning(BaseSession *session);
+  void StartSpeakerMonitor(BaseSession *session);
+  void StopSpeakerMonitor(BaseSession *session);
   void Mute(bool mute);
   void PressDTMF(int event);
 
@@ -94,6 +98,11 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
       SignalConnectionMonitor;
   sigslot::signal2<Call *, const VoiceMediaInfo&> SignalMediaMonitor;
   sigslot::signal2<Call *, const AudioInfo&> SignalAudioMonitor;
+  // Empty nick on NamedSource means "unknown".
+  // Ssrc of 0 on NamedSource means "no current speaker".
+  sigslot::signal3<Call *,
+                   BaseSession *,
+                   const NamedSource&> SignalSpeakerMonitor;
   sigslot::signal2<Call *, const std::vector<ConnectionInfo> &>
       SignalVideoConnectionMonitor;
   sigslot::signal2<Call *, const VideoMediaInfo&> SignalVideoMediaMonitor;
@@ -117,6 +126,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                            const std::vector<ConnectionInfo> &infos);
   void OnMediaMonitor(VoiceChannel *channel, const VoiceMediaInfo& info);
   void OnAudioMonitor(VoiceChannel *channel, const AudioInfo& info);
+  void OnSpeakerMonitor(CurrentSpeakerMonitor* monitor, uint32 ssrc);
   void OnConnectionMonitor(VideoChannel *channel,
                            const std::vector<ConnectionInfo> &infos);
   void OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info);
@@ -134,6 +144,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   MediaSources media_sources_;
   std::map<std::string, VoiceChannel *> voice_channel_map_;
   std::map<std::string, VideoChannel *> video_channel_map_;
+  std::map<std::string, CurrentSpeakerMonitor *> speaker_monitor_map_;
   VideoRenderer* local_renderer_;
   bool video_;
   bool muted_;

@@ -26,7 +26,9 @@
  */
 
 #include "talk/session/phone/currentspeakermonitor.h"
+
 #include "talk/base/logging.h"
+#include "talk/session/phone/call.h"
 
 namespace cricket {
 
@@ -37,7 +39,7 @@ const int kMaxAudioLevel = 9;
 const int kDefaultMinTimeBetweenSwitches = 1000;
 }
 
-CurrentSpeakerMonitor::CurrentSpeakerMonitor(Call* call, Session* session)
+CurrentSpeakerMonitor::CurrentSpeakerMonitor(Call* call, BaseSession* session)
     : started_(false),
       call_(call),
       session_(session),
@@ -184,7 +186,8 @@ void CurrentSpeakerMonitor::OnAudioMonitor(Call* call, const AudioInfo& info) {
   }
 }
 
-void CurrentSpeakerMonitor::OnMediaSourcesUpdate(Call* call, Session* session,
+void CurrentSpeakerMonitor::OnMediaSourcesUpdate(Call* call,
+                                                 Session* session,
                                                  const MediaSources& sources) {
   if (call == call_ && session == session_) {
     // Update the speaking state map based on new or removed sources.

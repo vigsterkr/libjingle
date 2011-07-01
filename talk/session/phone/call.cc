@@ -44,6 +44,8 @@ const size_t kMaxDTMFDigits = 30;
 const int kSendToVoicemailTimeout = 1000*20;
 const int kNoVoicemailTimeout = 1000*180;
 const int kMediaMonitorInterval = 1000*15;
+// In order to be the same as the server-side switching, this must be 100.
+const int kAudioMonitorPollPeriodMillis = 100;
 }
 
 Call::Call(MediaSessionClient* session_client)
@@ -319,6 +321,9 @@ void Call::RemoveSession(Session *session) {
     session_client_->channel_manager()->DestroyVoiceChannel(voice_channel);
   }
 
+  // Destroy speaker monitor
+  StopSpeakerMonitor(session);
+
   // Signal client
   SignalRemoveSession(this, session);
 
@@ -479,6 +484,43 @@ void Call::StopAudioMonitor(BaseSession *session) {
   }
 }
 
+bool Call::IsAudioMonitorRunning(BaseSession *session) {
+  VoiceChannel *voice_channel = GetVoiceChannel(session);
+  if (voice_channel) {
+    return voice_channel->IsAudioMonitorRunning();
+  } else {
+    return false;
+  }
+}
+
+void Call::StartSpeakerMonitor(BaseSession *session) {
+  if (speaker_monitor_map_.find(session->id()) == speaker_monitor_map_.end()) {
+    if (!IsAudioMonitorRunning(session)) {
+      StartAudioMonitor(session, kAudioMonitorPollPeriodMillis);
+    }
+    CurrentSpeakerMonitor* speaker_monitor =
+        new cricket::CurrentSpeakerMonitor(this, session);
+    speaker_monitor->SignalUpdate.connect(this, &Call::OnSpeakerMonitor);
+    speaker_monitor->Start();
+    speaker_monitor_map_[session->id()] = speaker_monitor;
+  } else {
+    LOG(LS_WARNING) << "Already started speaker monitor for session "
+                    << session->id() << ".";
+  }
+}
+
+void Call::StopSpeakerMonitor(BaseSession *session) {
+  if (speaker_monitor_map_.find(session->id()) == speaker_monitor_map_.end()) {
+    LOG(LS_WARNING) << "Speaker monitor for session "
+                    << session->id() << " already stopped.";
+  } else {
+    CurrentSpeakerMonitor* monitor = speaker_monitor_map_[session->id()];
+    monitor->Stop();
+    speaker_monitor_map_.erase(session->id());
+    delete monitor;
+  }
+}
+
 void Call::OnConnectionMonitor(VoiceChannel *channel,
                                const std::vector<ConnectionInfo> &infos) {
   SignalConnectionMonitor(this, infos);
@@ -490,6 +532,13 @@ void Call::OnMediaMonitor(VoiceChannel *channel, const VoiceMediaInfo& info) {
 
 void Call::OnAudioMonitor(VoiceChannel *channel, const AudioInfo& info) {
   SignalAudioMonitor(this, info);
+}
+
+void Call::OnSpeakerMonitor(CurrentSpeakerMonitor* monitor, uint32 ssrc) {
+  NamedSource source;
+  source.ssrc = ssrc;
+  media_sources_.GetAudioSourceBySsrc(ssrc, &source);
+  SignalSpeakerMonitor(this, monitor->session(), source);
 }
 
 void Call::OnConnectionMonitor(VideoChannel *channel,

@@ -49,6 +49,7 @@
 #include "talk/p2p/client/sessionmanagertask.h"
 #include "talk/session/phone/devicemanager.h"
 #include "talk/session/phone/mediaengine.h"
+#include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/videorendererfactory.h"
 #include "talk/xmpp/constants.h"
@@ -416,8 +417,26 @@ void CallClient::OnSessionState(cricket::Call* call,
     console_->PrintLine("call not answered");
   } else if (state == cricket::Session::STATE_INPROGRESS) {
     console_->PrintLine("call in progress");
+    call->SignalSpeakerMonitor.connect(this, &CallClient::OnSpeakerChanged);
+    call->StartSpeakerMonitor(session);
   } else if (state == cricket::Session::STATE_RECEIVEDTERMINATE) {
     console_->PrintLine("other side hung up");
+  }
+}
+
+void CallClient::OnSpeakerChanged(cricket::Call* call,
+                                  cricket::BaseSession* session,
+                                  const cricket::NamedSource& speaker) {
+  if (speaker.ssrc == 0) {
+    console_->PrintLine("Session %s has no current speaker.",
+                        session->id().c_str());
+  } else if (speaker.nick.empty()) {
+    console_->PrintLine("Session %s speaker change to unknown (%u).",
+                        session->id().c_str(), speaker.ssrc);
+  } else {
+    console_->PrintLine("Session %s speaker changed to %s (%u).",
+                        session->id().c_str(), speaker.nick.c_str(),
+                        speaker.ssrc);
   }
 }
 
@@ -477,6 +496,7 @@ void CallClient::OnStatusUpdate(const buzz::Status& status) {
   if (status.available() && status.voice_capability()) {
      console_->PrintLine("Adding to roster: %s", key.c_str());
     (*roster_)[key] = item;
+    // TODO: Make some of these constants.
   } else {
     console_->PrintLine("Removing from roster: %s", key.c_str());
     RosterMap::iterator iter = roster_->find(key);

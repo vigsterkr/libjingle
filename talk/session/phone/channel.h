@@ -298,6 +298,7 @@ class VoiceChannel : public BaseChannel {
 
   void StartAudioMonitor(int cms);
   void StopAudioMonitor();
+  bool IsAudioMonitorRunning() const;
   sigslot::signal2<VoiceChannel*, const AudioInfo&> SignalAudioMonitor;
 
   int GetInputLevel_w();

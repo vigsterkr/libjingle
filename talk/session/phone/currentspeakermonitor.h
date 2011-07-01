@@ -33,17 +33,25 @@
 
 #include <map>
 
-#include "talk/session/phone/call.h"
+#include "talk/base/basictypes.h"
 #include "talk/base/sigslot.h"
 
 namespace cricket {
+
+class AudioInfo;
+class BaseSession;
+class Call;
+class MediaSources;
+class Session;
 
 // Note that the call's audio monitor must be started before this is started.
 // It's recommended that the audio monitor be started with a 100 ms period.
 class CurrentSpeakerMonitor : public sigslot::has_slots<> {
  public:
-  CurrentSpeakerMonitor(Call* call, Session* session);
+  CurrentSpeakerMonitor(Call* call, BaseSession* session);
   ~CurrentSpeakerMonitor();
+
+  BaseSession* session() const { return session_; }
 
   void Start();
   void Stop();
@@ -77,7 +85,7 @@ class CurrentSpeakerMonitor : public sigslot::has_slots<> {
 
   bool started_;
   Call* call_;
-  Session* session_;
+  BaseSession* session_;
   std::map<uint32, SpeakingState> ssrc_to_speaking_state_map_;
   uint32 current_speaker_ssrc_;
   // To prevent overswitching, switching is disabled for some time after a

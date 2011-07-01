@@ -729,6 +729,10 @@ void VoiceChannel::StopAudioMonitor() {
   }
 }
 
+bool VoiceChannel::IsAudioMonitorRunning() const {
+  return (audio_monitor_.get() != NULL);
+}
+
 int VoiceChannel::GetInputLevel_w() {
   return media_engine()->GetInputLevel();
 }
