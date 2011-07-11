@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/constructormagic.h"
 #include "talk/base/criticalsection.h"
 #include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
@@ -238,6 +239,9 @@ class MessageQueue {
   PriorityQueue dmsgq_;
   uint32 dmsgq_next_num_;
   CriticalSection crit_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MessageQueue);
 };
 
 }  // namespace talk_base

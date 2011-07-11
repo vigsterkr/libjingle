@@ -140,6 +140,8 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   void OnConfigTimeout();
   void AllocatePorts();
   void OnAllocate();
+  void DoAllocate();
+  void OnNetworksChanged();
   void DisableEquivalentPhases(talk_base::Network* network,
       PortConfiguration* config, uint32* flags);
   void AddAllocatedPort(Port* port, AllocationSequence* seq, float pref,
@@ -159,6 +161,7 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   talk_base::PacketSocketFactory* socket_factory_;
   bool configuration_done_;
   bool allocation_started_;
+  bool network_manager_started_;
   bool running_;  // set when StartGetAllPorts is called
   std::vector<PortConfiguration*> configs_;
   std::vector<AllocationSequence*> sequences_;

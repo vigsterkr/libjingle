@@ -38,11 +38,11 @@
 
 namespace cricket {
 
-class AudioInfo;
 class BaseSession;
 class Call;
-class MediaSources;
 class Session;
+struct AudioInfo;
+struct MediaSources;
 
 // Note that the call's audio monitor must be started before this is started.
 // It's recommended that the audio monitor be started with a 100 ms period.

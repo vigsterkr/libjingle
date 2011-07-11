@@ -25,8 +25,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_MESSAGEHANDLER_H__
-#define TALK_BASE_MESSAGEHANDLER_H__
+#ifndef TALK_BASE_MESSAGEHANDLER_H_
+#define TALK_BASE_MESSAGEHANDLER_H_
+
+#include "talk/base/constructormagic.h"
 
 namespace talk_base {
 
@@ -35,12 +37,18 @@ struct Message;
 // Messages get dispatched to a MessageHandler
 
 class MessageHandler {
-public:
+ public:
   virtual ~MessageHandler();
 
   virtual void OnMessage(Message* msg) = 0;
+
+ protected:
+  MessageHandler() {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MessageHandler);
 };
 
 } // namespace talk_base
 
-#endif // TALK_BASE_MESSAGEHANDLER_H__
+#endif // TALK_BASE_MESSAGEHANDLER_H_

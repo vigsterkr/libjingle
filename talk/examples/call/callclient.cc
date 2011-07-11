@@ -329,7 +329,7 @@ void CallClient::InitMedia() {
   // TODO: It looks like we are leaking many objects. E.g.
   // |network_manager_| is never deleted.
 
-  network_manager_ = new talk_base::NetworkManager();
+  network_manager_ = new talk_base::BasicNetworkManager();
 
   // TODO: Decide if the relay address should be specified here.
   talk_base::SocketAddress stun_addr("stun.l.google.com", 19302);

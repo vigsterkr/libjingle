@@ -37,6 +37,7 @@
 #include <pthread.h>
 #endif
 
+#include "talk/base/constructormagic.h"
 #include "talk/base/messagequeue.h"
 
 #ifdef WIN32
@@ -87,6 +88,8 @@ class ThreadManager {
 #ifdef WIN32
   static DWORD key_;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(ThreadManager);
 };
 
 class Thread;
@@ -109,6 +112,12 @@ class Runnable {
  public:
   virtual ~Runnable() {}
   virtual void Run(Thread* thread) = 0;
+
+ protected:
+  Runnable() {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(Runnable);
 };
 
 class Thread : public MessageQueue {
@@ -208,6 +217,8 @@ class Thread : public MessageQueue {
   bool owned_;
 
   friend class ThreadManager;
+
+  DISALLOW_COPY_AND_ASSIGN(Thread);
 };
 
 // AutoThread automatically installs itself at construction
@@ -215,16 +226,25 @@ class Thread : public MessageQueue {
 // _not already_ associated with the current OS thread.
 
 class AutoThread : public Thread {
-public:
+ public:
   AutoThread(SocketServer* ss = 0);
   virtual ~AutoThread();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AutoThread);
 };
 
 // Win32 extension for threads that need to use COM
 #ifdef WIN32
 class ComThread : public Thread {
+ public:
+  ComThread() {}
+
  protected:
   virtual void Run();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ComThread);
 };
 #endif
 
@@ -238,8 +258,11 @@ class SocketServerScope {
   ~SocketServerScope() {
     Thread::Current()->set_socketserver(old_ss_);
   }
+
  private:
   SocketServer* old_ss_;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(SocketServerScope);
 };
 
 }  // namespace talk_base

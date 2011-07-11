@@ -30,6 +30,7 @@
 
 #include <string>
 
+#include "talk/base/constructormagic.h"
 #include "talk/base/cryptstring.h"
 #include "talk/base/proxyinfo.h"
 #include "talk/base/signalthread.h"
@@ -83,6 +84,8 @@ class AutoDetectProxy : public SignalThread {
   ProxyInfo proxy_;
   AsyncSocket* socket_;
   int next_;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(AutoDetectProxy);
 };
 
 }  // namespace talk_base

@@ -34,50 +34,105 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/messagehandler.h"
+#include "talk/base/sigslot.h"
 
 namespace talk_base {
 
 class Network;
 class NetworkSession;
+class Thread;
 
-// Keeps track of the available network interfaces over time so that quality
-// information can be aggregated and recorded.
+// Generic network manager interface. It provides list of local
+// networks.
 class NetworkManager {
  public:
+  typedef std::vector<Network*> NetworkList;
+
+  NetworkManager();
   virtual ~NetworkManager();
 
-  // Updates and returns the current list of networks available on this machine.
-  // This version will make sure that repeated calls return the same object for
-  // a given network, so that quality is tracked appropriately.
-  // Does not include ignored networks.
-  bool GetNetworks(std::vector<Network*>* networks);
+  // Called when network list is updated.
+  sigslot::signal0<> SignalNetworksChanged;
 
-  // Logs the available networks.
-  void DumpNetworks(bool include_ignored);
+  // Indicates a failure when getting list of network interfaces.
+  sigslot::signal0<> SignalError;
 
-  // Reads and writes the state of the quality database in a string format.
-  std::string GetState() const;
-  void SetState(const std::string& str);
+  // Start/Stop monitoring of network interfaces
+  // list. SignalNetworksChanged or SignalError is emitted immidiately
+  // after StartUpdating() is called. After that SignalNetworksChanged
+  // is emitted wheneven list of networks changes.
+  virtual void StartUpdating() = 0;
+  virtual void StopUpdating() = 0;
 
-  // Creates a network object for each network available on the machine.
-  static bool CreateNetworks(bool include_ignored,
-                             std::vector<Network*>* networks);
-  // Determines if a network should be ignored.
-  static bool IsIgnoredNetwork(const Network& network);
+  // Returns the current list of networks available on this machine.
+  // UpdateNetworks() must be called before this method is called.
+  // It makes sure that repeated calls return the same object for a
+  // given network, so that quality is tracked appropriately. Does not
+  // include ignored networks.
+  virtual void GetNetworks(NetworkList* networks) const = 0;
+};
+
+// Base class for NetworkManager implementations.
+class NetworkManagerBase : public NetworkManager {
+ public:
+  NetworkManagerBase();
+  virtual ~NetworkManagerBase();
+
+  virtual void GetNetworks(std::vector<Network*>* networks) const;
 
  protected:
-  // Fills the supplied list with all usable networks. Overrideable.
-  virtual bool EnumNetworks(bool include_ignored,
-                            std::vector<Network*>* networks);
+  // Updates |networks_| with the networks listed in |list|. If
+  // |network_map_| already has a Network object for a network listed
+  // in the |list| then it is reused. Accept ownership of the Network
+  // objects in the |list|. SignalNetworkListUpdated is emitted if
+  // there is a change in network configuration or
+  // |force_notification| is set to true.
+  void MergeNetworkList(const NetworkList& list, bool force_notification);
 
  private:
   typedef std::map<std::string, Network*> NetworkMap;
 
-  NetworkMap networks_;
+  void DoUpdateNetworks();
+
+  NetworkList networks_;
+  NetworkMap networks_map_;
+};
+
+// Basic implementation of the NetworkManager interface that gets list
+// of networks using OS APIs.
+class BasicNetworkManager : public NetworkManagerBase,
+                            public MessageHandler {
+ public:
+  BasicNetworkManager();
+  virtual ~BasicNetworkManager();
+
+  virtual void StartUpdating();
+  virtual void StopUpdating();
+
+  // Logs the available networks.
+  static void DumpNetworks(bool include_ignored);
+
+  // MessageHandler interface.
+  virtual void OnMessage(Message* msg);
+
+ protected:
+  // Creates a network object for each network available on the machine.
+  static bool CreateNetworks(bool include_ignored, NetworkList* networks);
+  // Determines if a network should be ignored.
+  static bool IsIgnoredNetwork(const Network& network);
+
+ private:
+  friend class NetworkTest;
+
+  void DoUpdateNetworks();
+
+  Thread* thread_;
+  bool started_;
+  bool sent_first_update_;
 };
 
 // Represents a Unix-type network interface, with a name and single address.
-// It also includes the ability to track and estimate quality.
 class Network {
  public:
   Network(const std::string& name, const std::string& description,
@@ -104,18 +159,6 @@ class Network {
   bool ignored() const { return ignored_; }
   void set_ignored(bool ignored) { ignored_ = ignored; }
 
-  // Updates the list of sessions that are ongoing.
-  void StartSession(NetworkSession* session);
-  void StopSession(NetworkSession* session);
-
-  // Re-computes the estimate of near-future quality based on the information
-  // as of this exact moment.
-  void EstimateQuality();
-
-  // Returns the current estimate of the near-future quality of connections
-  // that use this local interface.
-  double quality() { return quality_; }
-
   // Debugging description of this network
   std::string ToString() const;
 
@@ -132,38 +175,9 @@ class Network {
   double uniform_denominator_;
   double exponential_numerator_;
   double exponential_denominator_;
-  uint32 last_data_time_;
-  double quality_;
-
-  // Updates the statistics maintained to include the given estimate.
-  void AddDataPoint(uint32 time, double quality);
-
-  // Converts the internal state to and from a string.  This is used to record
-  // quality information into a permanent store.
-  void SetState(const std::string& str);
-  std::string GetState() const;
 
   friend class NetworkManager;
 };
-
-// Represents a session that is in progress using a particular network and can
-// provide data about the quality of the network at any given moment.
-class NetworkSession {
- public:
-  virtual ~NetworkSession() { }
-
-  // Determines whether this session has an estimate at this moment.  We will
-  // only call GetCurrentQuality when this returns true.
-  virtual bool HasQuality() = 0;
-
-  // Returns an estimate of the quality at this exact moment.  The result should
-  // be a MOS (mean opinion score) value.
-  virtual float GetCurrentQuality() = 0;
-};
-
-const double QUALITY_BAD  = 3.0;
-const double QUALITY_FAIR = 3.35;
-const double QUALITY_GOOD = 3.7;
 
 }  // namespace talk_base
 

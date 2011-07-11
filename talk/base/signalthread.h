@@ -30,6 +30,7 @@
 
 #include <string>
 
+#include "talk/base/constructormagic.h"
 #include "talk/base/thread.h"
 #include "talk/base/sigslot.h"
 
@@ -117,16 +118,17 @@ class SignalThread : public sigslot::has_slots<>, protected MessageHandler {
     kStopping,        // Work is being interrupted
   };
 
-  friend class Worker;
   class Worker : public Thread {
    public:
     explicit Worker(SignalThread* parent) : parent_(parent) {}
     virtual void Run() { parent_->Run(); }
+
    private:
     SignalThread* parent_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(Worker);
   };
 
-  friend class EnterExit;
   class EnterExit {
    public:
     explicit EnterExit(SignalThread* t) : t_(t) {
@@ -142,8 +144,11 @@ class SignalThread : public sigslot::has_slots<>, protected MessageHandler {
       if (d)
         delete t_;
     }
+
    private:
     SignalThread* t_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(EnterExit);
   };
 
   void Run();
@@ -154,6 +159,8 @@ class SignalThread : public sigslot::has_slots<>, protected MessageHandler {
   CriticalSection cs_;
   State state_;
   int refcount_;
+
+  DISALLOW_COPY_AND_ASSIGN(SignalThread);
 };
 
 ///////////////////////////////////////////////////////////////////////////////

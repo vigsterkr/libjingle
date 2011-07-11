@@ -138,7 +138,6 @@ void SocketMonitor::PollSocket(bool poll) {
       info.recv_bytes_second = connection->recv_bytes_second();
       info.local_candidate = connection->local_candidate();
       info.remote_candidate = connection->remote_candidate();
-      info.est_quality = connection->port()->network()->quality();
       info.key = connection;
       connection_infos_.push_back(info);
     }

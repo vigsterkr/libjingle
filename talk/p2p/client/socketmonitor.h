@@ -51,7 +51,6 @@ struct ConnectionInfo {
   size_t recv_bytes_second;
   Candidate local_candidate;
   Candidate remote_candidate;
-  double est_quality;
   void *key;
 };
 

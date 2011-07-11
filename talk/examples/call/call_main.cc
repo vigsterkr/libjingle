@@ -46,6 +46,7 @@
 #include "talk/examples/login/xmpppump.h"
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
+#include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/filemediaengine.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/srtpfilter.h"
@@ -216,6 +217,7 @@ cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
   return file_media_engine;
 }
 
+
 // TODO: Move this into Console.
 void Print(const char* chars) {
   printf("%s", chars);
@@ -247,6 +249,7 @@ int main(int argc, char **argv) {
   DEFINE_string(voiceinput, NULL, "RTP dump file for voice input.");
   DEFINE_string(voiceoutput, NULL, "RTP dump file for voice output.");
   DEFINE_string(videoinput, NULL, "RTP dump file for video input.");
+  DEFINE_string(yuvvideoinput, NULL, "YUV file for video input.");
   DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
   DEFINE_bool(debugsrtp, false, "Enable debugging for srtp.");
   DEFINE_bool(help, false, "Prints this message");
@@ -389,7 +392,6 @@ int main(int argc, char **argv) {
     // The engine will be released by the client later.
     client->SetMediaEngine(engine);
   }
-
   Console *console = new Console(main_thread, client);
   client->SetConsole(console);
   client->SetAutoAccept(auto_accept);

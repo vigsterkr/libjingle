@@ -30,7 +30,6 @@
 #endif
 
 #include "talk/base/network.h"
-#include "talk/base/stream.h"
 
 #ifdef POSIX
 #include <sys/socket.h>
@@ -47,162 +46,23 @@
 #endif
 
 #include <algorithm>
-#include <cassert>
-#include <cfloat>
-#include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <sstream>
 
 #include "talk/base/host.h"
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/socket.h"  // includes something that makes windows happy
-#include "talk/base/stringencode.h"
-#include "talk/base/time.h"
-
-namespace {
-
-const double kAlpha = 0.5;  // weight for data infinitely far in the past
-const double kHalfLife = 2000;  // half life of exponential decay (in ms)
-const double kLog2 = 0.693147180559945309417;
-const double kLambda = kLog2 / kHalfLife;
-
-// assume so-so quality unless data says otherwise
-const double kDefaultQuality = talk_base::QUALITY_FAIR;
-
-typedef std::map<std::string, std::string> StrMap;
-
-void BuildMap(const StrMap& map, std::string& str) {
-  str.append("{");
-  bool first = true;
-  for (StrMap::const_iterator i = map.begin(); i != map.end(); ++i) {
-    if (!first) str.append(",");
-    str.append(i->first);
-    str.append("=");
-    str.append(i->second);
-    first = false;
-  }
-  str.append("}");
-}
-
-void ParseCheck(std::istringstream& ist, char ch) {
-  if (ist.get() != ch)
-    LOG(LERROR) << "Expecting '" << ch << "'";
-}
-
-std::string ParseString(std::istringstream& ist) {
-  std::string str;
-  int count = 0;
-  while (ist) {
-    char ch = ist.peek();
-    if ((count == 0) && ((ch == '=') || (ch == ',') || (ch == '}'))) {
-      break;
-    } else if (ch == '{') {
-      count += 1;
-    } else if (ch == '}') {
-      count -= 1;
-      if (count < 0)
-        LOG(LERROR) << "mismatched '{' and '}'";
-    }
-    str.append(1, static_cast<char>(ist.get()));
-  }
-  return str;
-}
-
-void ParseMap(const std::string& str, StrMap& map) {
-  if (str.size() == 0)
-    return;
-  std::istringstream ist(str);
-  ParseCheck(ist, '{');
-  for (;;) {
-    std::string key = ParseString(ist);
-    ParseCheck(ist, '=');
-    std::string val = ParseString(ist);
-    map[key] = val;
-    if (ist.peek() == ',')
-      ist.get();
-    else
-      break;
-  }
-  ParseCheck(ist, '}');
-  if (ist.rdbuf()->in_avail() != 0)
-    LOG(LERROR) << "Unexpected characters at end";
-}
-
-}  // namespace
+#include "talk/base/stream.h"
+#include "talk/base/thread.h"
 
 namespace talk_base {
 
-NetworkManager::~NetworkManager() {
-  for (NetworkMap::iterator i = networks_.begin(); i != networks_.end(); ++i)
-    delete i->second;
-}
+namespace {
 
-bool NetworkManager::GetNetworks(std::vector<Network*>* result) {
-  std::vector<Network*> list;
-  if (!EnumNetworks(false, &list)) {
-    return false;
-  }
+const uint32 kUpdateNetworksMessage = 1;
 
-  for (uint32 i = 0; i < list.size(); ++i) {
-    NetworkMap::iterator iter = networks_.find(list[i]->name());
-
-    Network* network;
-    if (iter == networks_.end()) {
-      network = list[i];
-    } else {
-      network = iter->second;
-      network->set_ip(list[i]->ip());
-      network->set_gateway_ip(list[i]->gateway_ip());
-      delete list[i];
-    }
-
-    networks_[network->name()] = network;
-    result->push_back(network);
-  }
-  return true;
-}
-
-void NetworkManager::DumpNetworks(bool include_ignored) {
-  std::vector<Network*> list;
-  EnumNetworks(include_ignored, &list);
-  LOG(LS_INFO) << "NetworkManager detected " << list.size() << " networks:";
-  for (size_t i = 0; i < list.size(); ++i) {
-    const Network* network = list[i];
-    if (!network->ignored() || include_ignored) {
-      LOG(LS_INFO) << network->ToString() << ": " << network->description()
-                   << ", Gateway="
-                   << SocketAddress::IPToString(network->gateway_ip())
-                   << ((network->ignored()) ? ", Ignored" : "");
-    }
-  }
-}
-
-std::string NetworkManager::GetState() const {
-  StrMap map;
-  for (NetworkMap::const_iterator i = networks_.begin();
-       i != networks_.end(); ++i)
-    map[i->first] = i->second->GetState();
-
-  std::string str;
-  BuildMap(map, str);
-  return str;
-}
-
-void NetworkManager::SetState(const std::string& str) {
-  StrMap map;
-  ParseMap(str, map);
-
-  for (StrMap::iterator i = map.begin(); i != map.end(); ++i) {
-    std::string name = i->first;
-    std::string state = i->second;
-
-    Network* network = new Network(name, "", 0, 0);
-    network->SetState(state);
-    networks_[name] = network;
-  }
-}
+// Fetch list of networks every two seconds.
+const int kNetworksUpdateIntervalMs = 2000;
 
 #ifdef POSIX
 // Gets the default gateway for the specified interface.
@@ -215,10 +75,10 @@ uint32 GetDefaultGateway(const std::string& name) {
 
   uint32 gateway_ip = 0;
 
-  FileStream fs;
+  talk_base::FileStream fs;
   if (fs.Open("/proc/net/route", "r", NULL)) {
     std::string line;
-    while (fs.ReadLine(&line) == SR_SUCCESS && gateway_ip == 0) {
+    while (fs.ReadLine(&line) == talk_base::SR_SUCCESS && gateway_ip == 0) {
       char iface[16];
       unsigned int ip, gw;
       if (sscanf(line.c_str(), "%7s %8X %8X", iface, &ip, &gw) == 3 &&
@@ -230,10 +90,91 @@ uint32 GetDefaultGateway(const std::string& name) {
 
   return gateway_ip;
 }
+#endif  // POSIX
 
+bool CompareNetworks(const Network* a, const Network* b) {
+  return a->name() < b->name();
+}
 
-bool NetworkManager::CreateNetworks(bool include_ignored,
-                                    std::vector<Network*>* networks) {
+}  // namespace
+
+NetworkManager::NetworkManager() {
+}
+
+NetworkManager::~NetworkManager() {
+}
+
+NetworkManagerBase::NetworkManagerBase() {
+}
+
+NetworkManagerBase::~NetworkManagerBase() {
+  for (NetworkMap::iterator i = networks_map_.begin();
+       i != networks_map_.end(); ++i) {
+    delete i->second;
+  }
+}
+
+void NetworkManagerBase::GetNetworks(NetworkList* result) const {
+  *result = networks_;
+}
+
+void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks,
+                                          bool force_notification) {
+  // Sort the list so that we can detect when it changes.
+  NetworkList list(new_networks);
+  std::sort(list.begin(), list.end(), CompareNetworks);
+
+  bool changed = false;
+
+  if (networks_.size() != list.size())
+    changed = true;
+
+  networks_.resize(list.size());
+
+  for (uint32 i = 0; i < list.size(); ++i) {
+    NetworkMap::iterator iter = networks_map_.find(list[i]->name());
+
+    Network* network;
+    if (iter == networks_map_.end()) {
+      // That's a new network, add it to the map.
+      network = list[i];
+      networks_map_[network->name()] = network;
+    } else {
+      network = iter->second;
+      if (network->ip() != list[i]->ip()) {
+        changed = true;
+        network->set_ip(list[i]->ip());
+      }
+
+      if (network->gateway_ip() != list[i]->gateway_ip()) {
+        changed = true;
+        network->set_gateway_ip(list[i]->gateway_ip());
+      }
+
+      delete list[i];
+    }
+
+    if (!changed && networks_[i]->name() != network->name())
+      changed = true;
+
+    networks_[i] = network;
+  }
+
+  if (changed || force_notification)
+    SignalNetworksChanged();
+}
+
+BasicNetworkManager::BasicNetworkManager()
+    : thread_(NULL),
+      started_(false) {
+}
+
+BasicNetworkManager::~BasicNetworkManager() {
+}
+
+#ifdef POSIX
+bool BasicNetworkManager::CreateNetworks(bool include_ignored,
+                                         NetworkList* networks) {
   int fd;
   if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
     LOG_ERR(LERROR) << "socket";
@@ -248,7 +189,7 @@ bool NetworkManager::CreateNetworks(bool include_ignored,
     LOG_ERR(LERROR) << "ioctl";
     return false;
   }
-  assert(ifc.ifc_len < static_cast<int>(64 * sizeof(struct ifreq)));
+  ASSERT(ifc.ifc_len < static_cast<int>(64 * sizeof(struct ifreq)));
 
   struct ifreq* ptr = reinterpret_cast<struct ifreq*>(ifc.ifc_buf);
   struct ifreq* end =
@@ -283,8 +224,8 @@ bool NetworkManager::CreateNetworks(bool include_ignored,
 #endif  // POSIX
 
 #ifdef WIN32
-bool NetworkManager::CreateNetworks(bool include_ignored,
-                                    std::vector<Network*>* networks) {
+bool BasicNetworkManager::CreateNetworks(bool include_ignored,
+                                         NetworkList* networks) {
   IP_ADAPTER_INFO info_temp;
   ULONG len = 0;
 
@@ -332,7 +273,7 @@ bool NetworkManager::CreateNetworks(bool include_ignored,
 }
 #endif  // WIN32
 
-bool NetworkManager::IsIgnoredNetwork(const Network& network) {
+bool BasicNetworkManager::IsIgnoredNetwork(const Network& network) {
 #ifdef POSIX
   // Ignore local networks (lo, lo0, etc)
   // Also filter out VMware interfaces, typically named vmnet1 and vmnet8
@@ -354,57 +295,65 @@ bool NetworkManager::IsIgnoredNetwork(const Network& network) {
   return (network.ip() < 0x01000000);
 }
 
-bool NetworkManager::EnumNetworks(bool include_ignored,
-                                  std::vector<Network*>* result) {
-  return CreateNetworks(include_ignored, result);
+void BasicNetworkManager::StartUpdating() {
+  if (started_) {
+    sent_first_update_ = false;
+    return;
+  }
+
+  thread_ = Thread::Current();
+  started_ = true;
+  sent_first_update_ = false;
+  thread_->Post(this, kUpdateNetworksMessage);
 }
 
+void BasicNetworkManager::StopUpdating() {
+  ASSERT(Thread::Current() == thread_);
+  started_ = false;
+}
+
+void BasicNetworkManager::OnMessage(Message* msg) {
+  ASSERT(msg->message_id == kUpdateNetworksMessage);
+  DoUpdateNetworks();
+}
+
+void BasicNetworkManager::DoUpdateNetworks() {
+  if (!started_)
+    return;
+
+  ASSERT(Thread::Current() == thread_);
+
+  NetworkList list;
+  if (!CreateNetworks(false, &list)) {
+    SignalError();
+  } else {
+    MergeNetworkList(list, !sent_first_update_);
+    sent_first_update_ = true;
+  }
+
+  thread_->PostDelayed(kNetworksUpdateIntervalMs, this, kUpdateNetworksMessage);
+}
+
+void BasicNetworkManager::DumpNetworks(bool include_ignored) {
+  NetworkList list;
+  CreateNetworks(include_ignored, &list);
+  LOG(LS_INFO) << "NetworkManager detected " << list.size() << " networks:";
+  for (size_t i = 0; i < list.size(); ++i) {
+    const Network* network = list[i];
+    if (!network->ignored() || include_ignored) {
+      LOG(LS_INFO) << network->ToString() << ": " << network->description()
+                   << ", Gateway="
+                   << SocketAddress::IPToString(network->gateway_ip())
+                   << ((network->ignored()) ? ", Ignored" : "");
+    }
+  }
+}
 
 Network::Network(const std::string& name, const std::string& desc,
                  uint32 ip, uint32 gateway_ip)
     : name_(name), description_(desc), ip_(ip), gateway_ip_(gateway_ip),
       ignored_(false), uniform_numerator_(0), uniform_denominator_(0),
-      exponential_numerator_(0), exponential_denominator_(0),
-      quality_(kDefaultQuality) {
-  last_data_time_ = Time();
-
-  // TODO: seed the historical data with one data point based
-  // on the link speed metric from XP (4.0 if < 50, 3.0 otherwise).
-}
-
-void Network::StartSession(NetworkSession* session) {
-  assert(std::find(sessions_.begin(), sessions_.end(), session) ==
-         sessions_.end());
-  sessions_.push_back(session);
-}
-
-void Network::StopSession(NetworkSession* session) {
-  SessionList::iterator iter =
-      std::find(sessions_.begin(), sessions_.end(), session);
-  if (iter != sessions_.end())
-    sessions_.erase(iter);
-}
-
-void Network::EstimateQuality() {
-  uint32 now = Time();
-
-  // Add new data points for the current time.
-  for (uint32 i = 0; i < sessions_.size(); ++i) {
-    if (sessions_[i]->HasQuality())
-      AddDataPoint(now, sessions_[i]->GetCurrentQuality());
-  }
-
-  // Construct the weighted average using both uniform and exponential weights.
-
-  double exp_shift = exp(-kLambda * (now - last_data_time_));
-  double numerator = uniform_numerator_ + exp_shift * exponential_numerator_;
-  double denominator = uniform_denominator_ + exp_shift *
-                       exponential_denominator_;
-
-  if (denominator < DBL_EPSILON)
-    quality_ = kDefaultQuality;
-  else
-    quality_ = numerator / denominator;
+      exponential_numerator_(0), exponential_denominator_(0) {
 }
 
 std::string Network::ToString() const {
@@ -414,43 +363,6 @@ std::string Network::ToString() const {
   ss << "Net[" << description_.substr(0, description_.find(' '))
      << ":" << SocketAddress::IPToString(ip_) << "]";
   return ss.str();
-}
-
-void Network::AddDataPoint(uint32 time, double quality) {
-  uniform_numerator_ += kAlpha * quality;
-  uniform_denominator_ += kAlpha;
-
-  double exp_shift = exp(-kLambda * (time - last_data_time_));
-  exponential_numerator_ = (1 - kAlpha) * quality + exp_shift *
-                           exponential_numerator_;
-  exponential_denominator_ = (1 - kAlpha) + exp_shift *
-                             exponential_denominator_;
-
-  last_data_time_ = time;
-}
-
-std::string Network::GetState() const {
-  StrMap map;
-  map["lt"] = talk_base::ToString<uint32>(last_data_time_);
-  map["un"] = talk_base::ToString<double>(uniform_numerator_);
-  map["ud"] = talk_base::ToString<double>(uniform_denominator_);
-  map["en"] = talk_base::ToString<double>(exponential_numerator_);
-  map["ed"] = talk_base::ToString<double>(exponential_denominator_);
-
-  std::string str;
-  BuildMap(map, str);
-  return str;
-}
-
-void Network::SetState(const std::string& str) {
-  StrMap map;
-  ParseMap(str, map);
-
-  last_data_time_ = FromString<uint32>(map["lt"]);
-  uniform_numerator_ = FromString<double>(map["un"]);
-  uniform_denominator_ = FromString<double>(map["ud"]);
-  exponential_numerator_ = FromString<double>(map["en"]);
-  exponential_denominator_ = FromString<double>(map["ed"]);
 }
 
 }  // namespace talk_base

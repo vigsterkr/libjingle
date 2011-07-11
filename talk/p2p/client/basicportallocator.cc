@@ -232,7 +232,11 @@ BasicPortAllocatorSession::BasicPortAllocatorSession(
     : PortAllocatorSession(allocator->flags()), allocator_(allocator),
       name_(name), session_type_(session_type), network_thread_(NULL),
       socket_factory_(allocator->socket_factory()), allocation_started_(false),
+      network_manager_started_(false),
       running_(false) {
+  allocator_->network_manager()->SignalNetworksChanged.connect(
+      this, &BasicPortAllocatorSession::OnNetworksChanged);
+  allocator_->network_manager()->StartUpdating();
 }
 
 BasicPortAllocatorSession::~BasicPortAllocatorSession() {
@@ -347,14 +351,21 @@ void BasicPortAllocatorSession::AllocatePorts() {
   network_thread_->Post(this, MSG_ALLOCATE);
 }
 
+void BasicPortAllocatorSession::OnAllocate() {
+  if (network_manager_started_)
+    DoAllocate();
+
+  allocation_started_ = true;
+  if (running_)
+    network_thread_->PostDelayed(ALLOCATE_DELAY, this, MSG_ALLOCATE);
+}
+
 // For each network, see if we have a sequence that covers it already.  If not,
 // create a new sequence to create the appropriate ports.
-void BasicPortAllocatorSession::OnAllocate() {
+void BasicPortAllocatorSession::DoAllocate() {
   std::vector<talk_base::Network*> networks;
-
-  if (!allocator_->network_manager()->GetNetworks(&networks)) {
-    LOG(LS_ERROR) << "Failed to enumerate networks";
-  } else if (networks.empty()) {
+  allocator_->network_manager()->GetNetworks(&networks);
+  if (networks.empty()) {
     LOG(LS_WARNING) << "Machine has no networks; no ports will be allocated";
   } else {
     for (uint32 i = 0; i < networks.size(); ++i) {
@@ -374,8 +385,8 @@ void BasicPortAllocatorSession::OnAllocate() {
         sequence_flags |= PORTALLOCATOR_DISABLE_RELAY;
       }
 
-      // Disable phases that would only create ports equivalent to ones that we
-      // have already made.
+      // Disable phases that would only create ports equivalent to
+      // ones that we have already made.
       DisableEquivalentPhases(networks[i], config, &sequence_flags);
 
       if ((sequence_flags & DISABLE_ALL_PHASES) == DISABLE_ALL_PHASES) {
@@ -391,10 +402,12 @@ void BasicPortAllocatorSession::OnAllocate() {
       sequences_.push_back(sequence);
     }
   }
+}
 
-  allocation_started_ = true;
-  if (running_)
-    network_thread_->PostDelayed(ALLOCATE_DELAY, this, MSG_ALLOCATE);
+void BasicPortAllocatorSession::OnNetworksChanged() {
+  network_manager_started_ = true;
+  if (allocation_started_)
+    DoAllocate();
 }
 
 void BasicPortAllocatorSession::DisableEquivalentPhases(

@@ -66,11 +66,11 @@ namespace cricket {
 class PortAllocator;
 class MediaEngine;
 class MediaSessionClient;
-class NamedSource;
 class Receiver;
 class Call;
-struct CallOptions;
 class SessionManagerTask;
+struct CallOptions;
+struct NamedSource;
 }
 
 struct RosterItem {
