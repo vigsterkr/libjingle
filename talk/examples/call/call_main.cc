@@ -46,7 +46,6 @@
 #include "talk/examples/login/xmpppump.h"
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
-#include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/filemediaengine.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/srtpfilter.h"
