@@ -28,7 +28,6 @@
 #ifndef TALK_BASE_LATEBINDINGSYMBOLTABLE_H_
 #define TALK_BASE_LATEBINDINGSYMBOLTABLE_H_
 
-#include <stddef.h>  // for NULL
 #include <string.h>
 
 #include "talk/base/common.h"

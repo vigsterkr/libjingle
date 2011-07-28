@@ -231,7 +231,7 @@ PseudoTcp::PseudoTcp(IPseudoTcpNotify* notify, uint32 conv)
   m_rcv_wnd = sizeof(m_rbuf);
   m_snd_nxt = m_slen = 0;
   m_snd_wnd = 1;
-  m_snd_una = m_rcv_nxt = m_rlen = 0;
+  m_snd_una = m_rcv_nxt = m_rlen = m_rpos = 0;
   m_bReadEnable = true;
   m_bWriteEnable = false;
   m_t_ack = 0;
@@ -400,24 +400,23 @@ int PseudoTcp::Recv(char* buffer, size_t len) {
     return SOCKET_ERROR;
   }
 
-  if (m_rlen == 0) {
+  // Make sure read position is correct.
+  ASSERT(m_rpos <= m_rlen);
+  if (m_rlen == m_rpos) {
     m_bReadEnable = true;
     m_error = EWOULDBLOCK;
     return SOCKET_ERROR;
   }
 
-  uint32 read = talk_base::_min(uint32(len), m_rlen);
-  memcpy(buffer, m_rbuf, read);
-  m_rlen -= read;
+  uint32 read = talk_base::_min(uint32(len), m_rlen - m_rpos);
+  memcpy(buffer, m_rbuf + m_rpos, read);
+  m_rpos += read;
 
-  // !?! until we create a circular buffer, we need to move all of the rest of the buffer up!
-  memmove(m_rbuf, m_rbuf + read, sizeof(m_rbuf) - read/*m_rlen*/);
-
-  if ((sizeof(m_rbuf) - m_rlen - m_rcv_wnd)
-      >= talk_base::_min<uint32>(sizeof(m_rbuf) / 2, m_mss)) {
+  if (getReceiveBufferSpace() - m_rcv_wnd >=
+      talk_base::_min<uint32>(sizeof(m_rbuf) / 2, m_mss)) {
     bool bWasClosed = (m_rcv_wnd == 0); // !?! Not sure about this was closed business
 
-    m_rcv_wnd = sizeof(m_rbuf) - m_rlen;
+    m_rcv_wnd = getReceiveBufferSpace();
 
     if (bWasClosed) {
       attemptSend(sfImmediateAck);
@@ -824,8 +823,8 @@ bool PseudoTcp::process(Segment& seg) {
       seg.len = 0;
     }
   }
-  if ((seg.seq + seg.len - m_rcv_nxt) > (sizeof(m_rbuf) - m_rlen)) {
-    uint32 nAdjust = seg.seq + seg.len - m_rcv_nxt - (sizeof(m_rbuf) - m_rlen);
+  if ((seg.seq + seg.len - m_rcv_nxt) > getReceiveBufferSpace()) {
+    uint32 nAdjust = seg.seq + seg.len - m_rcv_nxt - getReceiveBufferSpace();
     if (nAdjust < seg.len) {
       seg.len -= nAdjust;
     } else {
@@ -843,6 +842,12 @@ bool PseudoTcp::process(Segment& seg) {
       }
     } else {
       uint32 nOffset = seg.seq - m_rcv_nxt;
+
+      if (getReceiveBufferConsecutiveSpace() < seg.len + nOffset) {
+        consolidateReceiveBufferSpace();
+        ASSERT(getReceiveBufferConsecutiveSpace() >= seg.len + nOffset);
+      }
+
       memcpy(m_rbuf + m_rlen + nOffset, seg.data, seg.len);
       if (seg.seq == m_rcv_nxt) {
         m_rlen += seg.len;
@@ -1080,6 +1085,28 @@ PseudoTcp::adjustMTU() {
   // Enforce minimums on ssthresh and cwnd
   m_ssthresh = talk_base::_max(m_ssthresh, 2 * m_mss);
   m_cwnd = talk_base::_max(m_cwnd, m_mss);
+}
+
+bool
+PseudoTcp::isReceiveBufferFull() const {
+  return !getReceiveBufferSpace();
+}
+
+uint32
+PseudoTcp::getReceiveBufferSpace() const {
+  return sizeof(m_rbuf) - m_rlen + m_rpos;
+}
+
+uint32
+PseudoTcp::getReceiveBufferConsecutiveSpace() const {
+  return sizeof(m_rbuf) - m_rlen;
+}
+
+void
+PseudoTcp::consolidateReceiveBufferSpace() {
+  memmove(m_rbuf, m_rbuf + m_rpos, sizeof(m_rbuf) - m_rpos);
+  m_rlen -= m_rpos;
+  m_rpos = 0;
 }
 
 }  // namespace cricket

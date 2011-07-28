@@ -62,6 +62,7 @@ bool ToUtf16(const std::string& str8, CFStringRef* str16) {
   return (NULL != *str16);
 }
 
+#ifdef OSX
 void DecodeFourChar(UInt32 fc, std::string* out) {
   std::stringstream ss;
   ss << '\'';
@@ -187,7 +188,7 @@ bool RunAppleScript(const std::string& script) {
   }
 
   err = OSAExecute(component, script_id, kOSANullScript, kOSAModeCanInteract,
-		   &result_id);
+                   &result_id);
 
   if (err == errOSAScriptError) {
     LOG(LS_ERROR) << "Error when executing Apple Script: " << script;
@@ -213,7 +214,7 @@ bool RunAppleScript(const std::string& script) {
   CloseComponent(component);
   return true;
 }
-
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

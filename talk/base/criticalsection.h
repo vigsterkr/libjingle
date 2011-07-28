@@ -126,6 +126,35 @@ private:
   CriticalSection *pcrit_;
 };
 
+// TODO: Replace with platform-specific "atomic" ops.
+// Something like: google3/base/atomicops.h TODO: And, move
+// it to atomicops.h, which can't be done easily because of complex
+// compile rules.
+class AtomicOps {
+ public:
+  static int Increment(int* i) {
+    // Could be faster, and less readable:
+    // static CriticalSection* crit = StaticCrit();
+    // CritScope scope(crit);
+    CritScope scope(StaticCrit());
+    return ++(*i);
+  }
+
+  static int Decrement(int* i) {
+    // Could be faster, and less readable:
+    // static CriticalSection* crit = StaticCrit();
+    // CritScope scope(crit);
+    CritScope scope(StaticCrit());
+    return --(*i);
+  }
+
+ private:
+  static CriticalSection* StaticCrit() {
+    static CriticalSection* crit = new CriticalSection();
+    return crit;
+  }
+};
+
 } // namespace talk_base
 
 #endif // TALK_BASE_CRITICALSECTION_H__

@@ -151,6 +151,12 @@ class Thread : public MessageQueue {
   bool started() const { return started_; }
   bool Start(Runnable* runnable = NULL);
 
+  // Used for fire-and-forget threads.  Deletes this thread object when the
+  // Run method returns.
+  void Release() {
+    delete_self_when_complete_ = true;
+  }
+
   // Tells the thread to stop and waits until it is joined.
   // Never call Stop on the current thread.  Instead use the inherited Quit
   // function which will exit the base MessageQueue without terminating the
@@ -215,6 +221,7 @@ class Thread : public MessageQueue {
 #endif
 
   bool owned_;
+  bool delete_self_when_complete_;
 
   friend class ThreadManager;
 

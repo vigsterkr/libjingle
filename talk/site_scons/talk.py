@@ -5,10 +5,108 @@
 #         Daniel Petersson (dape@google.com)
 #
 import os
+import SCons.Util
 
 # Keep a global dictionary of library target params for lookups in
 # ExtendComponent().
 _all_lib_targets = {}
+# Maintain a set of all prebuilt static libraries.
+_all_prebuilt_libraries = set()
+# Set of libraries not found in the above (used to detect out-of-order build
+# rules).
+_all_system_libraries = set()
+
+def _GetLibParams(lib):
+  """Gets the params for the given library if it is a library target.
+
+  Returns the params that were specified when the given lib target name was
+  created, or None if no such lib target has been defined. In the None case, it
+  additionally records the negative result so as to detect out-of-order
+  dependencies for future targets.
+
+  Args:
+    lib: The library's name as a string.
+
+  Returns:
+    Its dictionary of params, or None.
+  """
+  if lib in _all_lib_targets:
+    return _all_lib_targets[lib]
+  else:
+    if lib not in _all_prebuilt_libraries and lib not in _all_system_libraries:
+      _all_system_libraries.add(lib)
+    return None
+
+
+def _RecordLibParams(lib, params):
+  """Record the params used for a library target.
+
+  Record the params used for a library target while checking for several error
+  conditions.
+
+  Args:
+    lib: The library target's name as a string.
+    params: Its dictionary of params.
+
+  Raises:
+    Exception: The lib target has already been recorded, or the lib was
+        previously declared to be prebuilt, or the lib target is being defined
+        after a reverse library dependency.
+  """
+  if lib in _all_lib_targets:
+    raise Exception('Multiple definitions of ' + lib)
+  if lib in _all_prebuilt_libraries:
+    raise Exception(lib + ' already declared as a prebuilt library')
+  if lib in _all_system_libraries:
+    raise Exception(lib + ' cannot be defined after its reverse library '
+                    'dependencies')
+  _all_lib_targets[lib] = params
+
+
+def _IsPrebuiltLibrary(lib):
+  """Checks whether or not the given library is a prebuilt static library.
+
+  Returns whether or not the given library name has been declared to be a
+  prebuilt static library. In the False case, it additionally records the
+  negative result so as to detect out-of-order dependencies for future targets.
+
+  Args:
+    lib: The library's name as a string.
+
+  Returns:
+    True or False
+  """
+  if lib in _all_prebuilt_libraries:
+    return True
+  else:
+    if lib not in _all_lib_targets and lib not in _all_system_libraries:
+      _all_system_libraries.add(lib)
+    return False
+
+
+def _RecordPrebuiltLibrary(lib):
+  """Record that a library is a prebuilt static library.
+
+  Record that the given library name refers to a prebuilt static library while
+  checking for several error conditions.
+
+  Args:
+    lib: The library's name as a string.
+
+  Raises:
+    Exception: The lib has already been recorded to be prebuilt, or the lib was
+        previously declared as a target, or the lib is being declared as
+        prebuilt after a reverse library dependency.
+  """
+  if lib in _all_prebuilt_libraries:
+    raise Exception('Multiple prebuilt declarations of ' + lib)
+  if lib in _all_lib_targets:
+    raise Exception(lib + ' already defined as a target')
+  if lib in _all_system_libraries:
+    raise Exception(lib + ' cannot be declared as prebuilt after its reverse '
+                    'library dependencies')
+  _all_prebuilt_libraries.add(lib)
+
 
 def _GenericLibrary(env, static, **kwargs):
   """Extends ComponentLibrary to support multiplatform builds
@@ -23,6 +121,22 @@ def _GenericLibrary(env, static, **kwargs):
   """
   params = CombineDicts(kwargs, {'COMPONENT_STATIC': static})
   return ExtendComponent(env, 'ComponentLibrary', **params)
+
+
+def DeclarePrebuiltLibraries(libraries):
+  """Informs the build engine about external static libraries.
+
+  Informs the build engine that the given external library name(s) are prebuilt
+  static libraries, as opposed to shared libraries.
+
+  Args:
+    libraries: The library or libraries that are being declared as prebuilt
+        static libraries.
+  """
+  if not SCons.Util.is_List(libraries):
+    libraries = [libraries]
+  for library in libraries:
+    _RecordPrebuiltLibrary(library)
 
 
 def Library(env, **kwargs):
@@ -74,7 +188,7 @@ def Unittest(env, **kwargs):
     'posix_cppdefines': ['GUNIT_NO_GOOGLE3', 'GTEST_HAS_RTTI=0'],
     'libs': ['unittest_main', 'gunit']
   }
-  if not kwargs.has_key('explicit_libs'):
+  if 'explicit_libs' not in kwargs:
     common_test_params['win_libs'] = [
       'advapi32',
       'crypt32',
@@ -107,7 +221,7 @@ def App(env, **kwargs):
   Returns:
     See swtoolkit ComponentProgram.
   """
-  if not kwargs.has_key('explicit_libs'):
+  if 'explicit_libs' not in kwargs:
     common_app_params = {
       'win_libs': [
         'advapi32',
@@ -184,96 +298,11 @@ def ExpandSconsPath(path):
   return '%s/%s.scons' % (path, os.path.basename(path))
 
 
-def AddMediaLibs(env, **kwargs):
-  lmi_libdir = '$GOOGLE3/../googleclient/third_party/lmi/files/lib/'
-  if env.Bit('windows'):
-    if env.get('COVERAGE_ENABLED'):
-      lmi_libdir += 'win32/c_only'
-    else:
-      lmi_libdir += 'win32/Release'
-  elif env.Bit('mac'):
-    lmi_libdir += 'macos'
-  elif env.Bit('linux'):
-      lmi_libdir += 'linux/x86'
-
-
-  AddToDict(kwargs, 'libdirs', [
-    '$MAIN_DIR/third_party/gips/Libraries/',
-    lmi_libdir,
-  ])
-
-  gips_lib = ''
-  if env.Bit('windows'):
-    if env.Bit('debug'):
-      gips_lib = 'gipsvoiceenginelib_mtd'
-    else:
-      gips_lib = 'gipsvoiceenginelib_mt'
-  elif env.Bit('mac'):
-    gips_lib = 'VoiceEngine_mac_universal_gcc'
-  elif env.Bit('linux'):
-      gips_lib = 'VoiceEngine_Linux_gcc'
-
-
-  AddToDict(kwargs, 'libs', [
-    gips_lib,
-    'LmiAudioCommon',
-    'LmiClient',
-    'LmiCmcp',
-    'LmiDeviceManager',
-    'LmiH263ClientPlugIn',
-    'LmiH263CodecCommon',
-    'LmiH263Decoder',
-    'LmiH263Encoder',
-    'LmiH264ClientPlugIn',
-    'LmiH264CodecCommon',
-    'LmiH264Common',
-    'LmiH264Decoder',
-    'LmiH264Encoder',
-    'LmiIce',
-    'LmiMediaPayload',
-    'LmiOs',
-    'LmiPacketCache',
-    'LmiProtocolStack',
-    'LmiRateShaper',
-    'LmiRtp',
-    'LmiSecurity',
-    'LmiSignaling',
-    'LmiStun',
-    'LmiTransport',
-    'LmiUi',
-    'LmiUtils',
-    'LmiVideoCommon',
-    'LmiXml',
-  ])
-
-  if env.Bit('windows'):
-    AddToDict(kwargs, 'libs', [
-      'dsound',
-      'd3d9',
-      'gdi32',
-      'strmiids',
-    ])
-
-  if env.Bit('mac'):
-    AddToDict(kwargs, 'FRAMEWORKS', [
-      'AudioToolbox',
-      'AudioUnit',
-      'Cocoa',
-      'CoreAudio',
-      'CoreFoundation',
-      'IOKit',
-      'QTKit',
-      'QuickTime',
-      'QuartzCore',
-    ])
-  return kwargs
-
-
 def ReadVersion(filename):
   """Executes the supplied file and pulls out a version definition from it. """
   defs = {}
   execfile(str(filename), defs)
-  if not defs.has_key('version'):
+  if 'version' not in defs:
     return '0.0.0.0'
   version = defs['version']
   parts = version.split(',')
@@ -287,23 +316,22 @@ def ReadVersion(filename):
 # Helper methods for translating talk.Foo() declarations in to manipulations of
 # environmuent construction variables, including parameter parsing and merging,
 #
-def GetEntry(dict, key):
+def PopEntry(dictionary, key):
   """Get the value from a dictionary by key. If the key
      isn't in the dictionary then None is returned. If it is in
-     the dictionaruy the value is fetched and then is it removed
+     the dictionary the value is fetched and then is it removed
      from the dictionary.
 
   Args:
+    dictionary: The dictionary.
     key: The key to get the value for.
-    kwargs: The keyword argument dictionary.
   Returns:
     The value or None if the key is missing.
   """
   value = None
-  if dict.has_key(key):
-    value = dict[key]
-    dict.pop(key)
-
+  if key in dictionary:
+    value = dictionary[key]
+    dictionary.pop(key)
   return value
 
 
@@ -355,6 +383,7 @@ def MergeAndFilterByPlatform(env, params):
 
   return merged
 
+
 # Linux can build both 32 and 64 bit on 64 bit host, but 32 bit host can
 # only build 32 bit.  For 32 bit debian installer a 32 bit host is required.
 # ChromeOS (linux) ebuild don't support 64 bit and requires 32 bit build only
@@ -363,17 +392,20 @@ def Allow64BitCompile(env):
   return (env.Bit('linux') and env.Bit('platform_arch_64bit')
           )
 
+
 def MergeSettingsFromLibraryDependencies(env, params):
-  if params.has_key('libs'):
+  if 'libs' in params:
     for lib in params['libs']:
-      if (_all_lib_targets.has_key(lib) and
-          _all_lib_targets[lib].has_key('dependent_target_settings')):
-        params = CombineDicts(
-            params,
-            MergeAndFilterByPlatform(
-                env,
-                _all_lib_targets[lib]['dependent_target_settings']))
+      libparams = _GetLibParams(lib)
+      if libparams:
+        if 'dependent_target_settings' in libparams:
+          params = CombineDicts(
+              params,
+              MergeAndFilterByPlatform(
+                  env,
+                  libparams['dependent_target_settings']))
   return params
+
 
 def ExtendComponent(env, component, **kwargs):
   """A wrapper around a scons builder function that preprocesses and post-
@@ -399,31 +431,32 @@ def ExtendComponent(env, component, **kwargs):
   params = MergeAndFilterByPlatform(env, kwargs)
 
   # get the 'target' field
-  name = GetEntry(params, 'name')
+  name = PopEntry(params, 'name')
+
+  # get the 'packages' field and process it if present (only used for Linux).
+  packages = PopEntry(params, 'packages')
+  if packages and len(packages):
+    params = CombineDicts(params, env.GetPackageParams(packages))
 
   # save pristine params of lib targets for future reference
   if 'ComponentLibrary' == component:
-    _all_lib_targets[name] = dict(params)
+    _RecordLibParams(name, dict(params))
 
   # add any dependent target settings from library dependencies
   params = MergeSettingsFromLibraryDependencies(env, params)
 
   # if this is a signed binary we need to make an unsigned version first
-  signed = env.Bit('windows') and GetEntry(params, 'signed')
+  signed = env.Bit('windows') and PopEntry(params, 'signed')
   if signed:
     name = 'unsigned_' + name
 
-  # add default values
-  if GetEntry(params, 'include_talk_media_libs'):
-    params = AddMediaLibs(env, **params)
-
   # potentially exit now
-  srcs = GetEntry(params, 'srcs')
+  srcs = PopEntry(params, 'srcs')
   if not srcs or not hasattr(env, component):
     return None
 
   # apply any explicit dependencies
-  dependencies = GetEntry(params, 'depends')
+  dependencies = PopEntry(params, 'depends')
   if dependencies is not None:
     env.Depends(name, dependencies)
 
@@ -443,17 +476,17 @@ def ExtendComponent(env, component, **kwargs):
   else:
     # ... while GCC compile flags have precedence at the end
     appends['ccflags'] = 'CCFLAGS'
-  if GetEntry(params, 'prepend_includedirs'):
+  if PopEntry(params, 'prepend_includedirs'):
     prepends['includedirs'] = 'CPPPATH'
   else:
     appends['includedirs'] = 'CPPPATH'
 
   for field, var in appends.items():
-    values = GetEntry(params, field)
+    values = PopEntry(params, field)
     if values is not None:
       env.Append(**{var : values})
   for field, var in prepends.items():
-    values = GetEntry(params, field)
+    values = PopEntry(params, field)
     if values is not None:
       env.Prepend(**{var : values})
 
@@ -468,13 +501,30 @@ def ExtendComponent(env, component, **kwargs):
   for field, value in params.items():
     env.Replace(**{field : value})
 
+  if env.Bit('linux') and 'LIBS' in env:
+    libs = env['LIBS']
+    # When using --as-needed + --start/end-group, shared libraries need to come
+    # after --end-group on the command-line because the pruning decision only
+    # considers the preceding modules and --start/end-group may cause the
+    # effective position of early static libraries on the command-line to be
+    # deferred to the point of --end-group. To effect this, we move shared libs
+    # into _LIBFLAGS, which has the --end-group as its first entry. SCons does
+    # not track dependencies on system shared libraries anyway so we lose
+    # nothing by removing them from LIBS.
+    static_libs = [lib for lib in libs if
+                   _GetLibParams(lib) or _IsPrebuiltLibrary(lib)]
+    shared_libs = ['-l' + lib for lib in libs if not
+                   (_GetLibParams(lib) or _IsPrebuiltLibrary(lib))]
+    env.Replace(LIBS=static_libs)
+    env.Append(_LIBFLAGS=shared_libs)
+
   # invoke the builder function
   builder = getattr(env, component)
 
   node = builder(name, srcs)
 
   # make a parallel 64bit version if requested
-  if Allow64BitCompile(env) and GetEntry(params, 'also64bit'):
+  if Allow64BitCompile(env) and PopEntry(params, 'also64bit'):
     env_64bit = env.Clone()
     env_64bit.FilterOut(CCFLAGS = ['-m32'], LINKFLAGS = ['-m32'])
     env_64bit.Prepend(CCFLAGS = ['-m64', '-fPIC'], LINKFLAGS = ['-m64'])
@@ -487,8 +537,8 @@ def ExtendComponent(env, component, **kwargs):
       # link 64 bit versions of libraries
       libs = []
       for lib in env_64bit['LIBS']:
-        if (_all_lib_targets.has_key(lib) and
-            _all_lib_targets[lib].has_key('also64bit')):
+        libparams = _GetLibParams(lib)
+        if libparams and 'also64bit' in libparams:
           libs.append(lib + '64')
         else:
           libs.append(lib)
@@ -513,7 +563,7 @@ def ExtendComponent(env, component, **kwargs):
     # same name.  Setting postsignprefix allows the EXE and its PDB
     # to be renamed and copied in a previous step; then the desired
     # name of the EXE (but not PDB) is reconstructed after signing.
-    postsignprefix = GetEntry(params, 'postsignprefix')
+    postsignprefix = PopEntry(params, 'postsignprefix')
     if postsignprefix is not None:
         target = postsignprefix + target
     signed_node = env.SignedBinary(
@@ -534,7 +584,7 @@ def AddToDict(dictionary, key, values, append=True):
   if values is None:
     return
 
-  if not dictionary.has_key(key):
+  if key not in dictionary:
     dictionary[key] = values
     return
 
@@ -551,12 +601,28 @@ def AddToDict(dictionary, key, values, append=True):
 
 
 def CombineDicts(a, b):
-  """Unions two dictionaries by combining values of keys shared between them.
+  """Unions two dictionaries of arrays/dictionaries.
+
+  Unions two dictionaries of arrays/dictionaries by combining the values of keys
+  shared between them. The original dictionaries should not be used again after
+  this call.
+
+  Args:
+    a: First dict.
+    b: Second dict.
+
+  Returns:
+    The union of a and b.
   """
   c = {}
   for key in a:
-    if b.has_key(key):
-      c[key] = a[key] + b.pop(key)
+    if key in b:
+      aval = a[key]
+      bval = b.pop(key)
+      if isinstance(aval, dict) and isinstance(bval, dict):
+        c[key] = CombineDicts(aval, bval)
+      else:
+        c[key] = aval + bval
     else:
       c[key] = a[key]
 
@@ -567,4 +633,4 @@ def CombineDicts(a, b):
 
 
 def RenameKey(d, old, new, append=True):
-  AddToDict(d, new, GetEntry(d, old), append)
+  AddToDict(d, new, PopEntry(d, old), append)

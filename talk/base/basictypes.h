@@ -28,6 +28,8 @@
 #ifndef TALK_BASE_BASICTYPES_H__
 #define TALK_BASE_BASICTYPES_H__
 
+#include <stddef.h>  // for NULL, size_t
+
 #ifndef WIN32
 #include <stdint.h>  // for uintptr_t
 #endif

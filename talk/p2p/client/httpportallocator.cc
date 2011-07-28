@@ -150,6 +150,11 @@ void HttpPortAllocatorSession::GetPortConfigurations() {
 }
 
 void HttpPortAllocatorSession::TryCreateRelaySession() {
+  if (allocator()->flags() & PORTALLOCATOR_DISABLE_RELAY) {
+    LOG(LS_VERBOSE) << "HttpPortAllocator: Relay ports disabled, skipping.";
+    return;
+  }
+
   if (attempts_ == HttpPortAllocator::kNumRetries) {
     LOG(LS_ERROR) << "HttpPortAllocator: maximum number of requests reached; "
                   << "giving up on relay.";

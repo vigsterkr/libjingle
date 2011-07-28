@@ -155,7 +155,20 @@ class PseudoTcp {
 
   void adjustMTU();
 
+ protected:
+  // This method is used in test only to query receive buffer state.
+  bool isReceiveBufferFull() const;
+
  private:
+  // Get the total number of bytes of free space in m_rbuf, consecutive or not.
+  uint32 getReceiveBufferSpace() const;
+
+  // Get the number of bytes that can be written to m_rbuf.
+  uint32 getReceiveBufferConsecutiveSpace() const;
+
+  // Consolidate free space in m_rbuf so that it is a consecutive segment.
+  void consolidateReceiveBufferSpace();
+
   IPseudoTcpNotify* m_notify;
   enum Shutdown { SD_NONE, SD_GRACEFUL, SD_FORCEFUL } m_shutdown;
   int m_error;
@@ -170,7 +183,7 @@ class PseudoTcp {
   typedef std::list<RSegment> RList;
   RList m_rlist;
   char m_rbuf[kRcvBufSize];
-  uint32 m_rcv_nxt, m_rcv_wnd, m_rlen, m_lastrecv;
+  uint32 m_rcv_nxt, m_rcv_wnd, m_rpos, m_rlen, m_lastrecv;
 
   // Outgoing data
   SList m_slist;

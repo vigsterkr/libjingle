@@ -29,16 +29,22 @@
 #define TALK_BASE_MACUTILS_H__
 
 #include <CoreFoundation/CoreFoundation.h>
+#ifdef OSX
 #include <Carbon/Carbon.h>
+#endif
 #include <string>
 
 namespace talk_base {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Note that some of these functions work for both iOS and Mac OS X.  The ones
+// that are specific to Mac are #ifdef'ed as such.
+
 bool ToUtf8(const CFStringRef str16, std::string* str8);
 bool ToUtf16(const std::string& str8, CFStringRef* str16);
 
+#ifdef OSX
 void DecodeFourChar(UInt32 fc, std::string* out);
 std::string DecodeEvent(EventRef event);
 
@@ -58,6 +64,7 @@ bool GetQuickTimeVersion(std::string* version);
 // Runs the given apple script. Only supports scripts that does not
 // require user interaction.
 bool RunAppleScript(const std::string& script);
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

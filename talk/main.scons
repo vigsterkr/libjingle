@@ -24,6 +24,11 @@ import platform
 # If the name is the name of a directory then that directory shall contain a
 # .scons file with the same name as the directory itself:
 #  Ex: The directory session/phone contains a file called phone.scons
+# This list must be in order of library dependencies. e.g., if
+# session/phone/phone.scons defines a target that links to a library target
+# defined in sound/sound.scons, then 'sound' must come first.
+# When no particular order is imposed by library dependencies, try to keep in
+# mostly alphabetical order.
 #
 components = talk.Components("libjingle.scons")
 
@@ -41,7 +46,7 @@ root_env = Environment(
     'component_setup',
     'replace_strings',
     'talk_noops',
-    #'talk_linux',
+    #'talk_utils',
   ],
   BUILD_SCONSCRIPTS = components,
   DESTINATION_ROOT = '$MAIN_DIR/build',
@@ -361,8 +366,7 @@ envs.append(mac_opt_env)
 linux_common_env = posix_env.Clone(
   tools = [
     'target_platform_linux',
-    'talk_libjingle',
-    #'talk_linux',
+    'talk_linux',
   ],
 )
 
@@ -383,6 +387,8 @@ linux_common_env.Append(
   LINKFLAGS = [
     # Enable dead-code removal.
     '-Wl,--gc-sections',
+    # Elide dependencies on shared libraries that we're not actually using.
+    '-Wl,--as-needed',
     '-Wl,--start-group',
   ],
   _LIBFLAGS = ['-Wl,--end-group'],

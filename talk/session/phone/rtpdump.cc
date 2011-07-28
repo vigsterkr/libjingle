@@ -28,6 +28,7 @@
 #include "talk/session/phone/rtpdump.h"
 
 #include <string>
+#include <ctype.h>
 
 #include "talk/base/bytebuffer.h"
 #include "talk/base/byteorder.h"

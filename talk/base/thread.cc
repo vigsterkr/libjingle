@@ -174,7 +174,8 @@ Thread::Thread(SocketServer* ss)
 #if defined(WIN32)
       thread_(NULL),
 #endif
-      owned_(true) {
+      owned_(true),
+      delete_self_when_complete_(false) {
   g_thmgr.Add(this);
   SetName("Thread", this);  // default name
 }
@@ -366,6 +367,10 @@ void* Thread::PreRun(void* pv) {
     init->runnable->Run(init->thread);
   } else {
     init->thread->Run();
+  }
+  if (init->thread->delete_self_when_complete_) {
+    init->thread->started_ = false;
+    delete init->thread;
   }
   delete init;
   return NULL;

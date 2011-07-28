@@ -34,7 +34,6 @@
 #include "talk/p2p/base/transportchannel.h"
 #include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/mediasessionclient.h"
-#include "talk/session/phone/mediasink.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/rtputils.h"
 
@@ -81,8 +80,6 @@ BaseChannel::BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
       media_engine_(media_engine),
       session_(session),
       media_channel_(media_channel),
-      received_media_sink_(NULL),
-      sent_media_sink_(NULL),
       content_name_(content_name),
       transport_channel_(transport_channel),
       rtcp_transport_channel_(NULL),
@@ -280,19 +277,6 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
     return false;
   }
 
-  // Push the packet down to the media sink.
-  // Need to do this before protecting the packet.
-  {
-    talk_base::CritScope cs(&sink_critical_section_);
-    if (sent_media_sink_) {
-      if (!rtcp) {
-        sent_media_sink_->OnRtpPacket(packet->data(), packet->length());
-      } else {
-        sent_media_sink_->OnRtcpPacket(packet->data(), packet->length());
-      }
-    }
-  }
-
   // Protect if needed.
   if (srtp_filter_.IsActive()) {
     bool res;
@@ -325,6 +309,13 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
     packet->SetLength(len);
   }
 
+  // Signal to the media sink after protecting the packet. TODO:
+  // Separate APIs to record unprotected media and protected header.
+  {
+    talk_base::CritScope cs(&signal_send_packet_cs_);
+    SignalSendPacket(packet->data(), packet->length(), rtcp);
+  }
+
   // Bon voyage.
   return (channel->SendPacket(packet->data(), packet->length())
       == static_cast<int>(packet->length()));
@@ -337,6 +328,13 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
                   << PacketType(rtcp) << " packet: wrong size="
                   << packet->length();
     return;
+  }
+
+  // Signal to the media sink before unprotecting the packet. TODO:
+  // Separate APIs to record unprotected media and protected header.
+  {
+    talk_base::CritScope cs(&signal_recv_packet_cs_);
+    SignalRecvPacket(packet->data(), packet->length(), rtcp);
   }
 
   // Unprotect the packet, if needed.
@@ -375,18 +373,6 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
     media_channel_->OnPacketReceived(packet);
   } else {
     media_channel_->OnRtcpReceived(packet);
-  }
-
-  // Push it down to the media sink.
-  {
-    talk_base::CritScope cs(&sink_critical_section_);
-    if (received_media_sink_) {
-      if (!rtcp) {
-        received_media_sink_->OnRtpPacket(packet->data(), packet->length());
-      } else {
-        received_media_sink_->OnRtcpPacket(packet->data(), packet->length());
-      }
-    }
   }
 }
 

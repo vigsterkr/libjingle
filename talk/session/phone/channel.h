@@ -47,7 +47,6 @@
 namespace cricket {
 
 class MediaContentDescription;
-class MediaSinkInterface;
 struct CryptoParams;
 
 enum {
@@ -118,25 +117,44 @@ class BaseChannel
   void StartConnectionMonitor(int cms);
   void StopConnectionMonitor();
 
-  // Set and get media sinks for recording media.
-  void set_received_media_sink(MediaSinkInterface* sink) {
-    talk_base::CritScope cs(&sink_critical_section_);
-    received_media_sink_ = sink;
-  }
-  const MediaSinkInterface* received_media_sink() {
-    talk_base::CritScope cs(&sink_critical_section_);
-    return received_media_sink_;
-  }
-  void set_sent_media_sink(MediaSinkInterface* sink) {
-    talk_base::CritScope cs(&sink_critical_section_);
-    sent_media_sink_ = sink;
-  }
-  const MediaSinkInterface* sent_media_sink() {
-    talk_base::CritScope cs(&sink_critical_section_);
-    return sent_media_sink_;
-  }
   void set_srtp_signal_silent_time(uint32 silent_time) {
     srtp_filter_.set_signal_silent_time(silent_time);
+  }
+
+  template <class T>
+  void RegisterSendSink(T* sink,
+                        void (T::*OnPacket)(const void*, size_t, bool)) {
+    talk_base::CritScope cs(&signal_send_packet_cs_);
+    SignalSendPacket.disconnect(sink);
+    SignalSendPacket.connect(sink, OnPacket);
+  }
+
+  void UnregisterSendSink(sigslot::has_slots<>* sink) {
+    talk_base::CritScope cs(&signal_send_packet_cs_);
+    SignalSendPacket.disconnect(sink);
+  }
+
+  bool HasSendSinks() {
+    talk_base::CritScope cs(&signal_send_packet_cs_);
+    return !SignalSendPacket.is_empty();
+  }
+
+  template <class T>
+  void RegisterRecvSink(T* sink,
+                        void (T::*OnPacket)(const void*, size_t, bool)) {
+    talk_base::CritScope cs(&signal_recv_packet_cs_);
+    SignalRecvPacket.disconnect(sink);
+    SignalRecvPacket.connect(sink, OnPacket);
+  }
+
+  void UnregisterRecvSink(sigslot::has_slots<>* sink) {
+    talk_base::CritScope cs(&signal_recv_packet_cs_);
+    SignalRecvPacket.disconnect(sink);
+  }
+
+  bool HasRecvSinks() {
+    talk_base::CritScope cs(&signal_recv_packet_cs_);
+    return !SignalRecvPacket.is_empty();
   }
 
  protected:
@@ -238,15 +256,15 @@ class BaseChannel
       const std::vector<ConnectionInfo> &infos) = 0;
 
  private:
+  sigslot::signal3<const void*, size_t, bool> SignalSendPacket;
+  sigslot::signal3<const void*, size_t, bool> SignalRecvPacket;
+  talk_base::CriticalSection signal_send_packet_cs_;
+  talk_base::CriticalSection signal_recv_packet_cs_;
+
   talk_base::Thread *worker_thread_;
   MediaEngine *media_engine_;
   BaseSession *session_;
   MediaChannel *media_channel_;
-  // Media sinks to handle the received or sent RTP/RTCP packets. These are
-  // reference to the objects owned by the media recorder.
-  MediaSinkInterface* received_media_sink_;
-  MediaSinkInterface* sent_media_sink_;
-  talk_base::CriticalSection sink_critical_section_;
 
   std::string content_name_;
   TransportChannel *transport_channel_;

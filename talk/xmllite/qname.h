@@ -29,6 +29,7 @@
 #define _qname_h_
 
 #include <string>
+#include "talk/base/criticalsection.h"
 
 namespace buzz {
 
@@ -49,7 +50,7 @@ public:
     return *this;
   }
   ~QName();
-  
+
   const std::string & Namespace() const { return data_->namespace_; }
   const std::string & LocalPart() const { return data_->localPart_; }
   std::string Merged() const;
@@ -57,7 +58,7 @@ public:
   bool operator==(const QName & other) const;
   bool operator!=(const QName & other) const { return !operator==(other); }
   bool operator<(const QName & other) const { return Compare(other) < 0; }
-  
+
   class Data {
   public:
     Data(const std::string & ns, const std::string & local) :
@@ -66,11 +67,11 @@ public:
       refcount_(1) {}
 
     Data() : refcount_(0) {}
-      
+
     std::string namespace_;
     std::string localPart_;
-    void AddRef() { refcount_++; }
-    void Release() { if (!--refcount_) { delete this; } }
+    void AddRef() { talk_base::AtomicOps::Increment(&refcount_); }
+    void Release() { if (!talk_base::AtomicOps::Decrement(&refcount_)) { delete this; } }
     bool Occupied() { return !!refcount_; }
 
   private:

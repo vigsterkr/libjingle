@@ -61,36 +61,24 @@
 #include "talk/base/stream.h"
 #include "talk/base/stringutils.h"
 
-#ifdef ANDROID
-namespace {
-// Android does not have a concept of a single temp dir shared by all
-// because resource are scarse on a phone. Instead each app gets some
-// space on the sdcard under a path that is given at runtime by the
-// system.
-// The disk allocation feature is still work in progress so currently
-// we return a hardcoded a path on the sdcard. In the future, we
-// should do a JNI call to get that info from the context.
-// TODO: Replace hardcoded path with a query to the Context
-// object to get the equivalents of '/tmp' and '~/.'
-
-// @return the folder for libjingle. Some extra path (typically
-// Google/<app name>) will be added.
-const char* GetAndroidAppDataFolder() {
-  return "/sdcard";
-}
-
-// @return the tmp folder to be used. Some extra path will be added to
-// that base folder.
-const char* GetAndroidTempFolder() {
-  return "/sdcard";
-}
-
-}  // anonymous namespace
-#endif
-
 namespace talk_base {
 
-std::string UnixFilesystem::app_temp_path_;
+#if !defined(ANDROID) && !defined(IOS)
+char* UnixFilesystem::app_temp_path_ = NULL;
+#else
+char* UnixFilesystem::provided_app_data_folder_ = NULL;
+char* UnixFilesystem::provided_app_temp_folder_ = NULL;
+
+void UnixFilesystem::SetAppDataFolder(const std::string& folder) {
+  delete [] provided_app_data_folder_;
+  provided_app_data_folder_ = CopyString(folder);
+}
+
+void UnixFilesystem::SetAppTempFolder(const std::string& folder) {
+  delete [] provided_app_temp_folder_;
+  provided_app_temp_folder_ = CopyString(folder);
+}
+#endif
 
 bool UnixFilesystem::CreateFolder(const Pathname &path) {
   std::string pathname(path.pathname());
@@ -179,8 +167,9 @@ bool UnixFilesystem::GetTemporaryFolder(Pathname &pathname, bool create,
   if (0 != FSRefMakePath(&fr, buffer, ARRAY_SIZE(buffer)))
     return false;
   pathname.SetPathname(reinterpret_cast<char*>(buffer), "");
-#elif defined(ANDROID)
-  pathname.SetPathname(GetAndroidTempFolder(), "");
+#elif defined(ANDROID) || defined(IOS)
+  ASSERT(provided_app_temp_folder_ != NULL);
+  pathname.SetPathname(provided_app_temp_folder_, "");
 #else  // !OSX && !ANDROID
   if (const char* tmpdir = getenv("TMPDIR")) {
     pathname.SetPathname(tmpdir, "");
@@ -288,15 +277,19 @@ bool UnixFilesystem::CopyFile(const Pathname &old_path,
 }
 
 bool UnixFilesystem::IsTemporaryPath(const Pathname& pathname) {
+#if defined(ANDROID) || defined(IOS)
+  ASSERT(provided_app_temp_folder_ != NULL);
+#endif
+
   const char* const kTempPrefixes[] = {
-#ifdef ANDROID
-    GetAndroidTempFolder()
+#if defined(ANDROID) || defined(IOS)
+    provided_app_temp_folder_,
 #else
     "/tmp/", "/var/tmp/",
 #ifdef OSX
     "/private/tmp/", "/private/var/tmp/", "/private/var/folders/",
 #endif  // OSX
-#endif  // ANDROID
+#endif  // ANDROID || IOS
   };
   for (size_t i = 0; i < ARRAY_SIZE(kTempPrefixes); ++i) {
     if (0 == strncmp(pathname.pathname().c_str(), kTempPrefixes[i],
@@ -396,11 +389,10 @@ bool UnixFilesystem::GetAppDataFolder(Pathname* path, bool per_user) {
     // TODO
     return false;
   }
-#elif defined(ANDROID)  // && !OSX
-  // TODO: Check if the new disk allocation mechanism works
-  // per-user and we don't have the per_user distinction.
-  path->SetPathname(GetAndroidAppDataFolder(), "");
-#elif defined(LINUX)  // && !OSX && !defined(ANDROID)
+#elif defined(ANDROID) || defined(IOS)  // && !OSX
+  ASSERT(provided_app_data_folder_ != NULL);
+  path->SetPathname(provided_app_data_folder_, "");
+#elif defined(LINUX)  // && !OSX && !defined(ANDROID) && !defined(IOS)
   if (per_user) {
     // We follow the recommendations in
     // http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
@@ -434,7 +426,7 @@ bool UnixFilesystem::GetAppDataFolder(Pathname* path, bool per_user) {
 #endif  // !OSX && !defined(ANDROID) && !defined(LINUX)
 
   // Now add on a sub-path for our app.
-#if defined(OSX) || defined(ANDROID)
+#if defined(OSX) || defined(ANDROID) || defined(IOS)
   path->AppendFolder(organization_name_);
   path->AppendFolder(application_name_);
 #elif defined(LINUX)
@@ -452,9 +444,14 @@ bool UnixFilesystem::GetAppDataFolder(Pathname* path, bool per_user) {
 }
 
 bool UnixFilesystem::GetAppTempFolder(Pathname* path) {
+#if defined(ANDROID) || defined(IOS)
+  ASSERT(provided_app_temp_folder_ != NULL);
+  path->SetPathname(provided_app_temp_folder_);
+  return true;
+#else
   ASSERT(!application_name_.empty());
   // TODO: Consider whether we are worried about thread safety.
-  if (!app_temp_path_.empty()) {
+  if (app_temp_path_ != NULL && strlen(app_temp_path_) > 0) {
     path->SetPathname(app_temp_path_);
     return true;
   }
@@ -469,9 +466,11 @@ bool UnixFilesystem::GetAppTempFolder(Pathname* path) {
   if (!GetTemporaryFolder(*path, true, &folder))
     return false;
 
-  app_temp_path_ = path->pathname();
+  delete [] app_temp_path_;
+  app_temp_path_ = CopyString(path->pathname());
   // TODO: atexit(DeleteFolderAndContents(app_temp_path_));
   return true;
+#endif
 }
 
 bool UnixFilesystem::GetDiskFreeSpace(const Pathname& path, int64 *freebytes) {
@@ -517,6 +516,18 @@ Pathname UnixFilesystem::GetCurrentDirectory() {
   cwd.SetFolder(std::string(path));
 
   return cwd;
+}
+
+char* UnixFilesystem::CopyString(const std::string& str) {
+  size_t size = str.length() + 1;
+
+  char* buf = new char[size];
+  if (!buf) {
+    return NULL;
+  }
+
+  strcpyn(buf, size, str.c_str());
+  return buf;
 }
 
 }  // namespace talk_base

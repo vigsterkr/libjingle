@@ -70,6 +70,13 @@ talk.Library(env, name = "libjingle",
                "sound/soundsysteminterface.cc",
                "sound/soundsystemproxy.cc",
              ],
+             dependent_target_settings = {
+               'lin_libs': [
+                 "dl",
+                 "pthread",
+                 "rt",
+               ],
+             },
              mac_srcs = [
                "base/macasyncsocket.cc",
                "base/macconversion.cc",
@@ -232,44 +239,8 @@ talk.Library(env, name = "libjingle",
                "base/winping.cc",
                "session/phone/gdivideorenderer.cc",
              ],
-)
-talk.App(env, name = "login",
-         libs = [
-           "libjingle",
-           "expat",
-           "libxmpphelp",
-         ],
-         srcs = [
-           "examples/login/xmppthread.cc",
-           "examples/login/login_main.cc",
-         ],
-         mac_libs = [
-           "crypto",
-           "ssl",
-         ],
-         lin_libs = [
-           "libpthread",
-           ":libssl.so.0.9.8",
-           "gdk_pixbuf-2.0",
-           "gdk-x11-2.0",
-           "glib-2.0",
-           "gobject-2.0",
-           "gtk-x11-2.0",
-           "videorenderer",
-         ],
-)
-talk.Library(env, name = "videorenderer",
-             lin_srcs = [
-               "session/phone/gtkvideorenderer.cc",
-             ],
-             lin_includedirs = [
-               "/usr/include/atk-1.0",
-               "/usr/include/cairo",
-               "/usr/include/glib-2.0",
-               "/usr/include/gtk-2.0",
-               "/usr/include/pango-1.0",
-               "/usr/lib/glib-2.0/include",
-               "/usr/lib/gtk-2.0/include",
+             extra_srcs = [
+               "base/json.cc",
              ],
 )
 talk.Library(env, name = "libxmpphelp",
@@ -281,6 +252,32 @@ talk.Library(env, name = "libxmpphelp",
                "examples/login/xmpppump.cc",
                "examples/login/xmppsocket.cc",
              ],
+)
+talk.Library(env, name = "videorenderer",
+             lin_srcs = [
+               "session/phone/gtkvideorenderer.cc",
+             ],
+             lin_packages = [
+               "gtk+-2.0",
+             ],
+)
+talk.App(env, name = "login",
+         libs = [
+           "libjingle",
+           "expat",
+           "libxmpphelp",
+         ],
+         srcs = [
+           "examples/login/xmppthread.cc",
+           "examples/login/login_main.cc",
+         ],
+         posix_libs = [
+           "crypto",
+           "ssl",
+         ],
+         lin_libs = [
+           "videorenderer",
+         ],
 )
 talk.App(env, name = "call",
          mac_frameworks = [
@@ -300,7 +297,7 @@ talk.App(env, name = "call",
            "strmiids.lib",
            "winmm.lib",
          ],
-         mac_libs = [
+         posix_libs = [
            "crypto",
            "ssl",
          ],
@@ -308,14 +305,6 @@ talk.App(env, name = "call",
            "FEATURE_ENABLE_VOICEMAIL",
          ],
          lin_libs = [
-           "gdk_pixbuf-2.0",
-           "gdk-x11-2.0",
-           "glib-2.0",
-           "gobject-2.0",
-           "gtk-x11-2.0",
-           "libasound",
-           "libpthread",
-           ":libssl.so.0.9.8",
            "videorenderer",
          ],
          srcs = [
@@ -344,9 +333,6 @@ talk.App(env, name = "relayserver",
          srcs = [
            "p2p/base/relayserver_main.cc",
          ],
-         lin_libs = [
-           "libpthread",
-         ],
 )
 talk.App(env, name = "stunserver",
          libs = [
@@ -354,8 +340,5 @@ talk.App(env, name = "stunserver",
          ],
          srcs = [
            "p2p/base/stunserver_main.cc",
-         ],
-         lin_libs = [
-           "libpthread",
          ],
 )

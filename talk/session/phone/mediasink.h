@@ -31,8 +31,7 @@
 namespace cricket {
 
 // MediaSinkInterface is a sink to handle RTP and RTCP packets that are sent or
-// received by a channel. Each channel needs two MediaSinkInterface, one for
-// the sent packets and the other for the received packets.
+// received by a channel.
 class MediaSinkInterface {
  public:
   virtual ~MediaSinkInterface() {}
@@ -40,8 +39,8 @@ class MediaSinkInterface {
   virtual void SetMaxSize(size_t size) = 0;
   virtual bool Enable(bool enable) = 0;
   virtual bool IsEnabled() const = 0;
-  virtual void OnRtpPacket(const void* data, size_t size) = 0;
-  virtual void OnRtcpPacket(const void* data, size_t size) = 0;
+  virtual void OnPacket(const void* data, size_t size, bool rtcp) = 0;
+  virtual void set_packet_filter(int filter) = 0;
 };
 
 }  // namespace cricket

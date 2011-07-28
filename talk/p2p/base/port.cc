@@ -134,6 +134,7 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       ip_(ip),
       min_port_(min_port),
       max_port_(max_port),
+      generation_(0),
       preference_(-1),
       lifetime_(LT_PRESTART),
       enable_port_packets_(false) {
