@@ -523,6 +523,6 @@ if win_env.Bit('vsproj'):
   print '***Unfortunately the vsproj creator isn\'t smart enough to '
   print '***automatically get the correct output locations.  It is very easy'
   print '***though to change it in the properties pane to the following'
-  print '***($SolutionDir)/build/<foo>/staging/<bar>.exe'
+  print '***$(SolutionDir)/build/<foo>/staging/<bar>.exe'
   Default(None)
   Default([s])

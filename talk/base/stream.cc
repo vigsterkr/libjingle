@@ -772,6 +772,18 @@ bool FifoBuffer::SetCapacity(size_t size) {
   return true;
 }
 
+StreamResult FifoBuffer::ReadOffset(void* buffer, size_t bytes,
+                                    size_t offset, size_t* bytes_read) {
+  CritScope cs(&crit_);
+  return ReadOffsetLocked(buffer, bytes, offset, bytes_read);
+}
+
+StreamResult FifoBuffer::WriteOffset(const void* buffer, size_t bytes,
+                                     size_t offset, size_t* bytes_written) {
+  CritScope cs(&crit_);
+  return WriteOffsetLocked(buffer, bytes, offset, bytes_written);
+}
+
 StreamState FifoBuffer::GetState() const {
   return state_;
 }
@@ -779,60 +791,48 @@ StreamState FifoBuffer::GetState() const {
 StreamResult FifoBuffer::Read(void* buffer, size_t bytes,
                               size_t* bytes_read, int* error) {
   CritScope cs(&crit_);
-  const size_t available = data_length_;
-  if (0 == available) {
-    return (state_ != SS_CLOSED) ? SR_BLOCK : SR_EOS;
-  }
-
   const bool was_writable = data_length_ < buffer_length_;
-  const size_t copy = _min(bytes, available);
-  const size_t tail_copy = _min(copy, buffer_length_ - read_position_);
-  char* const p = static_cast<char*>(buffer);
-  memcpy(p, &buffer_[read_position_], tail_copy);
-  memcpy(p + tail_copy, &buffer_[0], copy - tail_copy);
-  read_position_ = (read_position_ + copy) % buffer_length_;
-  data_length_ -= copy;
-  if (bytes_read) {
-    *bytes_read = copy;
-  }
-  // if we were full before, and now we're not, post an event
-  if (!was_writable && copy > 0) {
-    PostEvent(owner_, SE_WRITE, 0);
-  }
+  size_t copy = 0;
+  StreamResult result = ReadOffsetLocked(buffer, bytes, 0, &copy);
 
-  return SR_SUCCESS;
+  if (result == SR_SUCCESS) {
+    // If read was successful then adjust the read position and number of
+    // bytes buffered.
+    read_position_ = (read_position_ + copy) % buffer_length_;
+    data_length_ -= copy;
+    if (bytes_read) {
+      *bytes_read = copy;
+    }
+
+    // if we were full before, and now we're not, post an event
+    if (!was_writable && copy > 0) {
+      PostEvent(owner_, SE_WRITE, 0);
+    }
+  }
+  return result;
 }
 
 StreamResult FifoBuffer::Write(const void* buffer, size_t bytes,
                                size_t* bytes_written, int* error) {
   CritScope cs(&crit_);
-  if (state_ == SS_CLOSED) {
-    return SR_EOS;
-  }
-
-  const size_t available = buffer_length_ - data_length_;
-  if (0 == available) {
-    return SR_BLOCK;
-  }
 
   const bool was_readable = (data_length_ > 0);
-  const size_t write_position = (read_position_ + data_length_)
-      % buffer_length_;
-  const size_t copy = _min(bytes, available);
-  const size_t tail_copy = _min(copy, buffer_length_ - write_position);
-  const char* const p = static_cast<const char*>(buffer);
-  memcpy(&buffer_[write_position], p, tail_copy);
-  memcpy(&buffer_[0], p + tail_copy, copy - tail_copy);
-  data_length_ += copy;
-  if (bytes_written) {
-    *bytes_written = copy;
-  }
-  // if we didn't have any data to read before, and now we do, post an event
-  if (!was_readable && copy > 0) {
-    PostEvent(owner_, SE_READ, 0);
-  }
+  size_t copy = 0;
+  StreamResult result = WriteOffsetLocked(buffer, bytes, 0, &copy);
 
-  return SR_SUCCESS;
+  if (result == SR_SUCCESS) {
+    // If write was successful then adjust the number of readable bytes.
+    data_length_ += copy;
+    if (bytes_written) {
+      *bytes_written = copy;
+    }
+
+    // if we didn't have any data to read before, and now we do, post an event
+    if (!was_readable && copy > 0) {
+      PostEvent(owner_, SE_READ, 0);
+    }
+  }
+  return result;
 }
 
 void FifoBuffer::Close() {
@@ -886,6 +886,63 @@ void FifoBuffer::ConsumeWriteBuffer(size_t size) {
     PostEvent(owner_, SE_READ, 0);
   }
 }
+
+bool FifoBuffer::GetWriteRemaining(size_t* size) const {
+  CritScope cs(&crit_);
+  *size = buffer_length_ - data_length_;
+  return true;
+}
+
+StreamResult FifoBuffer::ReadOffsetLocked(void* buffer,
+                                          size_t bytes,
+                                          size_t offset,
+                                          size_t* bytes_read) {
+  if (offset >= data_length_) {
+    return (state_ != SS_CLOSED) ? SR_BLOCK : SR_EOS;
+  }
+
+  const size_t available = data_length_ - offset;
+  const size_t read_position = (read_position_ + offset) % buffer_length_;
+  const size_t copy = _min(bytes, available);
+  const size_t tail_copy = _min(copy, buffer_length_ - read_position);
+  char* const p = static_cast<char*>(buffer);
+  memcpy(p, &buffer_[read_position], tail_copy);
+  memcpy(p + tail_copy, &buffer_[0], copy - tail_copy);
+
+  if (bytes_read) {
+    *bytes_read = copy;
+  }
+  return SR_SUCCESS;
+}
+
+StreamResult FifoBuffer::WriteOffsetLocked(const void* buffer,
+                                           size_t bytes,
+                                           size_t offset,
+                                           size_t* bytes_written) {
+  if (state_ == SS_CLOSED) {
+    return SR_EOS;
+  }
+
+  if (data_length_ + offset >= buffer_length_) {
+    return SR_BLOCK;
+  }
+
+  const size_t available = buffer_length_ - data_length_ - offset;
+  const size_t write_position = (read_position_ + data_length_ + offset)
+      % buffer_length_;
+  const size_t copy = _min(bytes, available);
+  const size_t tail_copy = _min(copy, buffer_length_ - write_position);
+  const char* const p = static_cast<const char*>(buffer);
+  memcpy(&buffer_[write_position], p, tail_copy);
+  memcpy(&buffer_[0], p + tail_copy, copy - tail_copy);
+
+  if (bytes_written) {
+    *bytes_written = copy;
+  }
+  return SR_SUCCESS;
+}
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // LoggingAdapter

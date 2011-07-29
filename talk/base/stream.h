@@ -562,6 +562,20 @@ class FifoBuffer : public StreamInterface {
   // Resizes the buffer to the specified capacity. Fails if data_length_ > size
   bool SetCapacity(size_t length);
 
+  // Read into |buffer| with an offset from the current read position, offset
+  // is specified in number of bytes.
+  // This method doesn't adjust read position nor the number of available
+  // bytes, user has to call ConsumeReadData() to do this.
+  StreamResult ReadOffset(void* buffer, size_t bytes, size_t offset,
+                          size_t* bytes_read);
+
+  // Write |buffer| with an offset from the current write position, offset is
+  // specified in number of bytes.
+  // This method doesn't adjust the number of buffered bytes, user has to call
+  // ConsumeWriteBuffer() to do this.
+  StreamResult WriteOffset(const void* buffer, size_t bytes, size_t offset,
+                           size_t* bytes_written);
+
   // StreamInterface methods
   virtual StreamState GetState() const;
   virtual StreamResult Read(void* buffer, size_t bytes,
@@ -573,8 +587,19 @@ class FifoBuffer : public StreamInterface {
   virtual void ConsumeReadData(size_t used);
   virtual void* GetWriteBuffer(size_t *buf_len);
   virtual void ConsumeWriteBuffer(size_t used);
+  virtual bool GetWriteRemaining(size_t* size) const;
 
  private:
+  // Helper method that implements ReadOffset. Caller must acquire a lock
+  // when calling this method.
+  StreamResult ReadOffsetLocked(void* buffer, size_t bytes, size_t offset,
+                                size_t* bytes_read);
+
+  // Helper method that implements WriteOffset. Caller must acquire a lock
+  // when calling this method.
+  StreamResult WriteOffsetLocked(const void* buffer, size_t bytes,
+                                 size_t offset, size_t* bytes_written);
+
   StreamState state_;  // keeps the opened/closed state of the stream
   scoped_array<char> buffer_;  // the allocated buffer
   size_t buffer_length_;  // size of the allocated buffer

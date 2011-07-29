@@ -31,6 +31,7 @@
 #include <list>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/stream.h"
 
 namespace cricket {
 
@@ -95,24 +96,20 @@ class PseudoTcp {
   // Call these to get/set option values to tailor this PseudoTcp
   // instance's behaviour for the kind of data it will carry.
   // If an unrecognized option is set or got, an assertion will fire.
+  //
+  // Setting options for OPT_RCVBUF or OPT_SNDBUF after Connect() is called
+  // will result in an assertion.
   enum Option {
     OPT_NODELAY,      // Whether to enable Nagle's algorithm (0 == off)
     OPT_ACKDELAY,     // The Delayed ACK timeout (0 == off).
-    //kOptRcvBuf,     // Set the receive buffer size, in bytes.
-    //kOptSndBuf,     // Set the send buffer size, in bytes.
+    OPT_RCVBUF,       // Set the receive buffer size, in bytes.
+    OPT_SNDBUF,       // Set the send buffer size, in bytes.
   };
   void GetOption(Option opt, int* value);
   void SetOption(Option opt, int value);
 
  protected:
   enum SendFlags { sfNone, sfDelayedAck, sfImmediateAck };
-  enum {
-    // Note: can't go as high as 1024 * 64, because of uint16 precision
-    kRcvBufSize = 1024 * 60,
-    // Note: send buffer should be larger to make sure we can always fill the
-    // receiver window
-    kSndBufSize = 1024 * 90
-  };
 
   struct Segment {
     uint32 conv, seq, ack;
@@ -140,8 +137,16 @@ class PseudoTcp {
 
   uint32 queue(const char* data, uint32 len, bool bCtrl);
 
+  // Creates a packet and submits it to the network. This method can either
+  // send payload or just an ACK packet.
+  //
+  // |seq| is the sequence number of this packet.
+  // |flags| is the flags for sending this packet.
+  // |offset| is the offset to read from |m_sbuf|.
+  // |len| is the number of bytes to read from |m_sbuf| as payload. If this
+  // value is 0 then this is an ACK packet, otherwise this packet has payload.
   IPseudoTcpNotify::WriteResult packet(uint32 seq, uint8 flags,
-                                       const char* data, uint32 len);
+                                       uint32 offset, uint32 len);
   bool parse(const uint8* buffer, uint32 size);
 
   void attemptSend(SendFlags sflags = sfNone);
@@ -159,15 +164,29 @@ class PseudoTcp {
   // This method is used in test only to query receive buffer state.
   bool isReceiveBufferFull() const;
 
+  // This method is only used in tests, to disable window scaling
+  // support for testing backward compatibility.
+  void disableWindowScale();
+
  private:
-  // Get the total number of bytes of free space in m_rbuf, consecutive or not.
-  uint32 getReceiveBufferSpace() const;
+  // Queue the connect message with TCP options.
+  void queueConnectMessage();
 
-  // Get the number of bytes that can be written to m_rbuf.
-  uint32 getReceiveBufferConsecutiveSpace() const;
+  // Parse TCP options in the header.
+  void parseOptions(const char* data, uint32 len);
 
-  // Consolidate free space in m_rbuf so that it is a consecutive segment.
-  void consolidateReceiveBufferSpace();
+  // Apply a TCP option that has been read from the header.
+  void applyOption(char kind, const char* data, uint32 len);
+
+  // Apply window scale option.
+  void applyWindowScaleOption(uint8 scale_factor);
+
+  // Resize the send buffer with |new_size| in bytes.
+  void resizeSendBuffer(uint32 new_size);
+
+  // Resize the receive buffer with |new_size| in bytes. This call adjusts
+  // window scale factor |m_swnd_scale| accordingly.
+  void resizeReceiveBuffer(uint32 new_size);
 
   IPseudoTcpNotify* m_notify;
   enum Shutdown { SD_NONE, SD_GRACEFUL, SD_FORCEFUL } m_shutdown;
@@ -182,13 +201,16 @@ class PseudoTcp {
   // Incoming data
   typedef std::list<RSegment> RList;
   RList m_rlist;
-  char m_rbuf[kRcvBufSize];
-  uint32 m_rcv_nxt, m_rcv_wnd, m_rpos, m_rlen, m_lastrecv;
+  uint32 m_rbuf_len, m_rcv_nxt, m_rcv_wnd, m_lastrecv;
+  uint8 m_rwnd_scale;  // Window scale factor.
+  talk_base::FifoBuffer m_rbuf;
 
   // Outgoing data
   SList m_slist;
-  char m_sbuf[kSndBufSize];
-  uint32 m_snd_nxt, m_snd_wnd, m_slen, m_lastsend, m_snd_una;
+  uint32 m_sbuf_len, m_snd_nxt, m_snd_wnd, m_lastsend, m_snd_una;
+  uint8 m_swnd_scale;  // Window scale factor.
+  talk_base::FifoBuffer m_sbuf;
+
   // Maximum segment size, estimated protocol level, largest segment sent
   uint32 m_mss, m_msslevel, m_largest, m_mtu_advise;
   // Retransmit timer
@@ -209,6 +231,10 @@ class PseudoTcp {
   // Configuration options
   bool m_use_nagling;
   uint32 m_ack_delay;
+
+  // This is used by unit tests to test backward compatibility of
+  // PseudoTcp implementations that don't support window scaling.
+  bool m_support_wnd_scale;
 };
 
 }  // namespace cricket
