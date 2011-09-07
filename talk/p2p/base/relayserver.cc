@@ -444,7 +444,6 @@ void RelayServer::HandleStunAllocate(
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
-  addr_attr->SetFamily(1);
   addr_attr->SetIP(ext_addr.ip());
   addr_attr->SetPort(ext_addr.port());
   response.AddAttribute(addr_attr);
@@ -621,7 +620,6 @@ void RelayServerConnection::Send(
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_SOURCE_ADDRESS2);
-  addr_attr->SetFamily(1);
   addr_attr->SetIP(from_addr.ip());
   addr_attr->SetPort(from_addr.port());
   msg.AddAttribute(addr_attr);

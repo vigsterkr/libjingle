@@ -127,12 +127,6 @@ class TransportProxy {
 
 typedef std::map<std::string, TransportProxy*> TransportMap;
 
-// TODO: Consider simplifying the dependency from Voice/VideoChannel
-// on Session. Right now the Channel class requires a BaseSession, but it only
-// uses CreateChannel/DestroyChannel. Perhaps something like a
-// TransportChannelFactory could be hoisted up out of BaseSession, or maybe
-// the transports could be passed in directly.
-
 // A BaseSession manages general session state. This includes negotiation
 // of both the application-level and network-level protocols:  the former
 // defines what will be sent and the latter defines how it will be sent.  Each
@@ -168,17 +162,71 @@ class BaseSession : public sigslot::has_slots<>,
     ERROR_CONTENT = 4,   // channel errors in SetLocalContent/SetRemoteContent
   };
 
-  explicit BaseSession(talk_base::Thread *signaling_thread);
+  BaseSession(talk_base::Thread* signaling_thread,
+              talk_base::Thread* worker_thread,
+              PortAllocator* port_allocator,
+              const std::string& sid,
+              const std::string& content_type,
+              bool initiator);
   virtual ~BaseSession();
 
-  // Updates the state, signaling if necessary.
-  void SetState(State state);
+  talk_base::Thread* signaling_thread() { return signaling_thread_; }
+  talk_base::Thread* worker_thread() { return worker_thread_; }
+  PortAllocator* port_allocator() { return port_allocator_; }
 
-  // Updates the error state, signaling if necessary.
-  virtual void SetError(Error error);
+  // The ID of this session.
+  const std::string& id() const { return sid_; }
 
-  // Handles messages posted to us.
-  virtual void OnMessage(talk_base::Message *pmsg);
+  // Returns the XML namespace identifying the type of this session.
+  const std::string& content_type() const { return content_type_; }
+
+  // Returns the XML namespace identifying the transport used for this session.
+  const std::string& transport_type() const { return transport_type_; }
+
+  // Indicates whether we initiated this session.
+  bool initiator() const { return initiator_; }
+
+  // Returns the application-level description given by our client.
+  // If we are the recipient, this will be NULL until we send an accept.
+  const SessionDescription* local_description() const {
+    return local_description_;
+  }
+  // Returns the application-level description given by the other client.
+  // If we are the initiator, this will be NULL until we receive an accept.
+  const SessionDescription* remote_description() const {
+    return remote_description_;
+  }
+  SessionDescription* remote_description() {
+    return remote_description_;
+  }
+
+  // Takes ownership of SessionDescription*
+  bool set_local_description(const SessionDescription* sdesc) {
+    if (sdesc != local_description_) {
+      delete local_description_;
+      local_description_ = sdesc;
+    }
+    return true;
+  }
+
+  // Takes ownership of SessionDescription*
+  bool set_remote_description(SessionDescription* sdesc) {
+    if (sdesc != remote_description_) {
+      delete remote_description_;
+      remote_description_ = sdesc;
+    }
+    return true;
+  }
+
+  const SessionDescription* initiator_description() const {
+    if (initiator_) {
+      return local_description_;
+    } else {
+      return remote_description_;
+    }
+  }
+
+  void set_allow_local_ips(bool allow);
 
   // Returns the current state of the session.  See the enum above for details.
   // Each time the state changes, we will fire this signal.
@@ -190,6 +238,19 @@ class BaseSession : public sigslot::has_slots<>,
   Error error() const { return error_; }
   sigslot::signal2<BaseSession *, Error> SignalError;
 
+  // Updates the state, signaling if necessary.
+  virtual void SetState(State state);
+
+  // Updates the error state, signaling if necessary.
+  virtual void SetError(Error error);
+
+  // Fired when the remote description is updated.
+  sigslot::signal1<BaseSession *> SignalRemoteDescriptionUpdate;
+
+  // Returns the transport that has been negotiated or NULL if
+  // negotiation is still in progress.
+  Transport* GetTransport(const std::string& content_name);
+
   // Creates a new channel with the given names.  This method may be called
   // immediately after creating the session.  However, the actual
   // implementation may not be fixed until transport negotiation completes.
@@ -197,68 +258,102 @@ class BaseSession : public sigslot::has_slots<>,
   // shouldn't be an issue since the main thread will be blocked in
   // Send when doing so.
   virtual TransportChannel* CreateChannel(const std::string& content_name,
-                                          const std::string& channel_name) = 0;
+                                          const std::string& channel_name);
 
   // Returns the channel with the given names.
   virtual TransportChannel* GetChannel(const std::string& content_name,
-                                       const std::string& channel_name) = 0;
+                                       const std::string& channel_name);
 
   // Destroys the channel with the given names.
   // This will usually be called from the worker thread, but that
   // shouldn't be an issue since the main thread will be blocked in
   // Send when doing so.
   virtual void DestroyChannel(const std::string& content_name,
-                              const std::string& channel_name) = 0;
+                              const std::string& channel_name);
+ protected:
+  const TransportMap& transport_proxies() const { return transports_; }
+  // Get a TransportProxy by content_name or transport. NULL if not found.
+  TransportProxy* GetTransportProxy(const std::string& content_name);
+  TransportProxy* GetTransportProxy(const Transport* transport);
+  TransportProxy* GetFirstTransportProxy();
+  // TransportProxy is owned by session.  Return proxy just for convenience.
+  TransportProxy* GetOrCreateTransportProxy(const std::string& content_name);
+  // Creates the actual transport object. Overridable for testing.
+  virtual Transport* CreateTransport();
 
-  // Invoked when we notice that there is no matching channel on our peer.
-  sigslot::signal2<Session*, const std::string&> SignalChannelGone;
+  void OnSignalingReady();
+  void SpeculativelyConnectAllTransportChannels();
 
-  // Returns the application-level description given by our client.
-  // If we are the recipient, this will be NULL until we send an accept.
-  const SessionDescription* local_description() const {
-    return local_description_;
-  }
-  // Takes ownership of SessionDescription*
-  bool set_local_description(const SessionDescription* sdesc) {
-    if (sdesc != local_description_) {
-      delete local_description_;
-      local_description_ = sdesc;
-    }
-    return true;
-  }
-
-  // Returns the application-level description given by the other client.
-  // If we are the initiator, this will be NULL until we receive an accept.
-  const SessionDescription* remote_description() const {
-    return remote_description_;
-  }
-  // Takes ownership of SessionDescription*
-  bool set_remote_description(SessionDescription* sdesc) {
-    if (sdesc != remote_description_) {
-      delete remote_description_;
-      remote_description_ = sdesc;
-    }
-    return true;
+  // Called when a transport requests signaling.
+  virtual void OnTransportRequestSignaling(Transport* transport) {
   }
 
-  // When we receive an initiate, we create a session in the
-  // RECEIVEDINITIATE state and respond by accepting or rejecting.
-  // Takes ownership of session description.
-  virtual bool Accept(const SessionDescription* sdesc) = 0;
-  virtual bool Reject(const std::string& reason) = 0;
-  bool Terminate() {
-    return TerminateWithReason(STR_TERMINATE_SUCCESS);
-  }
-  virtual bool TerminateWithReason(const std::string& reason) = 0;
-
-  // The worker thread used by the session manager
-  virtual talk_base::Thread *worker_thread() = 0;
-
-  talk_base::Thread *signaling_thread() {
-    return signaling_thread_;
+  // Called when the first channel of a transport begins connecting.  We use
+  // this to start a timer, to make sure that the connection completes in a
+  // reasonable amount of time.
+  virtual void OnTransportConnecting(Transport* transport) {
   }
 
-  // Returns the JID of this client.
+  // Called when a transport changes its writable state.  We track this to make
+  // sure that the transport becomes writable within a reasonable amount of
+  // time.  If this does not occur, we signal an error.
+  virtual void OnTransportWritable(Transport* transport) {
+  }
+
+  // Called when a transport signals that it has new candidates.
+  virtual void OnTransportCandidatesReady(Transport* transport,
+                                          const Candidates& candidates) {
+  }
+
+  // Called when a transport signals that it found an error in an incoming
+  // message.
+  virtual void OnTransportSendError(Transport* transport,
+                                    const buzz::XmlElement* stanza,
+                                    const buzz::QName& name,
+                                    const std::string& type,
+                                    const std::string& text,
+                                    const buzz::XmlElement* extra_info) {
+  }
+
+  // Called when we notice that one of our local channels has no peer, so it
+  // should be destroyed.
+  virtual void OnTransportChannelGone(Transport* transport,
+                                      const std::string& name) {
+  }
+
+  // Handles messages posted to us.
+  virtual void OnMessage(talk_base::Message *pmsg);
+
+ protected:
+// private:
+  State state_;
+  Error error_;
+ private:
+  talk_base::Thread* signaling_thread_;
+  talk_base::Thread* worker_thread_;
+  PortAllocator* port_allocator_;
+  std::string sid_;
+  std::string content_type_;
+  std::string transport_type_;
+  bool initiator_;
+  const SessionDescription* local_description_;
+  SessionDescription* remote_description_;
+  // This is transport-specific but required so much by unit tests
+  // that it's much easier to put it here.
+  bool allow_local_ips_;
+  TransportMap transports_;
+};
+
+// A specific Session created by the SessionManager, using XMPP for protocol.
+class Session : public BaseSession {
+ public:
+  // Returns the manager that created and owns this session.
+  SessionManager* session_manager() const { return session_manager_; }
+
+  // Returns the client that is handling the application data of this session.
+  SessionClient* client() const { return client_; }
+
+    // Returns the JID of this client.
   const std::string& local_name() const { return local_name_; }
 
   // Returns the JID of the other peer in this session.
@@ -271,41 +366,9 @@ class BaseSession : public sigslot::has_slots<>,
   // explicitly.
   void set_remote_name(const std::string& name) { remote_name_ = name; }
 
-  const std::string& id() const { return sid_; }
-
-  // Fired when the remote description is updated.
-  sigslot::signal1<BaseSession *> SignalRemoteDescriptionUpdate;
-
- protected:
-  State state_;
-  Error error_;
-  const SessionDescription* local_description_;
-  SessionDescription* remote_description_;
-  std::string sid_;
-  // We don't use buzz::Jid because changing to buzz:Jid here has a
-  // cascading effect that requires an enormous number places to
-  // change to buzz::Jid as well.
-  std::string local_name_;
-  std::string remote_name_;
-  talk_base::Thread *signaling_thread_;
-};
-
-// A specific Session created by the SessionManager, using XMPP for protocol.
-class Session : public BaseSession {
- public:
-  // Returns the manager that created and owns this session.
-  SessionManager* session_manager() const { return session_manager_; }
-
-  // the worker thread used by the session manager
-  talk_base::Thread *worker_thread() {
-    return session_manager_->worker_thread();
-  }
-
-  // Returns the XML namespace identifying the type of this session.
-  const std::string& content_type() const { return content_type_; }
-
-  // Returns the client that is handling the application data of this session.
-  SessionClient* client() const { return client_; }
+  // Indicates the JID of the entity who initiated this session.
+  // In special cases, may be different than both local_name and remote_name.
+  const std::string& initiator_name() const { return initiator_name_; }
 
   SignalingProtocol current_protocol() const { return current_protocol_; }
 
@@ -313,25 +376,18 @@ class Session : public BaseSession {
     current_protocol_ = protocol;
   }
 
-  // Indicates whether we initiated this session.
-  bool initiator() const { return initiator_; }
+  // Updates the error state, signaling if necessary.
+  virtual void SetError(Error error);
 
-  const SessionDescription* initiator_description() const {
-    if (initiator_) {
-      return local_description_;
-    } else {
-      return remote_description_;
-    }
-  }
+  // When the session needs to send signaling messages, it beings by requesting
+  // signaling.  The client should handle this by calling OnSignalingReady once
+  // it is ready to send the messages.
+  // (These are called only by SessionManager.)
+  sigslot::signal1<Session*> SignalRequestSignaling;
+  void OnSignalingReady() { BaseSession::OnSignalingReady(); }
 
-  // Fired whenever we receive a terminate message along with a reason
-  sigslot::signal2<Session*, const std::string&> SignalReceivedTerminateReason;
-
-  void set_allow_local_ips(bool allow);
-
-  // Returns the transport that has been negotiated or NULL if
-  // negotiation is still in progress.
-  Transport* GetTransport(const std::string& content_name);
+  // Invoked when we notice that there is no matching channel on our peer.
+  sigslot::signal2<Session*, const std::string&> SignalChannelGone;
 
   // Takes ownership of session description.
   // TODO: Add an error argument to pass back to the caller.
@@ -342,9 +398,14 @@ class Session : public BaseSession {
   // RECEIVEDINITIATE state and respond by accepting or rejecting.
   // Takes ownership of session description.
   // TODO: Add an error argument to pass back to the caller.
-  virtual bool Accept(const SessionDescription* sdesc);
-  virtual bool Reject(const std::string& reason);
-  virtual bool TerminateWithReason(const std::string& reason);
+  bool Accept(const SessionDescription* sdesc);
+  bool Reject(const std::string& reason);
+  bool Terminate() {
+    return TerminateWithReason(STR_TERMINATE_SUCCESS);
+  }
+  bool TerminateWithReason(const std::string& reason);
+  // Fired whenever we receive a terminate message along with a reason
+  sigslot::signal2<Session*, const std::string&> SignalReceivedTerminateReason;
 
   // The two clients in the session may also send one another
   // arbitrary XML messages, which are called "info" messages. Sending
@@ -353,30 +414,6 @@ class Session : public BaseSession {
   bool SendInfoMessage(const XmlElements& elems);
   sigslot::signal2<Session*, const buzz::XmlElement*> SignalInfoMessage;
 
-  // Maps passed to serialization functions.
-  TransportParserMap GetTransportParsers();
-  ContentParserMap GetContentParsers();
-
-  // Creates a new channel with the given names.  This method may be called
-  // immediately after creating the session.  However, the actual
-  // implementation may not be fixed until transport negotiation completes.
-  virtual TransportChannel* CreateChannel(const std::string& content_name,
-                                          const std::string& channel_name);
-
-  // Returns the channel with the given names.
-  virtual TransportChannel* GetChannel(const std::string& content_name,
-                                       const std::string& channel_name);
-
-  // Destroys the channel with the given names.
-  virtual void DestroyChannel(const std::string& content_name,
-                              const std::string& channel_name);
-
-  // Updates the error state, signaling if necessary.
-  virtual void SetError(Error error);
-
-  // Handles messages posted to us.
-  virtual void OnMessage(talk_base::Message *pmsg);
-
  private:
   // Creates or destroys a session.  (These are called only SessionManager.)
   Session(SessionManager *session_manager,
@@ -384,62 +421,35 @@ class Session : public BaseSession {
           const std::string& sid, const std::string& content_type,
           SessionClient* client);
   ~Session();
-
-  // Get a TransportProxy by content_name or transport. NULL if not found.
-  TransportProxy* GetTransportProxy(const std::string& content_name);
-  TransportProxy* GetTransportProxy(const Transport* transport);
-  TransportProxy* GetFirstTransportProxy();
-  // TransportProxy is owned by session.  Return proxy just for convenience.
-  TransportProxy* GetOrCreateTransportProxy(const std::string& content_name);
   // For each transport info, create a transport proxy.  Can fail for
   // incompatible transport types.
   bool CreateTransportProxies(const TransportInfos& tinfos,
                               SessionError* error);
-  void SpeculativelyConnectAllTransportChannels();
   bool OnRemoteCandidates(const TransportInfos& tinfos,
                           ParseError* error);
   // Returns a TransportInfo without candidates for each content name.
   // Uses the transport_type_ of the session.
   TransportInfos GetEmptyTransportInfos(const ContentInfos& contents) const;
 
-  // Called when the first channel of a transport begins connecting.  We use
-  // this to start a timer, to make sure that the connection completes in a
-  // reasonable amount of time.
-  void OnTransportConnecting(Transport* transport);
+    // Maps passed to serialization functions.
+  TransportParserMap GetTransportParsers();
+  ContentParserMap GetContentParsers();
 
-  // Called when a transport changes its writable state.  We track this to make
-  // sure that the transport becomes writable within a reasonable amount of
-  // time.  If this does not occur, we signal an error.
-  void OnTransportWritable(Transport* transport);
+  virtual void OnTransportRequestSignaling(Transport* transport);
+  virtual void OnTransportConnecting(Transport* transport);
+  virtual void OnTransportWritable(Transport* transport);
+  virtual void OnTransportCandidatesReady(Transport* transport,
+                                          const Candidates& candidates);
+  virtual void OnTransportSendError(Transport* transport,
+                                    const buzz::XmlElement* stanza,
+                                    const buzz::QName& name,
+                                    const std::string& type,
+                                    const std::string& text,
+                                    const buzz::XmlElement* extra_info);
+  virtual void OnTransportChannelGone(Transport* transport,
+                                      const std::string& name);
 
-  // Called when a transport requests signaling.
-  void OnTransportRequestSignaling(Transport* transport);
-
-  // Called when a transport signals that it has a message to send.   Note that
-  // these messages are just the transport part of the stanza; they need to be
-  // wrapped in the appropriate session tags.
-  void OnTransportCandidatesReady(Transport* transport,
-                                  const Candidates& candidates);
-
-  // Called when a transport signals that it found an error in an incoming
-  // message.
-  void OnTransportSendError(Transport* transport,
-                            const buzz::XmlElement* stanza,
-                            const buzz::QName& name,
-                            const std::string& type,
-                            const std::string& text,
-                            const buzz::XmlElement* extra_info);
-
-  // Called when we notice that one of our local channels has no peer, so it
-  // should be destroyed.
-  void OnTransportChannelGone(Transport* transport, const std::string& name);
-
-  // When the session needs to send signaling messages, it beings by requesting
-  // signaling.  The client should handle this by calling OnSignalingReady once
-  // it is ready to send the messages.
-  // (These are called only by SessionManager.)
-  sigslot::signal1<Session*> SignalRequestSignaling;
-  void OnSignalingReady();
+  virtual void OnMessage(talk_base::Message *pmsg);
 
   // Send various kinds of session messages.
   bool SendInitiateMessage(const SessionDescription* sdesc,
@@ -535,18 +545,13 @@ class Session : public BaseSession {
   // Verifies that we are in the appropriate state to receive this message.
   bool CheckState(State state, MessageError* error);
 
-  SessionManager *session_manager_;
-  bool initiator_;
+  SessionManager* session_manager_;
   bool initiate_acked_;
+  std::string local_name_;
   std::string initiator_name_;
-  std::string content_type_;
+  std::string remote_name_;
   SessionClient* client_;
-  std::string transport_type_;
   TransportParser* transport_parser_;
-  // This is transport-specific but required so much by unit tests
-  // that it's much easier to put it here.
-  bool allow_local_ips_;
-  TransportMap transports_;
   // Keeps track of what protocol we are speaking.
   SignalingProtocol current_protocol_;
 

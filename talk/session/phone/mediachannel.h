@@ -42,14 +42,28 @@ namespace talk_base {
 class Buffer;
 }
 
-namespace flute {
-class MagicCamVideoRenderer;
-}
-
 namespace cricket {
+
+class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
 const int kMaxRtpHeaderExtensionId = 255;
+
+// A class for playing out soundclips.
+class SoundclipMedia {
+ public:
+  enum SoundclipFlags {
+    SF_LOOP = 1,
+  };
+
+  virtual ~SoundclipMedia() {}
+
+  // Plays a sound out to the speakers with the given audio stream. The stream
+  // must be 16-bit little-endian 16 kHz PCM. If a stream is already playing
+  // on this SoundclipMedia, it is stopped. If clip is NULL, nothing is played.
+  // Returns whether it was successful.
+  virtual bool PlaySound(const char *clip, int len, int flags) = 0;
+};
 
 struct RtpHeaderExtension {
   RtpHeaderExtension(const std::string& u, int i) : uri(u), id(i) {}
@@ -253,8 +267,12 @@ class VoiceMediaChannel : public MediaChannel {
   virtual bool RemoveStream(uint32 ssrc) = 0;
   // Gets current energy levels for all incoming streams.
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) = 0;
-  // Get the current energy level for the outgoing stream.
+  // Get the current energy level of the stream sent to the speaker.
   virtual int GetOutputLevel() = 0;
+  // Set left and right scale for speaker output volume of the specified ssrc.
+  virtual bool SetOutputScaling(uint32 ssrc, double left, double right) = 0;
+  // Get left and right scale for speaker output volume of the specified ssrc.
+  virtual bool GetOutputScaling(uint32 ssrc, double* left, double* right) = 0;
   // Specifies a ringback tone to be played during call setup.
   virtual bool SetRingbackTone(const char *buf, int len) = 0;
   // Plays or stops the aforementioned ringback tone
@@ -273,179 +291,6 @@ class VoiceMediaChannel : public MediaChannel {
   // Signal errors from MediaChannel.  Arguments are:
   //     ssrc(uint32), and error(VoiceMediaChannel::Error).
   sigslot::signal2<uint32, VoiceMediaChannel::Error> SignalMediaError;
-};
-
-// Represents a YUV420 (a.k.a. I420) video frame.
-class VideoFrame {
-  friend class flute::MagicCamVideoRenderer;
-
- public:
-  VideoFrame() : rendered_(false) {}
-
-  virtual ~VideoFrame() {}
-
-  virtual size_t GetWidth() const = 0;
-  virtual size_t GetHeight() const = 0;
-  virtual const uint8 *GetYPlane() const = 0;
-  virtual const uint8 *GetUPlane() const = 0;
-  virtual const uint8 *GetVPlane() const = 0;
-  virtual uint8 *GetYPlane() = 0;
-  virtual uint8 *GetUPlane() = 0;
-  virtual uint8 *GetVPlane() = 0;
-  virtual int32 GetYPitch() const = 0;
-  virtual int32 GetUPitch() const = 0;
-  virtual int32 GetVPitch() const = 0;
-
-  // For retrieving the aspect ratio of each pixel. Usually this is 1x1, but
-  // the aspect_ratio_idc parameter of H.264 can specify non-square pixels.
-  virtual size_t GetPixelWidth() const = 0;
-  virtual size_t GetPixelHeight() const = 0;
-
-  // TODO: Add a fourcc format here and probably combine VideoFrame
-  // with CapturedFrame.
-  virtual int64 GetElapsedTime() const = 0;
-  virtual int64 GetTimeStamp() const = 0;
-  virtual void SetElapsedTime(int64 elapsed_time) = 0;
-  virtual void SetTimeStamp(int64 time_stamp) = 0;
-
-  // Make a copy of the frame. The frame buffer itself may not be copied,
-  // in which case both the current and new VideoFrame will share a single
-  // reference-counted frame buffer.
-  virtual VideoFrame *Copy() const = 0;
-
-  // Writes the frame into the given frame buffer, provided that it is of
-  // sufficient size. Returns the frame's actual size, regardless of whether
-  // it was written or not (like snprintf). If there is insufficient space,
-  // nothing is written.
-  virtual size_t CopyToBuffer(uint8 *buffer, size_t size) const = 0;
-
-  // Converts the I420 data to RGB of a certain type such as ARGB and ABGR.
-  // Returns the frame's actual size, regardless of whether it was written or
-  // not (like snprintf). Parameters size and pitch_rgb are in units of bytes.
-  // If there is insufficient space, nothing is written.
-  virtual size_t ConvertToRgbBuffer(uint32 to_fourcc, uint8 *buffer,
-                                    size_t size, size_t pitch_rgb) const = 0;
-
-  // Writes the frame into the given planes, stretched to the given width and
-  // height. The parameter "interpolate" controls whether to interpolate or just
-  // take the nearest-point. The parameter "crop" controls whether to crop this
-  // frame to the aspect ratio of the given dimensions before stretching.
-  virtual void StretchToPlanes(uint8 *y, uint8 *u, uint8 *v,
-                               int32 pitchY, int32 pitchU, int32 pitchV,
-                               size_t width, size_t height,
-                               bool interpolate, bool crop) const = 0;
-
-  // Writes the frame into the given frame buffer, stretched to the given width
-  // and height, provided that it is of sufficient size. Returns the frame's
-  // actual size, regardless of whether it was written or not (like snprintf).
-  // If there is insufficient space, nothing is written. The parameter
-  // "interpolate" controls whether to interpolate or just take the
-  // nearest-point. The parameter "crop" controls whether to crop this frame to
-  // the aspect ratio of the given dimensions before stretching.
-  virtual size_t StretchToBuffer(size_t w, size_t h, uint8 *buffer, size_t size,
-                                 bool interpolate, bool crop) const = 0;
-
-  // Writes the frame into the target VideoFrame, stretched to the size of that
-  // frame. The parameter "interpolate" controls whether to interpolate or just
-  // take the nearest-point. The parameter "crop" controls whether to crop this
-  // frame to the aspect ratio of the target frame before stretching.
-  virtual void StretchToFrame(VideoFrame *target, bool interpolate,
-                              bool crop) const = 0;
-
-  // Stretches the frame to the given size, creating a new VideoFrame object to
-  // hold it. The parameter "interpolate" controls whether to interpolate or
-  // just take the nearest-point. The parameter "crop" controls whether to crop
-  // this frame to the aspect ratio of the given dimensions before stretching.
-  virtual VideoFrame *Stretch(size_t w, size_t h, bool interpolate,
-                              bool crop) const = 0;
-
-  // Size of an I420 image of given dimensions when stored as a frame buffer.
-  static size_t SizeOf(size_t w, size_t h) {
-    return w * h + ((w + 1) / 2) * ((h + 1) / 2) * 2;
-  }
-
- protected:
-  // The frame needs to be rendered to magiccam only once.
-  // TODO: Remove this flag once magiccam rendering is fully replaced
-  // by client3d rendering.
-  mutable bool rendered_;
-};
-
-// Simple subclass for use in mocks.
-class NullVideoFrame : public VideoFrame {
- public:
-  virtual size_t GetWidth() const { return 0; }
-  virtual size_t GetHeight() const { return 0; }
-  virtual const uint8 *GetYPlane() const { return NULL; }
-  virtual const uint8 *GetUPlane() const { return NULL; }
-  virtual const uint8 *GetVPlane() const { return NULL; }
-  virtual uint8 *GetYPlane() { return NULL; }
-  virtual uint8 *GetUPlane() { return NULL; }
-  virtual uint8 *GetVPlane() { return NULL; }
-  virtual int32 GetYPitch() const { return 0; }
-  virtual int32 GetUPitch() const { return 0; }
-  virtual int32 GetVPitch() const { return 0; }
-
-  virtual size_t GetPixelWidth() const { return 1; }
-  virtual size_t GetPixelHeight() const { return 1; }
-  virtual int64 GetElapsedTime() const { return 0; }
-  virtual int64 GetTimeStamp() const { return 0; }
-  virtual void SetElapsedTime(int64 elapsed_time) {}
-  virtual void SetTimeStamp(int64 time_stamp) {}
-
-  virtual VideoFrame *Copy() const {
-    return NULL;
-  }
-
-  virtual size_t CopyToBuffer(uint8 *buffer, size_t size) const {
-    return 0;
-  }
-
-  virtual size_t ConvertToRgbBuffer(uint32 to_fourcc, uint8 *buffer,
-                                    size_t size, size_t pitch_rgb) const {
-    return 0;
-  }
-
-  virtual void StretchToPlanes(uint8 *y, uint8 *u, uint8 *v,
-                               int32 pitchY, int32 pitchU, int32 pitchV,
-                               size_t width, size_t height,
-                               bool interpolate, bool crop) const {
-  }
-
-  virtual size_t StretchToBuffer(size_t w, size_t h, uint8 *buffer, size_t size,
-                                 bool interpolate, bool crop) const {
-    return 0;
-  }
-
-  virtual void StretchToFrame(VideoFrame *target, bool interpolate,
-                              bool crop) const {
-  }
-
-  virtual VideoFrame *Stretch(size_t w, size_t h, bool interpolate,
-                              bool crop) const {
-    return NULL;
-  }
-};
-
-// Abstract interface for rendering VideoFrames.
-class VideoRenderer {
- public:
-  virtual ~VideoRenderer() {}
-  // Called when the video has changed size.
-  virtual bool SetSize(int width, int height, int reserved) = 0;
-  // Called when a new frame is available for display.
-  virtual bool RenderFrame(const VideoFrame *frame) = 0;
-};
-
-// Simple implementation for use in tests.
-class NullVideoRenderer : public VideoRenderer {
-  virtual bool SetSize(int width, int height, int reserved) {
-    return true;
-  }
-  // Called when a new frame is available for display.
-  virtual bool RenderFrame(const VideoFrame *frame) {
-    return true;
-  }
 };
 
 class VideoMediaChannel : public MediaChannel {

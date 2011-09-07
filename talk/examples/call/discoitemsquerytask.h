@@ -59,7 +59,8 @@ class DiscoItemsQueryTask : public XmppTask {
  public:
   // TODO: Currently, this only supports one query stanza - we may eventually
   // need it to support multiple
-  DiscoItemsQueryTask(Task* parent, const std::string node, const Jid& to);
+  DiscoItemsQueryTask(XmppTaskParentInterface* parent,
+                      const std::string& node, const Jid& to);
 
   virtual int ProcessStart();
   virtual int ProcessResponse();

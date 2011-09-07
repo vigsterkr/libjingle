@@ -183,7 +183,7 @@ class AllocateRequest : public StunRequest {
   uint32 start_time_;
 };
 
-const std::string RELAY_PORT_TYPE("relay");
+const char RELAY_PORT_TYPE[] = "relay";
 
 RelayPort::RelayPort(
     talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
@@ -554,7 +554,6 @@ int RelayEntry::SendTo(const void* data, size_t size,
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
-  addr_attr->SetFamily(1);
   addr_attr->SetIP(addr.ip());
   addr_attr->SetPort(addr.port());
   request.AddAttribute(addr_attr);

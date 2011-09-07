@@ -109,20 +109,8 @@ Thread *ThreadManager::WrapCurrentThread() {
   Thread* result = CurrentThread();
   if (NULL == result) {
     result = new Thread();
-#if defined(WIN32)
-    // We explicitly ask for no rights other than synchronization.
-    // This gives us the best chance of succeeding.
-    result->thread_ = OpenThread(SYNCHRONIZE, FALSE, GetCurrentThreadId());
-    if (!result->thread_)
-      LOG_GLE(LS_ERROR) << "Unable to get handle to thread.";
-#elif defined(POSIX)
-    result->thread_ = pthread_self();
-#endif
-    result->owned_ = false;
-    result->started_ = true;
-    SetCurrent(result);
+    result->WrapCurrent();
   }
-
   return result;
 }
 
@@ -130,14 +118,7 @@ Thread *ThreadManager::WrapCurrentThread() {
 void ThreadManager::UnwrapCurrentThread() {
   Thread* t = CurrentThread();
   if (t && !(t->IsOwned())) {
-    // Clears the platform-specific thread-specific storage.
-    SetCurrent(NULL);
-#ifdef WIN32
-    if (!CloseHandle(t->thread_)) {
-      LOG_GLE(LS_ERROR) << "When unwrapping thread, failed to close handle.";
-    }
-#endif
-    t->started_ = false;
+    t->UnwrapCurrent();
     delete t;
   }
 }
@@ -526,6 +507,38 @@ bool Thread::ProcessMessages(int cmsLoop) {
     }
   }
 }
+
+bool Thread::WrapCurrent() {
+  if (started_)
+    return false;
+#if defined(WIN32)
+  // We explicitly ask for no rights other than synchronization.
+  // This gives us the best chance of succeeding.
+  thread_ = OpenThread(SYNCHRONIZE, FALSE, GetCurrentThreadId());
+  if (!thread_) {
+    LOG_GLE(LS_ERROR) << "Unable to get handle to thread.";
+    return false;
+  }
+#elif defined(POSIX)
+  thread_ = pthread_self();
+#endif
+  owned_ = false;
+  started_ = true;
+  ThreadManager::SetCurrent(this);
+  return true;
+}
+
+void Thread::UnwrapCurrent() {
+  // Clears the platform-specific thread-specific storage.
+  ThreadManager::SetCurrent(NULL);
+#ifdef WIN32
+  if (!CloseHandle(thread_)) {
+    LOG_GLE(LS_ERROR) << "When unwrapping thread, failed to close handle.";
+  }
+#endif
+  started_ = false;
+}
+
 
 AutoThread::AutoThread(SocketServer* ss) : Thread(ss) {
   if (!ThreadManager::CurrentThread()) {

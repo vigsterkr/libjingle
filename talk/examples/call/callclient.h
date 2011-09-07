@@ -64,7 +64,7 @@ class NetworkManager;
 
 namespace cricket {
 class PortAllocator;
-class MediaEngine;
+class MediaEngineInterface;
 class MediaSessionClient;
 class Receiver;
 class Call;
@@ -98,7 +98,7 @@ class CallClient: public sigslot::has_slots<> {
   ~CallClient();
 
   cricket::MediaSessionClient* media_client() const { return media_client_; }
-  void SetMediaEngine(cricket::MediaEngine* media_engine) {
+  void SetMediaEngine(cricket::MediaEngineInterface* media_engine) {
     media_engine_ = media_engine;
   }
   void SetAutoAccept(bool auto_accept) {
@@ -106,6 +106,9 @@ class CallClient: public sigslot::has_slots<> {
   }
   void SetPmucDomain(const std::string &pmuc_domain) {
     pmuc_domain_ = pmuc_domain;
+  }
+  void SetRender(bool render) {
+    render_ = render;
   }
   void SetConsole(Console *console) {
     console_ = console;
@@ -154,8 +157,8 @@ class CallClient: public sigslot::has_slots<> {
   void OnCallCreate(cricket::Call* call);
   void OnCallDestroy(cricket::Call* call);
   void OnSessionState(cricket::Call* call,
-                      cricket::BaseSession* session,
-                      cricket::BaseSession::State state);
+                      cricket::Session* session,
+                      cricket::Session::State state);
   void OnStatusUpdate(const buzz::Status& status);
   void OnMucInviteReceived(const buzz::Jid& inviter, const buzz::Jid& room,
       const std::vector<buzz::AvailableMediaEntry>& avail);
@@ -169,7 +172,7 @@ class CallClient: public sigslot::has_slots<> {
                             cricket::Session* session,
                             const cricket::MediaSources& sources);
   void OnSpeakerChanged(cricket::Call* call,
-                        cricket::BaseSession* session,
+                        cricket::Session* session,
                         const cricket::NamedSource& speaker_source);
   void OnRoomLookupResponse(const buzz::MucRoomInfo& room_info);
   void OnRoomLookupError(const buzz::XmlElement* stanza);
@@ -208,15 +211,16 @@ class CallClient: public sigslot::has_slots<> {
   cricket::PortAllocator* port_allocator_;
   cricket::SessionManager* session_manager_;
   cricket::SessionManagerTask* session_manager_task_;
-  cricket::MediaEngine* media_engine_;
+  cricket::MediaEngineInterface* media_engine_;
   cricket::MediaSessionClient* media_client_;
   MucMap mucs_;
 
   cricket::Call* call_;
-  cricket::BaseSession *session_;
+  cricket::Session *session_;
   bool incoming_call_;
   bool auto_accept_;
   std::string pmuc_domain_;
+  bool render_;
   cricket::VideoRenderer* local_renderer_;
   cricket::VideoRenderer* remote_renderer_;
   StaticRenderedViews static_rendered_views_;

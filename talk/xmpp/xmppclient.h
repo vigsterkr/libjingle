@@ -31,14 +31,14 @@
 #include <string>
 #include "talk/base/basicdefs.h"
 #include "talk/base/sigslot.h"
-#include "talk/xmpp/xmppengine.h"
+#include "talk/base/task.h"
 #include "talk/xmpp/asyncsocket.h"
 #include "talk/xmpp/xmppclientsettings.h"
-#include "talk/base/task.h"
+#include "talk/xmpp/xmppengine.h"
+#include "talk/xmpp/xmpptask.h"
 
 namespace buzz {
 
-class XmppTask;
 class PreXmppAuth;
 class CaptchaChallenge;
 
@@ -68,22 +68,22 @@ class CaptchaChallenge;
 //
 /////////////////////////////////////////////////////////////////////
 
-class XmppClient : public talk_base::Task, public sigslot::has_slots<>
+class XmppClient : public XmppTaskParentInterface,
+                   public XmppClientInterface,
+                   public sigslot::has_slots<>
 {
 public:
   explicit XmppClient(talk_base::TaskParent * parent);
-  ~XmppClient();
+  virtual ~XmppClient();
 
   XmppReturnStatus Connect(const XmppClientSettings & settings,
                            const std::string & lang,
                            AsyncSocket * socket,
                            PreXmppAuth * preauth);
 
-  virtual talk_base::TaskParent* GetParent(int code);
   virtual int ProcessStart();
   virtual int ProcessResponse();
   XmppReturnStatus Disconnect();
-  const Jid & jid();
 
   sigslot::signal1<XmppEngine::State> SignalStateChange;
   XmppEngine::State GetState();
@@ -101,30 +101,31 @@ public:
   // (if we used GAIA authentication)
   std::string GetAuthCookie();
 
-  std::string NextId();
-  XmppReturnStatus SendStanza(const XmlElement *stanza);
   XmppReturnStatus SendRaw(const std::string & text);
-  XmppReturnStatus SendStanzaError(const XmlElement * pelOriginal,
-                       XmppStanzaError code,
-                       const std::string & text);
 
   XmppEngine* engine();
 
   sigslot::signal2<const char *, int> SignalLogInput;
   sigslot::signal2<const char *, int> SignalLogOutput;
 
-private:
+  // As XmppTaskParentIntreface
+  virtual XmppClientInterface* GetClient() { return this; }
+
+  // As XmppClientInterface
+  virtual const Jid& jid();
+  virtual std::string NextId();
+  virtual XmppReturnStatus SendStanza(const XmlElement *stanza);
+  virtual XmppReturnStatus SendStanzaError(const XmlElement * pelOriginal,
+                                           XmppStanzaError code,
+                                           const std::string & text);
+  virtual void AddXmppTask(XmppTask *, XmppEngine::HandlerLevel);
+  virtual void RemoveXmppTask(XmppTask *);
+
+ private:
   friend class XmppTask;
 
   void OnAuthDone();
 
-  // managed tasks and dispatching
-  void AddXmppTask(XmppTask *, XmppEngine::HandlerLevel);
-  void RemoveXmppTask(XmppTask *);
-
-  sigslot::signal0<> SignalDisconnected;
-
-private:
   // Internal state management
   enum {
     STATE_PRE_XMPP_LOGIN = STATE_NEXT,

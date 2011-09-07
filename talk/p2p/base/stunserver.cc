@@ -89,25 +89,17 @@ void StunServer::OnBindingRequest(
   response.SetTransactionID(msg->transaction_id());
 
   // Tell the user the address that we received their request from.
-  StunAddressAttribute* mapped_addr =
-      StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
-  mapped_addr->SetFamily(1);
+  StunAddressAttribute* mapped_addr;
+  if (!msg->IsLegacy()) {
+    mapped_addr = StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
+  } else {
+    mapped_addr = StunAttribute::CreateAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+  }
   mapped_addr->SetPort(remote_addr.port());
   mapped_addr->SetIP(remote_addr.ip());
   response.AddAttribute(mapped_addr);
 
-  // Tell the user the address that we are sending the response from.
-  talk_base::SocketAddress local_addr = socket_->GetLocalAddress();
-  StunAddressAttribute* source_addr =
-      StunAttribute::CreateAddress(STUN_ATTR_SOURCE_ADDRESS);
-  source_addr->SetFamily(1);
-  source_addr->SetPort(local_addr.port());
-  source_addr->SetIP(local_addr.ip());
-  response.AddAttribute(source_addr);
-
   // TODO: Add username and message-integrity.
-
-  // TODO: Add changed-address.  (Keep information about three other servers.)
 
   SendResponse(response, remote_addr);
 }

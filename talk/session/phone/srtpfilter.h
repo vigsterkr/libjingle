@@ -50,11 +50,10 @@ namespace cricket {
 // Cipher suite to use for SRTP. Typically a 80-bit HMAC will be used, except
 // in applications (voice) where the additional bandwidth may be significant.
 // A 80-bit HMAC is always used for SRTCP.
-extern const std::string& CS_DEFAULT;
 // 128-bit AES with 80-bit SHA-1 HMAC.
-extern const std::string CS_AES_CM_128_HMAC_SHA1_80;
+extern const char CS_AES_CM_128_HMAC_SHA1_80[];
 // 128-bit AES with 32-bit SHA-1 HMAC.
-extern const std::string CS_AES_CM_128_HMAC_SHA1_32;
+extern const char CS_AES_CM_128_HMAC_SHA1_32[];
 // Key is 128 bits and salt is 112 bits == 30 bytes. B64 bloat => 40 bytes.
 extern const int SRTP_MASTER_KEY_BASE64_LEN;
 

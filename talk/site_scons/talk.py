@@ -7,16 +7,40 @@
 import os
 import SCons.Util
 
-# Keep a global dictionary of library target params for lookups in
-# ExtendComponent().
-_all_lib_targets = {}
-# Maintain a set of all prebuilt static libraries.
-_all_prebuilt_libraries = set()
-# Set of libraries not found in the above (used to detect out-of-order build
-# rules).
-_all_system_libraries = set()
+class LibraryInfo:
+  """Records information on the libraries defined in a build configuration.
 
-def _GetLibParams(lib):
+  Attributes:
+    lib_targets: Dictionary of library target params for lookups in
+        ExtendComponent().
+    prebuilt_libraries: Set of all prebuilt static libraries.
+    system_libraries: Set of libraries not found in the above (used to detect
+        out-of-order build rules).
+  """
+
+  # Dictionary of LibraryInfo objects keyed by BUILD_TYPE value.
+  __library_info = {}
+
+  @staticmethod
+  def get(env):
+    """Gets the LibraryInfo object for the current build type.
+
+    Args:
+      env: The environment object.
+
+    Returns:
+      The LibraryInfo object.
+    """
+    return LibraryInfo.__library_info.setdefault(env['BUILD_TYPE'],
+                                                 LibraryInfo())
+
+  def __init__(self):
+    self.lib_targets = {}
+    self.prebuilt_libraries = set()
+    self.system_libraries = set()
+
+
+def _GetLibParams(env, lib):
   """Gets the params for the given library if it is a library target.
 
   Returns the params that were specified when the given lib target name was
@@ -25,26 +49,29 @@ def _GetLibParams(lib):
   dependencies for future targets.
 
   Args:
+    env: The environment object.
     lib: The library's name as a string.
 
   Returns:
     Its dictionary of params, or None.
   """
-  if lib in _all_lib_targets:
-    return _all_lib_targets[lib]
+  info = LibraryInfo.get(env)
+  if lib in info.lib_targets:
+    return info.lib_targets[lib]
   else:
-    if lib not in _all_prebuilt_libraries and lib not in _all_system_libraries:
-      _all_system_libraries.add(lib)
+    if lib not in info.prebuilt_libraries and lib not in info.system_libraries:
+      info.system_libraries.add(lib)
     return None
 
 
-def _RecordLibParams(lib, params):
+def _RecordLibParams(env, lib, params):
   """Record the params used for a library target.
 
   Record the params used for a library target while checking for several error
   conditions.
 
   Args:
+    env: The environment object.
     lib: The library target's name as a string.
     params: Its dictionary of params.
 
@@ -53,17 +80,18 @@ def _RecordLibParams(lib, params):
         previously declared to be prebuilt, or the lib target is being defined
         after a reverse library dependency.
   """
-  if lib in _all_lib_targets:
+  info = LibraryInfo.get(env)
+  if lib in info.lib_targets:
     raise Exception('Multiple definitions of ' + lib)
-  if lib in _all_prebuilt_libraries:
+  if lib in info.prebuilt_libraries:
     raise Exception(lib + ' already declared as a prebuilt library')
-  if lib in _all_system_libraries:
+  if lib in info.system_libraries:
     raise Exception(lib + ' cannot be defined after its reverse library '
                     'dependencies')
-  _all_lib_targets[lib] = params
+  info.lib_targets[lib] = params
 
 
-def _IsPrebuiltLibrary(lib):
+def _IsPrebuiltLibrary(env, lib):
   """Checks whether or not the given library is a prebuilt static library.
 
   Returns whether or not the given library name has been declared to be a
@@ -71,26 +99,29 @@ def _IsPrebuiltLibrary(lib):
   negative result so as to detect out-of-order dependencies for future targets.
 
   Args:
+    env: The environment object.
     lib: The library's name as a string.
 
   Returns:
     True or False
   """
-  if lib in _all_prebuilt_libraries:
+  info = LibraryInfo.get(env)
+  if lib in info.prebuilt_libraries:
     return True
   else:
-    if lib not in _all_lib_targets and lib not in _all_system_libraries:
-      _all_system_libraries.add(lib)
+    if lib not in info.lib_targets and lib not in info.system_libraries:
+      info.system_libraries.add(lib)
     return False
 
 
-def _RecordPrebuiltLibrary(lib):
+def _RecordPrebuiltLibrary(env, lib):
   """Record that a library is a prebuilt static library.
 
   Record that the given library name refers to a prebuilt static library while
   checking for several error conditions.
 
   Args:
+    env: The environment object.
     lib: The library's name as a string.
 
   Raises:
@@ -98,14 +129,15 @@ def _RecordPrebuiltLibrary(lib):
         previously declared as a target, or the lib is being declared as
         prebuilt after a reverse library dependency.
   """
-  if lib in _all_prebuilt_libraries:
+  info = LibraryInfo.get(env)
+  if lib in info.prebuilt_libraries:
     raise Exception('Multiple prebuilt declarations of ' + lib)
-  if lib in _all_lib_targets:
+  if lib in info.lib_targets:
     raise Exception(lib + ' already defined as a target')
-  if lib in _all_system_libraries:
+  if lib in info.system_libraries:
     raise Exception(lib + ' cannot be declared as prebuilt after its reverse '
                     'library dependencies')
-  _all_prebuilt_libraries.add(lib)
+  info.prebuilt_libraries.add(lib)
 
 
 def _GenericLibrary(env, static, **kwargs):
@@ -123,20 +155,21 @@ def _GenericLibrary(env, static, **kwargs):
   return ExtendComponent(env, 'ComponentLibrary', **params)
 
 
-def DeclarePrebuiltLibraries(libraries):
+def DeclarePrebuiltLibraries(env, libraries):
   """Informs the build engine about external static libraries.
 
   Informs the build engine that the given external library name(s) are prebuilt
   static libraries, as opposed to shared libraries.
 
   Args:
+    env: The environment object.
     libraries: The library or libraries that are being declared as prebuilt
         static libraries.
   """
   if not SCons.Util.is_List(libraries):
     libraries = [libraries]
   for library in libraries:
-    _RecordPrebuiltLibrary(library)
+    _RecordPrebuiltLibrary(env, library)
 
 
 def Library(env, **kwargs):
@@ -396,7 +429,7 @@ def Allow64BitCompile(env):
 def MergeSettingsFromLibraryDependencies(env, params):
   if 'libs' in params:
     for lib in params['libs']:
-      libparams = _GetLibParams(lib)
+      libparams = _GetLibParams(env, lib)
       if libparams:
         if 'dependent_target_settings' in libparams:
           params = CombineDicts(
@@ -440,7 +473,7 @@ def ExtendComponent(env, component, **kwargs):
 
   # save pristine params of lib targets for future reference
   if 'ComponentLibrary' == component:
-    _RecordLibParams(name, dict(params))
+    _RecordLibParams(env, name, dict(params))
 
   # add any dependent target settings from library dependencies
   params = MergeSettingsFromLibraryDependencies(env, params)
@@ -512,9 +545,9 @@ def ExtendComponent(env, component, **kwargs):
     # not track dependencies on system shared libraries anyway so we lose
     # nothing by removing them from LIBS.
     static_libs = [lib for lib in libs if
-                   _GetLibParams(lib) or _IsPrebuiltLibrary(lib)]
+                   _GetLibParams(env, lib) or _IsPrebuiltLibrary(env, lib)]
     shared_libs = ['-l' + lib for lib in libs if not
-                   (_GetLibParams(lib) or _IsPrebuiltLibrary(lib))]
+                   (_GetLibParams(env, lib) or _IsPrebuiltLibrary(env, lib))]
     env.Replace(LIBS=static_libs)
     env.Append(_LIBFLAGS=shared_libs)
 
@@ -537,7 +570,7 @@ def ExtendComponent(env, component, **kwargs):
       # link 64 bit versions of libraries
       libs = []
       for lib in env_64bit['LIBS']:
-        libparams = _GetLibParams(lib)
+        libparams = _GetLibParams(env, lib)
         if libparams and 'also64bit' in libparams:
           libs.append(lib + '64')
         else:

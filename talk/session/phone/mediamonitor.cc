@@ -28,7 +28,6 @@
 #include "talk/base/common.h"
 #include "talk/session/phone/mediamonitor.h"
 #include "talk/session/phone/channelmanager.h"
-#include "talk/session/phone/mediaengine.h"
 
 namespace cricket {
 

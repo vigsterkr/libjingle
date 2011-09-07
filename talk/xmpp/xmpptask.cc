@@ -35,18 +35,22 @@ namespace buzz {
 
 RateLimitManager task_rate_manager;
 
-XmppTask::XmppTask(TaskParent* parent, XmppEngine::HandlerLevel level)
-    : Task(parent), client_(NULL) {
+XmppClientInterface::XmppClientInterface() {
+}
+
+XmppClientInterface::~XmppClientInterface() {
+}
+
+XmppTask::XmppTask(XmppTaskParentInterface* parent,
+                   XmppEngine::HandlerLevel level)
+    : XmppTaskBase(parent), stopped_(false) {
 #ifdef _DEBUG
   debug_force_timeout_ = false;
 #endif
 
-  XmppClient* client =
-      static_cast<XmppClient*>(parent->GetParent(XMPP_CLIENT_TASK_CODE));
-  client_ = client;
-  id_ = client->NextId();
-  client->AddXmppTask(this, level);
-  client->SignalDisconnected.connect(this, &XmppTask::OnDisconnect);
+  id_ = GetClient()->NextId();
+  GetClient()->AddXmppTask(this, level);
+  GetClient()->SignalDisconnected.connect(this, &XmppTask::OnDisconnect);
 }
 
 XmppTask::~XmppTask() {
@@ -55,25 +59,25 @@ XmppTask::~XmppTask() {
 
 void XmppTask::StopImpl() {
   while (NextStanza() != NULL) {}
-  if (client_) {
-    client_->RemoveXmppTask(this);
-    client_->SignalDisconnected.disconnect(this);
-    client_ = NULL;
+  if (!stopped_) {
+    GetClient()->RemoveXmppTask(this);
+    GetClient()->SignalDisconnected.disconnect(this);
+    stopped_ = true;
   }
 }
 
 XmppReturnStatus XmppTask::SendStanza(const XmlElement* stanza) {
-  if (client_ == NULL)
+  if (stopped_)
     return XMPP_RETURN_BADSTATE;
-  return client_->SendStanza(stanza);
+  return GetClient()->SendStanza(stanza);
 }
 
 XmppReturnStatus XmppTask::SendStanzaError(const XmlElement* element_original,
                                            XmppStanzaError code,
                                            const std::string& text) {
-  if (client_ == NULL)
+  if (stopped_)
     return XMPP_RETURN_BADSTATE;
-  return client_->SendStanzaError(element_original, code, text);
+  return GetClient()->SendStanzaError(element_original, code, text);
 }
 
 void XmppTask::Stop() {
@@ -152,7 +156,7 @@ bool XmppTask::MatchStanzaFrom(const XmlElement* stanza,
 
   // It is legal for the server to identify itself with "domain" or
   // "myself@domain"
-  Jid me = client_->jid();
+  Jid me = GetClient()->jid();
   return (from == Jid(me.domain())) || (from == me.BareJid());
 }
 

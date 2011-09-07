@@ -84,7 +84,7 @@ class DeviceManager {
 
   void OnDevicesChange() { SignalDevicesChange(); }
 
-  static const std::string kDefaultDeviceName;
+  static const char kDefaultDeviceName[];
 
  protected:
   virtual bool GetAudioDevice(bool is_input, const std::string& name,

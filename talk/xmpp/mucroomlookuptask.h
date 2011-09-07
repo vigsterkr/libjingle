@@ -41,9 +41,11 @@ struct MucRoomInfo {
 
 class MucRoomLookupTask : public IqTask {
  public:
-  MucRoomLookupTask(Task* parent, const std::string& room_name,
-      const std::string& organizer_domain);
-  MucRoomLookupTask(Task* parent, const Jid& room_jid);
+  MucRoomLookupTask(XmppTaskParentInterface* parent,
+                    const std::string& room_name,
+                    const std::string& organizer_domain);
+  MucRoomLookupTask(XmppTaskParentInterface* parent,
+                    const Jid& room_jid);
 
   sigslot::signal1<const MucRoomInfo&> SignalResult;
 

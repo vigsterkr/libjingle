@@ -27,6 +27,7 @@
 
 #include <time.h>
 #include <iomanip>
+#include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -177,10 +178,10 @@ static DebugLog debug_log_;
 static const int DEFAULT_PORT = 5222;
 
 
-cricket::MediaEngine* CreateFileMediaEngine(const char* voice_in,
-                                            const char* voice_out,
-                                            const char* video_in,
-                                            const char* video_out) {
+cricket::MediaEngineInterface* CreateFileMediaEngine(const char* voice_in,
+                                                     const char* voice_out,
+                                                     const char* video_in,
+                                                     const char* video_out) {
   cricket::FileMediaEngine* file_media_engine = new cricket::FileMediaEngine;
   // Set the RTP dump file names.
   if (voice_in) {
@@ -250,6 +251,7 @@ int main(int argc, char **argv) {
   DEFINE_string(videoinput, NULL, "RTP dump file for video input.");
   DEFINE_string(yuvvideoinput, NULL, "YUV file for video input.");
   DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
+  DEFINE_bool(render, true, "Renders the video.");
   DEFINE_bool(debugsrtp, false, "Enable debugging for srtp.");
   DEFINE_bool(help, false, "Prints this message");
 
@@ -270,6 +272,7 @@ int main(int argc, char **argv) {
   std::string server = FLAG_s;
   std::string secure = FLAG_secure;
   bool debugsrtp = FLAG_debugsrtp;
+  bool render = FLAG_render;
 
   if (debugsrtp) {
     cricket::EnableSrtpDebugging();
@@ -384,10 +387,8 @@ int main(int argc, char **argv) {
   if (FLAG_voiceinput || FLAG_voiceoutput ||
       FLAG_videoinput || FLAG_videooutput) {
     // If any dump file is specified, we use FileMediaEngine.
-    cricket::MediaEngine* engine = CreateFileMediaEngine(FLAG_voiceinput,
-                                                         FLAG_voiceoutput,
-                                                         FLAG_videoinput,
-                                                         FLAG_videooutput);
+    cricket::MediaEngineInterface* engine = CreateFileMediaEngine(
+        FLAG_voiceinput, FLAG_voiceoutput, FLAG_videoinput, FLAG_videooutput);
     // The engine will be released by the client later.
     client->SetMediaEngine(engine);
   }
@@ -399,6 +400,7 @@ int main(int argc, char **argv) {
   client->SetAllowLocalIps(true);
   client->SetInitialProtocol(initial_protocol);
   client->SetSecurePolicy(secure_policy);
+  client->SetRender(render);
   console->Start();
 
   if (debug) {

@@ -332,6 +332,9 @@ void replace_substrs(const char *search,
 // True iff s1 starts with s2.
 bool starts_with(const char *s1, const char *s2);
 
+// True iff s1 ends with s2.
+bool ends_with(const char *s1, const char *s2);
+
 // Remove leading and trailing whitespaces.
 std::string string_trim(const std::string& s);
 

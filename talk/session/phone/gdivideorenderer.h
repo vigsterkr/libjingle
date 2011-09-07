@@ -30,7 +30,8 @@
 #define TALK_SESSION_PHONE_GDIVIDEORENDERER_H_
 
 #ifdef WIN32
-#include "talk/session/phone/mediachannel.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/session/phone/videorenderer.h"
 
 namespace cricket {
 

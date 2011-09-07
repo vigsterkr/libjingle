@@ -38,7 +38,7 @@
 
 namespace cricket {
 
-extern const std::string RELAY_PORT_TYPE;
+extern const char RELAY_PORT_TYPE[];
 class RelayEntry;
 class RelayConnection;
 

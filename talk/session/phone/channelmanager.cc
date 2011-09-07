@@ -37,7 +37,6 @@
 #include "talk/base/logging.h"
 #include "talk/base/sigslotrepeater.h"
 #include "talk/base/stringencode.h"
-#include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/soundclip.h"
 
 namespace cricket {
@@ -132,21 +131,21 @@ struct CaptureParams : public talk_base::MessageData {
 };
 
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread)
-    : media_engine_(MediaEngine::Create()),
+    : media_engine_(MediaEngineFactory::Create()),
       device_manager_(new DeviceManager()),
       initialized_(false),
       main_thread_(talk_base::Thread::Current()),
       worker_thread_(worker_thread),
       audio_in_device_(DeviceManager::kDefaultDeviceName),
       audio_out_device_(DeviceManager::kDefaultDeviceName),
-      audio_options_(MediaEngine::DEFAULT_AUDIO_OPTIONS),
+      audio_options_(MediaEngineInterface::DEFAULT_AUDIO_OPTIONS),
       local_renderer_(NULL),
       capturing_(false),
       monitoring_(false) {
   Construct();
 }
 
-ChannelManager::ChannelManager(MediaEngine* me, DeviceManager* dm,
+ChannelManager::ChannelManager(MediaEngineInterface* me, DeviceManager* dm,
                                talk_base::Thread* worker_thread)
     : media_engine_(me),
       device_manager_(dm),
@@ -155,7 +154,7 @@ ChannelManager::ChannelManager(MediaEngine* me, DeviceManager* dm,
       worker_thread_(worker_thread),
       audio_in_device_(DeviceManager::kDefaultDeviceName),
       audio_out_device_(DeviceManager::kDefaultDeviceName),
-      audio_options_(MediaEngine::DEFAULT_AUDIO_OPTIONS),
+      audio_options_(MediaEngineInterface::DEFAULT_AUDIO_OPTIONS),
       local_renderer_(NULL),
       capturing_(false),
       monitoring_(false) {
@@ -653,7 +652,10 @@ bool ChannelManager::Send(uint32 id, talk_base::MessageData* data) {
   return true;
 }
 
-void ChannelManager::OnVideoCaptureResult(CaptureResult result) {
+void ChannelManager::OnVideoCaptureResult(VideoCapturer* capturer,
+                                          CaptureResult result) {
+  // TODO: Check capturer and signal failure only for camera video, not
+  // screencast.
   capturing_ = result == CR_SUCCESS;
   main_thread_->Post(this, MSG_CAMERASTARTED,
                      new talk_base::TypedMessageData<CaptureResult>(result));

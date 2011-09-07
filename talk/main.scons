@@ -175,7 +175,6 @@ win_env.Append(
     '$PLATFORM_SDK_VISTA_6_0_DIR/Lib'
   ],
   LINKFLAGS = [
-    '-opt:ref', # Remove unused references (functions/data).
     '-manifest' # TODO: Why do we need this?
   ],
   MIDLFLAGS = [
@@ -248,7 +247,8 @@ win_opt_env.Prepend(
       '/GS',     # enable security checks
   ],
   LINKFLAGS = [
-    '/safeseh',
+    '/safeseh',  # protect against attacks against exception handlers
+    '/opt:ref',  # Remove unused references (functions/data).
   ],
 )
 
@@ -302,7 +302,7 @@ mac_env.Append(
   CCFLAGS = [
     '-m32',
     '-arch', 'i386',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
     '-fasm-blocks',
   ],
   LINKFLAGS = [
@@ -313,9 +313,10 @@ mac_env.Append(
     # TODO: consider only defining for libs that actually have objc.
     '-ObjC',
     '-arch', 'i386',
+    '-mmacosx-version-min=10.5',
+    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
     '-m32',
-    # Enable dead-code removal.
-    '-dead_strip',
+    '-dead-strip'
   ],
   FRAMEWORKS = [
     'CoreServices',

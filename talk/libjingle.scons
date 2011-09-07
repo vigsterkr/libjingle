@@ -20,7 +20,7 @@ talk.Library(env, name = "expat",
                "HAVE_EXPAT_CONFIG_H",
              ],
 )
-talk.Library(env, name = "libsrtp",
+talk.Library(env, name = "srtp",
              srcs = [
                "third_party/srtp/crypto/cipher/aes.c",
                "third_party/srtp/crypto/cipher/aes_cbc.c",
@@ -54,7 +54,7 @@ talk.Library(env, name = "libsrtp",
                "/wd4702",
              ],
 )
-talk.Library(env, name = "libjingle",
+talk.Library(env, name = "jingle",
              lin_srcs = [
                "base/latebindingsymboltable.cc",
                "base/linux.cc",
@@ -195,6 +195,7 @@ talk.Library(env, name = "libjingle",
                "session/phone/mediaengine.cc",
                "session/phone/mediamessages.cc",
                "session/phone/mediamonitor.cc",
+               "session/phone/mediasession.cc",
                "session/phone/mediasessionclient.cc",
                "session/phone/rtpdump.cc",
                "session/phone/rtputils.cc",
@@ -243,9 +244,9 @@ talk.Library(env, name = "libjingle",
                "base/json.cc",
              ],
 )
-talk.Library(env, name = "libxmpphelp",
+talk.Library(env, name = "xmpphelp",
              libs = [
-               "libjingle",
+               "jingle",
              ],
              srcs = [
                "examples/login/xmppauth.cc",
@@ -263,9 +264,9 @@ talk.Library(env, name = "videorenderer",
 )
 talk.App(env, name = "login",
          libs = [
-           "libjingle",
+           "jingle",
            "expat",
-           "libxmpphelp",
+           "xmpphelp",
          ],
          srcs = [
            "examples/login/xmppthread.cc",
@@ -320,15 +321,15 @@ talk.App(env, name = "call",
            "examples/call/voicemailjidrequester.cc",
          ],
          libs = [
-           "libjingle",
+           "jingle",
            "expat",
-           "libsrtp",
-           "libxmpphelp",
+           "srtp",
+           "xmpphelp",
          ],
 )
 talk.App(env, name = "relayserver",
          libs = [
-           "libjingle",
+           "jingle",
          ],
          srcs = [
            "p2p/base/relayserver_main.cc",
@@ -336,7 +337,7 @@ talk.App(env, name = "relayserver",
 )
 talk.App(env, name = "stunserver",
          libs = [
-           "libjingle",
+           "jingle",
          ],
          srcs = [
            "p2p/base/stunserver_main.cc",

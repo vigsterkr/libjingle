@@ -41,34 +41,29 @@
 #include "talk/xmllite/qname.h"
 #include "talk/xmllite/xmlconstants.h"
 
-using namespace talk_base;
-
-namespace {
-const std::string kInline = "inline:";
-}
-
 namespace cricket {
-
-typedef std::vector<CryptoParams> CryptoParamsVec;
 
 MediaSessionClient::MediaSessionClient(
     const buzz::Jid& jid, SessionManager *manager)
-    : jid_(jid), session_manager_(manager), focus_call_(NULL),
+    : jid_(jid),
+      session_manager_(manager),
+      focus_call_(NULL),
       channel_manager_(new ChannelManager(session_manager_->worker_thread())),
-      secure_(SEC_DISABLED) {
+      desc_factory_(channel_manager_) {
   Construct();
 }
 
 MediaSessionClient::MediaSessionClient(
     const buzz::Jid& jid, SessionManager *manager,
-    MediaEngine* media_engine, DeviceManager* device_manager)
-    : jid_(jid), session_manager_(manager), focus_call_(NULL),
+    MediaEngineInterface* media_engine, DeviceManager* device_manager)
+    : jid_(jid),
+      session_manager_(manager),
+      focus_call_(NULL),
       channel_manager_(new ChannelManager(
           media_engine, device_manager, session_manager_->worker_thread())),
-      secure_(SEC_DISABLED) {
+      desc_factory_(channel_manager_) {
   Construct();
 }
-
 
 void MediaSessionClient::Construct() {
   // Register ourselves as the handler of audio and video sessions.
@@ -94,257 +89,6 @@ MediaSessionClient::~MediaSessionClient() {
 
   // Remove ourselves from the client map.
   session_manager_->RemoveClient(NS_JINGLE_RTP);
-}
-
-bool CreateCryptoParams(int tag, const std::string& cipher, CryptoParams *out) {
-  std::string key;
-  key.reserve(SRTP_MASTER_KEY_BASE64_LEN);
-
-  if (!CreateRandomString(SRTP_MASTER_KEY_BASE64_LEN, &key)) {
-    return false;
-  }
-  out->tag = tag;
-  out->cipher_suite = cipher;
-  out->key_params = kInline + key;
-  return true;
-}
-
-bool AddCryptoParams(const std::string& cipher_suite, CryptoParamsVec *out) {
-  int size = out->size();
-
-  out->resize(size + 1);
-  return CreateCryptoParams(size, cipher_suite, &out->at(size));
-}
-
-// For audio, HMAC 32 is prefered because of the low overhead.
-bool GetSupportedAudioCryptos(CryptoParamsVec* cryptos) {
-#ifdef HAVE_SRTP
-  return AddCryptoParams(CS_AES_CM_128_HMAC_SHA1_32, cryptos) &&
-      AddCryptoParams(CS_AES_CM_128_HMAC_SHA1_80, cryptos);
-#else
-  return false;
-#endif
-}
-
-bool GetSupportedVideoCryptos(CryptoParamsVec* cryptos) {
-#ifdef HAVE_SRTP
-  return AddCryptoParams(CS_AES_CM_128_HMAC_SHA1_80, cryptos);
-#else
-  return false;
-#endif
-}
-
-SessionDescription* MediaSessionClient::CreateOffer(
-    const CallOptions& options) {
-  SessionDescription* offer = new SessionDescription();
-  AudioContentDescription* audio = new AudioContentDescription();
-
-
-  AudioCodecs audio_codecs;
-  channel_manager_->GetSupportedAudioCodecs(&audio_codecs);
-  for (AudioCodecs::const_iterator codec = audio_codecs.begin();
-       codec != audio_codecs.end(); ++codec) {
-    audio->AddCodec(*codec);
-  }
-  if (options.is_muc) {
-    audio->set_ssrc(talk_base::CreateRandomNonZeroId());
-  }
-  audio->SortCodecs();
-
-  if (secure() != SEC_DISABLED) {
-    CryptoParamsVec audio_cryptos;
-    if (GetSupportedAudioCryptos(&audio_cryptos)) {
-      for (CryptoParamsVec::const_iterator crypto = audio_cryptos.begin();
-           crypto != audio_cryptos.end(); ++crypto) {
-        audio->AddCrypto(*crypto);
-      }
-    }
-    if (secure() == SEC_REQUIRED) {
-      if (audio->cryptos().empty()) {
-        return NULL;  // Abort, crypto required but none found.
-      }
-      audio->set_crypto_required(true);
-    }
-  }
-
-  offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio);
-
-  // add video codecs, if this is a video call
-  if (options.is_video) {
-    VideoContentDescription* video = new VideoContentDescription();
-    VideoCodecs video_codecs;
-    channel_manager_->GetSupportedVideoCodecs(&video_codecs);
-    for (VideoCodecs::const_iterator codec = video_codecs.begin();
-         codec != video_codecs.end(); ++codec) {
-      video->AddCodec(*codec);
-    }
-    if (options.is_muc) {
-      video->set_ssrc(talk_base::CreateRandomNonZeroId());
-    }
-    video->set_bandwidth(options.video_bandwidth);
-    video->SortCodecs();
-
-    if (secure() != SEC_DISABLED) {
-      CryptoParamsVec video_cryptos;
-      if (GetSupportedVideoCryptos(&video_cryptos)) {
-        for (CryptoParamsVec::const_iterator crypto = video_cryptos.begin();
-             crypto != video_cryptos.end(); ++crypto) {
-          video->AddCrypto(*crypto);
-        }
-      }
-      if (secure() == SEC_REQUIRED) {
-        if (video->cryptos().empty()) {
-          return NULL;  // Abort, crypto required but none found.
-        }
-        video->set_crypto_required(true);
-      }
-    }
-
-    offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video);
-  }
-
-  return offer;
-}
-
-bool IsMediaContent(const ContentInfo* content, MediaType media_type) {
-  if (content == NULL || content->type != NS_JINGLE_RTP) {
-    return false;
-  }
-
-  const MediaContentDescription* media =
-      static_cast<const MediaContentDescription*>(content->description);
-  return media->type() == media_type;
-}
-
-bool IsAudioContent(const ContentInfo* content) {
-  return IsMediaContent(content, MEDIA_TYPE_AUDIO);
-}
-
-bool IsVideoContent(const ContentInfo* content) {
-  return IsMediaContent(content, MEDIA_TYPE_VIDEO);
-}
-
-const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
-                                        MediaType media_type) {
-  if (sdesc == NULL)
-    return NULL;
-
-  const ContentInfos& contents = sdesc->contents();
-  for (ContentInfos::const_iterator content = contents.begin();
-       content != contents.end(); content++) {
-    if (IsMediaContent(&*content, media_type)) {
-      return &*content;
-    }
-  }
-  return NULL;
-}
-
-const ContentInfo* GetFirstAudioContent(const SessionDescription* sdesc) {
-  return GetFirstMediaContent(sdesc, MEDIA_TYPE_AUDIO);
-}
-
-const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc) {
-  return GetFirstMediaContent(sdesc, MEDIA_TYPE_VIDEO);
-}
-
-// For video support only 80-bit SHA1 HMAC. For audio 32-bit HMAC is
-// tolerated because it is low overhead. Pick the crypto in the list
-// that is supported.
-bool SelectCrypto(const MediaContentDescription* offer, CryptoParams *crypto) {
-  bool audio = offer->type() == MEDIA_TYPE_AUDIO;
-  const CryptoParamsVec& cryptos = offer->cryptos();
-
-  for (CryptoParamsVec::const_iterator i = cryptos.begin();
-       i != cryptos.end(); ++i) {
-    if (CS_AES_CM_128_HMAC_SHA1_80 == i->cipher_suite ||
-        (CS_AES_CM_128_HMAC_SHA1_32 == i->cipher_suite && audio)) {
-      return CreateCryptoParams(i->tag, i->cipher_suite, crypto);
-    }
-  }
-  return false;
-}
-
-SessionDescription* MediaSessionClient::CreateAnswer(
-    const SessionDescription* offer, const CallOptions& options) {
-  // The answer contains the intersection of the codecs in the offer with the
-  // codecs we support, ordered by our local preference. As indicated by
-  // XEP-0167, we retain the same payload ids from the offer in the answer.
-  SessionDescription* accept = new SessionDescription();
-
-  const ContentInfo* audio_content = GetFirstAudioContent(offer);
-  if (audio_content) {
-    const AudioContentDescription* audio_offer =
-        static_cast<const AudioContentDescription*>(audio_content->description);
-    AudioContentDescription* audio_accept = new AudioContentDescription();
-    AudioCodecs audio_codecs;
-    channel_manager_->GetSupportedAudioCodecs(&audio_codecs);
-    for (AudioCodecs::const_iterator ours = audio_codecs.begin();
-        ours != audio_codecs.end(); ++ours) {
-      for (AudioCodecs::const_iterator theirs = audio_offer->codecs().begin();
-          theirs != audio_offer->codecs().end(); ++theirs) {
-        if (ours->Matches(*theirs)) {
-          AudioCodec negotiated(*ours);
-          negotiated.id = theirs->id;
-          audio_accept->AddCodec(negotiated);
-        }
-      }
-    }
-
-    audio_accept->SortCodecs();
-
-    if (secure() != SEC_DISABLED) {
-      CryptoParams crypto;
-
-      if (SelectCrypto(audio_offer, &crypto)) {
-        audio_accept->AddCrypto(crypto);
-      }
-    }
-
-    if (audio_accept->cryptos().empty() &&
-        (audio_offer->crypto_required() || secure() == SEC_REQUIRED)) {
-      return NULL;  // Fails the session setup.
-    }
-    accept->AddContent(audio_content->name, audio_content->type, audio_accept);
-  }
-
-  const ContentInfo* video_content = GetFirstVideoContent(offer);
-  if (video_content) {
-    const VideoContentDescription* video_offer =
-        static_cast<const VideoContentDescription*>(video_content->description);
-    VideoContentDescription* video_accept = new VideoContentDescription();
-    VideoCodecs video_codecs;
-    channel_manager_->GetSupportedVideoCodecs(&video_codecs);
-    for (VideoCodecs::const_iterator ours = video_codecs.begin();
-        ours != video_codecs.end(); ++ours) {
-      for (VideoCodecs::const_iterator theirs = video_offer->codecs().begin();
-          theirs != video_offer->codecs().end(); ++theirs) {
-        if (ours->Matches(*theirs)) {
-          VideoCodec negotiated(*ours);
-          negotiated.id = theirs->id;
-          video_accept->AddCodec(negotiated);
-        }
-      }
-    }
-
-    video_accept->set_bandwidth(options.video_bandwidth);
-    video_accept->SortCodecs();
-
-    if (secure() != SEC_DISABLED) {
-      CryptoParams crypto;
-
-      if (SelectCrypto(video_offer, &crypto)) {
-        video_accept->AddCrypto(crypto);
-      }
-    }
-
-    if (video_accept->cryptos().empty() &&
-        (video_offer->crypto_required() || secure() == SEC_REQUIRED)) {
-      return NULL;  // Fails the session setup.
-    }
-    accept->AddContent(video_content->name, video_content->type, video_accept);
-  }
-
-  return accept;
 }
 
 Call *MediaSessionClient::CreateCall() {
@@ -484,7 +228,7 @@ bool ParseGingleVideoCodec(const buzz::XmlElement* element, VideoCodec* out) {
 uint32 parse_ssrc(const std::string& ssrc) {
   // TODO: Return an error rather than defaulting to 0.
   uint32 default_ssrc = 0U;
-  return FromString(default_ssrc, ssrc);
+  return talk_base::FromString(default_ssrc, ssrc);
 }
 
 void ParseGingleSsrc(const buzz::XmlElement* parent_elem,
@@ -561,7 +305,7 @@ void ParseBandwidth(const buzz::XmlElement* parent_elem,
                     MediaContentDescription* media) {
   const buzz::XmlElement* bw_elem = GetXmlChild(parent_elem, LN_BANDWIDTH);
   int bandwidth_kbps;
-  if (bw_elem && FromString(bw_elem->BodyText(), &bandwidth_kbps)) {
+  if (bw_elem && talk_base::FromString(bw_elem->BodyText(), &bandwidth_kbps)) {
     if (bandwidth_kbps >= 0) {
       media->set_bandwidth(bandwidth_kbps * 1000);
     }
@@ -1000,7 +744,10 @@ buzz::XmlElement* CreateJingleAudioContentElem(
     elem->AddElement(CreateJingleEncryptionElem(cryptos, crypto_required));
   }
 
-  // TODO: Figure out how to integrate SSRC into Jingle.
+  if (audio->rtcp_mux()) {
+    elem->AddElement(new buzz::XmlElement(QN_JINGLE_RTCP_MUX));
+  }
+
   return elem;
 }
 
@@ -1022,12 +769,15 @@ buzz::XmlElement* CreateJingleVideoContentElem(
     elem->AddElement(CreateJingleEncryptionElem(cryptos, crypto_required));
   }
 
+  if (video->rtcp_mux()) {
+    elem->AddElement(new buzz::XmlElement(QN_JINGLE_RTCP_MUX));
+  }
+
   if (video->bandwidth() != kAutoBandwidth) {
     elem->AddElement(CreateBandwidthElem(QN_JINGLE_RTP_BANDWIDTH,
                                          video->bandwidth()));
   }
 
-  // TODO: Figure out how to integrate SSRC into Jingle.
   return elem;
 }
 

@@ -25,20 +25,21 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/scoped_ptr.h"
 #include "talk/examples/call/discoitemsquerytask.h"
 #include "talk/examples/call/voicemailjidrequester.h"
-#include "talk/base/scoped_ptr.h"
 #include "talk/xmpp/constants.h"
+#include "talk/xmpp/xmpptask.h"
 
 namespace buzz {
 
-VoicemailJidRequester::VoicemailJidRequester(talk_base::Task* parent,
+VoicemailJidRequester::VoicemailJidRequester(XmppTaskParentInterface* parent,
                                              const Jid& their_jid,
-                                             const Jid& my_jid) : Task(parent),
-                                             their_jid_(their_jid),
-                                             my_jid_(my_jid),
-                                             done_with_query_(false) {
-  parent_ = parent;
+                                             const Jid& my_jid) :
+    XmppTaskBase(parent),
+    their_jid_(their_jid),
+    my_jid_(my_jid),
+    done_with_query_(false) {
 }
 
 int VoicemailJidRequester::ProcessStart() {

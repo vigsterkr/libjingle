@@ -31,8 +31,9 @@
 #include <string>
 #include <deque>
 #include "talk/base/sigslot.h"
-#include "talk/xmpp/xmppengine.h"
 #include "talk/base/task.h"
+#include "talk/base/taskparent.h"
+#include "talk/xmpp/xmppengine.h"
 
 namespace buzz {
 
@@ -61,19 +62,76 @@ namespace buzz {
 //
 /////////////////////////////////////////////////////////////////////
 
-class XmppClient;
+class XmppTask;
 
-class XmppTask :
-  public talk_base::Task,
-  public XmppStanzaHandler,
-  public sigslot::has_slots<>
+// XmppClientInterface is an abstract interface for sending and
+// handling stanzas.  It can be implemented for unit tests or
+// different network environments.  It will usually be implemented by
+// XmppClient.
+class XmppClientInterface {
+ public:
+  XmppClientInterface();
+  virtual ~XmppClientInterface();
+
+  virtual const Jid& jid() = 0;
+  virtual std::string NextId() = 0;
+  virtual XmppReturnStatus SendStanza(const XmlElement* stanza) = 0;
+  virtual XmppReturnStatus SendStanzaError(const XmlElement* original_stanza,
+                                           XmppStanzaError error_code,
+                                           const std::string& message) = 0;
+  virtual void AddXmppTask(XmppTask* task, XmppEngine::HandlerLevel level) = 0;
+  virtual void RemoveXmppTask(XmppTask* task) = 0;
+  sigslot::signal0<> SignalDisconnected;
+
+  DISALLOW_EVIL_CONSTRUCTORS(XmppClientInterface);
+};
+
+// XmppTaskParentInterface is the interface require for any parent of
+// an XmppTask.  It needs, for example, a way to get an
+// XmppClientInterface.
+
+// We really ought to inherit from a TaskParentInterface, but we tried
+// that and it's way too complicated to change
+// Task/TaskParent/TaskRunner.  For now, this works.
+class XmppTaskParentInterface : public talk_base::Task {
+ public:
+  explicit XmppTaskParentInterface(talk_base::TaskParent* parent)
+      : Task(parent) {
+  }
+  virtual ~XmppTaskParentInterface() {}
+
+  virtual XmppClientInterface* GetClient() = 0;
+
+  DISALLOW_EVIL_CONSTRUCTORS(XmppTaskParentInterface);
+};
+
+class XmppTaskBase : public XmppTaskParentInterface {
+ public:
+  explicit XmppTaskBase(XmppTaskParentInterface* parent)
+      : XmppTaskParentInterface(parent),
+        parent_(parent) {
+  }
+  virtual ~XmppTaskBase() {}
+
+  virtual XmppClientInterface* GetClient() {
+    return parent_->GetClient();
+  }
+
+ protected:
+  XmppTaskParentInterface* parent_;
+
+  DISALLOW_EVIL_CONSTRUCTORS(XmppTaskBase);
+};
+
+class XmppTask : public XmppTaskBase,
+                 public XmppStanzaHandler,
+                 public sigslot::has_slots<>
 {
  public:
-  XmppTask(talk_base::TaskParent* parent,
+  XmppTask(XmppTaskParentInterface* parent,
            XmppEngine::HandlerLevel level = XmppEngine::HL_NONE);
   virtual ~XmppTask();
 
-  virtual XmppClient* GetClient() const { return client_; }
   std::string task_id() const { return id_; }
   void set_task_id(std::string id) { id_ = id; }
 
@@ -81,9 +139,9 @@ class XmppTask :
   void set_debug_force_timeout(const bool f) { debug_force_timeout_ = f; }
 #endif
 
- protected:
-  friend class XmppClient;
+  virtual bool HandleStanza(const XmlElement* stanza) { return false; }
 
+ protected:
   XmppReturnStatus SendStanza(const XmlElement* stanza);
   XmppReturnStatus SetResult(const std::string& code);
   XmppReturnStatus SendStanzaError(const XmlElement* element_original,
@@ -91,7 +149,6 @@ class XmppTask :
                                    const std::string& text);
 
   virtual void Stop();
-  virtual bool HandleStanza(const XmlElement* stanza) { return false; }
   virtual void OnDisconnect();
 
   virtual void QueueStanza(const XmlElement* stanza);
@@ -116,7 +173,7 @@ class XmppTask :
 private:
   void StopImpl();
 
-  XmppClient* client_;
+  bool stopped_;
   std::deque<XmlElement*> stanza_queue_;
   talk_base::scoped_ptr<XmlElement> next_stanza_;
   std::string id_;

@@ -41,7 +41,7 @@ class SignalThread;
 
 namespace cricket {
 
-extern const std::string STUN_PORT_TYPE;
+extern const char STUN_PORT_TYPE[];
 
 // Communicates using the address on the outside of a NAT.
 class StunPort : public Port {

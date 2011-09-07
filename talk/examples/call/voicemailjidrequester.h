@@ -73,9 +73,10 @@ namespace buzz {
 class Task;
 
 class VoicemailJidRequester : public sigslot::has_slots<>,
-                              public talk_base::Task {
+                              public XmppTaskBase {
  public:
-  VoicemailJidRequester(talk_base::Task* parent, const Jid& their_jid, const Jid& my_jid);
+  VoicemailJidRequester(XmppTaskParentInterface* parent,
+                        const Jid& their_jid, const Jid& my_jid);
 
   // Provides the target jid and the voicemail to reach it
   sigslot::signal2<const Jid&, const Jid&> SignalGotVoicemailJid;
@@ -109,8 +110,6 @@ class VoicemailJidRequester : public sigslot::has_slots<>,
   // Send a query to your own jid to get the voicemail jid.  This is used after
   // the first query fails.
   void StartSecondQuery();
-
-  talk_base::Task* parent_;
 
   Jid their_jid_;
 

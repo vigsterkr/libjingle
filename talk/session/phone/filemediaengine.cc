@@ -43,16 +43,16 @@ namespace cricket {
 int FileMediaEngine::GetCapabilities() {
   int capabilities = 0;
   if (!voice_input_filename_.empty()) {
-    capabilities |= MediaEngine::AUDIO_SEND;
+    capabilities |= AUDIO_SEND;
   }
   if (!voice_output_filename_.empty()) {
-    capabilities |= MediaEngine::AUDIO_RECV;
+    capabilities |= AUDIO_RECV;
   }
   if (!video_input_filename_.empty()) {
-    capabilities |= MediaEngine::VIDEO_SEND;
+    capabilities |= VIDEO_SEND;
   }
   if (!video_output_filename_.empty()) {
-    capabilities |= MediaEngine::VIDEO_RECV;
+    capabilities |= VIDEO_RECV;
   }
   return capabilities;
 }

@@ -48,6 +48,7 @@
 #include "talk/p2p/client/basicportallocator.h"
 #include "talk/p2p/client/sessionmanagertask.h"
 #include "talk/session/phone/devicemanager.h"
+#include "talk/session/phone/mediacommon.h"
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
@@ -225,12 +226,14 @@ void CallClient::ParseLine(const std::string& line) {
 
 CallClient::CallClient(buzz::XmppClient* xmpp_client)
     : xmpp_client_(xmpp_client),
+      worker_thread_(NULL),
       media_engine_(NULL),
       media_client_(NULL),
       call_(NULL),
       incoming_call_(false),
       auto_accept_(false),
       pmuc_domain_("groupchat.google.com"),
+      render_(true),
       local_renderer_(NULL),
       remote_renderer_(NULL),
       static_views_accumulated_count_(0),
@@ -245,6 +248,7 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
 CallClient::~CallClient() {
   delete media_client_;
   delete roster_;
+  delete worker_thread_;
 }
 
 const std::string CallClient::strerror(buzz::XmppEngine::Error err) {
@@ -354,7 +358,7 @@ void CallClient::InitMedia() {
   session_manager_task_->Start();
 
   if (!media_engine_) {
-    media_engine_ = cricket::MediaEngine::Create();
+    media_engine_ = cricket::MediaEngineFactory::Create();
   }
 
   media_client_ = new cricket::MediaSessionClient(
@@ -385,15 +389,15 @@ void CallClient::OnCallCreate(cricket::Call* call) {
 }
 
 void CallClient::OnSessionState(cricket::Call* call,
-                                cricket::BaseSession* session,
-                                cricket::BaseSession::State state) {
+                                cricket::Session* session,
+                                cricket::Session::State state) {
   if (state == cricket::Session::STATE_RECEIVEDINITIATE) {
     buzz::Jid jid(session->remote_name());
     console_->PrintLine("Incoming call from '%s'", jid.Str().c_str());
     call_ = call;
     session_ = session;
     incoming_call_ = true;
-    if (call->video()) {
+    if (call->video() && render_) {
       local_renderer_ =
           cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
       remote_renderer_ =
@@ -404,7 +408,7 @@ void CallClient::OnSessionState(cricket::Call* call,
       Accept(options);
     }
   } else if (state == cricket::Session::STATE_SENTINITIATE) {
-    if (call->video()) {
+    if (call->video() && render_) {
       local_renderer_ =
           cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
       remote_renderer_ =
@@ -425,7 +429,7 @@ void CallClient::OnSessionState(cricket::Call* call,
 }
 
 void CallClient::OnSpeakerChanged(cricket::Call* call,
-                                  cricket::BaseSession* session,
+                                  cricket::Session* session,
                                   const cricket::NamedSource& speaker) {
   if (speaker.ssrc == 0) {
     console_->PrintLine("Session %s has no current speaker.",
@@ -475,11 +479,11 @@ void CallClient::RefreshStatus() {
   my_status_.set_know_capabilities(true);
   my_status_.set_pmuc_capability(true);
   my_status_.set_voice_capability(
-      (media_caps & cricket::MediaEngine::AUDIO_RECV) != 0);
+      (media_caps & cricket::AUDIO_RECV) != 0);
   my_status_.set_video_capability(
-      (media_caps & cricket::MediaEngine::VIDEO_RECV) != 0);
+      (media_caps & cricket::VIDEO_RECV) != 0);
   my_status_.set_camera_capability(
-      (media_caps & cricket::MediaEngine::VIDEO_SEND) != 0);
+      (media_caps & cricket::VIDEO_SEND) != 0);
   my_status_.set_is_google_client(true);
   my_status_.set_version("1.0.0.67");
   presence_out_->Send(my_status_);
@@ -604,7 +608,7 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
     session_ = call_->InitiateSession(jid, options);
   }
   media_client_->SetFocus(call_);
-  if (call_->video()) {
+  if (call_->video() && render_) {
     if (!options.is_muc) {
       call_->SetLocalRenderer(local_renderer_);
       call_->SetVideoRenderer(session_, 0, remote_renderer_);
@@ -642,7 +646,7 @@ void CallClient::Accept(const cricket::CallOptions& options) {
   ASSERT(call_->sessions().size() == 1);
   call_->AcceptSession(call_->sessions()[0], options);
   media_client_->SetFocus(call_);
-  if (call_->video()) {
+  if (call_->video() && render_) {
     call_->SetLocalRenderer(local_renderer_);
     // The client never does an accept for multiway, so this must be 1:1,
     // so there's no SSRC.
@@ -740,8 +744,11 @@ void CallClient::OnRoomLookupResponse(const buzz::MucRoomInfo& room_info) {
 }
 
 void CallClient::OnRoomLookupError(const buzz::XmlElement* stanza) {
-  console_->PrintLine("Failed to look up the room_jid. %s",
-                    stanza->Str().c_str());
+  if (stanza == NULL) {
+    console_->PrintLine("Room lookup failed.");
+  } else {
+    console_->PrintLine("Room lookup error: ", stanza->Str().c_str());
+  }
 }
 
 void CallClient::OnMucInviteReceived(const buzz::Jid& inviter,
@@ -924,10 +931,12 @@ void CallClient::OnMediaSourcesUpdate(cricket::Call* call,
     if (it->removed) {
       RemoveStaticRenderedView(it->ssrc);
     } else {
-      // TODO: Make dimensions and positions more configurable.
-      int offset = (50 * static_views_accumulated_count_) % 300;
-      AddStaticRenderedView(session, it->ssrc, 640, 400, 30,
-                            offset, offset);
+      if (render_) {
+        // TODO: Make dimensions and positions more configurable.
+        int offset = (50 * static_views_accumulated_count_) % 300;
+        AddStaticRenderedView(session, it->ssrc, 640, 400, 30,
+                              offset, offset);
+      }
     }
   }
 

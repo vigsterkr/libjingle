@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -38,9 +38,6 @@
 #include "talk/base/bytebuffer.h"
 
 namespace cricket {
-
-// TODO: Remove message types and attributes that are no
-// longer suppored in RFC5389 (see section 18.2).
 
 // These are the types of STUN & TURN messages as of last check.
 enum StunMessageType {
@@ -61,26 +58,23 @@ enum StunMessageType {
 
 // These are the types of attributes defined in STUN & TURN.  Next to each is
 // the name of the class (T is StunTAttribute) that implements that type.
+//
+// TODO: Some attributes defined in RFC5389 are not
+// implemented yet, particularly REALM, NONCE, SOFTWARE,
+// ALTERNATE-SERVE and FINGEPRINT. Implement them.
 enum StunAttributeType {
   STUN_ATTR_MAPPED_ADDRESS        = 0x0001, // Address
-  STUN_ATTR_RESPONSE_ADDRESS      = 0x0002, // Address
-  STUN_ATTR_CHANGE_REQUEST        = 0x0003, // UInt32
-  STUN_ATTR_SOURCE_ADDRESS        = 0x0004, // Address
-  STUN_ATTR_CHANGED_ADDRESS       = 0x0005, // Address
   STUN_ATTR_USERNAME              = 0x0006, // ByteString, multiple of 4 bytes
-  STUN_ATTR_PASSWORD              = 0x0007, // ByteString, multiple of 4 bytes
   STUN_ATTR_MESSAGE_INTEGRITY     = 0x0008, // ByteString, 20 bytes
   STUN_ATTR_ERROR_CODE            = 0x0009, // ErrorCode
   STUN_ATTR_UNKNOWN_ATTRIBUTES    = 0x000a, // UInt16List
-  STUN_ATTR_REFLECTED_FROM        = 0x000b, // Address
-  STUN_ATTR_TRANSPORT_PREFERENCES = 0x000c, // TransportPrefs
   STUN_ATTR_LIFETIME              = 0x000d, // UInt32
-  STUN_ATTR_ALTERNATE_SERVER      = 0x000e, // Address
   STUN_ATTR_MAGIC_COOKIE          = 0x000f, // ByteString, 4 bytes
   STUN_ATTR_BANDWIDTH             = 0x0010, // UInt32
   STUN_ATTR_DESTINATION_ADDRESS   = 0x0011, // Address
   STUN_ATTR_SOURCE_ADDRESS2       = 0x0012, // Address
   STUN_ATTR_DATA                  = 0x0013, // ByteString
+  STUN_ATTR_XOR_MAPPED_ADDRESS    = 0x0020, // XorAddress
   STUN_ATTR_OPTIONS               = 0x8001  // UInt32
 };
 
@@ -96,20 +90,19 @@ enum StunErrorCodes {
   STUN_ERROR_GLOBAL_FAILURE       = 600
 };
 
-extern const std::string STUN_ERROR_REASON_BAD_REQUEST;
-extern const std::string STUN_ERROR_REASON_UNAUTHORIZED;
-extern const std::string STUN_ERROR_REASON_UNKNOWN_ATTRIBUTE;
-extern const std::string STUN_ERROR_REASON_STALE_CREDENTIALS;
-extern const std::string STUN_ERROR_REASON_INTEGRITY_CHECK_FAILURE;
-extern const std::string STUN_ERROR_REASON_MISSING_USERNAME;
-extern const std::string STUN_ERROR_REASON_USE_TLS;
-extern const std::string STUN_ERROR_REASON_SERVER_ERROR;
-extern const std::string STUN_ERROR_REASON_GLOBAL_FAILURE;
+enum StunAddressFamily {
+  STUN_ADDRESS_IPV4 = 1,
+  STUN_ADDRESS_IPV6 = 2
+};
+
+extern const char STUN_ERROR_REASON_BAD_REQUEST[];
+extern const char STUN_ERROR_REASON_STALE_CREDENTIALS[];
+extern const char STUN_ERROR_REASON_SERVER_ERROR[];
 
 // Following values correspond to RFC5389.
 const size_t kStunTransactionIdOffset = 8;
 const size_t kStunTransactionIdLength = 12;
-extern const char kStunMagicCookie[4];
+const uint32 kStunMagicCookie = 0x2112A442;
 const size_t kStunMagicCookieLength = sizeof(kStunMagicCookie);
 
 // Following value corresponds to an earlier version of STUN from
@@ -217,27 +210,32 @@ class StunAddressAttribute : public StunAttribute {
 public:
   explicit StunAddressAttribute(uint16 type);
 
-#if (_MSC_VER < 1300)
-  enum { SIZE = 8 };
-#else
   static const uint16 SIZE = 8;
-#endif
 
-  uint8 family() const { return family_; }
+  StunAddressFamily family() const { return family_; }
   uint16 port() const { return port_; }
   uint32 ip() const { return ip_; }
 
-  void SetFamily(uint8 family) { family_ = family; }
+  void SetFamily(StunAddressFamily family);
   void SetIP(uint32 ip) { ip_ = ip; }
   void SetPort(uint16 port) { port_ = port; }
 
-  bool Read(talk_base::ByteBuffer* buf);
-  void Write(talk_base::ByteBuffer* buf) const;
+  virtual bool Read(talk_base::ByteBuffer* buf);
+  virtual void Write(talk_base::ByteBuffer* buf) const;
 
 private:
-  uint8 family_;
+  StunAddressFamily family_;
   uint16 port_;
   uint32 ip_;
+};
+
+// Implements STUN/TURN attributes that record an Internet address.
+class StunXorAddressAttribute : public StunAddressAttribute {
+public:
+  explicit StunXorAddressAttribute(uint16 type);
+
+  virtual bool Read(talk_base::ByteBuffer* buf);
+  virtual void Write(talk_base::ByteBuffer* buf) const;
 };
 
 // Implements STUN/TURN attributs that record a 32-bit integer.
@@ -245,11 +243,7 @@ class StunUInt32Attribute : public StunAttribute {
 public:
   explicit StunUInt32Attribute(uint16 type);
 
-#if (_MSC_VER < 1300)
-  enum { SIZE = 4 };
-#else
   static const uint16 SIZE = 4;
-#endif
 
   uint32 value() const { return bits_; }
 
@@ -294,11 +288,7 @@ public:
   StunErrorCodeAttribute(uint16 type, uint16 length);
   ~StunErrorCodeAttribute();
 
-#if (_MSC_VER < 1300)
-  enum { MIN_SIZE = 4 };
-#else
   static const uint16 MIN_SIZE = 4;
-#endif
 
   uint32 error_code() const { return (class_ << 8) | number_; }
   uint8 error_class() const { return class_; }
@@ -335,39 +325,6 @@ public:
 
 private:
   std::vector<uint16>* attr_types_;
-};
-
-// Implements the TURN TRANSPORT-PREFS attribute, which provides information
-// about the ports to allocate.
-class StunTransportPrefsAttribute : public StunAttribute {
-public:
-  StunTransportPrefsAttribute(uint16 type, uint16 length);
-  ~StunTransportPrefsAttribute();
-
-#if (_MSC_VER < 1300)
-  enum { SIZE1 = 4, SIZE2 = 12 };
-#else
-  static const uint16 SIZE1 = 4;
-  static const uint16 SIZE2 = 12;
-#endif
-
-  bool preallocate() const { return preallocate_; }
-  uint8 preference_type() const { return prefs_; }
-  const StunAddressAttribute* address() const { return addr_; }
-
-  void SetPreferenceType(uint8 prefs) { prefs_ = prefs; }
-
-  // Sets the preallocate address to the given value, or if 0 is given, it sets
-  // to not preallocate.
-  void SetPreallocateAddress(StunAddressAttribute* addr);
-
-  bool Read(talk_base::ByteBuffer* buf);
-  void Write(talk_base::ByteBuffer* buf) const;
-
-private:
-  bool preallocate_;
-  uint8 prefs_;
-  StunAddressAttribute* addr_;
 };
 
 // The special MAGIC-COOKIE attribute is used to distinguish TURN packets from

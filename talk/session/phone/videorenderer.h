@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,26 +25,23 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MUCINVITESENDTASK_H_
-#define _MUCINVITESENDTASK_H_
+#ifndef TALK_SESSION_PHONE_VIDEORENDERER_H_
+#define TALK_SESSION_PHONE_VIDEORENDERER_H_
 
-#include "talk/xmpp/xmppengine.h"
-#include "talk/xmpp/xmpptask.h"
-#include "talk/examples/call/muc.h"
+namespace cricket {
 
-namespace buzz {
+class VideoFrame;
 
-class MucInviteSendTask : public XmppTask {
-public:
-  explicit MucInviteSendTask(XmppTaskParentInterface* parent)
-      : XmppTask(parent) {}
-  virtual ~MucInviteSendTask() {}
-
-  XmppReturnStatus Send(const Jid& to, const Jid& invitee);
-
-  virtual int ProcessStart();
+// Abstract interface for rendering VideoFrames.
+class VideoRenderer {
+ public:
+  virtual ~VideoRenderer() {}
+  // Called when the video has changed size.
+  virtual bool SetSize(int width, int height, int reserved) = 0;
+  // Called when a new frame is available for display.
+  virtual bool RenderFrame(const VideoFrame *frame) = 0;
 };
 
-}
+}  // namespace cricket
 
-#endif
+#endif  // TALK_SESSION_PHONE_VIDEORENDERER_H_

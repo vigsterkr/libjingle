@@ -38,8 +38,7 @@
 
 namespace cricket {
 
-const std::string RtpDumpFileHeader::kFirstLine =
-    "#!rtpplay1.0 0.0.0.0/0\n";
+const char RtpDumpFileHeader::kFirstLine[] = "#!rtpplay1.0 0.0.0.0/0\n";
 
 RtpDumpFileHeader::RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p)
     : start_sec(start_ms / 1000),
@@ -296,7 +295,12 @@ RtpDumpWriter::RtpDumpWriter(talk_base::StreamInterface* stream)
       packet_filter_(PF_ALL),
       file_header_written_(false),
       start_time_ms_(talk_base::Time()) {
-  }
+}
+
+void RtpDumpWriter::set_packet_filter(int filter) {
+  packet_filter_ = filter;
+  LOG(LS_INFO) << "RtpDumpWriter set_packet_filter to " << packet_filter_;
+}
 
 uint32 RtpDumpWriter::GetElapsedTime() const {
   return talk_base::TimeSince(start_time_ms_);
@@ -304,8 +308,8 @@ uint32 RtpDumpWriter::GetElapsedTime() const {
 
 talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
   talk_base::StreamResult res = stream_->WriteAll(
-      RtpDumpFileHeader::kFirstLine.c_str(),
-      RtpDumpFileHeader::kFirstLine.size(), NULL, NULL);
+      RtpDumpFileHeader::kFirstLine,
+      strlen(RtpDumpFileHeader::kFirstLine), NULL, NULL);
   if (res != talk_base::SR_SUCCESS) {
     return res;
   }

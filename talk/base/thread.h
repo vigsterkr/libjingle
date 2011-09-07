@@ -199,6 +199,15 @@ class Thread : public MessageQueue {
   }
 #endif
 
+  // This method should be called when thread is created using non standard
+  // method, like derived implementation of talk_base::Thread and it can not be
+  // started by calling Start(). This will set started flag to true and
+  // owned to false. This must be called from the current thread.
+  // NOTE: These methods should be used by the derived classes only, added here
+  // only for testing.
+  bool WrapCurrent();
+  void UnwrapCurrent();
+
  protected:
   // Blocks the calling thread until this thread has terminated.
   void Join();

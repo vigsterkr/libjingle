@@ -29,8 +29,9 @@
 #ifndef TALK_SESSION_PHONE_GTKVIDEORENDERER_H_
 #define TALK_SESSION_PHONE_GTKVIDEORENDERER_H_
 
+#include "talk/base/basictypes.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/videorenderer.h"
 
 typedef struct _GtkWidget GtkWidget;  // forward declaration, defined in gtk.h
 
@@ -52,6 +53,8 @@ class GtkVideoRenderer : public VideoRenderer {
   bool Initialize(int width, int height);
   // Pump the Gtk event loop until there are no events left.
   void Pump();
+  // Check if the window has been closed.
+  bool IsClosed() const;
 
   talk_base::scoped_array<uint8> image_;
   GtkWidget* window_;

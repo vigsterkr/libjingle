@@ -350,7 +350,6 @@ void Port::SendBindingResponse(StunMessage* request,
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
-  addr_attr->SetFamily(1);
   addr_attr->SetPort(addr.port());
   addr_attr->SetIP(addr.ip());
   response.AddAttribute(addr_attr);

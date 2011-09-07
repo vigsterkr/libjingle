@@ -213,20 +213,22 @@ void ByteBuffer::Resize(size_t size) {
   bytes_ = new_bytes;
 }
 
-void ByteBuffer::Consume(size_t size) {
+bool ByteBuffer::Consume(size_t size) {
   if (size > Length())
-    return;
+    return false;
 
   start_ += size;
+  return true;
 }
 
-void ByteBuffer::Shift(size_t size) {
+bool ByteBuffer::Shift(size_t size) {
   if (size > Length())
-    return;
+    return false;
 
   end_ = Length() - size;
   memmove(bytes_, bytes_ + start_ + size, end_);
   start_ = 0;
+  return true;
 }
 
 }  // namespace talk_base

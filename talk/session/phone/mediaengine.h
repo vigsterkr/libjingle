@@ -39,53 +39,32 @@
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/devicemanager.h"
 #include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/mediacommon.h"
 #include "talk/session/phone/videocommon.h"
 
 namespace cricket {
 
-// A class for playing out soundclips.
-class SoundclipMedia {
+class VideoCapturer;
+
+// MediaEngineInterface is an abstraction of a media engine which can be
+// subclassed to support different media componentry backends.
+// It supports voice and video operations in the same class to facilitate
+// proper synchronization between both media types.
+class MediaEngineInterface {
  public:
-  enum SoundclipFlags {
-    SF_LOOP = 1,
-  };
-
-  virtual ~SoundclipMedia() {}
-
-  // Plays a sound out to the speakers with the given audio stream. The stream
-  // must be 16-bit little-endian 16 kHz PCM. If a stream is already playing
-  // on this SoundclipMedia, it is stopped. If clip is NULL, nothing is played.
-  // Returns whether it was successful.
-  virtual bool PlaySound(const char *clip, int len, int flags) = 0;
-};
-
-// MediaEngine is an abstraction of a media engine which can be subclassed
-// to support different media componentry backends. It supports voice and
-// video operations in the same class to facilitate proper synchronization
-// between both media types.
-class MediaEngine {
- public:
-  // TODO: Move this to a global location (also used in DeviceManager)
-  // Capabilities of the media engine.
-  enum Capabilities {
-    AUDIO_RECV = 1 << 0,
-    AUDIO_SEND = 1 << 1,
-    VIDEO_RECV = 1 << 2,
-    VIDEO_SEND = 1 << 3,
-  };
-
   // Bitmask flags for options that may be supported by the media engine
   // implementation
   enum AudioOptions {
     ECHO_CANCELLATION = 1 << 0,
     AUTO_GAIN_CONTROL = 1 << 1,
+    NOISE_SUPPRESSION = 1 << 2,
+    TYPING_DETECTION = 1 << 3,
     DEFAULT_AUDIO_OPTIONS = ECHO_CANCELLATION | AUTO_GAIN_CONTROL
   };
   enum VideoOptions {
   };
 
-  virtual ~MediaEngine() {}
-  static MediaEngine* Create();
+  virtual ~MediaEngineInterface() {}
 
   // Initialization
   // Starts the engine.
@@ -147,13 +126,21 @@ class MediaEngine {
   virtual void SetVoiceLogging(int min_sev, const char* filter) = 0;
   virtual void SetVideoLogging(int min_sev, const char* filter) = 0;
 
-  sigslot::repeater1<CaptureResult> SignalVideoCaptureResult;
+  sigslot::repeater2<VideoCapturer*, CaptureResult>
+      SignalVideoCaptureResult;
 };
+
+
+class MediaEngineFactory {
+ public:
+  static MediaEngineInterface* Create();
+};
+
 
 // CompositeMediaEngine constructs a MediaEngine from separate
 // voice and video engine classes.
 template<class VOICE, class VIDEO>
-class CompositeMediaEngine : public MediaEngine {
+class CompositeMediaEngine : public MediaEngineInterface {
  public:
   CompositeMediaEngine() {}
   virtual ~CompositeMediaEngine() {}
@@ -260,12 +247,16 @@ class NullVoiceEngine {
   bool SetDevices(const Device* in_device, const Device* out_device) {
     return true;
   }
-  bool GetOutputVolume(int* level) { *level = 0; return true; }
+  bool GetOutputVolume(int* level) {
+    *level = 0;
+    return true;
+  }
   bool SetOutputVolume(int level) { return true; }
   int GetInputLevel() { return 0; }
   bool SetLocalMonitor(bool enable) { return true; }
   const std::vector<AudioCodec>& codecs() { return codecs_; }
   void SetLogging(int min_sev, const char* filter) {}
+
  private:
   std::vector<AudioCodec> codecs_;
 };
@@ -291,7 +282,7 @@ class NullVideoEngine {
   CaptureResult SetCapture(bool capture) { return CR_SUCCESS;  }
   const std::vector<VideoCodec>& codecs() { return codecs_; }
   void SetLogging(int min_sev, const char* filter) {}
-  sigslot::signal1<CaptureResult> SignalCaptureResult;
+  sigslot::signal2<VideoCapturer*, CaptureResult> SignalCaptureResult;
  private:
   std::vector<VideoCodec> codecs_;
 };

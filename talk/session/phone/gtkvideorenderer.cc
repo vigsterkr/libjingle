@@ -30,8 +30,20 @@
 #include <gtk/gtk.h>
 
 #include "talk/session/phone/videocommon.h"
+#include "talk/session/phone/videoframe.h"
 
 namespace cricket {
+
+class ScopedGdkLock {
+ public:
+  ScopedGdkLock() {
+    gdk_threads_enter();
+  }
+
+  ~ScopedGdkLock() {
+    gdk_threads_leave();
+  }
+};
 
 GtkVideoRenderer::GtkVideoRenderer(int x, int y)
     : window_(NULL),
@@ -44,38 +56,30 @@ GtkVideoRenderer::GtkVideoRenderer(int x, int y)
 
 GtkVideoRenderer::~GtkVideoRenderer() {
   if (window_) {
-    gdk_threads_enter();
+    ScopedGdkLock lock;
     gtk_widget_destroy(window_);
     // Run the Gtk main loop to tear down the window.
     Pump();
-    gdk_threads_leave();
   }
   // Don't need to destroy draw_area_ because it is not top-level, so it is
   // implicitly destroyed by the above.
 }
 
 bool GtkVideoRenderer::SetSize(int width, int height, int reserved) {
-  gdk_threads_enter();
+  ScopedGdkLock lock;
 
   // For the first frame, initialize the GTK window
-  if (!window_ && !Initialize(width, height)) {
-    gdk_threads_leave();
+  if ((!window_ && !Initialize(width, height)) || IsClosed()) {
     return false;
   }
 
   image_.reset(new uint8[width * height * 4]);
-  gtk_window_resize(GTK_WINDOW(window_), width, height);
-  gdk_threads_leave();
+  gtk_widget_set_size_request(draw_area_, width, height);
   return true;
 }
 
 bool GtkVideoRenderer::RenderFrame(const VideoFrame* frame) {
   if (!frame) {
-    return false;
-  }
-
-  if (!GTK_IS_WINDOW(window_) || !GTK_IS_DRAWING_AREA(draw_area_)) {
-    // window was closed
     return false;
   }
 
@@ -85,7 +89,12 @@ bool GtkVideoRenderer::RenderFrame(const VideoFrame* frame) {
                             frame->GetWidth() * frame->GetHeight() * 4,
                             frame->GetWidth() * 4);
 
-  gdk_threads_enter();
+  ScopedGdkLock lock;
+
+  if (IsClosed()) {
+    return false;
+  }
+
   // draw the ABGR image
   gdk_draw_rgb_32_image(draw_area_->window,
                         draw_area_->style->fg_gc[GTK_STATE_NORMAL],
@@ -99,7 +108,6 @@ bool GtkVideoRenderer::RenderFrame(const VideoFrame* frame) {
 
   // Run the Gtk main loop to refresh the window.
   Pump();
-  gdk_threads_leave();
   return true;
 }
 
@@ -113,6 +121,7 @@ bool GtkVideoRenderer::Initialize(int width, int height) {
 
   gtk_window_set_position(GTK_WINDOW(window_), GTK_WIN_POS_CENTER);
   gtk_window_set_title(GTK_WINDOW(window_), "Video Renderer");
+  gtk_window_set_resizable(GTK_WINDOW(window_), FALSE);
   gtk_widget_set_size_request(draw_area_, width, height);
   gtk_container_add(GTK_CONTAINER(window_), draw_area_);
   gtk_widget_show_all(window_);
@@ -126,6 +135,19 @@ void GtkVideoRenderer::Pump() {
   while (gtk_events_pending()) {
     gtk_main_iteration();
   }
+}
+
+bool GtkVideoRenderer::IsClosed() const {
+  if (!window_) {
+    // Not initialized yet, so hasn't been closed.
+    return false;
+  }
+
+  if (!GTK_IS_WINDOW(window_) || !GTK_IS_DRAWING_AREA(draw_area_)) {
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace cricket

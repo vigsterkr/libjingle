@@ -34,8 +34,10 @@ namespace buzz {
 
 static const int kDefaultIqTimeoutSecs = 15;
 
-IqTask::IqTask(talk_base::Task* parent, const std::string& verb,
-               const buzz::Jid& to, buzz::XmlElement* el)
+IqTask::IqTask(XmppTaskParentInterface* parent,
+               const std::string& verb,
+               const buzz::Jid& to,
+               buzz::XmlElement* el)
     : buzz::XmppTask(parent, buzz::XmppEngine::HL_SINGLE),
       to_(to),
       stanza_(MakeIq(verb, to_, task_id())) {

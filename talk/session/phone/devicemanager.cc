@@ -60,11 +60,12 @@
 
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
-#include "talk/session/phone/mediaengine.h"
+#include "talk/base/thread.h"
+#include "talk/session/phone/mediacommon.h"
 
 namespace cricket {
 // Initialize to empty string.
-const std::string DeviceManager::kDefaultDeviceName;
+const char DeviceManager::kDefaultDeviceName[] = "";
 
 #ifdef WIN32
 class DeviceWatcher : public talk_base::Win32Window {
@@ -196,15 +197,15 @@ void DeviceManager::Terminate() {
 
 int DeviceManager::GetCapabilities() {
   std::vector<Device> devices;
-  int caps = MediaEngine::VIDEO_RECV;
+  int caps = VIDEO_RECV;
   if (GetAudioInputDevices(&devices) && !devices.empty()) {
-    caps |= MediaEngine::AUDIO_SEND;
+    caps |= AUDIO_SEND;
   }
   if (GetAudioOutputDevices(&devices) && !devices.empty()) {
-    caps |= MediaEngine::AUDIO_RECV;
+    caps |= AUDIO_RECV;
   }
   if (GetVideoCaptureDevices(&devices) && !devices.empty()) {
-    caps |= MediaEngine::VIDEO_SEND;
+    caps |= VIDEO_SEND;
   }
   return caps;
 }

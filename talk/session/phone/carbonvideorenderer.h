@@ -33,7 +33,7 @@
 
 #include "talk/base/criticalsection.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/videorenderer.h"
 
 namespace cricket {
 

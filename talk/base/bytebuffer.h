@@ -39,29 +39,40 @@ class ByteBuffer {
  public:
 
   enum ByteOrder {
-    ORDER_NETWORK = 0,  // Default, use network byte order (big endian)
-    ORDER_HOST,         // Use the native order of the host
+    ORDER_NETWORK = 0,  // Default, use network byte order (big endian).
+    ORDER_HOST,         // Use the native order of the host.
   };
 
+  // |byte_order| defines order of bytes in the buffer.
   ByteBuffer();
-  ByteBuffer(ByteOrder byte_order); // convert to/from network format
+  explicit ByteBuffer(ByteOrder byte_order);
   ByteBuffer(const char* bytes, size_t len);
   ByteBuffer(const char* bytes, size_t len, ByteOrder byte_order);
-  explicit ByteBuffer(const char* bytes);  // uses strlen
+
+  // Initializes buffer from a zero-terminated string.
+  explicit ByteBuffer(const char* bytes);
+
   ~ByteBuffer();
 
   const char* Data() const { return bytes_ + start_; }
   size_t Length() const { return end_ - start_; }
   size_t Capacity() const { return size_ - start_; }
 
+  // Read a next value from the buffer. Return false if there isn't
+  // enough data left for the specified type.
   bool ReadUInt8(uint8* val);
   bool ReadUInt16(uint16* val);
   bool ReadUInt24(uint32* val);
   bool ReadUInt32(uint32* val);
   bool ReadUInt64(uint64* val);
-  bool ReadString(std::string* val, size_t len);  // append to val
   bool ReadBytes(char* val, size_t len);
 
+  // Appends next |len| bytes from the buffer to |val|. Returns false
+  // if there is less than |len| bytes left.
+  bool ReadString(std::string* val, size_t len);
+
+  // Write value to the buffer. Resizes the buffer when it is
+  // neccessary.
   void WriteUInt8(uint8 val);
   void WriteUInt16(uint16 val);
   void WriteUInt24(uint32 val);
@@ -70,9 +81,16 @@ class ByteBuffer {
   void WriteString(const std::string& val);
   void WriteBytes(const char* val, size_t len);
 
+  // Resize the buffer to the specified |size|.
   void Resize(size_t size);
-  void Consume(size_t size);
-  void Shift(size_t size);
+
+  // Moves current position |size| bytes forward. Return false if
+  // there is less than |size| bytes left in the buffer.
+  bool Consume(size_t size);
+
+  // Drops |size| bytes from the front of the buffer. Return false if
+  // there is less than |size| bytes left in the buffer.
+  bool Shift(size_t size);
 
  private:
   void Construct(const char* bytes, size_t size, ByteOrder byte_order);

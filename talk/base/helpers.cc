@@ -27,6 +27,8 @@
 
 #include "talk/base/helpers.h"
 
+#include <limits>
+
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -41,6 +43,9 @@
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/time.h"
+
+// Protect against max macro inclusion.
+#undef max
 
 namespace talk_base {
 
@@ -196,13 +201,26 @@ static const char BASE64[64] = {
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'
 };
 
-static scoped_ptr<RandomGenerator> g_rng(new SecureRandomGenerator());
+namespace {
+
+// This round about way of creating a global RNG is to safe-guard against
+// indeterminant static initialization order.
+scoped_ptr<RandomGenerator>& GetGlobalRng() {
+  static scoped_ptr<RandomGenerator> g_rng(new SecureRandomGenerator());
+  return g_rng;
+}
+
+RandomGenerator& Rng() {
+  return *GetGlobalRng();
+}
+
+}  // namespace
 
 void SetRandomTestMode(bool test) {
   if (!test) {
-    g_rng.reset(new SecureRandomGenerator());
+    GetGlobalRng().reset(new SecureRandomGenerator());
   } else {
-    g_rng.reset(new TestRandomGenerator());
+    GetGlobalRng().reset(new TestRandomGenerator());
   }
 }
 
@@ -211,7 +229,7 @@ bool InitRandom(int seed) {
 }
 
 bool InitRandom(const char* seed, size_t len) {
-  if (!g_rng->Init(seed, len)) {
+  if (!Rng().Init(seed, len)) {
     LOG(LS_ERROR) << "Failed to init random generator!";
     return false;
   }
@@ -229,7 +247,7 @@ bool CreateRandomString(size_t len,
                         std::string* str) {
   str->clear();
   scoped_array<uint8> bytes(new uint8[len]);
-  if (!g_rng->Generate(bytes.get(), len)) {
+  if (!Rng().Generate(bytes.get(), len)) {
     LOG(LS_ERROR) << "Failed to generate random string!";
     return false;
   }
@@ -251,7 +269,7 @@ bool CreateRandomString(size_t len, const std::string& table,
 
 uint32 CreateRandomId() {
   uint32 id;
-  if (!g_rng->Generate(&id, sizeof(id))) {
+  if (!Rng().Generate(&id, sizeof(id))) {
     LOG(LS_ERROR) << "Failed to generate random id!";
   }
   return id;
@@ -263,6 +281,11 @@ uint32 CreateRandomNonZeroId() {
     id = CreateRandomId();
   } while (id == 0);
   return id;
+}
+
+double CreateRandomDouble() {
+  return CreateRandomId() / (std::numeric_limits<uint32>::max() +
+      std::numeric_limits<double>::epsilon());
 }
 
 }  // namespace talk_base

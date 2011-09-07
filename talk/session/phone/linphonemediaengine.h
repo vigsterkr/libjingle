@@ -48,7 +48,7 @@ class StreamInterface;
 
 namespace cricket {
 
-class LinphoneMediaEngine : public MediaEngine {
+class LinphoneMediaEngine : public MediaEngineInterface {
  public:
   LinphoneMediaEngine(const std::string& ringWav,  const std::string& callWav);
   virtual ~LinphoneMediaEngine() {}
@@ -128,6 +128,12 @@ class LinphoneVoiceChannel : public VoiceMediaChannel {
   virtual bool RemoveStream(uint32 ssrc) { return true; }
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) { return true; }
   virtual int GetOutputLevel() { return 0; }
+  virtual bool SetOutputScaling(uint32 ssrc, double left, double right) {
+    return false;
+  }
+  virtual bool GetOutputScaling(uint32 ssrc, double* left, double* right) {
+    return false;
+  }
   virtual void SetRingbackTone(const char* buf, int len) {}
   virtual bool PlayRingbackTone(bool play, bool loop) { return true; }
   virtual bool PressDTMF(int event, bool playout) { return true; }

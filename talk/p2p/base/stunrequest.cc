@@ -78,8 +78,11 @@ void StunRequestManager::Clear() {
   for (RequestMap::iterator i = requests_.begin(); i != requests_.end(); ++i)
     requests.push_back(i->second);
 
-  for (uint32 i = 0; i < requests.size(); ++i)
-    Remove(requests[i]);
+  for (uint32 i = 0; i < requests.size(); ++i) {
+    // StunRequest destructor calls Remove() which deletes requests
+    // from |requests_|.
+    delete requests[i];
+  }
 }
 
 bool StunRequestManager::CheckResponse(StunMessage* msg) {

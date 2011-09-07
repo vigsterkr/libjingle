@@ -106,6 +106,7 @@ const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE(
     true, NS_JINGLE_RTP, LN_PAYLOADTYPE);
 const buzz::QName QN_JINGLE_RTP_BANDWIDTH(
     true, NS_JINGLE_RTP, LN_BANDWIDTH);
+const buzz::QName QN_JINGLE_RTCP_MUX(true, NS_JINGLE_RTP, "rtcp-mux");
 const buzz::QName QN_PARAMETER(true, NS_JINGLE_RTP, "parameter");
 
 const std::string NS_GINGLE_AUDIO("http://www.google.com/session/phone");

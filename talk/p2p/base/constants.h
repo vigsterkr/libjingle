@@ -125,6 +125,7 @@ extern const buzz::QName QN_JINGLE_RTP_CONTENT;
 extern const buzz::QName QN_JINGLE_SSRC;
 extern const buzz::QName QN_JINGLE_RTP_PAYLOADTYPE;
 extern const buzz::QName QN_JINGLE_RTP_BANDWIDTH;
+extern const buzz::QName QN_JINGLE_RTCP_MUX;
 
 extern const std::string NS_GINGLE_AUDIO;
 extern const buzz::QName QN_GINGLE_AUDIO_CONTENT;

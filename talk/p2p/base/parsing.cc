@@ -32,8 +32,8 @@
 #include "talk/base/stringutils.h"
 
 namespace {
-std::string kTrue = "true";
-std::string kOne = "1";
+static const char kTrue[] = "true";
+static const char kOne[] = "1";
 }
 
 namespace cricket {

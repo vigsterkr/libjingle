@@ -36,7 +36,8 @@ namespace buzz {
 
 class PresenceOutTask : public XmppTask {
 public:
-  PresenceOutTask(Task * parent) : XmppTask(parent) {}
+  explicit PresenceOutTask(XmppTaskParentInterface* parent)
+      : XmppTask(parent) {}
   virtual ~PresenceOutTask() {}
 
   XmppReturnStatus Send(const Status & s);

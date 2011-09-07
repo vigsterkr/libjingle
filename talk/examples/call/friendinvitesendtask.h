@@ -35,7 +35,8 @@ namespace buzz {
 
 class FriendInviteSendTask : public XmppTask {
 public:
-  FriendInviteSendTask(Task* parent) : XmppTask(parent) {}
+  explicit FriendInviteSendTask(XmppTaskParentInterface* parent)
+    : XmppTask(parent) {}
   virtual ~FriendInviteSendTask() {}
 
   XmppReturnStatus Send(const Jid& user);

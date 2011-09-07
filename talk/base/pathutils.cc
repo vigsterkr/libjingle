@@ -41,7 +41,7 @@
 
 namespace talk_base {
 
-std::string const EMPTY_STR = "";
+static const char EMPTY_STR[] = "";
 
 // EXT_DELIM separates a file basename from extension
 const char EXT_DELIM = '.';
@@ -224,7 +224,7 @@ bool Pathname::SetExtension(const std::string& extension) {
     extension_.insert(extension_.begin(), EXT_DELIM);
   }
   return true;
-} 
+}
 
 std::string Pathname::filename() const {
   std::string filename(basename_);
@@ -246,16 +246,16 @@ bool Pathname::GetDrive(char *drive, uint32 bytes) const {
   return GetDrive(drive, bytes, folder_);
 }
 
-// static 
+// static
 bool Pathname::GetDrive(char *drive, uint32 bytes,
                         const std::string& pathname) {
   // need at lease 4 bytes to save c:
   if (bytes < 4 || pathname.size() < 3) {
     return false;
   }
-  
+
   memcpy(drive, pathname.c_str(), 3);
-  drive[3] = 0; 
+  drive[3] = 0;
   // sanity checking
   return (isalpha(drive[0]) &&
           drive[1] == ':' &&

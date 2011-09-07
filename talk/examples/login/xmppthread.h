@@ -32,7 +32,6 @@
 #include "talk/base/thread.h"
 #include "talk/examples/login/xmpppump.h"
 #include "talk/examples/login/xmppsocket.h"
-#include <iostream>
 
 class XmppThread:
     public talk_base::Thread, XmppPumpNotify, talk_base::MessageHandler {

@@ -47,7 +47,7 @@ class HttpPortAllocator : public BasicPortAllocator {
   static const int kNumRetries;
 
   // Records the URL that we will GET in order to create a session.
-  static const std::string kCreateSessionURL;
+  static const char kCreateSessionURL[];
 
   HttpPortAllocator(talk_base::NetworkManager* network_manager,
                     const std::string& user_agent);

@@ -76,9 +76,8 @@ extern "C" debug_module_t mod_aes_hmac;
 
 namespace cricket {
 
-const std::string& CS_DEFAULT = CS_AES_CM_128_HMAC_SHA1_80;
-const std::string CS_AES_CM_128_HMAC_SHA1_80 = "AES_CM_128_HMAC_SHA1_80";
-const std::string CS_AES_CM_128_HMAC_SHA1_32 = "AES_CM_128_HMAC_SHA1_32";
+const char CS_AES_CM_128_HMAC_SHA1_80[] = "AES_CM_128_HMAC_SHA1_80";
+const char CS_AES_CM_128_HMAC_SHA1_32[] = "AES_CM_128_HMAC_SHA1_32";
 const int SRTP_MASTER_KEY_BASE64_LEN = SRTP_MASTER_KEY_LEN * 4 / 3;
 
 #ifndef HAVE_SRTP
@@ -95,6 +94,7 @@ bool SrtpNotAvailable(const char *func) {
 #endif  // !HAVE_SRTP
 
 void EnableSrtpDebugging() {
+#ifdef HAVE_SRTP
 #ifdef _DEBUG
   debug_on(mod_srtp);
   debug_on(mod_auth);
@@ -105,6 +105,7 @@ void EnableSrtpDebugging() {
   // debug_on(mod_aes_cbc);
   // debug_on(mod_hmac);
 #endif
+#endif  // HAVE_SRTP
 }
 
 SrtpFilter::SrtpFilter()

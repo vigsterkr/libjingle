@@ -29,7 +29,6 @@
 
 #include <string>
 #include <vector>
-#include <iostream>
 #include "talk/base/common.h"
 #include "talk/xmllite/xmlconstants.h"
 #include "talk/xmllite/xmlelement.h"

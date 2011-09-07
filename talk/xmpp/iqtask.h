@@ -37,7 +37,8 @@ namespace buzz {
 
 class IqTask : public buzz::XmppTask {
  public:
-  IqTask(talk_base::Task* parent, const std::string& verb, const buzz::Jid& to,
+  IqTask(XmppTaskParentInterface* parent,
+         const std::string& verb, const buzz::Jid& to,
          buzz::XmlElement* el);
   virtual ~IqTask() {}
 

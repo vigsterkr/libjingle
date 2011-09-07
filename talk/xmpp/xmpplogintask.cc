@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
 #include <string>
 #include <vector>
 #include "talk/base/base64.h"

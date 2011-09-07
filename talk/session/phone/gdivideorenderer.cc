@@ -33,6 +33,7 @@
 #include "talk/base/thread.h"
 #include "talk/base/win32window.h"
 #include "talk/session/phone/videocommon.h"
+#include "talk/session/phone/videoframe.h"
 
 namespace cricket {
 

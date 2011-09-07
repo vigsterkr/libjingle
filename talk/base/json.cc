@@ -115,6 +115,25 @@ bool GetBoolFromJson(const Json::Value& in, bool* out) {
   return ret;
 }
 
+bool GetDoubleFromJson(const Json::Value& in, double* out) {
+  bool ret;
+  if (!in.isString()) {
+    ret = in.isConvertibleTo(Json::realValue);
+    if (ret) {
+      *out = in.asDouble();
+    }
+  } else {
+    double val;
+    const char* c_str = in.asCString();
+    char* end_ptr;
+    errno = 0;
+    val = strtod(c_str, &end_ptr);
+    ret = (end_ptr != c_str && *end_ptr == '\0' && !errno);
+    *out = val;
+  }
+  return ret;
+}
+
 bool GetValueFromJsonArray(const Json::Value& in, size_t n,
                            Json::Value* out) {
   if (!in.isArray() || !in.isValidIndex(n)) {
@@ -149,6 +168,12 @@ bool GetBoolFromJsonArray(const Json::Value& in, size_t n,
   return GetValueFromJsonArray(in, n, &x) && GetBoolFromJson(x, out);
 }
 
+bool GetDoubleFromJsonArray(const Json::Value& in, size_t n,
+                            double* out) {
+  Json::Value x;
+  return GetValueFromJsonArray(in, n, &x) && GetDoubleFromJson(x, out);
+}
+
 bool GetValueFromJsonObject(const Json::Value& in, const std::string& k,
                             Json::Value* out) {
   if (!in.isObject() || !in.isMember(k)) {
@@ -158,7 +183,6 @@ bool GetValueFromJsonObject(const Json::Value& in, const std::string& k,
   *out = in[k];
   return true;
 }
-
 
 bool GetIntFromJsonObject(const Json::Value& in, const std::string& k,
                           int* out) {
@@ -182,6 +206,12 @@ bool GetBoolFromJsonObject(const Json::Value& in, const std::string& k,
                            bool* out) {
   Json::Value x;
   return GetValueFromJsonObject(in, k, &x) && GetBoolFromJson(x, out);
+}
+
+bool GetDoubleFromJsonObject(const Json::Value& in, const std::string& k,
+                             double* out) {
+  Json::Value x;
+  return GetValueFromJsonObject(in, k, &x) && GetDoubleFromJson(x, out);
 }
 
 Json::Value StringVectorToJsonValue(const std::vector<std::string>& strings) {

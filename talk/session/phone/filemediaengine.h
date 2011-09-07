@@ -48,7 +48,7 @@ namespace cricket {
 // stream. Depending on the parameters of the constructor, FileMediaEngine can
 // act as file voice engine, file video engine, or both. Currently, we use
 // only the RTP dump packets. TODO: Enable RTCP packets.
-class FileMediaEngine : public MediaEngine {
+class FileMediaEngine : public MediaEngineInterface {
  public:
   FileMediaEngine() {}
   virtual ~FileMediaEngine() {}
@@ -149,6 +149,12 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual bool RemoveStream(uint32 ssrc) { return true; }
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) { return true; }
   virtual int GetOutputLevel() { return 0; }
+  virtual bool SetOutputScaling(uint32 ssrc, double left, double right) {
+    return false;
+  }
+  virtual bool GetOutputScaling(uint32 ssrc, double* left, double* right) {
+    return false;
+  }
   virtual bool SetRingbackTone(const char* buf, int len) { return true; }
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
     return true;

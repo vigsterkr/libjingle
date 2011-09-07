@@ -54,6 +54,7 @@ Call::Call(MediaSessionClient* session_client)
       local_renderer_(NULL),
       video_(false),
       muted_(false),
+      video_muted_(false),
       send_to_voicemail_(true),
       playing_dtmf_(false) {
 }
@@ -94,7 +95,7 @@ void Call::IncomingSession(
   SignalSessionState(this, session, Session::STATE_RECEIVEDINITIATE);
 }
 
-void Call::AcceptSession(BaseSession* session,
+void Call::AcceptSession(Session* session,
                          const cricket::CallOptions& options) {
   std::vector<Session *>::iterator it;
   it = std::find(sessions_.begin(), sessions_.end(), session);
@@ -105,7 +106,7 @@ void Call::AcceptSession(BaseSession* session,
   }
 }
 
-void Call::RejectSession(BaseSession *session) {
+void Call::RejectSession(Session *session) {
   std::vector<Session *>::iterator it;
   it = std::find(sessions_.begin(), sessions_.end(), session);
   ASSERT(it != sessions_.end());
@@ -114,7 +115,7 @@ void Call::RejectSession(BaseSession *session) {
     session->Reject(STR_TERMINATE_DECLINE);
 }
 
-void Call::TerminateSession(BaseSession *session) {
+void Call::TerminateSession(Session *session) {
   ASSERT(std::find(sessions_.begin(), sessions_.end(), session)
          != sessions_.end());
   std::vector<Session *>::iterator it;
@@ -165,7 +166,7 @@ void Call::SetLocalRenderer(VideoRenderer* renderer) {
   }
 }
 
-void Call::SetVideoRenderer(BaseSession *session, uint32 ssrc,
+void Call::SetVideoRenderer(Session *session, uint32 ssrc,
                             VideoRenderer* renderer) {
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel) {
@@ -177,14 +178,14 @@ void Call::SetVideoRenderer(BaseSession *session, uint32 ssrc,
   }
 }
 
-void Call::AddVoiceStream(BaseSession *session, uint32 voice_ssrc) {
+void Call::AddVoiceStream(Session *session, uint32 voice_ssrc) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel && voice_ssrc) {
     voice_channel->AddStream(voice_ssrc);
   }
 }
 
-void Call::AddVideoStream(BaseSession *session, uint32 video_ssrc) {
+void Call::AddVideoStream(Session *session, uint32 video_ssrc) {
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel && video_ssrc) {
     // TODO: Do we need the audio_ssrc here?
@@ -193,14 +194,14 @@ void Call::AddVideoStream(BaseSession *session, uint32 video_ssrc) {
   }
 }
 
-void Call::RemoveVoiceStream(BaseSession *session, uint32 voice_ssrc) {
+void Call::RemoveVoiceStream(Session *session, uint32 voice_ssrc) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel && voice_ssrc) {
     voice_channel->RemoveStream(voice_ssrc);
   }
 }
 
-void Call::RemoveVideoStream(BaseSession *session, uint32 video_ssrc) {
+void Call::RemoveVideoStream(Session *session, uint32 video_ssrc) {
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel && video_ssrc) {
     video_channel->RemoveStream(video_ssrc);
@@ -238,32 +239,39 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
   VoiceChannel *voice_channel = NULL;
   VideoChannel *video_channel = NULL;
 
+  // Generate a random string for the RTCP CNAME, as stated in RFC 6222.
+  // This string is only used for synchronization, and therefore is opaque.
+  std::string rtcp_cname;
+  if (!talk_base::CreateRandomString(16, &rtcp_cname)) {
+    return false;
+  }
+
   const ContentInfo* audio_offer = GetFirstAudioContent(offer);
   const ContentInfo* video_offer = GetFirstVideoContent(offer);
   video_ = (video_offer != NULL);
 
   ASSERT(audio_offer != NULL);
-  // Create voice channel and start a media monitor
+  // Create voice channel and start a media monitor.
   voice_channel = session_client_->channel_manager()->CreateVoiceChannel(
       session, audio_offer->name, video_);
   // voice_channel can be NULL in case of NullVoiceEngine.
   if (voice_channel) {
     voice_channel_map_[session->id()] = voice_channel;
-
+    voice_channel->SetRtcpCName(rtcp_cname);
     voice_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
     voice_channel->StartMediaMonitor(kMediaMonitorInterval);
   } else {
     succeeded = false;
   }
 
-  // If desired, create video channel and start a media monitor
+  // If desired, create video channel and start a media monitor.
   if (video_ && succeeded) {
     video_channel = session_client_->channel_manager()->CreateVideoChannel(
         session, video_offer->name, true, voice_channel);
     // video_channel can be NULL in case of NullVideoEngine.
     if (video_channel) {
       video_channel_map_[session->id()] = video_channel;
-
+      video_channel->SetRtcpCName(rtcp_cname);
       video_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
       video_channel->StartMediaMonitor(kMediaMonitorInterval);
     } else {
@@ -272,7 +280,7 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
   }
 
   if (succeeded) {
-    // Add session to list, create channels for this session
+    // Add session to list, create channels for this session.
     sessions_.push_back(session);
     session->SignalState.connect(this, &Call::OnSessionState);
     session->SignalError.connect(this, &Call::OnSessionError);
@@ -280,7 +288,7 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
     session->SignalReceivedTerminateReason
       .connect(this, &Call::OnReceivedTerminateReason);
 
-    // If this call has the focus, enable this channel
+    // If this call has the focus, enable this channel.
     if (session_client_->GetFocus() == this) {
       voice_channel->Enable(true);
       if (video_channel) {
@@ -288,7 +296,7 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
       }
     }
 
-    // Signal client
+    // Signal client.
     SignalAddSession(this, session);
   }
 
@@ -331,13 +339,13 @@ void Call::RemoveSession(Session *session) {
   talk_base::Thread::Current()->Post(this, MSG_CHECKAUTODESTROY);
 }
 
-VoiceChannel* Call::GetVoiceChannel(BaseSession* session) {
+VoiceChannel* Call::GetVoiceChannel(Session* session) {
   std::map<std::string, VoiceChannel *>::iterator it
     = voice_channel_map_.find(session->id());
   return (it != voice_channel_map_.end()) ? it->second : NULL;
 }
 
-VideoChannel* Call::GetVideoChannel(BaseSession* session) {
+VideoChannel* Call::GetVideoChannel(Session* session) {
   std::map<std::string, VideoChannel *>::iterator it
     = video_channel_map_.find(session->id());
   return (it != video_channel_map_.end()) ? it->second : NULL;
@@ -364,6 +372,16 @@ void Call::Mute(bool mute) {
     VoiceChannel *voice_channel = voice_channel_map_[(*it)->id()];
     if (voice_channel != NULL)
       voice_channel->Mute(mute);
+  }
+}
+
+void Call::MuteVideo(bool mute) {
+  video_muted_ = mute;
+  std::vector<Session *>::iterator it;
+  for (it = sessions_.begin(); it != sessions_.end(); it++) {
+    VideoChannel *video_channel = video_channel_map_[(*it)->id()];
+    if (video_channel != NULL)
+      video_channel->Mute(mute);
   }
 }
 
@@ -438,7 +456,7 @@ void Call::Join(Call *call, bool enable) {
   }
 }
 
-void Call::StartConnectionMonitor(BaseSession *session, int cms) {
+void Call::StartConnectionMonitor(Session *session, int cms) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel) {
     voice_channel->SignalConnectionMonitor.connect(this,
@@ -454,7 +472,7 @@ void Call::StartConnectionMonitor(BaseSession *session, int cms) {
   }
 }
 
-void Call::StopConnectionMonitor(BaseSession *session) {
+void Call::StopConnectionMonitor(Session *session) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel) {
     voice_channel->StopConnectionMonitor();
@@ -468,7 +486,7 @@ void Call::StopConnectionMonitor(BaseSession *session) {
   }
 }
 
-void Call::StartAudioMonitor(BaseSession *session, int cms) {
+void Call::StartAudioMonitor(Session *session, int cms) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel) {
     voice_channel->SignalAudioMonitor.connect(this, &Call::OnAudioMonitor);
@@ -476,7 +494,7 @@ void Call::StartAudioMonitor(BaseSession *session, int cms) {
   }
 }
 
-void Call::StopAudioMonitor(BaseSession *session) {
+void Call::StopAudioMonitor(Session *session) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel) {
     voice_channel->StopAudioMonitor();
@@ -484,7 +502,7 @@ void Call::StopAudioMonitor(BaseSession *session) {
   }
 }
 
-bool Call::IsAudioMonitorRunning(BaseSession *session) {
+bool Call::IsAudioMonitorRunning(Session *session) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel) {
     return voice_channel->IsAudioMonitorRunning();
@@ -493,7 +511,7 @@ bool Call::IsAudioMonitorRunning(BaseSession *session) {
   }
 }
 
-void Call::StartSpeakerMonitor(BaseSession *session) {
+void Call::StartSpeakerMonitor(Session *session) {
   if (speaker_monitor_map_.find(session->id()) == speaker_monitor_map_.end()) {
     if (!IsAudioMonitorRunning(session)) {
       StartAudioMonitor(session, kAudioMonitorPollPeriodMillis);
@@ -509,7 +527,7 @@ void Call::StartSpeakerMonitor(BaseSession *session) {
   }
 }
 
-void Call::StopSpeakerMonitor(BaseSession *session) {
+void Call::StopSpeakerMonitor(Session *session) {
   if (speaker_monitor_map_.find(session->id()) == speaker_monitor_map_.end()) {
     LOG(LS_WARNING) << "Speaker monitor for session "
                     << session->id() << " already stopped.";
@@ -538,7 +556,8 @@ void Call::OnSpeakerMonitor(CurrentSpeakerMonitor* monitor, uint32 ssrc) {
   NamedSource source;
   source.ssrc = ssrc;
   media_sources_.GetAudioSourceBySsrc(ssrc, &source);
-  SignalSpeakerMonitor(this, monitor->session(), source);
+  SignalSpeakerMonitor(this, static_cast<Session *>(monitor->session()),
+                       source);
 }
 
 void Call::OnConnectionMonitor(VideoChannel *channel,
@@ -565,13 +584,13 @@ void Call::OnSessionState(BaseSession *session, BaseSession::State state) {
     default:
       break;
   }
-  SignalSessionState(this, session, state);
+  SignalSessionState(this, static_cast<Session *>(session), state);
 }
 
 void Call::OnSessionError(BaseSession *session, Session::Error error) {
   session_client_->session_manager()->signaling_thread()->Clear(this,
       MSG_TERMINATECALL);
-  SignalSessionError(this, session, error);
+  SignalSessionError(this, static_cast<Session *>(session), error);
 }
 
 void Call::OnSessionInfo(Session *session,

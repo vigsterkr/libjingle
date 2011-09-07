@@ -38,8 +38,8 @@
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/p2p/base/session.h"
 #include "talk/session/phone/audiomonitor.h"
-#include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamonitor.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/srtpfilter.h"
@@ -71,7 +71,8 @@ enum {
   MSG_RTCPPACKET = 23,
   MSG_CHANNEL_ERROR = 24,
   MSG_ENABLECPUADAPTATION = 25,
-  MSG_DISABLECPUADAPTATION = 26
+  MSG_DISABLECPUADAPTATION = 26,
+  MSG_SCALEVOLUME = 27
 };
 
 // BaseChannel contains logic common to voice and video, including
@@ -81,7 +82,7 @@ class BaseChannel
     : public talk_base::MessageHandler, public sigslot::has_slots<>,
       public MediaChannel::NetworkInterface {
  public:
-  BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
+  BaseChannel(talk_base::Thread* thread, MediaEngineInterface* media_engine,
               MediaChannel* channel, BaseSession* session,
               const std::string& content_name,
               TransportChannel* transport_channel);
@@ -158,7 +159,7 @@ class BaseChannel
   }
 
  protected:
-  MediaEngine* media_engine() const { return media_engine_; }
+  MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
   void set_rtcp_transport_channel(TransportChannel* transport);
   bool writable() const { return writable_; }
@@ -262,7 +263,7 @@ class BaseChannel
   talk_base::CriticalSection signal_recv_packet_cs_;
 
   talk_base::Thread *worker_thread_;
-  MediaEngine *media_engine_;
+  MediaEngineInterface *media_engine_;
   BaseSession *session_;
   MediaChannel *media_channel_;
 
@@ -283,7 +284,7 @@ class BaseChannel
 // and input/output level monitoring.
 class VoiceChannel : public BaseChannel {
  public:
-  VoiceChannel(talk_base::Thread *thread, MediaEngine *media_engine,
+  VoiceChannel(talk_base::Thread *thread, MediaEngineInterface *media_engine,
                VoiceMediaChannel *channel, BaseSession *session,
                const std::string& content_name, bool rtcp);
   ~VoiceChannel();
@@ -305,6 +306,7 @@ class VoiceChannel : public BaseChannel {
 
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
   bool PressDTMF(int digit, bool playout);
+  bool SetOutputScaling(uint32 ssrc, double left, double right);
 
   // Monitoring functions
   sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo> &>
@@ -361,6 +363,18 @@ class VoiceChannel : public BaseChannel {
     bool playout;
     bool result;
   };
+  struct ScaleVolumeMessageData : public talk_base::MessageData {
+    ScaleVolumeMessageData(uint32 s, double l, double r)
+        : ssrc(s),
+          left(l),
+          right(r),
+          result(false) {
+    }
+    uint32 ssrc;
+    double left;
+    double right;
+    bool result;
+  };
 
   // overrides from BaseChannel
   virtual void OnChannelRead(TransportChannel* channel,
@@ -380,6 +394,7 @@ class VoiceChannel : public BaseChannel {
   bool PlayRingbackTone_w(uint32 ssrc, bool play, bool loop);
   void HandleEarlyMediaTimeout();
   bool PressDTMF_w(int digit, bool playout);
+  bool SetOutputScaling_w(uint32 ssrc, double left, double right);
 
   virtual void OnMessage(talk_base::Message *pmsg);
   virtual void OnConnectionMonitorUpdate(
@@ -400,7 +415,7 @@ class VoiceChannel : public BaseChannel {
 // VideoChannel is a specialization for video.
 class VideoChannel : public BaseChannel {
  public:
-  VideoChannel(talk_base::Thread *thread, MediaEngine *media_engine,
+  VideoChannel(talk_base::Thread *thread, MediaEngineInterface *media_engine,
                VideoMediaChannel *channel, BaseSession *session,
                const std::string& content_name, bool rtcp,
                VoiceChannel *voice_channel);

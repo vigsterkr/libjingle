@@ -34,14 +34,14 @@
 
 namespace buzz {
 
-MucRoomLookupTask::MucRoomLookupTask(Task* parent,
+MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
                                      const std::string& room_name,
                                      const std::string& organizer_domain)
     : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
              MakeRoomQuery(room_name, organizer_domain)) {
 }
 
-MucRoomLookupTask::MucRoomLookupTask(Task* parent,
+MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
                                      const Jid& room_jid)
     : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
              MakeJidQuery(room_jid)) {

@@ -89,6 +89,7 @@ enum FourCC {
   FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY
   FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
   FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),  // Alias for MJPG
+  FOURCC_DMB1 = FOURCC('d', 'm', 'b', '1'),  // Alias for MJPG on Mac
   FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
   FOURCC_RGB3 = FOURCC('R', 'G', 'B', '3'),  // Alias for RAW
   FOURCC_BGR3 = FOURCC('B', 'G', 'R', '3'),  // Alias for 24BG

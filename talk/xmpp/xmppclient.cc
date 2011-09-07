@@ -36,13 +36,6 @@
 
 namespace buzz {
 
-talk_base::TaskParent* XmppClient::GetParent(int code) {
-  if (code == XMPP_CLIENT_TASK_CODE)
-    return this;
-  else
-    return talk_base::Task::GetParent(code);
-}
-
 class XmppClient::Private :
     public sigslot::has_slots<>,
     public XmppSessionHandler,
@@ -279,7 +272,7 @@ XmppClient::Disconnect() {
 }
 
 XmppClient::XmppClient(TaskParent * parent)
-    : Task(parent),
+    : XmppTaskParentInterface(parent),
       delivering_signal_(false),
       valid_(false) {
   d_.reset(new Private(this));

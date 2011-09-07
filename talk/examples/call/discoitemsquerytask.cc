@@ -36,8 +36,8 @@ namespace {
 const int kDiscoItemsTimeout = 60;
 } // namespace
 
-DiscoItemsQueryTask::DiscoItemsQueryTask(Task* parent,
-                                         const std::string node,
+DiscoItemsQueryTask::DiscoItemsQueryTask(XmppTaskParentInterface* parent,
+                                         const std::string& node,
                                          const Jid& to)
     : XmppTask(parent, XmppEngine::HL_SINGLE), node_(node) {
   set_timeout_seconds(kDiscoItemsTimeout);

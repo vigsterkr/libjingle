@@ -96,8 +96,8 @@ void LinphoneMediaEngine::Terminate() {
 
 int LinphoneMediaEngine::GetCapabilities() {
   int capabilities = 0;
-  capabilities |= MediaEngine::AUDIO_SEND;
-  capabilities |= MediaEngine::AUDIO_RECV;
+  capabilities |= AUDIO_SEND;
+  capabilities |= AUDIO_RECV;
   return capabilities;
 }
 

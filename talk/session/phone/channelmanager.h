@@ -37,7 +37,6 @@
 #include "talk/p2p/base/session.h"
 #include "talk/session/phone/voicechannel.h"
 #include "talk/session/phone/mediaengine.h"
-#include "talk/session/phone/devicemanager.h"
 
 namespace cricket {
 
@@ -59,7 +58,8 @@ class ChannelManager : public talk_base::MessageHandler,
   explicit ChannelManager(talk_base::Thread* worker);
   // For testing purposes. Allows the media engine and dev manager to be mocks.
   // The ChannelManager takes ownership of these objects.
-  ChannelManager(MediaEngine* me, DeviceManager* dm, talk_base::Thread* worker);
+  ChannelManager(MediaEngineInterface* me, DeviceManager* dm,
+                 talk_base::Thread* worker);
   ~ChannelManager();
 
   // Accessors for the worker thread, allowing it to be set after construction,
@@ -175,11 +175,12 @@ class ChannelManager : public talk_base::MessageHandler,
   CaptureResult SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);
-  void OnVideoCaptureResult(CaptureResult result);
+  void OnVideoCaptureResult(VideoCapturer* capturer,
+                            CaptureResult result);
   void OnMessage(talk_base::Message *message);
 
   talk_base::CriticalSection crit_;
-  talk_base::scoped_ptr<MediaEngine> media_engine_;
+  talk_base::scoped_ptr<MediaEngineInterface> media_engine_;
   talk_base::scoped_ptr<DeviceManager> device_manager_;
   bool initialized_;
   talk_base::Thread* main_thread_;

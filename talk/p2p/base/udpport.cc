@@ -33,7 +33,7 @@
 
 namespace cricket {
 
-const std::string LOCAL_PORT_TYPE("local");
+const char LOCAL_PORT_TYPE[] = "local";
 
 UDPPort::UDPPort(talk_base::Thread* thread,
                  talk_base::PacketSocketFactory* factory,

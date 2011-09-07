@@ -44,6 +44,7 @@ bool GetIntFromJson(const Json::Value& in, int* out);
 bool GetUIntFromJson(const Json::Value& in, unsigned int* out);
 bool GetStringFromJson(const Json::Value& in, std::string* out);
 bool GetBoolFromJson(const Json::Value& in, bool* out);
+bool GetDoubleFromJson(const Json::Value& in, double* out);
 
 // Pull values out of a JSON array.
 bool GetValueFromJsonArray(const Json::Value& in, size_t n,
@@ -56,6 +57,8 @@ bool GetStringFromJsonArray(const Json::Value& in, size_t n,
                             std::string* out);
 bool GetBoolFromJsonArray(const Json::Value& in, size_t n,
                           bool* out);
+bool GetDoubleFromJsonArray(const Json::Value& in, size_t n,
+                            double* out);
 
 // Pull values out of a JSON object.
 bool GetValueFromJsonObject(const Json::Value& in, const std::string& k,
@@ -68,6 +71,8 @@ bool GetStringFromJsonObject(const Json::Value& in, const std::string& k,
                              std::string* out);
 bool GetBoolFromJsonObject(const Json::Value& in, const std::string& k,
                            bool* out);
+bool GetDoubleFromJsonObject(const Json::Value& in, const std::string& k,
+                             double* out);
 
 // Converts vectors of strings to/from JSON arrays.
 Json::Value StringVectorToJsonValue(const std::vector<std::string>& strings);

@@ -29,23 +29,19 @@
 
 #if defined(HAVE_LINPHONE)
 #include "talk/session/phone/linphonemediaengine.h"
-#elif defined(HAVE_WEBRTC)
-#include "talk/session/phone/webrtcvoiceengine.h"
-#include "talk/session/phone/webrtcvideoengine.h"
 #else
 #endif  // HAVE_LINPHONE
 
 namespace cricket {
-MediaEngine* MediaEngine::Create() {
+
+MediaEngineInterface* MediaEngineFactory::Create() {
 #if defined(HAVE_LINPHONE)
   return new LinphoneMediaEngine("", "");
-#elif defined(HAVE_WEBRTC)
-  return new CompositeMediaEngine<WebRtcVoiceEngine, WebRtcVideoEngine>();
 #elif defined(ANDROID)
   return AndroidMediaEngineFactory::Create();
 #else
   return new NullMediaEngine();
-#endif  // HAVE_LINPHONE HAVE_WEBRTC ANDROID
+#endif  // HAVE_LINPHONE ANDROID HAVE_LMI HAVE_GIPS HAVE_WEBRTC_VOICE/VIDEO
 }
 
 };  // namespace cricket

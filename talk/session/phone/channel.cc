@@ -72,7 +72,8 @@ static bool ValidPacket(bool rtcp, const talk_base::Buffer* packet) {
       packet->length() <= kMaxRtpPacketLen);
 }
 
-BaseChannel::BaseChannel(talk_base::Thread* thread, MediaEngine* media_engine,
+BaseChannel::BaseChannel(talk_base::Thread* thread,
+                         MediaEngineInterface* media_engine,
                          MediaChannel* media_channel, BaseSession* session,
                          const std::string& content_name,
                          TransportChannel* transport_channel)
@@ -618,7 +619,7 @@ void BaseChannel::FlushRtcpMessages() {
 }
 
 VoiceChannel::VoiceChannel(talk_base::Thread* thread,
-                           MediaEngine* media_engine,
+                           MediaEngineInterface* media_engine,
                            VoiceMediaChannel* media_channel,
                            BaseSession* session,
                            const std::string& content_name,
@@ -682,6 +683,12 @@ bool VoiceChannel::PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
 bool VoiceChannel::PressDTMF(int digit, bool playout) {
   DtmfMessageData data(digit, playout);
   Send(MSG_PRESSDTMF, &data);
+  return data.result;
+}
+
+bool VoiceChannel::SetOutputScaling(uint32 ssrc, double left, double right) {
+  ScaleVolumeMessageData data(ssrc, left, right);
+  Send(MSG_SCALEVOLUME, &data);
   return data.result;
 }
 
@@ -886,6 +893,10 @@ bool VoiceChannel::PressDTMF_w(int digit, bool playout) {
   return media_channel()->PressDTMF(digit, playout);
 }
 
+bool VoiceChannel::SetOutputScaling_w(uint32 ssrc, double left, double right) {
+  return media_channel()->SetOutputScaling(ssrc, left, right);
+}
+
 void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
     case MSG_ADDSTREAM: {
@@ -911,6 +922,12 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_PRESSDTMF: {
       DtmfMessageData* data = static_cast<DtmfMessageData*>(pmsg->pdata);
       data->result = PressDTMF_w(data->digit, data->playout);
+      break;
+    }
+    case MSG_SCALEVOLUME: {
+      ScaleVolumeMessageData* data =
+          static_cast<ScaleVolumeMessageData*>(pmsg->pdata);
+      data->result = SetOutputScaling_w(data->ssrc, data->left, data->right);
       break;
     }
     case MSG_CHANNEL_ERROR: {
@@ -974,7 +991,7 @@ void VoiceChannel::OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode,
 }
 
 VideoChannel::VideoChannel(talk_base::Thread* thread,
-                           MediaEngine* media_engine,
+                           MediaEngineInterface* media_engine,
                            VideoMediaChannel* media_channel,
                            BaseSession* session,
                            const std::string& content_name,

@@ -47,16 +47,6 @@ class TaskParent {
   TaskParent *GetParent() { return parent_; }
   TaskRunner *GetRunner() { return runner_; }
 
-  // Retrieves a parent that corresponds to the given "code".  The code
-  // should be defined in a unique manner for the given subtree.  This
-  // method will crash (when the parent_ is NULL) if there is no corresponding
-  // parent.
-  // 
-  // Example use:
-  //  XmppClient* client =
-  //      static_cast<XmppClient*>(parent->GetParent(XMPP_CLIENT_TASK_CODE));
-  virtual TaskParent *GetParent(int code) { return parent_->GetParent(code); }
-
   bool AllChildrenDone();
   bool AnyChildError();
 #ifdef _DEBUG

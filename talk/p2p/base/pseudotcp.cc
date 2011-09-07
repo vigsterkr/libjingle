@@ -537,6 +537,7 @@ IPseudoTcpNotify::WriteResult PseudoTcp::packet(uint32 seq, uint8 flags,
                                                        len,
                                                        offset,
                                                        &bytes_read);
+    UNUSED(result);
     ASSERT(result == talk_base::SR_SUCCESS);
     ASSERT(static_cast<uint32>(bytes_read) == len);
   }
@@ -897,6 +898,7 @@ bool PseudoTcp::process(Segment& seg) {
       talk_base::StreamResult result = m_rbuf.WriteOffset(seg.data, seg.len,
                                                           nOffset, NULL);
       ASSERT(result == talk_base::SR_SUCCESS);
+      UNUSED(result);
 
       if (seg.seq == m_rcv_nxt) {
         m_rbuf.ConsumeWriteBuffer(seg.len);
@@ -1188,7 +1190,8 @@ PseudoTcp::parseOptions(const char* data, uint32 len) {
     }
 
     // Length of this option.
-    ASSERT(len);
+    ASSERT(len != 0);
+    UNUSED(len);
     uint8 opt_len = 0;
     buf.ReadUInt8(&opt_len);
 
@@ -1262,6 +1265,7 @@ PseudoTcp::resizeReceiveBuffer(uint32 new_size) {
   // before connection is established or when peers are exchanging connect
   // messages.
   ASSERT(result);
+  UNUSED(result);
   m_rbuf_len = new_size;
   m_rwnd_scale = scale_factor;
   m_ssthresh = new_size;

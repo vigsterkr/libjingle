@@ -221,15 +221,20 @@ def GetPackageParams(env, packages):
                       (package, package))
   package_ccflags = _GetPackageFlags('--cflags', packages)
   package_libs = _GetPackageFlags('--libs', packages)
-  # Split package_libs into actual libs and non-lib linker flags.
+  # Split package_libs into libs, libdirs, and misc. linker flags. (In a perfect
+  # world we could just leave libdirs in link_flags, but some linkers are
+  # somehow confused by the different argument order.)
   libs = [flag[2:] for flag in package_libs if flag[0:2] == '-l']
-  link_flags = [flag for flag in package_libs if flag[0:2] != '-l']
+  libdirs = [flag[2:] for flag in package_libs if flag[0:2] == '-L']
+  link_flags = [flag for flag in package_libs if flag[0:2] not in ['-l', '-L']]
   return {
       'ccflags': package_ccflags,
       'libs': libs,
+      'libdirs': libdirs,
       'link_flags': link_flags,
       'dependent_target_settings' : {
           'libs': libs[:],
+          'libdirs': libdirs[:],
           'link_flags': link_flags[:],
       },
   }

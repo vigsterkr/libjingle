@@ -132,6 +132,15 @@ private:
 // compile rules.
 class AtomicOps {
  public:
+#ifdef WIN32
+  // Assumes sizeof(int) == sizeof(LONG), which it is on Win32 and Win64.
+  static int Increment(int* i) {
+    return ::InterlockedIncrement(reinterpret_cast<LONG*>(i));
+  }
+  static int Decrement(int* i) {
+    return ::InterlockedDecrement(reinterpret_cast<LONG*>(i));
+  }
+#else
   static int Increment(int* i) {
     // Could be faster, and less readable:
     // static CriticalSection* crit = StaticCrit();
@@ -153,6 +162,7 @@ class AtomicOps {
     static CriticalSection* crit = new CriticalSection();
     return crit;
   }
+#endif
 };
 
 } // namespace talk_base

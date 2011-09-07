@@ -61,7 +61,7 @@ struct RtpDumpFileHeader {
   RtpDumpFileHeader(uint32 start_ms, uint32 s, uint16 p);
   void WriteToByteBuffer(talk_base::ByteBuffer* buf);
 
-  static const std::string kFirstLine;
+  static const char kFirstLine[];
   static const size_t kHeaderLength = 16;
   uint32 start_sec;   // start of recording, the seconds part.
   uint32 start_usec;  // start of recording, the microseconds part.
@@ -181,10 +181,7 @@ class RtpDumpWriter {
   explicit RtpDumpWriter(talk_base::StreamInterface* stream);
 
   // Filter to control what packets we actually record.
-  void set_packet_filter(int filter) {
-    packet_filter_ = filter;
-  }
-
+  void set_packet_filter(int filter);
   // Write a RTP or RTCP packet. The parameters data points to the packet and
   // data_len is its length.
   talk_base::StreamResult WriteRtpPacket(const void* data, size_t data_len) {

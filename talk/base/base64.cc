@@ -27,10 +27,10 @@ static const unsigned char pd = 0xFD;  // Padding
 static const unsigned char sp = 0xFE;  // Whitespace
 static const unsigned char il = 0xFF;  // Illegal base64 character
 
-const string Base64::Base64Table(
+const char Base64::Base64Table[] =
 // 0000000000111111111122222222223333333333444444444455555555556666
 // 0123456789012345678901234567890123456789012345678901234567890123
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // Decode Table gives the index of any valid base64 character in the
 // Base64 table

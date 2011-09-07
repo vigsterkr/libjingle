@@ -37,7 +37,7 @@ namespace cricket {
 
 class TCPConnection;
 
-extern const std::string LOCAL_PORT_TYPE;  // type of TCP ports
+extern const char LOCAL_PORT_TYPE[];  // type of TCP ports
 
 // Communicates using a local TCP port.
 //

@@ -94,7 +94,7 @@ namespace cricket {
 const int HttpPortAllocator::kHostPort = 80;
 const int HttpPortAllocator::kNumRetries = 5;
 
-const std::string HttpPortAllocator::kCreateSessionURL = "/create_session";
+const char HttpPortAllocator::kCreateSessionURL[] = "/create_session";
 
 HttpPortAllocator::HttpPortAllocator(
     talk_base::NetworkManager* network_manager,

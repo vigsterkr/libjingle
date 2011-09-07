@@ -29,6 +29,7 @@
 
 #include "talk/base/logging.h"
 #include "talk/session/phone/videocommon.h"
+#include "talk/session/phone/videoframe.h"
 
 namespace cricket {
 

@@ -65,15 +65,16 @@ struct AvailableMediaEntry {
 
 class MucInviteRecvTask : public XmppTask {
  public:
-  MucInviteRecvTask(Task* parent) : XmppTask(parent, XmppEngine::HL_TYPE) {}
+  explicit MucInviteRecvTask(XmppTaskParentInterface* parent)
+      : XmppTask(parent, XmppEngine::HL_TYPE) {}
   virtual int ProcessStart();
- 
+
   // First arg is inviter's JID; second is MUC's JID.
   sigslot::signal3<const Jid&, const Jid&, const std::vector<AvailableMediaEntry>& > SignalInviteReceived;
 
  protected:
   virtual bool HandleStanza(const XmlElement* stanza);
-  
+
 };
 
 }

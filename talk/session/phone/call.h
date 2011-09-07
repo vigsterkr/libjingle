@@ -39,42 +39,49 @@
 #include "talk/session/phone/audiomonitor.h"
 #include "talk/session/phone/currentspeakermonitor.h"
 #include "talk/session/phone/mediamessages.h"
-#include "talk/session/phone/voicechannel.h"
+#include "talk/session/phone/mediasession.h"
 
 namespace cricket {
 
 class MediaSessionClient;
-struct CallOptions;
+class VoiceChannel;
+class VideoChannel;
+
+// Can't typedef this easily since it's forward declared as struct elsewhere.
+struct CallOptions : public MediaSessionOptions {
+};
 
 class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
  public:
-  Call(MediaSessionClient* session_client);
+  explicit Call(MediaSessionClient* session_client);
   ~Call();
 
   Session *InitiateSession(const buzz::Jid &jid, const CallOptions& options);
-  void AcceptSession(BaseSession *session, const CallOptions& options);
-  void RejectSession(BaseSession *session);
-  void TerminateSession(BaseSession *session);
+  void AcceptSession(Session *session, const CallOptions& options);
+  void RejectSession(Session *session);
+  void TerminateSession(Session *session);
   void Terminate();
   bool SendViewRequest(Session* session,
                        const ViewRequest& view_request);
   void SetLocalRenderer(VideoRenderer* renderer);
-  void SetVideoRenderer(BaseSession *session, uint32 ssrc,
+  void SetVideoRenderer(Session *session, uint32 ssrc,
                         VideoRenderer* renderer);
-  void StartConnectionMonitor(BaseSession *session, int cms);
-  void StopConnectionMonitor(BaseSession *session);
-  void StartAudioMonitor(BaseSession *session, int cms);
-  void StopAudioMonitor(BaseSession *session);
-  bool IsAudioMonitorRunning(BaseSession *session);
-  void StartSpeakerMonitor(BaseSession *session);
-  void StopSpeakerMonitor(BaseSession *session);
+  void StartConnectionMonitor(Session *session, int cms);
+  void StopConnectionMonitor(Session *session);
+  void StartAudioMonitor(Session *session, int cms);
+  void StopAudioMonitor(Session *session);
+  bool IsAudioMonitorRunning(Session *session);
+  void StartSpeakerMonitor(Session *session);
+  void StopSpeakerMonitor(Session *session);
   void Mute(bool mute);
+  void MuteVideo(bool mute);
   void PressDTMF(int event);
 
   const std::vector<Session *> &sessions();
   uint32 id();
   bool video() const { return video_; }
   bool muted() const { return muted_; }
+  bool video_muted() const { return video_muted_; }
 
   // Setting this to false will cause the call to have a longer timeout and
   // for the SignalSetupToCallVoicemail to never fire.
@@ -88,9 +95,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   sigslot::signal0<> SignalSetupToCallVoicemail;
   sigslot::signal2<Call *, Session *> SignalAddSession;
   sigslot::signal2<Call *, Session *> SignalRemoveSession;
-  sigslot::signal3<Call *, BaseSession *, BaseSession::State>
+  sigslot::signal3<Call *, Session *, Session::State>
       SignalSessionState;
-  sigslot::signal3<Call *, BaseSession *, Session::Error>
+  sigslot::signal3<Call *, Session *, Session::Error>
       SignalSessionError;
   sigslot::signal3<Call *, Session *, const std::string &>
       SignalReceivedTerminateReason;
@@ -101,7 +108,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Empty nick on NamedSource means "unknown".
   // Ssrc of 0 on NamedSource means "no current speaker".
   sigslot::signal3<Call *,
-                   BaseSession *,
+                   Session *,
                    const NamedSource&> SignalSpeakerMonitor;
   sigslot::signal2<Call *, const std::vector<ConnectionInfo> &>
       SignalVideoConnectionMonitor;
@@ -130,12 +137,12 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnConnectionMonitor(VideoChannel *channel,
                            const std::vector<ConnectionInfo> &infos);
   void OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info);
-  VoiceChannel* GetVoiceChannel(BaseSession* session);
-  VideoChannel* GetVideoChannel(BaseSession* session);
-  void AddVoiceStream(BaseSession *session, uint32 voice_ssrc);
-  void AddVideoStream(BaseSession *session, uint32 video_ssrc);
-  void RemoveVoiceStream(BaseSession *session, uint32 voice_ssrc);
-  void RemoveVideoStream(BaseSession *session, uint32 video_ssrc);
+  VoiceChannel* GetVoiceChannel(Session* session);
+  VideoChannel* GetVideoChannel(Session* session);
+  void AddVoiceStream(Session *session, uint32 voice_ssrc);
+  void AddVideoStream(Session *session, uint32 video_ssrc);
+  void RemoveVoiceStream(Session *session, uint32 voice_ssrc);
+  void RemoveVideoStream(Session *session, uint32 video_ssrc);
   void ContinuePlayDTMF();
 
   uint32 id_;
@@ -148,6 +155,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   VideoRenderer* local_renderer_;
   bool video_;
   bool muted_;
+  bool video_muted_;
   bool send_to_voicemail_;
 
   // DTMF tones have to be queued up so that we don't flood the call.  We

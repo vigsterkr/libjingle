@@ -40,7 +40,7 @@ namespace buzz {
 
 class PresencePushTask : public XmppTask {
  public:
-  PresencePushTask(Task * parent, CallClient* client)
+  PresencePushTask(XmppTaskParentInterface* parent, CallClient* client)
     : XmppTask(parent, XmppEngine::HL_TYPE),
       client_(client) {}
   virtual int ProcessStart();

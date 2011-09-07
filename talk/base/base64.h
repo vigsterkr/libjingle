@@ -79,7 +79,7 @@ public:
   }
 
 private:
-  static const std::string Base64Table;
+  static const char Base64Table[];
   static const unsigned char DecodeTable[];
 
   static size_t GetNextQuantum(DecodeFlags parse_flags, bool illegal_pads,

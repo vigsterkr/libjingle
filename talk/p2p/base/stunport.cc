@@ -122,7 +122,7 @@ class StunPortBindingRequest : public StunRequest {
   uint32 start_time_;
 };
 
-const std::string STUN_PORT_TYPE("stun");
+const char STUN_PORT_TYPE[] = "stun";
 
 StunPort::StunPort(talk_base::Thread* thread,
                    talk_base::PacketSocketFactory* factory,

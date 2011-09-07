@@ -62,6 +62,9 @@ uint32 CreateRandomId();
 // Generates a random id > 0.
 uint32 CreateRandomNonZeroId();
 
+// Generates a random double between 0.0 (inclusive) and 1.0 (exclusive).
+double CreateRandomDouble();
+
 }  // namespace talk_base
 
 #endif  // TALK_BASE_HELPERS_H_
