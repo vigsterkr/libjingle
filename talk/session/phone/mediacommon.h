@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2004--2007, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,39 +25,18 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_XMPP_IQTASK_H_
-#define TALK_XMPP_IQTASK_H_
+#ifndef TALK_SESSION_PHONE_MEDIACOMMON_H_
+#define TALK_SESSION_PHONE_MEDIACOMMON_H_
 
-#include <string>
+namespace cricket {
 
-#include "talk/xmpp/xmpptask.h"
-#include "talk/xmpp/xmppengine.h"
-
-namespace buzz {
-
-class IqTask : public buzz::XmppTask {
- public:
-  IqTask(XmppTaskParentInterface* parent,
-         const std::string& verb, const buzz::Jid& to,
-         buzz::XmlElement* el);
-  virtual ~IqTask() {}
-
-  sigslot::signal2<IqTask*,
-                   const XmlElement*> SignalError;
-
- protected:
-  virtual void HandleResult(const buzz::XmlElement* element) = 0;
-
- private:
-  virtual int ProcessStart();
-  virtual bool HandleStanza(const buzz::XmlElement* stanza);
-  virtual int ProcessResponse();
-  virtual int OnTimeout();
-
-  buzz::Jid to_;
-  talk_base::scoped_ptr<buzz::XmlElement> stanza_;
+enum MediaCapabilities {
+  AUDIO_RECV = 1 << 0,
+  AUDIO_SEND = 1 << 1,
+  VIDEO_RECV = 1 << 2,
+  VIDEO_SEND = 1 << 3,
 };
 
-}  // namespace buzz
+}  // namespace cricket
 
-#endif  // TALK_XMPP_IQTASK_H_
+#endif  // TALK_SESSION_PHONE_MEDIACOMMON_H_

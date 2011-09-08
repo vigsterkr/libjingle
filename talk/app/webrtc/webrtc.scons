@@ -21,6 +21,8 @@ talk.Unittest(
   env,
   name = 'webrtc',
   srcs = [
+    'peerconnection_unittest.cc',
+    'unittest_utilities.cc',
     'webrtcsession_unittest.cc',
   ],
   libs = [

@@ -31,6 +31,7 @@
 
 #include "base/gunit.h"
 #include "base/helpers.h"
+#include "talk/app/webrtc/unittest_utilities.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/fakenetwork.h"
 #include "talk/base/scoped_ptr.h"
@@ -40,131 +41,6 @@
 #include "talk/p2p/client/fakeportallocator.h"
 #include "talk/session/phone/fakesession.h"
 #include "talk/session/phone/mediasessionclient.h"
-
-namespace {
-cricket::VideoContentDescription* CopyVideoContentDescription(
-    const cricket::VideoContentDescription* video_description) {
-  cricket::VideoContentDescription* new_video_description =
-      new cricket::VideoContentDescription();
-  cricket::VideoCodecs::const_iterator iter =
-      video_description->codecs().begin();
-  for (; iter != video_description->codecs().end(); iter++) {
-    new_video_description->AddCodec(*iter);
-  }
-  new_video_description->SortCodecs();
-  return new_video_description;
-}
-
-cricket::AudioContentDescription* CopyAudioContentDescription(
-    const cricket::AudioContentDescription* audio_description) {
-  cricket::AudioContentDescription* new_audio_description =
-      new cricket::AudioContentDescription();
-  cricket::AudioCodecs::const_iterator iter =
-      audio_description->codecs().begin();
-  for (; iter != audio_description->codecs().end(); iter++) {
-    new_audio_description->AddCodec(*iter);
-  }
-  new_audio_description->SortCodecs();
-  return new_audio_description;
-}
-
-const cricket::ContentDescription* CopyContentDescription(
-    const cricket::ContentDescription* original) {
-  const cricket::MediaContentDescription* media =
-      static_cast<const cricket::MediaContentDescription*>(original);
-  const cricket::ContentDescription* new_content_description = NULL;
-  if (media->type() == cricket::MEDIA_TYPE_VIDEO) {
-    const cricket::VideoContentDescription* video_description =
-        static_cast<const cricket::VideoContentDescription*>(original);
-    new_content_description = static_cast<const cricket::ContentDescription*>
-        (CopyVideoContentDescription(video_description));
-  } else if (media->type() == cricket::MEDIA_TYPE_AUDIO) {
-    const cricket::AudioContentDescription* audio_description =
-        static_cast<const cricket::AudioContentDescription*>(original);
-    new_content_description = static_cast<const cricket::ContentDescription*>
-        (CopyAudioContentDescription(audio_description));
-  } else {
-    return NULL;
-  }
-  return new_content_description;
-}
-
-cricket::ContentInfos CopyContentInfos(const cricket::ContentInfos& original) {
-  cricket::ContentInfos new_content_infos;
-  for (cricket::ContentInfos::const_iterator iter = original.begin();
-       iter != original.end(); iter++) {
-    cricket::ContentInfo info;
-    info.name = (*iter).name;
-    info.type = (*iter).type;
-    info.description = CopyContentDescription((*iter).description);
-    new_content_infos.push_back(info);
-  }
-  return new_content_infos;
-}
-
-cricket::SessionDescription* CopySessionDescription(
-    const cricket::SessionDescription* original) {
-  const cricket::ContentInfos& content_infos = original->contents();
-  cricket::ContentInfos new_content_infos = CopyContentInfos(content_infos);
-  return new cricket::SessionDescription(new_content_infos);
-}
-
-cricket::SessionDescription* GenerateFakeSessionDescription(bool video) {
-  cricket::SessionDescription* fake_description =
-      new cricket::SessionDescription();
-  const std::string name = video ? std::string(cricket::CN_VIDEO) :
-                                   std::string(cricket::CN_AUDIO);
-  cricket::ContentDescription* description = NULL;
-  if (video) {
-    cricket::VideoContentDescription* video_dsc =
-        new cricket::VideoContentDescription;
-    video_dsc->SortCodecs();
-    description = static_cast<cricket::ContentDescription*>(video_dsc);
-  } else {
-    cricket::AudioContentDescription* audio_dsc =
-        new cricket::AudioContentDescription();
-    audio_dsc->SortCodecs();
-    description = static_cast<cricket::ContentDescription*>(audio_dsc);
-  }
-
-  // Cannot fail.
-  fake_description->AddContent(name, cricket::NS_JINGLE_RTP, description);
-  return fake_description;
-}
-
-void GenerateFakeCandidate(std::vector<cricket::Candidate>* candidates,
-                           bool video) {
-  // Next add a candidate.
-  // int port_index = 0;
-  std::string port_index_as_string("0");
-
-  cricket::Candidate candidate;
-  candidate.set_name("rtp");
-  candidate.set_protocol("udp");
-  talk_base::SocketAddress address("127.0.0.1", 1234);
-  candidate.set_address(address);
-  candidate.set_preference(1);
-  candidate.set_username("username" + port_index_as_string);
-  candidate.set_password(port_index_as_string);
-  candidate.set_type("local");
-  candidate.set_network_name("network");
-  candidate.set_generation(0);
-
-  candidates->push_back(candidate);
-}
-
-cricket::SessionDescription* GenerateFakeSession(
-    std::vector<cricket::Candidate>* candidates,
-    bool video) {
-  cricket::SessionDescription* fake_description =
-      GenerateFakeSessionDescription(video);
-  if (fake_description == NULL) {
-    return NULL;
-  }
-  GenerateFakeCandidate(candidates, video);
-  return fake_description;
-}
-}  // namespace
 
 class WebRtcSessionTest
     : public sigslot::has_slots<>,
@@ -219,9 +95,7 @@ class WebRtcSessionTest
       const std::vector<cricket::Candidate>& candidates) {
     callback_ids_.push_back(kOnLocalDescription);
     last_description_ptr_.reset(CopySessionDescription(desc));
-    last_candidates_.clear();
-    last_candidates_.insert(last_candidates_.end(), candidates.begin(),
-                            candidates.end());
+    CopyCandidates(candidates, &last_candidates_);
   }
   cricket::SessionDescription* GetLocalDescription(
       std::vector<cricket::Candidate>* candidates) {
@@ -231,8 +105,7 @@ class WebRtcSessionTest
     if (!last_description_ptr_.get()) {
       return NULL;
     }
-    candidates->insert(candidates->end(), last_candidates_.begin(),
-                       last_candidates_.end());
+    CopyCandidates(last_candidates_, candidates);
     return CopySessionDescription(last_description_ptr_.get());
   }
 
@@ -315,7 +188,6 @@ class WebRtcSessionTest
     session_->SignalLocalDescription.connect(this,
         &WebRtcSessionTest::OnLocalDescription);
     session_->SignalFailedCall.connect(this, &WebRtcSessionTest::OnFailedCall);
-
     return true;
   }
 
@@ -512,14 +384,14 @@ TEST_F(WebRtcSessionTest, AudioReceiveCallSetUp) {
 
   std::vector<cricket::Candidate> candidates;
   cricket::SessionDescription* local_session =
-      GenerateFakeSession(&candidates, video);
+      GenerateFakeSession(video, &candidates);
   ASSERT_FALSE(candidates.empty());
   ASSERT_FALSE(local_session == NULL);
-  // TODO: Figure out why the TransportChannel is not created.
-  // if (!CallOnInitiateMessage(local_session, candidates)) {
-  //    delete local_session;
-  //    FAIL();
-  // }
+  ASSERT_TRUE(CallInitiate());
+  if (!CallOnInitiateMessage(local_session, candidates)) {
+    delete local_session;
+    FAIL();
+  }
   ASSERT_TRUE(CallConnect());
   ASSERT_FALSE(CallbackReceived(this, 1000));
 
@@ -535,14 +407,14 @@ TEST_F(WebRtcSessionTest, VideoReceiveCallSetUp) {
 
   std::vector<cricket::Candidate> candidates;
   cricket::SessionDescription* local_session =
-      GenerateFakeSession(&candidates, video);
+      GenerateFakeSession(video, &candidates);
   ASSERT_FALSE(candidates.empty());
   ASSERT_FALSE(local_session == NULL);
-  // TODO: Figure out why the TransportChannel is not created.
-  // if (!CallOnInitiateMessage(local_session, candidates)) {
-  //     delete local_session;
-  //     FAIL();
-  // }
+  ASSERT_TRUE(CallInitiate());
+  if (!CallOnInitiateMessage(local_session, candidates)) {
+    delete local_session;
+    FAIL();
+  }
   ASSERT_TRUE(CallConnect());
   ASSERT_FALSE(CallbackReceived(this, 1000));
   ASSERT_TRUE(!CallHasAudioChannel() &&

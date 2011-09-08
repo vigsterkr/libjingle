@@ -25,39 +25,40 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_XMPP_IQTASK_H_
-#define TALK_XMPP_IQTASK_H_
+#ifndef TALK_XMPP_MUCROOMCONFIGTASK_H_
+#define TALK_XMPP_MUCROOMCONFIGTASK_H_
 
 #include <string>
-
-#include "talk/xmpp/xmpptask.h"
-#include "talk/xmpp/xmppengine.h"
+#include "talk/xmpp/iqtask.h"
 
 namespace buzz {
 
-class IqTask : public buzz::XmppTask {
+// This task configures the muc room for document sharing and other enterprise
+// specific goodies.
+class MucRoomConfigTask : public IqTask {
  public:
-  IqTask(XmppTaskParentInterface* parent,
-         const std::string& verb, const buzz::Jid& to,
-         buzz::XmlElement* el);
-  virtual ~IqTask() {}
+  MucRoomConfigTask(XmppTaskParentInterface* parent,
+                    const Jid& room_jid,
+                    const std::string& room_name,
+                    const std::vector<std::string>& room_features);
 
-  sigslot::signal2<IqTask*,
-                   const XmlElement*> SignalError;
+  // Room configuration does not return any reasonable error
+  // values. The First config request configures the room, subseqent
+  // ones are just ignored by server and server returns empty
+  // response.
+  sigslot::signal1<MucRoomConfigTask*> SignalResult;
+
+  const Jid& room_jid() const { return room_jid_; }
 
  protected:
-  virtual void HandleResult(const buzz::XmlElement* element) = 0;
+  virtual void HandleResult(const XmlElement* stanza);
 
  private:
-  virtual int ProcessStart();
-  virtual bool HandleStanza(const buzz::XmlElement* stanza);
-  virtual int ProcessResponse();
-  virtual int OnTimeout();
-
-  buzz::Jid to_;
-  talk_base::scoped_ptr<buzz::XmlElement> stanza_;
+  static XmlElement* MakeRequest(const std::string& room_name,
+                                 const std::vector<std::string>& room_features);
+  Jid room_jid_;
 };
 
 }  // namespace buzz
 
-#endif  // TALK_XMPP_IQTASK_H_
+#endif  // TALK_XMPP_MUCROOMCONFIGTASK_H_

@@ -131,6 +131,13 @@ const std::string STR_SET("set");
 const std::string STR_RESULT("result");
 const std::string STR_ERROR("error");
 
+const std::string STR_FORM("form");
+const std::string STR_SUBMIT("submit");
+const std::string STR_TEXT_SINGLE("text-single");
+const std::string STR_LIST_SINGLE("list-single");
+const std::string STR_LIST_MULTI("list-multi");
+const std::string STR_HIDDEN("hidden");
+const std::string STR_FORM_TYPE("FORM_TYPE");
 
 const std::string STR_FROM("from");
 const std::string STR_TO("to");
@@ -160,7 +167,11 @@ const std::string STR_OUTGOINGVOICEMAIL("outgoingvoicemail");
 
 const std::string STR_UNAVAILABLE("unavailable");
 
-const std::string STR_MUC_LOOKUP_DOMAIN("lookup.groupchat.google.com");
+const Jid JID_GOOGLE_MUC_LOOKUP("lookup.groupchat.google.com");
+const std::string STR_MUC_ROOMCONFIG_ROOMNAME("muc#roomconfig_roomname");
+const std::string STR_MUC_ROOMCONFIG_FEATURES("muc#roomconfig_features");
+const std::string STR_MUC_ROOM_FEATURE_ENTERPRISE("muc_enterprise");
+const std::string STR_MUC_ROOMCONFIG("http://jabber.org/protocol/muc#roomconfig");
 
 const QName QN_STREAM_STREAM(true, NS_STREAM, STR_STREAM);
 const QName QN_STREAM_FEATURES(true, NS_STREAM, "features");
@@ -379,6 +390,22 @@ const QName QN_DISCO_FEATURE(true, NS_DISCO_INFO, "feature");
 const QName QN_DISCO_ITEMS_QUERY(true, NS_DISCO_ITEMS, "query");
 const QName QN_DISCO_ITEM(true, NS_DISCO_ITEMS, "item");
 
+// JEP 0020
+const std::string NS_FEATURE("http://jabber.org/protocol/feature-neg");
+const QName QN_FEATURE_FEATURE(true, NS_FEATURE, "feature");
+
+// JEP 0004
+const std::string NS_XDATA("jabber:x:data");
+const QName QN_XDATA_X(true, NS_XDATA, "x");
+const QName QN_XDATA_INSTRUCTIONS(true, NS_XDATA, "instructions");
+const QName QN_XDATA_TITLE(true, NS_XDATA, "title");
+const QName QN_XDATA_FIELD(true, NS_XDATA, "field");
+const QName QN_XDATA_REPORTED(true, NS_XDATA, "reported");
+const QName QN_XDATA_ITEM(true, NS_XDATA, "item");
+const QName QN_XDATA_DESC(true, NS_XDATA, "desc");
+const QName QN_XDATA_REQUIRED(true, NS_XDATA, "required");
+const QName QN_XDATA_VALUE(true, NS_XDATA, "value");
+const QName QN_XDATA_OPTION(true, NS_XDATA, "option");
 
 // JEP 0045
 const std::string NS_MUC("http://jabber.org/protocol/muc");
@@ -404,7 +431,7 @@ const std::string NS_SEARCH("jabber:iq:search");
 const QName QN_SEARCH_QUERY(true, NS_SEARCH, "query");
 const QName QN_SEARCH_ITEM(true, NS_SEARCH, "item");
 const QName QN_SEARCH_ROOM_NAME(true, NS_SEARCH, "room-name");
-const QName QN_SEARCH_ORGANIZERS_DOMAIN(true, NS_SEARCH, "organizers-domain");
+const QName QN_SEARCH_ROOM_DOMAIN(true, NS_SEARCH, "room-domain");
 const QName QN_SEARCH_ROOM_JID(true, NS_SEARCH, "room-jid");
 
 

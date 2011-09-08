@@ -56,6 +56,13 @@ is a set of extensions to the open-source SCons build tool (www.scons.org).
     set PATH_TO_SWTOOLKIT=c:\src\swtoolkit
     set PATH=%PATH_TO_SWTOOLKIT%;%PATH%
 
+  * Finally, download and install the unit test framework from
+    http://code.google.com/p/googletest/downloads/list
+    To install it, just unzip the package and put the file folder under
+    /talk/third_party/ directory and rename it from "gtest-x.x.x" to "gtest",
+    so that your folder structure looks like:
+    /talk/third_party/gtest/...
+
 2.2 libjingle
 
 Libjingle needs to be downloaded and patched

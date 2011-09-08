@@ -34,28 +34,35 @@
 namespace buzz {
 
 struct MucRoomInfo {
-  Jid room_jid;
-  std::string room_name;
-  std::string organizer_domain;
+  Jid jid;
+  std::string name;
+  std::string domain;
+
+  std::string full_name() const {
+    return name + "@" + domain;
+  }
 };
 
 class MucRoomLookupTask : public IqTask {
  public:
   MucRoomLookupTask(XmppTaskParentInterface* parent,
+                    const Jid& lookup_jid,
                     const std::string& room_name,
-                    const std::string& organizer_domain);
+                    const std::string& room_domain);
   MucRoomLookupTask(XmppTaskParentInterface* parent,
+                    const Jid& lookup_jid,
                     const Jid& room_jid);
 
-  sigslot::signal1<const MucRoomInfo&> SignalResult;
+  sigslot::signal2<MucRoomLookupTask*,
+                   const MucRoomInfo&> SignalResult;
+
+ protected:
+  virtual void HandleResult(const XmlElement* element);
 
  private:
-  static XmlElement* MakeRoomQuery(const std::string& room_name,
-                                   const std::string& org_domain);
+  static XmlElement* MakeNameQuery(const std::string& room_name,
+                                   const std::string& room_domain);
   static XmlElement* MakeJidQuery(const Jid& room_jid);
-  virtual void HandleResult(const XmlElement* element);
-  static bool GetRoomInfoFromResponse(const XmlElement* stanza,
-                                      MucRoomInfo* info);
 };
 
 }  // namespace buzz

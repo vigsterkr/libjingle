@@ -54,6 +54,7 @@
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/videorendererfactory.h"
 #include "talk/xmpp/constants.h"
+#include "talk/xmpp/mucroomconfigtask.h"
 #include "talk/xmpp/mucroomlookuptask.h"
 
 namespace {
@@ -696,7 +697,8 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
   }
 
   buzz::MucRoomLookupTask* lookup_query_task =
-      new buzz::MucRoomLookupTask(xmpp_client_, room, domain);
+      new buzz::MucRoomLookupTask(
+          xmpp_client_, buzz::JID_GOOGLE_MUC_LOOKUP, room, domain);
   lookup_query_task->SignalResult.connect(this,
       &CallClient::OnRoomLookupResponse);
   lookup_query_task->SignalError.connect(this,
@@ -739,15 +741,52 @@ void CallClient::JoinMuc(const buzz::Jid& room_jid) {
   presence_out_->SendDirected(muc->local_jid(), my_status_);
 }
 
-void CallClient::OnRoomLookupResponse(const buzz::MucRoomInfo& room_info) {
-  JoinMuc(room_info.room_jid);
+void CallClient::OnRoomLookupResponse(buzz::MucRoomLookupTask* task,
+                                      const buzz::MucRoomInfo& room) {
+  // The server requires the room be "configured" before being used.
+  // We only need to configure it if we create it, but rooms are
+  // auto-created at lookup, so there's currently no way to know if we
+  // created it.  So, we configure it every time, just in case.
+  // Luckily, it appears to be safe to configure a room that's already
+  // configured.  Our current flow is:
+  // 1. Lookup/auto-create
+  // 2. Configure
+  // 3. Join
+  // TODO: In the future, once the server supports it, we
+  // should:
+  // 1. Lookup
+  // 2. Create and Configure if necessary
+  // 3. Join
+  std::vector<std::string> room_features;
+  room_features.push_back(buzz::STR_MUC_ROOM_FEATURE_ENTERPRISE);
+  buzz::MucRoomConfigTask* room_config_task = new buzz::MucRoomConfigTask(
+      xmpp_client_, room.jid, room.full_name(), room_features);
+  room_config_task->SignalResult.connect(this,
+      &CallClient::OnRoomConfigResult);
+  room_config_task->SignalError.connect(this,
+      &CallClient::OnRoomConfigError);
+  room_config_task->Start();
 }
 
-void CallClient::OnRoomLookupError(const buzz::XmlElement* stanza) {
+void CallClient::OnRoomLookupError(buzz::IqTask* task,
+                                   const buzz::XmlElement* stanza) {
   if (stanza == NULL) {
     console_->PrintLine("Room lookup failed.");
   } else {
     console_->PrintLine("Room lookup error: ", stanza->Str().c_str());
+  }
+}
+
+void CallClient::OnRoomConfigResult(buzz::MucRoomConfigTask* task) {
+  JoinMuc(task->room_jid());
+}
+
+void CallClient::OnRoomConfigError(buzz::IqTask* task,
+                                   const buzz::XmlElement* stanza) {
+  if (stanza == NULL) {
+    console_->PrintLine("Room config failed.");
+  } else {
+    console_->PrintLine("Room config error: ", stanza->Str().c_str());
   }
 }
 

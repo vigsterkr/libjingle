@@ -35,28 +35,30 @@
 namespace buzz {
 
 MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
+                                     const Jid& lookup_server_jid,
                                      const std::string& room_name,
-                                     const std::string& organizer_domain)
-    : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
-             MakeRoomQuery(room_name, organizer_domain)) {
+                                     const std::string& room_domain)
+    : IqTask(parent, STR_SET, lookup_server_jid,
+             MakeNameQuery(room_name, room_domain)) {
 }
 
 MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
+                                     const Jid& lookup_server_jid,
                                      const Jid& room_jid)
-    : IqTask(parent, STR_SET, Jid(STR_MUC_LOOKUP_DOMAIN),
+    : IqTask(parent, STR_SET, lookup_server_jid,
              MakeJidQuery(room_jid)) {
 }
 
-XmlElement* MucRoomLookupTask::MakeRoomQuery(const std::string& room_name,
-    const std::string& org_domain) {
-  XmlElement* room_elem = new XmlElement(QN_SEARCH_ROOM_NAME, false);
-  room_elem->SetBodyText(room_name);
+XmlElement* MucRoomLookupTask::MakeNameQuery(
+    const std::string& room_name, const std::string& room_domain) {
+  XmlElement* name_elem = new XmlElement(QN_SEARCH_ROOM_NAME, false);
+  name_elem->SetBodyText(room_name);
 
-  XmlElement* domain_elem = new XmlElement(QN_SEARCH_ORGANIZERS_DOMAIN, false);
-  domain_elem->SetBodyText(org_domain);
+  XmlElement* domain_elem = new XmlElement(QN_SEARCH_ROOM_DOMAIN, false);
+  domain_elem->SetBodyText(room_domain);
 
   XmlElement* query = new XmlElement(QN_SEARCH_QUERY, true);
-  query->AddElement(room_elem);
+  query->AddElement(name_elem);
   query->AddElement(domain_elem);
   return query;
 }
@@ -72,37 +74,37 @@ XmlElement* MucRoomLookupTask::MakeJidQuery(const Jid& room_jid) {
 
 void MucRoomLookupTask::HandleResult(const XmlElement* stanza) {
   const XmlElement* query_elem = stanza->FirstNamed(QN_SEARCH_QUERY);
-  if (query_elem != NULL) {
-    const XmlElement* item_elem =
-        query_elem->FirstNamed(QN_SEARCH_ITEM);
-    if (item_elem != NULL && item_elem->HasAttr(QN_JID)) {
-      MucRoomInfo room_info;
-      if (GetRoomInfoFromResponse(item_elem, &room_info)) {
-        SignalResult(room_info);
-        return;
-      }
-    }
+  if (query_elem == NULL) {
+    SignalError(this, NULL);
+    return;
   }
 
-  SignalError(NULL);
-}
+  const XmlElement* item_elem = query_elem->FirstNamed(QN_SEARCH_ITEM);
+  if (item_elem == NULL) {
+    SignalError(this, NULL);
+    return;
+  }
 
-bool MucRoomLookupTask::GetRoomInfoFromResponse(
-    const XmlElement* stanza, MucRoomInfo* info) {
+  MucRoomInfo room;
+  room.jid = Jid(item_elem->Attr(buzz::QN_JID));
+  if (!room.jid.IsValid()) {
+    SignalError(this, NULL);
+    return;
+  }
 
-  info->room_jid = Jid(stanza->Attr(buzz::QN_JID));
-  if (!info->room_jid.IsValid()) return false;
+  const XmlElement* room_name_elem =
+      item_elem->FirstNamed(QN_SEARCH_ROOM_NAME);
+  if (room_name_elem != NULL) {
+    room.name = room_name_elem->BodyText();
+  }
 
-  const XmlElement* room_name_elem = stanza->FirstNamed(QN_SEARCH_ROOM_NAME);
-  const XmlElement* org_domain_elem =
-      stanza->FirstNamed(QN_SEARCH_ORGANIZERS_DOMAIN);
+  const XmlElement* room_domain_elem =
+      item_elem->FirstNamed(QN_SEARCH_ROOM_DOMAIN);
+  if (room_domain_elem != NULL) {
+    room.domain = room_domain_elem->BodyText();
+  }
 
-  if (room_name_elem != NULL)
-    info->room_name = room_name_elem->BodyText();
-  if (org_domain_elem != NULL)
-    info->organizer_domain = org_domain_elem->BodyText();
-
-  return true;
+  SignalResult(this, room);
 }
 
 }  // namespace buzz

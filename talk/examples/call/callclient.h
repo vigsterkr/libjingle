@@ -50,6 +50,8 @@ class VoicemailJidRequester;
 class DiscoInfoQueryTask;
 class Muc;
 class Status;
+class IqTask;
+class MucRoomConfigTask;
 class MucRoomLookupTask;
 class MucStatus;
 class XmlElement;
@@ -174,8 +176,13 @@ class CallClient: public sigslot::has_slots<> {
   void OnSpeakerChanged(cricket::Call* call,
                         cricket::Session* session,
                         const cricket::NamedSource& speaker_source);
-  void OnRoomLookupResponse(const buzz::MucRoomInfo& room_info);
-  void OnRoomLookupError(const buzz::XmlElement* stanza);
+  void OnRoomLookupResponse(buzz::MucRoomLookupTask* task,
+                            const buzz::MucRoomInfo& room_info);
+  void OnRoomLookupError(buzz::IqTask* task,
+                         const buzz::XmlElement* stanza);
+  void OnRoomConfigResult(buzz::MucRoomConfigTask* task);
+  void OnRoomConfigError(buzz::IqTask* task,
+                         const buzz::XmlElement* stanza);
   buzz::Jid GenerateRandomMucJid();
 
   void AddStaticRenderedView(

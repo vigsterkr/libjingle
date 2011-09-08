@@ -85,6 +85,13 @@ extern const std::string STR_SET;
 extern const std::string STR_RESULT;
 extern const std::string STR_ERROR;
 
+extern const std::string STR_FORM;
+extern const std::string STR_SUBMIT;
+extern const std::string STR_TEXT_SINGLE;
+extern const std::string STR_LIST_SINGLE;
+extern const std::string STR_LIST_MULTI;
+extern const std::string STR_HIDDEN;
+extern const std::string STR_FORM_TYPE;
 
 extern const std::string STR_FROM;
 extern const std::string STR_TO;
@@ -114,7 +121,10 @@ extern const std::string STR_OUTGOINGVOICEMAIL;
 
 extern const std::string STR_UNAVAILABLE;
 
-extern const std::string STR_MUC_LOOKUP_DOMAIN;
+extern const Jid JID_GOOGLE_MUC_LOOKUP;
+extern const std::string STR_MUC_ROOMCONFIG_ROOMNAME;
+extern const std::string STR_MUC_ROOMCONFIG_FEATURES;
+extern const std::string STR_MUC_ROOM_FEATURE_ENTERPRISE;
 
 extern const QName QN_STREAM_STREAM;
 extern const QName QN_STREAM_FEATURES;
@@ -345,6 +355,22 @@ extern const QName QN_DISCO_FEATURE;
 extern const QName QN_DISCO_ITEMS_QUERY;
 extern const QName QN_DISCO_ITEM;
 
+// JEP 0020
+extern const std::string NS_FEATURE;
+extern const QName QN_FEATURE_FEATURE;
+
+// JEP 0004
+extern const std::string NS_XDATA;
+extern const QName QN_XDATA_X;
+extern const QName QN_XDATA_INSTRUCTIONS;
+extern const QName QN_XDATA_TITLE;
+extern const QName QN_XDATA_FIELD;
+extern const QName QN_XDATA_REPORTED;
+extern const QName QN_XDATA_ITEM;
+extern const QName QN_XDATA_DESC;
+extern const QName QN_XDATA_REQUIRED;
+extern const QName QN_XDATA_VALUE;
+extern const QName QN_XDATA_OPTION;
 
 // JEP 0045
 extern const std::string NS_MUC;
@@ -371,7 +397,7 @@ extern const QName QN_SEARCH_QUERY;
 extern const QName QN_SEARCH_ITEM;
 extern const QName QN_SEARCH_ROOM_NAME;
 extern const QName QN_SEARCH_ROOM_JID;
-extern const QName QN_SEARCH_ORGANIZERS_DOMAIN;
+extern const QName QN_SEARCH_ROOM_DOMAIN;
 
 
 // JEP 0115

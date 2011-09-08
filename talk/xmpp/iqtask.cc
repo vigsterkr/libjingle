@@ -73,13 +73,13 @@ int IqTask::ProcessResponse() {
   if (success) {
     HandleResult(stanza);
   } else {
-    SignalError(stanza->FirstNamed(QN_ERROR));
+    SignalError(this, stanza->FirstNamed(QN_ERROR));
   }
   return STATE_DONE;
 }
 
 int IqTask::OnTimeout() {
-  SignalError(NULL);
+  SignalError(this, NULL);
   return XmppTask::OnTimeout();
 }
 

@@ -20,6 +20,18 @@ talk.Library(env, name = "expat",
                "HAVE_EXPAT_CONFIG_H",
              ],
 )
+talk.Library(env, name = "gunit",
+             srcs = [
+               "third_party/gtest/src/gtest-all.cc",
+             ],
+             includedirs = [
+               "third_party/gtest/include",
+               "third_party/gtest",
+             ],
+             cppdefines = [
+               "LIBJINGLE_UNITTEST",
+             ],
+)
 talk.Library(env, name = "srtp",
              srcs = [
                "third_party/srtp/crypto/cipher/aes.c",
@@ -63,6 +75,8 @@ talk.Library(env, name = "jingle",
                "sound/alsasoundsystem.cc",
                "sound/alsasymboltable.cc",
                "sound/linuxsoundsystem.cc",
+               "sound/nullsoundsystem.cc",
+               "sound/nullsoundsystemfactory.cc",
                "sound/pulseaudiosoundsystem.cc",
                "sound/pulseaudiosymboltable.cc",
                "sound/platformsoundsystem.cc",
@@ -212,6 +226,7 @@ talk.Library(env, name = "jingle",
                "xmpp/constants.cc",
                "xmpp/iqtask.cc",
                "xmpp/jid.cc",
+               "xmpp/mucroomconfigtask.cc",
                "xmpp/mucroomlookuptask.cc",
                "xmpp/ratelimitmanager.cc",
                "xmpp/saslmechanism.cc",
@@ -260,6 +275,21 @@ talk.Library(env, name = "videorenderer",
              ],
              lin_packages = [
                "gtk+-2.0",
+             ],
+)
+talk.Library(env, name = "unittest_main",
+             libs = [
+               "gunit",
+             ],
+             srcs = [
+               "base/unittest_main.cc",
+             ],
+             includedirs = [
+               "third_party/gtest/include",
+               "third_party/gtest",
+             ],
+             cppdefines = [
+               "LIBJINGLE_UNITTEST",
              ],
 )
 talk.App(env, name = "login",
@@ -342,4 +372,19 @@ talk.App(env, name = "stunserver",
          srcs = [
            "p2p/base/stunserver_main.cc",
          ],
+)
+talk.Unittest(env, name = "network",
+              libs = [
+                "jingle",
+              ],
+              srcs = [
+                "base/network_unittest.cc",
+              ],
+              includedirs = [
+                "third_party/gtest/include",
+                "third_party/gtest",
+              ],
+              cppdefines = [
+                "LIBJINGLE_UNITTEST",
+              ],
 )

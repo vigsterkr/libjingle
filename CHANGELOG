@@ -2,6 +2,7 @@ Libjingle
 
 0.5.9 - Aug 31, 2011
   - Add app/webrtc
+  - Add webrtcvoiceengine/webrtcvideoengine
   - Update STUN support some more (RFC 5389)
   - Add video output scaling
   - Refactoring and bug fixes

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2004--2010, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,39 +25,46 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_XMPP_IQTASK_H_
-#define TALK_XMPP_IQTASK_H_
+#ifndef TALK_SOUND_NULLSOUNDSYSTEM_H_
+#define TALK_SOUND_NULLSOUNDSYSTEM_H_
 
-#include <string>
+#include "talk/sound/soundsysteminterface.h"
 
-#include "talk/xmpp/xmpptask.h"
-#include "talk/xmpp/xmppengine.h"
+namespace cricket {
 
-namespace buzz {
+class SoundDeviceLocator;
+class SoundInputStreamInterface;
+class SoundOutputStreamInterface;
 
-class IqTask : public buzz::XmppTask {
+// A simple reference sound system that drops output samples and generates
+// no input samples.
+class NullSoundSystem : public SoundSystemInterface {
  public:
-  IqTask(XmppTaskParentInterface* parent,
-         const std::string& verb, const buzz::Jid& to,
-         buzz::XmlElement* el);
-  virtual ~IqTask() {}
+  static SoundSystemInterface *Create() {
+    return new NullSoundSystem();
+  }
 
-  sigslot::signal2<IqTask*,
-                   const XmlElement*> SignalError;
+  virtual ~NullSoundSystem();
 
- protected:
-  virtual void HandleResult(const buzz::XmlElement* element) = 0;
+  virtual bool Init();
+  virtual void Terminate();
 
- private:
-  virtual int ProcessStart();
-  virtual bool HandleStanza(const buzz::XmlElement* stanza);
-  virtual int ProcessResponse();
-  virtual int OnTimeout();
+  virtual bool EnumeratePlaybackDevices(SoundDeviceLocatorList *devices);
+  virtual bool EnumerateCaptureDevices(SoundDeviceLocatorList *devices);
 
-  buzz::Jid to_;
-  talk_base::scoped_ptr<buzz::XmlElement> stanza_;
+  virtual SoundOutputStreamInterface *OpenPlaybackDevice(
+      const SoundDeviceLocator *device,
+      const OpenParams &params);
+  virtual SoundInputStreamInterface *OpenCaptureDevice(
+      const SoundDeviceLocator *device,
+      const OpenParams &params);
+
+  virtual bool GetDefaultPlaybackDevice(SoundDeviceLocator **device);
+  virtual bool GetDefaultCaptureDevice(SoundDeviceLocator **device);
+
+  virtual const char *GetName() const;
 };
 
-}  // namespace buzz
+}  // namespace cricket
 
-#endif  // TALK_XMPP_IQTASK_H_
+#endif  // TALK_SOUND_NULLSOUNDSYSTEM_H_
