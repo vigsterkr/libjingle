@@ -783,11 +783,15 @@ void CallClient::OnRoomConfigResult(buzz::MucRoomConfigTask* task) {
 
 void CallClient::OnRoomConfigError(buzz::IqTask* task,
                                    const buzz::XmlElement* stanza) {
-  if (stanza == NULL) {
-    console_->PrintLine("Room config failed.");
-  } else {
-    console_->PrintLine("Room config error: ", stanza->Str().c_str());
-  }
+  console_->PrintLine("Room config failed.");
+  // We join the muc anyway, because if the room is already
+  // configured, the configure will fail, but we still want to join.
+  // Idealy, we'd know why the room config failed and only do this on
+  // "already configured" errors.  But right now all we get back is
+  // "not-allowed".
+  buzz::MucRoomConfigTask* config_task =
+      static_cast<buzz::MucRoomConfigTask*>(task);
+  JoinMuc(config_task->room_jid());
 }
 
 void CallClient::OnMucInviteReceived(const buzz::Jid& inviter,
