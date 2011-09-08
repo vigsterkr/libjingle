@@ -3,6 +3,8 @@ Libjingle
 0.5.9 - Aug 31, 2011
   - Add app/webrtc
   - Add webrtcvoiceengine/webrtcvideoengine
+  - Add some unit tests
+  - Add XMPP MUC room config classes
   - Update STUN support some more (RFC 5389)
   - Add video output scaling
   - Refactoring and bug fixes
