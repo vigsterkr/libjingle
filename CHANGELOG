@@ -1,5 +1,10 @@
 Libjingle
 
+0.5.9 - Aug 31, 2011
+  - Updated STUN support (RFC 5389)
+  - Video output scaling
+  - Refactoring and bug fixes
+
 0.5.8 - July 1, 2011
   - Support for loudest speaker detection
 

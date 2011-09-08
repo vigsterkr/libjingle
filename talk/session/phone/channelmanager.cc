@@ -654,8 +654,6 @@ bool ChannelManager::Send(uint32 id, talk_base::MessageData* data) {
 
 void ChannelManager::OnVideoCaptureResult(VideoCapturer* capturer,
                                           CaptureResult result) {
-  // TODO: Check capturer and signal failure only for camera video, not
-  // screencast.
   capturing_ = result == CR_SUCCESS;
   main_thread_->Post(this, MSG_CAMERASTARTED,
                      new talk_base::TypedMessageData<CaptureResult>(result));
