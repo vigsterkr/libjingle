@@ -55,9 +55,42 @@ struct Device {
   std::string id;
 };
 
-// DeviceManager manages the audio and video devices on the system.
-// Methods are virtual to allow for easy stubbing/mocking in tests.
-class DeviceManager {
+// DeviceManagerInterface - interface to manage the audio and
+// video devices on the system.
+class DeviceManagerInterface {
+ public:
+  virtual ~DeviceManagerInterface() { }
+
+  // Initialization
+  virtual bool Init() = 0;
+  virtual void Terminate() = 0;
+
+  // Capabilities
+  virtual int GetCapabilities() = 0;
+
+  // Device enumeration
+  virtual bool GetAudioInputDevices(std::vector<Device>* devices) = 0;
+  virtual bool GetAudioOutputDevices(std::vector<Device>* devices) = 0;
+
+  virtual bool GetAudioInputDevice(const std::string& name, Device* out) = 0;
+  virtual bool GetAudioOutputDevice(const std::string& name, Device* out) = 0;
+
+  virtual bool GetVideoCaptureDevices(std::vector<Device>* devs) = 0;
+  virtual bool GetVideoCaptureDevice(const std::string& name, Device* out) = 0;
+
+  sigslot::signal0<> SignalDevicesChange;
+
+  static const char kDefaultDeviceName[];
+};
+
+class DeviceManagerFactory {
+ public:
+  static DeviceManagerInterface* Create();
+ private:
+  DeviceManagerFactory();
+};
+
+class DeviceManager : public DeviceManagerInterface {
  public:
   DeviceManager();
   virtual ~DeviceManager();
@@ -65,7 +98,6 @@ class DeviceManager {
   // Initialization
   virtual bool Init();
   virtual void Terminate();
-  bool initialized() const { return initialized_; }
 
   // Capabilities
   virtual int GetCapabilities();
@@ -74,17 +106,14 @@ class DeviceManager {
   virtual bool GetAudioInputDevices(std::vector<Device>* devices);
   virtual bool GetAudioOutputDevices(std::vector<Device>* devices);
 
-  bool GetAudioInputDevice(const std::string& name, Device* out);
-  bool GetAudioOutputDevice(const std::string& name, Device* out);
+  virtual bool GetAudioInputDevice(const std::string& name, Device* out);
+  virtual bool GetAudioOutputDevice(const std::string& name, Device* out);
 
   virtual bool GetVideoCaptureDevices(std::vector<Device>* devs);
-  bool GetVideoCaptureDevice(const std::string& name, Device* out);
+  virtual bool GetVideoCaptureDevice(const std::string& name, Device* out);
 
-  sigslot::signal0<> SignalDevicesChange;
-
+  bool initialized() const { return initialized_; }
   void OnDevicesChange() { SignalDevicesChange(); }
-
-  static const char kDefaultDeviceName[];
 
  protected:
   virtual bool GetAudioDevice(bool is_input, const std::string& name,

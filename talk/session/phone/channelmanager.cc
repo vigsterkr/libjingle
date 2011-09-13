@@ -132,12 +132,12 @@ struct CaptureParams : public talk_base::MessageData {
 
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread)
     : media_engine_(MediaEngineFactory::Create()),
-      device_manager_(new DeviceManager()),
+      device_manager_(cricket::DeviceManagerFactory::Create()),
       initialized_(false),
       main_thread_(talk_base::Thread::Current()),
       worker_thread_(worker_thread),
-      audio_in_device_(DeviceManager::kDefaultDeviceName),
-      audio_out_device_(DeviceManager::kDefaultDeviceName),
+      audio_in_device_(DeviceManagerInterface::kDefaultDeviceName),
+      audio_out_device_(DeviceManagerInterface::kDefaultDeviceName),
       audio_options_(MediaEngineInterface::DEFAULT_AUDIO_OPTIONS),
       local_renderer_(NULL),
       capturing_(false),
@@ -145,15 +145,16 @@ ChannelManager::ChannelManager(talk_base::Thread* worker_thread)
   Construct();
 }
 
-ChannelManager::ChannelManager(MediaEngineInterface* me, DeviceManager* dm,
+ChannelManager::ChannelManager(MediaEngineInterface* me,
+                               DeviceManagerInterface* dm,
                                talk_base::Thread* worker_thread)
     : media_engine_(me),
       device_manager_(dm),
       initialized_(false),
       main_thread_(talk_base::Thread::Current()),
       worker_thread_(worker_thread),
-      audio_in_device_(DeviceManager::kDefaultDeviceName),
-      audio_out_device_(DeviceManager::kDefaultDeviceName),
+      audio_in_device_(DeviceManagerInterface::kDefaultDeviceName),
+      audio_out_device_(DeviceManagerInterface::kDefaultDeviceName),
       audio_options_(MediaEngineInterface::DEFAULT_AUDIO_OPTIONS),
       local_renderer_(NULL),
       capturing_(false),
@@ -166,7 +167,7 @@ void ChannelManager::Construct() {
   SignalDevicesChange.repeat(device_manager_->SignalDevicesChange);
   device_manager_->Init();
   // Set camera_device_ to the name of the default video capturer.
-  SetVideoOptions(DeviceManager::kDefaultDeviceName);
+  SetVideoOptions(DeviceManagerInterface::kDefaultDeviceName);
 
   // Camera is started asynchronously, request callbacks when startup
   // completes to be able to forward them to the rendering manager.
@@ -227,19 +228,19 @@ bool ChannelManager::Init() {
       if (!device_manager_->GetAudioInputDevice(audio_in_device_, &device)) {
         LOG(LS_WARNING) << "The preferred microphone '" << audio_in_device_
                         << "' is unavailable. Fall back to the default.";
-        audio_in_device_ = DeviceManager::kDefaultDeviceName;
+        audio_in_device_ = DeviceManagerInterface::kDefaultDeviceName;
       }
       if (!device_manager_->GetAudioOutputDevice(audio_out_device_, &device)) {
         LOG(LS_WARNING) << "The preferred speaker '" << audio_out_device_
                         << "' is unavailable. Fall back to the default.";
-        audio_out_device_ = DeviceManager::kDefaultDeviceName;
+        audio_out_device_ = DeviceManagerInterface::kDefaultDeviceName;
       }
       if (!device_manager_->GetVideoCaptureDevice(camera_device_, &device)) {
         if (!camera_device_.empty()) {
           LOG(LS_WARNING) << "The preferred camera '" << camera_device_
                           << "' is unavailable. Fall back to the default.";
         }
-        camera_device_ = DeviceManager::kDefaultDeviceName;
+        camera_device_ = DeviceManagerInterface::kDefaultDeviceName;
       }
 
       if (!SetAudioOptions(audio_in_device_, audio_out_device_,

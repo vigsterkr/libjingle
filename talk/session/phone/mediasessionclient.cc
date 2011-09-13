@@ -55,7 +55,7 @@ MediaSessionClient::MediaSessionClient(
 
 MediaSessionClient::MediaSessionClient(
     const buzz::Jid& jid, SessionManager *manager,
-    MediaEngineInterface* media_engine, DeviceManager* device_manager)
+    MediaEngineInterface* media_engine, DeviceManagerInterface* device_manager)
     : jid_(jid),
       session_manager_(manager),
       focus_call_(NULL),

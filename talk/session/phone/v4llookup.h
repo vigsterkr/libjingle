@@ -14,27 +14,31 @@
 #ifdef LINUX
 namespace cricket {
 class V4LLookup {
-  public:
-    virtual ~V4LLookup() {}
+ public:
+  virtual ~V4LLookup() {}
 
-    static bool IsV4L2Device(const std::string& device_path) {
-      return GetV4LLookup()->CheckIsV4L2Device(device_path);
+  static bool IsV4L2Device(const std::string& device_path) {
+    return GetV4LLookup()->CheckIsV4L2Device(device_path);
+  }
+
+  static void SetV4LLookup(V4LLookup* v4l_lookup) {
+    v4l_lookup_ = v4l_lookup;
+  }
+
+  static V4LLookup* GetV4LLookup() {
+    if (!v4l_lookup_) {
+      v4l_lookup_ = new V4LLookup();
     }
+    return v4l_lookup_;
+  }
 
-    static void SetV4LLookup(V4LLookup* v4l_lookup) {
-      v4l_lookup_ = v4l_lookup;
-    }
-
-    static V4LLookup* GetV4LLookup() {
-      return v4l_lookup_;
-    }
-
-  protected:
-    static V4LLookup* v4l_lookup_;
-    // Making virtual so it is easier to mock
-    virtual bool CheckIsV4L2Device(const std::string& device_path);
-
+ protected:
+  static V4LLookup* v4l_lookup_;
+  // Making virtual so it is easier to mock
+  virtual bool CheckIsV4L2Device(const std::string& device_path);
 };
+
 }  // namespace cricket
-#endif
+
+#endif  // LINUX
 #endif  // TALK_SESSION_PHONE_V4LLOOKUP_H_

@@ -331,6 +331,9 @@ extern const std::string NS_PUBSUB;
 extern const QName QN_PUBSUB;
 extern const QName QN_PUBSUB_ITEMS;
 extern const QName QN_PUBSUB_ITEM;
+extern const QName QN_PUBSUB_PUBLISH;
+extern const QName QN_PUBSUB_RETRACT;
+extern const QName QN_ATTR_PUBLISHER;
 
 extern const std::string NS_PUBSUB_EVENT;
 extern const QName QN_NODE;
@@ -338,6 +341,14 @@ extern const QName QN_PUBSUB_EVENT;
 extern const QName QN_PUBSUB_EVENT_ITEMS;
 extern const QName QN_PUBSUB_EVENT_ITEM;
 extern const QName QN_PUBSUB_EVENT_RETRACT;
+extern const QName QN_NOTIFY;
+
+
+extern const std::string NS_PRESENTER;
+extern const QName QN_PRESENTER_PRESENTER;
+extern const QName QN_PRESENTER_PRESENTATION_ITEM;
+extern const QName QN_PRESENTER_PRESENTATION_TYPE;
+extern const QName QN_PRESENTER_PRESENTATION_ID;
 
 
 
@@ -509,6 +520,12 @@ extern const QName QN_GOOGLE_MUC_USER_TYPE;
 extern const QName QN_GOOGLE_MUC_USER_SRC_ID;
 extern const QName QN_GOOGLE_MUC_USER_STATUS;
 extern const QName QN_LABEL;
+
+extern const std::string NS_GOOGLE_MUC_MEDIA;
+extern const QName QN_GOOGLE_MUC_AUDIO_MUTE;
+extern const QName QN_GOOGLE_MUC_VIDEO_MUTE;
+extern const QName QN_GOOGLE_MUC_RECORDING;
+extern const QName QN_STATE_ATTR;
 
 }  // namespace buzz
 

@@ -26,7 +26,10 @@
  */
 
 #include "talk/session/phone/codec.h"
+
 #include <sstream>
+
+#include "talk/base/stringutils.h"
 
 namespace cricket {
 
@@ -34,20 +37,22 @@ static const int kMaxStaticPayloadId = 95;
 
 bool AudioCodec::Matches(int payload, const std::string& nm) const {
   // Match the codec id/name based on the typical static/dynamic name rules.
-  return (payload <= kMaxStaticPayloadId) ? (id == payload) : (name == nm);
+  // Matching is case-insensitive.
+  return (payload <= kMaxStaticPayloadId) ?
+      (id == payload) : (_stricmp(name.c_str(), nm.c_str()) == 0);
 }
 
 bool AudioCodec::Matches(const AudioCodec& codec) const {
   // If a nonzero clockrate is specified, it must match the actual clockrate.
   // If a nonzero bitrate is specified, it must match the actual bitrate,
-  // unless the codec is VBR (-1), where we just force the supplied value.
+  // unless the codec is VBR (0), where we just force the supplied value.
   // The number of channels must match exactly.
   // Preference is ignored.
   // TODO: Treat a zero clockrate as 8000Hz, the RTP default clockrate.
   return Matches(codec.id, codec.name) &&
       ((codec.clockrate == 0 /*&& clockrate == 8000*/) ||
           clockrate == codec.clockrate) &&
-      (codec.bitrate == 0 || bitrate == -1 || bitrate == codec.bitrate) &&
+      (codec.bitrate == 0 || bitrate <= 0 || bitrate == codec.bitrate) &&
       (codec.channels == 0 || channels == codec.channels);
 }
 
@@ -60,7 +65,9 @@ std::string AudioCodec::ToString() const {
 
 bool VideoCodec::Matches(int payload, const std::string& nm) const {
   // Match the codec id/name based on the typical static/dynamic name rules.
-  return (payload <= kMaxStaticPayloadId) ? (id == payload) : (name == nm);
+  // Matching is case-insensitive.
+  return (payload <= kMaxStaticPayloadId) ?
+      (id == payload) : (_stricmp(name.c_str(), nm.c_str()) == 0);
 }
 
 bool VideoCodec::Matches(const VideoCodec& codec) const {

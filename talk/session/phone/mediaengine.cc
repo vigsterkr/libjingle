@@ -30,18 +30,31 @@
 #if defined(HAVE_LINPHONE)
 #include "talk/session/phone/linphonemediaengine.h"
 #else
+#if defined(HAVE_WEBRTC_VOICE)
+#include "talk/session/phone/webrtcvoiceengine.h"
+#endif  // HAVE_WEBRTC_VOICE
+#if defined(HAVE_WEBRTC_VIDEO)
+#include "talk/session/phone/webrtcvideoengine.h"
+#endif  // HAVE_WEBRTC_VIDEO
 #endif  // HAVE_LINPHONE
 
 namespace cricket {
+#if defined(HAVE_WEBRTC_VOICE)
+#define AUDIO_ENG_NAME WebRtcVoiceEngine
+#endif
+
+#if defined(HAVE_WEBRTC_VIDEO)
+#define VIDEO_ENG_NAME WebRtcVideoEngine
+#endif
 
 MediaEngineInterface* MediaEngineFactory::Create() {
 #if defined(HAVE_LINPHONE)
   return new LinphoneMediaEngine("", "");
-#elif defined(ANDROID)
-  return AndroidMediaEngineFactory::Create();
+#elif defined(AUDIO_ENG_NAME) && defined(VIDEO_ENG_NAME)
+  return new CompositeMediaEngine<AUDIO_ENG_NAME, VIDEO_ENG_NAME>();
 #else
   return new NullMediaEngine();
-#endif  // HAVE_LINPHONE ANDROID HAVE_LMI HAVE_GIPS HAVE_WEBRTC_VOICE/VIDEO
+#endif
 }
 
 };  // namespace cricket

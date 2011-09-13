@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.0 - Sep 13, 2011
+  - Add pub sub support
+  - Add unit tests
+
 0.5.9 - Aug 31, 2011
   - Add app/webrtc
   - Add webrtcvoiceengine/webrtcvideoengine

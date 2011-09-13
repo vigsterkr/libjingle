@@ -35,6 +35,11 @@
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/webrtccommon.h"
+#ifdef WEBRTC_RELATIVE_PATH
+#include "voice_engine/main/interface/vie_base.h"
+#else
+#include "third_party/webrtc/files/include/vie_base.h"
+#endif  // WEBRTC_RELATIVE_PATH
 
 namespace webrtc {
 class VideoCaptureModule;
@@ -56,10 +61,6 @@ class WebRtcVideoEngine : public webrtc::ViEBaseObserver,
  public:
   // Creates the WebRtcVideoEngine with internal VideoCaptureModule.
   WebRtcVideoEngine();
-  // Creates the WebRtcVideoEngine, and specifies the WebRtcVoiceEngine and
-  // external VideoCaptureModule to use.
-  WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
-                    webrtc::VideoCaptureModule* capture);
   // For testing purposes. Allows the WebRtcVoiceEngine and
   // ViEWrapper to be mocks.
   WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine, ViEWrapper* vie_wrapper);
@@ -89,6 +90,12 @@ class WebRtcVideoEngine : public webrtc::ViEBaseObserver,
   void SetLogging(int min_sev, const char* filter);
 
   int GetLastEngineError();
+
+  // Set the VoiceEngine for A/V sync. This can only be called before Init.
+  bool SetVoiceEngine(WebRtcVoiceEngine* voice_engine);
+
+  // Enable the render module with timing control.
+  bool EnableTimedRender();
 
   VideoEncoderConfig& default_encoder_config() {
     return default_encoder_config_;
@@ -138,6 +145,7 @@ class WebRtcVideoEngine : public webrtc::ViEBaseObserver,
   VideoEncoderConfig default_encoder_config_;
   bool capture_started_;
   talk_base::scoped_ptr<WebRtcRenderAdapter> local_renderer_;
+  bool initialized_;
 };
 
 class WebRtcVideoMediaChannel : public VideoMediaChannel,

@@ -22,7 +22,7 @@
 
 namespace cricket {
 
-V4LLookup *V4LLookup::v4l_lookup_ = new V4LLookup();
+V4LLookup *V4LLookup::v4l_lookup_ = NULL;
 
 bool V4LLookup::CheckIsV4L2Device(const std::string& device_path) {
   // check device major/minor numbers are in the range for video devices.

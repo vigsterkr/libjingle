@@ -58,7 +58,7 @@ class ChannelManager : public talk_base::MessageHandler,
   explicit ChannelManager(talk_base::Thread* worker);
   // For testing purposes. Allows the media engine and dev manager to be mocks.
   // The ChannelManager takes ownership of these objects.
-  ChannelManager(MediaEngineInterface* me, DeviceManager* dm,
+  ChannelManager(MediaEngineInterface* me, DeviceManagerInterface* dm,
                  talk_base::Thread* worker);
   ~ChannelManager();
 
@@ -181,7 +181,7 @@ class ChannelManager : public talk_base::MessageHandler,
 
   talk_base::CriticalSection crit_;
   talk_base::scoped_ptr<MediaEngineInterface> media_engine_;
-  talk_base::scoped_ptr<DeviceManager> device_manager_;
+  talk_base::scoped_ptr<DeviceManagerInterface> device_manager_;
   bool initialized_;
   talk_base::Thread* main_thread_;
   talk_base::Thread* worker_thread_;

@@ -41,6 +41,11 @@
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/webrtccommon.h"
+#ifdef WEBRTC_RELATIVE_PATH
+#include "voice_engine/main/interface/voe_base.h"
+#else
+#include "third_party/webrtc/files/include/voe_base.h"
+#endif  // WEBRTC_RELATIVE_PATH
 
 namespace cricket {
 
@@ -81,8 +86,6 @@ class WebRtcVoiceEngine
       public webrtc::TraceCallback {
  public:
   WebRtcVoiceEngine();
-  WebRtcVoiceEngine(webrtc::AudioDeviceModule* adm,
-                    webrtc::AudioDeviceModule* adm_sc);
   // Dependency injection for testing.
   WebRtcVoiceEngine(VoEWrapper* voe_wrapper,
                     VoEWrapper* voe_wrapper_sc,
@@ -131,6 +134,10 @@ class WebRtcVoiceEngine
   VoEWrapper* voe_sc() { return voe_wrapper_sc_.get(); }
   int GetLastEngineError();
 
+  // Set the external ADMs. This can only be called before Init.
+  bool SetAudioDeviceModule(webrtc::AudioDeviceModule* adm,
+                            webrtc::AudioDeviceModule* adm_sc);
+
  private:
   typedef std::vector<WebRtcSoundclipMedia *> SoundclipList;
   typedef std::vector<WebRtcVoiceMediaChannel *> ChannelList;
@@ -138,15 +145,16 @@ class WebRtcVoiceEngine
   struct CodecPref {
     const char* name;
     int clockrate;
+    int payload_type;
   };
 
   void Construct();
+  void ConstructCodecs();
   bool InitInternal();
   void ApplyLogging(const std::string& log_filter);
   virtual void Print(const webrtc::TraceLevel level,
                      const char* trace_string, const int length);
   virtual void CallbackOnError(const int channel, const int errCode);
-  static int GetCodecPreference(const char *name, int clockrate);
   // Given the device type, name, and id, find device id. Return true and
   // set the output parameter rtc_id if successful.
   bool FindWebRtcAudioDeviceId(

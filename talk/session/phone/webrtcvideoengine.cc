@@ -62,15 +62,12 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     return renderer_->SetSize(width_, height_, 0) ? 0 : -1;
   }
 
-  virtual int DeliverFrame(unsigned char* buffer, int buffer_size) {
+  virtual int DeliverFrame(unsigned char* buffer, int buffer_size,
+                           unsigned int time_stamp) {
     if (renderer_ == NULL)
       return 0;
     WebRtcVideoFrame video_frame;
-    // TODO: Currently by the time DeliverFrame got called,
-    // ViE expects the frame will be rendered ASAP. However, the libjingle
-    // renderer may have its own internal delays. Can you disable the buffering
-    // inside ViE and surface the timing information to this callback?
-    video_frame.Attach(buffer, buffer_size, width_, height_, 0, 0);
+    video_frame.Attach(buffer, buffer_size, width_, height_, 0, time_stamp);
     int ret = renderer_->RenderFrame(&video_frame) ? 0 : -1;
     uint8* buffer_temp;
     size_t buffer_size_temp;
@@ -117,38 +114,24 @@ const VideoFormat WebRtcVideoEngine::kDefaultVideoFormat =
 
 WebRtcVideoEngine::WebRtcVideoEngine()
     : vie_wrapper_(new ViEWrapper()),
-      capture_module_(NULL),
-      external_capture_(false),
-      render_module_(new WebRtcPassthroughRender()),
       voice_engine_(NULL) {
-  Construct();
-}
-
-WebRtcVideoEngine::WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
-                                     webrtc::VideoCaptureModule* capture)
-    : vie_wrapper_(new ViEWrapper()),
-      capture_module_(capture),
-      external_capture_(true),
-      render_module_(webrtc::VideoRender::CreateVideoRender(0, NULL, false,
-          webrtc::kRenderExternal)),
-      voice_engine_(voice_engine) {
   Construct();
 }
 
 WebRtcVideoEngine::WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
                                      ViEWrapper* vie_wrapper)
     : vie_wrapper_(vie_wrapper),
-      capture_module_(NULL),
-      external_capture_(false),
-      render_module_(new WebRtcPassthroughRender()),
       voice_engine_(voice_engine) {
   Construct();
 }
 
 void  WebRtcVideoEngine::Construct() {
+  initialized_ = false;
   capture_id_ = -1;
+  capture_module_ = NULL;
   log_level_ = kDefaultLogSeverity;
   capture_started_ = false;
+  render_module_.reset(new WebRtcPassthroughRender());
 
   ApplyLogging();
   if (vie_wrapper_->engine()->SetTraceCallback(this) != 0) {
@@ -220,6 +203,8 @@ bool WebRtcVideoEngine::InitVideoEngine() {
 
   std::sort(video_codecs_.begin(), video_codecs_.end(),
             &VideoCodec::Preferable);
+
+  initialized_ = true;
   return true;
 }
 
@@ -304,6 +289,7 @@ bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
 
 void WebRtcVideoEngine::Terminate() {
   LOG(LS_INFO) << "WebRtcVideoEngine::Terminate";
+  initialized_ = false;
   SetCapture(false);
   if (local_renderer_.get()) {
     // If the renderer already set, stop it first
@@ -588,6 +574,25 @@ void WebRtcVideoEngine::UnregisterChannel(WebRtcVideoMediaChannel *channel) {
   if (i != channels_.end()) {
     channels_.erase(i);
   }
+}
+
+bool WebRtcVideoEngine::SetVoiceEngine(WebRtcVoiceEngine* voice_engine) {
+  if (initialized_) {
+    LOG(LS_WARNING) << "SetVoiceEngine can not be called after Init.";
+    return false;
+  }
+  voice_engine_ = voice_engine;
+  return true;
+}
+
+bool WebRtcVideoEngine::EnableTimedRender() {
+  if (initialized_) {
+    LOG(LS_WARNING) << "EnableTimedRender can not be called after Init.";
+    return false;
+  }
+  render_module_.reset(webrtc::VideoRender::CreateVideoRender(0, NULL,
+      false, webrtc::kRenderExternal));
+  return true;
 }
 
 // WebRtcVideoMediaChannel

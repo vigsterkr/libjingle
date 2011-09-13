@@ -65,7 +65,11 @@
 
 namespace cricket {
 // Initialize to empty string.
-const char DeviceManager::kDefaultDeviceName[] = "";
+const char DeviceManagerInterface::kDefaultDeviceName[] = "";
+
+DeviceManagerInterface* DeviceManagerFactory::Create() {
+  return new DeviceManager();
+}
 
 #ifdef WIN32
 class DeviceWatcher : public talk_base::Win32Window {

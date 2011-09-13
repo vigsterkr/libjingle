@@ -108,10 +108,6 @@ class SessionSendTask : public buzz::XmppTask {
   }
 
   virtual int ProcessResponse() {
-    if (parent_->GetState() != buzz::XmppEngine::STATE_OPEN) {
-      return STATE_DONE;
-    }
-
     const buzz::XmlElement* next = NextStanza();
     if (next == NULL)
       return STATE_BLOCKED;

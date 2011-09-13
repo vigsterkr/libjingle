@@ -36,6 +36,7 @@
 #include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/xmpp/hangoutpubsubclient.h"
 #include "talk/xmpp/xmppclient.h"
 #include "talk/examples/call/status.h"
 #include "talk/examples/call/console.h"
@@ -55,6 +56,7 @@ class MucRoomConfigTask;
 class MucRoomLookupTask;
 class MucStatus;
 class XmlElement;
+class HangoutPubSubClient;
 struct AvailableMediaEntry;
 struct MucRoomInfo;
 }
@@ -124,6 +126,8 @@ class CallClient: public sigslot::has_slots<> {
   void JoinMuc(const std::string& room_jid_str);
   void LookupAndJoinMuc(const std::string& room_name);
   void InviteToMuc(const std::string& user, const std::string& room);
+  bool InMuc();
+  const buzz::Jid& FirstMucJid();
   void LeaveMuc(const std::string& room);
   void SetNick(const std::string& muc_nick);
   void SetPortAllocatorFlags(uint32 flags) { portallocator_flags_ = flags; }
@@ -167,6 +171,26 @@ class CallClient: public sigslot::has_slots<> {
   void OnMucJoined(const buzz::Jid& endpoint);
   void OnMucStatusUpdate(const buzz::Jid& jid, const buzz::MucStatus& status);
   void OnMucLeft(const buzz::Jid& endpoint, int error);
+  void OnPresenterStateChange(const std::string& nick,
+                              bool was_presenting, bool is_presenting);
+  void OnAudioMuteStateChange(const std::string& nick,
+                              bool was_muted, bool is_muted);
+  void OnRecordingStateChange(const std::string& nick,
+                              bool was_recording, bool is_recording);
+  void OnRemoteMuted(const std::string& mutee_nick,
+                     const std::string& muter_nick,
+                     bool should_mute_locally);
+  void OnHangoutRequestError(const std::string& node,
+                             const buzz::XmlElement* stanza);
+  void OnHangoutPublishAudioMuteError(const std::string& task_id,
+                                      const buzz::XmlElement* stanza);
+  void OnHangoutPublishPresenterError(const std::string& task_id,
+                                      const buzz::XmlElement* stanza);
+  void OnHangoutPublishRecordingError(const std::string& task_id,
+                                      const buzz::XmlElement* stanza);
+  void OnHangoutRemoteMuteError(const std::string& task_id,
+                                const std::string& mutee_nick,
+                                const buzz::XmlElement* stanza);
   void OnDevicesChange();
   void OnFoundVoicemailJid(const buzz::Jid& to, const buzz::Jid& voicemail);
   void OnVoicemailJidError(const buzz::Jid& to);
@@ -224,6 +248,7 @@ class CallClient: public sigslot::has_slots<> {
 
   cricket::Call* call_;
   cricket::Session *session_;
+  buzz::HangoutPubSubClient* hangout_pubsub_client_;
   bool incoming_call_;
   bool auto_accept_;
   std::string pmuc_domain_;

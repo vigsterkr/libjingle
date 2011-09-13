@@ -31,12 +31,8 @@
 
 #ifdef WEBRTC_RELATIVE_PATH
 #include "common_types.h"
-#include "video_engine/main/interface/vie_base.h"
-#include "voice_engine/main/interface/voe_base.h"
 #else
 #include "third_party/webrtc/files/include/common_types.h"
-#include "third_party/webrtc/files/include/voe_base.h"
-#include "third_party/webrtc/files/include/vie_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace cricket {

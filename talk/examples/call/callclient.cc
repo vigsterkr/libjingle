@@ -54,6 +54,7 @@
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/videorendererfactory.h"
 #include "talk/xmpp/constants.h"
+#include "talk/xmpp/hangoutpubsubclient.h"
 #include "talk/xmpp/mucroomconfigtask.h"
 #include "talk/xmpp/mucroomlookuptask.h"
 
@@ -94,11 +95,23 @@ int GetInt(const std::vector<std::string>& words, size_t index, int def) {
 const char* CALL_COMMANDS =
 "Available commands:\n"
 "\n"
-"  hangup  Ends the call.\n"
-"  mute    Stops sending voice.\n"
-"  unmute  Re-starts sending voice.\n"
-"  dtmf    Sends a DTMF tone.\n"
-"  quit    Quits the application.\n"
+"  hangup     Ends the call.\n"
+"  mute       Stops sending voice.\n"
+"  unmute     Re-starts sending voice.\n"
+"  dtmf       Sends a DTMF tone.\n"
+"  quit       Quits the application.\n"
+"";
+
+// TODO: Make present and record really work.
+const char* HANGOUT_COMMANDS =
+"Available MUC commands:\n"
+"\n"
+"  present    Starts presenting (just signalling; not actually presenting.)\n"
+"  unpresent  Stops presenting (just signalling; not actually presenting.)\n"
+"  record     Starts recording (just signalling; not actually recording.)\n"
+"  unrecord   Stops recording (just signalling; not actually recording.)\n"
+"  rmute [nick] Remote mute another participant.\n"
+"  quit       Quits the application.\n"
 "";
 
 const char* RECEIVE_COMMANDS =
@@ -169,13 +182,43 @@ void CallClient::ParseLine(const std::string& line) {
       call_->Terminate();
     } else if (command == "mute") {
       call_->Mute(true);
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishAudioMuteState(true);
+      }
     } else if (command == "unmute") {
       call_->Mute(false);
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishAudioMuteState(false);
+      }
+    } else if (command == "present") {
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishPresenterState(true);
+      }
+    } else if (command == "unpresent") {
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishPresenterState(false);
+      }
+    } else if (command == "record") {
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishRecordingState(true);
+      }
+    } else if (command == "unrecord") {
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishRecordingState(false);
+      }
+    } else if ((command == "rmute") && (words.size() == 2)) {
+      if (InMuc()) {
+        const std::string& nick = words[1];
+        hangout_pubsub_client_->RemoteMute(nick);
+      }
     } else if ((command == "dtmf") && (words.size() == 2)) {
       int ev = std::string("0123456789*#").find(words[1][0]);
       call_->PressDTMF(ev);
     } else {
       console_->PrintLine(CALL_COMMANDS);
+      if (InMuc()) {
+        console_->PrintLine(HANGOUT_COMMANDS);
+      }
     }
   } else {
     if (command == "roster") {
@@ -231,6 +274,7 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
       media_engine_(NULL),
       media_client_(NULL),
       call_(NULL),
+      hangout_pubsub_client_(NULL),
       incoming_call_(false),
       auto_accept_(false),
       pmuc_domain_("groupchat.google.com"),
@@ -295,6 +339,8 @@ void CallClient::OnCallDestroy(cricket::Call* call) {
     console_->PrintLine("call destroyed");
     call_ = NULL;
     session_ = NULL;
+    delete hangout_pubsub_client_;
+    hangout_pubsub_client_ = NULL;
   }
 }
 
@@ -366,7 +412,7 @@ void CallClient::InitMedia() {
       xmpp_client_->jid(),
       session_manager_,
       media_engine_,
-      new cricket::DeviceManager());
+      cricket::DeviceManagerFactory::Create());
   media_client_->SignalCallCreate.connect(this, &CallClient::OnCallCreate);
   media_client_->SignalCallDestroy.connect(this, &CallClient::OnCallDestroy);
   media_client_->SignalDevicesChange.connect(this,
@@ -615,6 +661,95 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
       call_->SetVideoRenderer(session_, 0, remote_renderer_);
     }
   }
+  if (options.is_muc) {
+    const std::string& nick = mucs_[jid]->local_jid().resource();
+    hangout_pubsub_client_ =
+        new buzz::HangoutPubSubClient(xmpp_client_, jid, nick);
+    hangout_pubsub_client_->SignalPresenterStateChange.connect(
+        this, &CallClient::OnPresenterStateChange);
+    hangout_pubsub_client_->SignalAudioMuteStateChange.connect(
+        this, &CallClient::OnAudioMuteStateChange);
+    hangout_pubsub_client_->SignalRecordingStateChange.connect(
+        this, &CallClient::OnRecordingStateChange);
+    hangout_pubsub_client_->SignalRemoteMute.connect(
+        this, &CallClient::OnRemoteMuted);
+    hangout_pubsub_client_->SignalRequestError.connect(
+        this, &CallClient::OnHangoutRequestError);
+    hangout_pubsub_client_->SignalPublishAudioMuteError.connect(
+        this, &CallClient::OnHangoutPublishAudioMuteError);
+    hangout_pubsub_client_->SignalPublishPresenterError.connect(
+        this, &CallClient::OnHangoutPublishPresenterError);
+    hangout_pubsub_client_->SignalPublishRecordingError.connect(
+        this, &CallClient::OnHangoutPublishRecordingError);
+    hangout_pubsub_client_->SignalRemoteMuteError.connect(
+        this, &CallClient::OnHangoutRemoteMuteError);
+  }
+}
+
+void CallClient::OnPresenterStateChange(
+    const std::string& nick, bool was_presenting, bool is_presenting) {
+  if (!was_presenting && is_presenting) {
+    console_->PrintLine("%s now presenting.", nick.c_str());
+  } else if (was_presenting && !is_presenting) {
+    console_->PrintLine("%s no longer presenting.", nick.c_str());
+  }
+}
+
+void CallClient::OnAudioMuteStateChange(
+    const std::string& nick, bool was_muted, bool is_muted) {
+  if (!was_muted && is_muted) {
+    console_->PrintLine("%s now muted.", nick.c_str());
+  } else if (was_muted && !is_muted) {
+    console_->PrintLine("%s no longer muted.", nick.c_str());
+  }
+}
+
+void CallClient::OnRecordingStateChange(
+    const std::string& nick, bool was_recording, bool is_recording) {
+  if (!was_recording && is_recording) {
+    console_->PrintLine("%s now recording.", nick.c_str());
+  } else if (was_recording && is_recording) {
+    console_->PrintLine("%s no longer recording.", nick.c_str());
+  }
+}
+
+void CallClient::OnRemoteMuted(const std::string& mutee_nick,
+                               const std::string& muter_nick,
+                               bool should_mute_locally) {
+  if (should_mute_locally) {
+    call_->Mute(true);
+    console_->PrintLine("Remote muted by %s.", muter_nick.c_str());
+  } else {
+    console_->PrintLine("%s remote muted by %s.",
+                        mutee_nick.c_str(), muter_nick.c_str());
+  }
+}
+
+void CallClient::OnHangoutRequestError(const std::string& node,
+                                       const buzz::XmlElement* stanza) {
+  console_->PrintLine("Failed request pub sub items for node %s.",
+                      node.c_str());
+}
+
+void CallClient::OnHangoutPublishAudioMuteError(
+    const std::string& task_id, const buzz::XmlElement* stanza) {
+  console_->PrintLine("Failed to publish audio mute state.");
+}
+
+void CallClient::OnHangoutPublishPresenterError(
+    const std::string& task_id, const buzz::XmlElement* stanza) {
+  console_->PrintLine("Failed to publish presenting state.");
+}
+
+void CallClient::OnHangoutPublishRecordingError(
+    const std::string& task_id, const buzz::XmlElement* stanza) {
+  console_->PrintLine("Failed to publish recording state.");
+}
+
+void CallClient::OnHangoutRemoteMuteError(const std::string& task_id,
+                                          const std::string& mutee_nick,
+                                          const buzz::XmlElement* stanza) {
+  console_->PrintLine("Failed to remote mute.");
 }
 
 void CallClient::CallVoicemail(const std::string& name) {
@@ -624,7 +759,7 @@ void CallClient::CallVoicemail(const std::string& name) {
     return;
   }
   buzz::VoicemailJidRequester *request =
-    new buzz::VoicemailJidRequester(xmpp_client_, jid, my_status_.jid());
+      new buzz::VoicemailJidRequester(xmpp_client_, jid, my_status_.jid());
   request->SignalGotVoicemailJid.connect(this,
                                          &CallClient::OnFoundVoicemailJid);
   request->SignalVoicemailJidError.connect(this,
@@ -847,13 +982,21 @@ void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
   }
 }
 
+bool CallClient::InMuc() {
+  return FirstMucJid().IsValid();
+}
+
+const buzz::Jid& CallClient::FirstMucJid() {
+  return mucs_.begin()->first;
+}
+
 void CallClient::LeaveMuc(const std::string& room) {
   buzz::Jid room_jid;
   if (room.length() > 0) {
     room_jid = buzz::Jid(room);
   } else if (mucs_.size() > 0) {
     // leave the first MUC if no JID specified
-    room_jid = mucs_.begin()->first;
+    room_jid = FirstMucJid();
   }
 
   if (!room_jid.IsValid()) {

@@ -140,7 +140,7 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
 }
 
 XmppEngine::State
-XmppClient::GetState() {
+XmppClient::GetState() const {
   if (d_->engine_.get() == NULL)
     return XmppEngine::STATE_NONE;
   return d_->engine_->GetState();
@@ -266,6 +266,7 @@ XmppReturnStatus
 XmppClient::Disconnect() {
   if (d_->socket_.get() == NULL)
     return XMPP_RETURN_BADSTATE;
+  Abort();
   d_->engine_->Disconnect();
   d_->socket_.reset(NULL);
   return XMPP_RETURN_OK;
@@ -284,7 +285,7 @@ XmppClient::~XmppClient() {
 }
 
 const Jid &
-XmppClient::jid() {
+XmppClient::jid() const {
   return d_->engine_->FullJid();
 }
 

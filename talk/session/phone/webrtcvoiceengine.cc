@@ -41,6 +41,7 @@
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
+#include "talk/base/stringutils.h"
 #include "talk/session/phone/webrtcvoe.h"
 
 #ifdef WIN32
@@ -76,6 +77,23 @@ static const int kDefaultAudioDeviceId = 0;
 static const char kRtpAudioLevelHeaderExtension[] =
     "urn:ietf:params:rtp-hdrext:ssrc-audio-level";
 
+static const char kIsacCodecName[] = "ISAC";
+static const char kL16CodecName[] = "L16";
+
+// Dumps an AudioCodec in RFC 2327-ish format.
+static std::string ToString(const AudioCodec& codec) {
+  std::stringstream ss;
+  ss << codec.name << "/" << codec.clockrate << "/" << codec.channels
+     << " (" << codec.id << ")";
+  return ss.str();
+}
+static std::string ToString(const webrtc::CodecInst& codec) {
+  std::stringstream ss;
+  ss << codec.plname << "/" << codec.plfreq << "/" << codec.channels
+     << " (" << codec.pltype << ")";
+  return ss.str();
+}
+
 static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   const char* delim = "\r\n";
   for (char* tok = strtok(text, delim); tok; tok = strtok(NULL, delim)) {
@@ -83,23 +101,21 @@ static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   }
 }
 
-static const char kL16CodecName[] = "L16";
-
 // WebRtcVoiceEngine
 const WebRtcVoiceEngine::CodecPref WebRtcVoiceEngine::kCodecPrefs[] = {
-  { "ISAC",   16000 },
-  { "ISAC",   32000 },
-  { "speex",  16000 },
-  { "G722",   16000 },
-  { "iLBC",   8000 },
-  { "speex",  8000 },
-  { "PCMU",   8000 },
-  { "PCMA",   8000 },
-  { "CN",     32000 },
-  { "CN",     16000 },
-  { "CN",     8000 },
-  { "red",    8000 },
-  { "telephone-event", 8000 },
+  { "ISAC",   16000,  103 },
+  { "ISAC",   32000,  104 },
+  { "speex",  16000,  107 },
+  { "G722",   16000,  9 },
+  { "ILBC",   8000,   102 },
+  { "speex",  8000,   108 },
+  { "PCMU",   8000,   0 },
+  { "PCMA",   8000,   8 },
+  { "CN",     32000,  106 },
+  { "CN",     16000,  105 },
+  { "CN",     8000,   13 },
+  { "red",    8000,   127 },
+  { "telephone-event", 8000, 126 },
 };
 
 class WebRtcSoundclipMedia : public SoundclipMedia {
@@ -191,19 +207,6 @@ WebRtcVoiceEngine::WebRtcVoiceEngine()
   Construct();
 }
 
-WebRtcVoiceEngine::WebRtcVoiceEngine(webrtc::AudioDeviceModule* adm,
-                                     webrtc::AudioDeviceModule* adm_sc)
-    : voe_wrapper_(new VoEWrapper()),
-      voe_wrapper_sc_(new VoEWrapper()),
-      tracing_(new VoETraceWrapper()),
-      adm_(adm),
-      adm_sc_(adm_sc),
-      log_level_(kDefaultLogSeverity),
-      is_dumping_aec_(false),
-      desired_local_monitor_enable_(false) {
-  Construct();
-}
-
 WebRtcVoiceEngine::WebRtcVoiceEngine(VoEWrapper* voe_wrapper,
                                      VoEWrapper* voe_wrapper_sc,
                                      VoETraceWrapper* tracing)
@@ -231,28 +234,48 @@ void WebRtcVoiceEngine::Construct() {
   // Clear the default agc state.
   memset(&default_agc_config_, 0, sizeof(default_agc_config_));
 
-  // Load our audio codec list
+  // Load our audio codec list.
+  ConstructCodecs();
+}
+
+void WebRtcVoiceEngine::ConstructCodecs() {
   LOG(LS_INFO) << "WebRtc VoiceEngine codecs:";
   int ncodecs = voe_wrapper_->codec()->NumOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
-    webrtc::CodecInst gcodec;
-    if (voe_wrapper_->codec()->GetCodec(i, gcodec) >= 0) {
-      // Skip the codecs that we don't support.
-      if (strcmp(gcodec.plname, kL16CodecName) == 0) {
+    webrtc::CodecInst voe_codec;
+    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) >= 0) {
+      // Skip uncompressed formats.
+      if (_stricmp(voe_codec.plname, kL16CodecName) == 0) {
         continue;
       }
-      int pref = GetCodecPreference(gcodec.plname, gcodec.plfreq);
-      if (pref != -1) {
-        if (gcodec.rate == -1) gcodec.rate = 0;
-        AudioCodec codec(gcodec.pltype, gcodec.plname, gcodec.plfreq,
-                         gcodec.rate, gcodec.channels, pref);
-        LOG(LS_INFO) << gcodec.plname << "/" << gcodec.plfreq << "/" \
-                     << gcodec.channels << " " << gcodec.pltype;
+
+      const CodecPref* pref = NULL;
+      for (size_t j = 0; j < ARRAY_SIZE(kCodecPrefs); ++j) {
+        if (_stricmp(kCodecPrefs[j].name, voe_codec.plname) == 0 &&
+            kCodecPrefs[j].clockrate == voe_codec.plfreq) {
+          pref = &kCodecPrefs[j];
+          break;
+        }
+      }
+
+      if (pref) {
+        // Use the payload type that we've configured in our pref table;
+        // use the offset in our pref table to determine the sort order.
+        AudioCodec codec(pref->payload_type, voe_codec.plname, voe_codec.plfreq,
+                         voe_codec.rate, voe_codec.channels,
+                         ARRAY_SIZE(kCodecPrefs) - (pref - kCodecPrefs));
+        LOG(LS_INFO) << ToString(codec);
+        // For ISAC, use 0 to indicate auto bandwidth in our signaling.
+        if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+          codec.bitrate = 0;
+        }
         codecs_.push_back(codec);
+      } else {
+        LOG(LS_WARNING) << "Unexpected codec: " << ToString(voe_codec);
       }
     }
   }
-  // Make sure they are in local preference order
+  // Make sure they are in local preference order.
   std::sort(codecs_.begin(), codecs_.end(), &AudioCodec::Preferable);
 }
 
@@ -340,8 +363,7 @@ bool WebRtcVoiceEngine::InitInternal() {
   LOG(LS_INFO) << "WebRtc VoiceEngine codecs:";
   for (std::vector<AudioCodec>::const_iterator it = codecs_.begin();
       it != codecs_.end(); ++it) {
-    LOG(LS_INFO) << it->name << "/" << it->clockrate << "/"
-              << it->channels << " " << it->id;
+    LOG(LS_INFO) << ToString(*it);
   }
 
 #if defined(LINUX) && !defined(HAVE_LIBPULSE)
@@ -701,21 +723,29 @@ bool WebRtcVoiceEngine::FindCodec(const AudioCodec& in) {
   return FindWebRtcCodec(in, NULL);
 }
 
+// Get the VoiceEngine codec that matches |in|, with the supplied settings.
 bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
                                         webrtc::CodecInst* out) {
   int ncodecs = voe_wrapper_->codec()->NumOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
-    webrtc::CodecInst gcodec;
-    if (voe_wrapper_->codec()->GetCodec(i, gcodec) >= 0) {
-      AudioCodec codec(gcodec.pltype, gcodec.plname,
-                       gcodec.plfreq, gcodec.rate, gcodec.channels, 0);
+    webrtc::CodecInst voe_codec;
+    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) >= 0) {
+      AudioCodec codec(voe_codec.pltype, voe_codec.plname, voe_codec.plfreq,
+                       voe_codec.rate, voe_codec.channels, 0);
+      // Allow arbitrary rates for ISAC to be specified.
+      if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+        codec.bitrate = 0;
+      }
       if (codec.Matches(in)) {
         if (out) {
-          // If the codec is VBR and an explicit rate is specified, use it.
-          if (in.bitrate != 0 && gcodec.rate == -1) {
-            gcodec.rate = in.bitrate;
+          // Fixup the payload type.
+          voe_codec.pltype = in.id;
+          // If ISAC is being used, and an explicit bitrate is not specified,
+          // enable auto bandwidth adjustment.
+          if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+            voe_codec.rate = (in.bitrate > 0) ? in.bitrate : -1;
           }
-          *out = gcodec;
+          *out = voe_codec;
         }
         return true;
       }
@@ -863,16 +893,6 @@ void WebRtcVoiceEngine::CallbackOnError(const int channel_num,
   }
 }
 
-int WebRtcVoiceEngine::GetCodecPreference(const char *name, int clockrate) {
-  for (size_t i = 0; i < ARRAY_SIZE(kCodecPrefs); ++i) {
-    if ((strcmp(kCodecPrefs[i].name, name) == 0) &&
-        (kCodecPrefs[i].clockrate == clockrate))
-      return ARRAY_SIZE(kCodecPrefs) - i;
-  }
-  LOG(LS_WARNING) << "Unexpected codec \"" << name << "/" << clockrate << "\"";
-  return -1;
-}
-
 bool WebRtcVoiceEngine::FindChannelAndSsrc(
     int channel_num, WebRtcVoiceMediaChannel** channel, uint32* ssrc) const {
   ASSERT(channel != NULL && ssrc != NULL);
@@ -973,6 +993,17 @@ bool WebRtcVoiceEngine::SetConferenceMode(bool enable) {
   return true;
 }
 
+bool WebRtcVoiceEngine::SetAudioDeviceModule(webrtc::AudioDeviceModule* adm,
+    webrtc::AudioDeviceModule* adm_sc) {
+  if (initialized_) {
+    LOG(LS_WARNING) << "SetAudioDeviceModule can not be called after Init.";
+    return false;
+  }
+  adm_ = adm;
+  adm_sc_ = adm_sc;
+  return true;
+}
+
 // WebRtcVoiceMediaChannel
 WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
     : WebRtcMediaChannel<VoiceMediaChannel, WebRtcVoiceEngine>(
@@ -1000,6 +1031,16 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
 
   // Create a random but nonzero send SSRC
   SetSendSsrc(talk_base::CreateRandomNonZeroId());
+
+  // Reset all recv codecs; they will be enabled via SetRecvCodecs.
+  int ncodecs = engine->voe()->codec()->NumOfCodecs();
+  for (int i = 0; i < ncodecs; ++i) {
+    webrtc::CodecInst voe_codec;
+    if (engine->voe()->codec()->GetCodec(i, voe_codec) >= 0) {
+      voe_codec.pltype = -1;
+      engine->voe()->codec()->SetRecPayloadType(voe_channel(), voe_codec);
+    }
+  }
 }
 
 WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
@@ -1042,26 +1083,22 @@ bool WebRtcVoiceMediaChannel::SetOptions(int flags) {
 
 bool WebRtcVoiceMediaChannel::SetRecvCodecs(
     const std::vector<AudioCodec>& codecs) {
-  // Update our receive payload types to match what we offered. This only is
-  // an issue when a different entity (i.e. a server) is generating the offer
-  // for us.
+  // Set the payload types to be used for incoming media.
   bool ret = true;
-  for (std::vector<AudioCodec>::const_iterator i = codecs.begin();
-       i != codecs.end() && ret; ++i) {
-    webrtc::CodecInst gcodec;
-    if (engine()->FindWebRtcCodec(*i, &gcodec)) {
-      if (gcodec.pltype != i->id) {
-        LOG(LS_INFO) << "Updating payload type for " << gcodec.plname
-                  << " from " << gcodec.pltype << " to " << i->id;
-        gcodec.pltype = i->id;
-        if (engine()->voe()->codec()->SetRecPayloadType(
-            voe_channel(), gcodec) == -1) {
-          LOG_RTCERR1(SetRecPayloadType, voe_channel());
-          ret = false;
-        }
+  LOG(LS_INFO) << "Setting receive voice codecs:";
+  for (std::vector<AudioCodec>::const_iterator it = codecs.begin();
+       it != codecs.end() && ret; ++it) {
+    webrtc::CodecInst voe_codec;
+    if (engine()->FindWebRtcCodec(*it, &voe_codec)) {
+      LOG(LS_INFO) << ToString(*it);
+      voe_codec.pltype = it->id;
+      if (engine()->voe()->codec()->SetRecPayloadType(
+          voe_channel(), voe_codec) == -1) {
+        LOG_RTCERR2(SetRecPayloadType, voe_channel(), ToString(voe_codec));
+        ret = false;
       }
     } else {
-      LOG(LS_WARNING) << "Unknown codec " << i->name;
+      LOG(LS_WARNING) << "Unknown codec " << ToString(*it);
       ret = false;
     }
   }
@@ -1082,29 +1119,30 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
   webrtc::CodecInst send_codec;
   memset(&send_codec, 0, sizeof(send_codec));
 
-  for (std::vector<AudioCodec>::const_iterator i = codecs.begin();
-       i != codecs.end(); ++i) {
+  for (std::vector<AudioCodec>::const_iterator it = codecs.begin();
+       it != codecs.end(); ++it) {
     // Ignore codecs we don't know about. The negotiation step should prevent
     // this, but double-check to be sure.
-    webrtc::CodecInst gcodec;
-    if (!engine()->FindWebRtcCodec(*i, &gcodec)) {
-      LOG(LS_WARNING) << "Unknown codec " << i->name;
+    webrtc::CodecInst voe_codec;
+    if (!engine()->FindWebRtcCodec(*it, &voe_codec)) {
+      LOG(LS_WARNING) << "Unknown codec " << ToString(voe_codec);
       continue;
     }
 
     // Find the DTMF telephone event "codec" and tell VoiceEngine about it.
-    if (i->name == "telephone-event" || i->name == "audio/telephone-event") {
+    if (_stricmp(it->name.c_str(), "telephone-event") == 0 ||
+        _stricmp(it->name.c_str(), "audio/telephone-event") == 0) {
       engine()->voe()->dtmf()->SetSendTelephoneEventPayloadType(
-          voe_channel(), i->id);
+          voe_channel(), it->id);
       dtmf_allowed_ = true;
     }
 
     // Turn voice activity detection/comfort noise on if supported.
     // Set the wideband CN payload type appropriately.
     // (narrowband always uses the static payload type 13).
-    if (i->name == "CN") {
+    if (_stricmp(it->name.c_str(), "CN") == 0) {
       webrtc::PayloadFrequencies cn_freq;
-      switch (i->clockrate) {
+      switch (it->clockrate) {
         case 8000:
           cn_freq = webrtc::kFreq8000Hz;
           break;
@@ -1115,14 +1153,14 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
           cn_freq = webrtc::kFreq32000Hz;
           break;
         default:
-          LOG(LS_WARNING) << "CN frequency " << i->clockrate
+          LOG(LS_WARNING) << "CN frequency " << it->clockrate
                           << " not supported.";
           continue;
       }
       engine()->voe()->codec()->SetVADStatus(voe_channel(), true);
       if (cn_freq != webrtc::kFreq8000Hz) {
         engine()->voe()->codec()->SetSendCNPayloadType(voe_channel(),
-                                                       i->id, cn_freq);
+                                                       it->id, cn_freq);
       }
     }
 
@@ -1131,24 +1169,23 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
     // "red", for FEC audio, is a special case where the actual codec to be
     // used is specified in params.
     if (first) {
-      if (i->name == "red") {
+      if (_stricmp(it->name.c_str(), "red") == 0) {
         // Parse out the RED parameters. If we fail, just ignore RED;
         // we don't support all possible params/usage scenarios.
-        if (!GetRedSendCodec(*i, codecs, &send_codec)) {
+        if (!GetRedSendCodec(*it, codecs, &send_codec)) {
           continue;
         }
 
         // Enable redundant encoding of the specified codec. Treat any
         // failure as a fatal internal error.
-        LOG(LS_INFO) << "Enabling RED";
+        LOG(LS_INFO) << "Enabling FEC";
         if (engine()->voe()->rtp()->SetFECStatus(voe_channel(),
-                                                    true, i->id) == -1) {
-          LOG_RTCERR3(SetFECStatus, voe_channel(), true, i->id);
+                                                 true, it->id) == -1) {
+          LOG_RTCERR3(SetFECStatus, voe_channel(), true, it->id);
           return false;
         }
       } else {
-        send_codec = gcodec;
-        send_codec.pltype = i->id;
+        send_codec = voe_codec;
       }
       first = false;
     }
@@ -1163,11 +1200,11 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
   }
 
   // Set the codec.
-  LOG(LS_INFO) << "Selected voice codec " << send_codec.plname
-            << "/" << send_codec.plfreq;
+  LOG(LS_INFO) << "Selected voice codec " << ToString(send_codec)
+               << ", bitrate=" << send_codec.rate;
   if (engine()->voe()->codec()->SetSendCodec(voe_channel(),
-                                                send_codec) == -1) {
-    LOG_RTCERR1(SetSendCodec, voe_channel());
+                                             send_codec) == -1) {
+    LOG_RTCERR2(SetSendCodec, voe_channel(), ToString(send_codec));
     return false;
   }
 
@@ -1893,7 +1930,6 @@ bool WebRtcVoiceMediaChannel::GetRedSendCodec(const AudioCodec& red_codec,
   // SetSendCodec, with the desired payload type.
   if (codec != all_codecs.end() &&
     engine()->FindWebRtcCodec(*codec, send_codec)) {
-    send_codec->pltype = red_pt;
   } else {
     LOG(LS_WARNING) << "RED params " << red_params << " are invalid.";
     return false;

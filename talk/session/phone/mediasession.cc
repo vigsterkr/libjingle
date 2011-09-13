@@ -56,6 +56,7 @@ static bool CreateCryptoParams(int tag, const std::string& cipher,
   return true;
 }
 
+#ifdef HAVE_SRTP
 static bool AddCryptoParams(const std::string& cipher_suite,
                             CryptoParamsVec *out) {
   int size = out->size();
@@ -63,6 +64,7 @@ static bool AddCryptoParams(const std::string& cipher_suite,
   out->resize(size + 1);
   return CreateCryptoParams(size, cipher_suite, &out->at(size));
 }
+#endif
 
 // For audio, HMAC 32 is prefered because of the low overhead.
 static bool GetSupportedAudioCryptos(CryptoParamsVec* cryptos) {

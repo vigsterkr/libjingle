@@ -86,7 +86,6 @@ public:
   XmppReturnStatus Disconnect();
 
   sigslot::signal1<XmppEngine::State> SignalStateChange;
-  XmppEngine::State GetState();
   XmppEngine::Error GetError(int *subcode);
 
   // When there is a <stream:error> stanza, return the stanza
@@ -112,7 +111,8 @@ public:
   virtual XmppClientInterface* GetClient() { return this; }
 
   // As XmppClientInterface
-  virtual const Jid& jid();
+  virtual XmppEngine::State GetState() const;
+  virtual const Jid& jid() const;
   virtual std::string NextId();
   virtual XmppReturnStatus SendStanza(const XmlElement *stanza);
   virtual XmppReturnStatus SendStanzaError(const XmlElement * pelOriginal,

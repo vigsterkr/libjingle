@@ -73,7 +73,8 @@ class XmppClientInterface {
   XmppClientInterface();
   virtual ~XmppClientInterface();
 
-  virtual const Jid& jid() = 0;
+  virtual XmppEngine::State GetState() const = 0;
+  virtual const Jid& jid() const = 0;
   virtual std::string NextId() = 0;
   virtual XmppReturnStatus SendStanza(const XmlElement* stanza) = 0;
   virtual XmppReturnStatus SendStanzaError(const XmlElement* original_stanza,

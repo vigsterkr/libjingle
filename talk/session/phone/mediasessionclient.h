@@ -56,7 +56,7 @@ class MediaSessionClient : public SessionClient, public sigslot::has_slots<> {
   // and device_manager.
   MediaSessionClient(const buzz::Jid& jid, SessionManager *manager,
                      MediaEngineInterface* media_engine,
-                     DeviceManager* device_manager);
+                     DeviceManagerInterface* device_manager);
   ~MediaSessionClient();
 
   const buzz::Jid &jid() const { return jid_; }

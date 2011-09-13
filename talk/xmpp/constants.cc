@@ -367,6 +367,9 @@ const std::string NS_PUBSUB("http://jabber.org/protocol/pubsub");
 const QName QN_PUBSUB(true, NS_PUBSUB, "pubsub");
 const QName QN_PUBSUB_ITEMS(true, NS_PUBSUB, "items");
 const QName QN_PUBSUB_ITEM(true, NS_PUBSUB, "item");
+const QName QN_PUBSUB_PUBLISH(true, NS_PUBSUB, "publish");
+const QName QN_PUBSUB_RETRACT(true, NS_PUBSUB, "retract");
+const QName QN_ATTR_PUBLISHER(true, STR_EMPTY, "publisher");
 
 const std::string NS_PUBSUB_EVENT("http://jabber.org/protocol/pubsub#event");
 const QName QN_NODE(true, STR_EMPTY, "node");
@@ -374,7 +377,17 @@ const QName QN_PUBSUB_EVENT(true, NS_PUBSUB_EVENT, "event");
 const QName QN_PUBSUB_EVENT_ITEMS(true, NS_PUBSUB_EVENT, "items");
 const QName QN_PUBSUB_EVENT_ITEM(true, NS_PUBSUB_EVENT, "item");
 const QName QN_PUBSUB_EVENT_RETRACT(true, NS_PUBSUB_EVENT, "retract");
+const QName QN_NOTIFY(true, STR_EMPTY, "notify");
 
+
+
+const std::string NS_PRESENTER("google:presenter");
+const QName QN_PRESENTER_PRESENTER(true, NS_PRESENTER, "presenter");
+const QName QN_PRESENTER_PRESENTATION_ITEM(
+    true, NS_PRESENTER, "presentation-item");
+const QName QN_PRESENTER_PRESENTATION_TYPE(
+    true, NS_PRESENTER, "presentation-type");
+const QName QN_PRESENTER_PRESENTATION_ID(true, NS_PRESENTER, "presentation-id");
 
 
 
@@ -566,5 +579,14 @@ const QName QN_GOOGLE_MUC_USER_TYPE(true, NS_GOOGLE_MUC_USER, "type");
 const QName QN_GOOGLE_MUC_USER_SRC_ID(true, NS_GOOGLE_MUC_USER, "src-id");
 const QName QN_GOOGLE_MUC_USER_STATUS(true, NS_GOOGLE_MUC_USER, "status");
 const QName QN_LABEL(true, STR_EMPTY, "label");
+
+const std::string NS_GOOGLE_MUC_MEDIA("google:muc#media");
+const QName QN_GOOGLE_MUC_AUDIO_MUTE(
+    true, NS_GOOGLE_MUC_MEDIA, "audio-mute");
+const QName QN_GOOGLE_MUC_VIDEO_MUTE(
+    true, NS_GOOGLE_MUC_MEDIA, "video-mute");
+const QName QN_GOOGLE_MUC_RECORDING(
+    true, NS_GOOGLE_MUC_MEDIA, "recording");
+const QName QN_STATE_ATTR(true, STR_EMPTY, "state");
 
 }

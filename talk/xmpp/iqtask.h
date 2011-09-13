@@ -35,27 +35,29 @@
 
 namespace buzz {
 
-class IqTask : public buzz::XmppTask {
+class IqTask : public XmppTask {
  public:
   IqTask(XmppTaskParentInterface* parent,
-         const std::string& verb, const buzz::Jid& to,
-         buzz::XmlElement* el);
+         const std::string& verb, const Jid& to,
+         XmlElement* el);
   virtual ~IqTask() {}
+
+  const XmlElement* stanza() const { return stanza_.get(); }
 
   sigslot::signal2<IqTask*,
                    const XmlElement*> SignalError;
 
  protected:
-  virtual void HandleResult(const buzz::XmlElement* element) = 0;
+  virtual void HandleResult(const XmlElement* element) = 0;
 
  private:
   virtual int ProcessStart();
-  virtual bool HandleStanza(const buzz::XmlElement* stanza);
+  virtual bool HandleStanza(const XmlElement* stanza);
   virtual int ProcessResponse();
   virtual int OnTimeout();
 
-  buzz::Jid to_;
-  talk_base::scoped_ptr<buzz::XmlElement> stanza_;
+  Jid to_;
+  talk_base::scoped_ptr<XmlElement> stanza_;
 };
 
 }  // namespace buzz
