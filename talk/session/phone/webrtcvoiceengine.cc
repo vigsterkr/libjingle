@@ -243,7 +243,7 @@ void WebRtcVoiceEngine::ConstructCodecs() {
   int ncodecs = voe_wrapper_->codec()->NumOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
     webrtc::CodecInst voe_codec;
-    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) >= 0) {
+    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) != -1) {
       // Skip uncompressed formats.
       if (_stricmp(voe_codec.plname, kL16CodecName) == 0) {
         continue;
@@ -729,7 +729,7 @@ bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
   int ncodecs = voe_wrapper_->codec()->NumOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
     webrtc::CodecInst voe_codec;
-    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) >= 0) {
+    if (voe_wrapper_->codec()->GetCodec(i, voe_codec) != -1) {
       AudioCodec codec(voe_codec.pltype, voe_codec.plname, voe_codec.plfreq,
                        voe_codec.rate, voe_codec.channels, 0);
       // Allow arbitrary rates for ISAC to be specified.
@@ -836,11 +836,12 @@ static bool ShouldIgnoreTrace(const std::string& trace) {
   static const char* kTracesToIgnore[] = {
     "\tfailed to GetReportBlockInformation",
     "GetRecCodec() failed to get received codec",
-    "GetRemoteRTCPData() failed to retrieve sender info for remote side",
-    "GetRTPStatistics() failed to measure RTT since no RTP packets have been received yet",  // NOLINT
+    "GetRemoteRTCPData() failed to measure statistics dueto lack of received RTP and/or RTCP packets",  // NOLINT
+    "GetRemoteRTCPData() failed to retrieve sender info for remoteside",
+    "GetRTPStatistics() failed to measure RTT since noRTP packets have been received yet",  // NOLINT
     "GetRTPStatistics() failed to read RTP statistics from the RTP/RTCP module",
-    "GetRTPStatistics() failed to retrieve RTT from the RTP/RTCP module",
-    "RTCPReceiver::SenderInfoReceived No received SR",
+    "GetRTPStatistics() failed to retrieve RTT fromthe RTP/RTCP module",
+    "webrtc::RTCPReceiver::SenderInfoReceived No received SR",
     "StatisticsRTP() no statisitics availble",
     NULL
   };
@@ -1033,14 +1034,7 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
   SetSendSsrc(talk_base::CreateRandomNonZeroId());
 
   // Reset all recv codecs; they will be enabled via SetRecvCodecs.
-  int ncodecs = engine->voe()->codec()->NumOfCodecs();
-  for (int i = 0; i < ncodecs; ++i) {
-    webrtc::CodecInst voe_codec;
-    if (engine->voe()->codec()->GetCodec(i, voe_codec) >= 0) {
-      voe_codec.pltype = -1;
-      engine->voe()->codec()->SetRecPayloadType(voe_channel(), voe_codec);
-    }
-  }
+  ResetRecvCodecs(voe_channel());
 }
 
 WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
@@ -1435,6 +1429,24 @@ bool WebRtcVoiceMediaChannel::AddStream(uint32 ssrc) {
   if (rtp->SetLocalSSRC(channel, send_ssrc) == -1) {
     LOG_RTCERR2(SetSendSSRC, channel, send_ssrc);
     return false;
+  }
+
+  // Use the same recv payload types as our default channel.
+  ResetRecvCodecs(channel);
+  int ncodecs = engine()->voe()->codec()->NumOfCodecs();
+  for (int i = 0; i < ncodecs; ++i) {
+    webrtc::CodecInst voe_codec;
+    if (engine()->voe()->codec()->GetCodec(i, voe_codec) != -1) {
+      voe_codec.rate = 0;  // Needed to make GetRecPayloadType work for ISAC
+      if (engine()->voe()->codec()->GetRecPayloadType(
+          voe_channel(), voe_codec) != -1) {
+        if (engine()->voe()->codec()->SetRecPayloadType(
+            channel, voe_codec) == -1) {
+          LOG_RTCERR2(SetRecPayloadType, channel, ToString(voe_codec));
+          return false;
+        }
+      }
+    }
   }
 
   if (mux_channels_.empty() && playout_) {
@@ -1947,6 +1959,22 @@ bool WebRtcVoiceMediaChannel::EnableRtcp(int channel) {
   // what we want to do with them.
   // engine()->voe().EnableVQMon(voe_channel(), true);
   // engine()->voe().EnableRTCP_XR(voe_channel(), true);
+  return true;
+}
+
+bool WebRtcVoiceMediaChannel::ResetRecvCodecs(int channel) {
+  int ncodecs = engine()->voe()->codec()->NumOfCodecs();
+  for (int i = 0; i < ncodecs; ++i) {
+    webrtc::CodecInst voe_codec;
+    if (engine()->voe()->codec()->GetCodec(i, voe_codec) != -1) {
+      voe_codec.pltype = -1;
+      if (engine()->voe()->codec()->SetRecPayloadType(
+          channel, voe_codec) == -1) {
+        LOG_RTCERR2(SetRecPayloadType, channel, ToString(voe_codec));
+        return false;
+      }
+    }
+  }
   return true;
 }
 

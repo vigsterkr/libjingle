@@ -1,5 +1,12 @@
 Libjingle
 
+0.6.1 - Sep 15, 2011
+  - Add dummydevicemanager.
+  - Remove underscores from the files names for app/webrtc folder.
+  - Remove PeerConnection OnLocalStreamInitialized callback.
+  - Fix webrtcjson.cc numeric locale formatting issue.
+  - Don't start playout until the local content has been set.
+
 0.6.0 - Sep 13, 2011
   - Add pub sub support
   - Add unit tests

@@ -25,7 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/webrtc_json.h"
+#include "talk/app/webrtc/webrtcjson.h"
 
 #include <stdio.h>
 #include <string>
@@ -33,39 +33,12 @@
 #include "talk/base/json.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
-#include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/codec.h"
+#include "talk/session/phone/mediasessionclient.h"
 
 namespace webrtc {
 static const int kIceComponent = 1;
 static const int kIceFoundation = 1;
-
-bool GetStunServer(const Json::Value& value, StunServiceDetails* stunServer) {
-  if (value.type() != Json::objectValue && value.type() != Json::nullValue) {
-    LOG(LS_WARNING) << "Failed to parse stun values";
-    return false;
-  }
-
-  Json::Value stun;
-  if (GetValueFromJsonObject(value, "stun_service", &stun)) {
-    if (stun.type() == Json::objectValue) {
-      if (!GetStringFromJsonObject(stun, "host", &stunServer->host) ||
-          !GetStringFromJsonObject(stun, "service", &stunServer->service) ||
-          !GetStringFromJsonObject(stun, "protocol", &stunServer->protocol)) {
-        LOG(LS_WARNING) << "Failed to parse JSON value: "
-                        << value.toStyledString();
-        return false;
-      }
-    } else {
-      LOG(LS_WARNING) << "Failed to find the stun_service member.";
-      return false;
-    }
-  } else {
-    LOG(LS_WARNING) << "Wrong ValueType. Expect Json::objectValue).";
-    return false;
-  }
-  return true;
-}
 
 bool GetJsonSignalingMessage(
     const cricket::SessionDescription* sdp,
@@ -90,8 +63,9 @@ bool GetJsonSignalingMessage(
   Json::Value signal;
   Append(&signal, "media", media);
 
-  // now serialize
+  // Now serialize.
   *signaling_message = Serialize(signal);
+
   return true;
 }
 
@@ -191,7 +165,7 @@ bool BuildAttributes(const std::vector<cricket::Candidate>& candidates,
       Append(&candidate, "foundation", kIceFoundation);
       Append(&candidate, "generation", iter->generation());
       Append(&candidate, "proto", iter->protocol());
-      Append(&candidate, "priority", iter->preference());
+      Append(&candidate, "priority", iter->preference_str());
       Append(&candidate, "ip", iter->address().IPAsString());
       Append(&candidate, "port", iter->address().PortAsString());
       Append(&candidate, "type", iter->type());
@@ -344,10 +318,10 @@ bool ParseIceCandidates(const Json::Value& value,
       return false;
     cand.set_protocol(proto);
 
-    double priority;
-    if (!GetDoubleFromJsonObject(*iter, "priority", &priority))
+    std::string priority;
+    if (!GetStringFromJsonObject(*iter, "priority", &priority))
       return false;
-    cand.set_preference_str(talk_base::ToString(priority));
+    cand.set_preference_str(priority);
 
     std::string str;
     talk_base::SocketAddress addr;
@@ -390,7 +364,7 @@ bool ParseIceCandidates(const Json::Value& value,
 std::vector<Json::Value> ReadValues(
     const Json::Value& value, const std::string& key) {
   std::vector<Json::Value> objects;
-  for (size_t i = 0; i < value[key].size(); ++i) {
+  for (Json::Value::ArrayIndex i = 0; i < value[key].size(); ++i) {
     objects.push_back(value[key][i]);
   }
   return objects;
@@ -412,7 +386,6 @@ double ReadDouble(const Json::Value& value, const std::string& key) {
   return value[key].asDouble();
 }
 
-// Add values
 void Append(Json::Value* object, const std::string& key, bool value) {
   (*object)[key] = Json::Value(value);
 }
@@ -420,19 +393,16 @@ void Append(Json::Value* object, const std::string& key, bool value) {
 void Append(Json::Value* object, const std::string& key, char * value) {
   (*object)[key] = Json::Value(value);
 }
-void Append(Json::Value* object, const std::string& key, double value) {
-  (*object)[key] = Json::Value(value);
-}
-void Append(Json::Value* object, const std::string& key, float value) {
-  (*object)[key] = Json::Value(value);
-}
+
 void Append(Json::Value* object, const std::string& key, int value) {
   (*object)[key] = Json::Value(value);
 }
+
 void Append(Json::Value* object, const std::string& key,
             const std::string& value) {
   (*object)[key] = Json::Value(value);
 }
+
 void Append(Json::Value* object, const std::string& key, uint32 value) {
   (*object)[key] = Json::Value(value);
 }

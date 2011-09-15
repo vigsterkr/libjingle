@@ -50,6 +50,11 @@ class AsyncHttpRequest : public SignalThread {
   explicit AsyncHttpRequest(const std::string &user_agent);
   ~AsyncHttpRequest();
 
+  // If start_delay is less than or equal to zero, this starts immediately.
+  // Start_delay defaults to zero.
+  int start_delay() const { return start_delay_; }
+  void set_start_delay(int delay) { start_delay_ = delay; }
+
   void set_proxy(const ProxyInfo& proxy) {
     proxy_ = proxy;
   }
@@ -93,6 +98,9 @@ class AsyncHttpRequest : public SignalThread {
   virtual void DoWork();
 
  private:
+  void LaunchRequest();
+
+  int start_delay_;
   ProxyInfo proxy_;
   FirewallManager* firewall_;
   std::string host_;

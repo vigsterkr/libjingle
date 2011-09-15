@@ -87,7 +87,8 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       enabled_(false),
       writable_(false),
       was_ever_writable_(false),
-      has_codec_(false),
+      has_local_content_(false),
+      has_remote_content_(false),
       muted_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   media_channel_->SetInterface(this);
@@ -750,16 +751,16 @@ void VoiceChannel::OnChannelRead(TransportChannel* channel,
 }
 
 void VoiceChannel::ChangeState() {
-  // render incoming data if we are the active call
-  // we receive data on the default channel and multiplexed streams
-  bool recv = enabled();
+  // Render incoming data if we're the active call, and we have the local
+  // content. We receive data on the default channel and multiplexed streams.
+  bool recv = enabled() && has_local_content();
   if (!media_channel()->SetPlayout(recv)) {
     SendLastMediaError();
   }
-
-  // Send outgoing data if we are the active call and we know their codec, and
-  // we have had some form of connectivity.
-  bool send = enabled() && has_codec() && was_ever_writable();
+    
+  // Send outgoing data if we're the active call, we have the remote content,
+  // and we have had some form of connectivity.
+  bool send = enabled() && has_remote_content() && was_ever_writable();
   SendFlags send_flag = send ? SEND_MICROPHONE : SEND_NOTHING;
   if (!media_channel()->SetSend(send_flag)) {
     LOG(LS_ERROR) << "Failed to SetSend " << send_flag << " on voice channel";
@@ -807,6 +808,12 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
     ret = media_channel()->SetRecvRtpHeaderExtensions(
         audio->rtp_header_extensions());
   }
+  if (ret) {
+    set_has_local_content(true);
+    ChangeState();
+  } else {
+    LOG(LS_WARNING) << "Failed to set local voice description";
+  }
   return ret;
 }
 
@@ -847,8 +854,10 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   // update state
   if (ret) {
-    set_has_codec(true);
+    set_has_remote_content(true);
     ChangeState();
+  } else {
+    LOG(LS_WARNING) << "Failed to set remote voice description";
   }
   return ret;
 }
@@ -1056,17 +1065,17 @@ void VideoChannel::EnableCpuAdaptation(bool enable) {
 }
 
 void VideoChannel::ChangeState() {
-  // render incoming data if we are the active call
-  // we receive data on the default channel and multiplexed streams
-  bool recv = enabled();
+  // Render incoming data if we're the active call, and we have the local
+  // content. We receive data on the default channel and multiplexed streams.
+  bool recv = enabled() && has_local_content();
   if (!media_channel()->SetRender(recv)) {
     LOG(LS_ERROR) << "Failed to SetRender on video channel";
     // TODO: Report error back to server.
   }
 
-  // Send outgoing data if we are the active call and we know their codec, and
-  // we have had some form of connectivity.
-  bool send = enabled() && has_codec() && was_ever_writable();
+  // Send outgoing data if we're the active call, we have the remote content,
+  // and we have had some form of connectivity.
+  bool send = enabled() && has_remote_content() && was_ever_writable();
   if (!media_channel()->SetSend(send)) {
     LOG(LS_ERROR) << "Failed to SetSend on video channel";
     // TODO: Report error back to server.
@@ -1127,6 +1136,12 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
     ret = media_channel()->SetRecvRtpHeaderExtensions(
         video->rtp_header_extensions());
   }
+  if (ret) {
+    set_has_local_content(true);
+    ChangeState();
+  } else {
+    LOG(LS_WARNING) << "Failed to set local video description";
+  }
   return ret;
 }
 
@@ -1161,8 +1176,10 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
         video->rtp_header_extensions());
   }
   if (ret) {
-    set_has_codec(true);
+    set_has_remote_content(true);
     ChangeState();
+  } else {
+    LOG(LS_WARNING) << "Failed to set remote video description";
   }
   return ret;
 }

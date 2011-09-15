@@ -164,8 +164,10 @@ class BaseChannel
   void set_rtcp_transport_channel(TransportChannel* transport);
   bool writable() const { return writable_; }
   bool was_ever_writable() const { return was_ever_writable_; }
-  bool has_codec() const { return has_codec_; }
-  void set_has_codec(bool has_codec) { has_codec_ = has_codec; }
+  bool has_local_content() const { return has_local_content_; }
+  bool has_remote_content() const { return has_remote_content_; }
+  void set_has_local_content(bool has) { has_local_content_ = has; }
+  void set_has_remote_content(bool has) { has_remote_content_ = has; }
   bool muted() const { return muted_; }
   talk_base::Thread* signaling_thread() { return session_->signaling_thread(); }
   SrtpFilter* srtp_filter() { return &srtp_filter_; }
@@ -276,7 +278,8 @@ class BaseChannel
   bool enabled_;
   bool writable_;
   bool was_ever_writable_;
-  bool has_codec_;
+  bool has_local_content_;
+  bool has_remote_content_;
   bool muted_;
 };
 

@@ -65,10 +65,13 @@ class AsyncHttpRequestTest : public testing::Test,
                              public sigslot::has_slots<> {
  public:
   AsyncHttpRequestTest()
-      : done_(false), server_(Thread::Current(), kServerAddr) {
+      : started_(false),
+        done_(false),
+        server_(Thread::Current(), kServerAddr) {
     server_.SignalHttpRequest.connect(this, &AsyncHttpRequestTest::OnRequest);
   }
 
+  bool started() const { return started_; }
   bool done() const { return done_; }
 
   AsyncHttpRequest* CreateGetRequest(const std::string& host, int port,
@@ -105,6 +108,8 @@ class AsyncHttpRequestTest : public testing::Test,
 
  protected:
   void OnRequest(HttpServer* server, HttpServerTransaction* t) {
+    started_ = true;
+
     if (t->request.path == kServerGetPath) {
       t->response.set_success("text/plain", new MemoryStream(kServerResponse));
     } else if (t->request.path == kServerPostPath) {
@@ -131,6 +136,7 @@ class AsyncHttpRequestTest : public testing::Test,
   }
 
  private:
+  bool started_;
   bool done_;
   TestHttpServer server_;
 };
@@ -139,7 +145,9 @@ TEST_F(AsyncHttpRequestTest, TestGetSuccess) {
   AsyncHttpRequest* req = CreateGetRequest(
       kServerHostnameAddr.hostname(), server().address().port(),
       kServerGetPath);
+  EXPECT_FALSE(started());
   req->Start();
+  EXPECT_TRUE_WAIT(started(), 100);  // Should have started by now.
   EXPECT_TRUE_WAIT(done(), 5000);
   std::string response;
   EXPECT_EQ(200U, req->response().scode);
@@ -186,6 +194,25 @@ TEST_F(AsyncHttpRequestTest, TestCancel) {
       kServerGetPath);
   req->Start();
   req->Destroy(true);
+}
+
+TEST_F(AsyncHttpRequestTest, TestGetSuccessDelay) {
+  AsyncHttpRequest* req = CreateGetRequest(
+      kServerHostnameAddr.hostname(), server().address().port(),
+      kServerGetPath);
+  req->set_start_delay(10);  // Delay 10ms.
+  req->Start();
+  Thread::SleepMs(5);
+  EXPECT_FALSE(started());  // Should not have started immediately.
+  EXPECT_TRUE_WAIT(started(), 200);  // Should have started by now.
+  EXPECT_TRUE_WAIT(done(), 5000);
+  std::string response;
+  EXPECT_EQ(200U, req->response().scode);
+  ASSERT_TRUE(req->response().document.get() != NULL);
+  req->response().document->Rewind();
+  req->response().document->ReadLine(&response);
+  EXPECT_EQ(kServerResponse, response);
+  req->Release();
 }
 
 }  // namespace talk_base

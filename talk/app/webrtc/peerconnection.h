@@ -51,14 +51,6 @@ class PeerConnectionObserver {
   // serialized signaling message
   virtual void OnSignalingMessage(const std::string& msg) = 0;
 
-  // Triggered when a local stream has been added and initialized
-  // TODO: This callback was added intense to give the client a
-  // chance to set the capture device. It doesn't map to any JS callback. Once
-  // we figure out a better way to set video capture device, we should remove
-  // this callback.
-  virtual void OnLocalStreamInitialized(const std::string& stream_id,
-      bool video) = 0;
-
   // Triggered when a remote peer accepts a media connection.
   virtual void OnAddStream(const std::string& stream_id, bool video) = 0;
 
@@ -88,8 +80,7 @@ class PeerConnection {
   virtual bool SignalingMessage(const std::string& msg) = 0;
 
   // Asynchronously adds a local stream device to the peer
-  // connection. The operation is complete when
-  // PeerConnectionObserver::OnLocalStreamInitialized is called.
+  // connection.
   virtual bool AddStream(const std::string& stream_id, bool video) = 0;
 
   // Asynchronously removes a local stream device from the peer

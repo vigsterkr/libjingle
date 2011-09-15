@@ -25,9 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/peerconnection_impl.h"
+#include "talk/app/webrtc/peerconnectionimpl.h"
 
-#include "talk/app/webrtc/webrtc_json.h"
+#include "talk/app/webrtc/webrtcjson.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/basicpacketsocketfactory.h"
 #include "talk/base/helpers.h"
@@ -108,9 +108,6 @@ WebRtcSession* PeerConnectionImpl::CreateMediaSession(
     session->SignalRemoveStream.connect(
         this,
         &PeerConnectionImpl::OnRemoveStream);
-    session->SignalRtcMediaChannelCreated.connect(
-        this,
-        &PeerConnectionImpl::OnRtcMediaChannelCreated);
     session->SignalLocalDescription.connect(
         this,
         &PeerConnectionImpl::OnLocalDescription);
@@ -207,13 +204,6 @@ void PeerConnectionImpl::OnRemoveStream(const std::string& stream_id,
                                         bool video) {
   if (event_callback_) {
     event_callback_->OnRemoveStream(stream_id, video);
-  }
-}
-
-void PeerConnectionImpl::OnRtcMediaChannelCreated(const std::string& stream_id,
-                                                  bool video) {
-  if (event_callback_) {
-    event_callback_->OnLocalStreamInitialized(stream_id, video);
   }
 }
 

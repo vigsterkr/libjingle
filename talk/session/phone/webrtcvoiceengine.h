@@ -298,6 +298,7 @@ class WebRtcVoiceMediaChannel
                        const std::vector<AudioCodec>& all_codecs,
                        webrtc::CodecInst* send_codec);
   bool EnableRtcp(int channel);
+  bool ResetRecvCodecs(int channel);
   bool SetPlayout(int channel, bool playout);
   static uint32 ParseSsrc(const void* data, size_t len, bool rtcp);
   static Error WebRtcErrorToChannelError(int err_code);

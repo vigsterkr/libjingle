@@ -244,6 +244,32 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsDuplicatePayloadType) {
   EXPECT_FALSE(channel_->SetRecvCodecs(codecs));
 }
 
+// Test that changes to recv codecs are applied to all streams.
+TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsWithMultipleStreams) {
+  EXPECT_TRUE(SetupEngine());
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kIsacCodec);
+  codecs.push_back(kPcmuCodec);
+  codecs.push_back(kTelephoneEventCodec);
+  codecs[0].id = 106;  // collide with existing telephone-event
+  codecs[2].id = 126;
+  EXPECT_TRUE(channel_->SetRecvCodecs(codecs));
+  EXPECT_TRUE(channel_->AddStream(2));
+  int channel_num2 = voe_.GetLastChannel();
+  webrtc::CodecInst gcodec;
+  talk_base::strcpyn(gcodec.plname, ARRAY_SIZE(gcodec.plname), "ISAC");
+  gcodec.plfreq = 16000;
+  EXPECT_EQ(0, voe_.GetRecPayloadType(channel_num2, gcodec));
+  EXPECT_EQ(106, gcodec.pltype);
+  EXPECT_STREQ("ISAC", gcodec.plname);
+  talk_base::strcpyn(gcodec.plname, ARRAY_SIZE(gcodec.plname),
+      "telephone-event");
+  gcodec.plfreq = 8000;
+  EXPECT_EQ(0, voe_.GetRecPayloadType(channel_num2, gcodec));
+  EXPECT_EQ(126, gcodec.pltype);
+  EXPECT_STREQ("telephone-event", gcodec.plname);
+}
+
 // Test that we apply codecs properly.
 TEST_F(WebRtcVoiceEngineTest, SetSendCodecs) {
   EXPECT_TRUE(SetupEngine());
@@ -584,6 +610,64 @@ TEST_F(WebRtcVoiceEngineTest, SendAndPlayout) {
   EXPECT_FALSE(voe_.GetPlayout(channel_num));
 }
 
+// Test that we can add and remove streams, and do proper send/playout.
+// We can receive on multiple streams, but will only send on one.
+TEST_F(WebRtcVoiceEngineTest, SendAndPlayoutWithMultipleStreams) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num1 = voe_.GetLastChannel();
+
+  // Start playout on the default channel.
+  EXPECT_TRUE(channel_->SetPlayout(true));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num1));
+
+  // Adding another stream should disable playout on the default channel.
+  EXPECT_TRUE(channel_->AddStream(2));
+  int channel_num2 = voe_.GetLastChannel();
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kPcmuCodec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
+  EXPECT_TRUE(voe_.GetSend(channel_num1));
+  EXPECT_FALSE(voe_.GetSend(channel_num2));
+
+  // Make sure only the new channel is played out.
+  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
+
+  // Adding yet another stream should have stream 2 and 3 enabled for playout.
+  EXPECT_TRUE(channel_->AddStream(3));
+  int channel_num3 = voe_.GetLastChannel();
+  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num3));
+  EXPECT_FALSE(voe_.GetSend(channel_num3));
+
+  // Stop sending.
+  EXPECT_TRUE(channel_->SetSend(cricket::SEND_NOTHING));
+  EXPECT_FALSE(voe_.GetSend(channel_num1));
+  EXPECT_FALSE(voe_.GetSend(channel_num2));
+  EXPECT_FALSE(voe_.GetSend(channel_num3));
+
+  // Stop playout.
+  EXPECT_TRUE(channel_->SetPlayout(false));
+  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
+  EXPECT_FALSE(voe_.GetPlayout(channel_num2));
+  EXPECT_FALSE(voe_.GetPlayout(channel_num3));
+
+  // Restart playout and make sure the default channel still is not played out.
+  EXPECT_TRUE(channel_->SetPlayout(true));
+  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
+  EXPECT_TRUE(voe_.GetPlayout(channel_num3));
+
+  // Now remove the new streams and verify that the default channel is
+  // played out again.
+  EXPECT_TRUE(channel_->RemoveStream(3));
+  EXPECT_TRUE(channel_->RemoveStream(2));
+
+  EXPECT_TRUE(voe_.GetPlayout(channel_num1));
+}
+
 // Test that we can set the devices to use.
 TEST_F(WebRtcVoiceEngineTest, SetDevices) {
   EXPECT_TRUE(SetupEngine());
@@ -758,73 +842,6 @@ TEST_F(WebRtcVoiceEngineTest, SetSendSsrc) {
   EXPECT_EQ(0x99U, send_ssrc);
 }
 
-// Test that we can properly receive packets.
-TEST_F(WebRtcVoiceEngineTest, Recv) {
-  EXPECT_TRUE(SetupEngine());
-  int channel_num = voe_.GetLastChannel();
-  DeliverPacket(kPcmuFrame, sizeof(kPcmuFrame));
-  EXPECT_TRUE(voe_.CheckPacket(channel_num, kPcmuFrame,
-                                      sizeof(kPcmuFrame)));
-}
-
-// Test that we can add and remove streams, and do proper send/playout.
-// We can receive on multiple streams, but will only send on one.
-TEST_F(WebRtcVoiceEngineTest, SendAndPlayoutWithMultipleStreams) {
-  EXPECT_TRUE(SetupEngine());
-  int channel_num1 = voe_.GetLastChannel();
-
-  // Start playout on the default channel.
-  EXPECT_TRUE(channel_->SetPlayout(true));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num1));
-
-  // Adding another stream should disable playout on the default channel.
-  EXPECT_TRUE(channel_->AddStream(2));
-  int channel_num2 = voe_.GetLastChannel();
-  std::vector<cricket::AudioCodec> codecs;
-  codecs.push_back(kPcmuCodec);
-  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
-  EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
-  EXPECT_TRUE(voe_.GetSend(channel_num1));
-  EXPECT_FALSE(voe_.GetSend(channel_num2));
-
-  // Make sure only the new channel is played out.
-  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
-
-  // Adding yet another stream should have stream 2 and 3 enabled for playout.
-  EXPECT_TRUE(channel_->AddStream(3));
-  int channel_num3 = voe_.GetLastChannel();
-  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num3));
-  EXPECT_FALSE(voe_.GetSend(channel_num3));
-
-  // Stop sending.
-  EXPECT_TRUE(channel_->SetSend(cricket::SEND_NOTHING));
-  EXPECT_FALSE(voe_.GetSend(channel_num1));
-  EXPECT_FALSE(voe_.GetSend(channel_num2));
-  EXPECT_FALSE(voe_.GetSend(channel_num3));
-
-  // Stop playout.
-  EXPECT_TRUE(channel_->SetPlayout(false));
-  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
-  EXPECT_FALSE(voe_.GetPlayout(channel_num2));
-  EXPECT_FALSE(voe_.GetPlayout(channel_num3));
-
-  // Restart playout and make sure the default channel still is not played out.
-  EXPECT_TRUE(channel_->SetPlayout(true));
-  EXPECT_FALSE(voe_.GetPlayout(channel_num1));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num2));
-  EXPECT_TRUE(voe_.GetPlayout(channel_num3));
-
-  // Now remove the new streams and verify that the default channel is
-  // played out again.
-  EXPECT_TRUE(channel_->RemoveStream(3));
-  EXPECT_TRUE(channel_->RemoveStream(2));
-
-  EXPECT_TRUE(voe_.GetPlayout(channel_num1));
-}
-
 // Test that we can set the outgoing SSRC properly with multiple streams.
 TEST_F(WebRtcVoiceEngineTest, SetSendSsrcWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
@@ -839,11 +856,13 @@ TEST_F(WebRtcVoiceEngineTest, SetSendSsrcWithMultipleStreams) {
   EXPECT_EQ(0x99U, send_ssrc);
 }
 
-// Test that we properly handle failures to add a stream.
-TEST_F(WebRtcVoiceEngineTest, AddStreamFail) {
+// Test that we can properly receive packets.
+TEST_F(WebRtcVoiceEngineTest, Recv) {
   EXPECT_TRUE(SetupEngine());
-  voe_.set_fail_create_channel(true);
-  EXPECT_FALSE(channel_->AddStream(2));
+  int channel_num = voe_.GetLastChannel();
+  DeliverPacket(kPcmuFrame, sizeof(kPcmuFrame));
+  EXPECT_TRUE(voe_.CheckPacket(channel_num, kPcmuFrame,
+                                      sizeof(kPcmuFrame)));
 }
 
 // Test that we can properly receive packets on multiple streams.
@@ -886,6 +905,13 @@ TEST_F(WebRtcVoiceEngineTest, RecvWithMultipleStreams) {
   EXPECT_TRUE(channel_->RemoveStream(3));
   EXPECT_TRUE(channel_->RemoveStream(2));
   EXPECT_TRUE(channel_->RemoveStream(1));
+}
+
+// Test that we properly handle failures to add a stream.
+TEST_F(WebRtcVoiceEngineTest, AddStreamFail) {
+  EXPECT_TRUE(SetupEngine());
+  voe_.set_fail_create_channel(true);
+  EXPECT_FALSE(channel_->AddStream(2));
 }
 
 // Test that we properly clean up any streams that were added, even if

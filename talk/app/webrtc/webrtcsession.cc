@@ -132,9 +132,6 @@ bool WebRtcSession::CreateVoiceChannel(const std::string& stream_id) {
   ASSERT(voice_channel != NULL);
   stream_info->channel = voice_channel;
 
-  if (!incoming()) {
-    SignalRtcMediaChannelCreated(stream_id, false);
-  }
   return true;
 }
 
@@ -149,9 +146,6 @@ bool WebRtcSession::CreateVideoChannel(const std::string& stream_id) {
   ASSERT(video_channel != NULL);
   stream_info->channel = video_channel;
 
-  if (!incoming()) {
-    SignalRtcMediaChannelCreated(stream_id, true);
-  }
   return true;
 }
 
@@ -457,15 +451,31 @@ bool WebRtcSession::OnRemoteDescription(
   if (!incoming()) {
     // Trigger OnAddStream callback at the initiator
     const cricket::ContentInfo* video_content = GetFirstVideoContent(desc);
-    if (video_content) {
-      SignalAddStream(video_content->name, true);
+    if (video_content && !SendSignalAddStream(true)) {
+      LOG(LERROR) << "Video stream unexpected in answer.";
+      return false;
     } else {
       const cricket::ContentInfo* audio_content = GetFirstAudioContent(desc);
-      if (audio_content)
-        SignalAddStream(audio_content->name, false);
+      if (audio_content && !SendSignalAddStream(false)) {
+        LOG(LERROR) << "Audio stream unexpected in answer.";
+        return false;
+      }
     }
   }
   return true;
+}
+
+// Send the SignalAddStream with the stream_id based on the content type.
+bool WebRtcSession::SendSignalAddStream(bool video) {
+  StreamMap::const_iterator iter;
+  for (iter = streams_.begin(); iter != streams_.end(); ++iter) {
+    StreamInfo* sinfo = (*iter);
+    if (sinfo->video == video) {
+      SignalAddStream(sinfo->stream_id, video);
+      return true;
+    }
+  }
+  return false;
 }
 
 cricket::SessionDescription* WebRtcSession::CreateOffer() {

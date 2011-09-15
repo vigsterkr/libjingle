@@ -27,7 +27,7 @@
 
 #include "talk/app/webrtc/peerconnectionfactory.h"
 
-#include "talk/app/webrtc/peerconnection_proxy.h"
+#include "talk/app/webrtc/peerconnectionproxy.h"
 #include "talk/base/logging.h"
 #include "talk/p2p/client/basicportallocator.h"
 #include "talk/session/phone/channelmanager.h"
@@ -37,7 +37,7 @@ namespace webrtc {
 PeerConnectionFactory::PeerConnectionFactory(
     cricket::PortAllocator* port_allocator,
     cricket::MediaEngineInterface* media_engine,
-    cricket::DeviceManager* device_manager,
+    cricket::DeviceManagerInterface* device_manager,
     talk_base::Thread* worker_thread)
     : initialized_(false),
       port_allocator_(port_allocator),
@@ -58,7 +58,7 @@ PeerConnectionFactory::~PeerConnectionFactory() {
 }
 
 bool PeerConnectionFactory::Initialize() {
-  ASSERT(channel_manager_.get());
+  ASSERT(channel_manager_.get() != NULL);
   initialized_ = channel_manager_->Init();
   return initialized_;
 }

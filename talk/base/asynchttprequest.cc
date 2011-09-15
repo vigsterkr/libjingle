@@ -29,7 +29,10 @@
 
 namespace talk_base {
 
-enum { MSG_TIMEOUT = SignalThread::ST_MSG_FIRST_AVAILABLE };
+enum {
+  MSG_TIMEOUT = SignalThread::ST_MSG_FIRST_AVAILABLE,
+  MSG_LAUNCH_REQUEST
+};
 static const int kDefaultHTTPTimeout = 30 * 1000;  // 30 sec
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -37,10 +40,16 @@ static const int kDefaultHTTPTimeout = 30 * 1000;  // 30 sec
 ///////////////////////////////////////////////////////////////////////////////
 
 AsyncHttpRequest::AsyncHttpRequest(const std::string &user_agent)
-    : firewall_(NULL), port_(80), secure_(false),
-      timeout_(kDefaultHTTPTimeout), fail_redirect_(false),
+    : start_delay_(0),
+      firewall_(NULL),
+      port_(80),
+      secure_(false),
+      timeout_(kDefaultHTTPTimeout),
+      fail_redirect_(false),
       factory_(Thread::Current()->socketserver(), user_agent),
-      pool_(&factory_), client_(user_agent.c_str(), &pool_), error_(HE_NONE)  {
+      pool_(&factory_),
+      client_(user_agent.c_str(), &pool_),
+      error_(HE_NONE) {
   client_.SignalHttpClientComplete.connect(this,
       &AsyncHttpRequest::OnComplete);
 }
@@ -49,22 +58,11 @@ AsyncHttpRequest::~AsyncHttpRequest() {
 }
 
 void AsyncHttpRequest::OnWorkStart() {
-  factory_.SetProxy(proxy_);
-  if (secure_)
-    factory_.UseSSL(host_.c_str());
-
-  bool transparent_proxy = (port_ == 80) &&
-           ((proxy_.type == PROXY_HTTPS) || (proxy_.type == PROXY_UNKNOWN));
-  if (transparent_proxy) {
-    client_.set_proxy(proxy_);
+  if (start_delay_ <= 0) {
+    LaunchRequest();
+  } else {
+    Thread::Current()->PostDelayed(start_delay_, this, MSG_LAUNCH_REQUEST);
   }
-  client_.set_fail_redirect(fail_redirect_);
-  client_.set_server(SocketAddress(host_, port_));
-
-  LOG(LS_INFO) << "HttpRequest start: " << host_ + client_.request().path;
-
-  Thread::Current()->PostDelayed(timeout_, this, MSG_TIMEOUT);
-  client_.start();
 }
 
 void AsyncHttpRequest::OnWorkStop() {
@@ -91,14 +89,19 @@ void AsyncHttpRequest::OnComplete(HttpClient* client, HttpErrorType error) {
 }
 
 void AsyncHttpRequest::OnMessage(Message* message) {
-  if (message->message_id != MSG_TIMEOUT) {
+  switch (message->message_id) {
+   case MSG_TIMEOUT:
+    LOG(LS_INFO) << "HttpRequest timed out";
+    client_.reset();
+    worker()->Quit();
+    break;
+   case MSG_LAUNCH_REQUEST:
+    LaunchRequest();
+    break;
+   default:
     SignalThread::OnMessage(message);
-    return;
+    break;
   }
-
-  LOG(LS_INFO) << "HttpRequest timed out";
-  client_.reset();
-  worker()->Quit();
 }
 
 void AsyncHttpRequest::DoWork() {
@@ -106,6 +109,25 @@ void AsyncHttpRequest::DoWork() {
   // that we can be a SignalThread; in the future this class should not be
   // a SignalThread, since it does not need to spawn a new thread.
   Thread::Current()->ProcessMessages(kForever);
+}
+
+void AsyncHttpRequest::LaunchRequest() {
+  factory_.SetProxy(proxy_);
+  if (secure_)
+    factory_.UseSSL(host_.c_str());
+
+  bool transparent_proxy = (port_ == 80) &&
+           ((proxy_.type == PROXY_HTTPS) || (proxy_.type == PROXY_UNKNOWN));
+  if (transparent_proxy) {
+    client_.set_proxy(proxy_);
+  }
+  client_.set_fail_redirect(fail_redirect_);
+  client_.set_server(SocketAddress(host_, port_));
+
+  LOG(LS_INFO) << "HttpRequest start: " << host_ + client_.request().path;
+
+  Thread::Current()->PostDelayed(timeout_, this, MSG_TIMEOUT);
+  client_.start();
 }
 
 }  // namespace talk_base

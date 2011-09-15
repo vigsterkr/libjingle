@@ -25,9 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/peerconnection_proxy.h"
+#include "talk/app/webrtc/peerconnectionproxy.h"
 
-#include "talk/app/webrtc/peerconnection_impl.h"
+#include "talk/app/webrtc/peerconnectionimpl.h"
 #include "talk/base/logging.h"
 
 namespace webrtc {

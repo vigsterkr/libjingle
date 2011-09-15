@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_WEBRTC_JSON_H_
-#define TALK_APP_WEBRTC_WEBRTC_JSON_H_
+#ifndef TALK_APP_WEBRTC_WEBRTCJSON_H_
+#define TALK_APP_WEBRTC_WEBRTCJSON_H_
 
 #include <string>
 
@@ -35,8 +35,8 @@
 #else
 #include "third_party/jsoncpp/json.h"
 #endif
-#include "talk/session/phone/codec.h"
 #include "talk/p2p/base/candidate.h"
+#include "talk/session/phone/codec.h"
 
 namespace Json {
 class Value;
@@ -48,12 +48,6 @@ class VideoContentDescription;
 struct ContentInfo;
 class SessionDescription;
 }
-
-struct StunServiceDetails {
-  std::string host;
-  std::string service;
-  std::string protocol;
-};
 
 namespace webrtc {
 
@@ -98,12 +92,8 @@ std::string ReadString(const Json::Value& value, const std::string& key);
 double ReadDouble(const Json::Value& value, const std::string& key);
 uint32 ReadUInt(const Json::Value& value, const std::string& key);
 
-// Add values
 void Append(Json::Value* object, const std::string& key, bool value);
-
 void Append(Json::Value* object, const std::string& key, char * value);
-void Append(Json::Value* object, const std::string& key, double value);
-void Append(Json::Value* object, const std::string& key, float value);
 void Append(Json::Value* object, const std::string& key, int value);
 void Append(Json::Value* object, const std::string& key,
             const std::string& value);
@@ -115,4 +105,4 @@ void Append(Json::Value* object,
             const std::vector<Json::Value>& values);
 }
 
-#endif  // TALK_APP_WEBRTC_WEBRTC_JSON_H_
+#endif  // TALK_APP_WEBRTC_WEBRTCJSON_H_

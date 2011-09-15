@@ -50,7 +50,6 @@ class WebRtcSessionTest
     kNone,
     kOnAddStream,
     kOnRemoveStream,
-    kOnRtcMediaChannelCreated,
     kOnLocalDescription,
     kOnFailedCall,
   };
@@ -81,12 +80,6 @@ class WebRtcSessionTest
   }
   void OnRemoveStream(const std::string& stream_id, bool video) {
     callback_ids_.push_back(kOnRemoveStream);
-    last_stream_id_ = stream_id;
-    last_was_video_ = video;
-  }
-  void OnRtcMediaChannelCreated(const std::string& stream_id,
-                                        bool video) {
-    callback_ids_.push_back(kOnRtcMediaChannelCreated);
     last_stream_id_ = stream_id;
     last_was_video_ = video;
   }
@@ -183,8 +176,6 @@ class WebRtcSessionTest
     session_->SignalAddStream.connect(this, &WebRtcSessionTest::OnAddStream);
     session_->SignalRemoveStream.connect(this,
         &WebRtcSessionTest::OnRemoveStream);
-    session_->SignalRtcMediaChannelCreated.connect(this,
-        &WebRtcSessionTest::OnRtcMediaChannelCreated);
     session_->SignalLocalDescription.connect(this,
         &WebRtcSessionTest::OnLocalDescription);
     session_->SignalFailedCall.connect(this, &WebRtcSessionTest::OnFailedCall);
@@ -234,17 +225,11 @@ class WebRtcSessionTest
     if (!session_->CreateVoiceChannel(stream_id)) {
       return false;
     }
-    if (!WaitForCallback(kOnRtcMediaChannelCreated, 1000)) {
-      return false;
-    }
     return true;
   }
 
   bool CallCreateVideoChannel(const std::string& stream_id) {
     if (!session_->CreateVideoChannel(stream_id)) {
-      return false;
-    }
-    if (!WaitForCallback(kOnRtcMediaChannelCreated, 1000)) {
       return false;
     }
     return true;

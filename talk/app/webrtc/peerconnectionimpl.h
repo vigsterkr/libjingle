@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_PEERCONNECTION_IMPL_H_
-#define TALK_APP_WEBRTC_PEERCONNECTION_IMPL_H_
+#ifndef TALK_APP_WEBRTC_PEERCONNECTIONIMPL_H_
+#define TALK_APP_WEBRTC_PEERCONNECTIONIMPL_H_
 
 #include <string>
 #include <vector>
@@ -80,8 +80,6 @@ class PeerConnectionImpl : public PeerConnection,
       const cricket::SessionDescription* desc,
       const std::vector<cricket::Candidate>& candidates);
   void OnFailedCall();
-  void OnRtcMediaChannelCreated(const std::string& stream_id,
-                                bool video);
   bool Init();
 
  private:
@@ -96,4 +94,4 @@ class PeerConnectionImpl : public PeerConnection,
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_PEERCONNECTION_IMPL_H_
+#endif  // TALK_APP_WEBRTC_PEERCONNECTIONIMPL_H_
