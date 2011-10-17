@@ -103,22 +103,22 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   }
   d_->engine_->SetUseTls(settings.use_tls());
 
-  //
-  // The talk.google.com server returns a certificate of "talk.google.com"
-  // for non-Gmail accounts, so we tweak this as needed:
-  // "foo@example.com" -> stream to="example.com"
-  // tls certificate for "talk.google.com"
-  // For Gmail accounts, and all other servers, we leave the strings empty,
-  // which causes the jid's domain to be used:
-  // "foo@gmail.com" -> stream to="gmail.com"
-  // tls certificate for "gmail.com"
-  //
+  // The talk.google.com server returns a certificate with common-name:
+  //   CN="gmail.com" for @gmail.com accounts,
+  //   CN="googlemail.com" for @googlemail.com accounts,
+  //   CN="talk.google.com" for other accounts (such as @example.com),
+  // so we tweak the tls server setting for those other accounts to match the
+  // returned certificate CN of "talk.google.com".
+  // For other servers, we leave the strings empty, which causes the jid's
+  // domain to be used.  We do the same for gmail.com and googlemail.com as the
+  // returned CN matches the account domain in those cases.
   std::string server_name = settings.server().IPAsString();
   if (server_name == buzz::STR_TALK_GOOGLE_COM ||
       server_name == buzz::STR_TALKX_L_GOOGLE_COM ||
       server_name == buzz::STR_XMPP_GOOGLE_COM ||
       server_name == buzz::STR_XMPPX_L_GOOGLE_COM) {
-    if (settings.host() != STR_GMAIL_COM) {
+    if (settings.host() != STR_GMAIL_COM &&
+        settings.host() != STR_GOOGLEMAIL_COM) {
       d_->engine_->SetTlsServer("", STR_TALK_GOOGLE_COM);
     }
   }
