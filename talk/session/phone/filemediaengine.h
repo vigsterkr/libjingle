@@ -111,6 +111,23 @@ class FileMediaEngine : public MediaEngineInterface {
   virtual void SetVoiceLogging(int min_sev, const char* filter) {}
   virtual void SetVideoLogging(int min_sev, const char* filter) {}
 
+  virtual bool RegisterVideoProcessor(VideoProcessor* processor) {
+    return true;
+  }
+  virtual bool UnregisterVideoProcessor(VideoProcessor* processor) {
+    return true;
+  }
+  virtual bool RegisterVoiceProcessor(uint32 ssrc,
+                                      VoiceProcessor* processor,
+                                      MediaProcessorDirection direction) {
+    return true;
+  }
+  virtual bool UnregisterVoiceProcessor(uint32 ssrc,
+                                        VoiceProcessor* processor,
+                                        MediaProcessorDirection direction) {
+    return true;
+  }
+
  private:
   std::string voice_input_filename_;
   std::string voice_output_filename_;

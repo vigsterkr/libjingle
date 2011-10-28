@@ -31,6 +31,7 @@
 #include <string>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/time.h"
 
 namespace cricket {
 
@@ -106,10 +107,9 @@ uint32 CanonicalFourCC(uint32 fourcc);
 // Definition of VideoFormat.
 //////////////////////////////////////////////////////////////////////////////
 
-static const int64 kNumNanosecsPerSec = 1000000000;
-
 struct VideoFormat {
-  static const int64 kMinimumInterval = kNumNanosecsPerSec / 10000;  // 10k fps
+  static const int64 kMinimumInterval =
+      talk_base::kNumNanosecsPerSec / 10000;  // 10k fps
 
   VideoFormat() : width(0), height(0), interval(0), fourcc(0) {}
 
@@ -128,13 +128,13 @@ struct VideoFormat {
   }
 
   static int64 FpsToInterval(int fps) {
-    return fps ? kNumNanosecsPerSec / fps : kMinimumInterval;
+    return fps ? talk_base::kNumNanosecsPerSec / fps : kMinimumInterval;
   }
 
   static int IntervalToFps(int64 interval) {
     // Normalize the interval first.
     interval = talk_base::_max(interval, kMinimumInterval);
-    return static_cast<int>(kNumNanosecsPerSec / interval);
+    return static_cast<int>(talk_base::kNumNanosecsPerSec / interval);
   }
 
   bool operator==(const VideoFormat& format) const {

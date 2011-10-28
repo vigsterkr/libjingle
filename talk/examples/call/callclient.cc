@@ -171,6 +171,7 @@ void CallClient::ParseLine(const std::string& line) {
     if (command == "accept") {
       cricket::CallOptions options;
       options.video_bandwidth = GetInt(words, 1, cricket::kAutoBandwidth);
+      options.has_video = true;
       Accept(options);
     } else if (command == "reject") {
       Reject();
@@ -452,6 +453,7 @@ void CallClient::OnSessionState(cricket::Call* call,
     }
     cricket::CallOptions options;
     if (auto_accept_) {
+      options.has_video = true;
       Accept(options);
     }
   } else if (state == cricket::Session::STATE_SENTINITIATE) {
@@ -709,7 +711,7 @@ void CallClient::OnRecordingStateChange(
     const std::string& nick, bool was_recording, bool is_recording) {
   if (!was_recording && is_recording) {
     console_->PrintLine("%s now recording.", nick.c_str());
-  } else if (was_recording && is_recording) {
+  } else if (was_recording && !is_recording) {
     console_->PrintLine("%s no longer recording.", nick.c_str());
   }
 }

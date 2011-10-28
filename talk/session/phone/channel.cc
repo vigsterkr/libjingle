@@ -810,21 +810,22 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
     media_channel()->SetSendSsrc(audio->ssrc());
     LOG(LS_INFO) << "Set send ssrc for audio: " << audio->ssrc();
   }
-  // set SRTP
+  // Set local SRTP parameters (what we will encrypt with).
   ret = SetSrtp_w(audio->cryptos(), action, CS_LOCAL);
-  // set RTCP mux
+  // Set local RTCP mux parameters.
   if (ret) {
     ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_LOCAL);
   }
-  // set payload type and config for voice codecs
+  // Set local audio codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(audio->codecs());
   }
-  // set header extensions
+  // Set local RTP header extensions.
   if (ret && audio->rtp_header_extensions_set()) {
     ret = media_channel()->SetRecvRtpHeaderExtensions(
         audio->rtp_header_extensions());
   }
+  // If everything worked, see if we can start receiving.
   if (ret) {
     set_has_local_content(true);
     ChangeState();
@@ -844,22 +845,23 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   ASSERT(audio != NULL);
 
   bool ret;
-  // set SRTP
+  // Set remote SRTP parameters (what the other side will encrypt with).
   ret = SetSrtp_w(audio->cryptos(), action, CS_REMOTE);
-  // set RTCP mux
+  // Set remote RTCP mux parameters.
   if (ret) {
     ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_REMOTE);
   }
-  // set codecs and payload types
+  // Set remote video codecs (what the other side wants to receive).
   if (ret) {
     ret = media_channel()->SetSendCodecs(audio->codecs());
   }
-  // set header extensions
+  // Set remote RTP header extensions.
   if (ret && audio->rtp_header_extensions_set()) {
     ret = media_channel()->SetSendRtpHeaderExtensions(
         audio->rtp_header_extensions());
   }
 
+  // Tweak our audio processing settings, if needed.
   int audio_options = 0;
   if (audio->conference_mode()) {
     audio_options |= OPT_CONFERENCE;
@@ -869,7 +871,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
     LOG(LS_ERROR) << "Failed to set voice channel options";
   }
 
-  // update state
+  // If everything worked, see if we can start sending.
   if (ret) {
     set_has_remote_content(true);
     ChangeState();
@@ -1142,20 +1144,22 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
     media_channel()->SetSendSsrc(video->ssrc());
     LOG(LS_INFO) << "Set send ssrc for video: " << video->ssrc();
   }
-  // set SRTP
+  // Set local SRTP parameters (what we will encrypt with).
   ret = SetSrtp_w(video->cryptos(), action, CS_LOCAL);
-  // set RTCP mux
+  // Set local RTCP mux parameters.
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_LOCAL);
   }
-  // set payload types and config for receiving video
+  // Set local video codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(video->codecs());
   }
+  // Set local RTP header extensions.
   if (ret && video->rtp_header_extensions_set()) {
     ret = media_channel()->SetRecvRtpHeaderExtensions(
         video->rtp_header_extensions());
   }
+  // If everything worked, see if we can start receiving.
   if (ret) {
     set_has_local_content(true);
     ChangeState();
@@ -1175,26 +1179,28 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   ASSERT(video != NULL);
 
   bool ret;
-  // set SRTP
+  // Set remote SRTP parameters (what the other side will encrypt with).
   ret = SetSrtp_w(video->cryptos(), action, CS_REMOTE);
-  // set RTCP mux
+  // Set remote RTCP mux parameters.
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_REMOTE);
   }
-  // Set video bandwidth parameters.
+  // Set remote video codecs (what the other side wants to receive).
+  if (ret) {
+    ret = media_channel()->SetSendCodecs(video->codecs());
+  }
+  // Set remote RTP header extensions.
+  if (ret && video->rtp_header_extensions_set()) {
+    ret = media_channel()->SetSendRtpHeaderExtensions(
+        video->rtp_header_extensions());
+  }
+  // Set bandwidth parameters (what the other side wants to get, default=auto)
   if (ret) {
     int bandwidth_bps = video->bandwidth();
     bool auto_bandwidth = (bandwidth_bps == kAutoBandwidth);
     ret = media_channel()->SetSendBandwidth(auto_bandwidth, bandwidth_bps);
   }
-  if (ret) {
-    ret = media_channel()->SetSendCodecs(video->codecs());
-  }
-  // set header extensions
-  if (ret && video->rtp_header_extensions_set()) {
-    ret = media_channel()->SetSendRtpHeaderExtensions(
-        video->rtp_header_extensions());
-  }
+  // If everything worked, see if we can start sending.
   if (ret) {
     set_has_remote_content(true);
     ChangeState();

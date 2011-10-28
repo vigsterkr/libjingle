@@ -64,7 +64,9 @@ root_env = Environment(
     'FEATURE_ENABLE_VOICEMAIL',
     'FEATURE_ENABLE_PSTN',
     'HAVE_SRTP',
-  ]
+  ],
+  # Ensure the os environment is captured for any scripts we call out to
+  ENV = os.environ,
 )
 
 # This is where we set common environments
@@ -287,6 +289,13 @@ posix_env.Append(
     # Needed for a clean ABI and for link-time dead-code removal to work
     # properly.
     '-fvisibility=hidden',
+    # Generate debugging info in the DWARF2 format.
+    '-gdwarf-2',
+    # Generate maximal debugging information. (It is stripped from what we ship
+    # to users, so we want it for both dbg and opt.)
+    # Note that hammer automatically supplies "-g" for mac/linux dbg, so that
+    # flag must be filtered out of linux_dbg and mac_dbg envs below.
+    '-g3',
   ],
   CXXFLAGS = [
     '-Wno-non-virtual-dtor',
@@ -314,8 +323,6 @@ mac_env.Append(
     '-arch', 'i386',
     '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
     '-fasm-blocks',
-    # Generate debugging info in the DWARF2 format.
-    '-gdwarf-2',
   ],
   LINKFLAGS = [
     '-Wl,-search_paths_first',
@@ -328,8 +335,7 @@ mac_env.Append(
     '-mmacosx-version-min=10.5',
     '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
     '-m32',
-    '-dead-strip'
-    '-gdwarf-2',
+    '-dead_strip',
   ],
   FRAMEWORKS = [
     'CoreServices',
@@ -345,6 +351,7 @@ mac_env.Append(
   ]
 )
 
+
 mac_dbg_env = mac_env.Clone(
   BUILD_TYPE = 'dbg',
   BUILD_TYPE_DESCRIPTION = 'Mac debug build',
@@ -354,8 +361,13 @@ mac_dbg_env = mac_env.Clone(
 mac_dbg_env.Append(
   CCFLAGS = [
     '-O0',
-  ]
+  ],
+  CPPDEFINES = [
+    'DEBUG=1',
+  ],
 )
+# Remove -g set by hammer, which is not what we want (we have set -g3 above).
+mac_dbg_env.FilterOut(CCFLAGS = ['-g'])
 envs.append(mac_dbg_env)
 
 mac_opt_env = mac_env.Clone(
@@ -371,6 +383,7 @@ mac_opt_env.Append(
     # out.  Maybe it's a different version of gcc?
     '-Wno-unused-variable',
   ],
+  # Hammer automatically specifies -Os for mac opt.
 )
 envs.append(mac_opt_env)
 
@@ -392,11 +405,6 @@ linux_common_env.Append(
     # Needed for link-time dead-code removal to work properly.
     '-ffunction-sections',
     '-fdata-sections',
-    # Generate debugging info in the DWARF2 format.
-    '-gdwarf-2',
-    # Generate maximal debugging information. (It is stripped from what we ship
-    # to users, so we want it for both dbg and opt.)
-    '-g3',
   ],
   LINKFLAGS = [
     # Enable dead-code removal.

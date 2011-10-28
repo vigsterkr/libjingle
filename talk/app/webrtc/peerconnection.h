@@ -59,7 +59,7 @@ class PeerConnectionObserver {
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
-  ~PeerConnectionObserver() {}
+  virtual ~PeerConnectionObserver() {}
 };
 
 class PeerConnection {

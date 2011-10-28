@@ -39,8 +39,10 @@
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stream.h"
 #include "talk/session/phone/channel.h"
+#include "talk/session/phone/mediaprocessorinterface.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/webrtccommon.h"
+#include "talk/session/phone/webrtcvoe.h"
 #ifdef WEBRTC_RELATIVE_PATH
 #include "voice_engine/main/interface/voe_base.h"
 #else
@@ -83,7 +85,8 @@ class WebRtcVoiceMediaChannel;
 // It uses the WebRtc VoiceEngine library for audio handling.
 class WebRtcVoiceEngine
     : public webrtc::VoiceEngineObserver,
-      public webrtc::TraceCallback {
+      public webrtc::TraceCallback,
+      public webrtc::VoEMediaProcess  {
  public:
   WebRtcVoiceEngine();
   // Dependency injection for testing.
@@ -111,6 +114,21 @@ class WebRtcVoiceEngine
   bool FindWebRtcCodec(const AudioCodec& codec, webrtc::CodecInst* gcodec);
 
   void SetLogging(int min_sev, const char* filter);
+
+  bool RegisterProcessor(uint32 ssrc,
+                         VoiceProcessor* voice_processor,
+                         MediaProcessorDirection direction);
+  bool UnregisterProcessor(uint32 ssrc,
+                           VoiceProcessor* voice_processor,
+                           MediaProcessorDirection direction);
+
+  // Method from webrtc::VoEMediaProcess
+  virtual void Process(const int channel,
+                       const webrtc::ProcessingTypes type,
+                       WebRtc_Word16 audio10ms[],
+                       const int length,
+                       const int sampling_freq,
+                       const bool is_stereo);
 
   // For tracking WebRtc channels. Needed because we have to pause them
   // all when switching devices.
@@ -162,9 +180,18 @@ class WebRtcVoiceEngine
   bool FindChannelAndSsrc(int channel_num,
                           WebRtcVoiceMediaChannel** channel,
                           uint32* ssrc) const;
+  bool FindChannelNumFromSsrc(uint32 ssrc,
+                              MediaProcessorDirection direction,
+                              int* channel_num);
   bool ChangeLocalMonitor(bool enable);
   bool PauseLocalMonitor();
   bool ResumeLocalMonitor();
+
+  // When a voice processor registers with the engine, it is connected
+  // to either the Rx or Tx signals, based on the direction parameter.
+  // SignalXXMediaFrame will be invoked for every audio packet.
+  sigslot::signal2<uint32, AudioFrame*> SignalRxMediaFrame;
+  sigslot::signal2<uint32, AudioFrame*> SignalTxMediaFrame;
 
   static const int kDefaultLogSeverity = talk_base::LS_WARNING;
   static const CodecPref kCodecPrefs[];
@@ -190,6 +217,8 @@ class WebRtcVoiceEngine
   talk_base::CriticalSection channels_cs_;
   webrtc::AgcConfig default_agc_config_;
   bool initialized_;
+
+  talk_base::CriticalSection signal_media_critical_;
 };
 
 // WebRtcMediaChannel is a class that implements the common WebRtc channel
@@ -247,8 +276,7 @@ class WebRtcMediaChannel : public T, public webrtc::Transport {
 // WebRtcVoiceMediaChannel is an implementation of VoiceMediaChannel that uses
 // WebRtc Voice Engine.
 class WebRtcVoiceMediaChannel
-    : public WebRtcMediaChannel<VoiceMediaChannel,
-                                WebRtcVoiceEngine> {
+    : public WebRtcMediaChannel<VoiceMediaChannel, WebRtcVoiceEngine> {
  public:
   explicit WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine);
   virtual ~WebRtcVoiceMediaChannel();
@@ -290,9 +318,11 @@ class WebRtcVoiceMediaChannel
   bool FindSsrc(int channel_num, uint32* ssrc);
   void OnError(uint32 ssrc, int error);
 
+  bool sending() const { return send_ != SEND_NOTHING; }
+  int GetChannelNum(uint32 ssrc);
+
  protected:
   int GetLastEngineError() { return engine()->GetLastEngineError(); }
-  int GetChannel(uint32 ssrc);
   int GetOutputLevel(int channel);
   bool GetRedSendCodec(const AudioCodec& red_codec,
                        const std::vector<AudioCodec>& all_codecs,
@@ -314,6 +344,7 @@ class WebRtcVoiceMediaChannel
   typedef std::map<uint32, int> ChannelMap;
   talk_base::scoped_ptr<WebRtcSoundclipStream> ringback_tone_;
   std::set<int> ringback_channels_;  // channels playing ringback
+  talk_base::scoped_ptr<webrtc::CodecInst> send_codec_;
   int channel_options_;
   bool agc_adjusted_;
   bool dtmf_allowed_;

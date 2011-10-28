@@ -147,9 +147,12 @@ TEST_F(WebRtcVideoEngineTest, CreateChannelFail) {
 TEST_F(WebRtcVideoEngineTest, FindCodec) {
   // We should not need to init engine in order to get codecs.
   const std::vector<cricket::VideoCodec>& c = engine_.codecs();
-  EXPECT_EQ(1U, c.size());
+  EXPECT_EQ(3U, c.size());
 
   cricket::VideoCodec vp8(104, "VP8", 320, 200, 30, 0);
+  EXPECT_TRUE(engine_.FindCodec(vp8));
+
+  cricket::VideoCodec vp8_ci(104, "vp8", 320, 200, 30, 0);
   EXPECT_TRUE(engine_.FindCodec(vp8));
 
   cricket::VideoCodec vp8_diff_fr_diff_pref(104, "VP8", 320, 200, 50, 50);
@@ -167,6 +170,18 @@ TEST_F(WebRtcVideoEngineTest, FindCodec) {
   // Test that FindCodec can handle the case when width/height is 0.
   cricket::VideoCodec vp8_zero_res(104, "VP8", 0, 0, 30, 0);
   EXPECT_TRUE(engine_.FindCodec(vp8_zero_res));
+
+  cricket::VideoCodec red(101, "RED", 0, 0, 30, 0);
+  EXPECT_TRUE(engine_.FindCodec(red));
+
+  cricket::VideoCodec red_ci(101, "red", 0, 0, 30, 0);
+  EXPECT_TRUE(engine_.FindCodec(red));
+
+  cricket::VideoCodec fec(102, "ULPFEC", 0, 0, 30, 0);
+  EXPECT_TRUE(engine_.FindCodec(fec));
+
+  cricket::VideoCodec fec_ci(102, "ulpfec", 0, 0, 30, 0);
+  EXPECT_TRUE(engine_.FindCodec(fec));
 }
 
 // Test that we set our inbound codecs properly

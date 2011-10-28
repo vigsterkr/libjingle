@@ -40,9 +40,6 @@ namespace cricket {
 
 class HttpPortAllocator : public BasicPortAllocator {
  public:
-  // Records the port on the hosts that will receive HTTP requests.
-  static const int kHostPort;
-
   // The number of HTTP requests we should attempt before giving up.
   static const int kNumRetries;
 

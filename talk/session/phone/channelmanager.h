@@ -41,7 +41,9 @@
 namespace cricket {
 
 class Soundclip;
+class VideoProcessor;
 class VoiceChannel;
+class VoiceProcessor;
 
 // ChannelManager allows the MediaEngine to run on a separate thread, and takes
 // care of marshalling calls between threads. It also creates and keeps track of
@@ -140,6 +142,21 @@ class ChannelManager : public talk_base::MessageHandler,
   void SetVoiceLogging(int level, const char* filter);
   void SetVideoLogging(int level, const char* filter);
 
+  // The channel manager handles the Tx side for Video processing,
+  // as well as Tx and Rx side for Voice processing.
+  // (The Rx Video processing will go throug the simplerenderingmanager,
+  //  to be implemented).
+  bool RegisterVideoProcessor(uint32 ssrc,
+                              VideoProcessor* processor);
+  bool UnregisterVideoProcessor(uint32 ssrc,
+                                VideoProcessor* processor);
+  bool RegisterVoiceProcessor(uint32 ssrc,
+                              VoiceProcessor* processor,
+                              MediaProcessorDirection direction);
+  bool UnregisterVoiceProcessor(uint32 ssrc,
+                                VoiceProcessor* processor,
+                                MediaProcessorDirection direction);
+
   // The operations below occur on the main thread.
 
   bool GetAudioInputDevices(std::vector<std::string>* names);
@@ -155,6 +172,7 @@ class ChannelManager : public talk_base::MessageHandler,
 
   void Construct();
   bool Send(uint32 id, talk_base::MessageData* pdata);
+  void Terminate_w();
   VoiceChannel* CreateVoiceChannel_w(
       BaseSession* session, const std::string& content_name, bool rtcp);
   void DestroyVoiceChannel_w(VoiceChannel* voice_channel);
@@ -177,9 +195,19 @@ class ChannelManager : public talk_base::MessageHandler,
   void SetMediaLogging_w(bool video, int level, const char* filter);
   void OnVideoCaptureResult(VideoCapturer* capturer,
                             CaptureResult result);
+  bool RegisterVideoProcessor_w(uint32 ssrc,
+                                VideoProcessor* processor);
+  bool UnregisterVideoProcessor_w(uint32 ssrc,
+                                  VideoProcessor* processor);
+  bool RegisterVoiceProcessor_w(uint32 ssrc,
+                                VoiceProcessor* processor,
+                                MediaProcessorDirection direction);
+  bool UnregisterVoiceProcessor_w(uint32 ssrc,
+                                  VoiceProcessor* processor,
+                                  MediaProcessorDirection direction);
+
   void OnMessage(talk_base::Message *message);
 
-  talk_base::CriticalSection crit_;
   talk_base::scoped_ptr<MediaEngineInterface> media_engine_;
   talk_base::scoped_ptr<DeviceManagerInterface> device_manager_;
   bool initialized_;

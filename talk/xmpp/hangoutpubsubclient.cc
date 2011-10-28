@@ -49,6 +49,7 @@ const std::string kNotPresenting = "o";
 template <typename C>
 class PubSubStateSerializer {
  public:
+  virtual ~PubSubStateSerializer() {}
   virtual XmlElement* Write(const QName& state_name, const C& state) = 0;
   virtual C Parse(const XmlElement* state_elem) = 0;
 };
@@ -232,7 +233,7 @@ class PubSubStateClient : public sigslot::has_slots<> {
   }
 
   PubSubClient* client_;
-  const QName& state_name_;
+  const QName state_name_;
   C default_state_;
   talk_base::scoped_ptr<PubSubStateSerializer<C> > serializer_;
   // key => state
@@ -422,7 +423,7 @@ const std::string& GetAudioMuteNickFromItem(const XmlElement* item) {
       return audio_mute_state->Attr(QN_NICK);
     }
   }
-  return STR_EMPTY;
+  return EmptyStringRef();
 }
 
 void HangoutPubSubClient::OnAudioMutePublishResult(

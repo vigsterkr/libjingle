@@ -138,7 +138,20 @@ enum SendFlags {
 };
 
 struct VoiceSenderInfo {
+  VoiceSenderInfo()
+      : ssrc(0),
+        bytes_sent(0),
+        packets_sent(0),
+        packets_lost(0),
+        fraction_lost(0.0),
+        ext_seqnum(0),
+        rtt_ms(0),
+        jitter_ms(0),
+        audio_level(0) {
+  }
+
   uint32 ssrc;
+  std::string codec_name;
   int bytes_sent;
   int packets_sent;
   int packets_lost;
@@ -150,6 +163,20 @@ struct VoiceSenderInfo {
 };
 
 struct VoiceReceiverInfo {
+  VoiceReceiverInfo()
+      : ssrc(0),
+        bytes_rcvd(0),
+        packets_rcvd(0),
+        packets_lost(0),
+        fraction_lost(0.0),
+        ext_seqnum(0),
+        jitter_ms(0),
+        jitter_buffer_ms(0),
+        jitter_buffer_preferred_ms(0),
+        delay_estimate_ms(0),
+        audio_level(0) {
+  }
+
   uint32 ssrc;
   int bytes_rcvd;
   int packets_rcvd;
@@ -164,7 +191,26 @@ struct VoiceReceiverInfo {
 };
 
 struct VideoSenderInfo {
+  VideoSenderInfo()
+      : ssrc(0),
+        bytes_sent(0),
+        packets_sent(0),
+        packets_cached(0),
+        packets_lost(0),
+        fraction_lost(0.0),
+        firs_rcvd(0),
+        nacks_rcvd(0),
+        rtt_ms(0),
+        frame_width(0),
+        frame_height(0),
+        framerate_input(0),
+        framerate_sent(0),
+        nominal_bitrate(0),
+        preferred_bitrate(0) {
+  }
+
   uint32 ssrc;
+  std::string codec_name;
   int bytes_sent;
   int packets_sent;
   int packets_cached;
@@ -182,6 +228,22 @@ struct VideoSenderInfo {
 };
 
 struct VideoReceiverInfo {
+  VideoReceiverInfo()
+      : ssrc(0),
+        bytes_rcvd(0),
+        packets_rcvd(0),
+        packets_lost(0),
+        packets_concealed(0),
+        fraction_lost(0.0),
+        firs_sent(0),
+        nacks_sent(0),
+        frame_width(0),
+        frame_height(0),
+        framerate_rcvd(0),
+        framerate_decoded(0),
+        framerate_output(0) {
+  }
+
   uint32 ssrc;
   int bytes_rcvd;
   // vector<int> layer_bytes_rcvd;
@@ -199,6 +261,16 @@ struct VideoReceiverInfo {
 };
 
 struct BandwidthEstimationInfo {
+  BandwidthEstimationInfo()
+      : available_send_bandwidth(0),
+        available_recv_bandwidth(0),
+        target_enc_bitrate(0),
+        actual_enc_bitrate(0),
+        retransmit_bitrate(0),
+        transmit_bitrate(0),
+        bucket_delay(0) {
+  }
+
   int available_send_bandwidth;
   int available_recv_bandwidth;
   int target_enc_bitrate;

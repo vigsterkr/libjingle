@@ -39,6 +39,7 @@
 #include "talk/base/criticalsection.h"
 #include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/scoped_ref_ptr.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/socketserver.h"
 #include "talk/base/time.h"
@@ -96,6 +97,17 @@ class ScopedMessageData : public MessageData {
   scoped_ptr<T>& data() { return data_; }
  private:
   scoped_ptr<T> data_;
+};
+
+// Like ScopedMessageData, but for reference counted pointers.
+template <class T>
+class ScopedRefMessageData : public MessageData {
+ public:
+  explicit ScopedRefMessageData(T* data) : data_(data) { }
+  const scoped_refptr<T>& data() const { return data_; }
+  scoped_refptr<T>& data() { return data_; }
+ private:
+  scoped_refptr<T> data_;
 };
 
 template<class T>

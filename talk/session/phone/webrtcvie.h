@@ -139,6 +139,23 @@ class ViEWrapper {
   scoped_vie_ptr<webrtc::ViERTP_RTCP> rtp_;
   scoped_vie_ptr<webrtc::ViEImageProcess> image_;
 };
-}
+
+// Adds indirection to static WebRtc functions, allowing them to be mocked.
+class ViETraceWrapper {
+ public:
+  virtual ~ViETraceWrapper() {}
+
+  virtual int SetTraceFilter(const unsigned int filter) {
+    return webrtc::VideoEngine::SetTraceFilter(filter);
+  }
+  virtual int SetTraceFile(const char* fileNameUTF8) {
+    return webrtc::VideoEngine::SetTraceFile(fileNameUTF8);
+  }
+  virtual int SetTraceCallback(webrtc::TraceCallback* callback) {
+    return webrtc::VideoEngine::SetTraceCallback(callback);
+  }
+};
+
+}  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_WEBRTCVIE_H_

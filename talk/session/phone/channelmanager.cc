@@ -59,6 +59,11 @@ enum {
   MSG_DESTROYSOUNDCLIP = 18,
   MSG_CAMERASTARTED = 19,
   MSG_SETVIDEOCAPTURE = 20,
+  MSG_TERMINATE = 21,
+  MSG_REGISTERVIDEOPROCESSOR = 22,
+  MSG_UNREGISTERVIDEOPROCESSOR = 23,
+  MSG_REGISTERVOICEPROCESSOR = 24,
+  MSG_UNREGISTERVOICEPROCESSOR = 25,
 };
 
 struct CreationParams : public talk_base::MessageData {
@@ -125,9 +130,25 @@ struct LoggingOptions : public talk_base::MessageData {
 
 struct CaptureParams : public talk_base::MessageData {
   explicit CaptureParams(bool c) : capture(c), result(CR_FAILURE) {}
-
   bool capture;
   CaptureResult result;
+};
+
+struct VideoProcessorParams : public talk_base::MessageData {
+  VideoProcessorParams(uint32 s, VideoProcessor* p)
+      : ssrc(s), processor(p), result(false) {}
+  uint32 ssrc;
+  VideoProcessor* processor;
+  bool result;
+};
+
+struct VoiceProcessorParams : public talk_base::MessageData {
+  VoiceProcessorParams(uint32 c, VoiceProcessor* p, MediaProcessorDirection d)
+      : ssrc(c), direction(d), processor(p), result(false) {}
+  uint32 ssrc;
+  MediaProcessorDirection direction;
+  VoiceProcessor* processor;
+  bool result;
 };
 
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread)
@@ -278,8 +299,14 @@ void ChannelManager::Terminate() {
   if (!initialized_) {
     return;
   }
+  Send(MSG_TERMINATE, NULL);
+  media_engine_->Terminate();
+  initialized_ = false;
+}
 
-  // Need to destroy the voice/video channels
+void ChannelManager::Terminate_w() {
+  ASSERT(worker_thread_ == talk_base::Thread::Current());
+    // Need to destroy the voice/video channels
   while (!video_channels_.empty()) {
     DestroyVideoChannel_w(video_channels_.back());
   }
@@ -289,9 +316,6 @@ void ChannelManager::Terminate() {
   while (!soundclips_.empty()) {
     DestroySoundclip_w(soundclips_.back());
   }
-
-  media_engine_->Terminate();
-  initialized_ = false;
 }
 
 VoiceChannel* ChannelManager::CreateVoiceChannel(
@@ -302,8 +326,6 @@ VoiceChannel* ChannelManager::CreateVoiceChannel(
 
 VoiceChannel* ChannelManager::CreateVoiceChannel_w(
     BaseSession* session, const std::string& content_name, bool rtcp) {
-  talk_base::CritScope cs(&crit_);
-
   // This is ok to alloc from a thread other than the worker thread
   ASSERT(initialized_);
   VoiceMediaChannel* media_channel = media_engine_->CreateChannel();
@@ -329,7 +351,6 @@ void ChannelManager::DestroyVoiceChannel(VoiceChannel* voice_channel) {
 }
 
 void ChannelManager::DestroyVoiceChannel_w(VoiceChannel* voice_channel) {
-  talk_base::CritScope cs(&crit_);
   // Destroy voice channel.
   ASSERT(initialized_);
   VoiceChannels::iterator it = std::find(voice_channels_.begin(),
@@ -352,8 +373,6 @@ VideoChannel* ChannelManager::CreateVideoChannel(
 VideoChannel* ChannelManager::CreateVideoChannel_w(
     BaseSession* session, const std::string& content_name, bool rtcp,
     VoiceChannel* voice_channel) {
-  talk_base::CritScope cs(&crit_);
-
   // This is ok to alloc from a thread other than the worker thread
   ASSERT(initialized_);
   VideoMediaChannel* media_channel =
@@ -382,7 +401,6 @@ void ChannelManager::DestroyVideoChannel(VideoChannel* video_channel) {
 }
 
 void ChannelManager::DestroyVideoChannel_w(VideoChannel *video_channel) {
-  talk_base::CritScope cs(&crit_);
   // Destroy voice channel.
   ASSERT(initialized_);
   VideoChannels::iterator it = std::find(video_channels_.begin(),
@@ -402,8 +420,6 @@ Soundclip* ChannelManager::CreateSoundclip() {
 }
 
 Soundclip* ChannelManager::CreateSoundclip_w() {
-  talk_base::CritScope cs(&crit_);
-
   ASSERT(initialized_);
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 
@@ -425,7 +441,6 @@ void ChannelManager::DestroySoundclip(Soundclip* soundclip) {
 }
 
 void ChannelManager::DestroySoundclip_w(Soundclip* soundclip) {
-  talk_base::CritScope cs(&crit_);
   // Destroy soundclip.
   ASSERT(initialized_);
   Soundclips::iterator it = std::find(soundclips_.begin(),
@@ -485,7 +500,6 @@ bool ChannelManager::SetAudioOptions_w(int opts, const Device* in_dev,
 
   // Set the audio devices
   if (ret) {
-    talk_base::CritScope cs(&crit_);
     ret = media_engine_->SetSoundDevices(in_dev, out_dev);
   }
 
@@ -655,6 +669,62 @@ void ChannelManager::SetMediaLogging_w(bool video, int level,
   }
 }
 
+// TODO: For now pass this request through the mediaengine to the
+// voice and video engines to do the real work. Once the capturer refactoring
+// is done, we will access the capturer using the ssrc (similar to how the
+// renderer is accessed today) and register with it directly.
+bool ChannelManager::RegisterVideoProcessor(uint32 ssrc,
+                                            VideoProcessor* processor) {
+  VideoProcessorParams processor_params(ssrc, processor);
+  return (Send(MSG_REGISTERVIDEOPROCESSOR, &processor_params) &&
+      processor_params.result);
+}
+bool ChannelManager::RegisterVideoProcessor_w(uint32 ssrc,
+                                              VideoProcessor* processor) {
+  return media_engine_->RegisterVideoProcessor(processor);
+}
+
+bool ChannelManager::UnregisterVideoProcessor(uint32 ssrc,
+                                              VideoProcessor* processor) {
+  VideoProcessorParams processor_params(ssrc, processor);
+  return (Send(MSG_UNREGISTERVIDEOPROCESSOR, &processor_params) &&
+      processor_params.result);
+}
+bool ChannelManager::UnregisterVideoProcessor_w(uint32 ssrc,
+                                                VideoProcessor* processor) {
+  return media_engine_->UnregisterVideoProcessor(processor);
+}
+
+bool ChannelManager::RegisterVoiceProcessor(
+    uint32 ssrc,
+    VoiceProcessor* processor,
+    MediaProcessorDirection direction) {
+  VoiceProcessorParams processor_params(ssrc, processor, direction);
+  return (Send(MSG_REGISTERVOICEPROCESSOR, &processor_params) &&
+      processor_params.result);
+}
+bool ChannelManager::RegisterVoiceProcessor_w(
+    uint32 ssrc,
+    VoiceProcessor* processor,
+    MediaProcessorDirection direction) {
+  return media_engine_->RegisterVoiceProcessor(ssrc, processor, direction);
+}
+
+bool ChannelManager::UnregisterVoiceProcessor(
+    uint32 ssrc,
+    VoiceProcessor* processor,
+    MediaProcessorDirection direction) {
+  VoiceProcessorParams processor_params(ssrc, processor, direction);
+  return (Send(MSG_UNREGISTERVOICEPROCESSOR, &processor_params) &&
+      processor_params.result);
+}
+bool ChannelManager::UnregisterVoiceProcessor_w(
+    uint32 ssrc,
+    VoiceProcessor* processor,
+    MediaProcessorDirection direction) {
+  return media_engine_->UnregisterVoiceProcessor(ssrc, processor, direction);
+}
+
 bool ChannelManager::Send(uint32 id, talk_base::MessageData* data) {
   if (!worker_thread_ || !initialized_) return false;
   worker_thread_->Send(this, id, data);
@@ -764,6 +834,38 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
               message->pdata);
       SignalVideoCaptureResult(data->data());
       delete data;
+      break;
+    }
+    case MSG_TERMINATE: {
+      Terminate_w();
+      break;
+    }
+    case MSG_REGISTERVIDEOPROCESSOR: {
+      VideoProcessorParams* data =
+          static_cast<VideoProcessorParams*>(message->pdata);
+      data->result = RegisterVideoProcessor_w(data->ssrc, data->processor);
+      break;
+    }
+    case MSG_UNREGISTERVIDEOPROCESSOR: {
+      VideoProcessorParams* data =
+          static_cast<VideoProcessorParams*>(message->pdata);
+      data->result = UnregisterVideoProcessor_w(data->ssrc, data->processor);
+      break;
+    }
+    case MSG_REGISTERVOICEPROCESSOR: {
+      VoiceProcessorParams* data =
+          static_cast<VoiceProcessorParams*>(message->pdata);
+      data->result = RegisterVoiceProcessor_w(data->ssrc,
+                                              data->processor,
+                                              data->direction);
+      break;
+    }
+    case MSG_UNREGISTERVOICEPROCESSOR: {
+      VoiceProcessorParams* data =
+          static_cast<VoiceProcessorParams*>(message->pdata);
+      data->result = UnregisterVoiceProcessor_w(data->ssrc,
+                                              data->processor,
+                                              data->direction);
       break;
     }
   }

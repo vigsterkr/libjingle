@@ -91,7 +91,6 @@ namespace cricket {
 
 // HttpPortAllocator
 
-const int HttpPortAllocator::kHostPort = 80;
 const int HttpPortAllocator::kNumRetries = 5;
 
 const char HttpPortAllocator::kCreateSessionURL[] = "/create_session";
@@ -174,7 +173,7 @@ void HttpPortAllocatorSession::TryCreateRelaySession() {
     LOG(LS_WARNING) << "No relay auth token found.";
   }
 
-  SendSessionRequest(host, HttpPortAllocator::kHostPort);
+  SendSessionRequest(host, talk_base::HTTP_SECURE_PORT);
 }
 
 void HttpPortAllocatorSession::SendSessionRequest(const std::string& host,
@@ -185,6 +184,7 @@ void HttpPortAllocatorSession::SendSessionRequest(const std::string& host,
   request->SignalWorkDone.connect(this,
       &HttpPortAllocatorSession::OnRequestDone);
 
+  request->set_secure(port == talk_base::HTTP_SECURE_PORT);
   request->set_proxy(allocator()->proxy());
   request->response().document.reset(new talk_base::MemoryStream);
   request->request().verb = talk_base::HV_GET;

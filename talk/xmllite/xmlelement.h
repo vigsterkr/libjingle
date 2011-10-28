@@ -35,10 +35,6 @@
 
 namespace buzz {
 
-extern const QName QN_EMPTY;
-extern const QName QN_XMLNS;
-
-
 class XmlChild;
 class XmlText;
 class XmlElement;
@@ -48,7 +44,6 @@ class XmlChild {
 friend class XmlElement;
 
 public:
-
   XmlChild * NextChild() { return pNextChild_; }
   const XmlChild * NextChild() const { return pNextChild_; }
 
@@ -156,9 +151,11 @@ public:
   const XmlAttr * FirstAttr() const
     { return const_cast<XmlElement *>(this)->FirstAttr(); }
 
-  //! Attr will return STR_EMPTY if the attribute isn't there:
-  //! use HasAttr to test presence of an attribute. 
-  const std::string & Attr(const QName & name) const;
+  // Attr will return STR_EMPTY if the attribute isn't there:
+  // use HasAttr to test presence of an attribute.
+  const std::string & Attr(const StaticQName& name) const;
+  const std::string & Attr(const QName& name) const;
+  bool HasAttr(const StaticQName & name) const;
   bool HasAttr(const QName & name) const;
   void SetAttr(const QName & name, const std::string & value);
   void ClearAttr(const QName & name);
@@ -183,9 +180,17 @@ public:
   const XmlElement * NextWithNamespace(const std::string & ns) const
     { return const_cast<XmlElement *>(this)->NextWithNamespace(ns); }
 
+  XmlElement * FirstNamed(const StaticQName & name);
+  const XmlElement * FirstNamed(const StaticQName & name) const
+    { return const_cast<XmlElement *>(this)->FirstNamed(name); }
+
   XmlElement * FirstNamed(const QName & name);
   const XmlElement * FirstNamed(const QName & name) const
     { return const_cast<XmlElement *>(this)->FirstNamed(name); }
+
+  XmlElement * NextNamed(const StaticQName & name);
+  const XmlElement * NextNamed(const StaticQName & name) const
+    { return const_cast<XmlElement *>(this)->NextNamed(name); }
 
   XmlElement * NextNamed(const QName & name);
   const XmlElement * NextNamed(const QName & name) const

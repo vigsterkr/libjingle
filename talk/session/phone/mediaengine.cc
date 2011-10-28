@@ -44,7 +44,6 @@ namespace cricket {
 #endif
 
 #if defined(HAVE_WEBRTC_VIDEO)
-#define VIDEO_ENG_NAME WebRtcVideoEngine
 #endif
 
 MediaEngineInterface* MediaEngineFactory::Create() {

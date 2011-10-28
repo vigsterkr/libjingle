@@ -6,6 +6,7 @@
 #include "talk/base/gunit.h"
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/fakemediaengine.h"
+#include "talk/session/phone/fakemediaprocessor.h"
 #include "talk/session/phone/fakertp.h"
 #include "talk/session/phone/fakesession.h"
 #include "talk/session/phone/fakewebrtcvoiceengine.h"
@@ -862,7 +863,7 @@ TEST_F(WebRtcVoiceEngineTest, Recv) {
   int channel_num = voe_.GetLastChannel();
   DeliverPacket(kPcmuFrame, sizeof(kPcmuFrame));
   EXPECT_TRUE(voe_.CheckPacket(channel_num, kPcmuFrame,
-                                      sizeof(kPcmuFrame)));
+                               sizeof(kPcmuFrame)));
 }
 
 // Test that we can properly receive packets on multiple streams.
@@ -889,19 +890,19 @@ TEST_F(WebRtcVoiceEngineTest, RecvWithMultipleStreams) {
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num3));
   DeliverPacket(packets[1], sizeof(packets[1]));
   EXPECT_TRUE(voe_.CheckPacket(channel_num1, packets[1],
-                                      sizeof(packets[1])));
+                               sizeof(packets[1])));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num2));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num3));
   DeliverPacket(packets[2], sizeof(packets[2]));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num1));
   EXPECT_TRUE(voe_.CheckPacket(channel_num2, packets[2],
-                                      sizeof(packets[2])));
+                               sizeof(packets[2])));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num3));
   DeliverPacket(packets[3], sizeof(packets[3]));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num1));
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num2));
   EXPECT_TRUE(voe_.CheckPacket(channel_num3, packets[3],
-                                      sizeof(packets[3])));
+                               sizeof(packets[3])));
   EXPECT_TRUE(channel_->RemoveStream(3));
   EXPECT_TRUE(channel_->RemoveStream(2));
   EXPECT_TRUE(channel_->RemoveStream(1));
@@ -1030,7 +1031,7 @@ TEST_F(WebRtcVoiceEngineTest, MediaEngineCallbackOnError) {
 
   // Test on WebRtc VoE channel.
   voe_.TriggerCallbackOnError(media_channel->voe_channel(),
-                               VE_SATURATION_WARNING);
+                              VE_SATURATION_WARNING);
   EXPECT_EQ(cricket::VoiceMediaChannel::ERROR_REC_DEVICE_SATURATION,
             listener->error());
   EXPECT_NE(-1, voe_.GetLocalSSRC(voe_.GetLastChannel(), ssrc));
@@ -1047,7 +1048,7 @@ TEST_F(WebRtcVoiceEngineTest, MediaEngineCallbackOnError) {
   EXPECT_TRUE(channel_->AddStream(ssrc));
   listener->Reset();
   voe_.TriggerCallbackOnError(voe_.GetLastChannel(),
-                               VE_SATURATION_WARNING);
+                              VE_SATURATION_WARNING);
   EXPECT_EQ(cricket::VoiceMediaChannel::ERROR_REC_DEVICE_SATURATION,
             listener->error());
   EXPECT_EQ(ssrc, listener->ssrc());
@@ -1055,7 +1056,7 @@ TEST_F(WebRtcVoiceEngineTest, MediaEngineCallbackOnError) {
   // Testing a non-existing channel.
   listener->Reset();
   voe_.TriggerCallbackOnError(voe_.GetLastChannel() + 2,
-                               VE_SATURATION_WARNING);
+                              VE_SATURATION_WARNING);
   EXPECT_EQ(0, listener->error());
 }
 
@@ -1071,6 +1072,71 @@ TEST_F(WebRtcVoiceEngineTest, TestSetPlayoutError) {
   voe_.set_playout_fail_channel(voe_.GetLastChannel() - 1);
   EXPECT_TRUE(channel_->SetPlayout(false));
   EXPECT_FALSE(channel_->SetPlayout(true));
+}
+
+// Test that the Registering/Unregistering with the
+// webrtcvoiceengine works as expected
+TEST_F(WebRtcVoiceEngineTest, RegisterVoiceProcessor) {
+  EXPECT_TRUE(SetupEngine());
+  uint32 ssrc = 0;
+  voe_.GetLocalSSRC(0,ssrc);
+  cricket::FakeMediaProcessor vp_1;
+  cricket::FakeMediaProcessor vp_2;
+
+  EXPECT_TRUE(engine_.RegisterProcessor(ssrc, &vp_1, cricket::MPD_RX));
+  EXPECT_TRUE(engine_.RegisterProcessor(ssrc, &vp_2, cricket::MPD_RX));
+  voe_.TriggerProcessPacket(cricket::MPD_RX);
+  voe_.TriggerProcessPacket(cricket::MPD_TX);
+
+  EXPECT_TRUE(voe_.IsExternalMediaProcessorRegistered());
+  EXPECT_EQ(1, vp_1.voice_frame_count());
+  EXPECT_EQ(1, vp_2.voice_frame_count());
+
+  EXPECT_TRUE(engine_.UnregisterProcessor(ssrc,
+                                          &vp_2,
+                                          cricket::MPD_RX));
+  voe_.TriggerProcessPacket(cricket::MPD_RX);
+  EXPECT_TRUE(voe_.IsExternalMediaProcessorRegistered());
+  EXPECT_EQ(1, vp_2.voice_frame_count());
+  EXPECT_EQ(2, vp_1.voice_frame_count());
+
+  EXPECT_TRUE(engine_.UnregisterProcessor(ssrc,
+                                          &vp_1,
+                                          cricket::MPD_RX));
+  voe_.TriggerProcessPacket(cricket::MPD_RX);
+  EXPECT_FALSE(voe_.IsExternalMediaProcessorRegistered());
+  EXPECT_EQ(2, vp_1.voice_frame_count());
+
+  EXPECT_TRUE(engine_.RegisterProcessor(ssrc, &vp_1, cricket::MPD_TX));
+  voe_.TriggerProcessPacket(cricket::MPD_RX);
+  voe_.TriggerProcessPacket(cricket::MPD_TX);
+  EXPECT_TRUE(voe_.IsExternalMediaProcessorRegistered());
+  EXPECT_EQ(3, vp_1.voice_frame_count());
+
+  EXPECT_TRUE(engine_.UnregisterProcessor(ssrc,
+                                          &vp_1,
+                                          cricket::MPD_RX_AND_TX));
+  voe_.TriggerProcessPacket(cricket::MPD_TX);
+  EXPECT_FALSE(voe_.IsExternalMediaProcessorRegistered());
+  EXPECT_EQ(3, vp_1.voice_frame_count());
+
+  // The following tests test that FindChannelNumFromSsrc is doing
+  // what we expect.
+  // pick an invalid ssrc and make sure we can't register
+  EXPECT_FALSE(engine_.RegisterProcessor(0,
+                                         &vp_1,
+                                         cricket::MPD_RX));
+  channel_->AddStream(1);
+  EXPECT_TRUE(engine_.RegisterProcessor(1,
+                                        &vp_1,
+                                        cricket::MPD_RX));
+  EXPECT_TRUE(engine_.UnregisterProcessor(1,
+                                          &vp_1,
+                                          cricket::MPD_RX));
+  EXPECT_FALSE(engine_.RegisterProcessor(1,
+                                         &vp_1,
+                                         cricket::MPD_TX));
+  channel_->RemoveStream(1);
 }
 
 // Tests for the actual WebRtc VoE library.

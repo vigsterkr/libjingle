@@ -362,7 +362,7 @@ bool ParseJingleTransportInfos(const buzz::XmlElement* jingle,
 }
 
 buzz::XmlElement* NewTransportElement(const std::string& name) {
-  return new buzz::XmlElement(buzz::QName(true, name, LN_TRANSPORT), true);
+  return new buzz::XmlElement(buzz::QName(name, LN_TRANSPORT), true);
 }
 
 bool WriteCandidates(SignalingProtocol protocol,
@@ -807,13 +807,12 @@ void WriteSessionTerminate(SignalingProtocol protocol,
                            const SessionTerminate& term,
                            XmlElements* elems) {
   if (protocol == PROTOCOL_GINGLE) {
-    elems->push_back(new buzz::XmlElement(
-        buzz::QName(true, NS_GINGLE, term.reason)));
+    elems->push_back(new buzz::XmlElement(buzz::QName(NS_GINGLE, term.reason)));
   } else {
     if (!term.reason.empty()) {
       buzz::XmlElement* reason_elem = new buzz::XmlElement(QN_JINGLE_REASON);
       reason_elem->AddElement(new buzz::XmlElement(
-          buzz::QName(true, NS_JINGLE, term.reason)));
+          buzz::QName(NS_JINGLE, term.reason)));
       elems->push_back(reason_elem);
     }
   }
