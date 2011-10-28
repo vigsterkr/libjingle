@@ -40,8 +40,6 @@ namespace buzz {
 // TODO: Remove static objects of complex types, particularly
 // Jid and QName.
 
-const Jid JID_EMPTY(STR_EMPTY);
-
 const char NS_CLIENT[] = "jabber:client";
 const char NS_SERVER[] = "jabber:server";
 const char NS_STREAM[] = "http://etherx.jabber.org/streams";
@@ -102,7 +100,7 @@ const char STR_OUTGOINGVOICEMAIL[] = "outgoingvoicemail";
 
 const char STR_UNAVAILABLE[] = "unavailable";
 
-const Jid JID_GOOGLE_MUC_LOOKUP("lookup.groupchat.google.com");
+const char STR_GOOGLE_MUC_LOOKUP_JID[] = "lookup.groupchat.google.com";
 const char STR_MUC_ROOMCONFIG_ROOMNAME[] = "muc#roomconfig_roomname";
 const char STR_MUC_ROOMCONFIG_FEATURES[] = "muc#roomconfig_features";
 const char STR_MUC_ROOM_FEATURE_ENTERPRISE[] = "muc_enterprise";

@@ -834,9 +834,8 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
     domain = room_name.substr(room_name.find("@") + 1);
   }
 
-  buzz::MucRoomLookupTask* lookup_query_task =
-      new buzz::MucRoomLookupTask(
-          xmpp_client_, buzz::JID_GOOGLE_MUC_LOOKUP, room, domain);
+  buzz::MucRoomLookupTask* lookup_query_task = new buzz::MucRoomLookupTask(
+      xmpp_client_, buzz::Jid(buzz::STR_GOOGLE_MUC_LOOKUP_JID), room, domain);
   lookup_query_task->SignalResult.connect(this,
       &CallClient::OnRoomLookupResponse);
   lookup_query_task->SignalError.connect(this,

@@ -24,8 +24,9 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _jid_h_
-#define _jid_h_
+
+#ifndef TALK_XMPP_JID_H_
+#define TALK_XMPP_JID_H_
 
 #include <string>
 #include "talk/base/basictypes.h"
@@ -83,6 +84,7 @@ public:
   std::string Str() const;
   Jid BareJid() const;
 
+  bool IsEmpty() const;
   bool IsValid() const;
   bool IsBare() const;
   bool IsFull() const;
@@ -125,15 +127,19 @@ private:
   class Data {
   public:
     Data() : refcount_(1) {}
-    Data(const std::string & node, const std::string &domain, const std::string & resource) :
-      node_name_(node),
-      domain_name_(domain),
-      resource_name_(resource),
-      refcount_(1) {}
+    Data(const std::string & node, const std::string &domain,
+         const std::string & resource)
+        : node_name_(node),
+          domain_name_(domain),
+          resource_name_(resource),
+          refcount_(1) {
+    }
     const std::string node_name_;
     const std::string domain_name_;
     const std::string resource_name_;
 
+    // TODO: ref-counter is not thread-safe here. Make it
+    // thread-safe or remove this optimization.
     void AddRef() { refcount_++; }
     void Release() { if (!--refcount_) delete this; }
   private:
@@ -145,6 +151,4 @@ private:
 
 }
 
-
-
-#endif
+#endif  // TALK_XMPP_JID_H_

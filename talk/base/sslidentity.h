@@ -35,11 +35,11 @@
 namespace talk_base {
 
 // Definitions for the digest algorithms
-extern const std::string DIGEST_SHA_1;
-extern const std::string DIGEST_SHA_224;
-extern const std::string DIGEST_SHA_256;
-extern const std::string DIGEST_SHA_384;
-extern const std::string DIGEST_SHA_512;
+extern const char DIGEST_SHA_1[];
+extern const char DIGEST_SHA_224[];
+extern const char DIGEST_SHA_256[];
+extern const char DIGEST_SHA_384[];
+extern const char DIGEST_SHA_512[];
 
 // Abstract interface overridden by SSL library specific
 // implementations.

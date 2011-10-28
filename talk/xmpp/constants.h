@@ -34,8 +34,6 @@
 
 namespace buzz {
 
-extern const Jid JID_EMPTY;
-
 extern const char NS_CLIENT[];
 extern const char NS_SERVER[];
 extern const char NS_STREAM[];
@@ -96,7 +94,7 @@ extern const char STR_OUTGOINGVOICEMAIL[];
 
 extern const char STR_UNAVAILABLE[];
 
-extern const Jid JID_GOOGLE_MUC_LOOKUP;
+extern const char STR_GOOGLE_MUC_LOOKUP_JID[];
 extern const char STR_MUC_ROOMCONFIG_ROOMNAME[];
 extern const char STR_MUC_ROOMCONFIG_FEATURES[];
 extern const char STR_MUC_ROOM_FEATURE_ENTERPRISE[];

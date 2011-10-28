@@ -46,7 +46,7 @@ Jid::Jid(bool is_special, const std::string & special) {
 }
 
 Jid::Jid(const std::string & jid_string) {
-  if (jid_string == STR_EMPTY) {
+  if (jid_string.empty()) {
     data_ = NULL;
     return;
   }
@@ -159,13 +159,20 @@ std::string Jid::Str() const {
 }
 
 bool
+Jid::IsEmpty() const {
+  return data_ == NULL ||
+      (data_->node_name_.empty() && data_->domain_name_.empty() &&
+       data_->resource_name_.empty());
+}
+
+bool
 Jid::IsValid() const {
   return data_ != NULL && !data_->domain_name_.empty();
 }
 
 bool
 Jid::IsBare() const {
-  if (Compare(JID_EMPTY) == 0) {
+  if (IsEmpty()) {
     LOG(LS_VERBOSE) << "Warning: Calling IsBare() on the empty jid";
     return true;
   }

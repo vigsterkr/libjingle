@@ -40,8 +40,8 @@
 namespace buzz {
 
 namespace {
-const std::string kPresenting = "s";
-const std::string kNotPresenting = "o";
+const char kPresenting[] = "s";
+const char kNotPresenting[] = "o";
 }  // namespace
 
 
