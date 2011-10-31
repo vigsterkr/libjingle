@@ -29,8 +29,10 @@
 
 #include <cstring>
 
+#ifdef HAVE_YUV
 #include "libyuv/planar_functions.h"
 #include "libyuv/scale.h"
+#endif
 
 namespace cricket {
 
@@ -42,6 +44,7 @@ void VideoFrame::StretchToPlanes(
     uint8* y, uint8* u, uint8* v,
     int32 dst_pitch_y, int32 dst_pitch_u, int32 dst_pitch_v,
     size_t width, size_t height, bool interpolate, bool vert_crop) const {
+#ifdef HAVE_YUV
   if (!GetYPlane() || !GetUPlane() || !GetVPlane())
     return;
 
@@ -79,6 +82,7 @@ void VideoFrame::StretchToPlanes(
                 iwidth, iheight,
                 y, u, v, dst_pitch_y, dst_pitch_u, dst_pitch_v,
                 width, height, interpolate);
+#endif
 }
 
 size_t VideoFrame::StretchToBuffer(size_t w, size_t h,
@@ -117,11 +121,19 @@ void VideoFrame::StretchToFrame(VideoFrame *target,
 }
 
 bool VideoFrame::SetToBlack() {
+#ifdef HAVE_YUV
   return libyuv::I420Rect(GetYPlane(), GetYPitch(),
                           GetUPlane(), GetUPitch(),
                           GetVPlane(), GetVPitch(),
                           0, 0, GetWidth(), GetHeight(),
                           16, 128, 128) == 0;
+#else
+  int uv_size = GetUPitch() * GetChromaHeight();
+  memset(GetYPlane(), 16, GetWidth() * GetHeight());
+  memset(GetUPlane(), 128, uv_size);
+  memset(GetVPlane(), 128, uv_size);
+  return true;
+#endif
 }
 
 }  // namespace cricket
