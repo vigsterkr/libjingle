@@ -25,8 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
+
+#include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppauth.h"
 
 namespace {

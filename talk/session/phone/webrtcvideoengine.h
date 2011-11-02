@@ -110,8 +110,14 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   // Enable the render module with timing control.
   bool EnableTimedRender();
 
+  bool RegisterProcessor(VideoProcessor* video_processor);
+  bool UnregisterProcessor(VideoProcessor* video_processor);
+
   // Functions called by WebRtcVideoMediaChannel.
-  ViEWrapper* video_engine() { return vie_wrapper_.get(); }
+  ViEWrapper* vie() { return vie_wrapper_.get(); }
+  const VideoFormat& default_codec_format() const {
+    return default_codec_format_;
+  }
   int GetLastEngineError();
   bool FindCodec(const VideoCodec& in);
   void RegisterChannel(WebRtcVideoMediaChannel* channel);
@@ -120,14 +126,6 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
                                   VideoCodec& out_codec);
   bool ConvertFromCricketVideoCodec(const VideoCodec& in_codec,
                                     webrtc::VideoCodec& out_codec);
-
-  bool RegisterProcessor(VideoProcessor* video_processor);
-  bool UnregisterProcessor(VideoProcessor* video_processor);
-
-  const VideoFormat& default_codec_format() const {
-    return default_codec_format_;
-  }
-
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.
@@ -229,7 +227,14 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool SetOptions(int options);
   virtual void SetInterface(NetworkInterface* iface);
 
+  // Public functions for use by tests and other specialized code.
+  uint32 send_ssrc() const { return 0; }
+  bool GetRenderer(uint32 ssrc, VideoRenderer** renderer) {
+    *renderer = NULL;
+    return false;
+  }
   bool SendFrame(uint32 ssrc, const VideoFrame* frame);
+
   // Thunk functions for use with HybridVideoEngine
   void OnLocalFrame(VideoCapturer* capturer, const VideoFrame* frame) {
     SendFrame(0, frame);
@@ -247,9 +252,10 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool EnablePli();
   bool EnableTmmbr();
   bool EnableNack();
-  bool EnableNackFec(int red_payload_type, int fec_payload_type);
+  bool SetNackFec(int red_payload_type, int fec_payload_type);
   bool SetSendCodec(const webrtc::VideoCodec& codec,
       int min_bitrate, int max_bitrate);
+  bool ResetRecvCodecs(int channel);
 
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;

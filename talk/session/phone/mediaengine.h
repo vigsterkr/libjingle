@@ -59,7 +59,6 @@ class MediaEngineInterface {
     ECHO_CANCELLATION = 1 << 0,
     AUTO_GAIN_CONTROL = 1 << 1,
     NOISE_SUPPRESSION = 1 << 2,
-    TYPING_DETECTION = 1 << 3,
     DEFAULT_AUDIO_OPTIONS = ECHO_CANCELLATION | AUTO_GAIN_CONTROL
   };
   enum VideoOptions {

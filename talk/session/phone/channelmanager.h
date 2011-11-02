@@ -85,10 +85,6 @@ class ChannelManager : public talk_base::MessageHandler,
   bool initialized() const { return initialized_; }
   // Starts up the media engine.
   bool Init();
-  // TODO: Remove this temporary API once Flute is updated.
-  bool Init(talk_base::Thread* thread) {
-    return set_worker_thread(thread) && Init();
-  }
   // Shuts down the media engine.
   void Terminate();
 

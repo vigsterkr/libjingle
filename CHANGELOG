@@ -3,7 +3,8 @@ Libjingle
 0.6.3 - Oct 26, 2011
   - Add media unit tests
   - Improve OpenSSL support
-  - Add support for rtp extension headers
+  - Add SSL unit tests
+  - Add DTLS support to SslStreamAdapter
   - Add initial support for media processors
   - Updated WebRTC voice and video engines
 

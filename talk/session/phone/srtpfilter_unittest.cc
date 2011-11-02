@@ -32,7 +32,11 @@
 #include "talk/session/phone/cryptoparams.h"
 #include "talk/session/phone/fakertp.h"
 #include "talk/session/phone/srtpfilter.h"
+#ifdef SRTP_RELATIVE_PATH
+#include "crypto/include/err.h"
+#else
 #include "third_party/libsrtp/crypto/include/err.h"
+#endif
 
 using cricket::CS_AES_CM_128_HMAC_SHA1_80;
 using cricket::CS_AES_CM_128_HMAC_SHA1_32;

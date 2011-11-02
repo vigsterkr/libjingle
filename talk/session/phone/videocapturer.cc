@@ -34,6 +34,7 @@
 namespace cricket {
 
 static const int64 kMaxDistance = ~(static_cast<int64>(1) << 63);
+static const int64  kMinDesirableFps = static_cast<int64>(15);
 
 /////////////////////////////////////////////////////////////////////
 // Implementation of struct CapturedFrame
@@ -158,7 +159,8 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
   int desired_height = desired.height;
   int desired_width = desired.width;
   int64 delta_w = supported.width - desired.width;
-  int64 delta_fps = VideoFormat::IntervalToFps(supported.interval) -
+  int64 supported_fps = VideoFormat::IntervalToFps(supported.interval);
+  int64 delta_fps = supported_fps -
       VideoFormat::IntervalToFps(desired.interval);
   // Check height of supported height compared to height we would like it to be.
   int64 aspect_h = desired_width ?
@@ -185,6 +187,9 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
     // Otherwise prefer higher resolution.
     distance |= static_cast<int64>(1) << 15;
     delta_fps = -delta_fps;
+    if (supported_fps <  kMinDesirableFps) {
+      distance |= kMaxDistance;
+    }
   }
 
   // 12 bits for width and height and 8 bits for fps and fourcc.

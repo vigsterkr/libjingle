@@ -58,7 +58,7 @@ class NullVoETraceWrapper : public cricket::VoETraceWrapper {
   }
 };
 
-class WebRtcVoiceEngineTest : public testing::Test {
+class WebRtcVoiceEngineTestFake : public testing::Test {
  public:
   class ChannelErrorListener : public sigslot::has_slots<> {
    public:
@@ -89,7 +89,7 @@ class WebRtcVoiceEngineTest : public testing::Test {
     cricket::VoiceMediaChannel::Error error_;
   };
 
-  WebRtcVoiceEngineTest()
+  WebRtcVoiceEngineTestFake()
       : voe_(kAudioCodecs, ARRAY_SIZE(kAudioCodecs)),
         voe_sc_(kAudioCodecs, ARRAY_SIZE(kAudioCodecs)),
         engine_(new FakeVoEWrapper(&voe_),
@@ -124,7 +124,7 @@ class WebRtcVoiceEngineTest : public testing::Test {
 };
 
 // Tests that our stub library "works".
-TEST_F(WebRtcVoiceEngineTest, StartupShutdown) {
+TEST_F(WebRtcVoiceEngineTestFake, StartupShutdown) {
   EXPECT_FALSE(voe_.IsInited());
   EXPECT_FALSE(voe_sc_.IsInited());
   EXPECT_TRUE(engine_.Init());
@@ -136,14 +136,14 @@ TEST_F(WebRtcVoiceEngineTest, StartupShutdown) {
 }
 
 // Tests that we can create and destroy a channel.
-TEST_F(WebRtcVoiceEngineTest, CreateChannel) {
+TEST_F(WebRtcVoiceEngineTestFake, CreateChannel) {
   EXPECT_TRUE(engine_.Init());
   channel_ = engine_.CreateChannel();
   EXPECT_TRUE(channel_ != NULL);
 }
 
 // Tests that we properly handle failures in CreateChannel.
-TEST_F(WebRtcVoiceEngineTest, CreateChannelFail) {
+TEST_F(WebRtcVoiceEngineTestFake, CreateChannelFail) {
   voe_.set_fail_create_channel(true);
   EXPECT_TRUE(engine_.Init());
   channel_ = engine_.CreateChannel();
@@ -152,7 +152,7 @@ TEST_F(WebRtcVoiceEngineTest, CreateChannelFail) {
 
 // Tests that the list of supported codecs is created properly and ordered
 // correctly
-TEST_F(WebRtcVoiceEngineTest, CodecPreference) {
+TEST_F(WebRtcVoiceEngineTestFake, CodecPreference) {
   const std::vector<cricket::AudioCodec>& codecs = engine_.codecs();
   ASSERT_FALSE(codecs.empty());
   EXPECT_EQ("ISAC", codecs[0].name);
@@ -167,7 +167,7 @@ TEST_F(WebRtcVoiceEngineTest, CodecPreference) {
 
 // Tests that we can find codecs by name or id, and that we interpret the
 // clockrate and bitrate fields properly.
-TEST_F(WebRtcVoiceEngineTest, FindCodec) {
+TEST_F(WebRtcVoiceEngineTestFake, FindCodec) {
   cricket::AudioCodec codec;
   webrtc::CodecInst codec_inst;
   // Find PCMU with explicit clockrate and bitrate.
@@ -202,7 +202,7 @@ TEST_F(WebRtcVoiceEngineTest, FindCodec) {
 }
 
 // Test that we set our inbound codecs properly, including changing PT.
-TEST_F(WebRtcVoiceEngineTest, SetRecvCodecs) {
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecs) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -227,7 +227,7 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvCodecs) {
 }
 
 // Test that we fail to set an unknown inbound codec.
-TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsUnsupportedCodec) {
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsUnsupportedCodec) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kIsacCodec);
@@ -236,7 +236,7 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsUnsupportedCodec) {
 }
 
 // Test that we fail if we have duplicate types in the inbound list.
-TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsDuplicatePayloadType) {
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsDuplicatePayloadType) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kIsacCodec);
@@ -246,7 +246,7 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsDuplicatePayloadType) {
 }
 
 // Test that changes to recv codecs are applied to all streams.
-TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsWithMultipleStreams) {
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kIsacCodec);
@@ -272,7 +272,7 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvCodecsWithMultipleStreams) {
 }
 
 // Test that we apply codecs properly.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecs) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -293,7 +293,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecs) {
 }
 
 // Test that we handle various ways of specifying bitrate.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBitrate) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBitrate) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -331,7 +331,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBitrate) {
 }
 
 // Test that we fall back to PCMU if no codecs are specified.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsNoCodecs) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsNoCodecs) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -348,7 +348,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsNoCodecs) {
 }
 
 // Test that we set VAD and DTMF types correctly.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsCNandDTMF) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCNandDTMF) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -375,7 +375,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsCNandDTMF) {
 }
 
 // Test that we perform case-insensitive matching of codec names.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsCaseInsensitive) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCaseInsensitive) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -402,7 +402,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsCaseInsensitive) {
 }
 
 // Test that we set up FEC correctly.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsRED) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsRED) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -422,7 +422,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsRED) {
 }
 
 // Test that we set up FEC correctly if params are omitted.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsREDNoParams) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsREDNoParams) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -441,7 +441,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsREDNoParams) {
 }
 
 // Test that we ignore RED if the parameters aren't named the way we expect.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED1) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBadRED1) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -460,7 +460,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED1) {
 }
 
 // Test that we ignore RED if it uses different primary/secondary encoding.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED2) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBadRED2) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -479,7 +479,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED2) {
 }
 
 // Test that we ignore RED if it uses more than 2 encodings.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED3) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBadRED3) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -498,7 +498,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED3) {
 }
 
 // Test that we ignore RED if it has bogus codec ids.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED4) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBadRED4) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -517,7 +517,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED4) {
 }
 
 // Test that we ignore RED if it refers to a codec that is not present.
-TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED5) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBadRED5) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -536,7 +536,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendCodecsBadRED5) {
 }
 
 // Test that we support setting an empty list of recv header extensions.
-TEST_F(WebRtcVoiceEngineTest, SetRecvRtpHeaderExtensions) {
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvRtpHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::RtpHeaderExtension> extensions;
   int channel_num = voe_.GetLastChannel();
@@ -559,7 +559,7 @@ TEST_F(WebRtcVoiceEngineTest, SetRecvRtpHeaderExtensions) {
 }
 
 // Test that we support setting certain send header extensions.
-TEST_F(WebRtcVoiceEngineTest, SetSendRtpHeaderExtensions) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendRtpHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::RtpHeaderExtension> extensions;
   int channel_num = voe_.GetLastChannel();
@@ -595,7 +595,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendRtpHeaderExtensions) {
 }
 
 // Test that we can create a channel and start sending/playing out on it.
-TEST_F(WebRtcVoiceEngineTest, SendAndPlayout) {
+TEST_F(WebRtcVoiceEngineTestFake, SendAndPlayout) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -613,7 +613,7 @@ TEST_F(WebRtcVoiceEngineTest, SendAndPlayout) {
 
 // Test that we can add and remove streams, and do proper send/playout.
 // We can receive on multiple streams, but will only send on one.
-TEST_F(WebRtcVoiceEngineTest, SendAndPlayoutWithMultipleStreams) {
+TEST_F(WebRtcVoiceEngineTestFake, SendAndPlayoutWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   int channel_num1 = voe_.GetLastChannel();
 
@@ -670,7 +670,7 @@ TEST_F(WebRtcVoiceEngineTest, SendAndPlayoutWithMultipleStreams) {
 }
 
 // Test that we can set the devices to use.
-TEST_F(WebRtcVoiceEngineTest, SetDevices) {
+TEST_F(WebRtcVoiceEngineTestFake, SetDevices) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -724,7 +724,7 @@ TEST_F(WebRtcVoiceEngineTest, SetDevices) {
 
 // Test that we can set the devices to use even if we failed to
 // open the initial ones.
-TEST_F(WebRtcVoiceEngineTest, SetDevicesWithInitiallyBadDevices) {
+TEST_F(WebRtcVoiceEngineTestFake, SetDevicesWithInitiallyBadDevices) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
@@ -764,7 +764,7 @@ TEST_F(WebRtcVoiceEngineTest, SetDevicesWithInitiallyBadDevices) {
 
 // Test that we can create a channel configured for multi-point conferences,
 // and start sending/playing out on it.
-TEST_F(WebRtcVoiceEngineTest, ConferenceSendAndPlayout) {
+TEST_F(WebRtcVoiceEngineTestFake, ConferenceSendAndPlayout) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
@@ -807,13 +807,13 @@ TEST_F(WebRtcVoiceEngineTest, ConferenceSendAndPlayout) {
 
 // Test that we can create a channel configured for Codian bridges,
 // and start sending/playing out on it.
-TEST_F(WebRtcVoiceEngineTest, CodianSendAndPlayout) {
+TEST_F(WebRtcVoiceEngineTestFake, CodianSendAndPlayout) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   webrtc::AgcConfig agc_config;
   EXPECT_EQ(0, voe_.GetAgcConfig(agc_config));
   EXPECT_EQ(0, agc_config.targetLeveldBOv);
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_AGC_TANDBERG_LEVELS));
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_AGC_MINUS_10DB));
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kPcmuCodec);
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
@@ -832,7 +832,7 @@ TEST_F(WebRtcVoiceEngineTest, CodianSendAndPlayout) {
 }
 
 // Test that we can set the outgoing SSRC properly.
-TEST_F(WebRtcVoiceEngineTest, SetSendSsrc) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrc) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   unsigned int send_ssrc;
@@ -844,7 +844,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendSsrc) {
 }
 
 // Test that we can set the outgoing SSRC properly with multiple streams.
-TEST_F(WebRtcVoiceEngineTest, SetSendSsrcWithMultipleStreams) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrcWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   int channel_num1 = voe_.GetLastChannel();
   unsigned int send_ssrc;
@@ -858,7 +858,7 @@ TEST_F(WebRtcVoiceEngineTest, SetSendSsrcWithMultipleStreams) {
 }
 
 // Test that we can properly receive packets.
-TEST_F(WebRtcVoiceEngineTest, Recv) {
+TEST_F(WebRtcVoiceEngineTestFake, Recv) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   DeliverPacket(kPcmuFrame, sizeof(kPcmuFrame));
@@ -867,7 +867,7 @@ TEST_F(WebRtcVoiceEngineTest, Recv) {
 }
 
 // Test that we can properly receive packets on multiple streams.
-TEST_F(WebRtcVoiceEngineTest, RecvWithMultipleStreams) {
+TEST_F(WebRtcVoiceEngineTestFake, RecvWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   EXPECT_TRUE(channel_->AddStream(1));
   int channel_num1 = voe_.GetLastChannel();
@@ -909,7 +909,7 @@ TEST_F(WebRtcVoiceEngineTest, RecvWithMultipleStreams) {
 }
 
 // Test that we properly handle failures to add a stream.
-TEST_F(WebRtcVoiceEngineTest, AddStreamFail) {
+TEST_F(WebRtcVoiceEngineTestFake, AddStreamFail) {
   EXPECT_TRUE(SetupEngine());
   voe_.set_fail_create_channel(true);
   EXPECT_FALSE(channel_->AddStream(2));
@@ -917,7 +917,7 @@ TEST_F(WebRtcVoiceEngineTest, AddStreamFail) {
 
 // Test that we properly clean up any streams that were added, even if
 // not explicitly removed.
-TEST_F(WebRtcVoiceEngineTest, StreamCleanup) {
+TEST_F(WebRtcVoiceEngineTestFake, StreamCleanup) {
   EXPECT_TRUE(SetupEngine());
   EXPECT_TRUE(channel_->AddStream(1));
   EXPECT_TRUE(channel_->AddStream(2));
@@ -929,7 +929,7 @@ TEST_F(WebRtcVoiceEngineTest, StreamCleanup) {
 
 // Test that we can send DTMF properly, but only if the other side supports
 // telephone-event.
-TEST_F(WebRtcVoiceEngineTest, SendDtmf) {
+TEST_F(WebRtcVoiceEngineTestFake, SendDtmf) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kPcmuCodec);
@@ -942,7 +942,7 @@ TEST_F(WebRtcVoiceEngineTest, SendDtmf) {
 }
 
 // Test that we can play a ringback tone properly in a single-stream call.
-TEST_F(WebRtcVoiceEngineTest, PlayRingback) {
+TEST_F(WebRtcVoiceEngineTestFake, PlayRingback) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   EXPECT_EQ(0, voe_.IsPlayingFileLocally(channel_num));
@@ -964,7 +964,7 @@ TEST_F(WebRtcVoiceEngineTest, PlayRingback) {
 }
 
 // Test that we can play a ringback tone properly in a multi-stream call.
-TEST_F(WebRtcVoiceEngineTest, PlayRingbackWithMultipleStreams) {
+TEST_F(WebRtcVoiceEngineTestFake, PlayRingbackWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   EXPECT_TRUE(channel_->AddStream(1));
   EXPECT_TRUE(channel_->AddStream(2));
@@ -996,7 +996,7 @@ TEST_F(WebRtcVoiceEngineTest, PlayRingbackWithMultipleStreams) {
 }
 
 // Tests creating soundclips, and make sure they come from the right engine.
-TEST_F(WebRtcVoiceEngineTest, CreateSoundclip) {
+TEST_F(WebRtcVoiceEngineTestFake, CreateSoundclip) {
   EXPECT_TRUE(engine_.Init());
   soundclip_ = engine_.CreateSoundclip();
   ASSERT_TRUE(soundclip_ != NULL);
@@ -1010,7 +1010,7 @@ TEST_F(WebRtcVoiceEngineTest, CreateSoundclip) {
 }
 
 // Tests playing out a fake sound.
-TEST_F(WebRtcVoiceEngineTest, PlaySoundclip) {
+TEST_F(WebRtcVoiceEngineTestFake, PlaySoundclip) {
   static const char kZeroes[16000] = {};
   EXPECT_TRUE(engine_.Init());
   soundclip_ = engine_.CreateSoundclip();
@@ -1018,7 +1018,7 @@ TEST_F(WebRtcVoiceEngineTest, PlaySoundclip) {
   EXPECT_TRUE(soundclip_->PlaySound(kZeroes, sizeof(kZeroes), 0));
 }
 
-TEST_F(WebRtcVoiceEngineTest, MediaEngineCallbackOnError) {
+TEST_F(WebRtcVoiceEngineTestFake, MediaEngineCallbackOnError) {
   talk_base::scoped_ptr<ChannelErrorListener> listener;
   cricket::WebRtcVoiceMediaChannel* media_channel;
   unsigned int ssrc = 0;
@@ -1060,7 +1060,7 @@ TEST_F(WebRtcVoiceEngineTest, MediaEngineCallbackOnError) {
   EXPECT_EQ(0, listener->error());
 }
 
-TEST_F(WebRtcVoiceEngineTest, TestSetPlayoutError) {
+TEST_F(WebRtcVoiceEngineTestFake, TestSetPlayoutError) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kPcmuCodec);
@@ -1076,7 +1076,7 @@ TEST_F(WebRtcVoiceEngineTest, TestSetPlayoutError) {
 
 // Test that the Registering/Unregistering with the
 // webrtcvoiceengine works as expected
-TEST_F(WebRtcVoiceEngineTest, RegisterVoiceProcessor) {
+TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_TRUE(SetupEngine());
   uint32 ssrc = 0;
   voe_.GetLocalSSRC(0,ssrc);
@@ -1142,7 +1142,7 @@ TEST_F(WebRtcVoiceEngineTest, RegisterVoiceProcessor) {
 // Tests for the actual WebRtc VoE library.
 
 // Tests that the library initializes and shuts down properly.
-TEST(WebRtcVoiceEngineLibTest, StartupShutdown) {
+TEST(WebRtcVoiceEngineTest, StartupShutdown) {
   cricket::WebRtcVoiceEngine engine;
   EXPECT_TRUE(engine.Init());
   cricket::VoiceMediaChannel* channel = engine.CreateChannel();
@@ -1156,9 +1156,7 @@ TEST(WebRtcVoiceEngineLibTest, StartupShutdown) {
 }
 
 // Tests that the logging from the library is cleartext.
-// TODO: This test case is disabled due to a known bug in VoE4.0
-// which sends out truncated log message. Will be fixed in next VoE release.
-TEST(WebRtcVoiceEngineLibTest, DISABLED_HasUnencryptedLogging) {
+TEST(WebRtcVoiceEngineTest, DISABLED_HasUnencryptedLogging) {
   cricket::WebRtcVoiceEngine engine;
   talk_base::scoped_ptr<talk_base::MemoryStream> stream(
       new talk_base::MemoryStream);
@@ -1183,7 +1181,7 @@ TEST(WebRtcVoiceEngineLibTest, DISABLED_HasUnencryptedLogging) {
 
 // Tests we do not see any references to a monitor thread being spun up
 // when initiating the engine.
-TEST(WebRtcVoiceEngineLibTest, HasNoMonitorThread) {
+TEST(WebRtcVoiceEngineTest, HasNoMonitorThread) {
   cricket::WebRtcVoiceEngine engine;
   talk_base::scoped_ptr<talk_base::MemoryStream> stream(
       new talk_base::MemoryStream);
@@ -1201,7 +1199,7 @@ TEST(WebRtcVoiceEngineLibTest, HasNoMonitorThread) {
 }
 
 // Tests that the library is configured with the codecs we want.
-TEST(WebRtcVoiceEngineLibTest, HasCorrectCodecs) {
+TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   cricket::WebRtcVoiceEngine engine;
   // Check codecs by name.
   EXPECT_TRUE(engine.FindCodec(
@@ -1277,7 +1275,7 @@ TEST(WebRtcVoiceEngineLibTest, HasCorrectCodecs) {
 }
 
 // Tests that VoE supports at least 32 channels
-TEST(WebRtcVoiceEngineLibTest, Has32Channels) {
+TEST(WebRtcVoiceEngineTest, Has32Channels) {
   cricket::WebRtcVoiceEngine engine;
   EXPECT_TRUE(engine.Init());
 
@@ -1304,7 +1302,7 @@ TEST(WebRtcVoiceEngineLibTest, Has32Channels) {
 
 #ifdef WIN32
 // Test our workarounds to WebRtc VoE' munging of the coinit count
-TEST(WebRtcVoiceEngineLibTest, CoInitialize) {
+TEST(WebRtcVoiceEngineTest, CoInitialize) {
   cricket::WebRtcVoiceEngine* engine = new cricket::WebRtcVoiceEngine();
 
   // Initial refcount should be 0.

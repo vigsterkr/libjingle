@@ -636,8 +636,6 @@ buzz::XmlElement* CreateGingleAudioContentElem(
                                                 QN_GINGLE_AUDIO_CRYPTO_USAGE,
                                                 crypto_required));
   }
-
-
   return elem;
 }
 

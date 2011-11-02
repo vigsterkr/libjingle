@@ -25,11 +25,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _xmlelement_h_
-#define _xmlelement_h_
+#ifndef TALK_XMLLITE_XMLELEMENT_H_
+#define TALK_XMLLITE_XMLELEMENT_H_
 
 #include <iosfwd>
 #include <string>
+
 #include "talk/base/scoped_ptr.h"
 #include "talk/xmllite/qname.h"
 
@@ -241,4 +242,5 @@ private:
 };
 
 }
-#endif
+
+#endif  // TALK_XMLLITE_XMLELEMENT_H_

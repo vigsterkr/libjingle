@@ -25,12 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/xmllite/xmlelement.h"
+
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <sstream>
 
 #include "talk/base/common.h"
-#include "talk/xmllite/xmlelement.h"
 #include "talk/xmllite/qname.h"
 #include "talk/xmllite/xmlparser.h"
 #include "talk/xmllite/xmlbuilder.h"

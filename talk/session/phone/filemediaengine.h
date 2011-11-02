@@ -219,6 +219,10 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
     return true;
   }
+  virtual bool AddScreencast(uint32 ssrc, talk_base::WindowId id) {
+    return true;
+  }
+  virtual bool RemoveScreencast(uint32 ssrc) { return true; }
   virtual bool GetStats(VideoMediaInfo* info) { return true; }
   virtual bool SendIntraFrame() { return false; }
   virtual bool RequestIntraFrame() { return false; }

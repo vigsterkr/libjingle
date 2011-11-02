@@ -514,6 +514,7 @@ void SrtpSession::HandleEventThunk(srtp_event_data_t* ev) {
 
 #else   // !HAVE_SRTP
 
+// On some systems, SRTP is not (yet) available.
 
 SrtpSession::SrtpSession() {
   LOG(WARNING) << "SRTP implementation is missing.";
@@ -628,6 +629,7 @@ void SrtpStat::HandleSrtpResult(const SrtpStat::FailureKey& key) {
 
 #else   // !HAVE_SRTP
 
+// On some systems, SRTP is not (yet) available.
 
 SrtpStat::SrtpStat()
     : signal_silent_time_(1000) {

@@ -283,6 +283,9 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   }
 
   void set_fail_set_send(bool fail) { fail_set_send_ = fail; }
+  void TriggerError(uint32 ssrc, VoiceMediaChannel::Error error) {
+    VoiceMediaChannel::SignalMediaError(ssrc, error);
+  }
 
  private:
   struct OutputScaling {
@@ -581,6 +584,9 @@ class FakeVideoEngine : public FakeBaseEngine {
   bool SetDefaultEncoderConfig(const VideoEncoderConfig& config) {
     default_encoder_config_ = config;
     return true;
+  }
+  const VideoEncoderConfig& default_encoder_config() const {
+    return default_encoder_config_;
   }
 
   VideoMediaChannel* CreateChannel(VoiceMediaChannel* channel) {

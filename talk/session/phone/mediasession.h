@@ -175,6 +175,7 @@ class MediaContentDescriptionImpl : public MediaContentDescription {
 class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
  public:
   AudioContentDescription() :
+      agc_minus_10db_(false),
       conference_mode_(false) {}
 
   virtual MediaType type() const { return MEDIA_TYPE_AUDIO; }
@@ -187,6 +188,12 @@ class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
   const std::string &lang() const { return lang_; }
   void set_lang(const std::string &lang) { lang_ = lang; }
 
+  bool agc_minus_10db() const { return agc_minus_10db_; }
+  void set_agc_minus_10db(bool enable) {
+    agc_minus_10db_ = enable;
+  }
+ private:
+  bool agc_minus_10db_;
 
  private:
   bool conference_mode_;

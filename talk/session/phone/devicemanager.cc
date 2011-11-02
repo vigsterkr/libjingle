@@ -40,6 +40,9 @@
 #include <uuids.h>
 #include "talk/base/win32.h"  // ToUtf8
 #include "talk/base/win32window.h"
+#ifdef HAVE_LOGITECH_HEADERS
+#include "third_party/logitech/files/logitechquickcam.h"
+#endif
 #elif OSX
 #include <CoreAudio/CoreAudio.h>
 #include <QuickTime/QuickTime.h>
@@ -120,6 +123,14 @@ class DeviceWatcher {
  private:
   DeviceManager* manager_;
   void* impl_;
+};
+#elif defined(IOS) || defined(ANDROID)
+// We don't use DeviceWatcher on iOS or Android, so just stub out a noop class.
+class DeviceWatcher {
+ public:
+  explicit DeviceWatcher(DeviceManager* dm) {}
+  bool Start() { return true; }
+  void Stop() {}
 };
 #endif
 
@@ -389,6 +400,17 @@ bool DeviceManager::GetAudioDevicesByPlatform(bool input,
   }
   return ret;
 
+#elif defined(ANDROID)
+  // Under Android, we don't access the device file directly.
+  // Arbitrary use 0 for the mic and 1 for the output.
+  // These ids are used in MediaEngine::SetSoundDevices(in, out);
+  // The strings are for human consumption.
+  if (input) {
+      devs->push_back(Device("audiorecord", 0));
+  } else {
+      devs->push_back(Device("audiotrack", 1));
+  }
+  return true;
 #else
   return false;
 #endif
@@ -418,6 +440,10 @@ bool GetDevices(const CLSID& catid, std::vector<Device>* devices) {
   if (hr == S_OK) {
     CComPtr<IMoniker> mk;
     while (cam_enum->Next(1, &mk, NULL) == S_OK) {
+#ifdef HAVE_LOGITECH_HEADERS
+      // Initialize Logitech device if applicable
+      MaybeLogitechDeviceReset(mk);
+#endif
       CComPtr<IPropertyBag> bag;
       if (SUCCEEDED(mk->BindToStorage(NULL, NULL,
           __uuidof(bag), reinterpret_cast<void**>(&bag)))) {
@@ -971,6 +997,17 @@ bool DeviceWatcher::IsDescriptorClosed() {
   return false;
 }
 
+// TODO: Incomplete. Use ANDROID implementation for IOS to quiet compiler.
+#elif defined(ANDROID) || defined(IOS)
+
+// On Android, we treat the camera(s) as a single device. Even if there are
+// multiple cameras, that's abstracted away at a higher level.
+static bool GetVideoDevices(std::vector<Device>* devices) {
+  devices->clear();
+  Device dev("camera", "1");    // name and ID
+  devices->push_back(dev);
+  return true;
+}
 #endif
 
 #if defined(CHROMEOS)

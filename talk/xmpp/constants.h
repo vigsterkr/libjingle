@@ -98,6 +98,7 @@ extern const char STR_GOOGLE_MUC_LOOKUP_JID[];
 extern const char STR_MUC_ROOMCONFIG_ROOMNAME[];
 extern const char STR_MUC_ROOMCONFIG_FEATURES[];
 extern const char STR_MUC_ROOM_FEATURE_ENTERPRISE[];
+extern const char STR_MUC_ROOMCONFIG[];
 
 extern const StaticQName QN_STREAM_STREAM;
 extern const StaticQName QN_STREAM_FEATURES;
@@ -149,6 +150,12 @@ extern const StaticQName QN_SASL_INVALID_MECHANISM;
 extern const StaticQName QN_SASL_MECHANISM_TOO_WEAK;
 extern const StaticQName QN_SASL_NOT_AUTHORIZED;
 extern const StaticQName QN_SASL_TEMPORARY_AUTH_FAILURE;
+
+// These are non-standard.
+extern const char NS_GOOGLE_AUTH[];
+extern const char NS_GOOGLE_AUTH_PROTOCOL[];
+extern const StaticQName QN_GOOGLE_AUTH_CLIENT_USES_FULL_BIND_RESULT;
+extern const StaticQName QN_GOOGLE_ALLOW_NON_GOOGLE_ID_XMPP_LOGIN;
 
 extern const StaticQName QN_DIALBACK_RESULT;
 extern const StaticQName QN_DIALBACK_VERIFY;
@@ -274,7 +281,6 @@ extern const StaticQName QN_AFFILIATION;
 extern const StaticQName QN_ROLE;
 extern const StaticQName QN_TIME;
 
-
 extern const StaticQName QN_XMLNS_CLIENT;
 extern const StaticQName QN_XMLNS_SERVER;
 extern const StaticQName QN_XMLNS_STREAM;
@@ -316,15 +322,11 @@ extern const StaticQName QN_PUBSUB_EVENT_ITEM;
 extern const StaticQName QN_PUBSUB_EVENT_RETRACT;
 extern const StaticQName QN_NOTIFY;
 
-
 extern const char NS_PRESENTER[];
 extern const StaticQName QN_PRESENTER_PRESENTER;
 extern const StaticQName QN_PRESENTER_PRESENTATION_ITEM;
 extern const StaticQName QN_PRESENTER_PRESENTATION_TYPE;
 extern const StaticQName QN_PRESENTER_PRESENTATION_ID;
-
-
-
 
 // JEP 0030
 extern const StaticQName QN_CATEGORY;
@@ -374,7 +376,6 @@ extern const StaticQName QN_MUC_USER_X;
 extern const StaticQName QN_MUC_USER_ITEM;
 extern const StaticQName QN_MUC_USER_STATUS;
 
-
 // JEP 0055 - Jabber Search
 extern const char NS_SEARCH[];
 extern const StaticQName QN_SEARCH_QUERY;
@@ -382,7 +383,6 @@ extern const StaticQName QN_SEARCH_ITEM;
 extern const StaticQName QN_SEARCH_ROOM_NAME;
 extern const StaticQName QN_SEARCH_ROOM_JID;
 extern const StaticQName QN_SEARCH_ROOM_DOMAIN;
-
 
 // JEP 0115
 extern const char NS_CAPS[];
@@ -399,7 +399,6 @@ extern const StaticQName kQnVCardPhoto;
 // JEP 0172 User Nickname
 extern const char NS_NICKNAME[];
 extern const StaticQName QN_NICKNAME;
-
 
 // JEP 0085 chat state
 extern const char NS_CHATSTATE[];
@@ -418,7 +417,6 @@ extern const StaticQName kQnStamp;
 extern const char kNSTimestamp[];
 extern const StaticQName kQnTime;
 extern const StaticQName kQnMilliseconds;
-
 
 extern const char NS_JINGLE_INFO[];
 extern const StaticQName QN_JINGLE_INFO_QUERY;
@@ -498,6 +496,7 @@ extern const char NS_GOOGLE_MUC_MEDIA[];
 extern const StaticQName QN_GOOGLE_MUC_AUDIO_MUTE;
 extern const StaticQName QN_GOOGLE_MUC_VIDEO_MUTE;
 extern const StaticQName QN_GOOGLE_MUC_RECORDING;
+extern const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK;
 extern const StaticQName QN_STATE_ATTR;
 
 }  // namespace buzz

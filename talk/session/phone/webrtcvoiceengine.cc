@@ -25,6 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #ifdef HAVE_WEBRTC_VOICE
 
@@ -881,13 +884,13 @@ void WebRtcVoiceEngine::CallbackOnError(const int channel_num,
   WebRtcVoiceMediaChannel* channel = NULL;
   uint32 ssrc = 0;
   LOG(LS_WARNING) << "VoiceEngine error " << err_code << " reported on channel "
-               << channel_num << ".";
+                  << channel_num << ".";
   if (FindChannelAndSsrc(channel_num, &channel, &ssrc)) {
     ASSERT(channel != NULL);
     channel->OnError(ssrc, err_code);
   } else {
     LOG(LS_ERROR) << "VoiceEngine channel " << channel_num
-        << " could not be found in the channel list when error reported.";
+                  << " could not be found in channel list when error reported.";
   }
 }
 
@@ -1483,6 +1486,11 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
     }
 #endif  // CHROMEOS
 
+    if ((channel_options_ & OPT_AGC_MINUS_10DB) && !agc_adjusted_) {
+      if (engine()->AdjustAgcLevel(kMinus10DbAdjustment)) {
+        agc_adjusted_ = true;
+      }
+    }
 
     // VoiceEngine resets sequence number when StopSend is called. This
     // sometimes causes libSRTP to complain about packets being
@@ -1795,8 +1803,8 @@ bool WebRtcVoiceMediaChannel::PlayRingbackTone(uint32 ssrc,
     ringback_channels_.insert(channel);
     LOG(LS_INFO) << "Started ringback on channel " << channel;
   } else {
-    if (engine()->voe()->file()->StopPlayingFileLocally(channel)
-        == -1) {
+    if (engine()->voe()->file()->IsPlayingFileLocally(channel) == 1 &&
+        engine()->voe()->file()->StopPlayingFileLocally(channel) == -1) {
       LOG_RTCERR1(StopPlayingFileLocally, channel);
       return false;
     }

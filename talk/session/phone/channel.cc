@@ -133,14 +133,15 @@ bool BaseChannel::Init(TransportChannel* transport_channel,
   return true;
 }
 
+// Can be called from thread other than worker thread
 bool BaseChannel::Enable(bool enable) {
-  // Can be called from thread other than worker thread
   Send(enable ? MSG_ENABLE : MSG_DISABLE);
   return true;
 }
 
+// Can be called from thread other than worker thread
 bool BaseChannel::Mute(bool mute) {
-  // Can be called from thread other than worker thread
+  Clear(MSG_UNMUTE);  // Clear any penging auto-unmutes.
   Send(mute ? MSG_MUTE : MSG_UNMUTE);
   return true;
 }
@@ -641,7 +642,9 @@ VoiceChannel::VoiceChannel(talk_base::Thread* thread,
                            bool rtcp)
     : BaseChannel(thread, media_engine, media_channel, session, content_name,
                   rtcp),
-      received_media_(false) {
+      received_media_(false),
+      mute_on_type_(false),
+      mute_on_type_timeout_(kTypingBlackoutPeriod) {
 }
 
 VoiceChannel::~VoiceChannel() {
@@ -866,6 +869,9 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   if (audio->conference_mode()) {
     audio_options |= OPT_CONFERENCE;
   }
+  if (audio->agc_minus_10db()) {
+    audio_options |= OPT_AGC_MINUS_10DB;
+  }
   if (!media_channel()->SetOptions(audio_options)) {
     // Log an error on failure, but don't abort the call.
     LOG(LS_ERROR) << "Failed to set voice channel options";
@@ -989,9 +995,14 @@ void VoiceChannel::OnAudioMonitorUpdate(AudioMonitor* monitor,
 }
 
 void VoiceChannel::OnVoiceChannelError(
-    uint32 ssrc, VoiceMediaChannel::Error error) {
-  VoiceChannelErrorMessageData *data = new VoiceChannelErrorMessageData(
-      ssrc, error);
+    uint32 ssrc, VoiceMediaChannel::Error err) {
+  if (err == VoiceMediaChannel::ERROR_REC_TYPING_NOISE_DETECTED &&
+      mute_on_type_ && !muted()) {
+    Mute(true);
+    PostDelayed(mute_on_type_timeout_, MSG_UNMUTE, NULL);
+  }
+  VoiceChannelErrorMessageData* data = new VoiceChannelErrorMessageData(
+      ssrc, err);
   signaling_thread()->Post(this, MSG_CHANNEL_ERROR, data);
 }
 
@@ -1038,6 +1049,8 @@ bool VideoChannel::Init() {
           rtcp_channel)) {
     return false;
   }
+  media_channel()->SignalScreencastWindowEvent.connect(
+      this, &VideoChannel::OnScreencastWindowEvent);
   media_channel()->SignalMediaError.connect(
       this, &VideoChannel::OnVideoChannelError);
   srtp_filter()->SignalSrtpError.connect(
@@ -1070,7 +1083,17 @@ bool VideoChannel::SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
   return true;
 }
 
+bool VideoChannel::AddScreencast(uint32 ssrc, talk_base::WindowId id) {
+  ScreencastMessageData data(ssrc, id);
+  Send(MSG_ADDSCREENCAST, &data);
+  return true;
+}
 
+bool VideoChannel::RemoveScreencast(uint32 ssrc) {
+  ScreencastMessageData data(ssrc, 0);
+  Send(MSG_REMOVESCREENCAST, &data);
+  return true;
+}
 
 bool VideoChannel::SendIntraFrame() {
   Send(MSG_SENDINTRAFRAME);
@@ -1222,6 +1245,19 @@ void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
 
+void VideoChannel::AddScreencast_w(uint32 ssrc, talk_base::WindowId id) {
+  media_channel()->AddScreencast(ssrc, id);
+}
+
+void VideoChannel::RemoveScreencast_w(uint32 ssrc) {
+  media_channel()->RemoveScreencast(ssrc);
+}
+
+void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
+                                             talk_base::WindowEvent we) {
+  ASSERT(signaling_thread() == talk_base::Thread::Current());
+  SignalScreencastWindowEvent(ssrc, we);
+}
 
 void VideoChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
@@ -1233,6 +1269,25 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_SETRENDERER: {
       RenderMessageData* data = static_cast<RenderMessageData*>(pmsg->pdata);
       SetRenderer_w(data->ssrc, data->renderer);
+      break;
+    }
+    case MSG_ADDSCREENCAST: {
+      ScreencastMessageData* data =
+          static_cast<ScreencastMessageData*>(pmsg->pdata);
+      AddScreencast_w(data->ssrc, data->window_id);
+      break;
+    }
+    case MSG_REMOVESCREENCAST: {
+      ScreencastMessageData* data =
+          static_cast<ScreencastMessageData*>(pmsg->pdata);
+      RemoveScreencast_w(data->ssrc);
+      break;
+    }
+    case MSG_SCREENCASTWINDOWEVENT: {
+      ScreencastEventData* data =
+          static_cast<ScreencastEventData*>(pmsg->pdata);
+      OnScreencastWindowEvent_s(data->ssrc, data->event);
+      delete data;
       break;
     }
     case MSG_SENDINTRAFRAME:
@@ -1271,6 +1326,11 @@ void VideoChannel::OnMediaMonitorUpdate(
   SignalMediaMonitor(this, info);
 }
 
+void VideoChannel::OnScreencastWindowEvent(uint32 ssrc,
+                                           talk_base::WindowEvent event) {
+  ScreencastEventData* pdata = new ScreencastEventData(ssrc, event);
+  signaling_thread()->Post(this, MSG_SCREENCASTWINDOWEVENT, pdata);
+}
 
 void VideoChannel::OnVideoChannelError(uint32 ssrc,
                                        VideoMediaChannel::Error error) {

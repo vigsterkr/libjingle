@@ -35,6 +35,7 @@
 #include "talk/base/criticalsection.h"
 #include "talk/base/network.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/window.h"
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/p2p/base/session.h"
 #include "talk/session/phone/audiomonitor.h"
@@ -64,9 +65,12 @@ enum {
   MSG_SETRINGBACKTONE = 13,
   MSG_PLAYRINGBACKTONE = 14,
   MSG_SETMAXSENDBANDWIDTH = 15,
+  MSG_ADDSCREENCAST = 16,
+  MSG_REMOVESCREENCAST = 17,
   MSG_SETRTCPCNAME = 18,
   MSG_SENDINTRAFRAME = 19,
   MSG_REQUESTINTRAFRAME = 20,
+  MSG_SCREENCASTWINDOWEVENT = 21,
   MSG_RTPPACKET = 22,
   MSG_RTCPPACKET = 23,
   MSG_CHANNEL_ERROR = 24,
@@ -314,6 +318,10 @@ class VoiceChannel : public BaseChannel {
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
   bool PressDTMF(int digit, bool playout);
   bool SetOutputScaling(uint32 ssrc, double left, double right);
+  void set_mute_on_type(bool enable, int timeout) {
+    mute_on_type_ = enable;
+    mute_on_type_timeout_ = talk_base::_max(0, timeout);
+  }
 
   // Monitoring functions
   sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo> &>
@@ -336,6 +344,8 @@ class VoiceChannel : public BaseChannel {
   //     ssrc(uint32), and error(VoiceMediaChannel::Error).
   sigslot::signal3<VoiceChannel*, uint32, VoiceMediaChannel::Error>
       SignalMediaError;
+
+  static const int kTypingBlackoutPeriod = 1500;
 
  private:
   struct SetRingbackToneMessageData : public talk_base::MessageData {
@@ -417,6 +427,8 @@ class VoiceChannel : public BaseChannel {
   bool received_media_;
   talk_base::scoped_ptr<VoiceMediaMonitor> media_monitor_;
   talk_base::scoped_ptr<AudioMonitor> audio_monitor_;
+  bool mute_on_type_;
+  int  mute_on_type_timeout_;
 };
 
 // VideoChannel is a specialization for video.
@@ -439,6 +451,8 @@ class VideoChannel : public BaseChannel {
 
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
 
+  bool AddScreencast(uint32 ssrc, talk_base::WindowId id);
+  bool RemoveScreencast(uint32 ssrc);
 
   sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo> &>
       SignalConnectionMonitor;
@@ -446,6 +460,7 @@ class VideoChannel : public BaseChannel {
   void StartMediaMonitor(int cms);
   void StopMediaMonitor();
   sigslot::signal2<VideoChannel*, const VideoMediaInfo&> SignalMediaMonitor;
+  sigslot::signal2<uint32, talk_base::WindowEvent> SignalScreencastWindowEvent;
 
   bool SendIntraFrame();
   bool RequestIntraFrame();
@@ -486,15 +501,33 @@ class VideoChannel : public BaseChannel {
     VideoRenderer* renderer;
   };
 
+  struct ScreencastMessageData : public talk_base::MessageData {
+    ScreencastMessageData(uint32 s, talk_base::WindowId id)
+        : ssrc(s), window_id(id) {}
+    uint32 ssrc;
+    talk_base::WindowId window_id;
+  };
+
+  struct ScreencastEventData : public talk_base::MessageData {
+    ScreencastEventData(uint32 s, talk_base::WindowEvent we)
+        : ssrc(s), event(we) {}
+    uint32 ssrc;
+    talk_base::WindowEvent event;
+  };
 
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
+  void AddScreencast_w(uint32 ssrc, talk_base::WindowId);
+  void RemoveScreencast_w(uint32 ssrc);
+  void OnScreencastWindowEvent_s(uint32 ssrc, talk_base::WindowEvent we);
 
   virtual void OnMessage(talk_base::Message *pmsg);
   virtual void OnConnectionMonitorUpdate(
       SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
   virtual void OnMediaMonitorUpdate(
       VideoMediaChannel *media_channel, const VideoMediaInfo& info);
+  virtual void OnScreencastWindowEvent(uint32 ssrc,
+                                       talk_base::WindowEvent event);
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
 

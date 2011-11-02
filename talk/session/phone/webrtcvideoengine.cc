@@ -25,6 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #ifdef HAVE_WEBRTC_VIDEO
 
@@ -43,6 +46,9 @@
 #include "talk/session/phone/webrtcvie.h"
 #include "talk/session/phone/webrtcvoe.h"
 
+// TODO Change video protection calls when WebRTC API has changed.
+#define WEBRTC_VIDEO_AVPF_NACK_ONLY
+
 namespace cricket {
 
 static const int kDefaultLogSeverity = talk_base::LS_WARNING;
@@ -52,10 +58,18 @@ static const int kMaxVideoBitrate = 2000;
 
 static const int kVideoRtpBufferSize = 65536;
 
-static const int kRedPayloadType = 101;
-static const int kFecPayloadType = 102;
+static const char kVp8PayloadName[] = "VP8";
+static const char kRedPayloadName[] = "red";
+static const char kFecPayloadName[] = "ulpfec";
 
 static const int kDefaultNumberOfTemporalLayers = 3;
+
+static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
+  const char* delim = "\r\n";
+  for (char* tok = strtok(text, delim); tok; tok = strtok(NULL, delim)) {
+    LOG_V(sev) << tok;
+  }
+}
 
 class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
  public:
@@ -212,11 +226,12 @@ class LocalStreamInfo {
 
 const WebRtcVideoEngine::VideoCodecPref
     WebRtcVideoEngine::kVideoCodecPrefs[] = {
-    {"VP8", 100, 0},
-    {"RED", kRedPayloadType, 1},
-    {"ULPFEC", kFecPayloadType, 2},
+    {kVp8PayloadName, 100, 0},
+#ifndef WEBRTC_VIDEO_AVPF_NACK_ONLY
+    {kRedPayloadName, 101, 1},
+    {kFecPayloadName, 102, 2},
+#endif
 };
-
 
 // TODO: Add CanSendCodec()
 // The formats are sorted by the descending order of width. We use the order to
@@ -257,9 +272,9 @@ WebRtcVideoEngine::WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
   Construct(vie_wrapper, tracing, voice_engine);
 }
 
-void  WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
-                                   ViETraceWrapper* tracing,
-                                   WebRtcVoiceEngine* voice_engine) {
+void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
+                                  ViETraceWrapper* tracing,
+                                  WebRtcVoiceEngine* voice_engine) {
   LOG(LS_INFO) << "WebRtcVideoEngine::WebRtcVideoEngine";
   vie_wrapper_.reset(vie_wrapper);
   tracing_.reset(tracing);
@@ -313,11 +328,23 @@ bool WebRtcVideoEngine::Init() {
 bool WebRtcVideoEngine::InitVideoEngine() {
   LOG(LS_INFO) << "WebRtcVideoEngine::InitVideoEngine";
 
+  // Init WebRTC VideoEngine.
   if (vie_wrapper_->base()->Init() != 0) {
     LOG_RTCERR0(Init);
     return false;
   }
 
+  // Log the VoiceEngine version info.
+  char buffer[1024] = "";
+  if (vie_wrapper_->base()->GetVersion(buffer) != 0) {
+    LOG_RTCERR0(GetVersion);
+    return false;
+  }
+
+  LOG(LS_INFO) << "WebRtc VideoEngine Version:";
+  LogMultiline(talk_base::LS_INFO, buffer);
+
+  // Hook up to VoiceEngine for sync purposes, if supplied.
   if (!voice_engine_) {
     LOG(LS_WARNING) << "NULL voice engine";
   } else if ((vie_wrapper_->base()->SetVoiceEngine(
@@ -326,11 +353,13 @@ bool WebRtcVideoEngine::InitVideoEngine() {
     return false;
   }
 
+  // Register for callbacks from the engine.
   if ((vie_wrapper_->base()->RegisterObserver(*this)) != 0) {
     LOG_RTCERR0(RegisterObserver);
     return false;
   }
 
+  // Register our custom render module.
   if (vie_wrapper_->render()->RegisterVideoRenderModule(
       *render_module_.get()) != 0) {
     LOG_RTCERR0(RegisterVideoRenderModule);
@@ -781,7 +810,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
 }
 
 bool WebRtcVideoMediaChannel::Init() {
-  if (engine_->video_engine()->base()->CreateChannel(vie_channel_) != 0) {
+  if (engine_->vie()->base()->CreateChannel(vie_channel_) != 0) {
     LOG_RTCERR1(CreateChannel, vie_channel_);
     return false;
   }
@@ -793,7 +822,7 @@ bool WebRtcVideoMediaChannel::Init() {
   if (voice_channel_) {
     WebRtcVoiceMediaChannel* channel =
         static_cast<WebRtcVoiceMediaChannel*>(voice_channel_);
-    if (engine_->video_engine()->base()->ConnectAudioChannel(
+    if (engine_->vie()->base()->ConnectAudioChannel(
         vie_channel_, channel->voe_channel()) != 0) {
       LOG_RTCERR2(ConnectAudioChannel, vie_channel_, channel->voe_channel());
       LOG(LS_WARNING) << "A/V not synchronized";
@@ -802,21 +831,21 @@ bool WebRtcVideoMediaChannel::Init() {
   }
 
   // Register external transport.
-  if (engine_->video_engine()->network()->RegisterSendTransport(
+  if (engine_->vie()->network()->RegisterSendTransport(
       vie_channel_, *this) != 0) {
     LOG_RTCERR1(RegisterSendTransport, vie_channel_);
     return false;
   }
 
   // Register external capture.
-  if (engine()->video_engine()->capture()->AllocateExternalCaptureDevice(
+  if (engine()->vie()->capture()->AllocateExternalCaptureDevice(
       vie_capture_, external_capture_) != 0) {
     LOG_RTCERR0(AllocateExternalCaptureDevice);
     return false;
   }
 
   // Connect external capture.
-  if (engine()->video_engine()->capture()->ConnectCaptureDevice(
+  if (engine()->vie()->capture()->ConnectCaptureDevice(
       vie_capture_, vie_channel_) != 0) {
     LOG_RTCERR2(ConnectCaptureDevice, vie_capture_, vie_channel_);
     return false;
@@ -824,7 +853,7 @@ bool WebRtcVideoMediaChannel::Init() {
 
   // Install render adapter.
   remote_renderer_.reset(new WebRtcRenderAdapter(NULL));
-  if (engine_->video_engine()->render()->AddRenderer(vie_channel_,
+  if (engine_->vie()->render()->AddRenderer(vie_channel_,
       webrtc::kVideoI420, remote_renderer_.get()) != 0) {
     LOG_RTCERR3(AddRenderer, vie_channel_, webrtc::kVideoI420,
                 remote_renderer_.get());
@@ -834,7 +863,7 @@ bool WebRtcVideoMediaChannel::Init() {
 
   // Register decoder observer for incoming framerate and bitrate.
   decoder_observer_.reset(new WebRtcDecoderObserver(vie_channel_));
-  if (engine()->video_engine()->codec()->RegisterDecoderObserver(
+  if (engine()->vie()->codec()->RegisterDecoderObserver(
       vie_channel_, *decoder_observer_) != 0) {
     LOG_RTCERR1(RegisterDecoderObserver, decoder_observer_.get());
     return false;
@@ -842,66 +871,73 @@ bool WebRtcVideoMediaChannel::Init() {
 
   // Register encoder observer for outgoing framerate and bitrate.
   encoder_observer_.reset(new WebRtcEncoderObserver(vie_channel_));
-  if (engine()->video_engine()->codec()->RegisterEncoderObserver(
+  if (engine()->vie()->codec()->RegisterEncoderObserver(
       vie_channel_, *encoder_observer_) != 0) {
     LOG_RTCERR1(RegisterEncoderObserver, encoder_observer_.get());
     return false;
   }
 
-  if (!EnableRtcp())
+  // Turn on RTCP and loss feedback reporting.
+  if (!EnableRtcp() ||
+      !EnablePli()) {
     return false;
+  }
 
-  if (!EnablePli())
-    return false;
-
+#ifdef WEBRTC_VIDEO_AVPF_NACK_ONLY
+  // Turn on NACK-only loss handling.
   if (!EnableNack())
     return false;
+#endif
+
+  // Turn on TMMBR-based BWE reporting.
+  if (!EnableTmmbr()) {
+    return false;
+  }
 
   return true;
 }
 
 WebRtcVideoMediaChannel::~WebRtcVideoMediaChannel() {
   if (vie_channel_ != -1) {
+    // Stop sending.
+    SetSend(false);
+    if (engine()->vie()->codec()->DeregisterEncoderObserver(
+        vie_channel_) != 0) {
+      LOG_RTCERR1(DeregisterEncoderObserver, vie_channel_);
+    }
+
     // Stop the renderer.
     SetRender(false);
+    if (engine()->vie()->codec()->DeregisterDecoderObserver(
+        vie_channel_) != 0) {
+      LOG_RTCERR1(DeregisterDecoderObserver, vie_channel_);
+    }
     if (remote_renderer_.get() &&
-        engine()->video_engine()->render()->RemoveRenderer(vie_channel_) != 0) {
+        engine()->vie()->render()->RemoveRenderer(vie_channel_) != 0) {
       LOG_RTCERR1(RemoveRenderer, vie_channel_);
     }
 
     // Destroy the external capture interface.
     if (vie_capture_ != -1) {
-      if (engine()->video_engine()->capture()->DisconnectCaptureDevice(
+      if (engine()->vie()->capture()->DisconnectCaptureDevice(
           vie_channel_) != 0) {
         LOG_RTCERR1(DisconnectCaptureDevice, vie_channel_);
       }
-      if (engine()->video_engine()->capture()->ReleaseCaptureDevice(
+      if (engine()->vie()->capture()->ReleaseCaptureDevice(
           vie_capture_) != 0) {
         LOG_RTCERR1(ReleaseCaptureDevice, vie_capture_);
       }
     }
 
-    // Deregister external transport
-    if (engine()->video_engine()->network()->DeregisterSendTransport(
+    // Deregister external transport.
+    if (engine()->vie()->network()->DeregisterSendTransport(
         vie_channel_) != 0) {
       LOG_RTCERR1(DeregisterSendTransport, vie_channel_);
     }
 
     // Delete the VideoEngine channel.
-    if (engine()->video_engine()->base()->DeleteChannel(vie_channel_) != 0) {
+    if (engine()->vie()->base()->DeleteChannel(vie_channel_) != 0) {
       LOG_RTCERR1(DeleteChannel, vie_channel_);
-    }
-
-    // Deregister decoder observer.
-    if (engine()->video_engine()->codec()->DeregisterDecoderObserver(
-        vie_channel_) != 0) {
-      LOG_RTCERR1(DeregisterDecoderObserver, vie_channel_);
-    }
-
-    // Deregister encoder observer.
-    if (engine()->video_engine()->codec()->DeregisterEncoderObserver(
-        vie_channel_) != 0) {
-      LOG_RTCERR1(DeregisterEncoderObserver, vie_channel_);
     }
   }
 
@@ -917,7 +953,7 @@ bool WebRtcVideoMediaChannel::SetRecvCodecs(
     if (engine()->FindCodec(*iter)) {
       webrtc::VideoCodec wcodec;
       if (engine()->ConvertFromCricketVideoCodec(*iter, wcodec)) {
-        if (engine()->video_engine()->codec()->SetReceiveCodec(
+        if (engine()->vie()->codec()->SetReceiveCodec(
             vie_channel_, wcodec) != 0) {
           LOG_RTCERR2(SetReceiveCodec, vie_channel_, wcodec.plName);
           ret = false;
@@ -931,7 +967,7 @@ bool WebRtcVideoMediaChannel::SetRecvCodecs(
 
   // make channel ready to receive packets
   if (ret) {
-    if (engine()->video_engine()->base()->StartReceive(vie_channel_) != 0) {
+    if (engine()->vie()->base()->StartReceive(vie_channel_) != 0) {
       LOG_RTCERR1(StartReceive, vie_channel_);
       ret = false;
     }
@@ -943,12 +979,19 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
     const std::vector<VideoCodec>& codecs) {
   // Match with local video codec list.
   std::vector<webrtc::VideoCodec> send_codecs;
+  int red_type = -1, fec_type = -1;
   for (std::vector<VideoCodec>::const_iterator iter = codecs.begin();
       iter != codecs.end(); ++iter) {
-    if (engine()->FindCodec(*iter)) {
+    if (_stricmp(iter->name.c_str(), kRedPayloadName) == 0) {
+      red_type = iter->id;
+    } else if (_stricmp(iter->name.c_str(), kFecPayloadName) == 0) {
+      fec_type = iter->id;
+    } else if (engine()->FindCodec(*iter)) {
       webrtc::VideoCodec wcodec;
       if (engine()->ConvertFromCricketVideoCodec(*iter, wcodec))
         send_codecs.push_back(wcodec);
+    } else {
+      LOG(LS_WARNING) << "Unknown codec " << iter->name;
     }
   }
 
@@ -957,6 +1000,13 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
     LOG(LS_WARNING) << "No matching codecs avilable";
     return false;
   }
+
+#ifndef WEBRTC_VIDEO_AVPF_NACK_ONLY
+  // Configure FEC if enabled.
+  if (!SetNackFec(red_type, fec_type)) {
+    return false;
+  }
+#endif
 
   // Select the first matched codec.
   webrtc::VideoCodec& codec(send_codecs[0]);
@@ -993,7 +1043,8 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
                << static_cast<int>(send_codec_->maxFramerate);
   if (webrtc::kVideoCodecVP8 == codec.codecType) {
     LOG(LS_INFO) << "VP8 number of layers: "
-                 << send_codec_->codecSpecific.VP8.numberOfTemporalLayers;
+                 << static_cast<int>(
+                    send_codec_->codecSpecific.VP8.numberOfTemporalLayers);
   }
   return true;
 }
@@ -1005,12 +1056,12 @@ bool WebRtcVideoMediaChannel::SetRender(bool render) {
 
   bool ret = true;
   if (render) {
-    if (engine()->video_engine()->render()->StartRender(vie_channel_) != 0) {
+    if (engine()->vie()->render()->StartRender(vie_channel_) != 0) {
       LOG_RTCERR1(StartRender, vie_channel_);
       ret = false;
     }
   } else {
-    if (engine()->video_engine()->render()->StopRender(vie_channel_) != 0) {
+    if (engine()->vie()->render()->StopRender(vie_channel_) != 0) {
       LOG_RTCERR1(StopRender, vie_channel_);
       ret = false;
     }
@@ -1027,23 +1078,27 @@ bool WebRtcVideoMediaChannel::SetSend(bool send) {
     return true;  // no action required
   }
 
-  bool ret = true;
-  if (send) {  // enable
-    if (engine()->video_engine()->base()->StartSend(vie_channel_) != 0) {
+  if (send) {
+    // We've been asked to start sending.
+    // SetSendCodecs must have been called already.
+    if (!send_codec_.get()) {
+      return false;
+    }
+
+    if (engine()->vie()->base()->StartSend(vie_channel_) != 0) {
       LOG_RTCERR1(StartSend, vie_channel_);
-      ret = false;
+      return false;
     }
-  } else {  // disable
-    if (engine()->video_engine()->base()->StopSend(vie_channel_) != 0) {
+  } else {
+    // We've been asked to stop sending.
+    if (engine()->vie()->base()->StopSend(vie_channel_) != 0) {
       LOG_RTCERR1(StopSend, vie_channel_);
-      ret = false;
+      return false;
     }
-  }
-  if (ret) {
-    sending_ = send;
   }
 
-  return ret;
+  sending_ = send;
+  return true;
 }
 
 bool WebRtcVideoMediaChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
@@ -1064,123 +1119,112 @@ bool WebRtcVideoMediaChannel::SetRenderer(
 }
 
 bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
-  // Get RTP statistics.
-  unsigned int bytes_sent;
-  unsigned int packets_sent;
-  unsigned int bytes_recv;
-  unsigned int packets_recv;
-  if (engine_->video_engine()->rtp()->GetRTPStatistics(vie_channel_,
-          bytes_sent, packets_sent, bytes_recv, packets_recv) != 0) {
-    LOG_RTCERR5(GetRTPStatistics, vie_channel_,
-        bytes_sent, packets_sent, bytes_recv, packets_recv);
-    return false;
-  }
-
-  // Get received RTCP statistics.
-  uint16 r_fraction_lost;
-  unsigned int r_cumulative_lost;
-  unsigned int r_extended_max;
-  unsigned int r_jitter;
-  int r_rtt_ms;
-  if (engine_->video_engine()->rtp()->GetReceivedRTCPStatistics(vie_channel_,
-          r_fraction_lost, r_cumulative_lost, r_extended_max,
-          r_jitter, r_rtt_ms) != 0) {
-    LOG_RTCERR6(GetReceivedRTCPStatistics, vie_channel_,
-        r_fraction_lost, r_cumulative_lost, r_extended_max, r_jitter, r_rtt_ms);
-    return false;
-  }
-
-  // Get sent RTCP statistics.
-  uint16 s_fraction_lost;
-  unsigned int s_cumulative_lost;
-  unsigned int s_extended_max;
-  unsigned int s_jitter;
-  int s_rtt_ms;
-  if (engine_->video_engine()->rtp()->GetReceivedRTCPStatistics(vie_channel_,
-          s_fraction_lost, s_cumulative_lost, s_extended_max,
-          s_jitter, s_rtt_ms) != 0) {
-    LOG_RTCERR6(GetReceivedRTCPStatistics, vie_channel_,
-        s_fraction_lost, s_cumulative_lost, s_extended_max, s_jitter, s_rtt_ms);
-    return false;
-  }
-
+  // Get basic statistics.
+  unsigned int bytes_sent, packets_sent, bytes_recv, packets_recv;
   unsigned int ssrc;
-
-  // Build VideoSenderInfo.
-  if (engine_->video_engine()->rtp()->GetLocalSSRC(vie_channel_,
-                                                   ssrc) != 0) {
-    LOG_RTCERR2(GetLocalSSRC, vie_channel_, ssrc);
+  if (engine_->vie()->rtp()->GetRTPStatistics(vie_channel_,
+          bytes_sent, packets_sent, bytes_recv, packets_recv) != 0) {
+    LOG_RTCERR1(GetRTPStatistics, vie_channel_);
     return false;
   }
-  VideoSenderInfo sinfo;
-  sinfo.ssrc = ssrc;
-  sinfo.codec_name = send_codec_.get() ? send_codec_->plName : "";
-  sinfo.bytes_sent = bytes_sent;
-  sinfo.packets_sent = packets_sent;
-  sinfo.packets_cached = -1;
-  sinfo.packets_lost = r_cumulative_lost;  // from ReceivedRTCP
-  sinfo.fraction_lost = r_fraction_lost;  // from ReceivedRTCP
-  sinfo.firs_rcvd = -1;
-  sinfo.nacks_rcvd = -1;
-  sinfo.rtt_ms = s_rtt_ms;
-  sinfo.frame_width = local_stream_info_->width();
-  sinfo.frame_height = local_stream_info_->height();
-  sinfo.framerate_input = local_stream_info_->framerate();
-  sinfo.framerate_sent = encoder_observer_->framerate();
-  sinfo.nominal_bitrate = encoder_observer_->bitrate();
-  sinfo.preferred_bitrate = kMaxVideoBitrate;
-  info->senders.push_back(sinfo);
 
-  // Build VideoReceiverInfo.
-  if (engine_->video_engine()->rtp()->GetRemoteSSRC(vie_channel_,
-                                                    ssrc) != 0) {
-    LOG_RTCERR2(GetRemoteSSRC, vie_channel_, ssrc);
-    return false;
+  // Get sender statistics and build VideoSenderInfo.
+  if (engine_->vie()->rtp()->GetLocalSSRC(vie_channel_, ssrc) == 0) {
+    VideoSenderInfo sinfo;
+    sinfo.ssrc = ssrc;
+    sinfo.codec_name = send_codec_.get() ? send_codec_->plName : "";
+    sinfo.bytes_sent = bytes_sent;
+    sinfo.packets_sent = packets_sent;
+    sinfo.packets_cached = -1;
+    sinfo.packets_lost = -1;
+    sinfo.fraction_lost = -1;
+    sinfo.firs_rcvd = -1;
+    sinfo.nacks_rcvd = -1;
+    sinfo.rtt_ms = -1;
+    sinfo.frame_width = local_stream_info_->width();
+    sinfo.frame_height = local_stream_info_->height();
+    sinfo.framerate_input = local_stream_info_->framerate();
+    sinfo.framerate_sent = encoder_observer_->framerate();
+    sinfo.nominal_bitrate = encoder_observer_->bitrate();
+    sinfo.preferred_bitrate = kMaxVideoBitrate;
+
+    // Get received RTCP statistics for the sender, if available.
+    // It's not a fatal error if we can't, since RTCP may not have arrived yet.
+    uint16 r_fraction_lost;
+    unsigned int r_cumulative_lost;
+    unsigned int r_extended_max;
+    unsigned int r_jitter;
+    int r_rtt_ms;
+    if (engine_->vie()->rtp()->GetReceivedRTCPStatistics(vie_channel_,
+            r_fraction_lost, r_cumulative_lost, r_extended_max,
+            r_jitter, r_rtt_ms) == 0) {
+      // Convert Q8 to float.
+      sinfo.packets_lost = r_cumulative_lost;
+      sinfo.fraction_lost = static_cast<float>(r_fraction_lost) / (1 << 8);
+      sinfo.rtt_ms = r_rtt_ms;
+    }
+    info->senders.push_back(sinfo);
+  } else {
+    LOG_RTCERR1(GetLocalSSRC, vie_channel_);
   }
-  VideoReceiverInfo rinfo;
-  rinfo.ssrc = ssrc;
-  rinfo.bytes_rcvd = bytes_recv;
-  rinfo.packets_rcvd = packets_recv;
-  rinfo.packets_lost = s_cumulative_lost;  // from SentRTCP
-  rinfo.packets_concealed = -1;
-  rinfo.fraction_lost = s_fraction_lost;  // from SentRTCP
-  rinfo.firs_sent = decoder_observer_->firs_requested();
-  rinfo.nacks_sent = -1;
-  rinfo.frame_width = remote_renderer_->width();
-  rinfo.frame_height = remote_renderer_->height();
-  rinfo.framerate_rcvd = decoder_observer_->framerate();
-  int fps = remote_renderer_->framerate();
-  rinfo.framerate_decoded = fps;
-  rinfo.framerate_output = fps;
-  info->receivers.push_back(rinfo);
+
+  // Get receiver statistics and build VideoReceiverInfo, if we have data.
+  if (engine_->vie()->rtp()->GetRemoteSSRC(vie_channel_, ssrc) == 0) {
+    VideoReceiverInfo rinfo;
+    rinfo.ssrc = ssrc;
+    rinfo.bytes_rcvd = bytes_recv;
+    rinfo.packets_rcvd = packets_recv;
+    rinfo.packets_lost = -1;
+    rinfo.packets_concealed = -1;
+    rinfo.fraction_lost = -1;  // from SentRTCP
+    rinfo.firs_sent = decoder_observer_->firs_requested();
+    rinfo.nacks_sent = -1;
+    rinfo.frame_width = remote_renderer_->width();
+    rinfo.frame_height = remote_renderer_->height();
+    rinfo.framerate_rcvd = decoder_observer_->framerate();
+    int fps = remote_renderer_->framerate();
+    rinfo.framerate_decoded = fps;
+    rinfo.framerate_output = fps;
+
+    // Get sent RTCP statistics.
+    uint16 s_fraction_lost;
+    unsigned int s_cumulative_lost;
+    unsigned int s_extended_max;
+    unsigned int s_jitter;
+    int s_rtt_ms;
+    if (engine_->vie()->rtp()->GetSentRTCPStatistics(vie_channel_,
+            s_fraction_lost, s_cumulative_lost, s_extended_max,
+            s_jitter, s_rtt_ms) == 0) {
+      // Convert Q8 to float.
+      rinfo.packets_lost = s_cumulative_lost;
+      rinfo.fraction_lost = static_cast<float>(s_fraction_lost) / (1 << 8);
+    }
+    info->receivers.push_back(rinfo);
+  }
 
   // Build BandwidthEstimationInfo.
-  // TODO: Fill in BWE once we have them.
+  // TODO: Fill in more BWE stats once we have them.
   unsigned int total_bitrate_sent;
   unsigned int fec_bitrate_sent;
   unsigned int nack_bitrate_sent;
-  if (engine_->video_engine()->rtp()->GetBandwidthUsage(
-      vie_channel_,
-      total_bitrate_sent,
-      fec_bitrate_sent,
-      nack_bitrate_sent) != 0) {
-    LOG_RTCERR4(GetBandwidthUsage, vie_channel_,
-                total_bitrate_sent, fec_bitrate_sent, nack_bitrate_sent);
-    return false;
+  if (engine_->vie()->rtp()->GetBandwidthUsage(vie_channel_,
+      total_bitrate_sent, fec_bitrate_sent, nack_bitrate_sent) == 0) {
+    BandwidthEstimationInfo bwe;
+    bwe.actual_enc_bitrate = total_bitrate_sent - nack_bitrate_sent -
+        fec_bitrate_sent;
+    bwe.transmit_bitrate = total_bitrate_sent;
+    bwe.retransmit_bitrate = nack_bitrate_sent;
+    info->bw_estimations.push_back(bwe);
+  } else {
+    LOG_RTCERR1(GetBandwidthUsage, vie_channel_);
   }
-  BandwidthEstimationInfo bwe;
-  bwe.actual_enc_bitrate = total_bitrate_sent - nack_bitrate_sent -
-      fec_bitrate_sent;
-  bwe.transmit_bitrate = total_bitrate_sent;
-  bwe.retransmit_bitrate = nack_bitrate_sent;
-  info->bw_estimations.push_back(bwe);
 
   return true;
 }
 
 bool WebRtcVideoMediaChannel::SendIntraFrame() {
   bool ret = true;
-  if (engine()->video_engine()->codec()->SendKeyFrame(vie_channel_) != 0) {
+  if (engine()->vie()->codec()->SendKeyFrame(vie_channel_) != 0) {
     LOG_RTCERR1(SendKeyFrame, vie_channel_);
     ret = false;
   }
@@ -1195,21 +1239,20 @@ bool WebRtcVideoMediaChannel::RequestIntraFrame() {
 }
 
 void WebRtcVideoMediaChannel::OnPacketReceived(talk_base::Buffer* packet) {
-  engine()->video_engine()->network()->ReceivedRTPPacket(vie_channel_,
+  engine()->vie()->network()->ReceivedRTPPacket(vie_channel_,
                                                          packet->data(),
                                                          packet->length());
 }
 
 void WebRtcVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
-  engine_->video_engine()->network()->ReceivedRTCPPacket(vie_channel_,
+  engine_->vie()->network()->ReceivedRTCPPacket(vie_channel_,
                                                          packet->data(),
                                                          packet->length());
 }
 
 void WebRtcVideoMediaChannel::SetSendSsrc(uint32 id) {
   if (!sending_) {
-    if (engine()->video_engine()->rtp()->SetLocalSSRC(vie_channel_,
-                                                      id) != 0) {
+    if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_, id) != 0) {
       LOG_RTCERR1(SetLocalSSRC, vie_channel_);
     }
   } else {
@@ -1218,8 +1261,8 @@ void WebRtcVideoMediaChannel::SetSendSsrc(uint32 id) {
 }
 
 bool WebRtcVideoMediaChannel::SetRtcpCName(const std::string& cname) {
-  if (engine()->video_engine()->rtp()->SetRTCPCName(vie_channel_,
-                                                    cname.c_str()) != 0) {
+  if (engine()->vie()->rtp()->SetRTCPCName(vie_channel_,
+                                           cname.c_str()) != 0) {
     LOG_RTCERR2(SetRTCPCName, vie_channel_, cname.c_str());
     return false;
   }
@@ -1279,7 +1322,7 @@ void WebRtcVideoMediaChannel::SetInterface(NetworkInterface* iface) {
 
 // TODO: Add unittests to test this function.
 bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
-  if (ssrc != 0 || !external_capture_) {
+  if (ssrc != 0 || !sending() || !external_capture_) {
     return false;
   }
 
@@ -1315,7 +1358,7 @@ bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
 }
 
 bool WebRtcVideoMediaChannel::EnableRtcp() {
-  if (engine()->video_engine()->rtp()->SetRTCPStatus(
+  if (engine()->vie()->rtp()->SetRTCPStatus(
           vie_channel_, webrtc::kRtcpCompound_RFC4585) != 0) {
     LOG_RTCERR2(SetRTCPStatus, vie_channel_, webrtc::kRtcpCompound_RFC4585);
     return false;
@@ -1324,7 +1367,7 @@ bool WebRtcVideoMediaChannel::EnableRtcp() {
 }
 
 bool WebRtcVideoMediaChannel::EnablePli() {
-  if (engine_->video_engine()->rtp()->SetKeyFrameRequestMethod(
+  if (engine_->vie()->rtp()->SetKeyFrameRequestMethod(
           vie_channel_, webrtc::kViEKeyFrameRequestPliRtcp) != 0) {
     LOG_RTCERR2(SetRTCPStatus,
                 vie_channel_, webrtc::kViEKeyFrameRequestPliRtcp);
@@ -1334,7 +1377,7 @@ bool WebRtcVideoMediaChannel::EnablePli() {
 }
 
 bool WebRtcVideoMediaChannel::EnableTmmbr() {
-  if (engine_->video_engine()->rtp()->SetTMMBRStatus(vie_channel_, true) != 0) {
+  if (engine_->vie()->rtp()->SetTMMBRStatus(vie_channel_, true) != 0) {
     LOG_RTCERR1(SetTMMBRStatus, vie_channel_);
     return false;
   }
@@ -1342,19 +1385,20 @@ bool WebRtcVideoMediaChannel::EnableTmmbr() {
 }
 
 bool WebRtcVideoMediaChannel::EnableNack() {
-  if (engine_->video_engine()->rtp()->SetNACKStatus(vie_channel_, true) != 0) {
+  if (engine_->vie()->rtp()->SetNACKStatus(vie_channel_, true) != 0) {
     LOG_RTCERR1(SetNACKStatus, vie_channel_);
     return false;
   }
   return true;
 }
 
-bool WebRtcVideoMediaChannel::EnableNackFec(int red_payload_type,
-                                            int fec_payload_type) {
-  if (engine_->video_engine()->rtp()->SetHybridNACKFECStatus(
-          vie_channel_, true, red_payload_type, fec_payload_type) != 0) {
-    LOG_RTCERR3(SetHybridNACKFECStatus,
-                vie_channel_, red_payload_type, fec_payload_type);
+bool WebRtcVideoMediaChannel::SetNackFec(int red_payload_type,
+                                         int fec_payload_type) {
+  bool enable = (red_payload_type != -1 && fec_payload_type != -1);
+  if (engine_->vie()->rtp()->SetHybridNACKFECStatus(
+          vie_channel_, enable, red_payload_type, fec_payload_type) != 0) {
+    LOG_RTCERR4(SetHybridNACKFECStatus,
+                vie_channel_, enable, red_payload_type, fec_payload_type);
     return false;
   }
   return true;
@@ -1368,8 +1412,7 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
   target_codec.minBitrate = min_bitrate;
   target_codec.maxBitrate = max_bitrate;
 
-  if (engine()->video_engine()->codec()->SetSendCodec(vie_channel_,
-      target_codec) != 0) {
+  if (engine()->vie()->codec()->SetSendCodec(vie_channel_, target_codec) != 0) {
     LOG_RTCERR2(SetSendCodec, vie_channel_, send_codec_->plName);
     return false;
   }
@@ -1404,4 +1447,3 @@ int WebRtcVideoMediaChannel::SendRTCPPacket(int channel,
 }  // namespace cricket
 
 #endif  // HAVE_WEBRTC_VIDEO
-

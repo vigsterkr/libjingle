@@ -174,6 +174,15 @@ const StaticQName QN_SASL_NOT_AUTHORIZED = { NS_SASL, "not-authorized" };
 const StaticQName QN_SASL_TEMPORARY_AUTH_FAILURE =
     { NS_SASL, "temporary-auth-failure" };
 
+// These are non-standard.
+const char NS_GOOGLE_AUTH_PROTOCOL[] =
+    "http://www.google.com/talk/protocol/auth";
+const StaticQName QN_GOOGLE_AUTH_CLIENT_USES_FULL_BIND_RESULT =
+    { NS_GOOGLE_AUTH_PROTOCOL, "client-uses-full-bind-result" };
+const char NS_GOOGLE_AUTH_OLD[] = "google:auth";
+const StaticQName QN_GOOGLE_ALLOW_NON_GOOGLE_ID_XMPP_LOGIN =
+    { NS_GOOGLE_AUTH_PROTOCOL, "allow-non-google-login" };
+
 const StaticQName QN_DIALBACK_RESULT = { NS_DIALBACK, "result" };
 const StaticQName QN_DIALBACK_VERIFY = { NS_DIALBACK, "verify" };
 
@@ -342,8 +351,6 @@ const StaticQName QN_PUBSUB_EVENT_ITEM = { NS_PUBSUB_EVENT, "item" };
 const StaticQName QN_PUBSUB_EVENT_RETRACT = { NS_PUBSUB_EVENT, "retract" };
 const StaticQName QN_NOTIFY = { STR_EMPTY, "notify" };
 
-
-
 const char NS_PRESENTER[] = "google:presenter";
 const StaticQName QN_PRESENTER_PRESENTER = { NS_PRESENTER, "presenter" };
 const StaticQName QN_PRESENTER_PRESENTATION_ITEM =
@@ -352,8 +359,6 @@ const StaticQName QN_PRESENTER_PRESENTATION_TYPE =
     { NS_PRESENTER, "presentation-type" };
 const StaticQName QN_PRESENTER_PRESENTATION_ID =
     { NS_PRESENTER, "presentation-id" };
-
-
 
 // JEP 0030
 const StaticQName QN_CATEGORY = { STR_EMPTY, "category" };
@@ -402,7 +407,6 @@ const StaticQName QN_MUC_USER_X = { NS_MUC_USER, "x" };
 const StaticQName QN_MUC_USER_ITEM = { NS_MUC_USER, "item" };
 const StaticQName QN_MUC_USER_STATUS = { NS_MUC_USER, "status" };
 
-
 // JEP 0055 - Jabber Search
 const char NS_SEARCH[] = "jabber:iq:search";
 const StaticQName QN_SEARCH_QUERY = { NS_SEARCH, "query" };
@@ -410,7 +414,6 @@ const StaticQName QN_SEARCH_ITEM = { NS_SEARCH, "item" };
 const StaticQName QN_SEARCH_ROOM_NAME = { NS_SEARCH, "room-name" };
 const StaticQName QN_SEARCH_ROOM_DOMAIN = { NS_SEARCH, "room-domain" };
 const StaticQName QN_SEARCH_ROOM_JID = { NS_SEARCH, "room-jid" };
-
 
 // JEP 0115
 const char NS_CAPS[] = "http://jabber.org/protocol/caps";
@@ -426,7 +429,6 @@ const StaticQName kQnVCardPhoto = { kNSVCard, "photo" };
 // JEP 0172 User Nickname
 const char NS_NICKNAME[] = "http://jabber.org/protocol/nick";
 const StaticQName QN_NICKNAME = { NS_NICKNAME, "nick" };
-
 
 // JEP 0085 chat state
 const char NS_CHATSTATE[] = "http://jabber.org/protocol/chatstates";
@@ -445,24 +447,6 @@ const StaticQName kQnStamp = { STR_EMPTY, "stamp" };
 const char kNSTimestamp[] = "google:timestamp";
 const StaticQName kQnTime = { kNSTimestamp, "time" };
 const StaticQName kQnMilliseconds = { STR_EMPTY, "ms" };
-
-
-// Event tracking
-#ifdef FEATURE_ENABLE_TRACKING
-const char NS_GOOGLE_EVENT_TRACKING[] = "google:client-usability-testing";
-const StaticQName QN_EVENT_TRACKING =
-    { NS_GOOGLE_EVENT_TRACKING, "usage-stats" };
-const StaticQName QN_EVENT_TRACKING_BRANDID =
-    { NS_GOOGLE_EVENT_TRACKING, "bid" };
-const StaticQName QN_EVENT_TRACKING_EVENT =
-    { NS_GOOGLE_EVENT_TRACKING, "event" };
-const StaticQName QN_EVENT_TRACKING_VARIABLE_KEY = { STR_EMPTY, "key" };
-const StaticQName QN_EVENT_TRACKING_VARIABLE_VALUE = { STR_EMPTY, "value" };
-const StaticQName QN_EVENT_TRACKING_VARIABLE_TIME = { STR_EMPTY, "time" };
-const StaticQName QN_EVENT_TRACKING_EVENT_GROUP =
-     { NS_GOOGLE_EVENT_TRACKING, "events" };
-#endif
-
 
 // Jingle Info
 const char NS_JINGLE_INFO[] = "google:jingleinfo";
@@ -566,6 +550,7 @@ const StaticQName QN_GOOGLE_MUC_VIDEO_MUTE =
     { NS_GOOGLE_MUC_MEDIA, "video-mute" };
 const StaticQName QN_GOOGLE_MUC_RECORDING =
     { NS_GOOGLE_MUC_MEDIA, "recording" };
+const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK = { NS_GOOGLE_MUC_MEDIA, "block" };
 const StaticQName QN_STATE_ATTR = { STR_EMPTY, "state" };
 
 }

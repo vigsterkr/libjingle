@@ -25,14 +25,15 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <cstdio>
+#include <cstring>
 #include <time.h>
 #include <iomanip>
 #include <iostream>
-#include <cstdio>
-#include <cstring>
 #include <vector>
-#include "talk/base/logging.h"
+
 #include "talk/base/flags.h"
+#include "talk/base/logging.h"
 #ifdef OSX
 #include "talk/base/macsocketserver.h"
 #endif
@@ -40,16 +41,19 @@
 #include "talk/base/stream.h"
 #include "talk/base/ssladapter.h"
 #include "talk/base/win32socketserver.h"
-#include "talk/p2p/base/constants.h"
-#include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
 #include "talk/examples/login/xmppauth.h"
 #include "talk/examples/login/xmpppump.h"
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
-#include "talk/session/phone/filemediaengine.h"
+#include "talk/examples/call/mediaenginefactory.h"
+#include "talk/p2p/base/constants.h"
+#ifdef ANDROID
+#include "talk/session/phone/androidmediaengine.h"
+#endif
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/srtpfilter.h"
+#include "talk/xmpp/xmppclientsettings.h"
 
 class DebugLog : public sigslot::has_slots<> {
  public:
@@ -177,48 +181,18 @@ class DebugLog : public sigslot::has_slots<> {
 static DebugLog debug_log_;
 static const int DEFAULT_PORT = 5222;
 
+#ifdef ANDROID
+static std::vector<cricket::AudioCodec> codecs;
+static const cricket::AudioCodec ISAC(103, "ISAC", 40000, 16000, 1, 0);
 
-cricket::MediaEngineInterface* CreateFileMediaEngine(const char* voice_in,
-                                                     const char* voice_out,
-                                                     const char* video_in,
-                                                     const char* video_out) {
-  cricket::FileMediaEngine* file_media_engine = new cricket::FileMediaEngine;
-  // Set the RTP dump file names.
-  if (voice_in) {
-    file_media_engine->set_voice_input_filename(voice_in);
-  }
-  if (voice_out) {
-    file_media_engine->set_voice_output_filename(voice_out);
-  }
-  if (video_in) {
-    file_media_engine->set_video_input_filename(video_in);
-  }
-  if (video_out) {
-    file_media_engine->set_video_output_filename(video_out);
-  }
+cricket::MediaEngine *AndroidMediaEngineFactory() {
+    cricket::FakeMediaEngine *engine = new cricket::FakeMediaEngine();
 
-  // Set voice and video codecs. TODO: The codecs actually depend on
-  // the the input voice and video streams.
-  std::vector<cricket::AudioCodec> voice_codecs;
-  voice_codecs.push_back(
-      cricket::AudioCodec(9, "G722", 16000, 0, 1, 0));
-  voice_codecs.push_back(
-      cricket::AudioCodec(0, "PCMU", 8000, 0, 1, 0));
-  voice_codecs.push_back(
-      cricket::AudioCodec(13, "CN", 8000, 0, 1, 0));
-  voice_codecs.push_back(
-      cricket::AudioCodec(105, "CN", 16000, 0, 1, 0));    
-  file_media_engine->set_voice_codecs(voice_codecs);
-  std::vector<cricket::VideoCodec> video_codecs;
-  video_codecs.push_back(
-      cricket::VideoCodec(97, "H264", 320, 240, 30, 0));
-  video_codecs.push_back(
-      cricket::VideoCodec(99, "H264-SVC", 640, 360, 30, 0));
-  file_media_engine->set_video_codecs(video_codecs);
-
-  return file_media_engine;
+    codecs.push_back(ISAC);
+    engine->SetAudioCodecs(codecs);
+    return engine;
 }
-
+#endif
 
 // TODO: Move this into Console.
 void Print(const char* chars) {
@@ -251,7 +225,6 @@ int main(int argc, char **argv) {
   DEFINE_string(voiceinput, NULL, "RTP dump file for voice input.");
   DEFINE_string(voiceoutput, NULL, "RTP dump file for voice output.");
   DEFINE_string(videoinput, NULL, "RTP dump file for video input.");
-  DEFINE_string(yuvvideoinput, NULL, "YUV file for video input.");
   DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
   DEFINE_bool(render, true, "Renders the video.");
   DEFINE_bool(debugsrtp, false, "Enable debugging for srtp.");
@@ -351,6 +324,7 @@ int main(int argc, char **argv) {
   if (test_server) {
     pass.password() = jid.node();
     xcs.set_allow_plain(true);
+    xcs.set_test_server_domain("google.com");
   }
   xcs.set_pass(talk_base::CryptString(pass));
 
@@ -371,6 +345,9 @@ int main(int argc, char **argv) {
 
   talk_base::InitializeSSL();
 
+#ifdef ANDROID
+  InitAndroidMediaEngineFactory(AndroidMediaEngineFactory);
+#endif
 
 #if WIN32
   // Need to pump messages on our main thread on Windows.
@@ -388,12 +365,14 @@ int main(int argc, char **argv) {
 
   if (FLAG_voiceinput || FLAG_voiceoutput ||
       FLAG_videoinput || FLAG_videooutput) {
-    // If any dump file is specified, we use FileMediaEngine.
-    cricket::MediaEngineInterface* engine = CreateFileMediaEngine(
-        FLAG_voiceinput, FLAG_voiceoutput, FLAG_videoinput, FLAG_videooutput);
-    // The engine will be released by the client later.
+    // If any dump file is specified, we use a FileMediaEngine.
+    cricket::MediaEngineInterface* engine =
+        MediaEngineFactory::CreateFileMediaEngine(
+            FLAG_voiceinput, FLAG_voiceoutput,
+            FLAG_videoinput, FLAG_videooutput);
     client->SetMediaEngine(engine);
   }
+
   Console *console = new Console(main_thread, client);
   client->SetConsole(console);
   client->SetAutoAccept(auto_accept);

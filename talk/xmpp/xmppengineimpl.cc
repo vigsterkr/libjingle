@@ -442,6 +442,10 @@ XmppEngineImpl::HasError() {
 void
 XmppEngineImpl::StartTls(const std::string & domain) {
   if (output_handler_) {
+    // As substitute for the real (login jid's) domain, we permit
+    // verifying a tls_server_domain_ instead, if one was passed.
+    // This allows us to avoid running a proxy that needs to handle
+    // valuable certificates.
     output_handler_->StartTls(
       tls_server_domain_.empty() ? domain : tls_server_domain_);
     encrypted_ = true;

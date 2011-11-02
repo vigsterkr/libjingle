@@ -27,11 +27,12 @@
 
 #include "xmppclient.h"
 #include "xmpptask.h"
-#include "talk/xmpp/constants.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/stringutils.h"
+#include "talk/xmpp/constants.h"
 #include "talk/xmpp/saslplainmechanism.h"
 #include "talk/xmpp/prexmppauth.h"
-#include "talk/base/scoped_ptr.h"
 #include "talk/xmpp/plainsaslhandler.h"
 
 namespace buzz {
@@ -82,6 +83,13 @@ public:
   void OnSocketClosed();
 };
 
+bool IsTestServer(const std::string& server_name,
+                  const std::string& test_server_domain) {
+  return (!test_server_domain.empty() &&
+          talk_base::ends_with(server_name.c_str(),
+                               test_server_domain.c_str()));
+}
+
 XmppReturnStatus
 XmppClient::Connect(const XmppClientSettings & settings, const std::string & lang, AsyncSocket * socket, PreXmppAuth * pre_auth) {
   if (socket == NULL)
@@ -116,7 +124,8 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   if (server_name == buzz::STR_TALK_GOOGLE_COM ||
       server_name == buzz::STR_TALKX_L_GOOGLE_COM ||
       server_name == buzz::STR_XMPP_GOOGLE_COM ||
-      server_name == buzz::STR_XMPPX_L_GOOGLE_COM) {
+      server_name == buzz::STR_XMPPX_L_GOOGLE_COM ||
+      IsTestServer(server_name, settings.test_server_domain())) {
     if (settings.host() != STR_GMAIL_COM &&
         settings.host() != STR_GOOGLEMAIL_COM) {
       d_->engine_->SetTlsServer("", STR_TALK_GOOGLE_COM);

@@ -334,9 +334,9 @@ class WebRtcVoiceMediaChannel
   static Error WebRtcErrorToChannelError(int err_code);
 
  private:
-  // Tandberg-bridged conferences require a -10dB gain adjustment,
-  // which is actually +10 in AgcConfig.targetLeveldBOv
-  static const int kTandbergDbAdjustment = 10;
+  // A -10dB gain adjustment is actually +10 in
+  // AgcConfig.targetLeveldBOv
+  static const int kMinus10DbAdjustment = 10;
 
   bool ChangePlayout(bool playout);
   bool ChangeSend(SendFlags send);

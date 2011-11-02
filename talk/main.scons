@@ -64,7 +64,6 @@ root_env = Environment(
     'FEATURE_ENABLE_VOICEMAIL',
     'FEATURE_ENABLE_PSTN',
     'HAVE_SRTP',
-    'HAVE_YUV',
   ],
   # Ensure the os environment is captured for any scripts we call out to
   ENV = os.environ,
