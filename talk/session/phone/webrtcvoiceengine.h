@@ -156,6 +156,9 @@ class WebRtcVoiceEngine
   bool SetAudioDeviceModule(webrtc::AudioDeviceModule* adm,
                             webrtc::AudioDeviceModule* adm_sc);
 
+  // Check whether the supplied trace should be ignored.
+  bool ShouldIgnoreTrace(const std::string& trace);
+
  private:
   typedef std::vector<WebRtcSoundclipMedia *> SoundclipList;
   typedef std::vector<WebRtcVoiceMediaChannel *> ChannelList;

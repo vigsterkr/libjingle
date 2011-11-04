@@ -1,6 +1,5 @@
-//
 // libjingle
-// Copyright 2004--2007, Google Inc.
+// Copyright 2004--2011 Google Inc.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -23,47 +22,42 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
 
-#include "talk/session/phone/mediaengine.h"
+#ifndef TALK_SESSION_PHONE_FAKEWEBRTCVCMFACTORY_H_
+#define TALK_SESSION_PHONE_FAKEWEBRTCVCMFACTORY_H_
 
-#if defined(HAVE_LINPHONE)
-#include "talk/session/phone/linphonemediaengine.h"
-#elif defined(ANDROID)
-#include "talk/session/phone/androidmediaengine.h"
-#else
-#if defined(HAVE_WEBRTC_VOICE)
-#include "talk/session/phone/webrtcvoiceengine.h"
-#endif  // HAVE_WEBRTC_VOICE
-#if defined(HAVE_WEBRTC_VIDEO)
-#include "talk/session/phone/webrtcvideoengine.h"
-#endif  // HAVE_WEBRTC_VIDEO
-#endif  // HAVE_LINPHONE
+#include <vector>
 
-namespace cricket {
-#if defined(HAVE_WEBRTC_VOICE)
-#define AUDIO_ENG_NAME WebRtcVoiceEngine
-#endif
+#include "talk/session/phone/fakewebrtcvideocapturemodule.h"
+#include "talk/session/phone/webrtcvideocapturer.h"
 
-#if defined(HAVE_WEBRTC_VIDEO)
-template<>
-CompositeMediaEngine<WebRtcVoiceEngine, WebRtcVideoEngine>::
-    CompositeMediaEngine() {
-  video_.SetVoiceEngine(&voice_);
-}
-#define VIDEO_ENG_NAME WebRtcVideoEngine
-#endif
+// Factory class to allow the fakes above to be injected into
+// WebRtcVideoCapturer.
+class FakeWebRtcVcmFactory : public cricket::WebRtcVcmFactoryInterface {
+ public:
+  virtual webrtc::VideoCaptureModule* Create(int module_id,
+                                             const WebRtc_UWord8* device_id) {
+    if (!device_info.GetDeviceById(device_id)) return NULL;
+    FakeWebRtcVideoCaptureModule* module =
+        new FakeWebRtcVideoCaptureModule(this, module_id);
+    modules.push_back(module);
+    return module;
+  }
+  virtual webrtc::VideoCaptureModule::DeviceInfo* CreateDeviceInfo(int id) {
+    return &device_info;
+  }
+  virtual void DestroyDeviceInfo(webrtc::VideoCaptureModule::DeviceInfo* info) {
+  }
+  void OnDestroyed(webrtc::VideoCaptureModule* module) {
+    std::remove(modules.begin(), modules.end(), module);
+  }
+  FakeWebRtcDeviceInfo device_info;
+  std::vector<FakeWebRtcVideoCaptureModule*> modules;
+};
 
-MediaEngineInterface* MediaEngineFactory::Create() {
-#if defined(HAVE_LINPHONE)
-  return new LinphoneMediaEngine("", "");
-#elif defined(ANDROID)
-  return AndroidMediaEngineFactory::Create();
-#elif defined(AUDIO_ENG_NAME) && defined(VIDEO_ENG_NAME)
-  return new CompositeMediaEngine<AUDIO_ENG_NAME, VIDEO_ENG_NAME>();
-#else
-  return new NullMediaEngine();
-#endif
+FakeWebRtcVideoCaptureModule::~FakeWebRtcVideoCaptureModule() {
+  if (factory_)
+    factory_->OnDestroyed(this);
 }
 
-};  // namespace cricket
+#endif  // TALK_SESSION_PHONE_FAKEWEBRTCVCMFACTORY_H_

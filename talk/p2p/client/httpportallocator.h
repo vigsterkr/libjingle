@@ -111,6 +111,9 @@ class HttpPortAllocatorSession : public BasicPortAllocatorSession {
   virtual void ReceiveSessionResponse(const std::string& response);
 
  protected:
+  // Protected for diagnostics.
+  virtual void OnRequestDone(talk_base::SignalThread* request);
+
   virtual void GetPortConfigurations();
   void TryCreateRelaySession();
 
@@ -119,8 +122,6 @@ class HttpPortAllocatorSession : public BasicPortAllocatorSession {
     return static_cast<HttpPortAllocator*>(
         BasicPortAllocatorSession::allocator());
   }
-
-  void OnRequestDone(talk_base::SignalThread* request);
 
   std::vector<std::string> relay_hosts_;
   std::vector<talk_base::SocketAddress> stun_hosts_;

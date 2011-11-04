@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2010, Google Inc.
+ * Copyright 2008 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,60 +25,30 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef TALK_P2P_BASE_TESTSTUNSERVER_H_
+#define TALK_P2P_BASE_TESTSTUNSERVER_H_
 
-#ifndef TALK_SESSION_PHONE_MEDIAPROCESSORINTERFACE_H_
-#define TALK_SESSION_PHONE_MEDIAPROCESSORINTERFACE_H_
-
-#include "talk/base/basictypes.h"
-#include "talk/base/sigslot.h"
-#include "talk/session/phone/videoframe.h"
+#include "talk/base/socketaddress.h"
+#include "talk/base/thread.h"
+#include "talk/p2p/base/stunserver.h"
 
 namespace cricket {
 
-enum MediaProcessorDirection {
-    MPD_RX = 1 << 0,
-    MPD_TX = 1 << 1,
-    MPD_RX_AND_TX = MPD_RX | MPD_TX,
-};
-
-struct AudioFrame {
-  AudioFrame()
-      : audio10ms(NULL),
-        length(0),
-        sampling_freq(8000),
-        is_stereo(false) {
-  }
-
-  AudioFrame(int16* audio, size_t audio_length, int sample_freq, bool stereo)
-      : audio10ms(audio),
-        length(audio_length),
-        sampling_freq(sample_freq),
-        is_stereo(stereo) {
-  }
-
-  int16* audio10ms;
-  size_t length;
-  int sampling_freq;
-  bool is_stereo;
-};
-
-class VoiceProcessor : public sigslot::has_slots<> {
+// A test STUN server. Useful for unit tests.
+class TestStunServer {
  public:
-  virtual ~VoiceProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data
-  virtual void OnFrame(uint32 ssrc, AudioFrame* frame) = 0;
-};
-
-class VideoProcessor : public sigslot::has_slots<> {
- public:
-  virtual ~VideoProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data
-  virtual void OnFrame(uint32 ssrc, VideoFrame* frame) = 0;
+  TestStunServer(talk_base::Thread* thread,
+                 const talk_base::SocketAddress& addr)
+      : socket_(thread->socketserver()->CreateAsyncSocket(SOCK_DGRAM)),
+        udp_socket_(talk_base::AsyncUDPSocket::Create(socket_, addr)),
+        server_(udp_socket_) {
+  }
+ private:
+  talk_base::AsyncSocket* socket_;
+  talk_base::AsyncUDPSocket* udp_socket_;
+  cricket::StunServer server_;
 };
 
 }  // namespace cricket
-#endif  // TALK_SESSION_PHONE_MEDIAPROCESSORINTERFACE_H_
+
+#endif  // TALK_P2P_BASE_TESTSTUNSERVER_H_

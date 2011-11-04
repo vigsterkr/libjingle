@@ -558,8 +558,9 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvRtpHeaderExtensions) {
   EXPECT_FALSE(enable);
 }
 
+// TODO: Re-enable this test once audio level status is restored.
 // Test that we support setting certain send header extensions.
-TEST_F(WebRtcVoiceEngineTestFake, SetSendRtpHeaderExtensions) {
+TEST_F(WebRtcVoiceEngineTestFake, DISABLED_SetSendRtpHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::RtpHeaderExtension> extensions;
   int channel_num = voe_.GetLastChannel();

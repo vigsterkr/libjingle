@@ -37,6 +37,7 @@
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/cryptoparams.h"
 #include "talk/session/phone/mediachannel.h"
+#include "talk/session/phone/streamparams.h"
 #include "talk/p2p/base/sessiondescription.h"
 
 namespace cricket {
@@ -45,6 +46,7 @@ class ChannelManager;
 typedef std::vector<AudioCodec> AudioCodecs;
 typedef std::vector<VideoCodec> VideoCodecs;
 typedef std::vector<CryptoParams> CryptoParamsVec;
+typedef std::vector<StreamParams> StreamParamsVec;
 
 // SEC_ENABLED and SEC_REQUIRED should only be used if the session
 // was negotiated over TLS, to protect the inline crypto material
@@ -64,6 +66,11 @@ enum SecureMediaPolicy {
   SEC_REQUIRED
 };
 
+enum MediaType {
+  MEDIA_TYPE_AUDIO,
+  MEDIA_TYPE_VIDEO
+};
+
 // Options to control how session descriptions are generated.
 const int kAutoBandwidth = -1;
 struct MediaSessionOptions {
@@ -74,16 +81,33 @@ struct MediaSessionOptions {
       video_bandwidth(kAutoBandwidth) {
   }
 
+  // Add a stream with MediaType type and id name.
+  // All streams with the same sync_label will get the same CNAME.
+  // All names must be unique.
+  void AddStream(MediaType type,
+                 const std::string& name,
+                 const std::string& sync_label);
+  void RemoveStream(MediaType type, const std::string& name);
+
   bool has_audio;
   bool has_video;
   bool is_muc;
   // bps. -1 == auto.
   int video_bandwidth;
-};
 
-enum MediaType {
-  MEDIA_TYPE_AUDIO,
-  MEDIA_TYPE_VIDEO
+  struct Stream {
+    Stream(MediaType type,
+           const std::string& name,
+           const std::string& sync_label)
+        : type(type), name(name), sync_label(sync_label) {
+    }
+    MediaType type;
+    std::string name;
+    std::string sync_label;
+  };
+
+  typedef std::vector<Stream> Streams;
+  Streams streams;
 };
 
 // "content" (as used in XEP-0166) descriptions for voice and video.
@@ -141,6 +165,12 @@ class MediaContentDescription : public ContentDescription {
   bool rtp_header_extensions_set() const {
     return rtp_header_extensions_set_;
   }
+  const StreamParamsVec& streams() const {
+    return streams_;
+  }
+  void AddStream(const StreamParams& stream) {
+    streams_.push_back(stream);
+  }
 
  protected:
   uint32 ssrc_;
@@ -151,6 +181,7 @@ class MediaContentDescription : public ContentDescription {
   bool crypto_required_;
   std::vector<RtpHeaderExtension> rtp_header_extensions_;
   bool rtp_header_extensions_set_;
+  StreamParamsVec streams_;
 };
 
 template <class C>
@@ -192,6 +223,7 @@ class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
   void set_agc_minus_10db(bool enable) {
     agc_minus_10db_ = enable;
   }
+
  private:
   bool agc_minus_10db_;
 
@@ -223,9 +255,25 @@ class MediaSessionDescriptionFactory {
   SecureMediaPolicy secure() const { return secure_; }
   void set_secure(SecureMediaPolicy s) { secure_ = s; }
 
-  SessionDescription* CreateOffer(const MediaSessionOptions& options);
-  SessionDescription* CreateAnswer(const SessionDescription* offer,
-                                   const MediaSessionOptions& options);
+  // TODO Deprecate this version of CreateOffer and
+  // force to use the second alternative.
+  SessionDescription* CreateOffer(
+      const MediaSessionOptions& options);
+
+  SessionDescription* CreateOffer(
+      const MediaSessionOptions& options,
+      const SessionDescription* current_description);
+
+  // TODO Deprecate this version of CreateAnswer and
+  // force to use the second alternative.
+  SessionDescription* CreateAnswer(
+      const SessionDescription* offer,
+      const MediaSessionOptions& options);
+
+  SessionDescription* CreateAnswer(
+        const SessionDescription* offer,
+        const MediaSessionOptions& options,
+        const SessionDescription* current_description);
 
  private:
   AudioCodecs audio_codecs_;
@@ -243,3 +291,4 @@ const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_
+

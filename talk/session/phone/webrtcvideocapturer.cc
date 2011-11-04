@@ -225,6 +225,32 @@ bool WebRtcVideoCapturer::Init(webrtc::VideoCaptureModule* module) {
   return true;
 }
 
+bool WebRtcVideoCapturer::GetBestCaptureFormat(const VideoFormat& desired,
+                                               VideoFormat* best_format) {
+  if (!best_format) {
+    return false;
+  }
+
+  if (!VideoCapturer::GetBestCaptureFormat(desired, best_format)) {
+    // If the vcm has a list of the supported format, but didn't find the
+    // best match, then we should return fail.
+    if (GetSupportedFormats()) {
+      return false;
+    }
+
+    // We maybe using a manually injected VCM which doesn't support enum.
+    // Use the desired format as the best format.
+    best_format->width = desired.width;
+    best_format->height = desired.height;
+    best_format->fourcc = FOURCC_I420;
+    best_format->interval = desired.interval;
+    LOG(LS_INFO) << "Failed to find best capture format,"
+                 << " fall back to the requested format "
+                 << best_format->ToString();
+  }
+  return true;
+}
+
 CaptureResult WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
   if (!module_) {
     LOG(LS_ERROR) << "The capturer has not been initialized";
@@ -302,7 +328,6 @@ void WebRtcVideoCapturer::OnMessage(talk_base::Message* message) {
 void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
     webrtc::VideoFrame& sample, webrtc::VideoCodecType codec_type) {
   ASSERT(IsRunning());
-  ASSERT(id == 0);
   ASSERT(codec_type == webrtc::kVideoCodecUnknown);
 
   ++captured_frames_;

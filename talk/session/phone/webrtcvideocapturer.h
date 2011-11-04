@@ -66,6 +66,8 @@ class WebRtcVideoCapturer : public VideoCapturer,
   bool Init(webrtc::VideoCaptureModule* module);
 
   // Override virtual methods of the parent class VideoCapturer.
+  virtual bool GetBestCaptureFormat(const VideoFormat& desired,
+                                    VideoFormat* best_format);
   virtual CaptureResult Start(const VideoFormat& capture_format);
   virtual void Stop();
   virtual bool IsRunning();

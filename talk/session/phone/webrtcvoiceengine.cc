@@ -832,7 +832,7 @@ void WebRtcVoiceEngine::ApplyLogging(const std::string& log_filter) {
 
 // Ignore spammy trace messages, mostly from the stats API when we haven't
 // gotten RTCP info yet from the remote side.
-static bool ShouldIgnoreTrace(const std::string& trace) {
+bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
   static const char* kTracesToIgnore[] = {
     "\tfailed to GetReportBlockInformation",
     "GetRecCodec() failed to get received codec",
@@ -872,7 +872,7 @@ void WebRtcVoiceEngine::Print(const webrtc::TraceLevel level,
     } else {
       std::string msg(trace + 71, length - 72);
       if (!ShouldIgnoreTrace(msg)) {
-        LOG_V(sev) << "WebRtc VoE:" << msg;
+        LOG_V(sev) << "WebRtc:" << msg;
       }
     }
   }
@@ -1402,8 +1402,9 @@ bool WebRtcVoiceMediaChannel::SetSendRtpHeaderExtensions(
     }
   }
 
+// This api is currently present but nonfunctional in WebRTC VoiceEngine.
 // This api call is not available in iOS version of VoiceEngine currently.
-#if !defined(IOS) && !defined(ANDROID)
+#if 0  // !defined(IOS) && !defined(ANDROID)
   if (engine()->voe()->rtp()->SetRTPAudioLevelIndicationStatus(
       voe_channel(), enable, id) == -1) {
     LOG_RTCERR3(SetRTPAudioLevelIndicationStatus, voe_channel(), enable, id);

@@ -458,9 +458,14 @@ bool WebRtcVideoEngine::SetCaptureDevice(const Device* device) {
 
 bool WebRtcVideoEngine::SetCaptureModule(webrtc::VideoCaptureModule* vcm) {
   if (!vcm) {
-    video_capturer_.reset();
-    LOG(LS_INFO) << "Camera set to NULL";
-    return true;
+    if (video_capturer_.get() && video_capturer_->IsRunning()) {
+      LOG(LS_WARNING) << "Failed to set camera to NULL when is running.";
+      return false;
+    } else {
+      video_capturer_.reset();
+      LOG(LS_INFO) << "Camera set to NULL";
+      return true;
+    }
   }
   // Create a new capturer for the specified device.
   WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
@@ -534,12 +539,14 @@ CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
                       << ". Supported formats are:";
       const std::vector<VideoFormat>* formats =
           video_capturer_->GetSupportedFormats();
-      for (std::vector<VideoFormat>::const_iterator i = formats->begin();
-           i != formats->end(); ++i) {
-        const VideoFormat& format = *i;
-        LOG(LS_WARNING) << "  " << GetFourccName(format.fourcc) << ":"
-                        << format.width << "x" << format.height << "x"
-                        << format.framerate();
+      if (formats) {
+        for (std::vector<VideoFormat>::const_iterator i = formats->begin();
+             i != formats->end(); ++i) {
+          const VideoFormat& format = *i;
+          LOG(LS_WARNING) << "  " << GetFourccName(format.fourcc) << ":"
+                          << format.width << "x" << format.height << "x"
+                          << format.framerate();
+        }
       }
       return CR_FAILURE;
     }
@@ -566,6 +573,10 @@ void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
   // Force 16:10 for now. We'll be smarter with the capture refactor.
   int cropped_height = frame->width * kDefaultVideoFormat.height
       / kDefaultVideoFormat.width;
+  if (cropped_height > frame->height) {
+    // TODO: Once we support horizontal cropping, add cropped_width.
+    cropped_height = frame->height;
+  }
 
   // This CapturedFrame* will already be in I420. In the future, when
   // WebRtcVideoFrame has support for independent planes, we can just attach
@@ -743,9 +754,8 @@ void WebRtcVideoEngine::PerformanceAlarm(const unsigned int cpu_load) {
 
 // Ignore spammy trace messages, mostly from the stats API when we haven't
 // gotten RTCP info yet from the remote side.
-static bool ShouldIgnoreTrace(const std::string& trace) {
+bool WebRtcVideoEngine::ShouldIgnoreTrace(const std::string& trace) {
   static const char* kTracesToIgnore[] = {
-    "\tfailed to GetReportBlockInformation",
     NULL
   };
   for (const char* const* p = kTracesToIgnore; *p; ++p) {
@@ -774,8 +784,9 @@ void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
       LOG_V(sev) << msg;
     } else {
       std::string msg(trace + 71, length - 72);
-      if (!ShouldIgnoreTrace(msg)) {
-        LOG_V(sev) << "WebRtc ViE:" << msg;
+      if (!ShouldIgnoreTrace(msg) &&
+          (!voice_engine_ || !voice_engine_->ShouldIgnoreTrace(msg))) {
+        LOG_V(sev) << "WebRtc:" << msg;
       }
     }
   }
@@ -1205,13 +1216,14 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   // Build BandwidthEstimationInfo.
   // TODO: Fill in more BWE stats once we have them.
   unsigned int total_bitrate_sent;
+  unsigned int video_bitrate_sent;
   unsigned int fec_bitrate_sent;
   unsigned int nack_bitrate_sent;
   if (engine_->vie()->rtp()->GetBandwidthUsage(vie_channel_,
-      total_bitrate_sent, fec_bitrate_sent, nack_bitrate_sent) == 0) {
+      total_bitrate_sent, video_bitrate_sent,
+      fec_bitrate_sent, nack_bitrate_sent) == 0) {
     BandwidthEstimationInfo bwe;
-    bwe.actual_enc_bitrate = total_bitrate_sent - nack_bitrate_sent -
-        fec_bitrate_sent;
+    bwe.actual_enc_bitrate = video_bitrate_sent;
     bwe.transmit_bitrate = total_bitrate_sent;
     bwe.retransmit_bitrate = nack_bitrate_sent;
     info->bw_estimations.push_back(bwe);

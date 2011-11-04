@@ -126,6 +126,9 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
                                   VideoCodec& out_codec);
   bool ConvertFromCricketVideoCodec(const VideoCodec& in_codec,
                                     webrtc::VideoCodec& out_codec);
+  // Check whether the supplied trace should be ignored.
+  bool ShouldIgnoreTrace(const std::string& trace);									
+  
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.
