@@ -1,5 +1,11 @@
 Libjingle
 
+0.6.4 - Nov 30, 2011
+  - Branch app/webrtc to app/webrtcv1.
+  - Add more base unit tests.
+  - Add xmllite unit tests.
+  - Refactoring and bug fixes
+
 0.6.3 - Oct 26, 2011
   - Add media unit tests
   - Improve OpenSSL support

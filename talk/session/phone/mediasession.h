@@ -255,20 +255,14 @@ class MediaSessionDescriptionFactory {
   SecureMediaPolicy secure() const { return secure_; }
   void set_secure(SecureMediaPolicy s) { secure_ = s; }
 
-  // TODO Deprecate this version of CreateOffer and
-  // force to use the second alternative.
-  SessionDescription* CreateOffer(
-      const MediaSessionOptions& options);
 
   SessionDescription* CreateOffer(
       const MediaSessionOptions& options,
       const SessionDescription* current_description);
 
-  // TODO Deprecate this version of CreateAnswer and
-  // force to use the second alternative.
-  SessionDescription* CreateAnswer(
-      const SessionDescription* offer,
-      const MediaSessionOptions& options);
+
+
+
 
   SessionDescription* CreateAnswer(
         const SessionDescription* offer,
@@ -291,4 +285,5 @@ const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_
+
 

@@ -33,7 +33,7 @@
 #include "talk/session/phone/webrtcvideocapturer.h"
 #include "talk/base/logging.h"
 #include "talk/base/thread.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 #include "talk/session/phone/webrtcvideoframe.h"
 
 #include "talk/base/win32.h"  // Need this to #include the impl files
@@ -60,8 +60,8 @@ static kVideoFourCCEntry kSupportedFourCCs[] = {
   { FOURCC_YUY2, webrtc::kVideoYUY2 },   // 16 bpp, fast conversion
   { FOURCC_UYVY, webrtc::kVideoUYVY },   // 16 bpp, fast conversion
   { FOURCC_MJPG, webrtc::kVideoMJPEG },  // compressed, slow conversion
-  { FOURCC_ARGB, webrtc::kVideoARGB },   // 32 bpp, very slow conversion
-  { FOURCC_24BG, webrtc::kVideoRGB24 },  // 32 bpp, very slow conversion
+  { FOURCC_ARGB, webrtc::kVideoARGB },   // 32 bpp, slow conversion
+  { FOURCC_24BG, webrtc::kVideoRGB24 },  // 32 bpp, slow conversion
 };
 
 class WebRtcVcmFactory : public WebRtcVcmFactoryInterface {
@@ -355,9 +355,9 @@ WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
   fourcc = FOURCC_I420;
   pixel_width = 1;
   pixel_height = 1;
-  // convert units from VideoFrame (RTP clocks @ 90KHz)
+  // convert units from VideoFrame RenderTimeMs
   // to CapturedFrame (nanoseconds)
-  elapsed_time = sample.TimeStamp() / 90000 * talk_base::kNumNanosecsPerSec;
+  elapsed_time = sample.RenderTimeMs() * talk_base::kNumNanosecsPerMillisec;
   time_stamp = elapsed_time;
   data_size = sample.Length();
   data = const_cast<WebRtc_UWord8*>(sample.Buffer());

@@ -45,6 +45,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
+#include "talk/session/phone/voiceprocessor.h"
 #include "talk/session/phone/webrtcvoe.h"
 
 #ifdef WIN32
@@ -445,6 +446,12 @@ bool WebRtcVoiceEngine::SetOptions(int options) {
     LOG_RTCERR1(SetEcStatus, aec);
     return false;
   }
+  if (aec) {
+    if (voe_wrapper_->processing()->SetEcMetricsStatus(true) == -1) {
+      LOG_RTCERR1(SetEcMetricsStatus, true);
+      return false;
+    }
+  }
 
   if (voe_wrapper_->processing()->SetAgcStatus(agc) == -1) {
     LOG_RTCERR1(SetAgcStatus, agc);
@@ -836,12 +843,13 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
   static const char* kTracesToIgnore[] = {
     "\tfailed to GetReportBlockInformation",
     "GetRecCodec() failed to get received codec",
-    "GetRemoteRTCPData() failed to measure statistics dueto lack of received RTP and/or RTCP packets",  // NOLINT
-    "GetRemoteRTCPData() failed to retrieve sender info for remoteside",
-    "GetRTPStatistics() failed to measure RTT since noRTP packets have been received yet",  // NOLINT
+    "GetReceivedRtcpStatistics: Could not get received RTP statistics",
+    "GetRemoteRTCPData() failed to measure statistics due to lack of received RTP and/or RTCP packets",  // NOLINT
+    "GetRemoteRTCPData() failed to retrieve sender info for remote side",
+    "GetRTPStatistics() failed to measure RTT since no RTP packets have been received yet",  // NOLINT
     "GetRTPStatistics() failed to read RTP statistics from the RTP/RTCP module",
-    "GetRTPStatistics() failed to retrieve RTT fromthe RTP/RTCP module",
-    "webrtc::RTCPReceiver::SenderInfoReceived No received SR",
+    "GetRTPStatistics() failed to retrieve RTT from the RTP/RTCP module",
+    "SenderInfoReceived No received SR",
     "StatisticsRTP() no statisitics availble",
     NULL
   };
@@ -1959,6 +1967,36 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
   // Local speech level.
   sinfo.audio_level = (engine()->voe()->volume()->
       GetSpeechInputLevelFullRange(level) != -1) ? level : -1;
+
+  bool echo_metrics_on = false;
+  // These can take on valid negative values, so use the lowest possible level
+  // as default rather than -1.
+  sinfo.echo_return_loss = -100;
+  sinfo.echo_return_loss_enhancement = -100;
+  // These can also be negative, but in practice -1 is only used to signal
+  // insufficient data, since the resolution is limited to multiples of 4 ms.
+  sinfo.echo_delay_median_ms = -1;
+  sinfo.echo_delay_std_ms = -1;
+  if (engine()->voe()->processing()->GetEcMetricsStatus(echo_metrics_on) !=
+      -1 && echo_metrics_on) {
+
+    // TODO: we may want to use VoECallReport::GetEchoMetricsSummary
+    // here, but it appears to be unsuitable currently. Revisit after this is
+    // investigated: http://b/issue?id=5666755
+    int erl, erle, rerl, anlp;
+    if (engine()->voe()->processing()->GetEchoMetrics(erl, erle, rerl, anlp) !=
+        -1) {
+      sinfo.echo_return_loss = erl;
+      sinfo.echo_return_loss_enhancement = erle;
+    }
+
+    int median, std;
+    if (engine()->voe()->processing()->GetEcDelayMetrics(median, std) != -1) {
+      sinfo.echo_delay_median_ms = median;
+      sinfo.echo_delay_std_ms = std;
+    }
+  }
+
   info->senders.push_back(sinfo);
 
   // Build the list of receivers, one for each mux channel, or 1 in a 1:1 call.

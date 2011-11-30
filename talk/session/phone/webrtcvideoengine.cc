@@ -56,6 +56,8 @@ static const int kDefaultLogSeverity = talk_base::LS_WARNING;
 static const int kMinVideoBitrate = 300;
 static const int kMaxVideoBitrate = 2000;
 
+static const int kVideoMtu = 1200;
+
 static const int kVideoRtpBufferSize = 65536;
 
 static const char kVp8PayloadName[] = "VP8";
@@ -104,11 +106,6 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     WebRtcVideoFrame video_frame;
     video_frame.Attach(buffer, buffer_size, width_, height_,
                        1, 1, 0, time_stamp, 0);
-
-    // Add a watermark to the frame.
-    if (!video_frame.AddWatermark()) {
-      LOG(LS_ERROR) << "Failed to add watermark to decoded frame.";
-    }
 
     int ret = renderer_->RenderFrame(&video_frame) ? 0 : -1;
     uint8* buffer_temp;
@@ -233,25 +230,28 @@ const WebRtcVideoEngine::VideoCodecPref
 #endif
 };
 
-// TODO: Add CanSendCodec()
 // The formats are sorted by the descending order of width. We use the order to
 // find the next format for CPU and bandwidth adaptation.
 const VideoFormat WebRtcVideoEngine::kVideoFormats[] = {
-  // TODO: Understand why we have problem with 16:9 formats.
   VideoFormat(1280, 800, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(1280, 720, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(1280, 720, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(960, 600, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(960, 540, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(960, 540, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(640, 400, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(640, 360, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(640, 360, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(640, 480, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(480, 300, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(480, 270, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(480, 270, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(480, 360, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(320, 200, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(320, 180, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(320, 180, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(320, 240, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(240, 150, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(240, 135, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(240, 135, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(240, 180, VideoFormat::FpsToInterval(30), FOURCC_ANY),
   VideoFormat(160, 100, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-//VideoFormat(160, 90, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(160, 90, VideoFormat::FpsToInterval(30), FOURCC_ANY),
+  VideoFormat(160, 120, VideoFormat::FpsToInterval(30), FOURCC_ANY)
 };
 
 const VideoFormat WebRtcVideoEngine::kDefaultVideoFormat =
@@ -277,6 +277,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
                                   WebRtcVoiceEngine* voice_engine) {
   LOG(LS_INFO) << "WebRtcVideoEngine::WebRtcVideoEngine";
   vie_wrapper_.reset(vie_wrapper);
+  vie_wrapper_base_initialized_ = false;
   tracing_.reset(tracing);
   voice_engine_ = voice_engine;
   initialized_ = false;
@@ -329,9 +330,12 @@ bool WebRtcVideoEngine::InitVideoEngine() {
   LOG(LS_INFO) << "WebRtcVideoEngine::InitVideoEngine";
 
   // Init WebRTC VideoEngine.
-  if (vie_wrapper_->base()->Init() != 0) {
-    LOG_RTCERR0(Init);
-    return false;
+  if (!vie_wrapper_base_initialized_) {
+    if (vie_wrapper_->base()->Init() != 0) {
+      LOG_RTCERR0(Init);
+      return false;
+    }
+    vie_wrapper_base_initialized_ = true;
   }
 
   // Log the VoiceEngine version info.
@@ -571,8 +575,8 @@ bool WebRtcVideoEngine::IsCapturing() const {
 void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
                                         const CapturedFrame* frame) {
   // Force 16:10 for now. We'll be smarter with the capture refactor.
-  int cropped_height = frame->width * kDefaultVideoFormat.height
-      / kDefaultVideoFormat.width;
+  int cropped_height = frame->width * default_codec_format_.height
+      / default_codec_format_.width;
   if (cropped_height > frame->height) {
     // TODO: Once we support horizontal cropping, add cropped_width.
     cropped_height = frame->height;
@@ -637,6 +641,84 @@ bool WebRtcVideoEngine::FindCodec(const VideoCodec& in) {
   return false;
 }
 
+// Given the requested codec, returns true if we can send that codec type and
+// updates out with the best quality we could send for that codec. If current is
+// not empty, we constrain out so that its aspect ratio matches current's.
+bool WebRtcVideoEngine::CanSendCodec(const VideoCodec& requested,
+                                     const VideoCodec& current,
+                                     VideoCodec* out) {
+  if (!out) {
+    return false;
+  }
+
+  std::vector<VideoCodec>::const_iterator local_max;
+  for (local_max = video_codecs_.begin();
+       local_max < video_codecs_.end();
+       ++local_max) {
+    // First match codecs by payload type
+    if (!requested.Matches(local_max->id, local_max->name)) {
+      continue;
+    }
+
+    out->id = requested.id;
+    out->name = requested.name;
+    out->preference = requested.preference;
+    out->framerate = talk_base::_min(requested.framerate, local_max->framerate);
+    out->width = 0;
+    out->height = 0;
+
+    if (0 == requested.width && 0 == requested.height) {
+      // Special case with resolution 0. The channel should not send frames.
+      return true;
+    } else if (0 == requested.width || 0 == requested.height) {
+      // 0xn and nx0 are invalid resolutions.
+      return false;
+    }
+
+    // Pick the best quality that is within their and our bounds and has the
+    // correct aspect ratio.
+    for (int j = 0; j < ARRAY_SIZE(kVideoFormats); ++j) {
+      const VideoFormat& format = kVideoFormats[j];
+
+      // Skip any format that is larger than the local or remote maximums, or
+      // smaller than the current best match
+      if (format.width > requested.width || format.height > requested.height ||
+          format.width > local_max->width ||
+          (format.width < out->width && format.height < out->height)) {
+        continue;
+      }
+
+      bool better = false;
+
+      // Check any further constraints on this prospective format
+      if (!out->width || !out->height) {
+        // If we don't have any matches yet, this is the best so far.
+        better = true;
+      } else if (current.width && current.height) {
+        // current is set so format must match its ratio exactly.
+        better =
+            (format.width * current.height == format.height * current.width);
+      } else {
+        // Prefer closer aspect ratios i.e
+        // format.aspect - requested.aspect < out.aspect - requested.aspect
+        better = abs(format.width * requested.height * out->height -
+                     requested.width * format.height * out->height) <
+                 abs(out->width * format.height * requested.height -
+                     requested.width * format.height * out->height);
+      }
+
+      if (better) {
+        out->width = format.width;
+        out->height = format.height;
+      }
+    }
+    if (out->width > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void WebRtcVideoEngine::ConvertToCricketVideoCodec(
     const webrtc::VideoCodec& in_codec, VideoCodec& out_codec) {
   out_codec.id = in_codec.plType;
@@ -690,7 +772,8 @@ void WebRtcVideoEngine::RegisterChannel(WebRtcVideoMediaChannel *channel) {
 
 void WebRtcVideoEngine::UnregisterChannel(WebRtcVideoMediaChannel *channel) {
   talk_base::CritScope cs(&channels_crit_);
-  std::remove(channels_.begin(), channels_.end(), channel);
+  channels_.erase(std::remove(channels_.begin(), channels_.end(), channel),
+                  channels_.end());
 }
 
 bool WebRtcVideoEngine::SetVoiceEngine(WebRtcVoiceEngine* voice_engine) {
@@ -764,6 +847,11 @@ bool WebRtcVideoEngine::ShouldIgnoreTrace(const std::string& trace) {
     }
   }
   return false;
+}
+
+int WebRtcVideoEngine::GetNumOfChannels() {
+  talk_base::CritScope cs(&channels_crit_);
+  return channels_.size();
 }
 
 void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
@@ -845,6 +933,12 @@ bool WebRtcVideoMediaChannel::Init() {
   if (engine_->vie()->network()->RegisterSendTransport(
       vie_channel_, *this) != 0) {
     LOG_RTCERR1(RegisterSendTransport, vie_channel_);
+    return false;
+  }
+
+  // Set MTU.
+  if (engine_->vie()->network()->SetMTU(vie_channel_, kVideoMtu) != 0) {
+    LOG_RTCERR2(SetMTU, vie_channel_, kVideoMtu);
     return false;
   }
 
@@ -991,16 +1085,22 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   // Match with local video codec list.
   std::vector<webrtc::VideoCodec> send_codecs;
   int red_type = -1, fec_type = -1;
+  VideoCodec checked_codec;
+  VideoCodec current;  // defaults to 0x0
+  if (sending_) {
+    engine()->ConvertToCricketVideoCodec(*send_codec_, current);
+  }
   for (std::vector<VideoCodec>::const_iterator iter = codecs.begin();
       iter != codecs.end(); ++iter) {
     if (_stricmp(iter->name.c_str(), kRedPayloadName) == 0) {
       red_type = iter->id;
     } else if (_stricmp(iter->name.c_str(), kFecPayloadName) == 0) {
       fec_type = iter->id;
-    } else if (engine()->FindCodec(*iter)) {
+    } else if (engine()->CanSendCodec(*iter, current, &checked_codec)) {
       webrtc::VideoCodec wcodec;
-      if (engine()->ConvertFromCricketVideoCodec(*iter, wcodec))
+      if (engine()->ConvertFromCricketVideoCodec(checked_codec, wcodec)) {
         send_codecs.push_back(wcodec);
+      }
     } else {
       LOG(LS_WARNING) << "Unknown codec " << iter->name;
     }
@@ -1021,23 +1121,6 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
 
   // Select the first matched codec.
   webrtc::VideoCodec& codec(send_codecs[0]);
-
-  // TODO: Remove this once WebRtcVideoFrame::Stretch() is implemented.
-  // O3D has a default texture size 1024 x 512.
-  // On streamon, the renderer needs to write the decoded frame into the
-  // default texture. If the decoded frame is bigger than the texture buffer,
-  // the renderer scales it down.
-  // After the first frame is received by O3D, the renderer sends streamready
-  // back to order a new texture with real size.
-  // WebRtcVideoFrame::Stretch() is not implemented yet, so the first frame
-  // can not be fit in the default 1024 x 512 texture, and this causes rendering
-  // failure.
-  // So here, as a workaround, we cut at 640 x 400 here.
-  if (codec.width > engine()->default_codec_format().width ||
-      codec.height > engine()->default_codec_format().height) {
-    codec.width = engine()->default_codec_format().width;
-    codec.height = engine()->default_codec_format().height;
-  }
 
   // Set the default number of temporal layers for VP8.
   if (webrtc::kVideoCodecVP8 == codec.codecType) {

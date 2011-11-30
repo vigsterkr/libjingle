@@ -678,6 +678,7 @@ bool ParseContentType(SignalingProtocol protocol,
 static bool ParseContentMessage(
     SignalingProtocol protocol,
     const buzz::XmlElement* action_elem,
+    bool expect_transports,
     const ContentParserMap& content_parsers,
     const TransportParserMap& trans_parsers,
     SessionInitiate* init,
@@ -688,7 +689,8 @@ static bool ParseContentMessage(
                                  &init->contents, error))
       return false;
 
-    if (!ParseGingleTransportInfos(action_elem, init->contents, trans_parsers,
+    if (expect_transports &&
+        !ParseGingleTransportInfos(action_elem, init->contents, trans_parsers,
                                    &init->transports, error))
       return false;
   } else {
@@ -696,7 +698,8 @@ static bool ParseContentMessage(
                                  &init->contents, error))
       return false;
 
-    if (!ParseJingleTransportInfos(action_elem, init->contents, trans_parsers,
+    if (expect_transports &&
+        !ParseJingleTransportInfos(action_elem, init->contents, trans_parsers,
                                    &init->transports, error))
       return false;
   }
@@ -735,7 +738,8 @@ bool ParseSessionInitiate(SignalingProtocol protocol,
                           const TransportParserMap& trans_parsers,
                           SessionInitiate* init,
                           ParseError* error) {
-  return ParseContentMessage(protocol, action_elem,
+  bool expect_transports = true;
+  return ParseContentMessage(protocol, action_elem, expect_transports,
                              content_parsers, trans_parsers,
                              init, error);
 }
@@ -759,7 +763,8 @@ bool ParseSessionAccept(SignalingProtocol protocol,
                         const TransportParserMap& transport_parsers,
                         SessionAccept* accept,
                         ParseError* error) {
-  return ParseContentMessage(protocol, action_elem,
+  bool expect_transports = true;
+  return ParseContentMessage(protocol, action_elem, expect_transports,
                              content_parsers, transport_parsers,
                              accept, error);
 }
@@ -824,7 +829,8 @@ bool ParseDescriptionInfo(SignalingProtocol protocol,
                           const TransportParserMap& transport_parsers,
                           DescriptionInfo* description_info,
                           ParseError* error) {
-  return ParseContentMessage(protocol, action_elem,
+  bool expect_transports = false;
+  return ParseContentMessage(protocol, action_elem, expect_transports,
                              content_parsers, transport_parsers,
                              description_info, error);
 }

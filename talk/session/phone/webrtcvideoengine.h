@@ -53,11 +53,11 @@ struct Device;
 class LocalStreamInfo;
 class VideoCapturer;
 class VideoFrame;
+class VideoProcessor;
 class VideoRenderer;
 class ViETraceWrapper;
 class ViEWrapper;
 class VoiceMediaChannel;
-class VoiceProcessor;
 class WebRtcRenderAdapter;
 class WebRtcVideoMediaChannel;
 class WebRtcVoiceEngine;
@@ -120,6 +120,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   }
   int GetLastEngineError();
   bool FindCodec(const VideoCodec& in);
+  bool CanSendCodec(const VideoCodec& in, const VideoCodec& current,
+                    VideoCodec* out);
   void RegisterChannel(WebRtcVideoMediaChannel* channel);
   void UnregisterChannel(WebRtcVideoMediaChannel* channel);
   void ConvertToCricketVideoCodec(const webrtc::VideoCodec& in_codec,
@@ -127,8 +129,9 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool ConvertFromCricketVideoCodec(const VideoCodec& in_codec,
                                     webrtc::VideoCodec& out_codec);
   // Check whether the supplied trace should be ignored.
-  bool ShouldIgnoreTrace(const std::string& trace);									
-  
+  bool ShouldIgnoreTrace(const std::string& trace);
+  int GetNumOfChannels();
+
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.
@@ -161,6 +164,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
                      const int length);
 
   talk_base::scoped_ptr<ViEWrapper> vie_wrapper_;
+  bool vie_wrapper_base_initialized_;
   talk_base::scoped_ptr<ViETraceWrapper> tracing_;
   WebRtcVoiceEngine* voice_engine_;
   int log_level_;

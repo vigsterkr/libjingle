@@ -51,6 +51,7 @@
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/stunserver.h"
 #include "talk/p2p/base/transportchannel.h"
+#include "talk/p2p/base/transportchannelproxy.h"
 #include "talk/p2p/base/udpport.h"
 #include "talk/xmpp/constants.h"
 
@@ -223,18 +224,21 @@ std::string JingleContentXml(const std::string& content_name,
                              const std::string& content_type,
                              const std::string& transport_type,
                              const std::string& transport_main) {
-  return "<content"
+  std::string transport = transport_type.empty() ? "" :
+      "<transport"
+      " xmlns=\"" + transport_type + "\""
+      ">"
+      + transport_main +
+      "</transport>";
+
+  return"<content"
       " name=\"" + content_name + "\""
       " creator=\"initiator\""
       ">"
       "<description"
       " xmlns=\"" + content_type + "\""
       "/>"
-      "<transport"
-      " xmlns=\"" + transport_type + "\""
-      ">"
-      + transport_main +
-      "</transport>"
+      + transport +
       "</content>";
 }
 
@@ -357,7 +361,7 @@ std::string JingleDescriptionInfoXml(const std::string& content_name,
                                      const std::string& content_type) {
   return JingleActionXml(
       "description-info",
-      JingleContentXml(content_name, content_type, kTransportType, ""));
+      JingleContentXml(content_name, content_type, "", ""));
 }
 
 std::string GingleRejectXml(const std::string& reason) {
@@ -563,7 +567,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
-        network_("network", "unittest", address_.ip(), 0),
+        network_("network", "unittest", address_.ip()),
         socket_factory_(talk_base::Thread::Current()),
         running_(false),
         port_(28653) {
@@ -786,26 +790,75 @@ class TestClient : public sigslot::has_slots<> {
              const std::string& content_name_a,
              const std::string& channel_name_a,
              const std::string& content_name_b,
-             const std::string& channel_name_b)
-      : next_message_id(next_message_id),
-        local_name(local_name),
-        start_protocol(start_protocol),
-        content_type(content_type),
-        content_name_a(content_name_a),
-        channel_name_a(channel_name_a),
-        content_name_b(content_name_b),
-        channel_name_b(channel_name_b),
-        session_created_count(0),
-        session_destroyed_count(0),
-        session_remote_description_update_count(0),
-        last_expected_sent_stanza(NULL),
-        session(NULL),
-        last_session_state(cricket::BaseSession::STATE_INIT),
-        chan_a(NULL),
-        chan_b(NULL),
-        blow_up_on_error(true),
-        error_count(0) {
-    session_manager = new cricket::SessionManager(port_allocator);
+             const std::string& channel_name_b) {
+    Construct(port_allocator, next_message_id, local_name, start_protocol,
+              content_type, content_name_a, channel_name_a, std::string(""),
+              content_name_b, channel_name_b, std::string(""));
+  }
+
+  TestClient(cricket::PortAllocator* port_allocator,
+             int* next_message_id,
+             const std::string& local_name,
+             SignalingProtocol start_protocol,
+             const std::string& content_type,
+             const std::string& content_name_a,
+             const std::string& channel_name_a,
+             const std::string& channel_name_aa,
+             const std::string& content_name_b,
+             const std::string& channel_name_b,
+             const std::string& channel_name_bb) {
+    Construct(port_allocator, next_message_id, local_name, start_protocol,
+              content_type, content_name_a, channel_name_a, channel_name_aa,
+              content_name_b, channel_name_b, channel_name_bb);
+  }
+
+  ~TestClient() {
+    if (session) {
+      session_manager->DestroySession(session);
+      EXPECT_EQ(1U, session_destroyed_count);
+    }
+    delete session_manager;
+    delete client;
+  }
+
+  void Construct(cricket::PortAllocator* pa,
+                 int* message_id,
+                 const std::string& lname,
+                 SignalingProtocol protocol,
+                 const std::string& cont_type,
+                 const std::string& cont_name_a,
+                 const std::string& chan_name_a,
+                 const std::string& chan_name_aa,
+                 const std::string& cont_name_b,
+                 const std::string& chan_name_b,
+                 const std::string& chan_name_bb) {
+    port_allocator_ = pa;
+    next_message_id = message_id;
+    local_name = lname;
+    start_protocol = protocol;
+    content_type = cont_type;
+    content_name_a = cont_name_a;
+    channel_name_a = chan_name_a;
+    channel_name_aa = chan_name_aa;
+    content_name_b = cont_name_b;
+    channel_name_b = chan_name_b;
+    channel_name_bb = chan_name_bb;
+    session_created_count = 0;
+    session_destroyed_count = 0;
+    session_remote_description_update_count = 0;
+    last_expected_sent_stanza = NULL;
+    session = NULL;
+    last_session_state = cricket::BaseSession::STATE_INIT;
+    chan_a = NULL;
+    chan_b = NULL;
+    blow_up_on_error = true;
+    error_count = 0;
+    if (!chan_name_aa.empty() || !chan_name_bb.empty()) {
+      chan_aa = NULL;
+      chan_bb = NULL;
+    }
+
+    session_manager = new cricket::SessionManager(port_allocator_);
     session_manager->SignalSessionCreate.connect(
         this, &TestClient::OnSessionCreate);
     session_manager->SignalSessionDestroy.connect(
@@ -816,15 +869,6 @@ class TestClient : public sigslot::has_slots<> {
     client = new TestSessionClient();
     session_manager->AddClient(content_type, client);
     EXPECT_EQ(client, session_manager->GetClient(content_type));
-  }
-
-  ~TestClient() {
-    if (session) {
-      session_manager->DestroySession(session);
-      EXPECT_EQ(1U, session_destroyed_count);
-    }
-    delete session_manager;
-    delete client;
   }
 
   uint32 sent_stanza_count() const {
@@ -838,6 +882,11 @@ class TestClient : public sigslot::has_slots<> {
   cricket::BaseSession::State session_state() const {
     EXPECT_EQ(last_session_state, session->state());
     return session->state();
+  }
+
+  void SetSessionState(cricket::BaseSession::State state) {
+    session->SetState(state);
+    EXPECT_EQ_WAIT(last_session_state, session->state(), kEventTimeout);
   }
 
   void CreateSession() {
@@ -891,6 +940,12 @@ class TestClient : public sigslot::has_slots<> {
     return channel != NULL && (channel_name == channel->name());
   }
 
+  cricket::TransportChannel* GetChannel(const std::string& content_name,
+                                        const std::string& channel_name) const {
+    ASSERT(session != NULL);
+    return session->GetChannel(content_name, channel_name);
+  }
+
   void OnSessionCreate(cricket::Session* created_session, bool initiate) {
     session_created_count += 1;
 
@@ -928,7 +983,7 @@ class TestClient : public sigslot::has_slots<> {
       error_count++;
     }
   }
-  
+
   void OnSessionRemoteDescriptionUpdate(cricket::BaseSession* session) {
     session_remote_description_update_count++;
   }
@@ -972,6 +1027,12 @@ class TestClient : public sigslot::has_slots<> {
         session->CreateChannel(content_name_a, channel_name_a));
     chan_b = new ChannelHandler(
         session->CreateChannel(content_name_b, channel_name_b));
+    if (chan_aa == NULL && chan_bb == NULL) {
+      chan_aa = new ChannelHandler(
+          session->CreateChannel(content_name_a, channel_name_aa));
+      chan_bb = new ChannelHandler(
+          session->CreateChannel(content_name_b, channel_name_bb));
+    }
   }
 
   int* next_message_id;
@@ -980,8 +1041,10 @@ class TestClient : public sigslot::has_slots<> {
   std::string content_type;
   std::string content_name_a;
   std::string channel_name_a;
+  std::string channel_name_aa;
   std::string content_name_b;
   std::string channel_name_b;
+  std::string channel_name_bb;
 
   uint32 session_created_count;
   uint32 session_destroyed_count;
@@ -991,11 +1054,13 @@ class TestClient : public sigslot::has_slots<> {
 
   cricket::SessionManager* session_manager;
   TestSessionClient* client;
-
+  cricket::PortAllocator* port_allocator_;
   cricket::Session* session;
   cricket::BaseSession::State last_session_state;
   ChannelHandler* chan_a;
+  ChannelHandler* chan_aa;
   ChannelHandler* chan_b;
+  ChannelHandler* chan_bb;
   bool blow_up_on_error;
   int error_count;
 };
@@ -1903,18 +1968,111 @@ class SessionTest : public testing::Test {
                 initiator->session_state());
     }
   }
+
+  void TestTransportMux() {
+    std::string content_type = cricket::NS_JINGLE_RTP;
+    std::string gingle_content_type = cricket::NS_GINGLE_VIDEO;
+    std::string content_name_a = cricket::CN_AUDIO;
+    std::string channel_name_a = "rtp";
+    std::string channel_name_aa = "rtcp";
+    std::string content_name_b = cricket::CN_VIDEO;
+    std::string channel_name_b = "video_rtp";
+    std::string channel_name_bb = "video_rtcp";
+    cricket::SignalingProtocol protocol = PROTOCOL_JINGLE;
+
+    talk_base::scoped_ptr<cricket::PortAllocator> allocator(
+        new TestPortAllocator());
+    int next_message_id = 0;
+
+    talk_base::scoped_ptr<TestClient> initiator(
+        new TestClient(allocator.get(), &next_message_id,
+                       kInitiator, protocol,
+                       content_type,
+                       content_name_a, channel_name_a, channel_name_aa,
+                       content_name_b, channel_name_b, channel_name_bb));
+
+    // First creating the offer and answer session descriptions required for
+    // testing.
+    cricket::SessionDescription* offer = NewTestSessionDescription(
+        gingle_content_type,
+        content_name_a, content_type,
+        content_name_b, content_type);
+    // Add group information to the offer
+    cricket::ContentGroup group(cricket::GN_TOGETHER);
+    group.AddContentName(content_name_a);
+    group.AddContentName(content_name_b);
+    EXPECT_TRUE(group.HasContentName(content_name_a));
+    EXPECT_TRUE(group.HasContentName(content_name_b));
+    offer->AddGroup(group);
+
+    // Creating answer for the offer.
+    cricket::SessionDescription* answer = NewTestSessionDescription(
+        gingle_content_type,
+        content_name_a, content_type,
+        content_name_b, content_type);
+    // Check if group "TOGETHER" exists in the offer. If it's present then
+    // remote supports muxing.
+    EXPECT_TRUE(offer->HasGroup(cricket::GN_TOGETHER));
+    const cricket::ContentGroup* group_offer =
+        offer->GetGroupByName(cricket::GN_TOGETHER);
+    // Not creating new copy in answer, for test we can use this for test.
+    answer->AddGroup(*group_offer);
+    EXPECT_TRUE(answer->HasGroup(cricket::GN_TOGETHER));
+
+    initiator->CreateSession();
+    EXPECT_TRUE(initiator->session->Initiate(
+        kResponder, offer));
+
+    EXPECT_TRUE(initiator->HasTransport(content_name_a));
+    EXPECT_TRUE(initiator->HasChannel(content_name_a, channel_name_a));
+    EXPECT_TRUE(initiator->HasChannel(content_name_a, channel_name_aa));
+    EXPECT_TRUE(initiator->HasTransport(content_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name_b, channel_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name_b, channel_name_bb));
+    // This test will not create initiator and responder. Manually change
+    // session state and invoke methods.
+    initiator->PrepareCandidates();
+    EXPECT_EQ(cricket::BaseSession::STATE_SENTINITIATE,
+              initiator->session_state());
+    // Now apply answer to the session and move session state to
+    // STATE_RECEIVEDACCEPT
+    initiator->session->set_remote_description(answer);
+    initiator->session->SetState(cricket::BaseSession::STATE_RECEIVEDACCEPT);
+    cricket::TransportChannel* chan_a =
+        initiator->GetChannel(content_name_a, channel_name_a);
+    cricket::TransportChannel* chan_b =
+            initiator->GetChannel(content_name_b, channel_name_b);
+    // Since we know these are TransportChannelProxy, type cast it.
+    cricket::TransportChannelProxy* proxy_chan_a =
+        static_cast<cricket::TransportChannelProxy*>(chan_a);
+    cricket::TransportChannelProxy* proxy_chan_b =
+            static_cast<cricket::TransportChannelProxy*>(chan_b);
+    EXPECT_EQ(proxy_chan_a->impl(), proxy_chan_b->impl());
+    cricket::TransportChannel* chan_aa =
+            initiator->GetChannel(content_name_a, channel_name_aa);
+        cricket::TransportChannel* chan_bb =
+                initiator->GetChannel(content_name_b, channel_name_bb);
+    cricket::TransportChannelProxy* proxy_chan_aa =
+        static_cast<cricket::TransportChannelProxy*>(chan_aa);
+    cricket::TransportChannelProxy* proxy_chan_bb =
+            static_cast<cricket::TransportChannelProxy*>(chan_bb);
+    EXPECT_EQ(proxy_chan_aa->impl(), proxy_chan_bb->impl());
+    // TODO - Add test code to send data after mux is enabled.
+  }
 };
 
 // For each of these, "X => Y = Z" means "if a client with protocol X
 // initiates to a client with protocol Y, they end up speaking protocol Z.
 
 // Gingle => Gingle = Gingle (with other content)
-TEST_F(SessionTest, GingleToGingleOtherContent) {
+// Disabled due to flakey pulse builds
+TEST_F(SessionTest, DISABLED_GingleToGingleOtherContent) {
   TestOtherContent(PROTOCOL_GINGLE, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
 // Gingle => Gingle = Gingle (with audio content)
-TEST_F(SessionTest, GingleToGingleAudioContent) {
+// Disabled due to flakey pulse builds
+TEST_F(SessionTest, DISABLED_GingleToGingleAudioContent) {
   TestAudioContent(PROTOCOL_GINGLE, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
@@ -2041,7 +2199,8 @@ TEST_F(SessionTest, JingleRejection) {
   TestRejection(PROTOCOL_JINGLE);
 }
 
-TEST_F(SessionTest, GingleGoodRedirect) {
+// Disabled due to flakey pulse builds
+TEST_F(SessionTest, DISABLED_GingleGoodRedirect) {
   TestGoodRedirect(PROTOCOL_GINGLE);
 }
 
@@ -2059,4 +2218,8 @@ TEST_F(SessionTest, JingleBadRedirect) {
 
 TEST_F(SessionTest, TestCandidatesInInitiateAndAccept) {
   TestCandidatesInInitiateAndAccept("Candidates in initiate/accept");
+}
+
+TEST_F(SessionTest, TestTransportMux) {
+  TestTransportMux();
 }

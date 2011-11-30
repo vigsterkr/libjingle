@@ -39,7 +39,7 @@
 #include "talk/base/physicalsocketserver.h"
 #include "talk/base/socketaddresspair.h"
 #include "talk/base/thread.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 
 namespace talk_base {
 

@@ -999,20 +999,26 @@ void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
 }
 
 bool CallClient::InMuc() {
-  return FirstMucJid().IsValid();
+  const buzz::Jid* muc_jid = FirstMucJid();
+  if (!muc_jid) return false;
+  return muc_jid->IsValid();
 }
 
-const buzz::Jid& CallClient::FirstMucJid() {
-  return mucs_.begin()->first;
+const buzz::Jid* CallClient::FirstMucJid() {
+  if (mucs_.empty()) return NULL;
+  return &(mucs_.begin()->first);
 }
 
 void CallClient::LeaveMuc(const std::string& room) {
   buzz::Jid room_jid;
+  const buzz::Jid* muc_jid = FirstMucJid();
   if (room.length() > 0) {
     room_jid = buzz::Jid(room);
   } else if (mucs_.size() > 0) {
     // leave the first MUC if no JID specified
-    room_jid = FirstMucJid();
+    if (muc_jid) {
+      room_jid = *(muc_jid);
+    }
   }
 
   if (!room_jid.IsValid()) {

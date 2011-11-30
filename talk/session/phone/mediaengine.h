@@ -40,8 +40,9 @@
 #include "talk/session/phone/devicemanager.h"
 #include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/mediacommon.h"
-#include "talk/session/phone/mediaprocessorinterface.h"
+#include "talk/session/phone/videoprocessor.h"
 #include "talk/session/phone/videocommon.h"
+#include "talk/session/phone/voiceprocessor.h"
 
 namespace cricket {
 

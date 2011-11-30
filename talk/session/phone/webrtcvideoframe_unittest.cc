@@ -60,6 +60,8 @@ TEST_WEBRTCVIDEOFRAME(ConstructBlack)
 // TEST_WEBRTCVIDEOFRAME(ConvertToBGRABuffer)
 // TEST_WEBRTCVIDEOFRAME(ConvertToABGRBuffer)
 TEST_WEBRTCVIDEOFRAME(ConvertToARGBBuffer)
+//TEST_WEBRTCVIDEOFRAME(ConvertToYUY2Buffer)
+//TEST_WEBRTCVIDEOFRAME(ConvertToI422Buffer)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerGRBG)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerGBRG)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerBGGR)
@@ -75,7 +77,7 @@ TEST_WEBRTCVIDEOFRAME(MakeExclusive)
 // These functions test implementation-specific details.
 TEST_F(WebRtcVideoFrameTest, AttachAndRelease) {
   cricket::WebRtcVideoFrame frame1, frame2;
-  ASSERT_TRUE(LoadFrame(&frame1));
+  ASSERT_TRUE(LoadFrameNoRepeat(&frame1));
   frame2.Attach(frame1.frame()->Buffer(), frame1.frame()->Size(),
                 kWidth, kHeight, 1, 1,
                 frame1.GetElapsedTime(), frame1.GetTimeStamp(), 0);
@@ -91,7 +93,7 @@ TEST_F(WebRtcVideoFrameTest, AttachAndRelease) {
 
 TEST_F(WebRtcVideoFrameTest, Transfer) {
   cricket::WebRtcVideoFrame frame1, frame2;
-  ASSERT_TRUE(LoadFrame(&frame1));
+  ASSERT_TRUE(LoadFrameNoRepeat(&frame1));
   uint8* buffer;
   size_t size;
   frame1.Detach(&buffer, &size),

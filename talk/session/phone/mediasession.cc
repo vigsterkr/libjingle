@@ -282,11 +282,7 @@ MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
 }
 
 SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
-    const MediaSessionOptions& options) {
-  return CreateOffer(options, NULL);
-}
 
-SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const MediaSessionOptions& options,
     const SessionDescription* current_description) {
   scoped_ptr<SessionDescription> offer(new SessionDescription());
@@ -395,12 +391,6 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
   }
 
   return offer.release();
-}
-
-SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
-    const SessionDescription* offer,
-    const MediaSessionOptions& options) {
-  return CreateAnswer(offer, options, NULL);
 }
 
 SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
@@ -589,3 +579,5 @@ const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc) {
 }
 
 }  // namespace cricket
+
+

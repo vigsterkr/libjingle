@@ -29,10 +29,6 @@
 
 namespace cricket {
 
-// TODO: Remove the duplicate kDefaultDeviceName
-// Initialize to empty string.
-const char DeviceManagerInterface::kDefaultDeviceName[] = "";
-
 DeviceManagerInterface* DeviceManagerFactory::Create() {
   return new DummyDeviceManager();
 }

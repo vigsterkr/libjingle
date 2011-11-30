@@ -52,6 +52,9 @@ typedef struct _TOKEN_MANDATORY_LABEL {
 #include "talk/base/stringutils.h"
 #include "talk/base/basictypes.h"
 
+const char* inet_ntop(int af, const void *src, char* dst, socklen_t size);
+int inet_pton(int af, const char* src, void *dst);
+
 namespace talk_base {
 
 ///////////////////////////////////////////////////////////////////////////////

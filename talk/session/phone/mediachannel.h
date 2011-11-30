@@ -149,7 +149,11 @@ struct VoiceSenderInfo {
         ext_seqnum(0),
         rtt_ms(0),
         jitter_ms(0),
-        audio_level(0) {
+        audio_level(0),
+        echo_delay_median_ms(0),
+        echo_delay_std_ms(0),
+        echo_return_loss(0),
+        echo_return_loss_enhancement(0) {
   }
 
   uint32 ssrc;
@@ -162,6 +166,10 @@ struct VoiceSenderInfo {
   int rtt_ms;
   int jitter_ms;
   int audio_level;
+  int echo_delay_median_ms;
+  int echo_delay_std_ms;
+  int echo_return_loss;
+  int echo_return_loss_enhancement;
 };
 
 struct VoiceReceiverInfo {

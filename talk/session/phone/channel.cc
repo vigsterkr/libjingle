@@ -149,6 +149,7 @@ bool BaseChannel::Mute(bool mute) {
 bool BaseChannel::RemoveStream(uint32 ssrc) {
   StreamMessageData data(ssrc, 0);
   Send(MSG_REMOVESTREAM, &data);
+  ssrc_filter()->RemoveStream(ssrc);
   return true;
 }
 
@@ -344,6 +345,14 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
     LOG(LS_ERROR) << "Dropping incoming " << content_name_ << " "
                   << PacketType(rtcp) << " packet: wrong size="
                   << packet->length();
+    return;
+  }
+
+  // If this channel is suppose to handle RTP data, that is determined by
+  // checking against ssrc filter. This is necessary to do it here to avoid
+  // double decryption.
+  if (ssrc_filter_.IsActive() &&
+      !ssrc_filter_.DemuxPacket(packet->data(), packet->length(), rtcp)) {
     return;
   }
 
@@ -550,6 +559,25 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
   return ret;
 }
 
+bool BaseChannel::SetSsrcMux_w(bool enable,
+                               const MediaContentDescription* content,
+                               ContentAction action,
+                               ContentSource src) {
+  bool ret = true;
+  if (action == CA_OFFER) {
+    ret = ssrc_filter_.SetOffer(enable, src);
+    if (ret && src == CS_REMOTE) {  // if received offer with ssrc
+      ret = ssrc_filter_.AddStream(content->ssrc());
+    }
+  } else if (action == CA_ANSWER) {
+    ret = ssrc_filter_.SetAnswer(enable, src);
+    if (ret && src == CS_REMOTE && ssrc_filter_.IsActive()) {
+      ret = ssrc_filter_.AddStream(content->ssrc());
+    }
+  }
+  return ret;
+}
+
 void BaseChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
     case MSG_ENABLE:
@@ -671,6 +699,7 @@ bool VoiceChannel::Init() {
 bool VoiceChannel::AddStream(uint32 ssrc) {
   StreamMessageData data(ssrc, 0);
   Send(MSG_ADDSTREAM, &data);
+  ssrc_filter()->AddStream(ssrc);
   return true;
 }
 
@@ -819,6 +848,10 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_LOCAL);
   }
+  // Set SSRC mux filter
+  if (ret) {
+    ret = SetSsrcMux_w(audio->ssrc_set(), content, action, CS_LOCAL);
+  }
   // Set local audio codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(audio->codecs());
@@ -854,6 +887,11 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_REMOTE);
   }
+  // Set SSRC mux filter
+  if (ret) {
+    ret = SetSsrcMux_w(audio->ssrc_set(), content, action, CS_REMOTE);
+  }
+
   // Set remote video codecs (what the other side wants to receive).
   if (ret) {
     ret = media_channel()->SetSendCodecs(audio->codecs());
@@ -971,7 +1009,6 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
       delete data;
       break;
     }
-
     default:
       BaseChannel::OnMessage(pmsg);
       break;
@@ -1074,6 +1111,7 @@ VideoChannel::~VideoChannel() {
 bool VideoChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
   StreamMessageData data(ssrc, voice_ssrc);
   Send(MSG_ADDSTREAM, &data);
+  ssrc_filter()->AddStream(ssrc);
   return true;
 }
 
@@ -1173,6 +1211,11 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_LOCAL);
   }
+  // Set SSRC mux filter
+  if (ret) {
+    ret = SetSsrcMux_w(video->ssrc_set(), content, action, CS_LOCAL);
+  }
+
   // Set local video codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(video->codecs());
@@ -1207,6 +1250,10 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   // Set remote RTCP mux parameters.
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_REMOTE);
+  }
+  // Set SSRC mux filter
+  if (ret) {
+    ret = SetSsrcMux_w(video->ssrc_set(), content, action, CS_REMOTE);
   }
   // Set remote video codecs (what the other side wants to receive).
   if (ret) {

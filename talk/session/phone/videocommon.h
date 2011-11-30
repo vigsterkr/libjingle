@@ -31,7 +31,7 @@
 #include <string>
 
 #include "talk/base/basictypes.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 
 namespace cricket {
 
@@ -62,7 +62,11 @@ inline std::string GetFourccName(uint32 fourcc) {
 enum FourCC {
   // Canonical fourcc codes used in our code.
   FOURCC_I420 = FOURCC('I', '4', '2', '0'),
+  FOURCC_I422 = FOURCC('I', '4', '2', '2'),
+  FOURCC_I444 = FOURCC('I', '4', '4', '4'),
   FOURCC_YV12 = FOURCC('Y', 'V', '1', '2'),
+  FOURCC_YV16 = FOURCC('Y', 'V', '1', '6'),
+  FOURCC_YV24 = FOURCC('Y', 'V', '2', '4'),
   FOURCC_YUY2 = FOURCC('Y', 'U', 'Y', '2'),
   FOURCC_UYVY = FOURCC('U', 'Y', 'V', 'Y'),
   FOURCC_M420 = FOURCC('M', '4', '2', '0'),
@@ -86,6 +90,8 @@ enum FourCC {
   // equivalents by CanonicalFourCC().
   FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420
   FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420
+  FOURCC_YU16 = FOURCC('Y', 'U', '1', '6'),  // Alias for I422
+  FOURCC_YU24 = FOURCC('Y', 'U', '2', '4'),  // Alias for I444
   FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2
   FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2 on Mac
   FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY

@@ -64,34 +64,6 @@ const uint32 kUpdateNetworksMessage = 1;
 // Fetch list of networks every two seconds.
 const int kNetworksUpdateIntervalMs = 2000;
 
-#ifdef POSIX
-// Gets the default gateway for the specified interface.
-uint32 GetDefaultGateway(const std::string& name) {
-#ifdef OSX
-  // TODO: /proc/net/route doesn't exist,
-  // Use ioctl to get the routing table
-  return 0xFFFFFFFF;
-#endif
-
-  uint32 gateway_ip = 0;
-
-  talk_base::FileStream fs;
-  if (fs.Open("/proc/net/route", "r", NULL)) {
-    std::string line;
-    while (fs.ReadLine(&line) == talk_base::SR_SUCCESS && gateway_ip == 0) {
-      char iface[16];
-      unsigned int ip, gw;
-      if (sscanf(line.c_str(), "%7s %8X %8X", iface, &ip, &gw) == 3 &&
-          name == iface && ip == 0) {
-        gateway_ip = ntohl(gw);
-      }
-    }
-  }
-
-  return gateway_ip;
-}
-#endif  // POSIX
-
 bool CompareNetworks(const Network* a, const Network* b) {
   return a->name() < b->name();
 }
@@ -146,11 +118,6 @@ void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks,
         network->set_ip(list[i]->ip());
       }
 
-      if (network->gateway_ip() != list[i]->gateway_ip()) {
-        changed = true;
-        network->set_gateway_ip(list[i]->gateway_ip());
-      }
-
       delete list[i];
     }
 
@@ -201,8 +168,7 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
     if (inaddr->sin_family == AF_INET) {
       uint32 ip = ntohl(inaddr->sin_addr.s_addr);
       scoped_ptr<Network> network(
-          new Network(ptr->ifr_name, ptr->ifr_name, ip,
-                      GetDefaultGateway(ptr->ifr_name)));
+          new Network(ptr->ifr_name, ptr->ifr_name, ip));
       network->set_ignored(IsIgnoredNetwork(*network));
       if (include_ignored || !network->ignored()) {
         networks->push_back(network.release());
@@ -261,8 +227,7 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
 #endif  // !_DEBUG
 
     scoped_ptr<Network> network(new Network(name, info->Description,
-        SocketAddress::StringToIP(info->IpAddressList.IpAddress.String),
-        SocketAddress::StringToIP(info->GatewayList.IpAddress.String)));
+        SocketAddress::StringToIP(info->IpAddressList.IpAddress.String)));
     network->set_ignored(IsIgnoredNetwork(*network));
     if (include_ignored || !network->ignored()) {
       networks->push_back(network.release());
@@ -342,17 +307,14 @@ void BasicNetworkManager::DumpNetworks(bool include_ignored) {
     const Network* network = list[i];
     if (!network->ignored() || include_ignored) {
       LOG(LS_INFO) << network->ToString() << ": " << network->description()
-                   << ", Gateway="
-                   << SocketAddress::IPToString(network->gateway_ip())
                    << ((network->ignored()) ? ", Ignored" : "");
     }
   }
 }
 
-Network::Network(const std::string& name, const std::string& desc,
-                 uint32 ip, uint32 gateway_ip)
-    : name_(name), description_(desc), ip_(ip), gateway_ip_(gateway_ip),
-      ignored_(false), uniform_numerator_(0), uniform_denominator_(0),
+Network::Network(const std::string& name, const std::string& desc, uint32 ip)
+    : name_(name), description_(desc), ip_(ip), ignored_(false),
+      uniform_numerator_(0), uniform_denominator_(0),
       exponential_numerator_(0), exponential_denominator_(0) {
 }
 

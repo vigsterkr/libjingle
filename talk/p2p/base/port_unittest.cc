@@ -157,7 +157,7 @@ class PortTest : public testing::Test {
       : main_(talk_base::Thread::Current()),
         pss_(new talk_base::PhysicalSocketServer),
         ss_(new talk_base::VirtualSocketServer(pss_.get())),
-        ss_scope_(ss_.get()), network_("unittest", "unittest", 0, 0),
+        ss_scope_(ss_.get()), network_("unittest", "unittest", 0),
         socket_factory_(talk_base::Thread::Current()),
         nat_factory1_(ss_.get(), kNatAddr1),
         nat_factory2_(ss_.get(), kNatAddr2),

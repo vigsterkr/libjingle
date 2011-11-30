@@ -33,6 +33,8 @@
 
 #include "talk/base/basictypes.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/window.h"
+#include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/videocommon.h"
 #include "talk/session/phone/videocapturer.h"
 
@@ -145,6 +147,34 @@ class VideoCapturerListener : public sigslot::has_slots<> {
   int frame_height_;
   uint32 frame_size_;
   bool resolution_changed_;
+};
+
+class ScreencastEventCatcher : public sigslot::has_slots<> {
+ public:
+  ScreencastEventCatcher() : ssrc_(0), ev_(talk_base::WE_RESIZE) { }
+  uint32 ssrc() const { return ssrc_; }
+  talk_base::WindowEvent event() const { return ev_; }
+  void OnEvent(uint32 ssrc, talk_base::WindowEvent ev) {
+    ssrc_ = ssrc;
+    ev_ = ev;
+  }
+ private:
+  uint32 ssrc_;
+  talk_base::WindowEvent ev_;
+};
+
+class VideoMediaErrorCatcher : public sigslot::has_slots<> {
+ public:
+  VideoMediaErrorCatcher() : ssrc_(0), error_(VideoMediaChannel::ERROR_NONE) { }
+  uint32 ssrc() const { return ssrc_; }
+  VideoMediaChannel::Error error() const { return error_; }
+  void OnError(uint32 ssrc, VideoMediaChannel::Error error) {
+    ssrc_ = ssrc;
+    error_ = error;
+  }
+ private:
+  uint32 ssrc_;
+  VideoMediaChannel::Error error_;
 };
 
 // Returns the absolute path to a file in the testdata/ directory.

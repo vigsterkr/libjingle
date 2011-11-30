@@ -43,6 +43,7 @@
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamonitor.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
+#include "talk/session/phone/ssrcmuxfilter.h"
 #include "talk/session/phone/srtpfilter.h"
 
 namespace cricket {
@@ -163,6 +164,8 @@ class BaseChannel
     return !SignalRecvPacket.is_empty();
   }
 
+  SsrcMuxFilter* ssrc_filter() { return &ssrc_filter_; }
+
  protected:
   MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
@@ -250,6 +253,11 @@ class BaseChannel
                  ContentSource src);
   bool SetRtcpMux_w(bool enable, ContentAction action, ContentSource src);
 
+  // SSRC mux handling methods.
+  bool AddSsrcMux_w(const MediaContentDescription* content);
+  bool SetSsrcMux_w(bool enable, const MediaContentDescription* content,
+                    ContentAction action, ContentSource src);
+
   struct SetBandwidthData : public talk_base::MessageData {
     explicit SetBandwidthData(int value) : value(value), result(false) {}
     int value;
@@ -281,6 +289,7 @@ class BaseChannel
   TransportChannel *rtcp_transport_channel_;
   SrtpFilter srtp_filter_;
   RtcpMuxFilter rtcp_mux_filter_;
+  SsrcMuxFilter ssrc_filter_;
   talk_base::scoped_ptr<SocketMonitor> socket_monitor_;
   bool enabled_;
   bool writable_;
@@ -530,6 +539,7 @@ class VideoChannel : public BaseChannel {
                                        talk_base::WindowEvent event);
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
+
 
   VoiceChannel *voice_channel_;
   VideoRenderer *renderer_;

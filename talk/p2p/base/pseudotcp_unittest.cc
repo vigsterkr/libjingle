@@ -32,7 +32,7 @@
 #include "talk/base/messagehandler.h"
 #include "talk/base/stream.h"
 #include "talk/base/thread.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 #include "talk/p2p/base/pseudotcp.h"
 
 using cricket::PseudoTcp;

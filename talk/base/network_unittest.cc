@@ -32,16 +32,9 @@
 namespace talk_base {
 
 // A network that should not be ignored.
-static const Network kNetwork1("test1", "Test Network Adapter 1",
-                               0x12345678, 0x12345601);
+static const Network kNetwork1("test1", "Test Network Adapter 1", 0x12345678);
 // A network that should be ignored (IP is 0.1.0.4).
-static const Network kNetwork2("test2", "Test Network Adapter 2",
-                               0x00010004, 0x01000000);
-// A network that should not be ignored (IP is valid, but gateway is 0.0.0.1).
-// Previously, we attempted to ignore networks with no default gateway,
-// but if an explicit route is set, no default gateway is needed.
-static const Network kNetwork3("test3", "Test Network Adapter 3",
-                               0x55667788, 0x01000000);
+static const Network kNetwork2("test2", "Test Network Adapter 2", 0x00010004);
 
 class NetworkTest : public testing::Test, public sigslot::has_slots<>  {
  public:
@@ -72,7 +65,6 @@ TEST_F(NetworkTest, TestNetworkConstruct) {
   EXPECT_EQ("test1", kNetwork1.name());
   EXPECT_EQ("Test Network Adapter 1", kNetwork1.description());
   EXPECT_EQ(0x12345678U, kNetwork1.ip());
-  EXPECT_EQ(0x12345601U, kNetwork1.gateway_ip());
   EXPECT_FALSE(kNetwork1.ignored());
 }
 
@@ -80,7 +72,6 @@ TEST_F(NetworkTest, TestNetworkConstruct) {
 TEST_F(NetworkTest, TestNetworkIgnore) {
   EXPECT_FALSE(IsIgnoredNetwork(kNetwork1));
   EXPECT_TRUE(IsIgnoredNetwork(kNetwork2));
-  EXPECT_FALSE(IsIgnoredNetwork(kNetwork3));
 }
 
 // Test that UpdateNetworks succeeds.

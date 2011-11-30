@@ -57,7 +57,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/nethelpers.h"
 #include "talk/base/physicalsocketserver.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 #include "talk/base/winping.h"
 #include "talk/base/win32socketinit.h"
 

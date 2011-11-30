@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2008, Google Inc.
+ * Copyright 2008 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,8 @@ TEST(VideoCommonTest, TestCanonicalFourCC) {
   EXPECT_EQ(FOURCC_ANY, CanonicalFourCC(FOURCC_ANY));
   // Aliases are translated to the canonical equivalent.
   EXPECT_EQ(FOURCC_I420, CanonicalFourCC(FOURCC_IYUV));
+  EXPECT_EQ(FOURCC_I422, CanonicalFourCC(FOURCC_YU16));
+  EXPECT_EQ(FOURCC_I444, CanonicalFourCC(FOURCC_YU24));
   EXPECT_EQ(FOURCC_24BG, CanonicalFourCC(FOURCC_BGR3));
   EXPECT_EQ(FOURCC_RAW, CanonicalFourCC(FOURCC_RGB3));
   EXPECT_EQ(FOURCC_MJPG, CanonicalFourCC(FOURCC_DMB1));

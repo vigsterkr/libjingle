@@ -39,7 +39,6 @@
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stream.h"
 #include "talk/session/phone/channel.h"
-#include "talk/session/phone/mediaprocessorinterface.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/webrtccommon.h"
 #include "talk/session/phone/webrtcvoe.h"
@@ -78,6 +77,7 @@ class WebRtcMonitorStream : public webrtc::OutStream {
 class AudioDeviceModule;
 class VoETraceWrapper;
 class VoEWrapper;
+class VoiceProcessor;
 class WebRtcSoundclipMedia;
 class WebRtcVoiceMediaChannel;
 

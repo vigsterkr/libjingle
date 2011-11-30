@@ -28,7 +28,7 @@
 #include "talk/base/gunit.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 #include "talk/p2p/base/stunrequest.h"
 
 using namespace cricket;

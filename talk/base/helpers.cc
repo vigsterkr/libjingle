@@ -42,7 +42,7 @@
 #include "talk/base/base64.h"
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 
 // Protect against max macro inclusion.
 #undef max

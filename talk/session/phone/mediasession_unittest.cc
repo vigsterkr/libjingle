@@ -167,7 +167,7 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioOffer) {
   f1_.set_secure(SEC_ENABLED);
   talk_base::scoped_ptr<SessionDescription> offer(
-      f1_.CreateOffer(MediaSessionOptions()));
+      f1_.CreateOffer(MediaSessionOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   const ContentInfo* ac = offer->GetContentByName("audio");
   const ContentInfo* vc = offer->GetContentByName("video");
@@ -190,7 +190,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoOffer) {
   opts.has_video = true;
   f1_.set_secure(SEC_ENABLED);
   talk_base::scoped_ptr<SessionDescription>
-      offer(f1_.CreateOffer(opts));
+      offer(f1_.CreateOffer(opts, NULL));
   ASSERT_TRUE(offer.get() != NULL);
   const ContentInfo* ac = offer->GetContentByName("audio");
   const ContentInfo* vc = offer->GetContentByName("video");
@@ -221,10 +221,10 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswer) {
   f1_.set_secure(SEC_ENABLED);
   f2_.set_secure(SEC_ENABLED);
   talk_base::scoped_ptr<SessionDescription> offer(
-      f1_.CreateOffer(MediaSessionOptions()));
+      f1_.CreateOffer(MediaSessionOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   talk_base::scoped_ptr<SessionDescription> answer(
-      f2_.CreateAnswer(offer.get(), MediaSessionOptions()));
+      f2_.CreateAnswer(offer.get(), MediaSessionOptions(), NULL));
   const ContentInfo* ac = answer->GetContentByName("audio");
   const ContentInfo* vc = answer->GetContentByName("video");
   ASSERT_TRUE(ac != NULL);
@@ -246,10 +246,10 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswer) {
   opts.has_video = true;
   f1_.set_secure(SEC_ENABLED);
   f2_.set_secure(SEC_ENABLED);
-  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts));
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
   ASSERT_TRUE(offer.get() != NULL);
   talk_base::scoped_ptr<SessionDescription> answer(
-      f2_.CreateAnswer(offer.get(), opts));
+      f2_.CreateAnswer(offer.get(), opts, NULL));
   const ContentInfo* ac = answer->GetContentByName("audio");
   const ContentInfo* vc = answer->GetContentByName("video");
   ASSERT_TRUE(ac != NULL);
@@ -278,10 +278,10 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswerToVideo) {
   MediaSessionOptions opts;
   opts.has_video = true;
   talk_base::scoped_ptr<SessionDescription>
-      offer(f1_.CreateOffer(opts));
+      offer(f1_.CreateOffer(opts, NULL));
   ASSERT_TRUE(offer.get() != NULL);
   talk_base::scoped_ptr<SessionDescription> answer(
-      f2_.CreateAnswer(offer.get(), MediaSessionOptions()));
+      f2_.CreateAnswer(offer.get(), MediaSessionOptions(), NULL));
   const ContentInfo* ac = answer->GetContentByName("audio");
   const ContentInfo* vc = answer->GetContentByName("video");
   ASSERT_TRUE(ac != NULL);
@@ -300,8 +300,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoOffer) {
   opts.AddStream(MEDIA_TYPE_AUDIO, kAudioTrack2, kMediaStream1);
 
   f1_.set_secure(SEC_ENABLED);
-  talk_base::scoped_ptr<SessionDescription>
-      offer(f1_.CreateOffer(opts));
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
 
   ASSERT_TRUE(offer.get() != NULL);
   const ContentInfo* ac = offer->GetContentByName("audio");
@@ -395,7 +394,8 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   offer_opts.has_video = true;
   f1_.set_secure(SEC_ENABLED);
   f2_.set_secure(SEC_ENABLED);
-  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(offer_opts));
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(offer_opts,
+                                                                  NULL));
 
   MediaSessionOptions opts;
   opts.AddStream(MEDIA_TYPE_VIDEO, kVideoTrack1, kMediaStream1);
@@ -403,7 +403,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   opts.AddStream(MEDIA_TYPE_AUDIO, kAudioTrack2, kMediaStream1);
 
   talk_base::scoped_ptr<SessionDescription>
-      answer(f2_.CreateAnswer(offer.get(), opts));
+      answer(f2_.CreateAnswer(offer.get(), opts, NULL));
 
   ASSERT_TRUE(answer.get() != NULL);
   const ContentInfo* ac = answer->GetContentByName("audio");

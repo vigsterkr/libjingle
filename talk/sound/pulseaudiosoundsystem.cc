@@ -39,7 +39,7 @@
 #include "talk/base/fileutils.h"  // for GetApplicationName()
 #include "talk/base/logging.h"
 #include "talk/base/worker.h"
-#include "talk/base/time.h"
+#include "talk/base/timeutils.h"
 #include "talk/sound/sounddevicelocator.h"
 #include "talk/sound/soundinputstreaminterface.h"
 #include "talk/sound/soundoutputstreaminterface.h"

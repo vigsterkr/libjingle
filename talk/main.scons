@@ -76,16 +76,13 @@ DeclareBit('build_platform_64bit', 'Platform of the build machine is 64-bit')
 if platform.architecture()[0] == "64bit":
   root_env.SetBits('build_platform_64bit')
 
-# This bit denotes that an env is for pure 64-bit builds. When set, all build
-# artifacts will be 64-bit. When unset, we will still produce some 64-bit
-# artifacts on 64-bit Linux via the legacy also64bit setting on our targets.
-# When the pure 64-bit build is considered stable, the also64bit setting will go
-# away.
+# This bit denotes that an env is for 64-bit builds. When set, all build
+# artifacts will be 64-bit. When unset, all build artifacts will be 32-bit.
 DeclareBit('host_platform_64bit', 'Platform of the host machine (where artifacts will execute) is 64-bit')
 
-def same_arch(env):
-  """Whether the host machine and build machine architectures match."""
-  return env.Bit('host_platform_64bit') == env.Bit('build_platform_64bit')
+def CrossBuilding(env):
+  return env.Bit('host_platform_64bit') != env.Bit('build_platform_64bit')
+root_env.AddMethod(CrossBuilding)
 
 DeclareBit('use_static_openssl', 'Build OpenSSL as a static library')
 
@@ -478,16 +475,24 @@ def gen_linux_x86(base_env, type_suffix, desc_suffix):
   linux_env.EnableFeatureWherePackagePresent('have_libpulse',
                                              'HAVE_LIBPULSE',
                                              'libpulse')
-  # Until the pure 64-bit build has had time to bake, we leave the funky mixed
-  # 32/64 build as the default.
-  #if same_arch(linux_env):
-  if not linux_env.Bit('host_platform_64bit'):
-    dbg_groups = ['default', 'all']
+
+  groups = ['all']
+  if not linux_env.CrossBuilding():
+    groups = groups + ['all-native']
+    # The native-arch dbg build is the default.
+    dbg_groups = groups + ['default']
+    native_desc = ', native '
+    # No suffix for native modes.
+    type_suffix = ''
   else:
-    dbg_groups = ['all']
+    groups = groups + ['all-cross']
+    dbg_groups = groups
+    native_desc = ', cross-built for '
+
   linux_dbg_env = linux_env.Clone(
     BUILD_TYPE = 'dbg' + type_suffix,
-    BUILD_TYPE_DESCRIPTION = 'Linux debug build' + desc_suffix,
+    BUILD_TYPE_DESCRIPTION = 'Linux debug build%s%s' % (native_desc,
+        desc_suffix),
     BUILD_GROUPS = dbg_groups,
     tools = ['target_debug'],
   )
@@ -497,8 +502,9 @@ def gen_linux_x86(base_env, type_suffix, desc_suffix):
 
   linux_opt_env = linux_env.Clone(
     BUILD_TYPE = 'opt' + type_suffix,
-    BUILD_TYPE_DESCRIPTION = 'Linux optimized build' + desc_suffix,
-    BUILD_GROUPS = ['all'],
+    BUILD_TYPE_DESCRIPTION = 'Linux optimized build%s%s' % (native_desc,
+        desc_suffix),
+    BUILD_GROUPS = groups,
     tools = ['target_optimized'],
   )
   # Remove -O2 set by hammer, which is not what we want.
@@ -506,8 +512,8 @@ def gen_linux_x86(base_env, type_suffix, desc_suffix):
   linux_opt_env.Append(CCFLAGS = ['-Os'])
   envs.append(linux_opt_env)
 
-gen_linux_x86(linux_x86_32_env, '', '')
-gen_linux_x86(linux_x86_64_env, '64', ' (64-bit)')
+gen_linux_x86(linux_x86_32_env, '32', '32-bit')
+gen_linux_x86(linux_x86_64_env, '64', '64-bit')
 
 
 

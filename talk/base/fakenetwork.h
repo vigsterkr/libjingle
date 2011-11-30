@@ -89,8 +89,7 @@ class FakeNetworkManager : public NetworkManagerBase,
     std::vector<Network*> networks;
     for (std::vector<SocketAddress>::iterator it = ifaces_.begin();
          it != ifaces_.end(); ++it) {
-      networks.push_back(new Network(it->hostname(), it->hostname(),
-                                     it->ip(), 0));
+      networks.push_back(new Network(it->hostname(), it->hostname(), it->ip()));
     }
     MergeNetworkList(networks, true);
   }

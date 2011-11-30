@@ -65,7 +65,7 @@ class RelayPortTest : public testing::Test,
         virtual_socket_server_(new talk_base::VirtualSocketServer(
             physical_socket_server_.get())),
         ss_scope_(virtual_socket_server_.get()),
-        network_("unittest", "unittest", 0, 0),
+        network_("unittest", "unittest", 0),
         socket_factory_(talk_base::Thread::Current()),
         username_(talk_base::CreateRandomString(16)),
         password_(talk_base::CreateRandomString(16)),

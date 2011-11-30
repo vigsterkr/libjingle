@@ -57,7 +57,7 @@ void AsyncResolver::OnWorkDone() {
   }
 }
 
-#if defined(WIN32) || defined(ANDROID)
+#if defined(WIN32) || defined(ANDROID) || defined(OPENBSD)
 static hostent* DeepCopyHostent(const hostent* ent) {
   // Get the total number of bytes we need to copy, and allocate our buffer.
   int num_aliases = 0, num_addrs = 0;
@@ -168,6 +168,13 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
 #elif defined(OSX) || defined(IOS)
   // Mac OS returns an object with everything allocated.
   result = getipnodebyname(hostname, AF_INET, AI_DEFAULT, herrno);
+#elif defined(OPENBSD)
+  hostent* ent = gethostbyname(hostname);
+  if (!ent) {
+    return NULL;
+  }
+  result = DeepCopyHostent(ent);
+  *herrno = 0;
 #else
 #error "I don't know how to do gethostbyname safely on your system."
 #endif

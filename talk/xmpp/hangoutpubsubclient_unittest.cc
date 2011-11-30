@@ -226,12 +226,17 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
       "        <pre:presentation-item xmlns:pre='google:presenter'"
       "          pre:presentation-type='s'/>"
       "      </item>"
+      "      <item id='12347'>"
+      "        <presenter xmlns='google:presenter' nick='presenting-nick2'/>"
+      "        <pre:presentation-item xmlns:pre='google:presenter'"
+      "          pre:presentation-type='s'/>"
+      "      </item>"
       "    </items>"
       "  </pubsub>"
       "</iq>";
 
   xmpp_client->HandleStanza(buzz::XmlElement::ForStr(presenter_response));
-  EXPECT_EQ("presenting-nick", listener->last_presenter_nick);
+  EXPECT_EQ("presenting-nick2", listener->last_presenter_nick);
   EXPECT_FALSE(listener->last_was_presenting);
   EXPECT_TRUE(listener->last_is_presenting);
 
@@ -257,11 +262,11 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
   EXPECT_FALSE(listener->last_was_recording);
   EXPECT_TRUE(listener->last_is_recording);
 
-  std::string incoming_presenter_retracts_message =
+  std::string incoming_presenter_resets_message =
       "<message xmlns='jabber:client' from='room@domain.com'>"
       "  <event xmlns='http://jabber.org/protocol/pubsub#event'>"
       "    <items node='google:presenter'>"
-      "      <item id='12347'>"
+      "      <item id='12348'>"
       "        <presenter xmlns='google:presenter' nick='presenting-nick'/>"
       "        <pre:presentation-item xmlns:pre='google:presenter'"
       "          pre:presentation-type='o'/>"
@@ -271,8 +276,23 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
       "</message>";
 
   xmpp_client->HandleStanza(
-      buzz::XmlElement::ForStr(incoming_presenter_retracts_message));
+      buzz::XmlElement::ForStr(incoming_presenter_resets_message));
   EXPECT_EQ("presenting-nick", listener->last_presenter_nick);
+  EXPECT_TRUE(listener->last_was_presenting);
+  EXPECT_FALSE(listener->last_is_presenting);
+
+  std::string incoming_presenter_retracts_message =
+      "<message xmlns='jabber:client' from='room@domain.com'>"
+      "  <event xmlns='http://jabber.org/protocol/pubsub#event'>"
+      "    <items node='google:presenter'>"
+      "      <retract id='12347'/>"
+      "    </items>"
+      "  </event>"
+      "</message>";
+
+  xmpp_client->HandleStanza(
+      buzz::XmlElement::ForStr(incoming_presenter_retracts_message));
+  EXPECT_EQ("presenting-nick2", listener->last_presenter_nick);
   EXPECT_TRUE(listener->last_was_presenting);
   EXPECT_FALSE(listener->last_is_presenting);
 

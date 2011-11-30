@@ -28,9 +28,12 @@
 #ifndef TALK_SESSION_PHONE_FAKEMEDIAPROCESSOR_H_
 #define TALK_SESSION_PHONE_FAKEMEDIAPROCESSOR_H_
 
-#include "talk/session/phone/mediaprocessorinterface.h"
+#include "talk/session/phone/videoprocessor.h"
+#include "talk/session/phone/voiceprocessor.h"
 
 namespace cricket {
+
+class AudioFrame;
 
 class FakeMediaProcessor : public VoiceProcessor, public VideoProcessor {
  public:
