@@ -895,10 +895,6 @@ VirtualSocketServer::Function* VirtualSocketServer::CreateDistribution(
       start = mean - 4 * static_cast<double>(stddev);
     double end = mean + 4 * static_cast<double>(stddev);
 
-    double delay_min = 0;
-    if (mean >= 1.0 * stddev)
-      delay_min = mean - 1.0 * stddev;
-
     for (uint32 i = 0; i < samples; i++) {
       double x = start + (end - start) * i / (samples - 1);
       double y = Normal(x, mean, stddev);

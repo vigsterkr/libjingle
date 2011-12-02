@@ -41,7 +41,6 @@ class XmppIqEntry;
 class SaslHandler;
 class SaslMechanism;
 
-
 //! The XMPP connection engine.
 //! This engine implements the client side of the 'core' XMPP protocol.
 //! To use it, register an XmppOutputHandler to handle socket output
@@ -78,7 +77,7 @@ public:
   virtual XmppReturnStatus SetSaslHandler(SaslHandler * sasl_handler);
 
   //! Sets whether TLS will be used within the connection (default true).
-  virtual XmppReturnStatus SetUseTls(bool useTls);
+  virtual XmppReturnStatus SetTls(TlsOptions useTls);
 
   //! Sets an alternate domain from which we allows TLS certificates.
   //! This is for use in the case where a we want to allow a proxy to
@@ -88,7 +87,7 @@ public:
                                         const std::string & proxy_domain);
 
   //! Gets whether TLS will be used within the connection.
-  virtual bool GetUseTls();
+  virtual TlsOptions GetTls();
 
   //! Sets the request resource name, if any (optional).
   //! Note that the resource name may be overridden by the server; after
@@ -244,7 +243,7 @@ private:
   Jid user_jid_;
   std::string password_;
   std::string requested_resource_;
-  bool tls_needed_;
+  TlsOptions tls_option_;
   std::string tls_server_hostname_;
   std::string tls_server_domain_;
   talk_base::scoped_ptr<XmppLoginTask> login_task_;

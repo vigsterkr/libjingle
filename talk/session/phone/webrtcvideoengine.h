@@ -36,7 +36,7 @@
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/webrtccommon.h"
 #ifdef WEBRTC_RELATIVE_PATH
-#include "video_engine/main/interface/vie_base.h"
+#include "video_engine/include/vie_base.h"
 #else
 #include "third_party/webrtc/files/include/vie_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
@@ -96,7 +96,9 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   // Capture-related stuff. Will be removed with capture refactor.
   bool SetCaptureDevice(const Device* device);
   bool SetCaptureModule(webrtc::VideoCaptureModule* vcm);
-  bool SetCapturer(VideoCapturer* capturer);
+  // If capturer is NULL, unregisters the capturer and stops capturing.
+  // Otherwise sets the capturer and starts capturing.
+  bool SetVideoCapturer(VideoCapturer* capturer, uint32 /*ssrc*/);
   bool SetLocalRenderer(VideoRenderer* renderer);
   CaptureResult SetCapture(bool capture);
   sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;
@@ -156,12 +158,15 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool RebuildCodecList(const VideoCodec& max_codec);
   void ApplyLogging();
   bool InitVideoEngine();
+  bool SetCapturer(VideoCapturer* capturer, bool own_capturer);
 
   // webrtc::ViEBaseObserver implementation.
   virtual void PerformanceAlarm(const unsigned int cpu_load);
   // webrtc::TraceCallback implementation.
   virtual void Print(const webrtc::TraceLevel level, const char* trace_string,
                      const int length);
+
+  void ClearCapturer();
 
   talk_base::scoped_ptr<ViEWrapper> vie_wrapper_;
   bool vie_wrapper_base_initialized_;
@@ -175,7 +180,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   talk_base::CriticalSection channels_crit_;
   VideoChannels channels_;
 
-  talk_base::scoped_ptr<VideoCapturer> video_capturer_;
+  bool owns_capturer_;
+  VideoCapturer* video_capturer_;
   bool capture_started_;
   int local_renderer_w_;
   int local_renderer_h_;

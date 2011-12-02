@@ -61,6 +61,9 @@ static const int kCallLostTimeout = 60 * 1000;
 static const char kVideoStream[] = "video_rtp";
 static const char kAudioStream[] = "rtp";
 
+const cricket::VideoCodec WebRtcSession::kDefaultVideoCodec =
+    cricket::VideoCodec(100, "VP8", 640, 480, 30, 0);
+
 WebRtcSession::WebRtcSession(const std::string& id,
                              bool incoming,
                              cricket::PortAllocator* allocator,
@@ -93,6 +96,9 @@ WebRtcSession::~WebRtcSession() {
 }
 
 bool WebRtcSession::Initiate() {
+  channel_manager_->SetDefaultVideoEncoderConfig(
+      cricket::VideoEncoderConfig(kDefaultVideoCodec));
+
   if (signaling_thread_ == NULL)
     return false;
 
@@ -499,13 +505,17 @@ cricket::SessionDescription* WebRtcSession::CreateOffer() {
       options.has_audio = true;
     }
   }
-  return desc_factory_.CreateOffer(options);
+  // We didn't save the previous offer.
+  const cricket::SessionDescription* previous_offer = NULL;
+  return desc_factory_.CreateOffer(options, previous_offer);
 }
 
 cricket::SessionDescription* WebRtcSession::CreateAnswer(
     const cricket::SessionDescription* offer,
     const cricket::MediaSessionOptions& options) {
-  return desc_factory_.CreateAnswer(offer, options);
+  // We didn't save the previous answer.
+  const cricket::SessionDescription* previous_answer = NULL;
+  return desc_factory_.CreateAnswer(offer, options, previous_answer);
 }
 
 void WebRtcSession::SetError(Error error) {

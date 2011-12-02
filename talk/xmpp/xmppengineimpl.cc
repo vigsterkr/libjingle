@@ -58,7 +58,7 @@ XmppEngineImpl::XmppEngineImpl() :
     engine_entered_(0),
     password_(),
     requested_resource_(STR_EMPTY),
-    tls_needed_(true),
+    tls_option_(buzz::TLS_REQUIRED),
     login_task_(new XmppLoginTask(this)),
     next_id_(0),
     state_(STATE_START),
@@ -130,12 +130,10 @@ XmppEngineImpl::ConnectionClosed(int subcode) {
 }
 
 XmppReturnStatus
-XmppEngineImpl::SetUseTls(bool useTls) {
+XmppEngineImpl::SetTls(TlsOptions useTls) {
   if (state_ != STATE_START)
     return XMPP_RETURN_BADSTATE;
-
-  tls_needed_ = useTls;
-
+  tls_option_ = useTls;
   return XMPP_RETURN_OK;
 }
 
@@ -151,9 +149,9 @@ XmppEngineImpl::SetTlsServer(const std::string & tls_server_hostname,
   return XMPP_RETURN_OK;
 }
 
-bool
-XmppEngineImpl::GetUseTls() {
-  return tls_needed_;
+TlsOptions
+XmppEngineImpl::GetTls() {
+  return tls_option_;
 }
 
 XmppReturnStatus

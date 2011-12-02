@@ -57,12 +57,16 @@ class XmppLoginTaskTest : public testing::Test {
     engine_.reset();
   }
   void RunPartialLogin(XlttStage startstage, XlttStage endstage);
+  void SetTlsOptions(buzz::TlsOptions option);
 
  private:
   talk_base::scoped_ptr<XmppEngine> engine_;
   talk_base::scoped_ptr<XmppTestHandler> handler_;
 };
 
+void XmppLoginTaskTest::SetTlsOptions(buzz::TlsOptions option) {
+  engine_->SetTls(option);
+}
 void XmppLoginTaskTest::RunPartialLogin(XlttStage startstage,
                                         XlttStage endstage) {
   std::string input;
@@ -257,7 +261,7 @@ TEST_F(XmppLoginTaskTest, TestNoFeatures) {
   EXPECT_EQ("", handler()->StanzaActivity());
 }
 
-TEST_F(XmppLoginTaskTest, TestTlsFeatureMissing) {
+TEST_F(XmppLoginTaskTest, TestTlsRequiredNotPresent) {
   RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
 
   std::string input = "<stream:features>"
@@ -270,6 +274,113 @@ TEST_F(XmppLoginTaskTest, TestTlsFeatureMissing) {
 
   EXPECT_EQ("[CLOSED]", handler()->OutputActivity());
   EXPECT_EQ("[CLOSED][ERROR-TLS]", handler()->SessionActivity());
+  EXPECT_EQ("", handler()->StanzaActivity());
+}
+
+TEST_F(XmppLoginTaskTest, TestTlsRequeiredAndPresent) {
+  RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
+
+  std::string input = "<stream:features>"
+      "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>"
+        "<required/>"
+      "</starttls>"
+      "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+        "<mechanism>X-GOOGLE-TOKEN</mechanism>"
+        "<mechanism>PLAIN</mechanism>"
+        "<mechanism>X-OAUTH2</mechanism>"
+      "</mechanisms>"
+     "</stream:features>";
+  engine()->HandleInput(input.c_str(), input.length());
+
+  EXPECT_EQ("<starttls xmlns=\"urn:ietf:params:xml:ns:xmpp-tls\"/>",
+      handler()->OutputActivity());
+  EXPECT_EQ("", handler()->SessionActivity());
+  EXPECT_EQ("", handler()->StanzaActivity());
+}
+
+TEST_F(XmppLoginTaskTest, TestTlsEnabledNotPresent) {
+  SetTlsOptions(buzz::TLS_ENABLED);
+  RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
+
+  std::string input = "<stream:features>"
+      "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+        "<mechanism>DIGEST-MD5</mechanism>"
+        "<mechanism>PLAIN</mechanism>"
+      "</mechanisms>"
+     "</stream:features>";
+  engine()->HandleInput(input.c_str(), input.length());
+
+  EXPECT_EQ("<auth xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\" "
+      "mechanism=\"PLAIN\" auth:allow-non-google-login=\"true\" "
+      "auth:client-uses-full-bind-result=\"true\" "
+      "xmlns:auth=\"http://www.google.com/talk/protocol/auth\""
+      ">AGRhdmlkAGRhdmlk</auth>", handler()->OutputActivity());
+  EXPECT_EQ("", handler()->SessionActivity());
+  EXPECT_EQ("", handler()->StanzaActivity());
+}
+
+TEST_F(XmppLoginTaskTest, TestTlsEnabledAndPresent) {
+  SetTlsOptions(buzz::TLS_ENABLED);
+  RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
+
+  std::string input = "<stream:features>"
+      "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+        "<mechanism>X-GOOGLE-TOKEN</mechanism>"
+        "<mechanism>PLAIN</mechanism>"
+        "<mechanism>X-OAUTH2</mechanism>"
+      "</mechanisms>"
+      "</stream:features>";
+  engine()->HandleInput(input.c_str(), input.length());
+
+  EXPECT_EQ("<auth xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\" "
+      "mechanism=\"PLAIN\" auth:allow-non-google-login=\"true\" "
+      "auth:client-uses-full-bind-result=\"true\" "
+      "xmlns:auth=\"http://www.google.com/talk/protocol/auth\""
+      ">AGRhdmlkAGRhdmlk</auth>", handler()->OutputActivity());
+  EXPECT_EQ("", handler()->SessionActivity());
+  EXPECT_EQ("", handler()->StanzaActivity());
+}
+
+TEST_F(XmppLoginTaskTest, TestTlsDisabledNotPresent) {
+  SetTlsOptions(buzz::TLS_DISABLED);
+  RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
+
+    std::string input = "<stream:features>"
+      "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+        "<mechanism>DIGEST-MD5</mechanism>"
+        "<mechanism>PLAIN</mechanism>"
+      "</mechanisms>"
+     "</stream:features>";
+  engine()->HandleInput(input.c_str(), input.length());
+
+  EXPECT_EQ("<auth xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\" "
+      "mechanism=\"PLAIN\" auth:allow-non-google-login=\"true\" "
+      "auth:client-uses-full-bind-result=\"true\" "
+      "xmlns:auth=\"http://www.google.com/talk/protocol/auth\""
+      ">AGRhdmlkAGRhdmlk</auth>", handler()->OutputActivity());
+  EXPECT_EQ("", handler()->SessionActivity());
+  EXPECT_EQ("", handler()->StanzaActivity());
+}
+
+TEST_F(XmppLoginTaskTest, TestTlsDisabledAndPresent) {
+  SetTlsOptions(buzz::TLS_DISABLED);
+  RunPartialLogin(XLTT_STAGE_CONNECT, XLTT_STAGE_STREAMSTART);
+
+  std::string input = "<stream:features>"
+      "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>"
+        "<mechanism>X-GOOGLE-TOKEN</mechanism>"
+        "<mechanism>PLAIN</mechanism>"
+        "<mechanism>X-OAUTH2</mechanism>"
+      "</mechanisms>"
+      "</stream:features>";
+  engine()->HandleInput(input.c_str(), input.length());
+
+  EXPECT_EQ("<auth xmlns=\"urn:ietf:params:xml:ns:xmpp-sasl\" "
+      "mechanism=\"PLAIN\" auth:allow-non-google-login=\"true\" "
+      "auth:client-uses-full-bind-result=\"true\" "
+      "xmlns:auth=\"http://www.google.com/talk/protocol/auth\""
+      ">AGRhdmlkAGRhdmlk</auth>", handler()->OutputActivity());
+  EXPECT_EQ("", handler()->SessionActivity());
   EXPECT_EQ("", handler()->StanzaActivity());
 }
 

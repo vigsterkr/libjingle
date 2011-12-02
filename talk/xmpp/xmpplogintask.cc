@@ -140,8 +140,14 @@ XmppLoginTask::Advance() {
         if (!HandleFeatures(element))
           return Failure(XmppEngine::ERROR_VERSION);
 
-        // Use TLS if forced, or if available
-        if (pctx_->tls_needed_ || GetFeature(QN_TLS_STARTTLS) != NULL) {
+        bool tls_present = (GetFeature(QN_TLS_STARTTLS) != NULL);
+        // Error if TLS required but not present.
+        if (pctx_->tls_option_ == buzz::TLS_REQUIRED && !tls_present) {
+          return Failure(XmppEngine::ERROR_TLS);
+        }
+        // Use TLS if required or enabled, and also available
+        if ((pctx_->tls_option_ == buzz::TLS_REQUIRED ||
+            pctx_->tls_option_ == buzz::TLS_ENABLED) && tls_present) {
           state_ = LOGINSTATE_TLS_INIT;
           continue;
         }
@@ -178,7 +184,7 @@ XmppLoginTask::Advance() {
         // to do so - see the implementation of XmppEngineImpl::StartTls and
         // XmppEngine::SetTlsServerDomain to see how you can use that feature
         pctx_->StartTls(pctx_->user_jid_.domain());
-        pctx_->tls_needed_ = false;
+        pctx_->tls_option_ = buzz::TLS_ENABLED;
         state_ = LOGINSTATE_INIT;
         continue;
       }

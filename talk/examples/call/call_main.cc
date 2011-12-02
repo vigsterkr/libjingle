@@ -210,14 +210,13 @@ int main(int argc, char **argv) {
   // define options
   DEFINE_bool(a, false, "Turn on auto accept.");
   DEFINE_bool(d, false, "Turn on debugging.");
-  DEFINE_string(
-      protocol, "hybrid",
+  DEFINE_string(protocol, "hybrid",
       "Initial signaling protocol to use: jingle, gingle, or hybrid.");
-  DEFINE_string(
-      secure, "enable",
+  DEFINE_string(secure, "enable",
       "Disable or enable encryption: disable, enable, require.");
+  DEFINE_string(tls, "enable",
+      "Disable or enable tls: disable, enable, require.");
   DEFINE_bool(testserver, false, "Use test server");
-  DEFINE_bool(plainserver, false, "Turn off tls and allow plain password.");
   DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
   DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
   DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
@@ -241,7 +240,7 @@ int main(int argc, char **argv) {
   bool debug = FLAG_d;
   std::string protocol = FLAG_protocol;
   bool test_server = FLAG_testserver;
-  bool plain_server = FLAG_plainserver;
+  std::string tls = FLAG_tls;
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
@@ -315,12 +314,21 @@ int main(int argc, char **argv) {
   xcs.set_user(jid.node());
   xcs.set_resource("call");
   xcs.set_host(jid.domain());
-  xcs.set_use_tls(!test_server);
 
-  if (plain_server) {
-    xcs.set_use_tls(false);
-    xcs.set_allow_plain(true);
+  bool allow_plain = (test_server) ? true : false;
+  xcs.set_allow_plain(allow_plain);
+
+  if(test_server || tls == "disable") {
+    xcs.set_use_tls(buzz::TLS_DISABLED);
+  } else if (tls == "enable") {
+    xcs.set_use_tls(buzz::TLS_ENABLED);
+  } else if (tls == "require") {
+    xcs.set_use_tls(buzz::TLS_REQUIRED);
+  } else {
+    Print("Invalid TLS option, must be enable, disable, or require.\n");
+    return 1;
   }
+
   if (test_server) {
     pass.password() = jid.node();
     xcs.set_allow_plain(true);
@@ -389,7 +397,7 @@ int main(int argc, char **argv) {
     pump.client()->SignalLogOutput.connect(&debug_log_, &DebugLog::Output);
   }
 
-  pump.DoLogin(xcs, new XmppSocket(true), NULL);
+  pump.DoLogin(xcs, new XmppSocket(buzz::TLS_REQUIRED), NULL);
   main_thread->Run();
   pump.DoDisconnect();
 

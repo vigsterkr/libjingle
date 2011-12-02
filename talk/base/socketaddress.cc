@@ -398,7 +398,7 @@ std::string SocketAddress::IPToString(uint32 ip_as_host_order_integer) {
 
 bool SocketAddress::StringToIP(const std::string& hostname, uint32* ip) {
   in_addr addr;
-  if (inet_pton(AF_INET, hostname.c_str(), &addr) == 0)
+  if (talk_base::inet_pton(AF_INET, hostname.c_str(), &addr) == 0)
     return false;
   *ip = NetworkToHost32(addr.s_addr);
   return true;
@@ -406,7 +406,7 @@ bool SocketAddress::StringToIP(const std::string& hostname, uint32* ip) {
 
 bool SocketAddress::StringToIP(const std::string& hostname, IPAddress* ip) {
   in_addr addr4;
-  if (inet_pton(AF_INET, hostname.c_str(), &addr4) > 0) {
+  if (talk_base::inet_pton(AF_INET, hostname.c_str(), &addr4) > 0) {
     if (ip) {
       *ip = IPAddress(addr4);
     }
@@ -414,7 +414,7 @@ bool SocketAddress::StringToIP(const std::string& hostname, IPAddress* ip) {
   }
 
   in6_addr addr6;
-  if (inet_pton(AF_INET6, hostname.c_str(), &addr6) > 0) {
+  if (talk_base::inet_pton(AF_INET6, hostname.c_str(), &addr6) > 0) {
     if (ip) {
       *ip = IPAddress(addr6);
     }

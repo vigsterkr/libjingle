@@ -137,7 +137,7 @@ std::string IPAddress::ToString() const {
   if (family_ == AF_INET6) {
     src = &u_.ip6;
   }
-  if (!inet_ntop(family_, src, buf, sizeof(buf))) {
+  if (!talk_base::inet_ntop(family_, src, buf, sizeof(buf))) {
     return std::string();
   }
   return std::string(buf);
@@ -221,9 +221,9 @@ bool IPFromString(const std::string& str, IPAddress* out) {
     return false;
   }
   in_addr addr;
-  if (inet_pton(AF_INET, str.c_str(), &addr) == 0) {
+  if (talk_base::inet_pton(AF_INET, str.c_str(), &addr) == 0) {
     in6_addr addr6;
-    if (inet_pton(AF_INET6, str.c_str(), &addr6) == 0) {
+    if (talk_base::inet_pton(AF_INET6, str.c_str(), &addr6) == 0) {
       *out = IPAddress();
       return false;
     }

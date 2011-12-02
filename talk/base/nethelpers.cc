@@ -193,4 +193,20 @@ void FreeHostEnt(hostent* host) {
 #endif
 }
 
+const char* inet_ntop(int af, const void *src, char* dst, socklen_t size) {
+#ifdef WIN32
+  return win32_inet_ntop(af, src, dst, size);
+#else
+  return ::inet_ntop(af, src, dst, size);
+#endif
+}
+
+int inet_pton(int af, const char* src, void *dst) {
+#ifdef WIN32
+  return win32_inet_pton(af, src, dst);
+#else
+  return ::inet_pton(af, src, dst);
+#endif
+}
+
 }  // namespace talk_base

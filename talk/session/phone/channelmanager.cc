@@ -64,6 +64,7 @@ enum {
   MSG_UNREGISTERVIDEOPROCESSOR = 23,
   MSG_REGISTERVOICEPROCESSOR = 24,
   MSG_UNREGISTERVOICEPROCESSOR = 25,
+  MSG_SETVIDEOCAPTURER = 26,
 };
 
 struct CreationParams : public talk_base::MessageData {
@@ -119,6 +120,16 @@ struct LocalMonitor : public talk_base::MessageData {
 struct LocalRenderer : public talk_base::MessageData {
   explicit LocalRenderer(VideoRenderer* r) : renderer(r), result(false) {}
   VideoRenderer* renderer;
+  bool result;
+};
+
+struct Capturer : public talk_base::MessageData {
+  Capturer(VideoCapturer* c, uint32 s)
+      : capturer(c),
+        ssrc(s),
+        result(false) {}
+  VideoCapturer* capturer;
+  uint32 ssrc;
   bool result;
 };
 
@@ -621,6 +632,21 @@ bool ChannelManager::SetLocalRenderer_w(VideoRenderer* renderer) {
   return media_engine_->SetLocalRenderer(renderer);
 }
 
+bool ChannelManager::SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc) {
+  bool ret = true;
+  if (initialized_) {
+    Capturer capture(capturer, ssrc);
+    ret = (Send(MSG_SETVIDEOCAPTURER, &capture) && capture.result);
+  }
+  return ret;
+}
+
+bool ChannelManager::SetVideoCapturer_w(VideoCapturer* capturer, uint32 ssrc) {
+  ASSERT(worker_thread_ == talk_base::Thread::Current());
+  ASSERT(initialized_);
+  return media_engine_->SetVideoCapturer(capturer, ssrc);
+}
+
 CaptureResult ChannelManager::SetVideoCapture(bool capture) {
   bool ret;
   CaptureParams capture_params(capture);
@@ -814,6 +840,11 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
     case MSG_SETLOCALRENDERER: {
       LocalRenderer* p = static_cast<LocalRenderer*>(data);
       p->result = SetLocalRenderer_w(p->renderer);
+      break;
+    }
+    case MSG_SETVIDEOCAPTURER: {
+      Capturer* p = static_cast<Capturer*>(data);
+      p->result = SetVideoCapturer_w(p->capturer, p->ssrc);
       break;
     }
     case MSG_SETVIDEOCAPTURE: {

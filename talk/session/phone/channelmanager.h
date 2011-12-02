@@ -130,6 +130,9 @@ class ChannelManager : public talk_base::MessageHandler,
   bool monitoring() const { return monitoring_; }
   // Sets the local renderer where to renderer the local camera.
   bool SetLocalRenderer(VideoRenderer* renderer);
+  // Sets the externally provided video capturer. The ssrc is the ssrc of the
+  // (video) stream for which the video capturer should be set.
+  bool SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc);
   // Starts and stops the local camera and renders it to the local renderer.
   CaptureResult SetVideoCapture(bool capture);
   bool capturing() const { return capturing_; }
@@ -186,6 +189,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool SetVideoOptions_w(const Device* cam_device);
   bool SetDefaultVideoEncoderConfig_w(const VideoEncoderConfig& config);
   bool SetLocalRenderer_w(VideoRenderer* renderer);
+  bool SetVideoCapturer_w(VideoCapturer* capturer, uint32 ssrc);
   CaptureResult SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);

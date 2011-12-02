@@ -91,7 +91,8 @@ bool IsTestServer(const std::string& server_name,
 }
 
 XmppReturnStatus
-XmppClient::Connect(const XmppClientSettings & settings, const std::string & lang, AsyncSocket * socket, PreXmppAuth * pre_auth) {
+XmppClient::Connect(const XmppClientSettings & settings,
+    const std::string & lang, AsyncSocket * socket, PreXmppAuth * pre_auth) {
   if (socket == NULL)
     return XMPP_RETURN_BADARGUMENT;
   if (d_->socket_.get() != NULL)
@@ -109,7 +110,7 @@ XmppClient::Connect(const XmppClientSettings & settings, const std::string & lan
   if (!settings.resource().empty()) {
     d_->engine_->SetRequestedResource(settings.resource());
   }
-  d_->engine_->SetUseTls(settings.use_tls());
+  d_->engine_->SetTls(settings.use_tls());
 
   // The talk.google.com server returns a certificate with common-name:
   //   CN="gmail.com" for @gmail.com accounts,

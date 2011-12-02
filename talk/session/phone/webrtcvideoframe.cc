@@ -118,7 +118,7 @@ void WebRtcVideoFrame::Attach(uint8* buffer, size_t buffer_size, int w, int h,
   pixel_width_ = pixel_width;
   pixel_height_ = pixel_height;
   elapsed_time_ = elapsed_time;
-  video_frame_.SetTimeStamp(static_cast<WebRtc_UWord32>(time_stamp));
+  time_stamp_ = time_stamp;
   rotation_ = rotation;
 }
 
@@ -195,7 +195,7 @@ VideoFrame* WebRtcVideoFrame::Copy() const {
   copy->Attach(new_buffer, new_buffer_size,
                video_frame_.Width(), video_frame_.Height(),
                pixel_width_, pixel_height_,
-               elapsed_time_, video_frame_.TimeStamp(), rotation_);
+               elapsed_time_, time_stamp_, rotation_);
   return copy;
 }
 

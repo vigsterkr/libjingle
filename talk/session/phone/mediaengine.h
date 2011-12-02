@@ -101,6 +101,9 @@ class MediaEngineInterface {
   virtual bool SetSoundDevices(const Device* in_device,
                                const Device* out_device) = 0;
   virtual bool SetVideoCaptureDevice(const Device* cam_device) = 0;
+  // Sets the externally provided video capturer. The ssrc is the ssrc of the
+  // (video) stream for which the video capturer should be set.
+  virtual bool SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc) = 0;
 
   // Device configuration
   // Gets the current speaker volume, as a value between 0 and 255.
@@ -199,6 +202,9 @@ class CompositeMediaEngine : public MediaEngineInterface {
   }
   virtual bool SetVideoCaptureDevice(const Device* cam_device) {
     return video_.SetCaptureDevice(cam_device);
+  }
+  virtual bool SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc) {
+    return video_.SetVideoCapturer(capturer, ssrc);
   }
 
   virtual bool GetOutputVolume(int* level) {
@@ -318,6 +324,8 @@ class NullVideoEngine {
   void SetLogging(int min_sev, const char* filter) {}
   bool RegisterProcessor(VideoProcessor* video_processor) { return true; }
   bool UnregisterProcessor(VideoProcessor* video_processor) { return true; }
+  bool SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc) { return true; }
+
   sigslot::signal2<VideoCapturer*, CaptureResult> SignalCaptureResult;
  private:
   std::vector<VideoCodec> codecs_;

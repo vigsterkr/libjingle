@@ -30,6 +30,8 @@
 #include <stdio.h>
 #include <string>
 
+// TODO: Remove webrtcsession.h once we can get size from signaling.
+#include "talk/app/webrtc/webrtcsession.h"  // For kDefaultVideoCodec
 #include "talk/base/json.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
@@ -288,6 +290,9 @@ bool ParseVideoCodec(const Json::Value& value,
     std::vector<std::string> tokens;
     talk_base::split(codec_info["codec"].asString(), '/', &tokens);
     codec.name = tokens[1];
+    // TODO: Remove once we can get size from signaling message.
+    codec.width = WebRtcSession::kDefaultVideoCodec.width;
+    codec.height = WebRtcSession::kDefaultVideoCodec.height;
     content->AddCodec(codec);
   }
   return true;

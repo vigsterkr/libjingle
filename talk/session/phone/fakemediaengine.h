@@ -629,6 +629,9 @@ class FakeVideoEngine : public FakeBaseEngine {
     renderer_ = r;
     return true;
   }
+  bool SetVideoCapturer(VideoCapturer* /*capturer*/, uint32 /*ssrc*/) {
+    return false;
+  }
   CaptureResult SetCapture(bool capture) {
     capture_ = capture;
     return CR_SUCCESS;

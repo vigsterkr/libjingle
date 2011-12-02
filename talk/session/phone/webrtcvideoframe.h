@@ -83,12 +83,12 @@ class WebRtcVideoFrame : public VideoFrame {
   virtual size_t GetPixelWidth() const { return pixel_width_; }
   virtual size_t GetPixelHeight() const { return pixel_height_; }
   virtual int64 GetElapsedTime() const { return elapsed_time_; }
-  virtual int64 GetTimeStamp() const { return video_frame_.TimeStamp(); }
+  virtual int64 GetTimeStamp() const { return time_stamp_; }
   virtual void SetElapsedTime(int64 elapsed_time) {
     elapsed_time_ = elapsed_time;
   }
   virtual void SetTimeStamp(int64 time_stamp) {
-    video_frame_.SetTimeStamp(static_cast<WebRtc_UWord32>(time_stamp));
+    time_stamp_ = time_stamp;
   }
 
   virtual int GetRotation() const { return rotation_; }
@@ -109,6 +109,7 @@ class WebRtcVideoFrame : public VideoFrame {
   size_t pixel_width_;
   size_t pixel_height_;
   int64 elapsed_time_;
+  int64 time_stamp_;
   int rotation_;
 };
 }  // namespace cricket

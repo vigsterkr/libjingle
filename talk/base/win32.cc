@@ -35,28 +35,29 @@
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 
+namespace talk_base {
+
 // Helper function declarations for inet_ntop/inet_pton.
-static const char* inet_ntop_v4(int af, const void* src,
-                                char* dst, socklen_t size);
-static const char* inet_ntop_v6(int af, const void* src,
-                                char* dst, socklen_t size);
-static int inet_pton_v4(int af, const char* src, void* dst);
-static int inet_pton_v6(int af, const char* src, void* dst);
+static const char* inet_ntop_v4(const void* src, char* dst, socklen_t size);
+static const char* inet_ntop_v6(const void* src, char* dst, socklen_t size);
+static int inet_pton_v4(const char* src, void* dst);
+static int inet_pton_v6(const char* src, void* dst);
 
 // Implementation of inet_ntop (create a printable representation of an
-// ip address). Wraps inet_ntoa for v4, and implements inet_ntop for v6, as per
-// RFC 2553. XP doesn't have its own inet_ntop, and WSAAddressToString requires
-// both IPv6 to be  installed and for Winsock to be initialized.
-const char* inet_ntop(int af, const void *src, char* dst, socklen_t size) {
+// ip address). XP doesn't have its own inet_ntop, and
+// WSAAddressToString requires both IPv6 to be  installed and for Winsock
+// to be initialized.
+const char* win32_inet_ntop(int af, const void *src,
+                            char* dst, socklen_t size) {
   if (!src || !dst) {
     return NULL;
   }
   switch (af) {
     case AF_INET: {
-      return inet_ntop_v4(af, src, dst, size);
+      return inet_ntop_v4(src, dst, size);
     }
     case AF_INET6: {
-      return inet_ntop_v6(af, src, dst, size);
+      return inet_ntop_v6(src, dst, size);
     }
   }
   return NULL;
@@ -67,36 +68,36 @@ const char* inet_ntop(int af, const void *src, char* dst, socklen_t size) {
 // windows' inet_addr which permits octal and hexadecimal values in v4
 // addresses, while inet_pton only allows decimal.
 // Note that our inet_ntop will output normal 'dotted' v4 addresses only.
-int inet_pton(int af, const char* src, void* dst) {
+int win32_inet_pton(int af, const char* src, void* dst) {
   if (!src || !dst) {
     return 0;
   }
   if (af == AF_INET) {
-    return inet_pton_v4(af, src, dst);
+    return inet_pton_v4(src, dst);
   } else if (af == AF_INET6) {
-    return inet_pton_v6(af, src, dst);
+    return inet_pton_v6(src, dst);
   }
   return -1;
 }
 
-// Helper function for inet_ntop for IPv4 addresses. Delegates to Win32's
-// inet_ntoa.
-const char* inet_ntop_v4(int af, const void* src, char* dst, socklen_t size) {
+// Helper function for inet_ntop for IPv4 addresses.
+// Outputs "dotted-quad" decimal notation.
+const char* inet_ntop_v4(const void* src, char* dst, socklen_t size) {
   if (size < INET_ADDRSTRLEN) {
     return NULL;
   }
-  struct in_addr in4_addr;
-  memcpy(&in4_addr, src, sizeof(in4_addr));
-  const char* res = inet_ntoa(in4_addr);
-  if (!res) {
-    return NULL;
-  }
-  talk_base::strcpyn(dst, size, res);
+  const struct in_addr* as_in_addr =
+      reinterpret_cast<const struct in_addr*>(src);
+  talk_base::sprintfn(dst, size, "%d.%d.%d.%d",
+                      as_in_addr->S_un.S_un_b.s_b1,
+                      as_in_addr->S_un.S_un_b.s_b2,
+                      as_in_addr->S_un.S_un_b.s_b3,
+                      as_in_addr->S_un.S_un_b.s_b4);
   return dst;
 }
 
 // Helper function for inet_ntop for IPv6 addresses.
-const char* inet_ntop_v6(int af, const void* src, char* dst, socklen_t size) {
+const char* inet_ntop_v6(const void* src, char* dst, socklen_t size) {
   if (size < INET6_ADDRSTRLEN) {
     return NULL;
   }
@@ -149,7 +150,7 @@ const char* inet_ntop_v6(int af, const void* src, char* dst, socklen_t size) {
     }
     const struct in_addr* as_v4 =
         reinterpret_cast<const struct in_addr*>(&(as_shorts[6]));
-    inet_ntop_v4(AF_INET, as_v4, cursor, (INET6_ADDRSTRLEN - (cursor - dst)));
+    inet_ntop_v4(as_v4, cursor, (INET6_ADDRSTRLEN - (cursor - dst)));
   } else {
     for (int i = 0; i < run_array_size; ++i) {
       if (runpos[i] == -1) {
@@ -172,7 +173,7 @@ const char* inet_ntop_v6(int af, const void* src, char* dst, socklen_t size) {
 
 // Helper function for inet_pton for IPv4 addresses.
 // Uses win32's inet_addr.
-int inet_pton_v4(int af, const char* src, void* dst) {
+int inet_pton_v4(const char* src, void* dst) {
   uint32 ip = inet_addr(src);
   if (ip == 0xFFFFFFFF && strcmp(src, "255.255.255.255") != 0) {
     return 0;
@@ -183,7 +184,7 @@ int inet_pton_v4(int af, const char* src, void* dst) {
 }
 
 // Helper function for inet_pton for IPv6 addresses.
-int inet_pton_v6(int af, const char* src, void* dst) {
+int inet_pton_v6(const char* src, void* dst) {
   // sscanf will pick any other invalid chars up, but it parses 0xnnnn as hex.
   // Check for literal x in the input string.
   const char* readcursor = src;
@@ -226,7 +227,7 @@ int inet_pton_v6(int af, const char* src, void* dst) {
         }
       }
       struct in_addr v4;
-      if (inet_pton(AF_INET, addrstart, &v4.s_addr)) {
+      if (inet_pton_v4(addrstart, &v4.s_addr)) {
         memcpy(&an_addr.s6_addr[12], &v4, sizeof(v4));
         memcpy(dst, &an_addr, sizeof(an_addr));
         return 1;
@@ -290,8 +291,6 @@ int inet_pton_v6(int af, const char* src, void* dst) {
   memcpy(dst, &an_addr, sizeof(an_addr));
   return 1;
 }
-
-namespace talk_base {
 
 //
 // Unix time is in seconds relative to 1/1/1970.  So we compute the windows

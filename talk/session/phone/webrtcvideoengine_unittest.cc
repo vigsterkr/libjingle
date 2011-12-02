@@ -26,11 +26,13 @@
  */
 
 #include "talk/base/gunit.h"
+#include "talk/base/scoped_ptr.h"
 #include "talk/session/phone/fakewebrtcvideocapturemodule.h"
 #include "talk/session/phone/fakewebrtcvideoengine.h"
 #include "talk/session/phone/fakewebrtcvoiceengine.h"
 #include "talk/session/phone/mediasession.h"
 #include "talk/session/phone/videoengine_unittest.h"
+#include "talk/session/phone/webrtcvideocapturer.h"
 #include "talk/session/phone/webrtcvideoengine.h"
 #include "talk/session/phone/webrtcvoiceengine.h"
 
@@ -511,6 +513,26 @@ TEST_F(WebRtcVideoEngineTest, SetCaptureModule) {
   EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
   EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
                 engine_.default_codec_format().interval),
+            vcm->cap().maxFPS);
+  EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
+  EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
+}
+
+TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
+  // Use 123 to verify there's no assumption to the module id
+  FakeWebRtcVideoCaptureModule* vcm =
+      new FakeWebRtcVideoCaptureModule(NULL, 123);
+  talk_base::scoped_ptr<cricket::WebRtcVideoCapturer> capturer(
+      new cricket::WebRtcVideoCapturer);
+  EXPECT_TRUE(capturer->Init(vcm));
+  EXPECT_TRUE(engine_.Init());
+  const uint32 ssrc_dummy = 0;
+  EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get(), ssrc_dummy));
+
+  EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
+  EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
+  EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
+      engine_.default_codec_format().interval),
             vcm->cap().maxFPS);
   EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
   EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);

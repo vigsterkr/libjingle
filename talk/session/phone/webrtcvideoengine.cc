@@ -285,6 +285,8 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
   render_module_.reset(new WebRtcPassthroughRender());
   local_renderer_w_ = local_renderer_h_ = 0;
   local_renderer_ = NULL;
+  owns_capturer_ = false;
+  video_capturer_ = NULL;
   capture_started_ = false;
 
   ApplyLogging();
@@ -307,6 +309,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
 }
 
 WebRtcVideoEngine::~WebRtcVideoEngine() {
+  ClearCapturer();
   LOG(LS_INFO) << "WebRtcVideoEngine::~WebRtcVideoEngine";
   if (initialized_) {
     Terminate();
@@ -437,12 +440,12 @@ WebRtcVideoMediaChannel* WebRtcVideoEngine::CreateChannel(
 
 bool WebRtcVideoEngine::SetCaptureDevice(const Device* device) {
   if (!device) {
-    video_capturer_.reset();
+    ClearCapturer();
     LOG(LS_INFO) << "Camera set to NULL";
     return true;
   }
   // No-op if the device hasn't changed.
-  if (video_capturer_.get() && video_capturer_->GetId() == device->id) {
+  if ((video_capturer_ != NULL) && video_capturer_->GetId() == device->id) {
     return true;
   }
   // Create a new capturer for the specified device.
@@ -452,7 +455,8 @@ bool WebRtcVideoEngine::SetCaptureDevice(const Device* device) {
                   << device->id << "'";
     return false;
   }
-  if (!SetCapturer(capturer)) {
+  const bool owns_capturer = true;
+  if (!SetCapturer(capturer, owns_capturer)) {
     return false;
   }
   LOG(LS_INFO) << "Camera set to '" << device->name << "', id='"
@@ -462,11 +466,11 @@ bool WebRtcVideoEngine::SetCaptureDevice(const Device* device) {
 
 bool WebRtcVideoEngine::SetCaptureModule(webrtc::VideoCaptureModule* vcm) {
   if (!vcm) {
-    if (video_capturer_.get() && video_capturer_->IsRunning()) {
+    if ((video_capturer_ != NULL) && video_capturer_->IsRunning()) {
       LOG(LS_WARNING) << "Failed to set camera to NULL when is running.";
       return false;
     } else {
-      video_capturer_.reset();
+      ClearCapturer();
       LOG(LS_INFO) << "Camera set to NULL";
       return true;
     }
@@ -478,26 +482,35 @@ bool WebRtcVideoEngine::SetCaptureModule(webrtc::VideoCaptureModule* vcm) {
     delete capturer;
     return false;
   }
-  if (!SetCapturer(capturer)) {
+  const bool owns_capturer = true;
+  if (!SetCapturer(capturer, owns_capturer)) {
     return false;
   }
   LOG(LS_INFO) << "Camera created with VCM";
   return true;
 }
 
-bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer) {
-  // Hook up signals and install the supplied capturer.
-  SignalCaptureResult.repeat(capturer->SignalStartResult);
-  capturer->SignalFrameCaptured.connect(this,
-      &WebRtcVideoEngine::OnFrameCaptured);
-  video_capturer_.reset(capturer);
-  // Possibly restart the capturer if it is supposed to be running.
-  CaptureResult result = UpdateCapturingState();
-  if (result != CR_SUCCESS && result != CR_PENDING) {
-    LOG(LS_WARNING) << "Camera failed to restart";
-    return false;
+bool WebRtcVideoEngine::SetVideoCapturer(VideoCapturer* capturer,
+                                         uint32 /*ssrc*/) {
+  const bool capture = (capturer != NULL);
+  const bool owns_capturer = false;
+  CaptureResult res = CR_FAILURE;
+  if (capture) {
+    // Register the capturer before starting to capture.
+    if (!SetCapturer(capturer, owns_capturer)) {
+      return false;
+    }
+    const bool kEnableCapture = true;
+    res = SetCapture(kEnableCapture);
+  } else {
+    // Stop capturing before unregistering the capturer.
+    const bool kDisableCapture = false;
+    res = SetCapture(kDisableCapture);
+    if (!SetCapturer(capturer, owns_capturer)) {
+      return false;
+    }
   }
-  return true;
+  return (res == CR_SUCCESS) || (res == CR_PENDING);
 }
 
 bool WebRtcVideoEngine::SetLocalRenderer(VideoRenderer* renderer) {
@@ -530,7 +543,7 @@ CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
 
   bool capture = capture_started_;
   if (!IsCapturing() && capture) {  // Start capturing.
-    if (!video_capturer_.get()) {
+    if (video_capturer_ == NULL) {
       return CR_NO_DEVICE;
     }
 
@@ -569,7 +582,7 @@ CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
 }
 
 bool WebRtcVideoEngine::IsCapturing() const {
-  return video_capturer_.get() && video_capturer_->IsRunning();
+  return (video_capturer_ != NULL) && video_capturer_->IsRunning();
 }
 
 void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
@@ -831,6 +844,28 @@ bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
   return true;
 }
 
+bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer,
+                                    bool own_capturer) {
+  if (capturer == NULL) {
+    ClearCapturer();
+    return true;
+  }
+  // Hook up signals and install the supplied capturer.
+  SignalCaptureResult.repeat(capturer->SignalStartResult);
+  capturer->SignalFrameCaptured.connect(this,
+      &WebRtcVideoEngine::OnFrameCaptured);
+  ClearCapturer();
+  video_capturer_ = capturer;
+  owns_capturer_ = own_capturer;
+  // Possibly restart the capturer if it is supposed to be running.
+  CaptureResult result = UpdateCapturingState();
+  if (result != CR_SUCCESS && result != CR_PENDING) {
+    LOG(LS_WARNING) << "Camera failed to restart";
+    return false;
+  }
+  return true;
+}
+
 void WebRtcVideoEngine::PerformanceAlarm(const unsigned int cpu_load) {
   LOG(LS_INFO) << "WebRtcVideoEngine::PerformanceAlarm";
 }
@@ -888,6 +923,13 @@ bool WebRtcVideoEngine::RegisterProcessor(
 bool WebRtcVideoEngine::UnregisterProcessor(
     VideoProcessor* video_processor) {
   return true;
+}
+
+void WebRtcVideoEngine::ClearCapturer() {
+  if (owns_capturer_) {
+    delete video_capturer_;
+  }
+  video_capturer_ = NULL;
 }
 
 // WebRtcVideoMediaChannel

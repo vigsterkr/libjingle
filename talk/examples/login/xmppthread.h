@@ -32,6 +32,7 @@
 #include "talk/examples/login/xmpppump.h"
 #include "talk/examples/login/xmppsocket.h"
 #include "talk/xmpp/xmppclientsettings.h"
+#include "talk/xmpp/xmppengine.h"
 
 
 class XmppThread:

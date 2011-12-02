@@ -78,6 +78,9 @@ TEST_WEBRTCVIDEOFRAME(MakeExclusive)
 TEST_F(WebRtcVideoFrameTest, AttachAndRelease) {
   cricket::WebRtcVideoFrame frame1, frame2;
   ASSERT_TRUE(LoadFrameNoRepeat(&frame1));
+  const int64 time_stamp = 0x7FFFFFFFFFFFFFF0LL;
+  frame1.SetTimeStamp(time_stamp);
+  EXPECT_EQ(time_stamp, frame1.GetTimeStamp());
   frame2.Attach(frame1.frame()->Buffer(), frame1.frame()->Size(),
                 kWidth, kHeight, 1, 1,
                 frame1.GetElapsedTime(), frame1.GetTimeStamp(), 0);

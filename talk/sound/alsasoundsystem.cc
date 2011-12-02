@@ -654,7 +654,7 @@ StreamInterface *AlsaSoundSystem::OpenDevice(
         int freq)) {
 
   if (!IsInitialized()) {
-    return false;
+    return NULL;
   }
 
   StreamInterface *stream;
