@@ -30,11 +30,6 @@
 
 #include <string>
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "json/json.h"
-#else
-#include "third_party/jsoncpp/json.h"
-#endif
 #include "talk/p2p/base/candidate.h"
 #include "talk/session/phone/codec.h"
 
@@ -51,58 +46,14 @@ class SessionDescription;
 
 namespace webrtc {
 
-std::vector<Json::Value> ReadValues(const Json::Value& value,
-                                    const std::string& key);
-
-bool BuildMediaMessage(
-    const cricket::ContentInfo& content_info,
-    const std::vector<cricket::Candidate>& candidates,
-    bool video,
-    Json::Value* value);
-
 bool GetJsonSignalingMessage(
     const cricket::SessionDescription* sdp,
     const std::vector<cricket::Candidate>& candidates,
     std::string* signaling_message);
 
-bool BuildRtpMapParams(
-    const cricket::ContentInfo& audio_offer,
-    bool video,
-    std::vector<Json::Value>* rtpmap);
-
-bool BuildAttributes(const std::vector<cricket::Candidate>& candidates,
-                     bool video,
-                     std::vector<Json::Value>* jcandidates);
-
-std::string Serialize(const Json::Value& value);
-bool Deserialize(const std::string& message, Json::Value& value);
-
 bool ParseJsonSignalingMessage(const std::string& signaling_message,
                                cricket::SessionDescription** sdp,
                                std::vector<cricket::Candidate>* candidates);
-bool ParseRtcpMux(const Json::Value& value);
-bool ParseAudioCodec(const Json::Value& value,
-                     cricket::AudioContentDescription* content);
-bool ParseVideoCodec(const Json::Value& value,
-                     cricket::VideoContentDescription* content);
-bool ParseIceCandidates(const Json::Value& value,
-                        std::vector<cricket::Candidate>* candidates);
-Json::Value ReadValue(const Json::Value& value, const std::string& key);
-std::string ReadString(const Json::Value& value, const std::string& key);
-double ReadDouble(const Json::Value& value, const std::string& key);
-uint32 ReadUInt(const Json::Value& value, const std::string& key);
-
-void Append(Json::Value* object, const std::string& key, bool value);
-void Append(Json::Value* object, const std::string& key, char * value);
-void Append(Json::Value* object, const std::string& key, int value);
-void Append(Json::Value* object, const std::string& key,
-            const std::string& value);
-void Append(Json::Value* object, const std::string& key, uint32 value);
-void Append(Json::Value* object, const std::string& key,
-            const Json::Value& value);
-void Append(Json::Value* object,
-            const std::string& key,
-            const std::vector<Json::Value>& values);
 }
 
 #endif  // TALK_APP_WEBRTC_WEBRTCJSON_H_

@@ -232,30 +232,30 @@ const WebRtcVideoEngine::VideoCodecPref
 
 // The formats are sorted by the descending order of width. We use the order to
 // find the next format for CPU and bandwidth adaptation.
-const VideoFormat WebRtcVideoEngine::kVideoFormats[] = {
-  VideoFormat(1280, 800, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(1280, 720, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(960, 600, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(960, 540, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(640, 400, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(640, 360, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(640, 480, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(480, 300, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(480, 270, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(480, 360, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(320, 200, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(320, 180, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(320, 240, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(240, 150, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(240, 135, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(240, 180, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(160, 100, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(160, 90, VideoFormat::FpsToInterval(30), FOURCC_ANY),
-  VideoFormat(160, 120, VideoFormat::FpsToInterval(30), FOURCC_ANY)
+const VideoFormatPod WebRtcVideoEngine::kVideoFormats[] = {
+  {1280, 800, 30, FOURCC_ANY},
+  {1280, 720, 30, FOURCC_ANY},
+  {960, 600, 30, FOURCC_ANY},
+  {960, 540, 30, FOURCC_ANY},
+  {640, 400, 30, FOURCC_ANY},
+  {640, 360, 30, FOURCC_ANY},
+  {640, 480, 30, FOURCC_ANY},
+  {480, 300, 30, FOURCC_ANY},
+  {480, 270, 30, FOURCC_ANY},
+  {480, 360, 30, FOURCC_ANY},
+  {320, 200, 30, FOURCC_ANY},
+  {320, 180, 30, FOURCC_ANY},
+  {320, 240, 30, FOURCC_ANY},
+  {240, 150, 30, FOURCC_ANY},
+  {240, 135, 30, FOURCC_ANY},
+  {240, 180, 30, FOURCC_ANY},
+  {160, 100, 30, FOURCC_ANY},
+  {160, 90, 30, FOURCC_ANY},
+  {160, 120, 30, FOURCC_ANY},
 };
 
-const VideoFormat WebRtcVideoEngine::kDefaultVideoFormat =
-    VideoFormat(640, 400, VideoFormat::FpsToInterval(30), FOURCC_ANY);
+const VideoFormatPod WebRtcVideoEngine::kDefaultVideoFormat =
+    {640, 400, 30, FOURCC_ANY};
 
 WebRtcVideoEngine::WebRtcVideoEngine() {
   Construct(new ViEWrapper(), new ViETraceWrapper(), NULL);
@@ -302,7 +302,8 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
                        kVideoCodecPrefs[0].name,
                        kDefaultVideoFormat.width,
                        kDefaultVideoFormat.height,
-                       kDefaultVideoFormat.framerate(), 0);
+                       kDefaultVideoFormat.framerate,
+                       0);
   if (!SetDefaultCodec(max_codec)) {
     LOG(LS_ERROR) << "Failed to initialize list of supported codec types";
   }
@@ -639,7 +640,7 @@ int WebRtcVideoEngine::GetLastEngineError() {
 // Checks to see whether we comprehend and could receive a particular codec
 bool WebRtcVideoEngine::FindCodec(const VideoCodec& in) {
   for (int i = 0; i < ARRAY_SIZE(kVideoFormats); ++i) {
-    const VideoFormat& fmt = kVideoFormats[i];
+    const VideoFormat fmt(kVideoFormats[i]);
     if ((in.width == 0 && in.height == 0) ||
         (fmt.width == in.width && fmt.height == in.height)) {
       for (int j = 0; j < ARRAY_SIZE(kVideoCodecPrefs); ++j) {
@@ -691,7 +692,7 @@ bool WebRtcVideoEngine::CanSendCodec(const VideoCodec& requested,
     // Pick the best quality that is within their and our bounds and has the
     // correct aspect ratio.
     for (int j = 0; j < ARRAY_SIZE(kVideoFormats); ++j) {
-      const VideoFormat& format = kVideoFormats[j];
+      const VideoFormat format(kVideoFormats[j]);
 
       // Skip any format that is larger than the local or remote maximums, or
       // smaller than the current best match
@@ -873,7 +874,7 @@ void WebRtcVideoEngine::PerformanceAlarm(const unsigned int cpu_load) {
 // Ignore spammy trace messages, mostly from the stats API when we haven't
 // gotten RTCP info yet from the remote side.
 bool WebRtcVideoEngine::ShouldIgnoreTrace(const std::string& trace) {
-  static const char* kTracesToIgnore[] = {
+  static const char* const kTracesToIgnore[] = {
     NULL
   };
   for (const char* const* p = kTracesToIgnore; *p; ++p) {

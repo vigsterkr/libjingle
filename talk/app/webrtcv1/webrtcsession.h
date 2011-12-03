@@ -125,7 +125,8 @@ class WebRtcSession : public cricket::BaseSession {
   cricket::PortAllocator* port_allocator() const { return port_allocator_; }
   talk_base::Thread* signaling_thread() const { return signaling_thread_; }
 
-  static const cricket::VideoCodec kDefaultVideoCodec;
+  static const int kDefaultVideoCodecWidth = 640;
+  static const int kDefaultVideoCodecHeight = 480;
 
  protected:
   // methods from cricket::BaseSession

@@ -36,7 +36,7 @@
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/webrtccommon.h"
 #ifdef WEBRTC_RELATIVE_PATH
-#include "video_engine/include/vie_base.h"
+#include "video_engine/main/interface/vie_base.h"
 #else
 #include "third_party/webrtc/files/include/vie_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
@@ -148,8 +148,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   };
 
   static const VideoCodecPref kVideoCodecPrefs[];
-  static const VideoFormat kVideoFormats[];
-  static const VideoFormat kDefaultVideoFormat;
+  static const VideoFormatPod kVideoFormats[];
+  static const VideoFormatPod kDefaultVideoFormat;
 
   void Construct(ViEWrapper* vie_wrapper,
                  ViETraceWrapper* tracing,

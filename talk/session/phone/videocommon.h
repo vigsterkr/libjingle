@@ -113,6 +113,14 @@ uint32 CanonicalFourCC(uint32 fourcc);
 // Definition of VideoFormat.
 //////////////////////////////////////////////////////////////////////////////
 
+// VideoFormat with Plain Old Data for global variables
+struct VideoFormatPod {
+  int width;  // in number of pixels
+  int height;  // in number of pixels
+  int framerate;
+  uint32 fourcc;  // color space. FOURCC_ANY means that any color space is OK.
+};
+
 struct VideoFormat {
   static const int64 kMinimumInterval =
       talk_base::kNumNanosecsPerSec / 10000;  // 10k fps
@@ -130,6 +138,13 @@ struct VideoFormat {
       : width(format.width),
         height(format.height),
         interval(format.interval),
+        fourcc(format.fourcc) {
+  }
+
+  explicit VideoFormat(const VideoFormatPod& format)
+      : width(format.width),
+        height(format.height),
+        interval(FpsToInterval(format.framerate)),
         fourcc(format.fourcc) {
   }
 

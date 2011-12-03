@@ -31,7 +31,6 @@
 #include <vector>
 
 #include "talk/base/common.h"
-#include "talk/base/json.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
@@ -61,8 +60,9 @@ static const int kCallLostTimeout = 60 * 1000;
 static const char kVideoStream[] = "video_rtp";
 static const char kAudioStream[] = "rtp";
 
-const cricket::VideoCodec WebRtcSession::kDefaultVideoCodec =
-    cricket::VideoCodec(100, "VP8", 640, 480, 30, 0);
+static const int kDefaultVideoCodecId = 100;
+static const int kDefaultVideoCodecFramerate = 30;
+static const char kDefaultVideoCodecName[] = "VP8";
 
 WebRtcSession::WebRtcSession(const std::string& id,
                              bool incoming,
@@ -96,8 +96,11 @@ WebRtcSession::~WebRtcSession() {
 }
 
 bool WebRtcSession::Initiate() {
+  const cricket::VideoCodec default_codec(kDefaultVideoCodecId,
+      kDefaultVideoCodecName, kDefaultVideoCodecWidth, kDefaultVideoCodecHeight,
+      kDefaultVideoCodecFramerate, 0);
   channel_manager_->SetDefaultVideoEncoderConfig(
-      cricket::VideoEncoderConfig(kDefaultVideoCodec));
+      cricket::VideoEncoderConfig(default_codec));
 
   if (signaling_thread_ == NULL)
     return false;
