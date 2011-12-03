@@ -82,6 +82,7 @@ SocketAddress::SocketAddress(const SocketAddress& addr) {
 
 void SocketAddress::Clear() {
   hostname_.clear();
+  literal_ = false;
   ip_ = IPAddress(INADDR_ANY);
   port_ = 0;
 }
