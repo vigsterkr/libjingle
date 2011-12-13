@@ -157,7 +157,8 @@ class PortTest : public testing::Test {
       : main_(talk_base::Thread::Current()),
         pss_(new talk_base::PhysicalSocketServer),
         ss_(new talk_base::VirtualSocketServer(pss_.get())),
-        ss_scope_(ss_.get()), network_("unittest", "unittest", 0),
+        ss_scope_(ss_.get()),
+        network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY)),
         socket_factory_(talk_base::Thread::Current()),
         nat_factory1_(ss_.get(), kNatAddr1),
         nat_factory2_(ss_.get(), kNatAddr2),
@@ -241,7 +242,8 @@ class PortTest : public testing::Test {
   }
   UDPPort* CreateUdpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
-    return UDPPort::Create(main_, socket_factory, &network_, addr.ip(), 0, 0);
+    return UDPPort::Create(main_, socket_factory, &network_,
+                           addr.ipaddr(), 0, 0);
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr) {
     return CreateTcpPort(addr, &socket_factory_);
@@ -249,19 +251,19 @@ class PortTest : public testing::Test {
   TCPPort* CreateTcpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
     return TCPPort::Create(main_, socket_factory, &network_,
-                           addr.ip(), 0, 0, true);
+                           addr.ipaddr(), 0, 0, true);
   }
   StunPort* CreateStunPort(const SocketAddress& addr,
                            talk_base::PacketSocketFactory* factory) {
     return StunPort::Create(main_, factory, &network_,
-                            addr.ip(), 0, 0, kStunAddr);
+                            addr.ipaddr(), 0, 0, kStunAddr);
   }
   RelayPort* CreateRelayPort(const SocketAddress& addr,
                              ProtocolType int_proto, ProtocolType ext_proto) {
     std::string user = talk_base::CreateRandomString(16);
     std::string pass = talk_base::CreateRandomString(16);
     RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
-                                        addr.ip(), 0, 0, user, pass, "");
+                                        addr.ipaddr(), 0, 0, user, pass, "");
     SocketAddress addrs[] =
         { kRelayUdpIntAddr, kRelayTcpIntAddr, kRelaySslTcpIntAddr };
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));

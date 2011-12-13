@@ -97,9 +97,6 @@ extern const buzz::StaticQName QN_NAME;
 extern const buzz::StaticQName QN_CLOCKRATE;
 extern const buzz::StaticQName QN_BITRATE;
 extern const buzz::StaticQName QN_CHANNELS;
-extern const buzz::StaticQName QN_WIDTH;
-extern const buzz::StaticQName QN_HEIGHT;
-extern const buzz::StaticQName QN_FRAMERATE;
 extern const buzz::StaticQName QN_PARAMETER;
 extern const char LN_NAME[];
 extern const char LN_VALUE[];
@@ -125,7 +122,7 @@ extern const char GN_TOGETHER[];
 
 extern const char NS_JINGLE_RTP[];
 extern const buzz::StaticQName QN_JINGLE_RTP_CONTENT;
-extern const buzz::StaticQName QN_JINGLE_SSRC;
+extern const buzz::StaticQName QN_SSRC;
 extern const buzz::StaticQName QN_JINGLE_RTP_PAYLOADTYPE;
 extern const buzz::StaticQName QN_JINGLE_RTP_BANDWIDTH;
 extern const buzz::StaticQName QN_JINGLE_RTCP_MUX;
@@ -213,28 +210,26 @@ extern const char STR_TERMINATE_INTERNAL_SERVER_ERROR[];
 extern const char STR_TERMINATE_UNKNOWN_ERROR[];
 
 // Draft view and notify messages.
-extern const buzz::StaticQName QN_JINGLE_DRAFT_CONTENT_NAME;
 extern const char STR_JINGLE_DRAFT_CONTENT_NAME_VIDEO[];
 extern const char STR_JINGLE_DRAFT_CONTENT_NAME_AUDIO[];
-extern const buzz::StaticQName QN_JINGLE_DRAFT_NOTIFY;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_NICK;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_NAME;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_USAGE;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_STATE;
-extern const char STR_JINGLE_DRAFT_SOURCE_STATE_REMOVED[];
-extern const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_SSRC;
+extern const buzz::StaticQName QN_NICK;
+extern const buzz::StaticQName QN_TYPE;
 extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_NAME;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_TYPE;
 extern const char STR_JINGLE_DRAFT_VIEW_TYPE_NONE[];
 extern const char STR_JINGLE_DRAFT_VIEW_TYPE_STATIC[];
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_SSRC;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_WIDTH;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_HEIGHT;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_FRAMERATE;
-extern const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_PREFERENCE;
+extern const buzz::StaticQName QN_JINGLE_DRAFT_PARAMS;
+extern const buzz::StaticQName QN_WIDTH;
+extern const buzz::StaticQName QN_HEIGHT;
+extern const buzz::StaticQName QN_FRAMERATE;
+extern const buzz::StaticQName QN_JINGLE_DRAFT_STREAM;
+extern const buzz::StaticQName QN_JINGLE_DRAFT_STREAMS;
+extern const buzz::StaticQName QN_DISPLAY;
+extern const buzz::StaticQName QN_CNAME;
+extern const buzz::StaticQName QN_JINGLE_DRAFT_SSRC;
+extern const buzz::StaticQName QN_JINGLE_DRAFT_SSRC_GROUP;
+extern const buzz::StaticQName QN_SEMANTICS;
+extern const buzz::StaticQName QN_JINGLE_LEGACY_NOTIFY;
+extern const buzz::StaticQName QN_JINGLE_LEGACY_SOURCE;
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

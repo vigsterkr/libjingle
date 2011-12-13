@@ -384,9 +384,9 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
         } else if (config == BLOCK_ALL_BUT_OUTGOING_HTTP) {
           // Block all TCP to/from the endpoint except 80/443 out
           fw()->AddRule(true, talk_base::FP_TCP, kPublicAddrs[endpoint],
-                        SocketAddress(0, 80));
+                        SocketAddress(talk_base::IPAddress(INADDR_ANY), 80));
           fw()->AddRule(true, talk_base::FP_TCP, kPublicAddrs[endpoint],
-                        SocketAddress(0, 443));
+                        SocketAddress(talk_base::IPAddress(INADDR_ANY), 443));
           fw()->AddRule(false, talk_base::FP_TCP, talk_base::FD_ANY,
                         kPublicAddrs[endpoint]);
         } else if (config == PROXY_HTTPS) {

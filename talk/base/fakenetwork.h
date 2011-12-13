@@ -52,7 +52,7 @@ class FakeNetworkManager : public NetworkManagerBase,
   void AddInterface(const SocketAddress& iface) {
     // ensure a unique name for the interface
     SocketAddress address("test" + talk_base::ToString(next_index_++), 0);
-    address.SetResolvedIP(iface.ip());
+    address.SetResolvedIP(iface.ipaddr());
     ifaces_.push_back(address);
     DoUpdateNetworks();
   }
@@ -89,7 +89,8 @@ class FakeNetworkManager : public NetworkManagerBase,
     std::vector<Network*> networks;
     for (std::vector<SocketAddress>::iterator it = ifaces_.begin();
          it != ifaces_.end(); ++it) {
-      networks.push_back(new Network(it->hostname(), it->hostname(), it->ip()));
+      networks.push_back(new Network(it->hostname(), it->hostname(),
+                                     it->ipaddr()));
     }
     MergeNetworkList(networks, true);
   }

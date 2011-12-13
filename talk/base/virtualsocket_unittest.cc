@@ -56,7 +56,7 @@ class VirtualSocketServerTest : public testing::Test {
 };
 
 TEST_F(VirtualSocketServerTest, basic) {
-  SocketAddress addr1(0, 5000);
+  SocketAddress addr1(IPAddress(INADDR_ANY), 5000);
   AsyncSocket* socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
   socket->Bind(addr1);
   addr1 = socket->GetLocalAddress();
@@ -80,7 +80,8 @@ TEST_F(VirtualSocketServerTest, basic) {
     SocketAddress addr4;
     EXPECT_EQ(3, client2->SendTo("foo", 3, addr1));
     EXPECT_TRUE(client1->CheckNextPacket("foo", 3, &addr4));
-    EXPECT_EQ(addr4.ip(), addr2.ip() + 1);
+    EXPECT_EQ(addr4.ipaddr().v4AddressAsHostOrderInteger(),
+              addr2.ipaddr().v4AddressAsHostOrderInteger() + 1);
     EXPECT_EQ(addr4.port(), addr2.port() + 1);
 
     SocketAddress addr5;
@@ -618,8 +619,8 @@ struct Receiver : public MessageHandler, public sigslot::has_slots<> {
 TEST_F(VirtualSocketServerTest, bandwidth) {
   AsyncSocket* send_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
   AsyncSocket* recv_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
-  ASSERT_EQ(0, send_socket->Bind(SocketAddress(0, 1000)));
-  ASSERT_EQ(0, recv_socket->Bind(SocketAddress(0, 1000)));
+  ASSERT_EQ(0, send_socket->Bind(SocketAddress(IPAddress(INADDR_ANY), 1000)));
+  ASSERT_EQ(0, recv_socket->Bind(SocketAddress(IPAddress(INADDR_ANY), 1000)));
   ASSERT_EQ(0, send_socket->Connect(recv_socket->GetLocalAddress()));
 
   uint32 bandwidth = 64 * 1024;
@@ -653,8 +654,8 @@ TEST_F(VirtualSocketServerTest, delay) {
 
   AsyncSocket* send_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
   AsyncSocket* recv_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
-  ASSERT_EQ(0, send_socket->Bind(SocketAddress(0, 1000)));
-  ASSERT_EQ(0, recv_socket->Bind(SocketAddress(0, 1000)));
+  ASSERT_EQ(0, send_socket->Bind(SocketAddress(IPAddress(INADDR_ANY), 1000)));
+  ASSERT_EQ(0, recv_socket->Bind(SocketAddress(IPAddress(INADDR_ANY), 1000)));
   ASSERT_EQ(0, send_socket->Connect(recv_socket->GetLocalAddress()));
 
   Thread* pthMain = Thread::Current();

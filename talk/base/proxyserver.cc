@@ -36,7 +36,7 @@ namespace talk_base {
 ProxyServer::ProxyServer(
     SocketFactory* int_factory, const SocketAddress& int_addr,
     SocketFactory* ext_factory, const SocketAddress& ext_ip)
-    : ext_factory_(ext_factory), ext_ip_(ext_ip.ip(), 0),  // strip off any port
+    : ext_factory_(ext_factory), ext_ip_(ext_ip.ipaddr(), 0),  // strip off port
       server_socket_(int_factory->CreateAsyncSocket(SOCK_STREAM)) {
   server_socket_->Bind(int_addr);
   server_socket_->Listen(5);

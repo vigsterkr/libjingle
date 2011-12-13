@@ -99,11 +99,10 @@ TEST_F(StunServerTest, TestGood) {
   EXPECT_TRUE(mapped_addr != NULL);
   EXPECT_EQ(1, mapped_addr->family());
   EXPECT_EQ(client_addr.port(), mapped_addr->port());
-  if (mapped_addr->ip() != client_addr.ip()) {
+  if (mapped_addr->ipaddr() != client_addr.ipaddr()) {
     LOG(LS_WARNING) << "Warning: mapped IP ("
-                    << talk_base::SocketAddress::IPToString(
-                           mapped_addr->ip()).c_str()
-                    << ") != local IP (" << client_addr.IPAsString().c_str()
+                    << mapped_addr->ipaddr()
+                    << ") != local IP (" << client_addr.ipaddr()
                     << ")";
   }
 

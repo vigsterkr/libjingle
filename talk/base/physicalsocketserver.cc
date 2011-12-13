@@ -1409,6 +1409,10 @@ bool PhysicalSocketServer::SetPosixSignalHandler(int signum,
   return true;
 }
 
+Dispatcher* PhysicalSocketServer::signal_dispatcher() {
+  return signal_dispatcher_.get();
+}
+
 bool PhysicalSocketServer::InstallSignal(int signum, void (*handler)(int)) {
   struct sigaction act;
   // It doesn't really matter what we set this mask to.

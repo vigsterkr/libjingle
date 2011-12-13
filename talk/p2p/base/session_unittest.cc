@@ -567,7 +567,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
-        network_("network", "unittest", address_.ip()),
+        network_("network", "unittest", address_.ipaddr()),
         socket_factory_(talk_base::Thread::Current()),
         running_(false),
         port_(28653) {
@@ -583,7 +583,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
       int index = port_offset_ + i;
       ports_[i] = cricket::UDPPort::Create(
           talk_base::Thread::Current(), &socket_factory_,
-          &network_, address_.ip(), GetPort(index), GetPort(index));
+          &network_, address_.ipaddr(), GetPort(index), GetPort(index));
       ports_[i]->set_username_fragment(GetUsername(index));
       ports_[i]->set_password(GetPassword(index));
       AddPort(ports_[i]);
@@ -1027,7 +1027,7 @@ class TestClient : public sigslot::has_slots<> {
         session->CreateChannel(content_name_a, channel_name_a));
     chan_b = new ChannelHandler(
         session->CreateChannel(content_name_b, channel_name_b));
-    if (chan_aa == NULL && chan_bb == NULL) {
+    if (!channel_name_aa.empty() && !channel_name_bb.empty()) {
       chan_aa = new ChannelHandler(
           session->CreateChannel(content_name_a, channel_name_aa));
       chan_bb = new ChannelHandler(
@@ -2065,14 +2065,12 @@ class SessionTest : public testing::Test {
 // initiates to a client with protocol Y, they end up speaking protocol Z.
 
 // Gingle => Gingle = Gingle (with other content)
-// Disabled due to flakey pulse builds
-TEST_F(SessionTest, DISABLED_GingleToGingleOtherContent) {
+TEST_F(SessionTest, GingleToGingleOtherContent) {
   TestOtherContent(PROTOCOL_GINGLE, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
 // Gingle => Gingle = Gingle (with audio content)
-// Disabled due to flakey pulse builds
-TEST_F(SessionTest, DISABLED_GingleToGingleAudioContent) {
+TEST_F(SessionTest, GingleToGingleAudioContent) {
   TestAudioContent(PROTOCOL_GINGLE, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
@@ -2199,8 +2197,7 @@ TEST_F(SessionTest, JingleRejection) {
   TestRejection(PROTOCOL_JINGLE);
 }
 
-// Disabled due to flakey pulse builds
-TEST_F(SessionTest, DISABLED_GingleGoodRedirect) {
+TEST_F(SessionTest, GingleGoodRedirect) {
   TestGoodRedirect(PROTOCOL_GINGLE);
 }
 

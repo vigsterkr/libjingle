@@ -1,5 +1,10 @@
 Libjingle
 
+0.6.5 - Dec 12, 2011
+  - Add IPv6 support in SocketAddress.
+  - Change PeerConnectionFactory inteface.
+  - Bug fixes.
+
 0.6.4 - Nov 30, 2011
   - Branch app/webrtc to app/webrtcv1.
   - Add more base unit tests.

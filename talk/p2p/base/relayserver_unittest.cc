@@ -174,7 +174,7 @@ class RelayServerTest : public testing::Test {
   static void AddDestinationAttr(StunMessage* msg, const SocketAddress& addr) {
     StunAddressAttribute* attr =
         StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
-    attr->SetIP(addr.ip());
+    attr->SetIP(addr.ipaddr());
     attr->SetPort(addr.port());
     msg->AddAttribute(attr);
   }
@@ -263,7 +263,7 @@ TEST_F(RelayServerTest, TestAllocate) {
   ASSERT_TRUE(mapped_addr != NULL);
   EXPECT_EQ(1, mapped_addr->family());
   EXPECT_EQ(server_ext_addr.port(), mapped_addr->port());
-  EXPECT_EQ(server_ext_addr.ip(), mapped_addr->ip());
+  EXPECT_EQ(server_ext_addr.ipaddr(), mapped_addr->ipaddr());
 
   const StunUInt32Attribute* res_lifetime_attr =
       res->GetUInt32(STUN_ATTR_LIFETIME);
@@ -293,7 +293,7 @@ TEST_F(RelayServerTest, TestReallocate) {
   ASSERT_TRUE(mapped_addr != NULL);
   EXPECT_EQ(1, mapped_addr->family());
   EXPECT_EQ(server_ext_addr.port(), mapped_addr->port());
-  EXPECT_EQ(server_ext_addr.ip(), mapped_addr->ip());
+  EXPECT_EQ(server_ext_addr.ipaddr(), mapped_addr->ipaddr());
 
   const StunUInt32Attribute* lifetime_attr =
       res->GetUInt32(STUN_ATTR_LIFETIME);
@@ -330,7 +330,7 @@ TEST_F(RelayServerTest, TestRemoteBind) {
       res->GetAddress(STUN_ATTR_SOURCE_ADDRESS2);
   ASSERT_TRUE(src_addr != NULL);
   EXPECT_EQ(1, src_addr->family());
-  EXPECT_EQ(client2_addr.ip(), src_addr->ip());
+  EXPECT_EQ(client2_addr.ipaddr(), src_addr->ipaddr());
   EXPECT_EQ(client2_addr.port(), src_addr->port());
 
   EXPECT_TRUE(Receive2() == NULL);
@@ -498,7 +498,7 @@ TEST_F(RelayServerTest, TestSendRaw) {
         res->GetAddress(STUN_ATTR_SOURCE_ADDRESS2);
     ASSERT_TRUE(src_addr != NULL);
     EXPECT_EQ(1, src_addr->family());
-    EXPECT_EQ(client2_addr.ip(), src_addr->ip());
+    EXPECT_EQ(client2_addr.ipaddr(), src_addr->ipaddr());
     EXPECT_EQ(client2_addr.port(), src_addr->port());
 
     const StunByteStringAttribute* recv_data =

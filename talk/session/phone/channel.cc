@@ -559,6 +559,8 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
   return ret;
 }
 
+// TODO: Check all of the ssrcs in all of the streams in
+// the content, and not just the first one.
 bool BaseChannel::SetSsrcMux_w(bool enable,
                                const MediaContentDescription* content,
                                ContentAction action,
@@ -567,12 +569,12 @@ bool BaseChannel::SetSsrcMux_w(bool enable,
   if (action == CA_OFFER) {
     ret = ssrc_filter_.SetOffer(enable, src);
     if (ret && src == CS_REMOTE) {  // if received offer with ssrc
-      ret = ssrc_filter_.AddStream(content->ssrc());
+      ret = ssrc_filter_.AddStream(content->first_ssrc());
     }
   } else if (action == CA_ANSWER) {
     ret = ssrc_filter_.SetAnswer(enable, src);
     if (ret && src == CS_REMOTE && ssrc_filter_.IsActive()) {
-      ret = ssrc_filter_.AddStream(content->ssrc());
+      ret = ssrc_filter_.AddStream(content->first_ssrc());
     }
   }
   return ret;
@@ -838,9 +840,10 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
   ASSERT(audio != NULL);
 
   bool ret;
-  if (audio->ssrc_set()) {
-    media_channel()->SetSendSsrc(audio->ssrc());
-    LOG(LS_INFO) << "Set send ssrc for audio: " << audio->ssrc();
+  if (audio->has_ssrcs()) {
+    // TODO: Handle multiple streams and ssrcs here.
+    media_channel()->SetSendSsrc(audio->first_ssrc());
+    LOG(LS_INFO) << "Set send ssrc for audio: " << audio->first_ssrc();
   }
   // Set local SRTP parameters (what we will encrypt with).
   ret = SetSrtp_w(audio->cryptos(), action, CS_LOCAL);
@@ -850,7 +853,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(audio->ssrc_set(), content, action, CS_LOCAL);
+    ret = SetSsrcMux_w(audio->has_ssrcs(), content, action, CS_LOCAL);
   }
   // Set local audio codecs (what we want to receive).
   if (ret) {
@@ -889,7 +892,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(audio->ssrc_set(), content, action, CS_REMOTE);
+    ret = SetSsrcMux_w(audio->has_ssrcs(), content, action, CS_REMOTE);
   }
 
   // Set remote video codecs (what the other side wants to receive).
@@ -1201,9 +1204,10 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
   ASSERT(video != NULL);
 
   bool ret;
-  if (video->ssrc_set()) {
-    media_channel()->SetSendSsrc(video->ssrc());
-    LOG(LS_INFO) << "Set send ssrc for video: " << video->ssrc();
+  if (video->has_ssrcs()) {
+    // TODO: Handle multiple streams and ssrcs here.
+    media_channel()->SetSendSsrc(video->first_ssrc());
+    LOG(LS_INFO) << "Set send ssrc for video: " << video->first_ssrc();
   }
   // Set local SRTP parameters (what we will encrypt with).
   ret = SetSrtp_w(video->cryptos(), action, CS_LOCAL);
@@ -1213,7 +1217,7 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(video->ssrc_set(), content, action, CS_LOCAL);
+    ret = SetSsrcMux_w(video->has_ssrcs(), content, action, CS_LOCAL);
   }
 
   // Set local video codecs (what we want to receive).
@@ -1253,7 +1257,7 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(video->ssrc_set(), content, action, CS_REMOTE);
+    ret = SetSsrcMux_w(video->has_ssrcs(), content, action, CS_REMOTE);
   }
   // Set remote video codecs (what the other side wants to receive).
   if (ret) {

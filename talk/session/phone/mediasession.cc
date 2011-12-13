@@ -233,8 +233,12 @@ static bool AddStreamParams(
       }
       uint32 ssrc = GenerateSsrc(*current_params);
       // TODO: Generate the more complex types of stream_params.
-      StreamParams stream_param(stream_it->name, ssrc, cname,
-                                stream_it->sync_label);
+
+      StreamParams stream_param;
+      stream_param.name = stream_it->name;
+      stream_param.ssrcs.push_back(ssrc);
+      stream_param.cname = cname;
+      stream_param.sync_label = stream_it->sync_label;
       content_description->AddStream(stream_param);
 
       // Store the new StreamParams in current_params.
@@ -303,8 +307,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
 
     if (options.streams.empty()) {
-      // TODO: Remove this legacy ssrc when all apps use StreamParams.
-      audio->set_ssrc(talk_base::CreateRandomNonZeroId());
+      // TODO: Remove this legacy stream when all apps use StreamParams.
+      audio->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     audio->set_rtcp_mux(true);
     audio->set_lang(lang_);
@@ -355,8 +359,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
 
     if (options.streams.empty()) {
-      // TODO: Remove this legacy ssrc when all apps use StreamParams.
-      video->set_ssrc(talk_base::CreateRandomNonZeroId());
+      // TODO: Remove this legacy stream when all apps use StreamParams.
+      video->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     video->set_bandwidth(options.video_bandwidth);
     video->set_rtcp_mux(true);
@@ -429,8 +433,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     }
 
     if (options.streams.empty()) {
-      // TODO: Remove this legacy ssrc when all apps use StreamParams.
-      audio_accept->set_ssrc(talk_base::CreateRandomNonZeroId());
+      // TODO: Remove this legacy stream when all apps use StreamParams.
+      audio_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     audio_accept->set_rtcp_mux(audio_offer->rtcp_mux());
 
@@ -493,8 +497,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     }
 
     if (options.streams.empty()) {
-      // TODO: Remove this legacy ssrc when all apps use StreamParams.
-      video_accept->set_ssrc(talk_base::CreateRandomNonZeroId());
+      // TODO: Remove this legacy stream when all apps use StreamParams.
+      video_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     video_accept->set_bandwidth(options.video_bandwidth);
     video_accept->set_rtcp_mux(video_offer->rtcp_mux());
@@ -579,5 +583,3 @@ const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc) {
 }
 
 }  // namespace cricket
-
-

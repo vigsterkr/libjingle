@@ -191,8 +191,10 @@ class SocketAddress {
   // Dual stack version always sets family to AF_INET6, and maps v4 addresses.
   // The other version doesn't map, and outputs an AF_INET address for
   // v4 or mapped addresses, and AF_INET6 addresses for others.
-  void ToDualStackSockAddrStorage(sockaddr_storage* saddr) const;
-  void ToSockAddrStorage(sockaddr_storage* saddr) const;
+  // Returns the size of the sockaddr_in or sockaddr_in6 structure that is
+  // written to the sockaddr_storage, or zero on failure.
+  size_t ToDualStackSockAddrStorage(sockaddr_storage* saddr) const;
+  size_t ToSockAddrStorage(sockaddr_storage* saddr) const;
 
   // Converts the IP address given in 'compact form' into dotted form.
   // IP is given as an integer in host byte order. V4 only, to be deprecated.
@@ -210,16 +212,12 @@ class SocketAddress {
   static bool StringToIP(const std::string& str, IPAddress* ip);
 
   // Get a list of the local machine's ip addresses.
-  // TODO: Deprecate this function.
-  static bool GetLocalIPs(std::vector<uint32>& ips);
+  // TODO: Move to nethelpers or similar (doesn't belong in socketaddress).
+  static bool GetLocalIPs(std::vector<IPAddress>* ips);
 
  private:
   // Get local machine's hostname.
   static std::string GetHostname();
-  // Get a list of the local machine's ip addresses.
-  // TODO: Remove this (and the other GetLocalIPs method).
-  static bool GetLocalIPs(std::vector<IPAddress>* ips);
-
   std::string hostname_;
   IPAddress ip_;
   uint16 port_;

@@ -158,12 +158,12 @@ static void DoTest(const char* input, size_t size, const char* transaction_id) {
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 
   StunAddressAttribute* addr2 =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
   addr2->SetPort(13);
-  addr2->SetIP(17);
+  addr2->SetIP(talk_base::IPAddress(17U));
   msg2.AddAttribute(addr2);
 
   const StunByteStringAttribute* bytes = msg.GetByteString(STUN_ATTR_USERNAME);
@@ -239,22 +239,22 @@ static void DoTest(const char* input, size_t size, const char* transaction_id) {
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 
   addr2 = StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
   addr2->SetPort(13);
-  addr2->SetIP(17);
+  addr2->SetIP(talk_base::IPAddress(17U));
   msg2.AddAttribute(addr2);
 
   addr = msg.GetAddress(STUN_ATTR_SOURCE_ADDRESS2);
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 
   addr2 = StunAttribute::CreateAddress(STUN_ATTR_SOURCE_ADDRESS2);
   addr2->SetPort(13);
-  addr2->SetIP(17);
+  addr2->SetIP(talk_base::IPAddress(17U));
   msg2.AddAttribute(addr2);
 
   bytes = msg.GetByteString(STUN_ATTR_DATA);
@@ -306,7 +306,7 @@ TEST(StunTest, TestIgnoreUnknownAttr) {
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 
   const StunUInt32Attribute* uval = msg.GetUInt32(STUN_ATTR_LIFETIME);
   EXPECT_TRUE(uval != NULL);
@@ -324,11 +324,11 @@ TEST(StunTest, TestXorMappedAddress) {
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 
   addr = msg.GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
   EXPECT_TRUE(addr != NULL);
   EXPECT_EQ(1, addr->family());
   EXPECT_EQ(13, addr->port());
-  EXPECT_EQ(17U, addr->ip());
+  EXPECT_EQ(talk_base::IPAddress(17U), addr->ipaddr());
 }

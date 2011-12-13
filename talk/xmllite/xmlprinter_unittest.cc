@@ -25,23 +25,21 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string>
+#include "talk/xmllite/xmlprinter.h"
+
 #include <sstream>
-#include <iostream>
+#include <string>
+
 #include "talk/base/common.h"
 #include "talk/base/gunit.h"
 #include "talk/xmllite/qname.h"
 #include "talk/xmllite/xmlelement.h"
-#include "talk/xmllite/xmlprinter.h"
+#include "talk/xmllite/xmlnsstack.h"
 
 using buzz::QName;
 using buzz::XmlElement;
+using buzz::XmlnsStack;
 using buzz::XmlPrinter;
-
-static std::string XmlPrinterTest_Ns[] = {
-  "gg", "google:test",
-  "", "nested:test",
-};
 
 TEST(XmlPrinterTest, TestBasicPrinting) {
   XmlElement elt(QName("google:test", "first"));
@@ -55,7 +53,10 @@ TEST(XmlPrinterTest, TestNamespacedPrinting) {
   elt.AddElement(new XmlElement(QName("nested:test", "second")));
   std::stringstream ss;
 
-  XmlPrinter::PrintXml(&ss, &elt, XmlPrinterTest_Ns, 4);
+  XmlnsStack ns_stack;
+  ns_stack.AddXmlns("gg", "google:test");
+  ns_stack.AddXmlns("", "nested:test");
+
+  XmlPrinter::PrintXml(&ss, &elt, &ns_stack);
   EXPECT_EQ("<gg:first><second/></gg:first>", ss.str());
 }
-

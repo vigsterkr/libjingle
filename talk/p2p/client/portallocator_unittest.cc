@@ -104,7 +104,7 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
                              const std::string& proto,
                              const SocketAddress& addr) {
     return (c.name() == name && c.type() == type &&
-        c.protocol() == proto && c.address().ip() == addr.ip() &&
+        c.protocol() == proto && c.address().ipaddr() == addr.ipaddr() &&
         (addr.port() == 0 || (c.address().port() == addr.port())));
   }
   static bool CheckPort(const talk_base::SocketAddress& addr,

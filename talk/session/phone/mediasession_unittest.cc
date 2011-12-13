@@ -137,10 +137,13 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
     ssrc_groups.push_back(fec_group2);
     ssrc_groups.push_back(fec_group3);
 
-    StreamParams simulcast_params(kVideoTrack1,
-                                  MAKE_VECTOR(kSimulcastParamsSsrc),
-                                  ssrc_groups, "Video_SIM_FEC",
-                                  kMediaStream1);
+    StreamParams simulcast_params;
+    simulcast_params.name = kVideoTrack1;
+    simulcast_params.ssrcs = MAKE_VECTOR(kSimulcastParamsSsrc);
+    simulcast_params.ssrc_groups = ssrc_groups;
+    simulcast_params.cname = "Video_SIM_FEC";
+    simulcast_params.sync_label = kMediaStream1;
+
     StreamParamsVec video_streams;
     video_streams.push_back(simulcast_params);
 
@@ -178,7 +181,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioOffer) {
       static_cast<const AudioContentDescription*>(ac->description);
   EXPECT_EQ(MEDIA_TYPE_AUDIO, acd->type());
   EXPECT_EQ(f1_.audio_codecs(), acd->codecs());
-  EXPECT_NE(0U, acd->ssrc());                   // a random nonzero ssrc
+  EXPECT_NE(0U, acd->first_ssrc());             // a random nonzero ssrc
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, false, 2U, CS_AES_CM_128_HMAC_SHA1_32);
@@ -204,13 +207,13 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoOffer) {
       static_cast<const VideoContentDescription*>(vc->description);
   EXPECT_EQ(MEDIA_TYPE_AUDIO, acd->type());
   EXPECT_EQ(f1_.audio_codecs(), acd->codecs());
-  EXPECT_NE(0U, acd->ssrc());                   // a random nonzero ssrc
+  EXPECT_NE(0U, acd->first_ssrc());             // a random nonzero ssrc
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, false, 2U, CS_AES_CM_128_HMAC_SHA1_32);
   EXPECT_EQ(MEDIA_TYPE_VIDEO, vcd->type());
   EXPECT_EQ(f1_.video_codecs(), vcd->codecs());
-  EXPECT_NE(0U, vcd->ssrc());                   // a random nonzero ssrc
+  EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_EQ(kAutoBandwidth, vcd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(vcd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(vcd, false, 1U, CS_AES_CM_128_HMAC_SHA1_80);
@@ -234,7 +237,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswer) {
       static_cast<const AudioContentDescription*>(ac->description);
   EXPECT_EQ(MEDIA_TYPE_AUDIO, acd->type());
   EXPECT_EQ(MAKE_VECTOR(kAudioCodecsAnswer), acd->codecs());
-  EXPECT_NE(0U, acd->ssrc());                   // a random nonzero ssrc
+  EXPECT_NE(0U, acd->first_ssrc());             // a random nonzero ssrc
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // negotiated auto bw
   EXPECT_TRUE(acd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(acd, false, 1U, CS_AES_CM_128_HMAC_SHA1_32);
@@ -263,12 +266,12 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswer) {
   EXPECT_EQ(MEDIA_TYPE_AUDIO, acd->type());
   EXPECT_EQ(MAKE_VECTOR(kAudioCodecsAnswer), acd->codecs());
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // negotiated auto bw
-  EXPECT_NE(0U, acd->ssrc());                   // a random nonzero ssrc
+  EXPECT_NE(0U, acd->first_ssrc());             // a random nonzero ssrc
   EXPECT_TRUE(acd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(acd, false, 1U, CS_AES_CM_128_HMAC_SHA1_32);
   EXPECT_EQ(MEDIA_TYPE_VIDEO, vcd->type());
   EXPECT_EQ(MAKE_VECTOR(kVideoCodecsAnswer), vcd->codecs());
-  EXPECT_NE(0U, vcd->ssrc());                    // a random nonzero ssrc
+  EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_TRUE(vcd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(vcd, false, 1U, CS_AES_CM_128_HMAC_SHA1_80);
 }
@@ -324,7 +327,6 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoOffer) {
   ASSERT_EQ(1U, audio_streams[1].ssrcs.size());
   EXPECT_NE(0U, audio_streams[1].ssrcs[0]);
 
-  EXPECT_EQ(0U, acd->ssrc());                   // 0- not used.
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, false, 2U, CS_AES_CM_128_HMAC_SHA1_32);
@@ -337,7 +339,6 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoOffer) {
   ASSERT_EQ(1U, video_streams.size());
   EXPECT_EQ(video_streams[0].cname, audio_streams[0].cname);
   EXPECT_EQ(kVideoTrack1, video_streams[0].name);
-  EXPECT_EQ(0U, vcd->ssrc());                   // 0- not used.
   EXPECT_EQ(kAutoBandwidth, vcd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(vcd->rtcp_mux());                 // rtcp-mux defaults on
 
@@ -429,7 +430,6 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   ASSERT_EQ(1U, audio_streams[1].ssrcs.size());
   EXPECT_NE(0U, audio_streams[1].ssrcs[0]);
 
-  EXPECT_EQ(0U, acd->ssrc());                   // 0- not used.
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
 
@@ -440,7 +440,6 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   ASSERT_EQ(1U, video_streams.size());
   EXPECT_EQ(video_streams[0].cname, audio_streams[0].cname);
   EXPECT_EQ(kVideoTrack1, video_streams[0].name);
-  EXPECT_EQ(0U, vcd->ssrc());                   // 0- not used.
   EXPECT_EQ(kAutoBandwidth, vcd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(vcd->rtcp_mux());                 // rtcp-mux defaults on
 

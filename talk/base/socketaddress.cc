@@ -362,7 +362,7 @@ bool SocketAddress::FromSockAddr(const sockaddr_in& saddr) {
   return true;
 }
 
-static void ToSockAddrStorageHelper(sockaddr_storage* addr,
+static size_t ToSockAddrStorageHelper(sockaddr_storage* addr,
                                     IPAddress ip, int port) {
   memset(addr, 0, sizeof(sockaddr_storage));
   addr->ss_family = ip.family();
@@ -370,19 +370,22 @@ static void ToSockAddrStorageHelper(sockaddr_storage* addr,
     sockaddr_in6* saddr = reinterpret_cast<sockaddr_in6*>(addr);
     saddr->sin6_addr = ip.ipv6_address();
     saddr->sin6_port = HostToNetwork16(port);
-  } else {
+    return sizeof(sockaddr_in6);
+  } else if (addr->ss_family == AF_INET) {
     sockaddr_in* saddr = reinterpret_cast<sockaddr_in*>(addr);
     saddr->sin_addr = ip.ipv4_address();
     saddr->sin_port = HostToNetwork16(port);
+    return sizeof(sockaddr_in);
   }
+  return 0;
 }
 
-void SocketAddress::ToDualStackSockAddrStorage(sockaddr_storage *addr) const {
-  ToSockAddrStorageHelper(addr, ip_.AsIPv6Address(), port_);
+size_t SocketAddress::ToDualStackSockAddrStorage(sockaddr_storage *addr) const {
+  return ToSockAddrStorageHelper(addr, ip_.AsIPv6Address(), port_);
 }
 
-void SocketAddress::ToSockAddrStorage(sockaddr_storage* addr) const {
-  ToSockAddrStorageHelper(addr, ip_, port_);
+size_t SocketAddress::ToSockAddrStorage(sockaddr_storage* addr) const {
+  return ToSockAddrStorageHelper(addr, ip_, port_);
 }
 
 std::string SocketAddress::IPToString(uint32 ip_as_host_order_integer) {
@@ -435,27 +438,6 @@ std::string SocketAddress::GetHostname() {
   if (gethostname(hostname, ARRAY_SIZE(hostname)) == 0)
     return hostname;
   return "";
-}
-
-bool SocketAddress::GetLocalIPs(std::vector<uint32>& ips) {
-  ips.clear();
-
-  const std::string hostname = GetHostname();
-  if (hostname.empty())
-    return false;
-
-  int errcode;
-  if (hostent* pHost = SafeGetHostByName(hostname.c_str(), &errcode)) {
-    for (size_t i = 0; pHost->h_addr_list[i]; ++i) {
-      uint32 ip =
-        NetworkToHost32(*reinterpret_cast<uint32 *>(pHost->h_addr_list[i]));
-      ips.push_back(ip);
-    }
-    FreeHostEnt(pHost);
-    return !ips.empty();
-  }
-  LOG(LS_ERROR) << "gethostbyname err: " << errcode;
-  return false;
 }
 
 bool SocketAddress::GetLocalIPs(std::vector<IPAddress>* ips) {

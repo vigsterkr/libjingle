@@ -521,7 +521,7 @@ XmlElement::ClearChildren() {
 std::string
 XmlElement::Str() const {
   std::stringstream ss;
-  Print(&ss, NULL, 0);
+  XmlPrinter::PrintXml(&ss, this);
   return ss.str();
 }
 
@@ -530,12 +530,6 @@ XmlElement::ForStr(const std::string & str) {
   XmlBuilder builder;
   XmlParser::ParseXml(&builder, str);
   return builder.CreateElement();
-}
-
-void
-XmlElement::Print(
-    std::ostream * pout, std::string xmlns[], int xmlnsCount) const {
-  XmlPrinter::PrintXml(pout, this, xmlns, xmlnsCount);
 }
 
 XmlElement::~XmlElement() {

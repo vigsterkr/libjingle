@@ -216,6 +216,7 @@ int main(int argc, char **argv) {
       "Disable or enable encryption: disable, enable, require.");
   DEFINE_string(tls, "enable",
       "Disable or enable tls: disable, enable, require.");
+  DEFINE_bool(allowplain, false, "Allow plain authentication");
   DEFINE_bool(testserver, false, "Use test server");
   DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
   DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
@@ -240,6 +241,7 @@ int main(int argc, char **argv) {
   bool debug = FLAG_d;
   std::string protocol = FLAG_protocol;
   bool test_server = FLAG_testserver;
+  bool allow_plain = FLAG_allowplain;
   std::string tls = FLAG_tls;
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
@@ -314,11 +316,9 @@ int main(int argc, char **argv) {
   xcs.set_user(jid.node());
   xcs.set_resource("call");
   xcs.set_host(jid.domain());
-
-  bool allow_plain = (test_server) ? true : false;
   xcs.set_allow_plain(allow_plain);
 
-  if(test_server || tls == "disable") {
+  if(tls == "disable") {
     xcs.set_use_tls(buzz::TLS_DISABLED);
   } else if (tls == "enable") {
     xcs.set_use_tls(buzz::TLS_ENABLED);
@@ -332,6 +332,7 @@ int main(int argc, char **argv) {
   if (test_server) {
     pass.password() = jid.node();
     xcs.set_allow_plain(true);
+    xcs.set_use_tls(buzz::TLS_DISABLED);
     xcs.set_test_server_domain("google.com");
   }
   xcs.set_pass(talk_base::CryptString(pass));

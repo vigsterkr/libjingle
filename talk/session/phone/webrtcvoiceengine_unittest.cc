@@ -4,11 +4,11 @@
 
 #include "talk/base/byteorder.h"
 #include "talk/base/gunit.h"
+#include "talk/p2p/base/fakesession.h"
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/fakemediaprocessor.h"
 #include "talk/session/phone/fakertp.h"
-#include "talk/session/phone/fakesession.h"
 #include "talk/session/phone/fakewebrtcvoiceengine.h"
 #include "talk/session/phone/webrtcvoiceengine.h"
 
@@ -558,9 +558,8 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvRtpHeaderExtensions) {
   EXPECT_FALSE(enable);
 }
 
-// TODO: Re-enable this test once audio level status is restored.
 // Test that we support setting certain send header extensions.
-TEST_F(WebRtcVoiceEngineTestFake, DISABLED_SetSendRtpHeaderExtensions) {
+TEST_F(WebRtcVoiceEngineTestFake, SetSendRtpHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   std::vector<cricket::RtpHeaderExtension> extensions;
   int channel_num = voe_.GetLastChannel();

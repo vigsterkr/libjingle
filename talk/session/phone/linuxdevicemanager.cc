@@ -83,7 +83,7 @@ static const char* const kFilteredAudioDevicesName[] = {
     "surround50:",
     "surround51:",
     "surround71:",
-    "iec958:"       // S/PDIF
+    "iec958:",      // S/PDIF
 #endif
     NULL,
 };

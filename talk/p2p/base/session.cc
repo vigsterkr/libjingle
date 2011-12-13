@@ -737,8 +737,8 @@ void Session::OnIncomingMessage(const SessionMessage& msg) {
     case ACTION_TRANSPORT_ACCEPT:
       valid = OnTransportAcceptMessage(msg, &error);
       break;
-    case ACTION_UPDATE:
-      valid = OnUpdateMessage(msg, &error);
+    case ACTION_DESCRIPTION_INFO:
+      valid = OnDescriptionInfoMessage(msg, &error);
       break;
     default:
       valid = BadMessage(buzz::QN_STANZA_BAD_REQUEST,
@@ -946,7 +946,7 @@ bool Session::OnTransportAcceptMessage(const SessionMessage& msg,
   return true;
 }
 
-bool Session::OnUpdateMessage(const SessionMessage& msg,
+bool Session::OnDescriptionInfoMessage(const SessionMessage& msg,
                               MessageError* error) {
   if (!CheckState(STATE_INPROGRESS, error))
     return false;
@@ -972,12 +972,14 @@ bool Session::OnUpdateMessage(const SessionMessage& msg,
   }
 
   // Merge the updates into the remote description.
+  // TODO: Merge streams instead of overwriting.
   for (it = updated_contents.begin(); it != updated_contents.end(); ++it) {
     LOG(LS_INFO) << "Updating content " << it->name;
     remote_description()->RemoveContentByName(it->name);
     remote_description()->AddContent(it->name, it->type, it->description);
   }
 
+  // TODO: Add an argument that shows what streams were changed.
   SignalRemoteDescriptionUpdate(this);
 
   return true;

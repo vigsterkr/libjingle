@@ -35,6 +35,8 @@
 
 namespace cricket {
 
+static const uint32 kSsrc01 = 0x01;
+
 SsrcMuxFilter::SsrcMuxFilter()
     : state_(ST_INIT),
       enabled_(false) {
@@ -88,10 +90,16 @@ bool SsrcMuxFilter::DemuxPacket(const char* data, size_t len, bool rtcp) {
     if (!GetRtcpType(data, len, &pl_type)) return false;
     if (pl_type == kRtcpTypeSR || pl_type == kRtcpTypeRR) {
       // Getting SSRC from the report packets.
-      GetRtcpSsrc(data, len, &ssrc);
+      if (!GetRtcpSsrc(data, len, &ssrc)) return false;
+      if (ssrc == kSsrc01) {
+        // SSRC 1 has a special meaning and indicates generic feedback on
+        // some systems and should never be dropped.  If it is forwarded
+        // incorrectly it will be ignored by lower layers anyway.
+        return true;
+      }
     } else {
       // All other RTCP packets are handled by the all channels.
-      // TODO - Add SSRC parsing to all RTCP messages.
+      // TODO: Add SSRC parsing to all RTCP messages.
       LOG(LS_INFO) << "Non RTCP report packet received for demux.";
       return true;
     }

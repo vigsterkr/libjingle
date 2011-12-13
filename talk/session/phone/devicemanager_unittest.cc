@@ -29,11 +29,12 @@
 #include "talk/base/win32.h"
 #include <objbase.h>
 #endif
+#include "talk/base/fileutils.h"
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
-#include "talk/base/stream.h"
-#include "talk/base/fileutils.h"
 #include "talk/base/pathutils.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/stream.h"
 #include "talk/session/phone/devicemanager.h"
 #include "talk/session/phone/v4llookup.h"
 
@@ -42,50 +43,47 @@
 #include "talk/base/fileutils_mock.h"
 #endif  // LINUX
 
+#include "talk/session/phone/devicemanager.h"
+
 using talk_base::Pathname;
 using talk_base::FileTimeType;
+using talk_base::scoped_ptr;
 using cricket::Device;
+using cricket::DeviceManager;
+using cricket::DeviceManagerFactory;
+using cricket::DeviceManagerInterface;
 
 // Test that we startup/shutdown properly.
 TEST(DeviceManagerTest, StartupShutdown) {
-  cricket::DeviceManager dm;
-  EXPECT_FALSE(dm.initialized());
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.initialized());
-  dm.Terminate();
-  EXPECT_FALSE(dm.initialized());
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
+  EXPECT_TRUE(dm->Init());
+  dm->Terminate();
 }
 
 // Test CoInitEx behavior
 #ifdef WIN32
 TEST(DeviceManagerTest, CoInitialize) {
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> devices;
   // Ensure that calls to video device work if COM is not yet initialized.
-  EXPECT_FALSE(dm.initialized());
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.initialized());
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&devices));
-  dm.Terminate();
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&devices));
+  dm->Terminate();
   // Ensure that the ref count is correct.
   EXPECT_EQ(S_OK, CoInitializeEx(NULL, COINIT_MULTITHREADED));
   CoUninitialize();
   // Ensure that Init works in COINIT_APARTMENTTHREADED setting.
-  EXPECT_FALSE(dm.initialized());
   EXPECT_EQ(S_OK, CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.initialized());
-  dm.Terminate();
+  EXPECT_TRUE(dm->Init());
+  dm->Terminate();
   CoUninitialize();
   // Ensure that the ref count is correct.
   EXPECT_EQ(S_OK, CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
   CoUninitialize();
   // Ensure that Init works in COINIT_MULTITHREADED setting.
-  EXPECT_FALSE(dm.initialized());
   EXPECT_EQ(S_OK, CoInitializeEx(NULL, COINIT_MULTITHREADED));
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.initialized());
-  dm.Terminate();
+  EXPECT_TRUE(dm->Init());
+  dm->Terminate();
   CoUninitialize();
   // Ensure that the ref count is correct.
   EXPECT_EQ(S_OK, CoInitializeEx(NULL, COINIT_MULTITHREADED));
@@ -95,52 +93,52 @@ TEST(DeviceManagerTest, CoInitialize) {
 
 // Test enumerating devices (although we may not find any).
 TEST(DeviceManagerTest, GetDevices) {
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> audio_ins, audio_outs, video_ins;
   std::vector<cricket::Device> video_in_devs;
   cricket::Device def_video;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetAudioInputDevices(&audio_ins));
-  EXPECT_TRUE(dm.GetAudioOutputDevices(&audio_outs));
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_in_devs));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetAudioInputDevices(&audio_ins));
+  EXPECT_TRUE(dm->GetAudioOutputDevices(&audio_outs));
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_in_devs));
   EXPECT_EQ(video_ins.size(), video_in_devs.size());
   // If we have any video devices, we should be able to pick a default.
-  EXPECT_TRUE(dm.GetVideoCaptureDevice(
+  EXPECT_TRUE(dm->GetVideoCaptureDevice(
       cricket::DeviceManagerInterface::kDefaultDeviceName, &def_video)
       != video_ins.empty());
 }
 
 // Test that we return correct ids for default and bogus devices.
 TEST(DeviceManagerTest, GetAudioDeviceIds) {
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   Device device;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetAudioInputDevice(
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetAudioInputDevice(
       cricket::DeviceManagerInterface::kDefaultDeviceName, &device));
   EXPECT_EQ("-1", device.id);
-  EXPECT_TRUE(dm.GetAudioOutputDevice(
+  EXPECT_TRUE(dm->GetAudioOutputDevice(
       cricket::DeviceManagerInterface::kDefaultDeviceName, &device));
   EXPECT_EQ("-1", device.id);
-  EXPECT_FALSE(dm.GetAudioInputDevice("_NOT A REAL DEVICE_", &device));
-  EXPECT_FALSE(dm.GetAudioOutputDevice("_NOT A REAL DEVICE_", &device));
+  EXPECT_FALSE(dm->GetAudioInputDevice("_NOT A REAL DEVICE_", &device));
+  EXPECT_FALSE(dm->GetAudioOutputDevice("_NOT A REAL DEVICE_", &device));
 }
 
 // Test that we get the video capture device by name properly.
 TEST(DeviceManagerTest, GetVideoDeviceIds) {
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   Device device;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_FALSE(dm.GetVideoCaptureDevice("_NOT A REAL DEVICE_", &device));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_FALSE(dm->GetVideoCaptureDevice("_NOT A REAL DEVICE_", &device));
   std::vector<Device> video_ins;
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
   if (!video_ins.empty()) {
     // Get the default device with the parameter kDefaultDeviceName.
-    EXPECT_TRUE(dm.GetVideoCaptureDevice(
+    EXPECT_TRUE(dm->GetVideoCaptureDevice(
         cricket::DeviceManagerInterface::kDefaultDeviceName, &device));
 
     // Get the first device with the parameter video_ins[0].name.
-    EXPECT_TRUE(dm.GetVideoCaptureDevice(video_ins[0].name, &device));
+    EXPECT_TRUE(dm->GetVideoCaptureDevice(video_ins[0].name, &device));
     EXPECT_EQ(device.name, video_ins[0].name);
     EXPECT_EQ(device.id, video_ins[0].id);
   }
@@ -148,15 +146,15 @@ TEST(DeviceManagerTest, GetVideoDeviceIds) {
 
 TEST(DeviceManagerTest, VerifyDevicesListsAreCleared) {
   const std::string imaginary("_NOT A REAL DEVICE_");
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> audio_ins, audio_outs, video_ins;
   audio_ins.push_back(Device(imaginary, imaginary));
   audio_outs.push_back(Device(imaginary, imaginary));
   video_ins.push_back(Device(imaginary, imaginary));
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetAudioInputDevices(&audio_ins));
-  EXPECT_TRUE(dm.GetAudioOutputDevices(&audio_outs));
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetAudioInputDevices(&audio_ins));
+  EXPECT_TRUE(dm->GetAudioOutputDevices(&audio_outs));
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
   for (size_t i = 0; i < audio_ins.size(); ++i) {
     EXPECT_NE(imaginary, audio_ins[i].name);
   }
@@ -166,6 +164,57 @@ TEST(DeviceManagerTest, VerifyDevicesListsAreCleared) {
   for (size_t i = 0; i < video_ins.size(); ++i) {
     EXPECT_NE(imaginary, video_ins[i].name);
   }
+}
+
+static bool CompareDeviceList(std::vector<Device>& devices,
+    const char* const device_list[], int list_size) {
+  if (list_size != static_cast<int>(devices.size())) {
+    return false;
+  }
+  for (int i = 0; i < list_size; ++i) {
+    if (devices[i].name.compare(device_list[i]) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+TEST(DeviceManagerTest, VerifyFilterDevices) {
+  static const char* const kTotalDevicesName[] = {
+      "Google Camera Adapters are tons of fun.",
+      "device1",
+      "device2",
+      "device3",
+      "device4",
+      "device5",
+      "Google Camera Adapter 0",
+      "Google Camera Adapter 1",
+  };
+  static const char* const kFilteredDevicesName[] = {
+      "device2",
+      "device4",
+      "Google Camera Adapter",
+      NULL,
+  };
+  static const char* const kDevicesName[] = {
+      "device1",
+      "device3",
+      "device5",
+  };
+  std::vector<Device> devices;
+  for (int i = 0; i < ARRAY_SIZE(kTotalDevicesName); ++i) {
+    devices.push_back(Device(kTotalDevicesName[i], i));
+  }
+  EXPECT_TRUE(CompareDeviceList(devices, kTotalDevicesName,
+                                ARRAY_SIZE(kTotalDevicesName)));
+  // Return false if given NULL as the exclusion list.
+  EXPECT_TRUE(DeviceManager::FilterDevices(&devices, NULL));
+  // The devices should not change.
+  EXPECT_TRUE(CompareDeviceList(devices, kTotalDevicesName,
+                                ARRAY_SIZE(kTotalDevicesName)));
+  EXPECT_TRUE(DeviceManager::FilterDevices(&devices, kFilteredDevicesName));
+  EXPECT_TRUE(CompareDeviceList(devices, kDevicesName,
+                                ARRAY_SIZE(kDevicesName)));
 }
 
 #ifdef LINUX
@@ -202,10 +251,10 @@ TEST(DeviceManagerTest, GetVideoCaptureDevices_K2_6) {
                                       "Video Device 2"));
   talk_base::FilesystemScope fs(new talk_base::FakeFileSystem(files));
 
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> video_ins;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
   EXPECT_EQ(2u, video_ins.size());
   EXPECT_EQ("Video Device 1", video_ins.at(0).name);
   EXPECT_EQ("Video Device 2", video_ins.at(1).name);
@@ -231,10 +280,10 @@ TEST(DeviceManagerTest, GetVideoCaptureDevices_K2_4) {
           "param1: value1\nname:   Video Device 2\n param2: value2\n"));
   talk_base::FilesystemScope fs(new talk_base::FakeFileSystem(files));
 
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> video_ins;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
   EXPECT_EQ(2u, video_ins.size());
   EXPECT_EQ("Video Device 1", video_ins.at(0).name);
   EXPECT_EQ("Video Device 2", video_ins.at(1).name);
@@ -252,10 +301,10 @@ TEST(DeviceManagerTest, GetVideoCaptureDevices_KUnknown) {
   files.push_back(talk_base::FakeFileSystem::File("/dev/video5", ""));
   talk_base::FilesystemScope fs(new talk_base::FakeFileSystem(files));
 
-  cricket::DeviceManager dm;
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
   std::vector<Device> video_ins;
-  EXPECT_TRUE(dm.Init());
-  EXPECT_TRUE(dm.GetVideoCaptureDevices(&video_ins));
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetVideoCaptureDevices(&video_ins));
   EXPECT_EQ(2u, video_ins.size());
   EXPECT_EQ("/dev/video0", video_ins.at(0).name);
   EXPECT_EQ("/dev/video5", video_ins.at(1).name);

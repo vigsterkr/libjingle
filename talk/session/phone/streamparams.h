@@ -52,6 +52,7 @@ struct SsrcGroup {
   SsrcGroup(const std::string& usage, const std::vector<uint32>& ssrcs)
       : semantics(usage), ssrcs(ssrcs) {
   }
+
   bool operator==(const SsrcGroup& other) const {
     return (semantics == other.semantics && ssrcs == other.ssrcs);
   }
@@ -64,38 +65,48 @@ struct SsrcGroup {
 };
 
 struct StreamParams {
-  StreamParams(const std::string& name,
-               const std::vector<uint32>& ssrcs,
-               const std::vector<SsrcGroup>& ssrc_groups,
-               const std::string& cname,
-               const std::string& sync_label)
-      : name(name),
-        ssrcs(ssrcs),
-        ssrc_groups(ssrc_groups),
-        cname(cname),
-        sync_label(sync_label) {
-  }
-  StreamParams(const std::string& name,
-               uint32 ssrc,
-               const std::string& cname,
-               const std::string& sync_label)
-      : name(name),
-        cname(cname),
-        sync_label(sync_label) {
-    ssrcs.push_back(ssrc);
+  static StreamParams CreateLegacy(uint32 ssrc) {
+    StreamParams stream;
+    stream.ssrcs.push_back(ssrc);
+    return stream;
   }
   bool operator==(const StreamParams& other) const {
-    return (name == other.name && ssrcs == other.ssrcs &&
-        ssrc_groups == other.ssrc_groups && cname == other.cname &&
-        sync_label == sync_label);
+    return (nick == other.nick &&
+            name == other.name &&
+            ssrcs == other.ssrcs &&
+            ssrc_groups == other.ssrc_groups &&
+            type == other.type &&
+            display == other.display &&
+            cname == other.cname &&
+            sync_label == sync_label);
   }
   bool operator!=(const StreamParams &other) const {
     return !(*this == other);
   }
 
-  std::string name;  // Unique name of this source.
+  uint32 first_ssrc() const {
+    if (ssrcs.empty()) {
+      return 0;
+    }
+
+    return ssrcs[0];
+  }
+  bool has_ssrcs() const {
+    return !ssrcs.empty();
+  }
+
+  // Resource of the MUC jid of the participant of with this stream.
+  // For 1:1 calls, should be left empty (which means remote streams
+  // and local streams should not be mixed together).
+  std::string nick;
+  // Unique name of this source (unique per-nick, not for all nicks)
+  std::string name;
   std::vector<uint32> ssrcs;  // All SSRCs for this source
   std::vector<SsrcGroup> ssrc_groups;  // e.g. FID, FEC, SIM
+  // Examples: "camera", "screencast"
+  std::string type;
+  // Friendly name describing stream
+  std::string display;
   std::string cname;  // RTCP CNAME
   std::string sync_label;  // Friendly name of cname.
 };

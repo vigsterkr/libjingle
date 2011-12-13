@@ -48,7 +48,7 @@ class StunPortTest : public testing::Test,
                      public sigslot::has_slots<> {
  public:
   StunPortTest()
-      : network_("unittest", "unittest", 0),
+      : network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY)),
         socket_factory_(talk_base::Thread::Current()),
         stun_server_(new cricket::TestStunServer(
           talk_base::Thread::Current(), kStunAddr)),
@@ -62,7 +62,7 @@ class StunPortTest : public testing::Test,
   void CreateStunPort(const talk_base::SocketAddress& server_addr) {
     stun_port_.reset(cricket::StunPort::Create(
         talk_base::Thread::Current(), &socket_factory_, &network_,
-        kLocalAddr.ip(), 0, 0, server_addr));
+        kLocalAddr.ipaddr(), 0, 0, server_addr));
     stun_port_->SignalAddressReady.connect(this,
         &StunPortTest::OnAddressReady);
     stun_port_->SignalAddressError.connect(this,

@@ -267,7 +267,9 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool EnableNack();
   bool SetNackFec(int red_payload_type, int fec_payload_type);
   bool SetSendCodec(const webrtc::VideoCodec& codec,
-      int min_bitrate, int max_bitrate);
+                    int min_bitrate,
+                    int start_bitrate,
+                    int max_bitrate);
   bool ResetRecvCodecs(int channel);
 
   WebRtcVideoEngine* engine_;
@@ -279,6 +281,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool render_started_;
   bool muted_;  // Flag to tell if we need to mute video.
   int send_min_bitrate_;
+  int send_start_bitrate_;
   int send_max_bitrate_;
   talk_base::scoped_ptr<webrtc::VideoCodec> send_codec_;
   talk_base::scoped_ptr<WebRtcRenderAdapter> remote_renderer_;

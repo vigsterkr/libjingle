@@ -195,7 +195,9 @@ TEST(NatTest, TestPhysical) {
 
   SocketAddress int_addr("127.0.0.1", 0);
   std::string ext_ip1 = "127.0.0.1";
-  std::string ext_ip2 = SocketAddress::IPToString(networks[0]->ip());
+  std::string ext_ip2 = networks[0]->ip().ToString();
+
+  LOG(LS_INFO) << "selected ip " << ext_ip2;
 
   SocketAddress ext_addrs[4] = {
       SocketAddress(ext_ip1, 0),
@@ -226,11 +228,11 @@ TEST(NatTest, TestVirtual) {
       new PhysicalSocketServer());
 
   SocketAddress int_addr, ext_addrs[4];
-  int_addr.SetIP(int_vss->GetNextIP());
-  ext_addrs[0].SetIP(ext_vss->GetNextIP());
-  ext_addrs[1].SetIP(ext_vss->GetNextIP());
-  ext_addrs[2].SetIP(ext_addrs[0].ip());
-  ext_addrs[3].SetIP(ext_addrs[1].ip());
+  int_addr.SetIP(IPAddress(int_vss->GetNextIP()));
+  ext_addrs[0].SetIP(IPAddress(ext_vss->GetNextIP()));
+  ext_addrs[1].SetIP(IPAddress(ext_vss->GetNextIP()));
+  ext_addrs[2].SetIP(ext_addrs[0].ipaddr());
+  ext_addrs[3].SetIP(ext_addrs[1].ipaddr());
 
   TestBindings(int_vss, int_addr, ext_vss, ext_addrs);
   TestFilters(int_vss, int_addr, ext_vss, ext_addrs);

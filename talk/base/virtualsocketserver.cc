@@ -608,7 +608,7 @@ int VirtualSocketServer::Bind(VirtualSocket* socket,
                               const SocketAddress& addr) {
   ASSERT(NULL != socket);
   // Address must be completely specified at this point
-  ASSERT(addr.ip() != 0);
+  ASSERT(!IPIsAny(addr.ipaddr()));
   ASSERT(addr.port() != 0);
 
   AddressMap::value_type entry(addr, socket);
@@ -618,8 +618,9 @@ int VirtualSocketServer::Bind(VirtualSocket* socket,
 int VirtualSocketServer::Bind(VirtualSocket* socket, SocketAddress* addr) {
   ASSERT(NULL != socket);
 
-  if (addr->ip() == 0) {
-    addr->SetIP(GetNextIP());
+  if (IPIsAny(addr->ipaddr())) {
+    // TODO: An IPv6-ish version of this?
+    addr->SetIP(IPAddress(GetNextIP()));
   }
 
   if (addr->port() == 0) {

@@ -166,7 +166,7 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
     struct sockaddr_in* inaddr =
         reinterpret_cast<struct sockaddr_in*>(&ptr->ifr_ifru.ifru_addr);
     if (inaddr->sin_family == AF_INET) {
-      uint32 ip = ntohl(inaddr->sin_addr.s_addr);
+      IPAddress ip(inaddr->sin_addr);
       scoped_ptr<Network> network(
           new Network(ptr->ifr_name, ptr->ifr_name, ip));
       network->set_ignored(IsIgnoredNetwork(*network));
@@ -201,6 +201,8 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
 
   scoped_array<char> buf(new char[len]);
   IP_ADAPTER_INFO *infos = reinterpret_cast<IP_ADAPTER_INFO *>(buf.get());
+  // TODO: GetAdaptersInfo is IPv4 only. Replace with GetAddressesInfo when
+  // IPv6 support is needed in Network.
   DWORD ret = GetAdaptersInfo(infos, &len);
   if (ret != NO_ERROR) {
     LOG_ERR_EX(LS_ERROR, ret) << "GetAdaptersInfo failed";
@@ -225,12 +227,13 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
     name = ost.str();
     count++;
 #endif  // !_DEBUG
-
-    scoped_ptr<Network> network(new Network(name, info->Description,
-        SocketAddress::StringToIP(info->IpAddressList.IpAddress.String)));
-    network->set_ignored(IsIgnoredNetwork(*network));
-    if (include_ignored || !network->ignored()) {
-      networks->push_back(network.release());
+    IPAddress ip;
+    if (IPFromString(info->IpAddressList.IpAddress.String, &ip)) {
+      scoped_ptr<Network> network(new Network(name, info->Description, ip));
+      network->set_ignored(IsIgnoredNetwork(*network));
+      if (include_ignored || !network->ignored()) {
+        networks->push_back(network.release());
+      }
     }
   }
 
@@ -257,7 +260,10 @@ bool BasicNetworkManager::IsIgnoredNetwork(const Network& network) {
 #endif
 
   // Ignore any networks with a 0.x.y.z IP
-  return (network.ip() < 0x01000000);
+  if (network.ip().family() == AF_INET) {
+    return (network.ip().v4AddressAsHostOrderInteger() < 0x01000000);
+  }
+  return false;
 }
 
 void BasicNetworkManager::StartUpdating() {
@@ -312,7 +318,8 @@ void BasicNetworkManager::DumpNetworks(bool include_ignored) {
   }
 }
 
-Network::Network(const std::string& name, const std::string& desc, uint32 ip)
+Network::Network(const std::string& name, const std::string& desc,
+                 const IPAddress& ip)
     : name_(name), description_(desc), ip_(ip), ignored_(false),
       uniform_numerator_(0), uniform_denominator_(0),
       exponential_numerator_(0), exponential_denominator_(0) {
@@ -323,7 +330,7 @@ std::string Network::ToString() const {
   // Print out the first space-terminated token of the network desc, plus
   // the IP address.
   ss << "Net[" << description_.substr(0, description_.find(' '))
-     << ":" << SocketAddress::IPToString(ip_) << "]";
+     << ":" << ip_ << "]";
   return ss.str();
 }
 

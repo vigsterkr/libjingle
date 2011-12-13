@@ -57,8 +57,10 @@ TEST_WEBRTCVIDEOFRAME(ConstructBlack)
 // Re-evaluate once WebRTC switches to libyuv
 // TEST_LMIVIDEOFRAME(ConstructYuy2AllSizes)
 // TODO: WebRtcVideoFrame currently only supports ARGB output.
-// TEST_WEBRTCVIDEOFRAME(ConvertToBGRABuffer)
-// TEST_WEBRTCVIDEOFRAME(ConvertToABGRBuffer)
+#ifdef HAVE_YUV
+TEST_WEBRTCVIDEOFRAME(ConvertToBGRABuffer)
+TEST_WEBRTCVIDEOFRAME(ConvertToABGRBuffer)
+#endif
 TEST_WEBRTCVIDEOFRAME(ConvertToARGBBuffer)
 //TEST_WEBRTCVIDEOFRAME(ConvertToYUY2Buffer)
 //TEST_WEBRTCVIDEOFRAME(ConvertToI422Buffer)

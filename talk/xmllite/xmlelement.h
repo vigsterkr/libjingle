@@ -223,8 +223,6 @@ public:
   static XmlElement * ForStr(const std::string & str);
   std::string Str() const;
 
-  void Print(std::ostream * pout, std::string xmlns[], int xmlnsCount) const;
-
   bool IsCDATA() const { return cdata_; }
 
 protected:

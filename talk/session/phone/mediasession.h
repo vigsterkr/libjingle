@@ -114,22 +114,14 @@ struct MediaSessionOptions {
 class MediaContentDescription : public ContentDescription {
  public:
   MediaContentDescription()
-      : ssrc_(0),
-        ssrc_set_(false),
-        rtcp_mux_(false),
+      : rtcp_mux_(false),
         bandwidth_(kAutoBandwidth),
         crypto_required_(false),
-        rtp_header_extensions_set_(false) {
+        rtp_header_extensions_set_(false),
+        multistream_(false) {
   }
 
   virtual MediaType type() const = 0;
-
-  uint32 ssrc() const { return ssrc_; }
-  bool ssrc_set() const { return ssrc_set_; }
-  void set_ssrc(uint32 ssrc) {
-    ssrc_ = ssrc;
-    ssrc_set_ = true;
-  }
 
   bool rtcp_mux() const { return rtcp_mux_; }
   void set_rtcp_mux(bool mux) { rtcp_mux_ = mux; }
@@ -165,22 +157,46 @@ class MediaContentDescription : public ContentDescription {
   bool rtp_header_extensions_set() const {
     return rtp_header_extensions_set_;
   }
+  // True iff the client supports multiple streams.
+  void set_multistream(bool multistream) { multistream_ = multistream; }
+  bool multistream() const { return multistream_;  }
   const StreamParamsVec& streams() const {
+    return streams_;
+  }
+  // TODO: Remove this by giving mediamessage.cc access
+  // to MediaContentDescription
+  StreamParamsVec& mutable_streams() {
     return streams_;
   }
   void AddStream(const StreamParams& stream) {
     streams_.push_back(stream);
   }
+  // Legacy streams have an ssrc, but nothing else.
+  void AddLegacyStream(uint32 ssrc) {
+    streams_.push_back(StreamParams::CreateLegacy(ssrc));
+  }
+
+  uint32 first_ssrc() const {
+    if (streams_.empty()) {
+      return 0;
+    }
+    return streams_[0].first_ssrc();
+  }
+  bool has_ssrcs() const {
+    if (streams_.empty()) {
+      return false;
+    }
+    return streams_[0].has_ssrcs();
+  }
 
  protected:
-  uint32 ssrc_;
-  bool ssrc_set_;
   bool rtcp_mux_;
   int bandwidth_;
   std::vector<CryptoParams> cryptos_;
   bool crypto_required_;
   std::vector<RtpHeaderExtension> rtp_header_extensions_;
   bool rtp_header_extensions_set_;
+  bool multistream_;
   StreamParamsVec streams_;
 };
 
@@ -285,5 +301,3 @@ const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_
-
-

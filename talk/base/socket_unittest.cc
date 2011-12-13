@@ -37,7 +37,7 @@
 namespace talk_base {
 
 static const SocketAddress kEmptyAddr;
-static const SocketAddress kLoopbackAddr(INADDR_LOOPBACK, 0);
+static const SocketAddress kLoopbackAddr(IPAddress(INADDR_LOOPBACK), 0);
 
 void SocketTest::TestConnect() {
   testing::StreamSink sink;
@@ -153,7 +153,7 @@ void SocketTest::TestConnectFail() {
   // Attempt connect to a non-existent socket.
   // We don't connect to the server socket created above, since on
   // MacOS it takes about 75 seconds to get back an error!
-  SocketAddress bogus_addr(INADDR_LOOPBACK, 65535);
+  SocketAddress bogus_addr(IPAddress(INADDR_LOOPBACK), 65535);
   EXPECT_EQ(0, client->Connect(bogus_addr));
 
   // Wait for connection to fail (ECONNREFUSED).
@@ -664,7 +664,7 @@ void SocketTest::TestUdp() {
     SocketAddress addr4;
     EXPECT_EQ(3, client2->SendTo("foo", 3, addr1));
     EXPECT_TRUE(client1->CheckNextPacket("foo", 3, &addr4));
-    EXPECT_EQ(addr4.ip(), addr2.ip());
+    EXPECT_EQ(addr4.ipaddr(), addr2.ipaddr());
 
     SocketAddress addr5;
     EXPECT_EQ(6, client1->SendTo("bizbaz", 6, addr4));

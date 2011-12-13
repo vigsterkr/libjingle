@@ -104,7 +104,7 @@ const char GN_TOGETHER[] = "TOGETHER";
 const char NS_JINGLE_RTP[] = "urn:xmpp:jingle:apps:rtp:1";
 const buzz::StaticQName QN_JINGLE_RTP_CONTENT =
     { NS_JINGLE_RTP, LN_DESCRIPTION };
-const buzz::StaticQName QN_JINGLE_SSRC = { NS_EMPTY, "ssrc" };
+const buzz::StaticQName QN_SSRC = { NS_EMPTY, "ssrc" };
 const buzz::StaticQName QN_JINGLE_RTP_PAYLOADTYPE =
     { NS_JINGLE_RTP, LN_PAYLOADTYPE };
 const buzz::StaticQName QN_JINGLE_RTP_BANDWIDTH =
@@ -202,40 +202,24 @@ const char STR_TERMINATE_INTERNAL_SERVER_ERROR[] = "internal-server-error";
 const char STR_TERMINATE_UNKNOWN_ERROR[] = "unknown-error";
 
 // Draft view and notify messages.
-const buzz::StaticQName QN_JINGLE_DRAFT_CONTENT_NAME =
-    { cricket::NS_EMPTY, "name" };
 const char STR_JINGLE_DRAFT_CONTENT_NAME_VIDEO[] = "video";
 const char STR_JINGLE_DRAFT_CONTENT_NAME_AUDIO[] = "audio";
-const buzz::StaticQName QN_JINGLE_DRAFT_NOTIFY = { NS_JINGLE_DRAFT, "notify" };
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE = { NS_JINGLE_DRAFT, "source" };
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_NICK =
-    { cricket::NS_EMPTY, "nick" };
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_NAME =
-    { cricket::NS_EMPTY, "name" };
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_USAGE =
-    { cricket::NS_EMPTY, "usage" };
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_STATE =
-    { cricket::NS_EMPTY, "state" };
-const char STR_JINGLE_DRAFT_SOURCE_STATE_REMOVED[] = "removed";
-const buzz::StaticQName QN_JINGLE_DRAFT_SOURCE_SSRC =
-    { NS_JINGLE_DRAFT, "ssrc" };
+const buzz::StaticQName QN_NICK = { cricket::NS_EMPTY, "nick" };
+const buzz::StaticQName QN_TYPE = { cricket::NS_EMPTY, "type" };
 const buzz::StaticQName QN_JINGLE_DRAFT_VIEW = { NS_JINGLE_DRAFT, "view" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_TYPE =
-    { cricket::NS_EMPTY, "type" };
 const char STR_JINGLE_DRAFT_VIEW_TYPE_NONE[] = "none";
 const char STR_JINGLE_DRAFT_VIEW_TYPE_STATIC[] = "static";
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_SSRC =
-    { cricket::NS_EMPTY, "ssrc" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS =
-    { NS_JINGLE_DRAFT, "params" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_WIDTH =
-    { cricket::NS_EMPTY, "width" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_HEIGHT =
-    { cricket::NS_EMPTY, "height" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_FRAMERATE =
-    { cricket::NS_EMPTY, "framerate" };
-const buzz::StaticQName QN_JINGLE_DRAFT_VIEW_PARAMS_PREFERENCE =
-    { cricket::NS_EMPTY, "preference" };
+const buzz::StaticQName QN_JINGLE_DRAFT_PARAMS = { NS_JINGLE_DRAFT, "params" };
+const buzz::StaticQName QN_JINGLE_DRAFT_STREAMS = { NS_JINGLE_DRAFT, "streams" };
+const buzz::StaticQName QN_JINGLE_DRAFT_STREAM = { NS_JINGLE_DRAFT, "stream" };
+const buzz::StaticQName QN_DISPLAY = { cricket::NS_EMPTY, "display" };
+const buzz::StaticQName QN_CNAME = { cricket::NS_EMPTY, "cname" };
+const buzz::StaticQName QN_JINGLE_DRAFT_SSRC = { NS_JINGLE_DRAFT, "ssrc" };
+const buzz::StaticQName QN_JINGLE_DRAFT_SSRC_GROUP =
+    { NS_JINGLE_DRAFT, "ssrc-group" };
+const buzz::StaticQName QN_SEMANTICS = { cricket::NS_EMPTY, "semantics" };
+const buzz::StaticQName QN_JINGLE_LEGACY_NOTIFY = { NS_JINGLE_DRAFT, "notify" };
+const buzz::StaticQName QN_JINGLE_LEGACY_SOURCE = { NS_JINGLE_DRAFT, "source" };
 
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL

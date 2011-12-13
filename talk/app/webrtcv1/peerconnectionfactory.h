@@ -51,21 +51,20 @@ class PeerConnection;
 
 class PeerConnectionFactory {
  public:
-  PeerConnectionFactory(cricket::PortAllocator* port_allocator,
-                        cricket::MediaEngineInterface* media_engine,
+  PeerConnectionFactory(cricket::MediaEngineInterface* media_engine,
                         cricket::DeviceManagerInterface* device_manager,
                         talk_base::Thread* worker_thread);
-  PeerConnectionFactory(cricket::PortAllocator* port_allocator,
-                        talk_base::Thread* worker_thread);
+  PeerConnectionFactory(talk_base::Thread* worker_thread);
 
   virtual ~PeerConnectionFactory();
   bool Initialize();
 
-  PeerConnection* CreatePeerConnection(talk_base::Thread* signaling_thread);
+  PeerConnection* CreatePeerConnection(
+      cricket::PortAllocator* port_allocator,
+      talk_base::Thread* signaling_thread);
 
  private:
   bool initialized_;
-  talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
 };
 

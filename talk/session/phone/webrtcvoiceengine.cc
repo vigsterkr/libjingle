@@ -1410,9 +1410,8 @@ bool WebRtcVoiceMediaChannel::SetSendRtpHeaderExtensions(
     }
   }
 
-// This api is currently present but nonfunctional in WebRTC VoiceEngine.
 // This api call is not available in iOS version of VoiceEngine currently.
-#if 0  // !defined(IOS) && !defined(ANDROID)
+#if !defined(IOS) && !defined(ANDROID)
   if (engine()->voe()->rtp()->SetRTPAudioLevelIndicationStatus(
       voe_channel(), enable, id) == -1) {
     LOG_RTCERR3(SetRTPAudioLevelIndicationStatus, voe_channel(), enable, id);

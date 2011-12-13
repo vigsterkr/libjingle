@@ -50,16 +50,16 @@ const std::string kTestV6AddrFullString =
 TEST(SocketAddressTest, TestDefaultCtor) {
   SocketAddress addr;
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0U, addr.ip());
+  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
   EXPECT_EQ(0, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("0.0.0.0:0", addr.ToString());
 }
 
 TEST(SocketAddressTest, TestIPPortCtor) {
-  SocketAddress addr(0x01020304, 5678);
+  SocketAddress addr(IPAddress(0x01020304), 5678);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -68,7 +68,7 @@ TEST(SocketAddressTest, TestIPPortCtor) {
 TEST(SocketAddressTest, TestIPv4StringPortCtor) {
   SocketAddress addr("1.2.3.4", 5678);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("1.2.3.4", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -89,7 +89,7 @@ TEST(SocketAddressTest, TestSpecialStringPortCtor) {
   // inet_addr doesn't handle this address properly.
   SocketAddress addr("255.255.255.255", 5678);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0xFFFFFFFFU, addr.ip());
+  EXPECT_EQ(IPAddress(0xFFFFFFFFU), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("255.255.255.255", addr.hostname());
   EXPECT_EQ("255.255.255.255:5678", addr.ToString());
@@ -98,7 +98,7 @@ TEST(SocketAddressTest, TestSpecialStringPortCtor) {
 TEST(SocketAddressTest, TestHostnamePortCtor) {
   SocketAddress addr("a.b.com", 5678);
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0U, addr.ip());
+  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
@@ -108,7 +108,7 @@ TEST(SocketAddressTest, TestCopyCtor) {
   SocketAddress from("1.2.3.4", 5678);
   SocketAddress addr(from);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("1.2.3.4", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -116,49 +116,49 @@ TEST(SocketAddressTest, TestCopyCtor) {
 
 TEST(SocketAddressTest, TestAssign) {
   SocketAddress from("1.2.3.4", 5678);
-  SocketAddress addr(0x88888888, 9999);
+  SocketAddress addr(IPAddress(0x88888888), 9999);
   addr = from;
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("1.2.3.4", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
 }
 
 TEST(SocketAddressTest, TestSetIPPort) {
-  SocketAddress addr(0x88888888, 9999);
-  addr.SetIP(0x01020304);
+  SocketAddress addr(IPAddress(0x88888888), 9999);
+  addr.SetIP(IPAddress(0x01020304));
   addr.SetPort(5678);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
 }
 
 TEST(SocketAddressTest, TestSetIPFromString) {
-  SocketAddress addr(0x88888888, 9999);
+  SocketAddress addr(IPAddress(0x88888888), 9999);
   addr.SetIP("1.2.3.4");
   addr.SetPort(5678);
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("1.2.3.4", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
 }
 
 TEST(SocketAddressTest, TestSetIPFromHostname) {
-  SocketAddress addr(0x88888888, 9999);
+  SocketAddress addr(IPAddress(0x88888888), 9999);
   addr.SetIP("a.b.com");
   addr.SetPort(5678);
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0U, addr.ip());
+  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
-  addr.SetResolvedIP(0x01020304);
+  addr.SetResolvedIP(IPAddress(0x01020304));
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
 }
@@ -167,7 +167,7 @@ TEST(SocketAddressTest, TestFromIPv4String) {
   SocketAddress addr;
   EXPECT_TRUE(addr.FromString("1.2.3.4:5678"));
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("1.2.3.4", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -186,7 +186,7 @@ TEST(SocketAddressTest, TestFromHostname) {
   SocketAddress addr;
   EXPECT_TRUE(addr.FromString("a.b.com:5678"));
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0U, addr.ip());
+  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
@@ -198,7 +198,7 @@ TEST(SocketAddressTest, TestToFromSockAddr) {
   from.ToSockAddr(&addr_in);
   EXPECT_TRUE(addr.FromSockAddr(addr_in));
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -210,7 +210,7 @@ TEST(SocketAddressTest, TestToFromSockAddrStorage) {
   from.ToSockAddrStorage(&addr_storage);
   EXPECT_TRUE(SocketAddressFromSockAddrStorage(addr_storage, &addr));
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -239,7 +239,7 @@ TEST(SocketAddressTest, TestIPv4ToFromBuffer) {
   EXPECT_TRUE(addr.Read_(buf, sizeof(buf)));
   EXPECT_FALSE(addr.IsUnresolvedIP());
   EXPECT_EQ(AF_INET, addr.ipaddr().family());
-  EXPECT_EQ(0x01020304U, addr.ip());
+  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("1.2.3.4:5678", addr.ToString());
@@ -266,7 +266,7 @@ TEST(SocketAddressTest, TestGoodResolve) {
   EXPECT_EQ(0, error);
   EXPECT_FALSE(addr.IsUnresolvedIP());
   EXPECT_TRUE(addr.IsLoopbackIP());
-  EXPECT_EQ(0x7F000001U, addr.ip());
+  EXPECT_EQ(IPAddress(INADDR_LOOPBACK), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("localhost", addr.hostname());
   EXPECT_EQ("localhost:5678", addr.ToString());

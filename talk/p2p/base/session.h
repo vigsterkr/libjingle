@@ -562,7 +562,7 @@ class Session : public BaseSession {
   bool OnTerminateMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportInfoMessage(const SessionMessage& msg, MessageError* error);
   bool OnTransportAcceptMessage(const SessionMessage& msg, MessageError* error);
-  bool OnUpdateMessage(const SessionMessage& msg, MessageError* error);
+  bool OnDescriptionInfoMessage(const SessionMessage& msg, MessageError* error);
   bool OnRedirectError(const SessionRedirect& redirect, SessionError* error);
 
   // Verifies that we are in the appropriate state to receive this message.

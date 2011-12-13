@@ -33,6 +33,7 @@
 
 #include "talk/session/phone/webrtcvideoengine.h"
 
+#include "talk/base/basictypes.h"
 #include "talk/base/common.h"
 #include "talk/base/buffer.h"
 #include "talk/base/byteorder.h"
@@ -53,7 +54,8 @@ namespace cricket {
 
 static const int kDefaultLogSeverity = talk_base::LS_WARNING;
 
-static const int kMinVideoBitrate = 300;
+static const int kMinVideoBitrate = 100;
+static const int kStartVideoBitrate = 300;
 static const int kMaxVideoBitrate = 2000;
 
 static const int kVideoMtu = 1200;
@@ -772,9 +774,9 @@ bool WebRtcVideoEngine::ConvertFromCricketVideoCodec(
     out_codec.maxFramerate = in_codec.framerate;
 
   // Init the codec with the default bandwidth options.
-  out_codec.maxBitrate = kMaxVideoBitrate;
-  out_codec.startBitrate = kMinVideoBitrate;
   out_codec.minBitrate = kMinVideoBitrate;
+  out_codec.startBitrate = kStartVideoBitrate;
+  out_codec.maxBitrate = kMaxVideoBitrate;
 
   return true;
 }
@@ -946,6 +948,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       render_started_(false),
       muted_(false),
       send_min_bitrate_(kMinVideoBitrate),
+      send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
       local_stream_info_(new LocalStreamInfo()) {
   engine->RegisterChannel(this);
@@ -1171,7 +1174,8 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
         kDefaultNumberOfTemporalLayers;
   }
 
-  if (!SetSendCodec(codec, send_min_bitrate_, send_max_bitrate_)) {
+  if (!SetSendCodec(
+      codec, send_min_bitrate_, send_start_bitrate_, send_max_bitrate_)) {
     return false;
   }
 
@@ -1420,21 +1424,25 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
     return true;
   }
 
-  int min_bitrate = kMinVideoBitrate;
-  int max_bitrate = kMaxVideoBitrate;
+  int min_bitrate;
+  int start_bitrate;
+  int max_bitrate;
   if (autobw) {
-    // Use the default values as min
+    // Use the default values for min bitrate.
     min_bitrate = kMinVideoBitrate;
     // Use the default value or the bps for the max
     max_bitrate = (bps <= 0) ? kMaxVideoBitrate : (bps / 1000);
+    // Maximum start bitrate can be kStartVideoBitrate.
+    start_bitrate = talk_base::_min(kStartVideoBitrate, max_bitrate);
   } else {
     // Use the default start or the bps as the target bitrate.
-    int target_bitrate = (bps <= 0) ? kMinVideoBitrate : (bps / 1000);
+    int target_bitrate = (bps <= 0) ? kStartVideoBitrate : (bps / 1000);
     min_bitrate = target_bitrate;
+    start_bitrate = target_bitrate;
     max_bitrate = target_bitrate;
   }
 
-  if (!SetSendCodec(*send_codec_, min_bitrate, max_bitrate)) {
+  if (!SetSendCodec(*send_codec_, min_bitrate, start_bitrate, max_bitrate)) {
     return false;
   }
 
@@ -1467,6 +1475,23 @@ bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
   // Update local stream statistics.
   local_stream_info_->UpdateFrame(frame->GetWidth(), frame->GetHeight());
 
+  // If the captured video format is smaller than what we asked for, reset send
+  // codec on video engine.
+  if (send_codec_.get() != NULL &&
+      frame->GetWidth() < send_codec_->width &&
+      frame->GetHeight() < send_codec_->height) {
+    LOG(LS_INFO) << "Captured video frame size changed to: "
+                 << frame->GetWidth() << "x" << frame->GetHeight();
+    webrtc::VideoCodec new_codec = *send_codec_;
+    new_codec.width = frame->GetWidth();
+    new_codec.height = frame->GetHeight();
+    if (!SetSendCodec(
+        new_codec, send_min_bitrate_, send_start_bitrate_, send_max_bitrate_)) {
+      LOG(LS_WARNING) << "Failed to switch to new frame size: "
+                      << frame->GetWidth() << "x" << frame->GetHeight();
+    }
+  }
+  
   // Blacken the frame if video is muted.
   const VideoFrame* frame_out = frame;
   talk_base::scoped_ptr<VideoFrame> black_frame;
@@ -1543,10 +1568,12 @@ bool WebRtcVideoMediaChannel::SetNackFec(int red_payload_type,
 }
 
 bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
-    int min_bitrate, int max_bitrate) {
+                                           int min_bitrate,
+                                           int start_bitrate,
+                                           int max_bitrate) {
   // Make a copy of the codec
   webrtc::VideoCodec target_codec = codec;
-  target_codec.startBitrate = min_bitrate;
+  target_codec.startBitrate = start_bitrate;
   target_codec.minBitrate = min_bitrate;
   target_codec.maxBitrate = max_bitrate;
 
@@ -1558,6 +1585,7 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
   // Reset the send_codec_ only if SetSendCodec is success.
   send_codec_.reset(new webrtc::VideoCodec(target_codec));
   send_min_bitrate_ = min_bitrate;
+  send_start_bitrate_ = start_bitrate;
   send_max_bitrate_ = max_bitrate;
 
   return true;

@@ -27,14 +27,10 @@
 
 #include "talk/session/phone/webrtcvideoframe.h"
 
+#include "libyuv/planar_functions.h"
 #include "talk/base/logging.h"
 #include "talk/session/phone/videocapturer.h"
 #include "talk/session/phone/videocommon.h"
-#ifdef WEBRTC_RELATIVE_PATH
-#include "common_video/vplib/main/interface/vplib.h"
-#else
-#include "third_party/webrtc/files/include/vplib.h"
-#endif
 
 namespace cricket {
 
@@ -217,10 +213,11 @@ size_t WebRtcVideoFrame::CopyToBuffer(uint8* buffer, size_t size) const {
   return needed;
 }
 
+// TODO: Refactor into base class and share with lmi
 size_t WebRtcVideoFrame::ConvertToRgbBuffer(uint32 to_fourcc,
                                             uint8* buffer,
                                             size_t size,
-                                            size_t pitch_rgb) const {
+                                            size_t stride_rgb) const {
   if (!video_frame_.Buffer()) {
     return 0;
   }
@@ -231,29 +228,44 @@ size_t WebRtcVideoFrame::ConvertToRgbBuffer(uint32 to_fourcc,
   // explanation of pitch and why this is the amount of space we need.
   // TODO: increase to stride * height to allow padding to be used
   // to overwrite for efficiency.
-  size_t needed = pitch_rgb * (height - 1) + 4 * width;
+  size_t needed = stride_rgb * (height - 1) + 4 * width;
 
   if (needed > size) {
     LOG(LS_WARNING) << "RGB buffer is not large enough";
-    return 0;
+    return needed;
   }
 
-  webrtc::VideoType to_type = webrtc::kUnknown;
+  // TODO: Use libyuv::ConvertFromI420
   switch (to_fourcc) {
     case FOURCC_ARGB:
-      to_type = webrtc::kARGB;
+      libyuv::I420ToARGB(
+          GetYPlane(), GetYPitch(),
+          GetUPlane(), GetUPitch(),
+          GetVPlane(), GetVPitch(),
+          buffer, stride_rgb, width, height);
       break;
+
+    case FOURCC_BGRA:
+      libyuv::I420ToBGRA(
+          GetYPlane(), GetYPitch(),
+          GetUPlane(), GetUPitch(),
+          GetVPlane(), GetVPitch(),
+          buffer, stride_rgb, width, height);
+      break;
+
+    case FOURCC_ABGR:
+      libyuv::I420ToABGR(
+          GetYPlane(), GetYPitch(),
+          GetUPlane(), GetUPitch(),
+          GetVPlane(), GetVPitch(),
+          buffer, stride_rgb, width, height);
+      break;
+
     default:
+      needed = 0;
       LOG(LS_WARNING) << "RGB type not supported: " << to_fourcc;
-      return 0;
+      break;
   }
-
-  if (to_type != webrtc::kUnknown) {
-    // TODO: Use libyuv::ConvertFromI420
-    webrtc::ConvertFromI420(to_type, video_frame_.Buffer(),
-                            width, height, buffer);
-  }
-
   return needed;
 }
 

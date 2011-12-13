@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/ipaddress.h"
 #include "talk/base/messagehandler.h"
 #include "talk/base/sigslot.h"
 
@@ -135,7 +136,10 @@ class BasicNetworkManager : public NetworkManagerBase,
 // Represents a Unix-type network interface, with a name and single address.
 class Network {
  public:
-  Network(const std::string& name, const std::string& description, uint32 ip);
+  Network() : ip_(INADDR_ANY) {}
+
+  Network(const std::string& name, const std::string& description,
+          const IPAddress& ip);
 
   // Returns the index of this network.  This is considered the primary key
   // that identifies each network.
@@ -146,8 +150,8 @@ class Network {
   const std::string& description() const { return description_; }
 
   // Identifies the current IP address used by this network.
-  uint32 ip() const { return ip_; }
-  void set_ip(uint32 ip) { ip_ = ip; }
+  const IPAddress& ip() const { return ip_; }
+  void set_ip(const IPAddress& ip) { ip_ = ip; }
 
   // Indicates whether this network should be ignored, perhaps because
   // the IP is 0, or the interface is one we know is invalid.
@@ -162,7 +166,7 @@ class Network {
 
   std::string name_;
   std::string description_;
-  uint32 ip_;
+  IPAddress ip_;
   bool ignored_;
   SessionList sessions_;
   double uniform_numerator_;
