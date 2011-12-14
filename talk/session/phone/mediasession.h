@@ -78,6 +78,7 @@ struct MediaSessionOptions {
       has_audio(true),  // Audio enabled by default.
       has_video(false),
       is_muc(false),
+      rtcp_mux_enabled(true),
       video_bandwidth(kAutoBandwidth) {
   }
 
@@ -92,6 +93,7 @@ struct MediaSessionOptions {
   bool has_audio;
   bool has_video;
   bool is_muc;
+  bool rtcp_mux_enabled;
   // bps. -1 == auto.
   int video_bandwidth;
 

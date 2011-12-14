@@ -1,6 +1,13 @@
 Libjingle
 
-0.6.5 - Dec 12, 2011
+0.6.6 - Dec 14, 2011
+  - Fix support for rtcp multiplexing (aka rtcp-mux).
+  - Add more support for FreeBSD and OpenBSD.
+  - Add more unit tests to session/phone.
+  - Add session/phone/mediarecorder.cc.
+  - Fixed httpportallocator tests.
+
+0.6.5 - Dec 8, 2011
   - Add IPv6 support in SocketAddress.
   - Change PeerConnectionFactory inteface.
   - Bug fixes.

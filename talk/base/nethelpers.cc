@@ -165,7 +165,7 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
   result = deep_copy;
 #endif
   *herrno = 0;
-#elif defined(OSX) || defined(IOS)
+#elif defined(OSX) || defined(IOS) || defined(FREEBSD)
   // Mac OS returns an object with everything allocated.
   result = getipnodebyname(hostname, AF_INET, AI_DEFAULT, herrno);
 #elif defined(OPENBSD)
@@ -184,7 +184,7 @@ hostent* SafeGetHostByName(const char* hostname, int* herrno) {
 // This function should mirror the above function, and free any resources
 // allocated by the above.
 void FreeHostEnt(hostent* host) {
-#if defined(OSX) || defined(IOS)
+#if defined(OSX) || defined(IOS) || defined(FREEBSD)
   freehostent(host);
 #elif defined(WIN32) || defined(POSIX)
   free(host);

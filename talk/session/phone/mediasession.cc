@@ -286,7 +286,6 @@ MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
 }
 
 SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
-
     const MediaSessionOptions& options,
     const SessionDescription* current_description) {
   scoped_ptr<SessionDescription> offer(new SessionDescription());
@@ -310,7 +309,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       // TODO: Remove this legacy stream when all apps use StreamParams.
       audio->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
-    audio->set_rtcp_mux(true);
+    audio->set_rtcp_mux(options.rtcp_mux_enabled);
     audio->set_lang(lang_);
 
     if (secure() != SEC_DISABLED) {
@@ -363,7 +362,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       video->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     video->set_bandwidth(options.video_bandwidth);
-    video->set_rtcp_mux(true);
+    video->set_rtcp_mux(options.rtcp_mux_enabled);
 
     if (secure() != SEC_DISABLED) {
       CryptoParamsVec video_cryptos;
@@ -436,7 +435,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       // TODO: Remove this legacy stream when all apps use StreamParams.
       audio_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
-    audio_accept->set_rtcp_mux(audio_offer->rtcp_mux());
+    audio_accept->set_rtcp_mux(
+        options.rtcp_mux_enabled && audio_offer->rtcp_mux());
 
     if (secure() != SEC_DISABLED) {
       CryptoParams crypto;
@@ -501,7 +501,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       video_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
     video_accept->set_bandwidth(options.video_bandwidth);
-    video_accept->set_rtcp_mux(video_offer->rtcp_mux());
+    video_accept->set_rtcp_mux(
+        options.rtcp_mux_enabled && video_offer->rtcp_mux());
     video_accept->SortCodecs();
 
     if (secure() != SEC_DISABLED) {

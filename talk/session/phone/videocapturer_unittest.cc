@@ -74,10 +74,15 @@ TEST(VideoCapturerTest, TestResolutionMatch) {
 
   desired.width = 360;
   desired.height = 250;
-  // Ask for a litter higher than QVGA. Get QVGA.
+  // Ask for a little higher than QVGA. Get QVGA.  On OSX gets VGA
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 480;
@@ -90,18 +95,28 @@ TEST(VideoCapturerTest, TestResolutionMatch) {
 
   desired.width = 320;
   desired.height = 240;
-  // Ask for QVGA. Get QVGA.
+  // Ask for QVGA. Get QVGA.  On OSX get VGA
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 160;
   desired.height = 120;
-  // Ask for lower than QVGA. Get QVGA, which is the lowest.
+  // Ask for lower than QVGA. Get QVGA, which is the lowest.  OSX gets VGA
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 }
 
@@ -132,10 +147,15 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 
   desired.width = 360;
   desired.height = 250;
-  // Ask for a litter higher than QVGA. Get QVGA.
+  // Ask for a litter higher than QVGA. Get QVGA.  OSX gets VGA
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 480;
@@ -148,18 +168,28 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 
   desired.width = 320;
   desired.height = 240;
-  // Ask for QVGA. Get QVGA.
+  // Ask for QVGA. Get QVGA.  OSX gets VGA
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 160;
   desired.height = 120;
   // Ask for lower than QVGA. Get QVGA, which is the lowest.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
+#ifdef OSX
+  EXPECT_EQ(640, best.width);
+  EXPECT_EQ(480, best.height);
+#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
+#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 1280;
@@ -180,6 +210,7 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 }
 
 // Some cameras support 320x240 and 320x640. Verify we choose 320x240.
+// On OSX we choose VGA
 TEST(VideoCapturerTest, TestStrangeFormats) {
   FakeVideoCapturer capturer;
   std::vector<cricket::VideoFormat> supported_formats;

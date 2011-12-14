@@ -500,6 +500,9 @@ bool ParseJingleAudioContent(const buzz::XmlElement* content_elem,
   if (!ParseJingleEncryption(content_elem, audio, error)) {
     return false;
   }
+
+  audio->set_rtcp_mux(content_elem->FirstNamed(QN_JINGLE_RTCP_MUX) != NULL);
+
   *content = audio;
   return true;
 }
@@ -527,6 +530,9 @@ bool ParseJingleVideoContent(const buzz::XmlElement* content_elem,
   if (!ParseJingleEncryption(content_elem, video, error)) {
     return false;
   }
+
+  video->set_rtcp_mux(content_elem->FirstNamed(QN_JINGLE_RTCP_MUX) != NULL);
+
   *content = video;
   return true;
 }
