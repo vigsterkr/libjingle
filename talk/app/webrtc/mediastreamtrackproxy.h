@@ -119,7 +119,7 @@ class VideoTrackProxy : public MediaStreamTrackProxy<LocalVideoTrackInterface> {
       talk_base::Thread* signaling_thread);
   static talk_base::scoped_refptr<LocalVideoTrackInterface> CreateLocal(
       const std::string& label,
-      VideoCaptureModule* video_device,
+      cricket::VideoCapturer* video_device,
       talk_base::Thread* signaling_thread);
   static talk_base::scoped_refptr<LocalVideoTrackInterface> CreateLocal(
       LocalVideoTrackInterface* implementation,
@@ -133,7 +133,7 @@ class VideoTrackProxy : public MediaStreamTrackProxy<LocalVideoTrackInterface> {
   VideoTrackProxy(const std::string& label,
                   talk_base::Thread* signaling_thread);
   VideoTrackProxy(const std::string& label,
-                  VideoCaptureModule* video_device,
+                  cricket::VideoCapturer* video_device,
                   talk_base::Thread* signaling_thread);
   VideoTrackProxy(LocalVideoTrackInterface* implementation,
                   talk_base::Thread* signaling_thread);

@@ -224,8 +224,9 @@ class PeerConnectionP2PTestClient
   void CreateLocalVideoTrack() {
     fake_video_capture_module_ = FakeVideoCaptureModule::Create(
         talk_base::Thread::Current());
+    // TODO: Use FakeVideoCapturer instead of FakeVideoCaptureModule.
     video_track_ = peer_connection_factory_->CreateLocalVideoTrack(
-        "video_track", fake_video_capture_module_);
+        "video_track", CreateVideoCapturer(fake_video_capture_module_));
   }
 
   int id_;

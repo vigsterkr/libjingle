@@ -34,6 +34,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
 #include "talk/session/phone/channelmanager.h"
+#include "talk/session/phone/webrtcvideocapturer.h"
 
 namespace {
 
@@ -157,6 +158,16 @@ struct SdpStateMessage : public talk_base::MessageData {
 }  // namespace
 
 namespace webrtc {
+
+cricket::VideoCapturer* CreateVideoCapturer(VideoCaptureModule* vcm) {
+  cricket::WebRtcVideoCapturer* video_capturer =
+      new cricket::WebRtcVideoCapturer;
+  if (!video_capturer->Init(vcm)) {
+    delete video_capturer;
+    video_capturer = NULL;
+  }
+  return video_capturer;
+}
 
 PeerConnection::PeerConnection(PeerConnectionFactory* factory)
     : factory_(factory),

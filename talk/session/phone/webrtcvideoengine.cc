@@ -232,32 +232,34 @@ const WebRtcVideoEngine::VideoCodecPref
 #endif
 };
 
+static const int64 kNsPerFrame = 33333333;  // 30fps
+
 // The formats are sorted by the descending order of width. We use the order to
 // find the next format for CPU and bandwidth adaptation.
 const VideoFormatPod WebRtcVideoEngine::kVideoFormats[] = {
-  {1280, 800, 30, FOURCC_ANY},
-  {1280, 720, 30, FOURCC_ANY},
-  {960, 600, 30, FOURCC_ANY},
-  {960, 540, 30, FOURCC_ANY},
-  {640, 400, 30, FOURCC_ANY},
-  {640, 360, 30, FOURCC_ANY},
-  {640, 480, 30, FOURCC_ANY},
-  {480, 300, 30, FOURCC_ANY},
-  {480, 270, 30, FOURCC_ANY},
-  {480, 360, 30, FOURCC_ANY},
-  {320, 200, 30, FOURCC_ANY},
-  {320, 180, 30, FOURCC_ANY},
-  {320, 240, 30, FOURCC_ANY},
-  {240, 150, 30, FOURCC_ANY},
-  {240, 135, 30, FOURCC_ANY},
-  {240, 180, 30, FOURCC_ANY},
-  {160, 100, 30, FOURCC_ANY},
-  {160, 90, 30, FOURCC_ANY},
-  {160, 120, 30, FOURCC_ANY},
+  {1280, 800, kNsPerFrame, FOURCC_ANY},
+  {1280, 720, kNsPerFrame, FOURCC_ANY},
+  {960, 600, kNsPerFrame, FOURCC_ANY},
+  {960, 540, kNsPerFrame, FOURCC_ANY},
+  {640, 400, kNsPerFrame, FOURCC_ANY},
+  {640, 360, kNsPerFrame, FOURCC_ANY},
+  {640, 480, kNsPerFrame, FOURCC_ANY},
+  {480, 300, kNsPerFrame, FOURCC_ANY},
+  {480, 270, kNsPerFrame, FOURCC_ANY},
+  {480, 360, kNsPerFrame, FOURCC_ANY},
+  {320, 200, kNsPerFrame, FOURCC_ANY},
+  {320, 180, kNsPerFrame, FOURCC_ANY},
+  {320, 240, kNsPerFrame, FOURCC_ANY},
+  {240, 150, kNsPerFrame, FOURCC_ANY},
+  {240, 135, kNsPerFrame, FOURCC_ANY},
+  {240, 180, kNsPerFrame, FOURCC_ANY},
+  {160, 100, kNsPerFrame, FOURCC_ANY},
+  {160, 90, kNsPerFrame, FOURCC_ANY},
+  {160, 120, kNsPerFrame, FOURCC_ANY},
 };
 
 const VideoFormatPod WebRtcVideoEngine::kDefaultVideoFormat =
-    {640, 400, 30, FOURCC_ANY};
+    {640, 400, kNsPerFrame, FOURCC_ANY};
 
 WebRtcVideoEngine::WebRtcVideoEngine() {
   Construct(new ViEWrapper(), new ViETraceWrapper(), NULL);
@@ -304,7 +306,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
                        kVideoCodecPrefs[0].name,
                        kDefaultVideoFormat.width,
                        kDefaultVideoFormat.height,
-                       kDefaultVideoFormat.framerate,
+                       VideoFormat::IntervalToFps(kDefaultVideoFormat.interval),
                        0);
   if (!SetDefaultCodec(max_codec)) {
     LOG(LS_ERROR) << "Failed to initialize list of supported codec types";

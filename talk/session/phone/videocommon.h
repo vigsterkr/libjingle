@@ -117,35 +117,31 @@ uint32 CanonicalFourCC(uint32 fourcc);
 struct VideoFormatPod {
   int width;  // in number of pixels
   int height;  // in number of pixels
-  int framerate;
+  int64 interval;  // in nanoseconds
   uint32 fourcc;  // color space. FOURCC_ANY means that any color space is OK.
 };
 
-struct VideoFormat {
+struct VideoFormat : VideoFormatPod{
   static const int64 kMinimumInterval =
       talk_base::kNumNanosecsPerSec / 10000;  // 10k fps
 
-  VideoFormat() : width(0), height(0), interval(0), fourcc(0) {}
-
-  VideoFormat(int w, int h, int64 interval_ns, uint32 cc)
-      : width(w),
-        height(h),
-        interval(interval_ns),
-        fourcc(cc) {
+  VideoFormat() {
+    Construct(0, 0, 0, 0);
   }
 
-  VideoFormat(const VideoFormat& format)
-      : width(format.width),
-        height(format.height),
-        interval(format.interval),
-        fourcc(format.fourcc) {
+  VideoFormat(int w, int h, int64 interval_ns, uint32 cc) {
+    Construct(w, h, interval_ns, cc);
   }
 
-  explicit VideoFormat(const VideoFormatPod& format)
-      : width(format.width),
-        height(format.height),
-        interval(FpsToInterval(format.framerate)),
-        fourcc(format.fourcc) {
+  explicit VideoFormat(const VideoFormatPod& format) {
+    Construct(format.width, format.height, format.interval, format.fourcc);
+  }
+
+  void Construct(int w, int h, int64 interval_ns, uint32 cc) {
+    width = w;
+    height = h;
+    interval = interval_ns;
+    fourcc = cc;
   }
 
   static int64 FpsToInterval(int fps) {
@@ -190,11 +186,6 @@ struct VideoFormat {
 
   // Get a string presentation in the form of "fourcc width x height x fps"
   std::string ToString() const;
-
-  int    width;     // in number of pixels
-  int    height;    // in number of pixels
-  int64  interval;  // in nanoseconds
-  uint32 fourcc;    // color space. FOURCC_ANY means that any color space is OK.
 };
 
 // Result of video capturer start.

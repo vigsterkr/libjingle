@@ -43,7 +43,6 @@
 #include "talk/examples/call/mucinvitesendtask.h"
 #include "talk/examples/call/friendinvitesendtask.h"
 #include "talk/examples/call/muc.h"
-#include "talk/examples/call/voicemailjidrequester.h"
 #include "talk/p2p/base/sessionmanager.h"
 #include "talk/p2p/client/basicportallocator.h"
 #include "talk/p2p/client/sessionmanagertask.h"
@@ -132,7 +131,6 @@ const char* CONSOLE_COMMANDS =
 "                      given JID and with optional bandwidth.\n"
 "  vcall [jid] [bw]    Initiates a video call to the user[/room] with\n"
 "                      the given JID and with optional bandwidth.\n"
-"  voicemail [jid]     Leave a voicemail for the user with the given JID.\n"
 "  join [room_jid]     Joins a multi-user-chat with room JID.\n"
 "  ljoin [room_name]   Joins a MUC by looking up JID from room name.\n"
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
@@ -267,8 +265,6 @@ void CallClient::ParseLine(const std::string& line) {
       GetDevices();
     } else if ((words.size() == 2) && (command == "setvol")) {
       SetVolume(words[1]);
-    } else if (command == "voicemail") {
-      CallVoicemail((words.size() >= 2) ? words[1] : "");
     } else {
       console_->PrintLine(CONSOLE_COMMANDS);
     }
@@ -621,10 +617,6 @@ void CallClient::MakeCallTo(const std::string& name,
     // if the first character is a +, assume it's a phone number
     found_jid = callto_jid;
     found = true;
-  } else if (callto_jid.resource() == "voicemail") {
-    // if the resource is /voicemail, allow that
-    found_jid = callto_jid;
-    found = true;
   } else {
     // otherwise, it's a friend
     for (RosterMap::iterator iter = roster_->begin();
@@ -767,31 +759,6 @@ void CallClient::OnHangoutRemoteMuteError(const std::string& task_id,
                                           const std::string& mutee_nick,
                                           const buzz::XmlElement* stanza) {
   console_->PrintLine("Failed to remote mute.");
-}
-
-void CallClient::CallVoicemail(const std::string& name) {
-  buzz::Jid jid(name);
-  if (!jid.IsValid() || jid.node() == "") {
-    console_->PrintLine("Invalid JID. JIDs should be in the form user@domain.");
-    return;
-  }
-  buzz::VoicemailJidRequester *request =
-      new buzz::VoicemailJidRequester(xmpp_client_, jid, my_status_.jid());
-  request->SignalGotVoicemailJid.connect(this,
-                                         &CallClient::OnFoundVoicemailJid);
-  request->SignalVoicemailJidError.connect(this,
-                                           &CallClient::OnVoicemailJidError);
-  request->Start();
-}
-
-void CallClient::OnFoundVoicemailJid(const buzz::Jid& to,
-                                     const buzz::Jid& voicemail) {
-  console_->PrintLine("Calling %s's voicemail.", to.Str().c_str());
-  PlaceCall(voicemail, cricket::CallOptions());
-}
-
-void CallClient::OnVoicemailJidError(const buzz::Jid& to) {
-  console_->PrintLine("Unable to voicemail %s.", to.Str().c_str());
 }
 
 void CallClient::Accept(const cricket::CallOptions& options) {

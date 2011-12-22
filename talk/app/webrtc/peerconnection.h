@@ -84,6 +84,8 @@ class PortAllocator;
 }
 
 namespace webrtc {
+class VideoCaptureModule;
+
 // MediaStream container interface.
 class StreamCollectionInterface : public talk_base::RefCountInterface {
  public:
@@ -187,6 +189,12 @@ class PeerConnectionInterface : public talk_base::RefCountInterface {
   ~PeerConnectionInterface() {}
 };
 
+// Helper function to create a new instance of cricket::VideoCapturer
+// from VideoCaptureModule.
+// TODO: This function should be removed once chrome implement video
+// capture as the cricket::VideoCapturer.
+cricket::VideoCapturer* CreateVideoCapturer(VideoCaptureModule* vcm);
+
 // Factory class used for creating cricket::PortAllocator that is used
 // for ICE negotiation.
 class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
@@ -238,7 +246,7 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
 
   virtual talk_base::scoped_refptr<LocalVideoTrackInterface>
       CreateLocalVideoTrack(const std::string& label,
-                            VideoCaptureModule* video_device) = 0;
+                            cricket::VideoCapturer* video_device) = 0;
 
   virtual talk_base::scoped_refptr<LocalAudioTrackInterface>
       CreateLocalAudioTrack(const std::string& label,

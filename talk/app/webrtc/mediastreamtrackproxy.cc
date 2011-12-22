@@ -293,7 +293,7 @@ VideoTrackProxy::VideoTrackProxy(const std::string& label,
 }
 
 VideoTrackProxy::VideoTrackProxy(const std::string& label,
-                                 VideoCaptureModule* video_device,
+                                 cricket::VideoCapturer* video_device,
                                  talk_base::Thread* signaling_thread)
     : MediaStreamTrackProxy<LocalVideoTrackInterface>(signaling_thread),
       video_track_(VideoTrack::CreateLocal(label, video_device)) {
@@ -318,7 +318,7 @@ talk_base::scoped_refptr<VideoTrackInterface> VideoTrackProxy::CreateRemote(
 
 talk_base::scoped_refptr<LocalVideoTrackInterface> VideoTrackProxy::CreateLocal(
     const std::string& label,
-    VideoCaptureModule* video_device,
+    cricket::VideoCapturer* video_device,
     talk_base::Thread* signaling_thread) {
   ASSERT(signaling_thread != NULL);
   talk_base::RefCountedObject<VideoTrackProxy>* track =

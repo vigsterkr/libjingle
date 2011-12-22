@@ -47,7 +47,6 @@ class PresenceOutTask;
 class MucInviteRecvTask;
 class MucInviteSendTask;
 class FriendInviteSendTask;
-class VoicemailJidRequester;
 class DiscoInfoQueryTask;
 class Muc;
 class Status;
@@ -194,8 +193,6 @@ class CallClient: public sigslot::has_slots<> {
                                 const std::string& mutee_nick,
                                 const buzz::XmlElement* stanza);
   void OnDevicesChange();
-  void OnFoundVoicemailJid(const buzz::Jid& to, const buzz::Jid& voicemail);
-  void OnVoicemailJidError(const buzz::Jid& to);
   void OnMediaSourcesUpdate(cricket::Call* call,
                             cricket::Session* session,
                             const cricket::MediaSources& sources);
@@ -225,7 +222,6 @@ class CallClient: public sigslot::has_slots<> {
   void PrintRoster();
   void MakeCallTo(const std::string& name, const cricket::CallOptions& options);
   void PlaceCall(const buzz::Jid& jid, const cricket::CallOptions& options);
-  void CallVoicemail(const std::string& name);
   void Accept(const cricket::CallOptions& options);
   void Reject();
   void Quit();

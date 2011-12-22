@@ -58,7 +58,7 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
   // Create a video track used for local video tracks.
   static talk_base::scoped_refptr<VideoTrack> CreateLocal(
       const std::string& label,
-      VideoCaptureModule* video_device);
+      cricket::VideoCapturer* video_device);
 
   virtual cricket::VideoCapturer* GetVideoCapture();
   virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
@@ -68,7 +68,7 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
 
  protected:
   explicit VideoTrack(const std::string& label);
-  VideoTrack(const std::string& label, VideoCaptureModule* video_device);
+  VideoTrack(const std::string& label, cricket::VideoCapturer* video_device);
 
  private:
   talk_base::scoped_ptr<cricket::VideoCapturer> video_device_;

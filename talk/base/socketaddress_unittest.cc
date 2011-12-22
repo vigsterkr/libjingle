@@ -232,32 +232,6 @@ TEST(SocketAddressTest, TestToFromSockAddrStorage) {
   EXPECT_FALSE(SocketAddressFromSockAddrStorage(addr_storage, NULL));
 }
 
-TEST(SocketAddressTest, TestIPv4ToFromBuffer) {
-  SocketAddress from("1.2.3.4", 5678), addr;
-  char buf[20];
-  EXPECT_TRUE(from.Write_(buf, sizeof(buf)));
-  EXPECT_TRUE(addr.Read_(buf, sizeof(buf)));
-  EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(AF_INET, addr.ipaddr().family());
-  EXPECT_EQ(IPAddress(0x01020304U), addr.ipaddr());
-  EXPECT_EQ(5678, addr.port());
-  EXPECT_EQ("", addr.hostname());
-  EXPECT_EQ("1.2.3.4:5678", addr.ToString());
-}
-
-TEST(SocketAddressTest, TestIPv6ToFromBuffer) {
-  SocketAddress from6(kTestV6AddrString, 5678), addr;
-  char buf[20];
-  EXPECT_TRUE(from6.Write_(buf, sizeof(buf)));
-  EXPECT_TRUE(addr.Read_(buf, sizeof(buf)));
-  EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(AF_INET6, addr.ipaddr().family());
-  EXPECT_EQ(IPAddress(kTestV6Addr), addr.ipaddr());
-  EXPECT_EQ(5678, addr.port());
-  EXPECT_EQ("", addr.hostname());
-  EXPECT_EQ(kTestV6AddrFullString, addr.ToString());
-}
-
 TEST(SocketAddressTest, TestGoodResolve) {
   SocketAddress addr("localhost", 5678);
   int error;

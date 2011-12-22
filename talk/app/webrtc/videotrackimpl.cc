@@ -40,13 +40,10 @@ VideoTrack::VideoTrack(const std::string& label)
 }
 
 VideoTrack::VideoTrack(const std::string& label,
-                       VideoCaptureModule* video_device)
+                       cricket::VideoCapturer* video_device)
     : MediaStreamTrack<LocalVideoTrackInterface>(label),
       video_device_(NULL) {
-  cricket::WebRtcVideoCapturer* video_device_impl =
-      new cricket::WebRtcVideoCapturer;
-  video_device_impl->Init(video_device);
-  video_device_.reset(video_device_impl);
+  video_device_.reset(video_device);
 }
 
 void VideoTrack::SetRenderer(VideoRendererWrapperInterface* renderer) {
@@ -76,7 +73,7 @@ talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateRemote(
 
 talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateLocal(
     const std::string& label,
-    VideoCaptureModule* video_device) {
+    cricket::VideoCapturer* video_device) {
   talk_base::RefCountedObject<VideoTrack>* track =
       new talk_base::RefCountedObject<VideoTrack>(label, video_device);
   return track;

@@ -170,16 +170,6 @@ class SocketAddress {
   // Hashes this address into a small number.
   size_t Hash() const;
 
-  // Returns the size of this address when written (for STUN).
-  // TODO: Move STUN functions( Size_/Write_/Read_) out of this class.
-  size_t Size_() const;
-
-  // Writes this address into the given buffer, according to RFC 5389.
-  bool Write_(char* buf, int len) const;
-
-  // Reads this address from the given buffer, according to RFC 5389.
-  bool Read_(const char* buf, int len);
-
   // Write this address to a sockaddr_in.
   // If IPv6, will zero out the sockaddr_in and sets family to AF_UNSPEC.
   void ToSockAddr(sockaddr_in* saddr) const;

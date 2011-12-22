@@ -50,7 +50,7 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
 
   virtual talk_base::scoped_refptr<LocalVideoTrackInterface>
       CreateLocalVideoTrack(const std::string& label,
-                            VideoCaptureModule* video_device);
+                            cricket::VideoCapturer* video_device);
 
   virtual talk_base::scoped_refptr<LocalAudioTrackInterface>
       CreateLocalAudioTrack(const std::string& label,

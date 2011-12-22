@@ -220,7 +220,7 @@ PeerConnectionFactory::CreateLocalMediaStream(
 scoped_refptr<LocalVideoTrackInterface>
 PeerConnectionFactory::CreateLocalVideoTrack(
     const std::string& label,
-    VideoCaptureModule* video_device) {
+    cricket::VideoCapturer* video_device) {
   return VideoTrackProxy::CreateLocal(label, video_device,
                                       signaling_thread_);
 }

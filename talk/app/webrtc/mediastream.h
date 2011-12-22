@@ -51,7 +51,6 @@ class MediaEngine;
 namespace webrtc {
 
 class AudioDeviceModule;
-class VideoCaptureModule;
 
 // Generic observer interface.
 class ObserverInterface {

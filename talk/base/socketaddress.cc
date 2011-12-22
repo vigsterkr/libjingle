@@ -299,45 +299,6 @@ size_t SocketAddress::Hash() const {
   return h;
 }
 
-size_t SocketAddress::Size_() const {
-  return ip_.Size() + sizeof(port_) + 2;
-}
-
-bool SocketAddress::Write_(char* buf, int len) const {
-  if (len < static_cast<int>(Size_()))
-    return false;
-  int family = ip_.family();
-  if (family != AF_INET && family != AF_INET6) {
-    return false;
-  }
-  buf[0] = 0;
-  SetBE16(buf + 2, port_);
-  if (family == AF_INET) {
-    buf[1] = kStunFamilyIPv4;
-    SetBE32(buf + 4, ip_.v4AddressAsHostOrderInteger());
-  } else if (family == AF_INET6) {
-    buf[1] = kStunFamilyIPv6;
-    in6_addr addr = ip_.ipv6_address();
-    memcpy((buf + 4), &addr.s6_addr, sizeof(addr.s6_addr));
-  }
-  return true;
-}
-
-bool SocketAddress::Read_(const char* buf, int len) {
-  if (len < static_cast<int>(Size_()) ||
-      (buf[1] != kStunFamilyIPv4 && buf[1] != kStunFamilyIPv6))
-    return false;
-  port_ = GetBE16(buf + 2);
-  if (buf[1] == kStunFamilyIPv4) {
-    ip_ = IPAddress(GetBE32(buf + 4));
-  } else if (buf[1] == kStunFamilyIPv6) {
-    in6_addr addr;
-    memcpy(&addr.s6_addr, (buf + 4), sizeof(addr.s6_addr));
-    ip_ = IPAddress(addr);
-  }
-  return true;
-}
-
 void SocketAddress::ToSockAddr(sockaddr_in* saddr) const {
   memset(saddr, 0, sizeof(*saddr));
   if (ip_.family() != AF_INET) {

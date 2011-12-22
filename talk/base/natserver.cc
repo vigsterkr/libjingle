@@ -25,6 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/natsocketfactory.h"
 #include "talk/base/natserver.h"
 #include "talk/base/logging.h"
 
@@ -60,7 +61,7 @@ AddrCmp::AddrCmp(NAT* nat)
 size_t AddrCmp::operator()(const SocketAddress& a) const {
   size_t h = 0;
   if (use_ip)
-    h ^= a.ip();
+    h ^= HashIP(a.ipaddr());
   if (use_port)
     h ^= a.port() | (a.port() << 16);
   return h;
@@ -68,9 +69,9 @@ size_t AddrCmp::operator()(const SocketAddress& a) const {
 
 bool AddrCmp::operator()(
       const SocketAddress& a1, const SocketAddress& a2) const {
-  if (use_ip && (a1.ip() < a2.ip()))
+  if (use_ip && (a1.ipaddr() < a2.ipaddr()))
     return true;
-  if (use_ip && (a2.ip() < a1.ip()))
+  if (use_ip && (a2.ipaddr() < a1.ipaddr()))
     return false;
   if (use_port && (a1.port() < a2.port()))
     return true;
@@ -82,7 +83,7 @@ bool AddrCmp::operator()(
 NATServer::NATServer(
     NATType type, SocketFactory* internal, const SocketAddress& internal_addr,
     SocketFactory* external, const SocketAddress& external_ip)
-    : external_(external), external_ip_(external_ip.ip(), 0) {
+    : external_(external), external_ip_(external_ip.ipaddr(), 0) {
   nat_ = NAT::Create(type);
 
   server_socket_ = AsyncUDPSocket::Create(internal, internal_addr);
@@ -110,7 +111,7 @@ void NATServer::OnInternalPacket(
 
   // Read the intended destination from the wire.
   SocketAddress dest_addr;
-  dest_addr.Read_(buf, size);
+  int length = UnpackAddressFromNAT(buf, size, &dest_addr);
 
   // Find the translation for these addresses (allocating one if necessary).
   SocketAddressPair route(addr, dest_addr);
@@ -125,8 +126,7 @@ void NATServer::OnInternalPacket(
   iter->second->whitelist->insert(dest_addr);
 
   // Send the packet to its intended destination.
-  iter->second->socket->SendTo(
-      buf + dest_addr.Size_(), size - dest_addr.Size_(), dest_addr);
+  iter->second->socket->SendTo(buf + length, size - length, dest_addr);
 }
 
 void NATServer::OnExternalPacket(
@@ -147,16 +147,15 @@ void NATServer::OnExternalPacket(
   }
 
   // Forward this packet to the internal address.
-
-  size_t real_size = size + remote_addr.Size_();
-  char*  real_buf  = new char[real_size];
-
-  remote_addr.Write_(real_buf, real_size);
-  std::memcpy(real_buf + remote_addr.Size_(), buf, size);
-
-  server_socket_->SendTo(real_buf, real_size, iter->second->route.source());
-
-  delete[] real_buf;
+  // First prepend the address in a quasi-STUN format.
+  scoped_array<char> real_buf(new char[size + kNATEncodedIPv6AddressSize]);
+  size_t addrlength = PackAddressForNAT(real_buf.get(),
+                                        size + kNATEncodedIPv6AddressSize,
+                                        remote_addr);
+  // Copy the data part after the address.
+  std::memcpy(real_buf.get() + addrlength, buf, size);
+  server_socket_->SendTo(real_buf.get(), size + addrlength,
+                         iter->second->route.source());
 }
 
 void NATServer::Translate(const SocketAddressPair& route) {
