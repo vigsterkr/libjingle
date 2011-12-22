@@ -120,7 +120,8 @@ class MediaContentDescription : public ContentDescription {
         bandwidth_(kAutoBandwidth),
         crypto_required_(false),
         rtp_header_extensions_set_(false),
-        multistream_(false) {
+        multistream_(false),
+        partial_(false) {
   }
 
   virtual MediaType type() const = 0;
@@ -191,6 +192,9 @@ class MediaContentDescription : public ContentDescription {
     return streams_[0].has_ssrcs();
   }
 
+  void set_partial(bool partial) { partial_ = partial; }
+  bool partial() const { return partial_;  }
+
  protected:
   bool rtcp_mux_;
   int bandwidth_;
@@ -200,6 +204,7 @@ class MediaContentDescription : public ContentDescription {
   bool rtp_header_extensions_set_;
   bool multistream_;
   StreamParamsVec streams_;
+  bool partial_;
 };
 
 template <class C>

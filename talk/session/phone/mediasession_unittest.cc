@@ -300,6 +300,32 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswer) {
   ASSERT_CRYPTO(vcd, false, 1U, CS_AES_CM_128_HMAC_SHA1_80);
 }
 
+TEST_F(MediaSessionDescriptionFactoryTest, TestPartial) {
+  MediaSessionOptions opts;
+  opts.has_video = true;
+  f1_.set_secure(SEC_ENABLED);
+  talk_base::scoped_ptr<SessionDescription>
+      offer(f1_.CreateOffer(opts, NULL));
+  ASSERT_TRUE(offer.get() != NULL);
+  const ContentInfo* ac = offer->GetContentByName("audio");
+  const ContentInfo* vc = offer->GetContentByName("video");
+  AudioContentDescription* acd = const_cast<AudioContentDescription*>(
+      static_cast<const AudioContentDescription*>(ac->description));
+  VideoContentDescription* vcd = const_cast<VideoContentDescription*>(
+      static_cast<const VideoContentDescription*>(vc->description));
+
+  EXPECT_FALSE(acd->partial());  // default is false.
+  acd->set_partial(true);
+  EXPECT_TRUE(acd->partial());
+  acd->set_partial(false);
+  EXPECT_FALSE(acd->partial());
+
+  EXPECT_FALSE(vcd->partial());  // default is false.
+  vcd->set_partial(true);
+  EXPECT_TRUE(vcd->partial());
+  vcd->set_partial(false);
+  EXPECT_FALSE(vcd->partial());
+}
 
 // Create a typical video answer, and ensure it matches what we expect.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswerRtcpMux) {

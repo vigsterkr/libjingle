@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2011, Google Inc.
+ * Copyright 2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,50 +25,46 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_
-#define TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_
+// This file defines the default implementation of
+// PortAllocatorFactoryInterface.
+// This implementation creates instances of cricket::HTTPPortAllocator and uses
+// the BasicNetworkManager and BasicPacketSocketFactory.
 
-#include <string>
-#include <vector>
+#ifndef TALK_APP_WEBRTC_PORTALLOCATORFACTORY_H_
+#define TALK_APP_WEBRTC_PORTALLOCATORFACTORY_H_
 
+#include "talk/app/webrtc/peerconnection.h"
 #include "talk/base/scoped_ptr.h"
 
 namespace cricket {
-class ChannelManager;
-class DeviceManagerInterface;
-class MediaEngineInterface;
 class PortAllocator;
-}  // namespace cricket
+}
 
 namespace talk_base {
-class SocketAddress;
-class Thread;
-}  // namespace talk_base
+class BasicNetworkManager;
+class BasicPacketSocketFactory;
+}
 
 namespace webrtc {
 
-class PeerConnection;
-
-class PeerConnectionFactory {
+class PortAllocatorFactory : public PortAllocatorFactoryInterface {
  public:
-  PeerConnectionFactory(cricket::MediaEngineInterface* media_engine,
-                        cricket::DeviceManagerInterface* device_manager,
-                        talk_base::Thread* worker_thread);
-  PeerConnectionFactory(talk_base::Thread* worker_thread);
+  static talk_base::scoped_refptr<PortAllocatorFactoryInterface> Create(
+      talk_base::Thread* worker_thread);
 
-  virtual ~PeerConnectionFactory();
-  bool Initialize();
+  virtual cricket::PortAllocator* CreatePortAllocator(
+      const std::vector<StunConfiguration>& stun,
+      const std::vector<TurnConfiguration>& turn);
 
-  PeerConnection* CreatePeerConnection(
-      cricket::PortAllocator* port_allocator,
-      talk_base::Thread* signaling_thread);
+ protected:
+  explicit PortAllocatorFactory(talk_base::Thread* worker_thread);
+  ~PortAllocatorFactory();
 
  private:
-  bool initialized_;
-  talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
+  talk_base::scoped_ptr<talk_base::BasicNetworkManager> network_manager_;
+  talk_base::scoped_ptr<talk_base::BasicPacketSocketFactory> socket_factory_;
 };
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_
-
+#endif  // TALK_APP_WEBRTC_PORTALLOCATORFACTORY_H_

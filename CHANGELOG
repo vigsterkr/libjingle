@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.7 - Dec 21, 2011
+  - Release new PeerConnection implementation to app/webrtc.
+  - Bug fixes.
+
 0.6.6 - Dec 14, 2011
   - Fix support for rtcp multiplexing (aka rtcp-mux).
   - Add more support for FreeBSD and OpenBSD.
