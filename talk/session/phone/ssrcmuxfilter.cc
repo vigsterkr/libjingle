@@ -88,8 +88,11 @@ bool SsrcMuxFilter::DemuxPacket(const char* data, size_t len, bool rtcp) {
   } else {
     int pl_type = 0;
     if (!GetRtcpType(data, len, &pl_type)) return false;
-    if (pl_type == kRtcpTypeSR || pl_type == kRtcpTypeRR) {
-      // Getting SSRC from the report packets.
+    if (pl_type == kRtcpTypeSDES) {
+      // SDES packet parsing not supported.
+      LOG(LS_INFO) << "SDES packet received for demux.";
+      return true;
+    } else {
       if (!GetRtcpSsrc(data, len, &ssrc)) return false;
       if (ssrc == kSsrc01) {
         // SSRC 1 has a special meaning and indicates generic feedback on
@@ -97,11 +100,6 @@ bool SsrcMuxFilter::DemuxPacket(const char* data, size_t len, bool rtcp) {
         // incorrectly it will be ignored by lower layers anyway.
         return true;
       }
-    } else {
-      // All other RTCP packets are handled by the all channels.
-      // TODO: Add SSRC parsing to all RTCP messages.
-      LOG(LS_INFO) << "Non RTCP report packet received for demux.";
-      return true;
     }
   }
   return FindStream(ssrc);

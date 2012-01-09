@@ -45,13 +45,13 @@ namespace webrtc {
 // Helper class to test MediaStreamHandler.
 class MockMediaProvier : public MediaProviderInterface {
  public:
-  MOCK_METHOD1(SetCaptureDevice, void(const std::string& name));
+  MOCK_METHOD1(SetCaptureDevice, bool(const std::string& name));
   MOCK_METHOD1(SetLocalRenderer, void(const std::string& name));
   MOCK_METHOD1(SetRemoteRenderer, void(const std::string& name));
 
-  virtual void SetCaptureDevice(const std::string& name,
+  virtual bool SetCaptureDevice(const std::string& name,
                                 cricket::VideoCapturer* camera) {
-    SetCaptureDevice(name);
+    return SetCaptureDevice(name);
   }
   virtual void SetLocalRenderer(const std::string& name,
                                 cricket::VideoRenderer* renderer) {

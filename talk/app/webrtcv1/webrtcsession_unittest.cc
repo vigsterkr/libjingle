@@ -40,7 +40,12 @@
 #include "talk/p2p/base/portallocator.h"
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/p2p/client/fakeportallocator.h"
+#include "talk/session/phone/dummydevicemanager.h"
+#include "talk/session/phone/fakewebrtcvcmfactory.h"
+#include "talk/session/phone/fakewebrtcvideocapturemodule.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/webrtcmediaengine.h"
+#include "talk/session/phone/webrtcvideocapturer.h"
 
 class WebRtcSessionTest
     : public sigslot::has_slots<>,
@@ -55,22 +60,21 @@ class WebRtcSessionTest
   };
 
   WebRtcSessionTest()
-      : callback_ids_(),
-        last_stream_id_(""),
-        last_was_video_(false),
+      : last_was_video_(false),
         last_description_ptr_(NULL),
-        last_candidates_(),
         session_(NULL),
-        id_(),
         receiving_(false),
         allocator_(NULL),
         channel_manager_(NULL),
+        video_capturer_(NULL),
         worker_thread_(NULL),
         signaling_thread_(NULL) {
   }
 
   ~WebRtcSessionTest() {
     session_.reset();
+    // Ensure the VideoCapturer be unregistered before destroyed.
+    channel_manager_->SetVideoCapturer(NULL, 0);
   }
 
   void OnAddStream(const std::string& stream_id, bool video) {
@@ -163,8 +167,24 @@ class WebRtcSessionTest
 
     allocator_.reset(static_cast<cricket::PortAllocator*>(fake_port_allocator));
 
-    channel_manager_.reset(new cricket::ChannelManager(worker_thread_));
+    cricket::DummyDeviceManager* device_manager(
+        new cricket::DummyDeviceManager());
+    cricket::WebRtcMediaEngine* webrtc_media_engine(
+        new cricket::WebRtcMediaEngine(NULL, NULL, NULL));
+    channel_manager_.reset(new cricket::ChannelManager(webrtc_media_engine,
+                                                       device_manager,
+                                                       worker_thread_));
     if (!channel_manager_->Init())
+      return false;
+
+    FakeWebRtcVideoCaptureModule* vcm =
+        new FakeWebRtcVideoCaptureModule(NULL, 123);
+    video_capturer_.reset(new cricket::WebRtcVideoCapturer);
+    if (!video_capturer_->Init(vcm)) {
+      return false;
+    }
+    // The SetVideoCapturer call doesn't transfer ownership.
+    if (!channel_manager_->SetVideoCapturer(video_capturer_.get(), 0))
       return false;
 
     talk_base::CreateRandomString(8, &id_);
@@ -283,6 +303,7 @@ class WebRtcSessionTest
   talk_base::scoped_ptr<cricket::PortAllocator> allocator_;
 
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
+  talk_base::scoped_ptr<cricket::WebRtcVideoCapturer> video_capturer_;
 
   talk_base::Thread* worker_thread_;
   talk_base::Thread* signaling_thread_;

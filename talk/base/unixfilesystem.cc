@@ -483,9 +483,9 @@ bool UnixFilesystem::GetDiskFreeSpace(const Pathname& path, int64 *freebytes) {
     existing_path.SetFolder(existing_path.parent_folder());
   }
 #ifdef ANDROID
-  struct statfs fs;
-  memset(&fs, 0, sizeof(fs));
-  if (0 != statfs(existing_path.pathname().c_str(), &fs))
+  struct statfs vfs;
+  memset(&vfs, 0, sizeof(vfs));
+  if (0 != statfs(existing_path.pathname().c_str(), &vfs))
     return false;
 #else
   struct statvfs vfs;

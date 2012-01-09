@@ -31,8 +31,23 @@ function handlePeerMessage(peer_id, data) {
   str += "<blockquote id='msg_" + message_counter + "' style='display:none'>";
   str += data + "</blockquote>";
   trace(str);
-  if (document.getElementById("loopback").checked)
+  if (document.getElementById("loopback").checked) {
+    if (data.search("OFFER") != -1) {
+      // In loopback mode, replace the ROAP OFFER with ROAP ANSWER.
+      data = data.replace("OFFER", "ANSWER");
+      var lines = data.split("\n");
+      for (var i = 1; i < lines.length; ++i) {
+        // Look for the offererSessionId and use it as answererSessionId
+        if (lines[i].length > 0 && lines[i].search("offererSessionId") != -1) {
+          var answer_session_id =
+              lines[i].replace("offererSessionId", "answererSessionId");
+          answer_session_id += "\n" + lines[i];
+          data = data.replace(lines[i], answer_session_id);
+        }
+      }
+    }
     sendToPeer(peer_id, data);
+  }
 }
 
 function GetIntHeader(r, name) {

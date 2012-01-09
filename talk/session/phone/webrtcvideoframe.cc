@@ -221,16 +221,10 @@ size_t WebRtcVideoFrame::ConvertToRgbBuffer(uint32 to_fourcc,
   if (!video_frame_.Buffer()) {
     return 0;
   }
-
   size_t width = video_frame_.Width();
   size_t height = video_frame_.Height();
-  // See http://www.virtualdub.org/blog/pivot/entry.php?id=190 for a good
-  // explanation of pitch and why this is the amount of space we need.
-  // TODO: increase to stride * height to allow padding to be used
-  // to overwrite for efficiency.
-  size_t needed = stride_rgb * (height - 1) + 4 * width;
-
-  if (needed > size) {
+  size_t needed = stride_rgb * height;
+  if (size < needed) {
     LOG(LS_WARNING) << "RGB buffer is not large enough";
     return needed;
   }

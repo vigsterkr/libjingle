@@ -1,7 +1,14 @@
 Libjingle
 
+0.6.9 - Jan 09, 2012
+   - Enable SRTP in PeerConnection.
+   - Bug fixes.
+
 0.6.8 - Dec 22, 2011
-  -
+  - Add a lot of unit tests
+  - Add a lot of older files to base/ and xmpp/
+  - Add examples/pcp add examples/peerconnection
+  - Improve support for IPV6
 
 0.6.7 - Dec 21, 2011
   - Release new PeerConnection implementation to app/webrtc.

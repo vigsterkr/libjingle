@@ -62,15 +62,12 @@ void TestHttpPortAllocatorSession::OnRequestDone(
     talk_base::SignalThread* data) {
   talk_base::AsyncHttpRequest* request =
       static_cast<talk_base::AsyncHttpRequest*>(data);
+
+  // Tell the checker that the request is complete.
   SignalRequestDone(request);
 
-  // For the https response, pass the result back to the port
-  // allocator to generate a config with relay addresses we can
-  // ping. For http, we are only interested in that we got a
-  // response.
-  if (request->port() == talk_base::HTTP_SECURE_PORT) {
-    HttpPortAllocatorSession::OnRequestDone(data);
-  }
+  // Pass on the response to super class.
+  HttpPortAllocatorSession::OnRequestDone(data);
 }
 
 ConnectivityChecker::ConnectivityChecker(
@@ -238,6 +235,11 @@ void ConnectivityChecker::OnConfigReady(
     const PortConfiguration* config,
     const talk_base::ProxyInfo& proxy_info) {
   ASSERT(worker_ == talk_base::Thread::Current());
+
+  // Since we send requests on both HTTP and HTTPS we will get two
+  // configs per nic. Results from the second will overwrite the
+  // result from the first.
+  // TODO: Handle multiple pings on one nic.
   CreateRelayPorts(config, proxy_info);
 }
 
@@ -419,7 +421,7 @@ void ConnectivityChecker::AllocatePorts() {
     return;
   }
   talk_base::ProxyInfo proxy_info = GetProxyInfo();
-  bool allocateRelayPorts = false;
+  bool allocate_relay_ports = false;
   for (uint32 i = 0; i < networks.size(); ++i) {
     if (AddNic(networks[i]->ip(), proxy_info.address)) {
       Port* port = CreateStunPort(&config, networks[i]);
@@ -433,12 +435,12 @@ void ConnectivityChecker::AllocatePorts() {
       port->set_proxy(user_agent_, proxy_info);
       port->PrepareAddress();
       ports_.push_back(port);
-      allocateRelayPorts = true;
+      allocate_relay_ports = true;
     }
   }
 
   // If any new ip/proxy combinations were added, send a relay allocate.
-  if (allocateRelayPorts) {
+  if (allocate_relay_ports) {
     AllocateRelayPorts();
   }
 

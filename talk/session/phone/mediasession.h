@@ -278,14 +278,9 @@ class MediaSessionDescriptionFactory {
   SecureMediaPolicy secure() const { return secure_; }
   void set_secure(SecureMediaPolicy s) { secure_ = s; }
 
-
   SessionDescription* CreateOffer(
       const MediaSessionOptions& options,
       const SessionDescription* current_description);
-
-
-
-
 
   SessionDescription* CreateAnswer(
         const SessionDescription* offer,

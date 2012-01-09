@@ -28,6 +28,7 @@
 #ifndef TALK_SESSION_PHONE_WEBRTCVIDEOENGINE_H_
 #define TALK_SESSION_PHONE_WEBRTCVIDEOENGINE_H_
 
+#include <map>
 #include <vector>
 
 #include "talk/base/scoped_ptr.h"
@@ -49,8 +50,9 @@ class ViEExternalCapture;
 
 namespace cricket {
 struct CapturedFrame;
+class WebRtcVideoChannelInfo;
 struct Device;
-class LocalStreamInfo;
+class WebRtcLocalStreamInfo;
 class VideoCapturer;
 class VideoFrame;
 class VideoProcessor;
@@ -242,10 +244,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
 
   // Public functions for use by tests and other specialized code.
   uint32 send_ssrc() const { return 0; }
-  bool GetRenderer(uint32 ssrc, VideoRenderer** renderer) {
-    *renderer = NULL;
-    return false;
-  }
+  bool GetRenderer(uint32 ssrc, VideoRenderer** renderer);
   bool SendFrame(uint32 ssrc, const VideoFrame* frame);
 
   // Thunk functions for use with HybridVideoEngine
@@ -261,16 +260,21 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual int SendRTCPPacket(int channel, const void* data, int len);
 
  private:
-  bool EnableRtcp();
-  bool EnablePli();
-  bool EnableTmmbr();
-  bool EnableNack();
+  typedef std::map<uint32, WebRtcVideoChannelInfo*> ChannelMap;
+
+  // Creates and initializes a WebRtc video channel.
+  bool ConfigureChannel(int channel_id);
+  bool ConfigureReceiving(int channel_id, uint32 remote_ssrc);
   bool SetNackFec(int red_payload_type, int fec_payload_type);
   bool SetSendCodec(const webrtc::VideoCodec& codec,
                     int min_bitrate,
                     int start_bitrate,
                     int max_bitrate);
-  bool ResetRecvCodecs(int channel);
+  // Prepares the channel with channel id |channel_id| to receive all codecs in
+  // |receive_codecs_| and start receive packets.
+  bool SetReceiveCodecs(int channel_id);
+  // Returns the channel number that receives the stream with SSRC |ssrc|.
+  int GetChannelNum(uint32 ssrc);
 
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
@@ -284,10 +288,11 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   int send_start_bitrate_;
   int send_max_bitrate_;
   talk_base::scoped_ptr<webrtc::VideoCodec> send_codec_;
-  talk_base::scoped_ptr<WebRtcRenderAdapter> remote_renderer_;
-  talk_base::scoped_ptr<WebRtcDecoderObserver> decoder_observer_;
+  std::vector<webrtc::VideoCodec> receive_codecs_;
   talk_base::scoped_ptr<WebRtcEncoderObserver> encoder_observer_;
-  talk_base::scoped_ptr<LocalStreamInfo> local_stream_info_;
+  talk_base::scoped_ptr<WebRtcLocalStreamInfo> local_stream_info_;
+
+  ChannelMap mux_channels_;  // Contains all receive channels.
 };
 
 }  // namespace cricket

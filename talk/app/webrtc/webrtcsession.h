@@ -59,7 +59,7 @@ class WebRtcSession : public cricket::BaseSession,
                 talk_base::Thread* signaling_thread,
                 talk_base::Thread* worker_thread,
                 cricket::PortAllocator* port_allocator);
-  ~WebRtcSession();
+  virtual ~WebRtcSession();
 
   bool Initialize();
 
@@ -74,11 +74,16 @@ class WebRtcSession : public cricket::BaseSession,
     return video_channel_.get();
   }
 
+  void set_secure_policy(cricket::SecureMediaPolicy secure_policy);
+  cricket::SecureMediaPolicy secure_policy() const {
+    return session_desc_factory_.secure();
+  }
+
   // Generic error message callback from WebRtcSession.
   // TODO - It may be necessary to supply error code as well.
   sigslot::signal0<> SignalError;
 
- private:
+ protected:
   // Implements SessionDescriptionProvider
   virtual const cricket::SessionDescription* ProvideOffer(
       const cricket::MediaSessionOptions& options);
@@ -89,8 +94,9 @@ class WebRtcSession : public cricket::BaseSession,
       const cricket::MediaSessionOptions& options);
   virtual void NegotiationDone();
 
+ private:
   // Implements MediaProviderInterface.
-  virtual void SetCaptureDevice(const std::string& name,
+  virtual bool SetCaptureDevice(const std::string& name,
                                 cricket::VideoCapturer* camera);
   virtual void SetLocalRenderer(const std::string& name,
                                 cricket::VideoRenderer* renderer);
@@ -116,7 +122,6 @@ class WebRtcSession : public cricket::BaseSession,
   bool CheckCandidate(const std::string& name);
   void SetRemoteCandidates(const cricket::Candidates& candidates);
 
- private:
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;

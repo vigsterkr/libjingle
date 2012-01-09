@@ -605,7 +605,7 @@ class FakeVideoEngine : public FakeBaseEngine {
     channels_.erase(std::find(channels_.begin(), channels_.end(), channel));
   }
 
-  const std::vector<VideoCodec>& codecs() {
+  const std::vector<VideoCodec>& codecs() const {
     return codecs_;
   }
   bool FindCodec(const VideoCodec& in) {

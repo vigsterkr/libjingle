@@ -74,6 +74,8 @@ WebRtcSession::~WebRtcSession() {
 }
 
 bool WebRtcSession::Initialize() {
+  // By default SRTP-SDES is enabled in WebRtc.
+  set_secure_policy(cricket::SEC_REQUIRED);
   return CreateChannels();
 }
 
@@ -84,6 +86,11 @@ void WebRtcSession::Terminate() {
   if (video_channel_.get()) {
     channel_manager_->DestroyVideoChannel(video_channel_.release());
   }
+}
+
+void WebRtcSession::set_secure_policy(
+    cricket::SecureMediaPolicy secure_policy) {
+  session_desc_factory_.set_secure(secure_policy);
 }
 
 bool WebRtcSession::CreateChannels() {
@@ -236,7 +243,7 @@ bool WebRtcSession::CheckCandidate(const std::string& name) {
   return ret;
 }
 
-void WebRtcSession::SetCaptureDevice(const std::string& name,
+bool WebRtcSession::SetCaptureDevice(const std::string& name,
                                      cricket::VideoCapturer* camera) {
   // should be called from a signaling thread
   ASSERT(signaling_thread()->IsCurrent());
@@ -245,11 +252,17 @@ void WebRtcSession::SetCaptureDevice(const std::string& name,
   const uint32 dummy_ssrc = 0;
   if (!channel_manager_->SetVideoCapturer(camera, dummy_ssrc)) {
     LOG(LS_ERROR) << "Failed to set capture device.";
-    return;
+    return false;
   }
 
-  // Actually associate the video capture module with the ViE channel.
-  channel_manager_->SetVideoOptions("");
+  // Start the capture
+  cricket::CaptureResult ret = channel_manager_->SetVideoCapture(true);
+  if (ret != cricket::CR_SUCCESS && ret != cricket::CR_PENDING) {
+    LOG(LS_ERROR) << "Failed to start the capture device.";
+    return false;
+  }
+
+  return true;
 }
 
 void WebRtcSession::SetLocalRenderer(const std::string& name,
@@ -270,7 +283,11 @@ void WebRtcSession::SetRemoteRenderer(const std::string& name,
 
 const cricket::SessionDescription* WebRtcSession::ProvideOffer(
     const cricket::MediaSessionOptions& options) {
-  // TODO - Sanity check for options.
+  if (!options.has_video) {
+    LOG(LS_WARNING) << "To receive video, has_video flag must be set to true";
+    return NULL;
+  }
+
   cricket::SessionDescription* offer(
       session_desc_factory_.CreateOffer(options, local_description()));
   set_local_description(offer);

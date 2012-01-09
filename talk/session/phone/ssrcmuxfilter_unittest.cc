@@ -96,6 +96,12 @@ static const unsigned char kRtcpPacketTooSmall[] = {
     0x80, 0xC8, 0x00, 0x00, 0x00, 0x00,
 };
 
+// PT = 206, FMT = 1, Sender SSRC  = 0x1111, Media SSRC = 0x1111
+// No FCI information is needed for PLI.
+static const unsigned char kRtcpPacketNonCompoundRtcpPliFeedback[] = {
+    0x81, 0xCE, 0x00, 0x0C, 0x00, 0x00, 0x11, 0x11, 0x00, 0x00, 0x11, 0x11,
+};
+
 TEST(SsrcMuxFilterTest, TestOfferSetup) {
   cricket::SsrcMuxFilter ssrc_filter;
   EXPECT_TRUE(ssrc_filter.SetOffer(true, cricket::CS_LOCAL));
@@ -180,5 +186,7 @@ TEST(SsrcMuxFilterTest, RtcpPacketTest) {
   EXPECT_FALSE(ssrc_filter.DemuxPacket(
       reinterpret_cast<const char*>(kRtcpPacketTooSmall),
       sizeof(kRtcpPacketTooSmall), true));
+  EXPECT_TRUE(ssrc_filter.DemuxPacket(
+      reinterpret_cast<const char*>(kRtcpPacketNonCompoundRtcpPliFeedback),
+      sizeof(kRtcpPacketNonCompoundRtcpPliFeedback), true));
 }
-

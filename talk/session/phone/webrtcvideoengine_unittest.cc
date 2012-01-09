@@ -534,6 +534,20 @@ TEST_F(WebRtcVideoEngineTest, CreateChannel) {
   delete channel;
 }
 
+TEST_F(WebRtcVideoEngineTest, SetCaptureDevice) {
+  cricket::Device device;
+  EXPECT_TRUE(engine_.Init());
+
+  EXPECT_TRUE(engine_.SetCaptureDevice(&device));
+  EXPECT_FALSE(engine_.IsCapturing());
+  // FakeVideoCapturer returns CR_SUCCESS.
+  EXPECT_EQ(cricket::CR_SUCCESS, engine_.SetCapture(true));
+  EXPECT_TRUE(engine_.IsCapturing());
+
+  EXPECT_TRUE(engine_.SetCaptureDevice(NULL));
+  EXPECT_FALSE(engine_.IsCapturing());
+}
+
 TEST_F(WebRtcVideoEngineTest, SetCaptureModule) {
   // Use 123 to verify there's no assumption to the module id
   FakeWebRtcVideoCaptureModule* vcm =
@@ -544,7 +558,9 @@ TEST_F(WebRtcVideoEngineTest, SetCaptureModule) {
   // however the FakeWebRtcVideoCaptureModule didn't implemented the refcount.
   // So for testing, this should be fine.
   EXPECT_TRUE(engine_.SetCaptureModule(vcm));
+  EXPECT_FALSE(engine_.IsCapturing());
   EXPECT_EQ(cricket::CR_PENDING, engine_.SetCapture(true));
+  EXPECT_TRUE(engine_.IsCapturing());
   EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
   EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
   EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
@@ -552,6 +568,9 @@ TEST_F(WebRtcVideoEngineTest, SetCaptureModule) {
             vcm->cap().maxFPS);
   EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
   EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
+
+  EXPECT_TRUE(engine_.SetCaptureModule(NULL));
+  EXPECT_FALSE(engine_.IsCapturing());
 }
 
 TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
@@ -564,6 +583,9 @@ TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
   EXPECT_TRUE(engine_.Init());
   const uint32 ssrc_dummy = 0;
   EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get(), ssrc_dummy));
+  EXPECT_FALSE(engine_.IsCapturing());
+  EXPECT_EQ(cricket::CR_PENDING, engine_.SetCapture(true));
+  EXPECT_TRUE(engine_.IsCapturing());
 
   EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
   EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
@@ -572,6 +594,9 @@ TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
             vcm->cap().maxFPS);
   EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
   EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
+
+  EXPECT_TRUE(engine_.SetVideoCapturer(NULL, ssrc_dummy));
+  EXPECT_FALSE(engine_.IsCapturing());
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, SetRecvCodecs) {
@@ -620,7 +645,8 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SendManyResizeOnce) {
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStats) {
   Base::GetStats();
 }
-// TODO: Restore this test once we support multiple recv streams.
+
+// TODO: Fix this test to tolerate missing stats.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStatsMultipleRecvStreams) {
   Base::GetStatsMultipleRecvStreams();
 }
@@ -639,16 +665,15 @@ TEST_F(WebRtcVideoMediaChannelTest, SetSendSsrcAfterSetCodecs) {
   Base::SetSendSsrcAfterSetCodecs();
 }
 
-// TODO: Restore this test once we support GetRenderer.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetRenderer) {
+TEST_F(WebRtcVideoMediaChannelTest, SetRenderer) {
   Base::SetRenderer();
 }
-// TODO: Restore this test once we support multiple recv streams.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AddRemoveRecvStreams) {
+
+TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreams) {
   Base::AddRemoveRecvStreams();
 }
-// TODO: Restore this test once we support multiple recv streams.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SimulateConference) {
+
+TEST_F(WebRtcVideoMediaChannelTest, SimulateConference) {
   Base::SimulateConference();
 }
 // TODO: Investigate why this test is flaky.

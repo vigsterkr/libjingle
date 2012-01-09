@@ -455,6 +455,7 @@ bool GtkMainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
   gdk_threads_enter();
 
   int size = width_ * height_ * 4;
+  // TODO: Convert directly to RGBA
   frame->ConvertToRgbBuffer(cricket::FOURCC_ARGB,
                             image_.get(),
                             size,

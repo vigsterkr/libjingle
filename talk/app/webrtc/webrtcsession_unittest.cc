@@ -26,11 +26,11 @@
  */
 
 #include "talk/app/webrtc/webrtcsession.h"
-#include "talk/app/webrtc/peerconnectionsignaling.h"
 #include "talk/base/thread.h"
 #include "talk/base/gunit.h"
-#include "talk/session/phone/channelmanager.h"
 #include "talk/p2p/client/fakeportallocator.h"
+#include "talk/session/phone/channelmanager.h"
+#include "talk/session/phone/mediasession.h"
 
 class MockWebRtcSessionObserver : public webrtc::WebRtcSessionObserver {
  public:
@@ -44,14 +44,29 @@ class MockWebRtcSessionObserver : public webrtc::WebRtcSessionObserver {
   std::vector<cricket::Candidate> candidates_;
 };
 
+class WebRtcSessionForTest : public webrtc::WebRtcSession {
+ public:
+  WebRtcSessionForTest(cricket::ChannelManager* cmgr,
+                       talk_base::Thread* signaling_thread,
+                       talk_base::Thread* worker_thread,
+                       cricket::PortAllocator* port_allocator)
+    : WebRtcSession(cmgr, signaling_thread, worker_thread, port_allocator) {
+  }
+  virtual ~WebRtcSessionForTest() {}
+
+  using webrtc::WebRtcSession::ProvideOffer;
+  using webrtc::WebRtcSession::SetRemoteSessionDescription;
+  using webrtc::WebRtcSession::ProvideAnswer;
+  using webrtc::WebRtcSession::NegotiationDone;
+};
+
 class WebRtcSessionTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    signaling_thread_ = talk_base::Thread::Current();
-    worker_thread_ = talk_base::Thread::Current();
-    channel_manager_.reset(new cricket::ChannelManager(worker_thread_));
+    channel_manager_.reset(
+        new cricket::ChannelManager(talk_base::Thread::Current()));
     port_allocator_.reset(
-        new cricket::FakePortAllocator(worker_thread_, NULL));
+        new cricket::FakePortAllocator(talk_base::Thread::Current(), NULL));
     desc_factory_.reset(
         new cricket::MediaSessionDescriptionFactory(channel_manager_.get()));
   }
@@ -76,45 +91,134 @@ class WebRtcSessionTest : public testing::Test {
     ASSERT_TRUE(channel_manager_.get() != NULL);
     ASSERT_TRUE(session_.get() == NULL);
     EXPECT_TRUE(channel_manager_.get()->Init());
-    session_.reset(new webrtc::WebRtcSession(
-        channel_manager_.get(), worker_thread_, signaling_thread_,
-        port_allocator_.get()));
+    session_.reset(new WebRtcSessionForTest(
+        channel_manager_.get(), talk_base::Thread::Current(),
+        talk_base::Thread::Current(), port_allocator_.get()));
     session_->RegisterObserver(&observer_);
     desc_provider_ = session_.get();
     EXPECT_TRUE(InitializeSession());
   }
 
+  void PopulateFakeCandidates() {
+    const int num_of_channels = 4;
+    const char* const channel_names[num_of_channels] = {
+        "rtp", "rtcp", "video_rtp", "video_rtcp"
+    };
 
-  void CreateOffer(uint32 ssrc) {
-    cricket::MediaSessionOptions options;
-    // TODO - Adding test cases for session.
-    local_desc_ = desc_provider_->ProvideOffer(options);
-    ASSERT_TRUE(local_desc_ != NULL);
-  }
-  void CreateAnswer(uint32 ssrc) {
-    cricket::MediaSessionOptions options;
-    // TODO - Adding test cases for session.
-    remote_desc_ = desc_factory_->CreateAnswer(local_desc_, options, NULL);
-    ASSERT_TRUE(remote_desc_ != NULL);
-  }
-  void SetRemoteContents() {
-    desc_provider_->SetRemoteSessionDescription(
-        remote_desc_, observer_.candidates_);
-  }
-  void NegotiationDone() {
-    desc_provider_->NegotiationDone();
+    // max 4 transport channels;
+    candidates_.clear();
+    for (int i = 0; i < num_of_channels; ++i) {
+      cricket::Candidate candidate;
+      candidate.set_name(channel_names[i]);
+      candidates_.push_back(candidate);
+    }
   }
 
-  const cricket::SessionDescription* local_desc_;
-  const cricket::SessionDescription* remote_desc_;
-  talk_base::Thread* signaling_thread_;
-  talk_base::Thread* worker_thread_;
+  void CreateOffer() {
+    cricket::MediaSessionOptions options;
+    options.has_video = true;
+    session_->ProvideOffer(options);
+    ASSERT_TRUE(session_->local_description() != NULL);
+  }
+
+  void VerifyCryptoParams(const cricket::SessionDescription* sdp,
+                          bool offer) {
+    ASSERT_TRUE(session_.get() != NULL);
+    const cricket::ContentInfo* content = cricket::GetFirstAudioContent(sdp);
+    ASSERT_TRUE(content != NULL);
+    const cricket::AudioContentDescription* audio_content =
+        static_cast<const cricket::AudioContentDescription*>(
+            content->description);
+    ASSERT_TRUE(audio_content != NULL);
+    if (offer) {
+      ASSERT_EQ(2U, audio_content->cryptos().size());
+      // key(40) + inline string
+      ASSERT_EQ(47U, audio_content->cryptos()[0].key_params.size());
+      ASSERT_EQ("AES_CM_128_HMAC_SHA1_32",
+                audio_content->cryptos()[0].cipher_suite);
+      ASSERT_EQ("AES_CM_128_HMAC_SHA1_80",
+                audio_content->cryptos()[1].cipher_suite);
+      ASSERT_EQ(47U, audio_content->cryptos()[1].key_params.size());
+    } else {
+      ASSERT_EQ(1U, audio_content->cryptos().size());
+      // key(40) + inline string
+      ASSERT_EQ(47U, audio_content->cryptos()[0].key_params.size());
+      ASSERT_EQ("AES_CM_128_HMAC_SHA1_32",
+                audio_content->cryptos()[0].cipher_suite);
+    }
+
+    content = cricket::GetFirstVideoContent(sdp);
+    ASSERT_TRUE(content != NULL);
+    const cricket::VideoContentDescription* video_content =
+        static_cast<const cricket::VideoContentDescription*>(
+            content->description);
+    ASSERT_TRUE(video_content != NULL);
+    ASSERT_EQ(1U, video_content->cryptos().size());
+    ASSERT_EQ("AES_CM_128_HMAC_SHA1_80",
+              video_content->cryptos()[0].cipher_suite);
+    ASSERT_EQ(47U, video_content->cryptos()[0].key_params.size());
+  }
+
+  void VerifyNoCryptoParams(const cricket::SessionDescription* sdp) {
+    const cricket::ContentInfo* content = cricket::GetFirstAudioContent(sdp);
+    ASSERT_TRUE(content != NULL);
+    const cricket::AudioContentDescription* audio_content =
+        static_cast<const cricket::AudioContentDescription*>(
+            content->description);
+    ASSERT_TRUE(audio_content != NULL);
+    ASSERT_EQ(0U, audio_content->cryptos().size());
+
+    content = cricket::GetFirstVideoContent(sdp);
+    ASSERT_TRUE(content != NULL);
+    const cricket::VideoContentDescription* video_content =
+        static_cast<const cricket::VideoContentDescription*>(
+            content->description);
+    ASSERT_TRUE(video_content != NULL);
+    ASSERT_EQ(0U, video_content->cryptos().size());
+  }
+
+  void VerifyAnswerFromNonCryptoOffer() {
+    // Create a SDP without Crypto.
+    desc_factory_->set_secure(cricket::SEC_DISABLED);
+    cricket::MediaSessionOptions options;
+    options.has_video = true;
+    cricket::SessionDescription* offer =
+        desc_factory_->CreateOffer(options, NULL);
+    ASSERT_TRUE(offer != NULL);
+    VerifyNoCryptoParams(offer);
+    // Change security parameter to SEC_REQUIRED.
+    desc_factory_->set_secure(cricket::SEC_REQUIRED);
+    PopulateFakeCandidates();
+    session_->SetRemoteSessionDescription(offer, candidates_);
+    const cricket::SessionDescription* answer =
+        session_->ProvideAnswer(options);
+    // Answer should be NULL as no crypto params in offer.
+    ASSERT_TRUE(answer == NULL);
+  }
+
+  void VerifyAnswerFromCryptoOffer() {
+    desc_factory_->set_secure(cricket::SEC_REQUIRED);
+    cricket::MediaSessionOptions options;
+    options.has_video = true;
+    cricket::SessionDescription* offer =
+        desc_factory_->CreateOffer(options, NULL);
+    ASSERT_TRUE(offer != NULL);
+    VerifyCryptoParams(offer, true);
+    PopulateFakeCandidates();
+    session_->SetRemoteSessionDescription(offer, candidates_);
+    const cricket::SessionDescription* answer =
+        session_->ProvideAnswer(options);
+    ASSERT_TRUE(answer != NULL);
+    VerifyCryptoParams(answer, false);
+  }
+
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
   webrtc::SessionDescriptionProvider* desc_provider_;
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
   talk_base::scoped_ptr<cricket::MediaSessionDescriptionFactory> desc_factory_;
-  talk_base::scoped_ptr<webrtc::WebRtcSession> session_;
+  talk_base::scoped_ptr<WebRtcSessionForTest> session_;
   MockWebRtcSessionObserver observer_;
+  std::vector<cricket::Candidate> candidates_;
 };
 
 TEST_F(WebRtcSessionTest, TestInitialize) {
@@ -133,3 +237,30 @@ TEST_F(WebRtcSessionTest, DISABLE_TestOfferAnswer) {
   talk_base::Thread::Current()->ProcessMessages(1);
 }
 
+TEST_F(WebRtcSessionTest, TestDefaultSetSecurePolicy) {
+  WebRtcSessionTest::Init();
+  EXPECT_EQ(cricket::SEC_REQUIRED, session_->secure_policy());
+}
+
+TEST_F(WebRtcSessionTest, VerifyCryptoParamsInSDP) {
+  WebRtcSessionTest::Init();
+  CreateOffer();
+  VerifyCryptoParams(session_->local_description(), true);
+}
+
+TEST_F(WebRtcSessionTest, VerifyNoCryptoParamsInSDP) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  CreateOffer();
+  VerifyNoCryptoParams(session_->local_description());
+}
+
+TEST_F(WebRtcSessionTest, VerifyAnswerFromNonCryptoOffer) {
+  WebRtcSessionTest::Init();
+  VerifyAnswerFromNonCryptoOffer();
+}
+
+TEST_F(WebRtcSessionTest, VerifyAnswerFromCryptoOffer) {
+  WebRtcSessionTest::Init();
+  VerifyAnswerFromCryptoOffer();
+}
