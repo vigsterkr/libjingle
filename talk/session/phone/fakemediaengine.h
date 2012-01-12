@@ -360,7 +360,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     set_sending(send);
     return true;
   }
-  virtual bool AddScreencast(uint32 ssrc, talk_base::WindowId id) {
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
     screen_casting_ = true;
     return true;
   }

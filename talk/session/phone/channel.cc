@@ -149,7 +149,6 @@ bool BaseChannel::Mute(bool mute) {
 bool BaseChannel::RemoveStream(uint32 ssrc) {
   StreamMessageData data(ssrc, 0);
   Send(MSG_REMOVESTREAM, &data);
-  ssrc_filter()->RemoveStream(ssrc);
   return true;
 }
 
@@ -559,25 +558,14 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
   return ret;
 }
 
-// TODO: Check all of the ssrcs in all of the streams in
-// the content, and not just the first one.
-bool BaseChannel::SetSsrcMux_w(bool enable,
-                               const MediaContentDescription* content,
-                               ContentAction action,
-                               ContentSource src) {
-  bool ret = true;
-  if (action == CA_OFFER) {
-    ret = ssrc_filter_.SetOffer(enable, src);
-    if (ret && src == CS_REMOTE) {  // if received offer with ssrc
-      ret = ssrc_filter_.AddStream(content->first_ssrc());
-    }
-  } else if (action == CA_ANSWER) {
-    ret = ssrc_filter_.SetAnswer(enable, src);
-    if (ret && src == CS_REMOTE && ssrc_filter_.IsActive()) {
-      ret = ssrc_filter_.AddStream(content->first_ssrc());
-    }
+bool BaseChannel::AddSsrcMuxStreams_w(
+    const std::vector<StreamParams>& streams) {
+  for (std::vector<StreamParams>::const_iterator it = streams.begin();
+       it != streams.end(); ++it)  {
+    if (!ssrc_filter_.AddStream(*it))
+      return false;
   }
-  return ret;
+  return true;
 }
 
 void BaseChannel::OnMessage(talk_base::Message *pmsg) {
@@ -701,7 +689,6 @@ bool VoiceChannel::Init() {
 bool VoiceChannel::AddStream(uint32 ssrc) {
   StreamMessageData data(ssrc, 0);
   Send(MSG_ADDSTREAM, &data);
-  ssrc_filter()->AddStream(ssrc);
   return true;
 }
 
@@ -851,10 +838,6 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_LOCAL);
   }
-  // Set SSRC mux filter
-  if (ret) {
-    ret = SetSsrcMux_w(audio->has_ssrcs(), content, action, CS_LOCAL);
-  }
   // Set local audio codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(audio->codecs());
@@ -892,7 +875,9 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(audio->has_ssrcs(), content, action, CS_REMOTE);
+    // TODO: Refactor adding / removing to the ssrc mux filter
+    // when updating receiving streams based on the streams in content.
+    ret = AddSsrcMuxStreams_w(audio->streams());
   }
 
   // Set remote video codecs (what the other side wants to receive).
@@ -931,10 +916,14 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
 void VoiceChannel::AddStream_w(uint32 ssrc) {
   ASSERT(worker_thread() == talk_base::Thread::Current());
   media_channel()->AddStream(ssrc);
+  // TODO: Work is ongoing to refactor AddStream_w to take
+  // StreamParams as input.
+  ssrc_filter()->AddStream(StreamParams::CreateLegacy(ssrc));
 }
 
 void VoiceChannel::RemoveStream_w(uint32 ssrc) {
   media_channel()->RemoveStream(ssrc);
+  ssrc_filter()->RemoveStream(ssrc);
 }
 
 bool VoiceChannel::SetRingbackTone_w(const void* buf, int len) {
@@ -1114,7 +1103,6 @@ VideoChannel::~VideoChannel() {
 bool VideoChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
   StreamMessageData data(ssrc, voice_ssrc);
   Send(MSG_ADDSTREAM, &data);
-  ssrc_filter()->AddStream(ssrc);
   return true;
 }
 
@@ -1124,14 +1112,14 @@ bool VideoChannel::SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
   return true;
 }
 
-bool VideoChannel::AddScreencast(uint32 ssrc, talk_base::WindowId id) {
+bool VideoChannel::AddScreencast(uint32 ssrc, const ScreencastId& id) {
   ScreencastMessageData data(ssrc, id);
   Send(MSG_ADDSCREENCAST, &data);
   return true;
 }
 
 bool VideoChannel::RemoveScreencast(uint32 ssrc) {
-  ScreencastMessageData data(ssrc, 0);
+  ScreencastMessageData data(ssrc, ScreencastId());
   Send(MSG_REMOVESCREENCAST, &data);
   return true;
 }
@@ -1215,10 +1203,6 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
   if (ret) {
     ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_LOCAL);
   }
-  // Set SSRC mux filter
-  if (ret) {
-    ret = SetSsrcMux_w(video->has_ssrcs(), content, action, CS_LOCAL);
-  }
 
   // Set local video codecs (what we want to receive).
   if (ret) {
@@ -1257,7 +1241,9 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   }
   // Set SSRC mux filter
   if (ret) {
-    ret = SetSsrcMux_w(video->has_ssrcs(), content, action, CS_REMOTE);
+    // TODO: Refactor adding / removing to the ssrc mux filter
+    // when updating receiving streams based on the streams in content.
+    ret = AddSsrcMuxStreams_w(video->streams());
   }
   // Set remote video codecs (what the other side wants to receive).
   if (ret) {
@@ -1267,6 +1253,15 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   if (ret && video->rtp_header_extensions_set()) {
     ret = media_channel()->SetSendRtpHeaderExtensions(
         video->rtp_header_extensions());
+  }
+  // Tweak our video processing settings, if needed.
+  int video_options = 0;
+  if (video->conference_mode()) {
+    video_options |= OPT_CONFERENCE;
+  }
+  if (!media_channel()->SetOptions(video_options)) {
+    // Log an error on failure, but don't abort the call.
+    LOG(LS_ERROR) << "Failed to set video channel options";
   }
   // Set bandwidth parameters (what the other side wants to get, default=auto)
   if (ret) {
@@ -1286,17 +1281,21 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
 void VideoChannel::AddStream_w(uint32 ssrc, uint32 voice_ssrc) {
   media_channel()->AddStream(ssrc, voice_ssrc);
+  // TODO: Work is ongoing to refactor AddStream_w to take
+  // StreamParams as input.
+  ssrc_filter()->AddStream(StreamParams::CreateLegacy(ssrc));
 }
 
 void VideoChannel::RemoveStream_w(uint32 ssrc) {
   media_channel()->RemoveStream(ssrc);
+  ssrc_filter()->RemoveStream(ssrc);
 }
 
 void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
 
-void VideoChannel::AddScreencast_w(uint32 ssrc, talk_base::WindowId id) {
+void VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id) {
   media_channel()->AddScreencast(ssrc, id);
 }
 

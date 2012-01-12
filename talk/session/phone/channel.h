@@ -43,6 +43,7 @@
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamonitor.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
+#include "talk/session/phone/screencastid.h"
 #include "talk/session/phone/ssrcmuxfilter.h"
 #include "talk/session/phone/srtpfilter.h"
 
@@ -254,9 +255,7 @@ class BaseChannel
   bool SetRtcpMux_w(bool enable, ContentAction action, ContentSource src);
 
   // SSRC mux handling methods.
-  bool AddSsrcMux_w(const MediaContentDescription* content);
-  bool SetSsrcMux_w(bool enable, const MediaContentDescription* content,
-                    ContentAction action, ContentSource src);
+  bool AddSsrcMuxStreams_w(const std::vector<StreamParams>& streams);
 
   struct SetBandwidthData : public talk_base::MessageData {
     explicit SetBandwidthData(int value) : value(value), result(false) {}
@@ -460,7 +459,7 @@ class VideoChannel : public BaseChannel {
 
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
 
-  bool AddScreencast(uint32 ssrc, talk_base::WindowId id);
+  bool AddScreencast(uint32 ssrc, const ScreencastId& id);
   bool RemoveScreencast(uint32 ssrc);
 
   sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo> &>
@@ -511,10 +510,10 @@ class VideoChannel : public BaseChannel {
   };
 
   struct ScreencastMessageData : public talk_base::MessageData {
-    ScreencastMessageData(uint32 s, talk_base::WindowId id)
+    ScreencastMessageData(uint32 s, const ScreencastId& id)
         : ssrc(s), window_id(id) {}
     uint32 ssrc;
-    talk_base::WindowId window_id;
+    ScreencastId window_id;
   };
 
   struct ScreencastEventData : public talk_base::MessageData {
@@ -526,7 +525,7 @@ class VideoChannel : public BaseChannel {
 
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
-  void AddScreencast_w(uint32 ssrc, talk_base::WindowId);
+  void AddScreencast_w(uint32 ssrc, const ScreencastId&);
   void RemoveScreencast_w(uint32 ssrc);
   void OnScreencastWindowEvent_s(uint32 ssrc, talk_base::WindowEvent we);
 

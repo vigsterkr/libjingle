@@ -287,6 +287,48 @@ class WebRtcSessionTest
   const std::vector<cricket::Candidate>& CallLocalCandidates() {
     return session_->local_candidates();
   }
+  cricket::ChannelManager* channel_manager() const {
+    return channel_manager_.get();
+  }
+  const cricket::SessionDescription* local_description() const {
+    return session_->local_description();
+  }
+  cricket::SessionDescription* remote_description() const {
+    return session_->remote_description();
+  }
+
+  void VerifyCryptoParams(const cricket::SessionDescription* sdp,
+                          bool offer) {
+    const cricket::ContentInfo* content = cricket::GetFirstAudioContent(sdp);
+    if (content) {
+      const cricket::AudioContentDescription* audio_content =
+          static_cast<const cricket::AudioContentDescription*>(
+              content->description);
+      ASSERT_TRUE(audio_content != NULL);
+      ASSERT_EQ(offer ? 2U : 1U, audio_content->cryptos().size());
+      // key(40) + inline string
+      ASSERT_EQ(47U, audio_content->cryptos()[0].key_params.size());
+      ASSERT_EQ("AES_CM_128_HMAC_SHA1_32",
+                audio_content->cryptos()[0].cipher_suite);
+      if (offer) {
+        ASSERT_EQ(47U, audio_content->cryptos()[1].key_params.size());
+        ASSERT_EQ("AES_CM_128_HMAC_SHA1_80",
+                  audio_content->cryptos()[1].cipher_suite);
+      }
+    }
+    content = cricket::GetFirstVideoContent(sdp);
+    if (content) {
+      ASSERT_TRUE(content != NULL);
+      const cricket::VideoContentDescription* video_content =
+          static_cast<const cricket::VideoContentDescription*>(
+              content->description);
+      ASSERT_TRUE(video_content != NULL);
+      ASSERT_EQ(1U, video_content->cryptos().size());
+      ASSERT_EQ("AES_CM_128_HMAC_SHA1_80",
+                video_content->cryptos()[0].cipher_suite);
+      ASSERT_EQ(47U, video_content->cryptos()[0].key_params.size());
+    }
+  }
 
  private:
   std::list<CallbackId> callback_ids_;
@@ -390,7 +432,7 @@ TEST_F(WebRtcSessionTest, AudioReceiveCallSetUp) {
 
   std::vector<cricket::Candidate> candidates;
   cricket::SessionDescription* local_session =
-      GenerateFakeSession(video, &candidates);
+      GenerateFakeSession(channel_manager(), video, &candidates);
   ASSERT_FALSE(candidates.empty());
   ASSERT_FALSE(local_session == NULL);
   ASSERT_TRUE(CallInitiate());
@@ -398,11 +440,13 @@ TEST_F(WebRtcSessionTest, AudioReceiveCallSetUp) {
     delete local_session;
     FAIL();
   }
-  ASSERT_TRUE(CallConnect());
-  ASSERT_FALSE(CallbackReceived(this, 1000));
 
+  ASSERT_FALSE(CallbackReceived(this, 1000));
   ASSERT_TRUE(CallHasAudioChannel() &&
               !CallHasVideoChannel());
+  // Incoming call - local desc has the answer.
+  VerifyCryptoParams(local_description(), false);
+  VerifyCryptoParams(remote_description(), true);
 }
 
 TEST_F(WebRtcSessionTest, VideoReceiveCallSetUp) {
@@ -413,7 +457,7 @@ TEST_F(WebRtcSessionTest, VideoReceiveCallSetUp) {
 
   std::vector<cricket::Candidate> candidates;
   cricket::SessionDescription* local_session =
-      GenerateFakeSession(video, &candidates);
+      GenerateFakeSession(channel_manager(), video, &candidates);
   ASSERT_FALSE(candidates.empty());
   ASSERT_FALSE(local_session == NULL);
   ASSERT_TRUE(CallInitiate());
@@ -421,8 +465,11 @@ TEST_F(WebRtcSessionTest, VideoReceiveCallSetUp) {
     delete local_session;
     FAIL();
   }
-  ASSERT_TRUE(CallConnect());
+
   ASSERT_FALSE(CallbackReceived(this, 1000));
   ASSERT_TRUE(!CallHasAudioChannel() &&
               CallHasVideoChannel());
+  // Incoming call - local desc has the answer.
+  VerifyCryptoParams(local_description(), false);
+  VerifyCryptoParams(remote_description(), true);
 }

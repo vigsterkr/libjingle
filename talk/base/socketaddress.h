@@ -103,7 +103,7 @@ class SocketAddress {
   // Returns 0 for non-v4 addresses.
   uint32 ip() const;
 
-  IPAddress ipaddr() const;
+  const IPAddress& ipaddr() const;
 
   // Returns the port part of this address.
   uint16 port() const;

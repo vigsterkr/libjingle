@@ -13,12 +13,17 @@ class Win32WindowPicker : public WindowPicker {
  public:
   Win32WindowPicker();
   virtual bool Init();
-  virtual bool IsVisible(WindowId id);
-  virtual bool MoveToFront(WindowId id);
+  virtual bool IsVisible(const WindowId& id);
+  virtual bool MoveToFront(const WindowId& id);
   virtual bool GetWindowList(WindowDescriptionList* descriptions);
+  virtual bool GetDesktopList(DesktopDescriptionList* descriptions);
 
  protected:
   static BOOL CALLBACK EnumProc(HWND hwnd, LPARAM l_param);
+  static BOOL CALLBACK MonitorEnumProc(HMONITOR h_monitor,
+                                       HDC hdc_monitor,
+                                       LPRECT lprc_monitor,
+                                       LPARAM l_param);
 };
 
 }  // namespace talk_base

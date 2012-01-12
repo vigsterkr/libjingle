@@ -62,8 +62,7 @@ TEST(Win32WindowPickerTest, TestGetWindowList) {
   EXPECT_TRUE(window_picker.GetWindowList(&descriptions));
   EXPECT_EQ(1, descriptions.size());
   WindowDescription desc = descriptions.front();
-  EXPECT_EQ(reinterpret_cast<WindowId>(
-                window_picker.visible_window()->handle()), desc.id());
+  EXPECT_EQ(window_picker.visible_window()->handle(), desc.id().id());
   TCHAR window_title[500];
   GetWindowText(window_picker.visible_window()->handle(), window_title,
                 ARRAY_SIZE(window_title));
@@ -73,27 +72,23 @@ TEST(Win32WindowPickerTest, TestGetWindowList) {
 
 TEST(Win32WindowPickerTest, TestIsVisible) {
   Win32WindowPickerForTest window_picker;
-  WindowId visible_id =
-      reinterpret_cast<WindowId>(window_picker.visible_window()->handle());
-  WindowId invisible_id =
-      reinterpret_cast<WindowId>(window_picker.invisible_window()->handle());
-  EXPECT_TRUE(window_picker.IsVisible(visible_id));
-  EXPECT_FALSE(window_picker.IsVisible(invisible_id));
+  HWND visible_id = window_picker.visible_window()->handle();
+  HWND invisible_id = window_picker.invisible_window()->handle();
+  EXPECT_TRUE(window_picker.IsVisible(WindowId(visible_id)));
+  EXPECT_FALSE(window_picker.IsVisible(WindowId(invisible_id)));
 }
 
 TEST(Win32WindowPickerTest, TestMoveToFront) {
   Win32WindowPickerForTest window_picker;
-  WindowId visible_id =
-      reinterpret_cast<WindowId>(window_picker.visible_window()->handle());
-  WindowId invisible_id =
-      reinterpret_cast<WindowId>(window_picker.invisible_window()->handle());
+  HWND visible_id = window_picker.visible_window()->handle();
+  HWND invisible_id = window_picker.invisible_window()->handle();
 
   // There are a number of condition where SetForegroundWindow might
   // fail depending on the state of the calling process. To be on the
   // safe side we doesn't expect MoveToFront to return true, just test
   // that we don't crash.
-  window_picker.MoveToFront(visible_id);
-  window_picker.MoveToFront(invisible_id);
+  window_picker.MoveToFront(WindowId(visible_id));
+  window_picker.MoveToFront(WindowId(invisible_id));
 }
 
 }  // namespace talk_base

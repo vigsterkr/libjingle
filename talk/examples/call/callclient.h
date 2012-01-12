@@ -97,7 +97,9 @@ typedef std::vector<StaticRenderedView> StaticRenderedViews;
 
 class CallClient: public sigslot::has_slots<> {
  public:
-  explicit CallClient(buzz::XmppClient* xmpp_client);
+  CallClient(buzz::XmppClient* xmpp_client,
+             const std::string& caps_node,
+             const std::string& version);
   ~CallClient();
 
   cricket::MediaSessionClient* media_client() const { return media_client_; }
@@ -116,6 +118,13 @@ class CallClient: public sigslot::has_slots<> {
   void SetConsole(Console *console) {
     console_ = console;
   }
+  void SetPriority(int priority) {
+    my_status_.set_priority(priority);
+  }
+  void SendStatus() {
+    SendStatus(my_status_);
+  }
+  void SendStatus(const buzz::Status& status);
 
   void ParseLine(const std::string &str);
 
@@ -156,7 +165,6 @@ class CallClient: public sigslot::has_slots<> {
 
   void InitMedia();
   void InitPresence();
-  void RefreshStatus();
   void OnRequestSignaling();
   void OnSessionCreate(cricket::Session* session, bool initiate);
   void OnCallCreate(cricket::Call* call);

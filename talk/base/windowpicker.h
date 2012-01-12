@@ -5,8 +5,8 @@
 #ifndef TALK_BASE_WINDOWPICKER_H_
 #define TALK_BASE_WINDOWPICKER_H_
 
-#include <list>
 #include <string>
+#include <vector>
 
 #include "talk/base/window.h"
 
@@ -14,23 +14,38 @@ namespace talk_base {
 
 class WindowDescription {
  public:
-  WindowDescription() : id_(kInvalidWindowId) {}
-  WindowDescription(WindowId id, const std::string& title)
+  WindowDescription() : id_() {}
+  WindowDescription(const WindowId& id, const std::string& title)
       : id_(id), title_(title) {
   }
-  WindowId id() const {
-    return id_;
-  }
-  const std::string& title() const {
-    return title_;
-  }
+  const WindowId& id() const { return id_; }
+  void set_id(const WindowId& id) { id_ = id; }
+  const std::string& title() const { return title_; }
+  void set_title(const std::string& title) { title_ = title; }
 
  private:
   WindowId id_;
   std::string title_;
 };
 
-typedef std::list<WindowDescription> WindowDescriptionList;
+class DesktopDescription {
+ public:
+  DesktopDescription() : id_() {}
+  DesktopDescription(const DesktopId& id, const std::string& title)
+      : id_(id), title_(title) {
+  }
+  const DesktopId& id() const { return id_; }
+  void set_id(const DesktopId& id) { id_ = id; }
+  const std::string& title() const { return title_; }
+  void set_title(const std::string& title) { title_ = title; }
+
+ private:
+  DesktopId id_;
+  std::string title_;
+};
+
+typedef std::vector<WindowDescription> WindowDescriptionList;
+typedef std::vector<DesktopDescription> DesktopDescriptionList;
 
 class WindowPicker {
  public:
@@ -39,12 +54,15 @@ class WindowPicker {
 
   // TODO: Move this two methods to window.h when we no longer need to load
   // CoreGraphics dynamically.
-  virtual bool IsVisible(WindowId id) = 0;
-  virtual bool MoveToFront(WindowId id) = 0;
+  virtual bool IsVisible(const WindowId& id) = 0;
+  virtual bool MoveToFront(const WindowId& id) = 0;
 
-  // Gets a list of window description.
+  // Gets a list of window description and appends to descriptions.
   // Returns true if successful.
   virtual bool GetWindowList(WindowDescriptionList* descriptions) = 0;
+  // Gets a list of desktop descriptions and appends to descriptions.
+  // Returns true if successful.
+  virtual bool GetDesktopList(DesktopDescriptionList* descriptions) = 0;
 };
 
 }  // namespace talk_base

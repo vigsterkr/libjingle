@@ -324,7 +324,7 @@ class FakeWebRtcVideoEngine
       const unsigned int, char*, const unsigned int));
   WEBRTC_STUB(AllocateCaptureDevice, (const char*, const unsigned int, int&));
   WEBRTC_FUNC(AllocateExternalCaptureDevice,
-              (int& capture_id, webrtc::ViEExternalCapture *&capture)) {
+              (int& capture_id, webrtc::ViEExternalCapture*& capture)) {
     if (fail_alloc_capturer_) {
       return -1;
     }
@@ -334,7 +334,7 @@ class FakeWebRtcVideoEngine
     Capturer* cap = new Capturer();
     capturers_[++last_capturer_] = cap;
     capture_id = last_capturer_;
-    capture = static_cast<webrtc::ViEExternalCapture *>(cap);
+    capture = cap;
     return 0;
   }
   WEBRTC_STUB(AllocateCaptureDevice, (webrtc::VideoCaptureModule&, int&));

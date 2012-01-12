@@ -45,6 +45,7 @@ class Buffer;
 
 namespace cricket {
 
+class ScreencastId;
 class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
@@ -73,14 +74,18 @@ struct RtpHeaderExtension {
   // TODO: SendRecv direction;
 };
 
+enum MediaChannelOptions {
+  // Tune the stream for conference mode.
+  OPT_CONFERENCE = 0x0001
+};
+
 enum VoiceMediaChannelOptions {
-  OPT_CONFERENCE = 0x10000,   // tune the audio stream for conference mode
-  OPT_AGC_MINUS_10DB = 0x80000000,  // tune the audio stream for vcs
-                                    // with different target levels.
+  // Tune the audio stream for vcs with different target levels.
+  OPT_AGC_MINUS_10DB = 0x80000000
 };
 
 enum VideoMediaChannelOptions {
-  // Increase the output framerate by 2x by interpolating frames
+  // Increase the output framerate by 2x by interpolating frames.
   OPT_INTERPOLATE = 0x10000,
   // Enable video adaptation due to cpu load.
   OPT_CPU_ADAPTATION = 0x20000
@@ -408,7 +413,7 @@ class VideoMediaChannel : public MediaChannel {
   // Sets the renderer object to be used for the specified stream.
   // If SSRC is 0, the renderer is used for the 'default' stream.
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) = 0;
-  virtual bool AddScreencast(uint32 ssrc, talk_base::WindowId id) = 0;
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) = 0;
   virtual bool RemoveScreencast(uint32 ssrc) = 0;
   // Gets quality stats for the channel.
   virtual bool GetStats(VideoMediaInfo* info) = 0;

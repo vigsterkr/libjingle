@@ -140,7 +140,7 @@ uint32 SocketAddress::ip() const {
   return ip_.v4AddressAsHostOrderInteger();
 }
 
-IPAddress SocketAddress::ipaddr() const {
+const IPAddress& SocketAddress::ipaddr() const {
   return ip_;
 }
 

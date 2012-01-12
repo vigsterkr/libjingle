@@ -84,6 +84,20 @@ class WebRtcVideoEngineTestFake : public testing::Test {
     }
     return result;
   }
+  bool SendI420Frame(int width, int height) {
+    if (NULL == channel_) {
+      return false;
+    }
+    cricket::WebRtcVideoFrame frame;
+    size_t size = width * height * 3 / 2;  // I420
+    talk_base::scoped_ptr<uint8> pixel(new uint8[size]);
+    if (!frame.Init(cricket::FOURCC_I420,
+                    width, height, width, height,
+                    pixel.get(), size, 1, 1, 0, 0, 0)) {
+      return false;
+    }
+    return channel_->SendFrame(0, &frame);
+  }
   virtual void TearDown() {
     delete channel_;
     engine_.Terminate();
@@ -252,38 +266,31 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecsRejectBadCodec) {
   EXPECT_EQ(0, gcodec.plType);
 }
 
-// Test that send codec is reset if the captured frame is smaller.
-TEST_F(WebRtcVideoEngineTestFake, ResetSendCodecOnSmallerFrame) {
+// Test that vie send codec is reset on new video frame size.
+TEST_F(WebRtcVideoEngineTestFake, ResetVieSendCodecOnNewFrameSize) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
 
-  const int old_w = 640;
-  const int old_h = 400;
-  const int new_w = 160;
-  const int new_h = 100;
-
-  // Set send codec and start sending.
-  cricket::VideoCodec codec(kVP8Codec);
-  codec.width = old_w;
-  codec.height = old_h;
+  // Set send codec.
   std::vector<cricket::VideoCodec> codec_list;
-  codec_list.push_back(codec);
+  codec_list.push_back(kVP8Codec);
   EXPECT_TRUE(channel_->SetSendCodecs(codec_list));
   EXPECT_TRUE(channel_->SetSend(true));
 
-  // Capture a smaller frame.
-  cricket::WebRtcVideoFrame frame;
-  uint8 pixel[new_w * new_h * 3 / 2] = { 0 };  // I420
-  EXPECT_TRUE(frame.Init(cricket::FOURCC_I420, new_w, new_h, new_w, new_h,
-                         pixel, sizeof(pixel), 1, 1, 0, 0, 0));
-  EXPECT_TRUE(channel_->SendFrame(0, &frame));
-
-  // Verify the send codec has been reset to the new format.
+  // Capture a smaller frame and verify vie send codec has been reset to
+  // the new size.
+  SendI420Frame(kVP8Codec.width / 2, kVP8Codec.height / 2);
   webrtc::VideoCodec gcodec;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_EQ(new_w, gcodec.width);
-  EXPECT_EQ(new_h, gcodec.height);
+  EXPECT_EQ(kVP8Codec.width / 2, gcodec.width);
+  EXPECT_EQ(kVP8Codec.height / 2, gcodec.height);
+
+  // Capture a frame bigger than send_codec_ and verify vie send codec has been
+  // reset (and clipped) to send_codec_.
+  SendI420Frame(kVP8Codec.width * 2, kVP8Codec.height * 2);
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(kVP8Codec.width, gcodec.width);
+  EXPECT_EQ(kVP8Codec.height, gcodec.height);
 }
 
 // Test that we set our inbound codecs properly.
@@ -459,6 +466,11 @@ TEST_F(WebRtcVideoEngineTestFake, SetRtcpCName) {
   char rtcp_cname[256];
   EXPECT_EQ(0, vie_.GetRTCPCName(channel_num, rtcp_cname));
   EXPECT_STREQ("cname", rtcp_cname);
+}
+
+// Test SetOptions.
+// TODO: Test whatever need to be turned on for multiway WebRTC call.
+TEST_F(WebRtcVideoEngineTestFake, SetOptions) {
 }
 
 /////////////////////////
@@ -676,6 +688,26 @@ TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreams) {
 TEST_F(WebRtcVideoMediaChannelTest, SimulateConference) {
   Base::SimulateConference();
 }
+
+TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+
+  // Verify SetOptions returns true on a different options.
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CPU_ADAPTATION));
+
+  // Set send codecs on the channel and start sending.
+  std::vector<cricket::VideoCodec> codecs;
+  codecs.push_back(kVP8Codec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_TRUE(channel_->SetSend(true));
+
+  // Verify SetOptions returns false if channel is already sending.
+  EXPECT_FALSE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+
+  // Verify SetOptions returns true with the old options.
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CPU_ADAPTATION));
+}
+
 // TODO: Investigate why this test is flaky.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptResolution16x10) {
   Base::AdaptResolution16x10();

@@ -13,9 +13,10 @@ class MacWindowPicker : public WindowPicker {
   MacWindowPicker();
   ~MacWindowPicker();
   virtual bool Init();
-  virtual bool IsVisible(WindowId id);
-  virtual bool MoveToFront(WindowId id);
+  virtual bool IsVisible(const WindowId& id);
+  virtual bool MoveToFront(const WindowId& id);
   virtual bool GetWindowList(WindowDescriptionList* descriptions);
+  virtual bool GetDesktopList(DesktopDescriptionList* descriptions);
 
  private:
   void* lib_handle_;

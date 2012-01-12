@@ -136,6 +136,7 @@ const char* CONSOLE_COMMANDS =
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
 "  leave [room]        Leaves a multi-user-chat.\n"
 "  nick [nick]         Sets the nick.\n"
+"  priority [int]      Sets the priority.\n"
 "  getdevs             Prints the available media devices.\n"
 "  quit                Quits the application.\n"
 "";
@@ -261,6 +262,10 @@ void CallClient::ParseLine(const std::string& line) {
       LeaveMuc(GetWord(words, 1, ""));
     } else if (command == "nick") {
       SetNick(GetWord(words, 1, ""));
+    } else if (command == "priority") {
+      int priority = GetInt(words, 1, 0);
+      SetPriority(priority);
+      SendStatus();
     } else if (command == "getdevs") {
       GetDevices();
     } else if ((words.size() == 2) && (command == "setvol")) {
@@ -271,7 +276,8 @@ void CallClient::ParseLine(const std::string& line) {
   }
 }
 
-CallClient::CallClient(buzz::XmppClient* xmpp_client)
+CallClient::CallClient(buzz::XmppClient* xmpp_client,
+                       const std::string& caps_node, const std::string& version)
     : xmpp_client_(xmpp_client),
       worker_thread_(NULL),
       media_engine_(NULL),
@@ -291,6 +297,8 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client)
       initial_protocol_(cricket::PROTOCOL_HYBRID),
       secure_policy_(cricket::SEC_DISABLED) {
   xmpp_client_->SignalStateChange.connect(this, &CallClient::OnStateChange);
+  my_status_.set_caps_node(caps_node);
+  my_status_.set_version(version);
 }
 
 CallClient::~CallClient() {
@@ -495,6 +503,24 @@ void CallClient::OnSpeakerChanged(cricket::Call* call,
   }
 }
 
+void SetMediaCaps(int media_caps, buzz::Status* status) {
+  status->set_voice_capability((media_caps & cricket::AUDIO_RECV) != 0);
+  status->set_video_capability((media_caps & cricket::VIDEO_RECV) != 0);
+  status->set_camera_capability((media_caps & cricket::VIDEO_SEND) != 0);
+}
+
+void SetCaps(int media_caps, buzz::Status* status) {
+  status->set_know_capabilities(true);
+  status->set_pmuc_capability(true);
+  SetMediaCaps(media_caps, status);
+}
+
+void SetAvailable(const buzz::Jid& jid, buzz::Status* status) {
+  status->set_jid(jid);
+  status->set_available(true);
+  status->set_show(buzz::Status::SHOW_ONLINE);
+}
+
 void CallClient::InitPresence() {
   presence_push_ = new buzz::PresencePushTask(xmpp_client_, this);
   presence_push_->SignalStatusUpdate.connect(
@@ -506,7 +532,9 @@ void CallClient::InitPresence() {
   presence_push_->Start();
 
   presence_out_ = new buzz::PresenceOutTask(xmpp_client_);
-  RefreshStatus();
+  SetAvailable(xmpp_client_->jid(), &my_status_);
+  SetCaps(media_client_->GetCapabilities(), &my_status_);
+  SendStatus(my_status_);
   presence_out_->Start();
 
   muc_invite_recv_ = new buzz::MucInviteRecvTask(xmpp_client_);
@@ -521,23 +549,8 @@ void CallClient::InitPresence() {
   friend_invite_send_->Start();
 }
 
-void CallClient::RefreshStatus() {
-  int media_caps = media_client_->GetCapabilities();
-  my_status_.set_jid(xmpp_client_->jid());
-  my_status_.set_available(true);
-  my_status_.set_show(buzz::Status::SHOW_ONLINE);
-  my_status_.set_priority(0);
-  my_status_.set_know_capabilities(true);
-  my_status_.set_pmuc_capability(true);
-  my_status_.set_voice_capability(
-      (media_caps & cricket::AUDIO_RECV) != 0);
-  my_status_.set_video_capability(
-      (media_caps & cricket::VIDEO_RECV) != 0);
-  my_status_.set_camera_capability(
-      (media_caps & cricket::VIDEO_SEND) != 0);
-  my_status_.set_is_google_client(true);
-  my_status_.set_version("1.0.0.67");
-  presence_out_->Send(my_status_);
+void CallClient::SendStatus(const buzz::Status& status) {
+  presence_out_->Send(status);
 }
 
 void CallClient::OnStatusUpdate(const buzz::Status& status) {
@@ -1091,7 +1104,8 @@ void CallClient::PrintDevices(const std::vector<std::string>& names) {
 
 void CallClient::OnDevicesChange() {
   console_->PrintLine("Devices changed.");
-  RefreshStatus();
+  SetMediaCaps(media_client_->GetCapabilities(), &my_status_);
+  SendStatus(my_status_);
 }
 
 void CallClient::SetVolume(const std::string& level) {

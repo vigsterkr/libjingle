@@ -4,15 +4,20 @@
 #include "talk/base/win32windowpicker.h"
 
 #include <string>
+#include <vector>
 
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 
 namespace talk_base {
 
+namespace {
+
 // Window class names that we want to filter out.
-static const std::string kProgramManagerClass = "Progman";
-static const std::string kButtonClass = "Button";
+const char kProgramManagerClass[] = "Progman";
+const char kButtonClass[] = "Button";
+
+}  // namespace
 
 BOOL CALLBACK Win32WindowPicker::EnumProc(HWND hwnd, LPARAM l_param) {
   WindowDescriptionList* descriptions =
@@ -49,8 +54,23 @@ BOOL CALLBACK Win32WindowPicker::EnumProc(HWND hwnd, LPARAM l_param) {
   TCHAR window_title[500];
   GetWindowText(hwnd, window_title, ARRAY_SIZE(window_title));
   std::string title = ToUtf8(window_title, wcslen(window_title));
-  WindowDescription desc(reinterpret_cast<int>(hwnd), title);
+  WindowId id(hwnd);
+  WindowDescription desc(id, title);
   descriptions->push_back(desc);
+  return TRUE;
+}
+
+BOOL CALLBACK Win32WindowPicker::MonitorEnumProc(HMONITOR h_monitor,
+                                                 HDC hdc_monitor,
+                                                 LPRECT lprc_monitor,
+                                                 LPARAM l_param) {
+  DesktopDescriptionList* desktop_desc =
+      reinterpret_cast<DesktopDescriptionList*>(l_param);
+
+  DesktopId id(h_monitor, desktop_desc->size());
+  // TODO: Figure out an appropriate desktop title.
+  DesktopDescription desc(id, "");
+  desktop_desc->push_back(desc);
   return TRUE;
 }
 
@@ -60,19 +80,36 @@ Win32WindowPicker::Win32WindowPicker() {
 bool Win32WindowPicker::Init() {
   return true;
 }
-
+// TODO: Consider changing enumeration to clear() descriptions
+// before append().
 bool Win32WindowPicker::GetWindowList(WindowDescriptionList* descriptions) {
-  return EnumWindows(Win32WindowPicker::EnumProc,
-                     (LPARAM)descriptions) == TRUE ? true : false;
+  LPARAM desc = reinterpret_cast<LPARAM>(descriptions);
+  return EnumWindows(Win32WindowPicker::EnumProc, desc) != FALSE;
 }
 
-bool Win32WindowPicker::IsVisible(WindowId id) {
-  HWND hwnd = reinterpret_cast<HWND>(id);
-  return (::IsWindow(hwnd) != FALSE && ::IsWindowVisible(hwnd) != FALSE);
+bool Win32WindowPicker::GetDesktopList(DesktopDescriptionList* descriptions) {
+  // Create a fresh WindowDescriptionList so that we can use desktop_desc.size()
+  // in MonitorEnumProc to compute the desktop index.
+  DesktopDescriptionList desktop_desc;
+  HDC hdc = GetDC(NULL);
+  bool success = false;
+  if (EnumDisplayMonitors(hdc, NULL, Win32WindowPicker::MonitorEnumProc,
+      reinterpret_cast<LPARAM>(&desktop_desc)) != FALSE) {
+    // Append the desktop descriptions to the end of the returned descriptions.
+    descriptions->insert(descriptions->end(), desktop_desc.begin(),
+                         desktop_desc.end());
+    success = true;
+  }
+  ReleaseDC(NULL, hdc);
+  return success;
 }
 
-bool Win32WindowPicker::MoveToFront(WindowId id) {
-  return SetForegroundWindow(reinterpret_cast<HWND>(id)) != FALSE;
+bool Win32WindowPicker::IsVisible(const WindowId& id) {
+  return (::IsWindow(id.id()) != FALSE && ::IsWindowVisible(id.id()) != FALSE);
+}
+
+bool Win32WindowPicker::MoveToFront(const WindowId& id) {
+  return SetForegroundWindow(id.id()) != FALSE;
 }
 
 }  // namespace talk_base

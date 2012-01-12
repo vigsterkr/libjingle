@@ -95,6 +95,8 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     if (renderer_ == NULL) {
       return 0;
     }
+    LOG(LS_INFO) << "WebRtcRenderAdapter frame size changed to: "
+                 << width << "x" << height;
     width_ = width;
     height_ = height;
     return renderer_->SetSize(width_, height_, 0) ? 0 : -1;
@@ -109,6 +111,13 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     WebRtcVideoFrame video_frame;
     video_frame.Attach(buffer, buffer_size, width_, height_,
                        1, 1, 0, time_stamp, 0);
+
+
+    // Sanity check on decoded frame size.
+    if (buffer_size != static_cast<int>(VideoFrame::SizeOf(width_, height_))) {
+      LOG(LS_WARNING) << "WebRtcRenderAdapter received a strange frame size: "
+                      << buffer_size;
+    }
 
     int ret = renderer_->RenderFrame(&video_frame) ? 0 : -1;
     uint8* buffer_temp;
@@ -974,7 +983,8 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       send_min_bitrate_(kMinVideoBitrate),
       send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
-      local_stream_info_(new WebRtcLocalStreamInfo()) {
+      local_stream_info_(new WebRtcLocalStreamInfo()),
+      channel_options_(0) {
   engine->RegisterChannel(this);
 }
 
@@ -1524,6 +1534,19 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
 }
 
 bool WebRtcVideoMediaChannel::SetOptions(int options) {
+  // Always accept options that are unchanged.
+  if (channel_options_ == options) {
+    return true;
+  }
+
+  // Reject new options if we're already sending.
+  if (sending()) {
+    return false;
+  }
+
+  // Save the options, to be interpreted where appropriate.
+  channel_options_ = options;
+
   return true;
 }
 
@@ -1558,21 +1581,11 @@ bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
   // Update local stream statistics.
   local_stream_info_->UpdateFrame(frame->GetWidth(), frame->GetHeight());
 
-  // If the captured video format is smaller than what we asked for, reset send
-  // codec on video engine.
-  if (send_codec_.get() != NULL &&
-      frame->GetWidth() < send_codec_->width &&
-      frame->GetHeight() < send_codec_->height) {
-    LOG(LS_INFO) << "Captured video frame size changed to: "
-                 << frame->GetWidth() << "x" << frame->GetHeight();
-    webrtc::VideoCodec new_codec = *send_codec_;
-    new_codec.width = frame->GetWidth();
-    new_codec.height = frame->GetHeight();
-    if (!SetSendCodec(
-        new_codec, send_min_bitrate_, send_start_bitrate_, send_max_bitrate_)) {
-      LOG(LS_WARNING) << "Failed to switch to new frame size: "
-                      << frame->GetWidth() << "x" << frame->GetHeight();
-    }
+  // Checks if we need to reset vie send codec.
+  if (!MaybeResetVieSendCodec(frame->GetWidth(), frame->GetHeight(), NULL)) {
+    LOG(LS_ERROR) << "MaybeResetVieSendCodec failed with "
+                  << frame->GetWidth() << "x" << frame->GetHeight();
+    return false;
   }
 
   // Blacken the frame if video is muted.
@@ -1772,6 +1785,55 @@ bool WebRtcVideoMediaChannel::SetReceiveCodecs(int channel_id) {
       return false;
     }
   }
+  return true;
+}
+
+// If the new frame size is different from the send codec size we set on vie,
+// we need to reset the send codec on vie.
+// The new send codec size should not exceed send_codec_ which is controlled
+// only by the 'jec' logic.
+bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int new_width,
+                                                     int new_height,
+                                                     bool* reset) {
+  if (reset) {
+    *reset = false;
+  }
+
+  if (NULL == send_codec_.get()) {
+    return false;
+  }
+
+  // Vie send codec size should not exceed send_codec_.
+  int target_width = new_width;
+  int target_height = new_height;
+  if (new_width > send_codec_->width || new_height > send_codec_->height) {
+    target_width = send_codec_->width;
+    target_height = send_codec_->height;
+  }
+
+  // Get current vie codec.
+  webrtc::VideoCodec vie_codec;
+  if (engine()->vie()->codec()->GetSendCodec(vie_channel_, vie_codec) != 0) {
+    LOG_RTCERR1(GetSendCodec, vie_channel_);
+    return false;
+  }
+
+  // Only reset send codec when there is a size change.
+  if (target_width != vie_codec.width || target_height != vie_codec.height) {
+    // Set the new codec on vie.
+    vie_codec.width = target_width;
+    vie_codec.height = target_height;
+    if (engine()->vie()->codec()->SetSendCodec(vie_channel_, vie_codec) != 0) {
+      LOG_RTCERR1(SetSendCodec, vie_channel_);
+      return false;
+    }
+    if (reset) {
+      *reset = true;
+    }
+    LOG(LS_INFO) << "Reset vie send codec to: "
+                 << vie_codec.width << "x" << vie_codec.height;
+  }
+
   return true;
 }
 

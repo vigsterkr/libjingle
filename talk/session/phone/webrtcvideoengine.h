@@ -216,7 +216,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool RemoveStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool GetStats(VideoMediaInfo* info);
-  virtual bool AddScreencast(uint32 ssrc, talk_base::WindowId id) {
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
     return false;
   }
   virtual bool RemoveScreencast(uint32 ssrc) {
@@ -275,6 +275,10 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool SetReceiveCodecs(int channel_id);
   // Returns the channel number that receives the stream with SSRC |ssrc|.
   int GetChannelNum(uint32 ssrc);
+  // Given captured video frame size, checks if we need to reset vie send codec.
+  // |reset| is set to whether resetting has happened on vie or not.
+  // Returns false on error.
+  bool MaybeResetVieSendCodec(int new_width, int new_height, bool* reset);
 
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
@@ -291,6 +295,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   std::vector<webrtc::VideoCodec> receive_codecs_;
   talk_base::scoped_ptr<WebRtcEncoderObserver> encoder_observer_;
   talk_base::scoped_ptr<WebRtcLocalStreamInfo> local_stream_info_;
+  int channel_options_;
 
   ChannelMap mux_channels_;  // Contains all receive channels.
 };

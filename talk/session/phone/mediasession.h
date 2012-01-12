@@ -121,6 +121,7 @@ class MediaContentDescription : public ContentDescription {
         crypto_required_(false),
         rtp_header_extensions_set_(false),
         multistream_(false),
+        conference_mode_(false),
         partial_(false) {
   }
 
@@ -192,6 +193,9 @@ class MediaContentDescription : public ContentDescription {
     return streams_[0].has_ssrcs();
   }
 
+  void set_conference_mode(bool enable) { conference_mode_ = enable; }
+  bool conference_mode() const { return conference_mode_; }
+
   void set_partial(bool partial) { partial_ = partial; }
   bool partial() const { return partial_;  }
 
@@ -204,6 +208,7 @@ class MediaContentDescription : public ContentDescription {
   bool rtp_header_extensions_set_;
   bool multistream_;
   StreamParamsVec streams_;
+  bool conference_mode_;
   bool partial_;
 };
 
@@ -229,15 +234,9 @@ class MediaContentDescriptionImpl : public MediaContentDescription {
 class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
  public:
   AudioContentDescription() :
-      agc_minus_10db_(false),
-      conference_mode_(false) {}
+      agc_minus_10db_(false) {}
 
   virtual MediaType type() const { return MEDIA_TYPE_AUDIO; }
-
-  bool conference_mode() const { return conference_mode_; }
-  void set_conference_mode(bool enable) {
-    conference_mode_ = enable;
-  }
 
   const std::string &lang() const { return lang_; }
   void set_lang(const std::string &lang) { lang_ = lang; }
@@ -251,7 +250,6 @@ class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
   bool agc_minus_10db_;
 
  private:
-  bool conference_mode_;
   std::string lang_;
 };
 

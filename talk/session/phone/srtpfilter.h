@@ -114,8 +114,9 @@ class SrtpFilter {
   sigslot::repeater3<uint32, Mode, Error> SignalSrtpError;
 
  protected:
-  bool StoreParams(const std::vector<CryptoParams>& offer_params,
+  bool StoreParams(const std::vector<CryptoParams>& params,
                    ContentSource source);
+  void CreateSrtpSessions();
   bool NegotiateParams(const std::vector<CryptoParams>& answer_params,
                        CryptoParams* selected_params);
   bool ApplyParams(const CryptoParams& send_params,
@@ -124,8 +125,20 @@ class SrtpFilter {
   static bool ParseKeyParams(const std::string& params, uint8* key, int len);
 
  private:
-  enum State { ST_INIT, ST_SENTOFFER, ST_RECEIVEDOFFER, ST_ACTIVE };
+  enum State {
+    ST_INIT,           // SRTP filter unused.
+    ST_SENTOFFER,      // Offer with SRTP parameters sent.
+    ST_RECEIVEDOFFER,  // Offer with SRTP parameters received.
+    ST_ACTIVE,         // Offer and answer set.
+    // SRTP filter is active but new parameters are offered.
+    // When the answer is set, the state transitions to ST_ACTIVE or ST_INIT.
+    ST_SENTUPDATEDOFFER,
+    // SRTP filter is active but new parameters are received.
+    // When the answer is set, the state transitions back to ST_ACTIVE.
+    ST_RECEIVEDUPDATEDOFFER
+  };
   State state_;
+  uint32 signal_silent_time_in_ms_;
   std::vector<CryptoParams> offer_params_;
   talk_base::scoped_ptr<SrtpSession> send_session_;
   talk_base::scoped_ptr<SrtpSession> recv_session_;
@@ -228,7 +241,7 @@ class SrtpStat {
     FailureStat()
         : last_signal_time(0) {
     }
-    FailureStat(uint32 in_last_signal_time)
+    explicit FailureStat(uint32 in_last_signal_time)
         : last_signal_time(in_last_signal_time) {
     }
     void Reset() {

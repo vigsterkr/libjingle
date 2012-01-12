@@ -150,10 +150,8 @@ PresencePushTask::ProcessStart() {
         s.AddCapability(capability);
       }
 
-      if (node == GOOGLE_CLIENT_NODE) {
-        s.set_is_google_client(true);
-        s.set_version(ver);
-      }
+      s->set_caps_node(node);
+      s->set_version(ver);
     }
 
     const XmlElement* delay = stanza->FirstNamed(kQnDelayX);

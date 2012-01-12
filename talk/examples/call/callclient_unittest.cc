@@ -35,13 +35,13 @@
 
 TEST(CallClientTest, CreateCallClientWithDefaultMediaEngine) {
   XmppPump pump;
-  CallClient *client = new CallClient(pump.client());
+  CallClient *client = new CallClient(pump.client(), "app", "version");
   delete client;
 }
 
 TEST(CallClientTest, CreateCallClientWithFileMediaEngine) {
   XmppPump pump;
-  CallClient *client = new CallClient(pump.client());
+  CallClient *client = new CallClient(pump.client(), "app", "version");
   client->SetMediaEngine(new cricket::FileMediaEngine);
   delete client;
 }

@@ -121,6 +121,8 @@ bool WebRtcSession::Initiate() {
       this, &WebRtcSession::OnWritableState);
   // Limit the amount of time that setting up a call may take.
   StartTransportTimeout(kCallSetupTimeout);
+  // Set default secure option to SEC_REQUIRED.
+  desc_factory_.set_secure(cricket::SEC_REQUIRED);
   return true;
 }
 

@@ -64,13 +64,13 @@ bool MacWindowPicker::Init() {
   return true;
 }
 
-bool MacWindowPicker::IsVisible(WindowId id) {
+bool MacWindowPicker::IsVisible(const WindowId& id) {
   // Init if we're not already inited.
   if (get_window_list_desc_ == NULL && !Init()) {
     return false;
   }
   CGWindowID ids[1];
-  ids[0] = id;
+  ids[0] = id.id();
   CFArrayRef window_id_array =
       CFArrayCreate(NULL, reinterpret_cast<const void **>(&ids), 1, NULL);
 
@@ -99,14 +99,13 @@ bool MacWindowPicker::IsVisible(WindowId id) {
   return visible;
 }
 
-bool MacWindowPicker::MoveToFront(WindowId id) {
-  // TODO: Implement this method.
-  // Init if we're not already inited.
+bool MacWindowPicker::MoveToFront(const WindowId& id) {
+  // Init if we're not already initialized.
   if (get_window_list_desc_ == NULL && !Init()) {
     return false;
   }
   CGWindowID ids[1];
-  ids[0] = id;
+  ids[0] = id.id();
   CFArrayRef window_id_array =
       CFArrayCreate(NULL, reinterpret_cast<const void **>(&ids), 1, NULL);
 
@@ -171,6 +170,27 @@ bool MacWindowPicker::MoveToFront(WindowId id) {
   return result;
 }
 
+bool MacWindowPicker::GetDesktopList(DesktopDescriptionList* descriptions) {
+  const uint32_t kMaxDisplays = 128;
+  CGDirectDisplayID active_displays[kMaxDisplays];
+  uint32_t display_count = 0;
+
+  CGError err = CGGetActiveDisplayList(kMaxDisplays,
+                                       active_displays,
+                                       &display_count);
+  if (err != kCGErrorSuccess) {
+    LOG_E(LS_ERROR, OS, err) << "Failed to enumerate the active displays.";
+    return false;
+  }
+  for (uint32_t i = 0; i < display_count; ++i) {
+    DesktopId id(active_displays[i], static_cast<int>(i));
+    // TODO: Figure out an appropriate desktop title.
+    DesktopDescription desc(id, "");
+    descriptions->push_back(desc);
+  }
+  return display_count > 0;
+}
+
 bool MacWindowPicker::GetWindowList(WindowDescriptionList* descriptions) {
   // Init if we're not already inited.
   if (get_window_list_ == NULL && !Init()) {
@@ -207,7 +227,8 @@ bool MacWindowPicker::GetWindowList(WindowDescriptionList* descriptions) {
 
       // Discard windows without a title.
       if (layer_val == 0 && title_str.length() > 0) {
-        WindowDescription desc(id_val, title_str);
+        WindowId id(static_cast<CGWindowID>(id_val));
+        WindowDescription desc(id, title_str);
         descriptions->push_back(desc);
       }
     }
