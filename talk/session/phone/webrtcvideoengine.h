@@ -129,9 +129,9 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   void RegisterChannel(WebRtcVideoMediaChannel* channel);
   void UnregisterChannel(WebRtcVideoMediaChannel* channel);
   void ConvertToCricketVideoCodec(const webrtc::VideoCodec& in_codec,
-                                  VideoCodec& out_codec);
+                                  VideoCodec*  out_codec);
   bool ConvertFromCricketVideoCodec(const VideoCodec& in_codec,
-                                    webrtc::VideoCodec& out_codec);
+                                    webrtc::VideoCodec* out_codec);
   // Check whether the supplied trace should be ignored.
   bool ShouldIgnoreTrace(const std::string& trace);
   int GetNumOfChannels();
@@ -212,8 +212,11 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool SetSendCodecs(const std::vector<VideoCodec> &codecs);
   virtual bool SetRender(bool render);
   virtual bool SetSend(bool send);
-  virtual bool AddStream(uint32 ssrc, uint32 voice_ssrc);
-  virtual bool RemoveStream(uint32 ssrc);
+
+  virtual bool AddSendStream(const StreamParams& sp);
+  virtual bool RemoveSendStream(uint32 ssrc);
+  virtual bool AddRecvStream(const StreamParams& sp);
+  virtual bool RemoveRecvStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool GetStats(VideoMediaInfo* info);
   virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
@@ -227,8 +230,6 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
 
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
-  virtual void SetSendSsrc(uint32 id);
-  virtual bool SetRtcpCName(const std::string& cname);
   virtual bool Mute(bool on);
   virtual bool SetRecvRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) {
@@ -279,6 +280,12 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // |reset| is set to whether resetting has happened on vie or not.
   // Returns false on error.
   bool MaybeResetVieSendCodec(int new_width, int new_height, bool* reset);
+  // Call Webrtc function to start sending media on |vie_channel_|.
+  // Does not affect |sending_|.
+  bool StartSend();
+  // Call Webrtc function to stop sending media on |vie_channel_|.
+  // Does not affect |sending_|.
+  bool StopSend();
 
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
@@ -288,6 +295,8 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool sending_;
   bool render_started_;
   bool muted_;  // Flag to tell if we need to mute video.
+  // Our local SSRC. Currently only one send stream is supported.
+  uint32 local_ssrc_;
   int send_min_bitrate_;
   int send_start_bitrate_;
   int send_max_bitrate_;

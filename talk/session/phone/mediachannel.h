@@ -46,6 +46,7 @@ class Buffer;
 namespace cricket {
 
 class ScreencastId;
+struct StreamParams;
 class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
@@ -116,10 +117,21 @@ class MediaChannel : public sigslot::has_slots<> {
   virtual void OnPacketReceived(talk_base::Buffer* packet) = 0;
   // Called when a RTCP packet is received.
   virtual void OnRtcpReceived(talk_base::Buffer* packet) = 0;
-  // Sets the SSRC to be used for outgoing data.
-  virtual void SetSendSsrc(uint32 id) = 0;
-  // Set the CNAME of RTCP
-  virtual bool SetRtcpCName(const std::string& cname) = 0;
+  // Creates a new outgoing media stream with SSRCs and CNAME as described
+  // by sp.
+  virtual bool AddSendStream(const StreamParams& sp) = 0;
+  // Removes an outgoing media stream.
+  // ssrc must be the first SSRC of the media stream if the stream uses
+  // multiple SSRCs.
+  virtual bool RemoveSendStream(uint32 ssrc) = 0;
+  // Creates a new incoming media stream with SSRCs and CNAME as described
+  // by sp.
+  virtual bool AddRecvStream(const StreamParams& sp) = 0;
+  // Removes an incoming media stream.
+  // ssrc must be the first SSRC of the media stream if the stream uses
+  // multiple SSRCs.
+  virtual bool RemoveRecvStream(uint32 ssrc) = 0;
+
   // Mutes the channel.
   virtual bool Mute(bool on) = 0;
 
@@ -348,10 +360,6 @@ class VoiceMediaChannel : public MediaChannel {
   virtual bool SetPlayout(bool playout) = 0;
   // Starts or stops sending (and potentially capture) of local audio.
   virtual bool SetSend(SendFlags flag) = 0;
-  // Adds a new receive-only stream with the specified SSRC.
-  virtual bool AddStream(uint32 ssrc) = 0;
-  // Removes a stream added with AddStream.
-  virtual bool RemoveStream(uint32 ssrc) = 0;
   // Gets current energy levels for all incoming streams.
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) = 0;
   // Get the current energy level of the stream sent to the speaker.
@@ -406,10 +414,6 @@ class VideoMediaChannel : public MediaChannel {
   virtual bool SetRender(bool render) = 0;
   // Starts or stops transmission (and potentially capture) of local video.
   virtual bool SetSend(bool send) = 0;
-  // Adds a new receive-only stream with the specified SSRC.
-  virtual bool AddStream(uint32 ssrc, uint32 voice_ssrc) = 0;
-  // Removes a stream added with AddStream.
-  virtual bool RemoveStream(uint32 ssrc) = 0;
   // Sets the renderer object to be used for the specified stream.
   // If SSRC is 0, the renderer is used for the 'default' stream.
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) = 0;

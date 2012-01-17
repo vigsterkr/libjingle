@@ -57,6 +57,10 @@ extern const char CS_AES_CM_128_HMAC_SHA1_32[];
 // Key is 128 bits and salt is 112 bits == 30 bytes. B64 bloat => 40 bytes.
 extern const int SRTP_MASTER_KEY_BASE64_LEN;
 
+// Needed for DTLS-SRTP
+extern const int SRTP_MASTER_KEY_KEY_LEN;
+extern const int SRTP_MASTER_KEY_SALT_LEN;
+
 class SrtpSession;
 class SrtpStat;
 
@@ -98,6 +102,17 @@ class SrtpFilter {
   // successfully, this will advance the filter to the active state.
   bool SetAnswer(const std::vector<CryptoParams>& answer_params,
                  ContentSource source);
+
+  // Just set up both sets of keys directly.
+  // Used with DTLS-SRTP.
+  bool SetRtpParams(const std::string& send_cs,
+                    const uint8* send_key, int send_key_len,
+                    const std::string& recv_cs,
+                    const uint8* recv_key, int recv_key_len);
+  bool SetRtcpParams(const std::string& send_cs,
+                     const uint8* send_key, int send_key_len,
+                     const std::string& recv_cs,
+                     const uint8* recv_key, int recv_key_len);
 
   // Encrypts/signs an individual RTP/RTCP packet, in-place.
   // If an HMAC is used, this will increase the packet size.
@@ -142,6 +157,8 @@ class SrtpFilter {
   std::vector<CryptoParams> offer_params_;
   talk_base::scoped_ptr<SrtpSession> send_session_;
   talk_base::scoped_ptr<SrtpSession> recv_session_;
+  talk_base::scoped_ptr<SrtpSession> send_rtcp_session_;
+  talk_base::scoped_ptr<SrtpSession> recv_rtcp_session_;
 };
 
 // Class that wraps a libSRTP session.

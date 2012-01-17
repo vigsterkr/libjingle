@@ -2133,14 +2133,11 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
 
     cricket::FakeVoiceMediaChannel* voice_channel = fme_->GetVoiceChannel(0);
     ASSERT_TRUE(voice_channel != NULL);
-    ASSERT_TRUE(
-        voice_channel->streams().find(1234U) != voice_channel->streams().end());
-    ASSERT_TRUE(
-        voice_channel->streams().find(2468U) != voice_channel->streams().end());
+    ASSERT_TRUE(voice_channel->HasRecvStream(1234U));
+    ASSERT_TRUE(voice_channel->HasRecvStream(2468U));
     cricket::FakeVideoMediaChannel* video_channel = fme_->GetVideoChannel(0);
     ASSERT_TRUE(video_channel != NULL);
-    ASSERT_TRUE(
-        video_channel->streams().find(5678U) != video_channel->streams().end());
+    ASSERT_TRUE(video_channel->HasRecvStream(5678U));
     ClearStanzas();
 
     cricket::ViewRequest viewRequest;
@@ -2194,14 +2191,11 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
 
     voice_channel = fme_->GetVoiceChannel(0);
     ASSERT_TRUE(voice_channel != NULL);
-    ASSERT_FALSE(
-        voice_channel->streams().find(1234U) != voice_channel->streams().end());
-    ASSERT_TRUE(
-        voice_channel->streams().find(2468U) != voice_channel->streams().end());
+    ASSERT_FALSE(voice_channel->HasRecvStream(1234U));
+    ASSERT_TRUE(voice_channel->HasRecvStream(2468U));
     video_channel = fme_->GetVideoChannel(0);
     ASSERT_TRUE(video_channel != NULL);
-    ASSERT_FALSE(
-        video_channel->streams().find(5678U) != video_channel->streams().end());
+    ASSERT_FALSE(video_channel->HasRecvStream(5678U));
 
     // Fails because ssrc is now invalid.
     ASSERT_FALSE(

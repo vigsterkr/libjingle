@@ -105,17 +105,6 @@ static bool SelectCrypto(const MediaContentDescription* offer,
   return false;
 }
 
-static const StreamParams* FindStreamParamsByName(
-    const StreamParamsVec& params_vec,
-    const std::string& name) {
-  for (StreamParamsVec::const_iterator it = params_vec.begin();
-       it != params_vec.end(); ++it) {
-    if (it->name == name)
-      return &*it;
-  }
-  return NULL;
-}
-
 static const StreamParams* FindFirstStreamParamsByCname(
     const StreamParamsVec& params_vec,
     const std::string& cname) {
@@ -123,21 +112,6 @@ static const StreamParams* FindFirstStreamParamsByCname(
        it != params_vec.end(); ++it) {
     if (cname == it->cname)
       return &*it;
-  }
-  return NULL;
-}
-
-static const StreamParams* FindStreamParamsBySsrc(
-    const StreamParamsVec& params_vec,
-    uint32 ssrc) {
-  for (StreamParamsVec::const_iterator stream_it = params_vec.begin();
-       stream_it != params_vec.end(); ++stream_it) {
-    const std::vector<uint32>& ssrcs = stream_it->ssrcs;
-    for (std::vector<uint32>::const_iterator ssrc_it = ssrcs.begin();
-         ssrc_it !=  ssrcs.end(); ++ssrc_it) {
-      if (ssrc == *ssrc_it)
-        return &*stream_it;
-    }
   }
   return NULL;
 }
@@ -158,10 +132,13 @@ static bool GenerateCname(const StreamParamsVec& params_vec,
        stream_it != streams.end() ; ++stream_it) {
     if (synch_label != stream_it->sync_label)
       continue;
-    const StreamParams* param = FindStreamParamsByName(params_vec,
-                                                       stream_it->name);
-    if (param) {
-      *cname = param->cname;
+
+    StreamParams param;
+    // nick is empty for StreamParams generated using
+    // MediaSessionDescriptionFactory.
+    if (GetStreamByNickAndName(params_vec, "", stream_it->name,
+                               &param)) {
+      *cname = param.cname;
       return true;
     }
   }
@@ -183,7 +160,7 @@ static uint32 GenerateSsrc(const StreamParamsVec& params_vec) {
   uint32 ssrc = 0;
   do {
     ssrc = talk_base::CreateRandomNonZeroId();
-  } while (FindStreamParamsBySsrc(params_vec, ssrc));
+  } while (GetStreamBySsrc(params_vec, ssrc, NULL));
   return ssrc;
 }
 
@@ -221,9 +198,11 @@ static bool AddStreamParams(
        stream_it != streams.end(); ++stream_it) {
     if (stream_it->type != media_type)
       continue;  // Wrong media type.
-    const StreamParams* params = FindStreamParamsByName(*current_params,
-                                                        stream_it->name);
-    if (!params) {
+
+    StreamParams param;
+    // nick is empty for StreamParams generated using
+    // MediaSessionDescriptionFactory.
+    if (!GetStreamByNickAndName(*current_params, "", stream_it->name, &param)) {
       // This is a new stream.
       // Get a CNAME. Either new or same as one of the other synched streams.
       std::string cname;
@@ -245,7 +224,7 @@ static bool AddStreamParams(
       // This is necessary so that we can use the CNAME for other media types.
       current_params->push_back(stream_param);
     } else {
-      content_description->AddStream(*params);
+      content_description->AddStream(param);
     }
   }
   return true;

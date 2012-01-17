@@ -165,8 +165,6 @@ class FileVoiceChannel : public VoiceMediaChannel {
   }
   virtual bool SetPlayout(bool playout) { return true; }
   virtual bool SetSend(SendFlags flag);
-  virtual bool AddStream(uint32 ssrc) { return true; }
-  virtual bool RemoveStream(uint32 ssrc) { return true; }
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) { return true; }
   virtual int GetOutputLevel() { return 0; }
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right) {
@@ -185,13 +183,16 @@ class FileVoiceChannel : public VoiceMediaChannel {
   // Implement pure virtual methods of MediaChannel.
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
-  virtual void SetSendSsrc(uint32 ssrc);
-  virtual bool SetRtcpCName(const std::string& cname) { return true; }
+  virtual bool AddSendStream(const StreamParams& sp);
+  virtual bool RemoveSendStream(uint32 ssrc);
+  virtual bool AddRecvStream(const StreamParams& sp) { return true; }
+  virtual bool RemoveRecvStream(uint32 ssrc) { return true; }
   virtual bool Mute(bool on) { return false; }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool SetOptions(int options) { return true; }
 
  private:
+  uint32 send_ssrc_;
   talk_base::scoped_ptr<RtpSenderReceiver> rtp_sender_receiver_;
   DISALLOW_COPY_AND_ASSIGN(FileVoiceChannel);
 };
@@ -217,8 +218,6 @@ class FileVideoChannel : public VideoMediaChannel {
   }
   virtual bool SetRender(bool render) { return true; }
   virtual bool SetSend(bool send);
-  virtual bool AddStream(uint32 ssrc, uint32 voice_ssrc) { return true; }
-  virtual bool RemoveStream(uint32 ssrc) { return true; }
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
     return true;
   }
@@ -233,13 +232,16 @@ class FileVideoChannel : public VideoMediaChannel {
   // Implement pure virtual methods of MediaChannel.
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
-  virtual void SetSendSsrc(uint32 ssrc);
-  virtual bool SetRtcpCName(const std::string& cname) { return true; }
+  virtual bool AddSendStream(const StreamParams& sp);
+  virtual bool RemoveSendStream(uint32 ssrc);
+  virtual bool AddRecvStream(const StreamParams& sp) { return true; }
+  virtual bool RemoveRecvStream(uint32 ssrc) { return true; }
   virtual bool Mute(bool on) { return false; }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool SetOptions(int options) { return true; }
 
  private:
+  uint32 send_ssrc_;
   talk_base::scoped_ptr<RtpSenderReceiver> rtp_sender_receiver_;
   DISALLOW_COPY_AND_ASSIGN(FileVideoChannel);
 };

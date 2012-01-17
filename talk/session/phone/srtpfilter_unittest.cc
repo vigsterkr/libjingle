@@ -365,6 +365,64 @@ TEST_F(SrtpFilterTest, TestDisableEncryption) {
   EXPECT_FALSE(f2_.IsActive());
 }
 
+// Test directly setting the params with AES_CM_128_HMAC_SHA1_80
+TEST_F(SrtpFilterTest, TestProtect_SetParamsDirect_AES_CM_128_HMAC_SHA1_80) {
+  EXPECT_TRUE(f1_.SetRtpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                               kTestKey1, kTestKeyLen,
+                               CS_AES_CM_128_HMAC_SHA1_80,
+                               kTestKey2, kTestKeyLen));
+  EXPECT_TRUE(f2_.SetRtpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                               kTestKey2, kTestKeyLen,
+                               CS_AES_CM_128_HMAC_SHA1_80,
+                               kTestKey1, kTestKeyLen));
+  EXPECT_TRUE(f1_.SetRtcpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey1, kTestKeyLen,
+                                CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey2, kTestKeyLen));
+  EXPECT_TRUE(f2_.SetRtcpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey2, kTestKeyLen,
+                                CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey1, kTestKeyLen));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f2_.IsActive());
+  TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_80, CS_AES_CM_128_HMAC_SHA1_80);
+}
+
+// Test directly setting the params with AES_CM_128_HMAC_SHA1_32
+TEST_F(SrtpFilterTest, TestProtect_SetParamsDirect_AES_CM_128_HMAC_SHA1_32) {
+  EXPECT_TRUE(f1_.SetRtpParams(CS_AES_CM_128_HMAC_SHA1_32,
+                               kTestKey1, kTestKeyLen,
+                               CS_AES_CM_128_HMAC_SHA1_32,
+                               kTestKey2, kTestKeyLen));
+  EXPECT_TRUE(f2_.SetRtpParams(CS_AES_CM_128_HMAC_SHA1_32,
+                               kTestKey2, kTestKeyLen,
+                               CS_AES_CM_128_HMAC_SHA1_32,
+                               kTestKey1, kTestKeyLen));
+  EXPECT_TRUE(f1_.SetRtcpParams(CS_AES_CM_128_HMAC_SHA1_32,
+                                kTestKey1, kTestKeyLen,
+                                CS_AES_CM_128_HMAC_SHA1_32,
+                                kTestKey2, kTestKeyLen));
+  EXPECT_TRUE(f2_.SetRtcpParams(CS_AES_CM_128_HMAC_SHA1_32,
+                                kTestKey2, kTestKeyLen,
+                                CS_AES_CM_128_HMAC_SHA1_32,
+                                kTestKey1, kTestKeyLen));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f2_.IsActive());
+  TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_32, CS_AES_CM_128_HMAC_SHA1_32);
+}
+
+// Test directly setting the params with bogus keys
+TEST_F(SrtpFilterTest, TestSetParamsKeyTooShort) {
+  EXPECT_FALSE(f1_.SetRtpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey1, kTestKeyLen - 1,
+                                CS_AES_CM_128_HMAC_SHA1_80,
+                                kTestKey1, kTestKeyLen - 1));
+  EXPECT_FALSE(f1_.SetRtcpParams(CS_AES_CM_128_HMAC_SHA1_80,
+                                 kTestKey1, kTestKeyLen - 1,
+                                 CS_AES_CM_128_HMAC_SHA1_80,
+                                 kTestKey1, kTestKeyLen - 1));
+}
+
 class SrtpSessionTest : public testing::Test {
  protected:
   virtual void SetUp() {

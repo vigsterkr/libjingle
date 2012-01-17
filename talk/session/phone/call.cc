@@ -181,30 +181,28 @@ void Call::SetVideoRenderer(Session *session, uint32 ssrc,
 void Call::AddVoiceStream(Session *session, uint32 voice_ssrc) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel && voice_ssrc) {
-    voice_channel->AddStream(voice_ssrc);
+    voice_channel->AddRecvStream(StreamParams::CreateLegacy(voice_ssrc));
   }
 }
 
 void Call::AddVideoStream(Session *session, uint32 video_ssrc) {
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel && video_ssrc) {
-    // TODO: Do we need the audio_ssrc here?
-    // It doesn't seem to be used.
-    video_channel->AddStream(video_ssrc, 0U);
+    video_channel->AddRecvStream(StreamParams::CreateLegacy(video_ssrc));
   }
 }
 
 void Call::RemoveVoiceStream(Session *session, uint32 voice_ssrc) {
   VoiceChannel *voice_channel = GetVoiceChannel(session);
   if (voice_channel && voice_ssrc) {
-    voice_channel->RemoveStream(voice_ssrc);
+    voice_channel->RemoveRecvStream(voice_ssrc);
   }
 }
 
 void Call::RemoveVideoStream(Session *session, uint32 video_ssrc) {
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel && video_ssrc) {
-    video_channel->RemoveStream(video_ssrc);
+    video_channel->RemoveRecvStream(video_ssrc);
   }
 }
 
@@ -239,13 +237,6 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
   VoiceChannel *voice_channel = NULL;
   VideoChannel *video_channel = NULL;
 
-  // Generate a random string for the RTCP CNAME, as stated in RFC 6222.
-  // This string is only used for synchronization, and therefore is opaque.
-  std::string rtcp_cname;
-  if (!talk_base::CreateRandomString(16, &rtcp_cname)) {
-    return false;
-  }
-
   const ContentInfo* audio_offer = GetFirstAudioContent(offer);
   const ContentInfo* video_offer = GetFirstVideoContent(offer);
   video_ = (video_offer != NULL);
@@ -257,7 +248,6 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
   // voice_channel can be NULL in case of NullVoiceEngine.
   if (voice_channel) {
     voice_channel_map_[session->id()] = voice_channel;
-    voice_channel->SetRtcpCName(rtcp_cname);
     voice_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
     voice_channel->StartMediaMonitor(kMediaMonitorInterval);
   } else {
@@ -271,7 +261,6 @@ bool Call::AddSession(Session *session, const SessionDescription* offer) {
     // video_channel can be NULL in case of NullVideoEngine.
     if (video_channel) {
       video_channel_map_[session->id()] = video_channel;
-      video_channel->SetRtcpCName(rtcp_cname);
       video_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
       video_channel->StartMediaMonitor(kMediaMonitorInterval);
     } else {

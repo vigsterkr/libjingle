@@ -735,6 +735,12 @@ FifoBuffer::FifoBuffer(size_t size)
   // all events are done on the owner_ thread
 }
 
+FifoBuffer::FifoBuffer(size_t size, Thread *owner)
+    : state_(SS_OPEN), buffer_(new char[size]), buffer_length_(size),
+      data_length_(0), read_position_(0), owner_(owner) {
+  // all events are done on the owner_ thread
+}
+
 FifoBuffer::~FifoBuffer() {
 }
 

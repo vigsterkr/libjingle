@@ -34,6 +34,7 @@
 
 #include "talk/base/base64.h"
 #include "talk/base/logging.h"
+#include "talk/base/stringencode.h"
 #include "talk/base/timeutils.h"
 #include "talk/session/phone/rtputils.h"
 
@@ -65,6 +66,8 @@ namespace cricket {
 const char CS_AES_CM_128_HMAC_SHA1_80[] = "AES_CM_128_HMAC_SHA1_80";
 const char CS_AES_CM_128_HMAC_SHA1_32[] = "AES_CM_128_HMAC_SHA1_32";
 const int SRTP_MASTER_KEY_BASE64_LEN = SRTP_MASTER_KEY_LEN * 4 / 3;
+const int SRTP_MASTER_KEY_KEY_LEN = 16;
+const int SRTP_MASTER_KEY_SALT_LEN = 14;
 
 #ifndef HAVE_SRTP
 
@@ -143,6 +146,68 @@ bool SrtpFilter::SetAnswer(const std::vector<CryptoParams>& answer_params,
   return ret;
 }
 
+bool SrtpFilter::SetRtpParams(const std::string& send_cs,
+                              const uint8* send_key, int send_key_len,
+                              const std::string& recv_cs,
+                              const uint8* recv_key, int recv_key_len) {
+  if (state_ == ST_ACTIVE) {
+    LOG(LS_ERROR) << "Tried to set SRTP Params when filter already active";
+    return false;
+  }
+  CreateSrtpSessions();
+  if (!send_session_->SetSend(send_cs, send_key, send_key_len))
+    return false;
+
+  if (!recv_session_->SetRecv(recv_cs, recv_key, recv_key_len))
+    return false;
+
+  state_ = ST_ACTIVE;
+
+  LOG(LS_INFO) << "SRTP activated with negotiated parameters:"
+               << " send cipher_suite " << send_cs
+               << " recv cipher_suite " << recv_cs;
+
+  return true;
+}
+
+// This function is provided separately because DTLS-SRTP behaves
+// differently in RTP/RTCP mux and non-mux modes.
+//
+// - In the non-muxed case, RTP and RTCP are keyed with different
+//   keys (from different DTLS handshakes), and so we need a new
+//   SrtpSession.
+// - In the muxed case, they are keyed with the same keys, so
+//   this function is not needed
+bool SrtpFilter::SetRtcpParams(const std::string& send_cs,
+                               const uint8* send_key, int send_key_len,
+                               const std::string& recv_cs,
+                               const uint8* recv_key, int recv_key_len) {
+  // This can only be called once, but can be safely called after
+  // SetRtpParams
+  if (send_rtcp_session_.get() || send_rtcp_session_.get()) {
+    LOG(LS_ERROR) << "Tried to set SRTCP Params when filter already active";
+    return false;
+  }
+
+  send_rtcp_session_.reset(new SrtpSession());
+  SignalSrtpError.repeat(send_rtcp_session_->SignalSrtpError);
+  send_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms_);
+  if (!send_rtcp_session_->SetRecv(send_cs, send_key, send_key_len))
+    return false;
+
+  recv_rtcp_session_.reset(new SrtpSession());
+  SignalSrtpError.repeat(recv_rtcp_session_->SignalSrtpError);
+  recv_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms_);
+  if (!recv_rtcp_session_->SetRecv(recv_cs, recv_key, recv_key_len))
+    return false;
+
+  LOG(LS_INFO) << "SRTCP activated with negotiated parameters:"
+               << " send cipher_suite " << send_cs
+               << " recv cipher_suite " << recv_cs;
+
+  return true;
+}
+
 bool SrtpFilter::ProtectRtp(void* p, int in_len, int max_len, int* out_len) {
   if (!IsActive()) {
     LOG(LS_WARNING) << "Failed to ProtectRtp: SRTP not active";
@@ -156,7 +221,11 @@ bool SrtpFilter::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to ProtectRtcp: SRTP not active";
     return false;
   }
-  return send_session_->ProtectRtcp(p, in_len, max_len, out_len);
+  if (send_rtcp_session_.get()) {
+    return send_rtcp_session_->ProtectRtcp(p, in_len, max_len, out_len);
+  } else {
+    return send_session_->ProtectRtcp(p, in_len, max_len, out_len);
+  }
 }
 
 bool SrtpFilter::UnprotectRtp(void* p, int in_len, int* out_len) {
@@ -172,7 +241,11 @@ bool SrtpFilter::UnprotectRtcp(void* p, int in_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to UnprotectRtcp: SRTP not active";
     return false;
   }
-  return recv_session_->UnprotectRtcp(p, in_len, out_len);
+  if (recv_rtcp_session_.get()) {
+    return recv_rtcp_session_->UnprotectRtcp(p, in_len, out_len);
+  } else {
+    return recv_session_->UnprotectRtcp(p, in_len, out_len);
+  }
 }
 
 void SrtpFilter::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
@@ -180,6 +253,10 @@ void SrtpFilter::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
   if (state_ == ST_ACTIVE) {
     send_session_->set_signal_silent_time(signal_silent_time_in_ms);
     recv_session_->set_signal_silent_time(signal_silent_time_in_ms);
+    if (send_rtcp_session_.get())
+      send_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms);
+    if (recv_rtcp_session_.get())
+      recv_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms);
   }
 }
 

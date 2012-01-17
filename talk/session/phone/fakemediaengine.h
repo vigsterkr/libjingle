@@ -35,7 +35,9 @@
 #include <vector>
 
 #include "talk/base/buffer.h"
+#include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/phone/mediaengine.h"
+#include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/rtputils.h"
 
 namespace cricket {
@@ -67,7 +69,6 @@ class RtpHelper : public Base {
   const std::list<std::string>& rtp_packets() const { return rtp_packets_; }
   const std::list<std::string>& rtcp_packets() const { return rtcp_packets_; }
   int options() const { return options_; }
-  const uint32 send_ssrc() { return send_ssrc_; }
 
   bool SendRtp(const void* data, int len) {
     if (!sending_ || !Base::network_interface_) {
@@ -128,12 +129,57 @@ class RtpHelper : public Base {
   void set_fail_set_recv_codecs(bool fail) {
     fail_set_recv_codecs_ = fail;
   }
-  virtual void SetSendSsrc(uint32 ssrc) {
-    send_ssrc_ = ssrc;
+  virtual bool AddSendStream(const StreamParams& sp) {
+    if (std::find(send_streams_.begin(), send_streams_.end(), sp) !=
+        send_streams_.end()) {
+        return false;
+    }
+    send_streams_.push_back(sp);
+    return true;
+  }
+  virtual bool RemoveSendStream(uint32 ssrc) {
+    return RemoveStreamBySsrc(&send_streams_, ssrc);
+  }
+  virtual bool AddRecvStream(const StreamParams& sp) {
+    if (std::find(receive_streams_.begin(), receive_streams_.end(), sp) !=
+        receive_streams_.end()) {
+        return false;
+    }
+    receive_streams_.push_back(sp);
+    return true;
+  }
+  virtual bool RemoveRecvStream(uint32 ssrc) {
+    return RemoveStreamBySsrc(&receive_streams_, ssrc);
+  }
+  const std::vector<StreamParams>& send_streams() { return send_streams_; }
+  const std::vector<StreamParams>& recv_streams() {
+    return receive_streams_;
+  }
+  bool HasRecvStream(uint32 ssrc) const {
+    return GetStreamBySsrc(receive_streams_, ssrc, NULL);
+  }
+
+  // TODO: This is to support legacy unit test that only check one
+  // sending stream.
+  const uint32 send_ssrc() {
+    if (send_streams_.empty())
+      return 0;
+    return send_streams_[0].first_ssrc();
+  }
+
+  // TODO: This is to support legacy unit test that only check one
+  // sending stream.
+  const std::string rtcp_cname() {
+    if (send_streams_.empty())
+      return "";
+    return send_streams_[0].cname;
   }
 
  protected:
-  void set_sending(bool send) { sending_ = send; }
+  bool set_sending(bool send) {
+    sending_ = send;
+    return true;
+  }
   void set_playout(bool playout) { playout_ = playout; }
   virtual void OnPacketReceived(talk_base::Buffer* packet) {
     rtp_packets_.push_back(std::string(packet->data(), packet->length()));
@@ -156,9 +202,12 @@ class RtpHelper : public Base {
   std::vector<RtpHeaderExtension> send_extensions_;
   std::list<std::string> rtp_packets_;
   std::list<std::string> rtcp_packets_;
+  std::vector<StreamParams> send_streams_;
+  std::vector<StreamParams> receive_streams_;
   bool fail_set_send_codecs_;
   bool fail_set_recv_codecs_;
   uint32 send_ssrc_;
+  std::string rtcp_cname_;
 };
 
 class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
@@ -178,9 +227,7 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   const std::vector<AudioCodec>& send_codecs() const { return send_codecs_; }
   const std::vector<AudioCodec>& codecs() const { return send_codecs(); }
   bool muted() const { return muted_; }
-  const std::set<uint32>& streams() const { return streams_; }
   const std::vector<DtmfEvent>& dtmf_queue() const { return dtmf_queue_; }
-  const std::string& rtcp_cname() const { return rtcp_cname_; }
 
   uint32 ringback_tone_ssrc() const { return ringback_tone_ssrc_; }
   bool ringback_tone_play() const { return ringback_tone_play_; }
@@ -210,26 +257,22 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
     if (fail_set_send_) {
       return false;
     }
-    set_sending(flag != SEND_NOTHING);
-    return true;
-  }
-  virtual bool SetRtcpCName(const std::string& cname) {
-    rtcp_cname_ = cname;
-    return true;
+    return set_sending(flag != SEND_NOTHING);
   }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool Mute(bool on) {
     muted_ = on;
     return true;
   }
-
-  virtual bool AddStream(uint32 ssrc) {
-    streams_.insert(ssrc);
-    output_scalings_[ssrc] = OutputScaling();
+  virtual bool AddRecvStream(const StreamParams& sp) {
+    if (!RtpHelper<VoiceMediaChannel>::AddRecvStream(sp))
+      return false;
+    output_scalings_[sp.first_ssrc()] = OutputScaling();
     return true;
   }
-  virtual bool RemoveStream(uint32 ssrc) {
-    streams_.erase(ssrc);
+  virtual bool RemoveRecvStream(uint32 ssrc) {
+    if (!RtpHelper<VoiceMediaChannel>::RemoveRecvStream(ssrc))
+      return false;
     output_scalings_.erase(ssrc);
     return true;
   }
@@ -297,10 +340,8 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   std::vector<AudioCodec> recv_codecs_;
   std::vector<AudioCodec> send_codecs_;
   bool muted_;
-  std::set<uint32> streams_;
   std::map<uint32, OutputScaling> output_scalings_;
   std::vector<DtmfEvent> dtmf_queue_;
-  std::string rtcp_cname_;
   bool fail_set_send_;
   uint32 ringback_tone_ssrc_;
   bool ringback_tone_play_;
@@ -323,8 +364,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   const std::vector<VideoCodec>& codecs() const { return send_codecs(); }
   bool muted() const { return muted_; }
   bool rendering() const { return playout(); }
-  const std::map<uint32, VideoRenderer*>& streams() const { return streams_; }
-  const std::string rtcp_cname() const { return rtcp_cname_; }
+  const std::map<uint32, VideoRenderer*>& renderers() const { return streams_; }
 
   virtual bool SetRecvCodecs(const std::vector<VideoCodec>& codecs) {
     if (fail_set_recv_codecs()) {
@@ -357,8 +397,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   }
 
   virtual bool SetSend(bool send) {
-    set_sending(send);
-    return true;
+    return set_sending(send);
   }
   virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
     screen_casting_ = true;
@@ -368,24 +407,20 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     screen_casting_ = false;
     return true;
   }
-  virtual bool SetRtcpCName(const std::string& cname) {
-    rtcp_cname_ = cname;
-    return true;
-  }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool Mute(bool on) {
     muted_ = on;
     return true;
   }
-
-  virtual bool AddStream(uint32 ssrc, uint32 voice_ssrc) {
-    if (streams_.find(ssrc) != streams_.end()) {
+  virtual bool AddRecvStream(const StreamParams& sp) {
+    if (!RtpHelper<VideoMediaChannel>::AddRecvStream(sp))
       return false;
-    }
-    streams_[ssrc] = NULL;
+    streams_[sp.first_ssrc()] = NULL;
     return true;
   }
-  virtual bool RemoveStream(uint32 ssrc) {
+  virtual bool RemoveRecvStream(uint32 ssrc) {
+    if (!RtpHelper<VideoMediaChannel>::RemoveRecvStream(ssrc))
+      return false;
     streams_.erase(ssrc);
     return true;
   }
@@ -415,7 +450,6 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   std::map<uint32, VideoRenderer*> streams_;
   bool muted_;
   bool screen_casting_;
-  std::string rtcp_cname_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
 };

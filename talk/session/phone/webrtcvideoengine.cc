@@ -40,6 +40,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
 #include "talk/session/phone/rtputils.h"
+#include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/videorenderer.h"
 #include "talk/session/phone/webrtcpassthroughrender.h"
 #include "talk/session/phone/webrtcvoiceengine.h"
@@ -58,6 +59,7 @@ static const int kDefaultLogSeverity = talk_base::LS_WARNING;
 static const int kMinVideoBitrate = 100;
 static const int kStartVideoBitrate = 300;
 static const int kMaxVideoBitrate = 2000;
+static const int kConferenceModeMaxVideoBitrate = 500;
 
 static const int kVideoMtu = 1200;
 
@@ -535,6 +537,11 @@ bool WebRtcVideoEngine::SetCaptureModule(webrtc::VideoCaptureModule* vcm) {
     return false;
   }
   LOG(LS_INFO) << "Camera created with VCM";
+  CaptureResult ret = SetCapture(true);
+  if (ret != cricket::CR_SUCCESS && ret != cricket::CR_PENDING) {
+    LOG(LS_ERROR) << "Failed to start camera.";
+    return false;
+  }
   return true;
 }
 
@@ -764,21 +771,21 @@ bool WebRtcVideoEngine::CanSendCodec(const VideoCodec& requested,
 }
 
 void WebRtcVideoEngine::ConvertToCricketVideoCodec(
-    const webrtc::VideoCodec& in_codec, VideoCodec& out_codec) {
-  out_codec.id = in_codec.plType;
-  out_codec.name = in_codec.plName;
-  out_codec.width = in_codec.width;
-  out_codec.height = in_codec.height;
-  out_codec.framerate = in_codec.maxFramerate;
+    const webrtc::VideoCodec& in_codec, VideoCodec* out_codec) {
+  out_codec->id = in_codec.plType;
+  out_codec->name = in_codec.plName;
+  out_codec->width = in_codec.width;
+  out_codec->height = in_codec.height;
+  out_codec->framerate = in_codec.maxFramerate;
 }
 
 bool WebRtcVideoEngine::ConvertFromCricketVideoCodec(
-    const VideoCodec& in_codec, webrtc::VideoCodec& out_codec) {
+    const VideoCodec& in_codec, webrtc::VideoCodec* out_codec) {
   bool found = false;
   int ncodecs = vie_wrapper_->codec()->NumberOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
-    if (vie_wrapper_->codec()->GetCodec(i, out_codec) == 0 &&
-      in_codec.name == out_codec.plName) {
+    if (vie_wrapper_->codec()->GetCodec(i, *out_codec) == 0 &&
+      in_codec.name == out_codec->plName) {
       found = true;
       break;
     }
@@ -790,21 +797,21 @@ bool WebRtcVideoEngine::ConvertFromCricketVideoCodec(
   }
 
   if (in_codec.id != 0)
-    out_codec.plType = in_codec.id;
+    out_codec->plType = in_codec.id;
 
   if (in_codec.width != 0)
-    out_codec.width = in_codec.width;
+    out_codec->width = in_codec.width;
 
   if (in_codec.height != 0)
-    out_codec.height = in_codec.height;
+    out_codec->height = in_codec.height;
 
   if (in_codec.framerate != 0)
-    out_codec.maxFramerate = in_codec.framerate;
+    out_codec->maxFramerate = in_codec.framerate;
 
   // Init the codec with the default bandwidth options.
-  out_codec.minBitrate = kMinVideoBitrate;
-  out_codec.startBitrate = kStartVideoBitrate;
-  out_codec.maxBitrate = kMaxVideoBitrate;
+  out_codec->minBitrate = kMinVideoBitrate;
+  out_codec->startBitrate = kStartVideoBitrate;
+  out_codec->maxBitrate = kMaxVideoBitrate;
 
   return true;
 }
@@ -822,7 +829,7 @@ void WebRtcVideoEngine::UnregisterChannel(WebRtcVideoMediaChannel *channel) {
 
 bool WebRtcVideoEngine::SetVoiceEngine(WebRtcVoiceEngine* voice_engine) {
   if (initialized_) {
-    LOG(LS_WARNING) << "SetVoiceEngine can not be called after Init.";
+    LOG(LS_WARNING) << "SetVoiceEngine can not be called after Init";
     return false;
   }
   voice_engine_ = voice_engine;
@@ -831,7 +838,7 @@ bool WebRtcVideoEngine::SetVoiceEngine(WebRtcVoiceEngine* voice_engine) {
 
 bool WebRtcVideoEngine::EnableTimedRender() {
   if (initialized_) {
-    LOG(LS_WARNING) << "EnableTimedRender can not be called after Init.";
+    LOG(LS_WARNING) << "EnableTimedRender can not be called after Init";
     return false;
   }
   render_module_.reset(webrtc::VideoRender::CreateVideoRender(0, NULL,
@@ -880,7 +887,7 @@ bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer,
   if (capturer == NULL) {
     // Stop capturing before clearing the capturer.
     if (SetCapture(false) != CR_SUCCESS) {
-      LOG(LS_WARNING) << "Camera failed to stop.";
+      LOG(LS_WARNING) << "Camera failed to stop";
       return false;
     }
     ClearCapturer();
@@ -980,6 +987,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       sending_(false),
       render_started_(false),
       muted_(false),
+      local_ssrc_(0),
       send_min_bitrate_(kMinVideoBitrate),
       send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
@@ -1059,7 +1067,7 @@ WebRtcVideoMediaChannel::~WebRtcVideoMediaChannel() {
 
     // Remove all receive streams and the default channel.
     while (!mux_channels_.empty()) {
-      RemoveStream(mux_channels_.begin()->first);
+      RemoveRecvStream(mux_channels_.begin()->first);
     }
   }
 
@@ -1074,7 +1082,7 @@ bool WebRtcVideoMediaChannel::SetRecvCodecs(
       iter != codecs.end(); ++iter) {
     if (engine()->FindCodec(*iter)) {
       webrtc::VideoCodec wcodec;
-      if (engine()->ConvertFromCricketVideoCodec(*iter, wcodec)) {
+      if (engine()->ConvertFromCricketVideoCodec(*iter, &wcodec)) {
         receive_codecs_.push_back(wcodec);
       }
     } else {
@@ -1099,7 +1107,7 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   VideoCodec checked_codec;
   VideoCodec current;  // defaults to 0x0
   if (sending_) {
-    engine()->ConvertToCricketVideoCodec(*send_codec_, current);
+    engine()->ConvertToCricketVideoCodec(*send_codec_, &current);
   }
   for (std::vector<VideoCodec>::const_iterator iter = codecs.begin();
       iter != codecs.end(); ++iter) {
@@ -1109,7 +1117,7 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
       fec_type = iter->id;
     } else if (engine()->CanSendCodec(*iter, current, &checked_codec)) {
       webrtc::VideoCodec wcodec;
-      if (engine()->ConvertFromCricketVideoCodec(checked_codec, wcodec)) {
+      if (engine()->ConvertFromCricketVideoCodec(checked_codec, &wcodec)) {
         send_codecs.push_back(wcodec);
       }
     } else {
@@ -1185,8 +1193,12 @@ bool WebRtcVideoMediaChannel::SetRender(bool render) {
 }
 
 bool WebRtcVideoMediaChannel::SetSend(bool send) {
+  if (local_ssrc_ == 0 && send) {
+    LOG(LS_ERROR) << "No stream added";
+    return false;
+  }
   if (send == sending()) {
-    return true;  // no action required
+    return true;  // No action required.
   }
 
   if (send) {
@@ -1195,20 +1207,18 @@ bool WebRtcVideoMediaChannel::SetSend(bool send) {
     if (!send_codec_.get()) {
       return false;
     }
-
-    if (engine()->vie()->base()->StartSend(vie_channel_) != 0) {
-      LOG_RTCERR1(StartSend, vie_channel_);
+    // Start send now.
+    if (!StartSend()) {
       return false;
     }
   } else {
     // We've been asked to stop sending.
-    if (engine()->vie()->base()->StopSend(vie_channel_) != 0) {
-      LOG_RTCERR1(StopSend, vie_channel_);
+    if (!StopSend()) {
       return false;
     }
   }
-
   sending_ = send;
+
   return true;
 }
 
@@ -1217,8 +1227,58 @@ int WebRtcVideoMediaChannel::GetChannelNum(uint32 ssrc) {
   return (it != mux_channels_.end()) ? it->second->channel_id() : -1;
 }
 
-bool WebRtcVideoMediaChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
-  if (mux_channels_.find(ssrc) != mux_channels_.end()) {
+bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
+  // TODO: Implement send media from multiple streams.
+  if (local_ssrc_ != 0) {
+    LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one sending channel";
+    return false;
+  }
+  if (sp.ssrcs.size() != 1) {
+    LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one sending SSRC per"
+                  << " stream";
+    return false;
+  }
+  if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_,
+                                           sp.first_ssrc()) != 0) {
+    LOG_RTCERR1(SetLocalSSRC, vie_channel_);
+    return false;
+  }
+  if (engine()->vie()->rtp()->SetRTCPCName(vie_channel_,
+                                           sp.cname.c_str()) != 0) {
+    LOG_RTCERR2(SetRTCPCName, vie_channel_, sp.cname.c_str());
+    return false;
+  }
+
+  local_ssrc_ = sp.first_ssrc();
+
+  if (sending_) {
+    return StartSend();
+  }
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
+  // TODO: Implement send media from multiple streams.
+  if (ssrc != local_ssrc_) {
+    return false;
+  }
+  if (sending_) {
+    StopSend();
+  }
+  local_ssrc_ = 0;
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
+  if (mux_channels_.find(sp.first_ssrc()) != mux_channels_.end()) {
+    LOG(LS_ERROR) << "Stream already exists";
+    return false;
+  }
+
+  // TODO: Implement recv media from multiple SSRCs per stream.
+  if (sp.ssrcs.size() != 1) {
+    LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one receiving SSRC per"
+                  << " stream";
     return false;
   }
 
@@ -1231,19 +1291,20 @@ bool WebRtcVideoMediaChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
     LOG_RTCERR1(CreateChannel, channel_id);
     return false;
   }
-  if (!ConfigureChannel(channel_id) || !ConfigureReceiving(channel_id, ssrc)) {
+  if (!ConfigureChannel(channel_id) || !ConfigureReceiving(channel_id,
+                                                           sp.first_ssrc())) {
     engine_->vie()->base()->DeleteChannel(channel_id);
     return false;
   }
 
-  LOG(LS_INFO) << "New video stream " << ssrc
+  LOG(LS_INFO) << "New video stream " << sp.first_ssrc()
                << " registered to VideoEngine channel #"
-               << channel_id << ".";
+               << channel_id;
 
   return true;
 }
 
-bool WebRtcVideoMediaChannel::RemoveStream(uint32 ssrc) {
+bool WebRtcVideoMediaChannel::RemoveRecvStream(uint32 ssrc) {
   ChannelMap::iterator it = mux_channels_.find(ssrc);
 
   if (it == mux_channels_.end()) {
@@ -1266,7 +1327,7 @@ bool WebRtcVideoMediaChannel::RemoveStream(uint32 ssrc) {
 
   LOG(LS_INFO) << "Removing video stream " << ssrc
                << " with VideoEngine channel #"
-               << channel_id << ".";
+               << channel_id;
   if (engine()->vie()->base()->DeleteChannel(channel_id) == -1) {
     LOG_RTCERR1(DeleteChannel, channel_id);
     // Leak the WebRtcVideoChannelInfo owned by |it| but remove the channel from
@@ -1277,6 +1338,22 @@ bool WebRtcVideoMediaChannel::RemoveStream(uint32 ssrc) {
   // Delete the WebRtcVideoChannelInfo pointed to by it->second.
   delete info;
   mux_channels_.erase(it);
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::StartSend() {
+  if (engine()->vie()->base()->StartSend(vie_channel_) != 0) {
+    LOG_RTCERR1(StartSend, vie_channel_);
+    return false;
+  }
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::StopSend() {
+  if (engine()->vie()->base()->StopSend(vie_channel_) != 0) {
+    LOG_RTCERR1(StopSend, vie_channel_);
+    return false;
+  }
   return true;
 }
 
@@ -1317,7 +1394,7 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
     sinfo.framerate_input = local_stream_info_->framerate();
     sinfo.framerate_sent = encoder_observer_->framerate();
     sinfo.nominal_bitrate = encoder_observer_->bitrate();
-    sinfo.preferred_bitrate = kMaxVideoBitrate;
+    sinfo.preferred_bitrate = send_max_bitrate_;
 
     // Get received RTCP statistics for the sender, if available.
     // It's not a fatal error if we can't, since RTCP may not have arrived yet.
@@ -1452,12 +1529,12 @@ void WebRtcVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
 
   uint32 ssrc = 0;
   if (!GetRtcpSsrc(packet->data(), packet->length(), &ssrc)) {
-    LOG(LS_WARNING) << "Failed to parse SSRC from received RTCP packet.";
+    LOG(LS_WARNING) << "Failed to parse SSRC from received RTCP packet";
     return;
   }
   int type = 0;
   if (!GetRtcpType(packet->data(), packet->length(), & type)) {
-    LOG(LS_WARNING) << "Failed to parse type from received RTCP packet.";
+    LOG(LS_WARNING) << "Failed to parse type from received RTCP packet";
     return;
   }
 
@@ -1476,25 +1553,6 @@ void WebRtcVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
                                                 packet->length());
 }
 
-void WebRtcVideoMediaChannel::SetSendSsrc(uint32 id) {
-  if (!sending_) {
-    if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_, id) != 0) {
-      LOG_RTCERR1(SetLocalSSRC, vie_channel_);
-    }
-  } else {
-    LOG(LS_ERROR) << "Channel already in send state";
-  }
-}
-
-bool WebRtcVideoMediaChannel::SetRtcpCName(const std::string& cname) {
-  if (engine()->vie()->rtp()->SetRTCPCName(vie_channel_,
-                                           cname.c_str()) != 0) {
-    LOG_RTCERR2(SetRTCPCName, vie_channel_, cname.c_str());
-    return false;
-  }
-  return true;
-}
-
 bool WebRtcVideoMediaChannel::Mute(bool on) {
   muted_ = on;
   return true;
@@ -1504,7 +1562,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   LOG(LS_INFO) << "RtcVideoMediaChanne::SetSendBandwidth";
 
   if (!send_codec_.get()) {
-    LOG(LS_INFO) << "The send codec has not been set up yet.";
+    LOG(LS_INFO) << "The send codec has not been set up yet";
     return true;
   }
 
@@ -1515,7 +1573,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
     // Use the default values for min bitrate.
     min_bitrate = kMinVideoBitrate;
     // Use the default value or the bps for the max
-    max_bitrate = (bps <= 0) ? kMaxVideoBitrate : (bps / 1000);
+    max_bitrate = (bps <= 0) ? send_max_bitrate_ : (bps / 1000);
     // Maximum start bitrate can be kStartVideoBitrate.
     start_bitrate = talk_base::_min(kStartVideoBitrate, max_bitrate);
   } else {
@@ -1546,6 +1604,20 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
 
   // Save the options, to be interpreted where appropriate.
   channel_options_ = options;
+
+  // Adjust send codec bitrate if needed.
+  int expected_bitrate = (0 != (channel_options_ & OPT_CONFERENCE)) ?
+      kConferenceModeMaxVideoBitrate : kMaxVideoBitrate;
+  if (NULL != send_codec_.get() && send_max_bitrate_ != expected_bitrate) {
+    // On success, SetSendCodec() will reset send_max_bitrate_ to
+    // expected_bitrate.
+    if (!SetSendCodec(*send_codec_,
+                      send_min_bitrate_,
+                      send_start_bitrate_,
+                      expected_bitrate)) {
+      return false;
+    }
+  }
 
   return true;
 }

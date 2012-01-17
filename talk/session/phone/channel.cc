@@ -61,6 +61,18 @@ struct VideoChannelErrorMessageData : public talk_base::MessageData {
   VideoMediaChannel::Error error;
 };
 
+struct SsrcMessageData : public talk_base::MessageData {
+  explicit SsrcMessageData(uint32 ssrc) : ssrc(ssrc), result(false) {}
+  uint32 ssrc;
+  bool result;
+};
+
+struct StreamMessageData : public talk_base::MessageData {
+  explicit StreamMessageData(const StreamParams& sp) : sp(sp), result(false) {}
+  StreamParams sp;
+  bool result;
+};
+
 static const char* PacketType(bool rtcp) {
   return (!rtcp) ? "RTP" : "RTCP";
 }
@@ -146,15 +158,15 @@ bool BaseChannel::Mute(bool mute) {
   return true;
 }
 
-bool BaseChannel::RemoveStream(uint32 ssrc) {
-  StreamMessageData data(ssrc, 0);
-  Send(MSG_REMOVESTREAM, &data);
-  return true;
+bool BaseChannel::AddRecvStream(const StreamParams& sp) {
+  StreamMessageData data(sp);
+  Send(MSG_ADDRECVSTREAM, &data);
+  return data.result;
 }
 
-bool BaseChannel::SetRtcpCName(const std::string& cname) {
-  SetRtcpCNameData data(cname);
-  Send(MSG_SETRTCPCNAME, &data);
+bool BaseChannel::RemoveRecvStream(uint32 ssrc) {
+  SsrcMessageData data(ssrc);
+  Send(MSG_REMOVERECVSTREAM, &data);
   return data.result;
 }
 
@@ -518,10 +530,6 @@ bool BaseChannel::SetMaxSendBandwidth_w(int max_bandwidth) {
   return media_channel()->SetSendBandwidth(true, max_bandwidth);
 }
 
-bool BaseChannel::SetRtcpCName_w(const std::string& cname) {
-  return media_channel()->SetRtcpCName(cname);
-}
-
 bool BaseChannel::SetSrtp_w(const std::vector<CryptoParams>& cryptos,
                             ContentAction action, ContentSource src) {
   bool ret;
@@ -558,14 +566,186 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
   return ret;
 }
 
-bool BaseChannel::AddSsrcMuxStreams_w(
-    const std::vector<StreamParams>& streams) {
-  for (std::vector<StreamParams>::const_iterator it = streams.begin();
-       it != streams.end(); ++it)  {
-    if (!ssrc_filter_.AddStream(*it))
-      return false;
+bool BaseChannel::AddRecvStream_w(const StreamParams& sp) {
+  ASSERT(worker_thread() == talk_base::Thread::Current());
+  if (!media_channel()->AddRecvStream(sp))
+    return false;
+
+  return ssrc_filter_.AddStream(sp);
+}
+
+bool BaseChannel::RemoveRecvStream_w(uint32 ssrc) {
+  ASSERT(worker_thread() == talk_base::Thread::Current());
+  ssrc_filter_.RemoveStream(ssrc);
+  return media_channel()->RemoveRecvStream(ssrc);
+}
+
+bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
+                                       ContentAction action) {
+  if (!VERIFY(action == CA_OFFER || action == CA_ANSWER || action == CA_UPDATE))
+    return false;
+
+  // If this is an update, streams only contain streams that have changed.
+  if (action == CA_UPDATE) {
+    for (StreamParamsVec::const_iterator it = streams.begin();
+         it != streams.end(); ++it) {
+      StreamParams existing_stream;
+      bool stream_exist = GetStreamByNickAndName(local_streams_, it->nick,
+                                                 it->name, &existing_stream);
+      if (!stream_exist && it->has_ssrcs()) {
+        if (media_channel()->AddSendStream(*it)) {
+          local_streams_.push_back(*it);
+          LOG(LS_INFO) << "Add send stream ssrc: " << it->first_ssrc();
+        } else {
+          LOG(LS_INFO) << "Failed to add send stream ssrc: "
+                       << it->first_ssrc();
+          return false;
+        }
+      } else if (stream_exist) {
+        if (!media_channel()->RemoveSendStream(existing_stream.first_ssrc())) {
+            LOG(LS_ERROR) << "Failed to remove send stream with ssrc "
+                          << it->first_ssrc() << ".";
+            return false;
+        }
+        RemoveStreamBySsrc(&local_streams_, existing_stream.first_ssrc());
+      } else {
+        LOG(LS_ERROR) << "Unknown send stream update.";
+        return false;
+      }
+    }
+    return true;
   }
-  return true;
+  // Else streams are all the streams we want to send.
+
+  // Check for streams that have been removed.
+  bool ret = true;
+  for (StreamParamsVec::const_iterator it = local_streams_.begin();
+       it != local_streams_.end(); ++it) {
+    if (!GetStreamBySsrc(streams, it->first_ssrc(), NULL)) {
+      if (!media_channel()->RemoveSendStream(it->first_ssrc())) {
+        LOG(LS_ERROR) << "Failed to remove send stream with ssrc "
+                      << it->first_ssrc() << ".";
+        ret = false;
+      }
+    }
+  }
+  // Check for new streams.
+  for (StreamParamsVec::const_iterator it = streams.begin();
+       it != streams.end(); ++it) {
+    if (!GetStreamBySsrc(local_streams_, it->first_ssrc(), NULL)) {
+      if (media_channel()->AddSendStream(*it)) {
+        LOG(LS_INFO) << "Add send ssrc: " << it->ssrcs[0];
+      } else {
+        LOG(LS_INFO) << "Failed to add send stream ssrc: " << it->first_ssrc();
+        ret = false;
+      }
+    }
+  }
+  local_streams_ = streams;
+  return ret;
+}
+
+bool BaseChannel::UpdateRemoteStreams_w(
+    const std::vector<StreamParams>& streams,
+    ContentAction action) {
+  // If this is an update, streams only contain streams that have changed.
+  if (action == CA_UPDATE) {
+    for (StreamParamsVec::const_iterator it = streams.begin();
+         it != streams.end(); ++it) {
+      StreamParams existing_stream;
+      bool stream_exists = GetStreamByNickAndName(remote_streams_, it->nick,
+                                                  it->name, &existing_stream);
+      if (!stream_exists && it->has_ssrcs()) {
+        if (AddRecvStream_w(*it)) {
+          remote_streams_.push_back(*it);
+          LOG(LS_INFO) << "Add remote stream ssrc: " << it->first_ssrc();
+        } else {
+          LOG(LS_INFO) << "Failed to add remote stream ssrc: "
+                       << it->first_ssrc();
+          return false;
+        }
+      } else if (stream_exists) {
+        if (!RemoveRecvStream_w(existing_stream.first_ssrc())) {
+            LOG(LS_ERROR) << "Failed to remove remote stream with ssrc "
+                          << it->first_ssrc() << ".";
+            return false;
+        }
+        RemoveStreamBySsrc(&remote_streams_, existing_stream.first_ssrc());
+      } else {
+        LOG(LS_ERROR) << "Unknown remote stream update.";
+        return false;
+      }
+    }
+    return true;
+  }
+  // Else streams are all the streams we want to receive.
+
+  // Check for streams that have been removed.
+  bool ret = true;
+  for (StreamParamsVec::const_iterator it = remote_streams_.begin();
+       it != remote_streams_.end(); ++it) {
+    if (!GetStreamBySsrc(streams, it->first_ssrc(), NULL)) {
+      if (!RemoveRecvStream_w(it->first_ssrc())) {
+        LOG(LS_ERROR) << "Failed to remove remote stream with ssrc "
+                      << it->first_ssrc() << ".";
+        ret = false;
+      }
+    }
+  }
+  // Check for new streams.
+  for (StreamParamsVec::const_iterator it = streams.begin();
+      it != streams.end(); ++it) {
+    if (!GetStreamBySsrc(remote_streams_, it->first_ssrc(), NULL)) {
+      if (AddRecvStream_w(*it)) {
+        LOG(LS_INFO) << "Add remote ssrc: " << it->ssrcs[0];
+      } else {
+        LOG(LS_INFO) << "Failed to add remote stream ssrc: "
+                     << it->first_ssrc();
+        ret = false;
+      }
+    }
+  }
+  remote_streams_ = streams;
+  return ret;
+}
+
+bool BaseChannel::SetBaseLocalContent_w(const MediaContentDescription* content,
+                                        ContentAction action) {
+  bool ret = UpdateLocalStreams_w(content->streams(), action);
+  // Set local SRTP parameters (what we will encrypt with).
+  if (ret) {
+    ret = SetSrtp_w(content->cryptos(), action, CS_LOCAL);
+  }
+  // Set local RTCP mux parameters.
+  if (ret) {
+    ret = SetRtcpMux_w(content->rtcp_mux(), action, CS_LOCAL);
+  }
+  // Set local RTP header extensions.
+  if (ret && content->rtp_header_extensions_set()) {
+    ret = media_channel()->SetRecvRtpHeaderExtensions(
+        content->rtp_header_extensions());
+  }
+  return ret;
+}
+
+bool BaseChannel::SetBaseRemoteContent_w(const MediaContentDescription* content,
+                                         ContentAction action) {
+  bool ret = UpdateRemoteStreams_w(content->streams(), action);
+  // Set remote SRTP parameters (what the other side will encrypt with).
+  if (ret) {
+    ret = SetSrtp_w(content->cryptos(), action, CS_REMOTE);
+  }
+  // Set remote RTCP mux parameters.
+  if (ret) {
+    ret = SetRtcpMux_w(content->rtcp_mux(), action, CS_REMOTE);
+  }
+
+  // Set remote RTP header extensions.
+  if (ret && content->rtp_header_extensions_set()) {
+    ret = media_channel()->SetSendRtpHeaderExtensions(
+        content->rtp_header_extensions());
+  }
+  return ret;
 }
 
 void BaseChannel::OnMessage(talk_base::Message *pmsg) {
@@ -583,13 +763,6 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_UNMUTE:
       UnmuteMedia_w();
       break;
-
-    case MSG_SETRTCPCNAME: {
-      SetRtcpCNameData* data = static_cast<SetRtcpCNameData*>(pmsg->pdata);
-      data->result = SetRtcpCName_w(data->cname);
-      break;
-    }
-
     case MSG_SETLOCALCONTENT: {
       SetContentData* data = static_cast<SetContentData*>(pmsg->pdata);
       data->result = SetLocalContent_w(data->content, data->action);
@@ -600,13 +773,16 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
       data->result = SetRemoteContent_w(data->content, data->action);
       break;
     }
-
-    case MSG_REMOVESTREAM: {
+    case MSG_ADDRECVSTREAM: {
       StreamMessageData* data = static_cast<StreamMessageData*>(pmsg->pdata);
-      RemoveStream_w(data->ssrc1);
+      data->result = AddRecvStream_w(data->sp);
       break;
     }
-
+    case MSG_REMOVERECVSTREAM: {
+      SsrcMessageData* data = static_cast<SsrcMessageData*>(pmsg->pdata);
+      data->result = RemoveRecvStream_w(data->ssrc);
+      break;
+    }
     case MSG_SETMAXSENDBANDWIDTH: {
       SetBandwidthData* data = static_cast<SetBandwidthData*>(pmsg->pdata);
       data->result = SetMaxSendBandwidth_w(data->value);
@@ -683,12 +859,6 @@ bool VoiceChannel::Init() {
       this, &VoiceChannel::OnVoiceChannelError);
   srtp_filter()->SignalSrtpError.connect(
       this, &VoiceChannel::OnSrtpError);
-  return true;
-}
-
-bool VoiceChannel::AddStream(uint32 ssrc) {
-  StreamMessageData data(ssrc, 0);
-  Send(MSG_ADDSTREAM, &data);
   return true;
 }
 
@@ -795,7 +965,7 @@ void VoiceChannel::ChangeState() {
   if (!media_channel()->SetPlayout(recv)) {
     SendLastMediaError();
   }
-    
+
   // Send outgoing data if we're the active call, we have the remote content,
   // and we have had some form of connectivity.
   bool send = enabled() && has_remote_content() && was_ever_writable();
@@ -826,27 +996,13 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
       static_cast<const AudioContentDescription*>(content);
   ASSERT(audio != NULL);
 
-  bool ret;
-  if (audio->has_ssrcs()) {
-    // TODO: Handle multiple streams and ssrcs here.
-    media_channel()->SetSendSsrc(audio->first_ssrc());
-    LOG(LS_INFO) << "Set send ssrc for audio: " << audio->first_ssrc();
-  }
-  // Set local SRTP parameters (what we will encrypt with).
-  ret = SetSrtp_w(audio->cryptos(), action, CS_LOCAL);
-  // Set local RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_LOCAL);
-  }
+  bool ret = SetBaseLocalContent_w(content, action);
+
   // Set local audio codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(audio->codecs());
   }
-  // Set local RTP header extensions.
-  if (ret && audio->rtp_header_extensions_set()) {
-    ret = media_channel()->SetRecvRtpHeaderExtensions(
-        audio->rtp_header_extensions());
-  }
+
   // If everything worked, see if we can start receiving.
   if (ret) {
     set_has_local_content(true);
@@ -866,28 +1022,11 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
       static_cast<const AudioContentDescription*>(content);
   ASSERT(audio != NULL);
 
-  bool ret;
-  // Set remote SRTP parameters (what the other side will encrypt with).
-  ret = SetSrtp_w(audio->cryptos(), action, CS_REMOTE);
-  // Set remote RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(audio->rtcp_mux(), action, CS_REMOTE);
-  }
-  // Set SSRC mux filter
-  if (ret) {
-    // TODO: Refactor adding / removing to the ssrc mux filter
-    // when updating receiving streams based on the streams in content.
-    ret = AddSsrcMuxStreams_w(audio->streams());
-  }
-
   // Set remote video codecs (what the other side wants to receive).
+  bool ret = media_channel()->SetSendCodecs(audio->codecs());
+
   if (ret) {
-    ret = media_channel()->SetSendCodecs(audio->codecs());
-  }
-  // Set remote RTP header extensions.
-  if (ret && audio->rtp_header_extensions_set()) {
-    ret = media_channel()->SetSendRtpHeaderExtensions(
-        audio->rtp_header_extensions());
+    ret =  SetBaseRemoteContent_w(content, action);
   }
 
   // Tweak our audio processing settings, if needed.
@@ -911,19 +1050,6 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
     LOG(LS_WARNING) << "Failed to set remote voice description";
   }
   return ret;
-}
-
-void VoiceChannel::AddStream_w(uint32 ssrc) {
-  ASSERT(worker_thread() == talk_base::Thread::Current());
-  media_channel()->AddStream(ssrc);
-  // TODO: Work is ongoing to refactor AddStream_w to take
-  // StreamParams as input.
-  ssrc_filter()->AddStream(StreamParams::CreateLegacy(ssrc));
-}
-
-void VoiceChannel::RemoveStream_w(uint32 ssrc) {
-  media_channel()->RemoveStream(ssrc);
-  ssrc_filter()->RemoveStream(ssrc);
 }
 
 bool VoiceChannel::SetRingbackTone_w(const void* buf, int len) {
@@ -963,11 +1089,6 @@ bool VoiceChannel::SetOutputScaling_w(uint32 ssrc, double left, double right) {
 
 void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
-    case MSG_ADDSTREAM: {
-      StreamMessageData* data = static_cast<StreamMessageData*>(pmsg->pdata);
-      AddStream_w(data->ssrc1);
-      break;
-    }
     case MSG_SETRINGBACKTONE: {
       SetRingbackToneMessageData* data =
           static_cast<SetRingbackToneMessageData*>(pmsg->pdata);
@@ -1100,12 +1221,6 @@ VideoChannel::~VideoChannel() {
   DisableMedia_w();
 }
 
-bool VideoChannel::AddStream(uint32 ssrc, uint32 voice_ssrc) {
-  StreamMessageData data(ssrc, voice_ssrc);
-  Send(MSG_ADDSTREAM, &data);
-  return true;
-}
-
 bool VideoChannel::SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
   RenderMessageData data(ssrc, renderer);
   Send(MSG_SETRENDERER, &data);
@@ -1191,28 +1306,13 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
       static_cast<const VideoContentDescription*>(content);
   ASSERT(video != NULL);
 
-  bool ret;
-  if (video->has_ssrcs()) {
-    // TODO: Handle multiple streams and ssrcs here.
-    media_channel()->SetSendSsrc(video->first_ssrc());
-    LOG(LS_INFO) << "Set send ssrc for video: " << video->first_ssrc();
-  }
-  // Set local SRTP parameters (what we will encrypt with).
-  ret = SetSrtp_w(video->cryptos(), action, CS_LOCAL);
-  // Set local RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_LOCAL);
-  }
+  bool ret = SetBaseLocalContent_w(content, action);
 
   // Set local video codecs (what we want to receive).
   if (ret) {
     ret = media_channel()->SetRecvCodecs(video->codecs());
   }
-  // Set local RTP header extensions.
-  if (ret && video->rtp_header_extensions_set()) {
-    ret = media_channel()->SetRecvRtpHeaderExtensions(
-        video->rtp_header_extensions());
-  }
+
   // If everything worked, see if we can start receiving.
   if (ret) {
     set_has_local_content(true);
@@ -1232,27 +1332,11 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
       static_cast<const VideoContentDescription*>(content);
   ASSERT(video != NULL);
 
-  bool ret;
-  // Set remote SRTP parameters (what the other side will encrypt with).
-  ret = SetSrtp_w(video->cryptos(), action, CS_REMOTE);
-  // Set remote RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(video->rtcp_mux(), action, CS_REMOTE);
-  }
-  // Set SSRC mux filter
-  if (ret) {
-    // TODO: Refactor adding / removing to the ssrc mux filter
-    // when updating receiving streams based on the streams in content.
-    ret = AddSsrcMuxStreams_w(video->streams());
-  }
   // Set remote video codecs (what the other side wants to receive).
+  bool ret = media_channel()->SetSendCodecs(video->codecs());
+
   if (ret) {
-    ret = media_channel()->SetSendCodecs(video->codecs());
-  }
-  // Set remote RTP header extensions.
-  if (ret && video->rtp_header_extensions_set()) {
-    ret = media_channel()->SetSendRtpHeaderExtensions(
-        video->rtp_header_extensions());
+    ret =  SetBaseRemoteContent_w(content, action);
   }
   // Tweak our video processing settings, if needed.
   int video_options = 0;
@@ -1279,18 +1363,6 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   return ret;
 }
 
-void VideoChannel::AddStream_w(uint32 ssrc, uint32 voice_ssrc) {
-  media_channel()->AddStream(ssrc, voice_ssrc);
-  // TODO: Work is ongoing to refactor AddStream_w to take
-  // StreamParams as input.
-  ssrc_filter()->AddStream(StreamParams::CreateLegacy(ssrc));
-}
-
-void VideoChannel::RemoveStream_w(uint32 ssrc) {
-  media_channel()->RemoveStream(ssrc);
-  ssrc_filter()->RemoveStream(ssrc);
-}
-
 void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
@@ -1311,11 +1383,6 @@ void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
 
 void VideoChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
-    case MSG_ADDSTREAM: {
-      StreamMessageData* data = static_cast<StreamMessageData*>(pmsg->pdata);
-      AddStream_w(data->ssrc1, data->ssrc2);
-      break;
-    }
     case MSG_SETRENDERER: {
       RenderMessageData* data = static_cast<RenderMessageData*>(pmsg->pdata);
       SetRenderer_w(data->ssrc, data->renderer);

@@ -26,6 +26,7 @@ static const cricket::AudioCodec* const kAudioCodecs[] = {
     &kTelephoneEventCodec,
 };
 const char kRingbackTone[] = "RIFF____WAVE____ABCD1234";
+static uint32 kSsrc1 = 0x99;
 
 class FakeVoEWrapper : public cricket::VoEWrapper {
  public:
@@ -102,6 +103,10 @@ class WebRtcVoiceEngineTestFake : public testing::Test {
     if (result) {
       channel_ = engine_.CreateChannel();
       result = (channel_ != NULL);
+    }
+    if (result) {
+      result = channel_->AddSendStream(
+          cricket::StreamParams::CreateLegacy(kSsrc1));
     }
     return result;
   }
@@ -255,7 +260,8 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsWithMultipleStreams) {
   codecs[0].id = 106;  // collide with existing telephone-event
   codecs[2].id = 126;
   EXPECT_TRUE(channel_->SetRecvCodecs(codecs));
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_TRUE(channel_->AddRecvStream(
+      cricket::StreamParams::CreateLegacy(kSsrc1)));
   int channel_num2 = voe_.GetLastChannel();
   webrtc::CodecInst gcodec;
   talk_base::strcpyn(gcodec.plname, ARRAY_SIZE(gcodec.plname), "ISAC");
@@ -622,7 +628,7 @@ TEST_F(WebRtcVoiceEngineTestFake, SendAndPlayoutWithMultipleStreams) {
   EXPECT_TRUE(voe_.GetPlayout(channel_num1));
 
   // Adding another stream should disable playout on the default channel.
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
   int channel_num2 = voe_.GetLastChannel();
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kPcmuCodec);
@@ -636,7 +642,7 @@ TEST_F(WebRtcVoiceEngineTestFake, SendAndPlayoutWithMultipleStreams) {
   EXPECT_TRUE(voe_.GetPlayout(channel_num2));
 
   // Adding yet another stream should have stream 2 and 3 enabled for playout.
-  EXPECT_TRUE(channel_->AddStream(3));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(3)));
   int channel_num3 = voe_.GetLastChannel();
   EXPECT_FALSE(voe_.GetPlayout(channel_num1));
   EXPECT_TRUE(voe_.GetPlayout(channel_num2));
@@ -663,8 +669,8 @@ TEST_F(WebRtcVoiceEngineTestFake, SendAndPlayoutWithMultipleStreams) {
 
   // Now remove the new streams and verify that the default channel is
   // played out again.
-  EXPECT_TRUE(channel_->RemoveStream(3));
-  EXPECT_TRUE(channel_->RemoveStream(2));
+  EXPECT_TRUE(channel_->RemoveRecvStream(3));
+  EXPECT_TRUE(channel_->RemoveRecvStream(2));
 
   EXPECT_TRUE(voe_.GetPlayout(channel_num1));
 }
@@ -832,29 +838,30 @@ TEST_F(WebRtcVoiceEngineTestFake, CodianSendAndPlayout) {
 }
 
 // Test that we can set the outgoing SSRC properly.
+// SSRC is set in SetupEngine by calling AddSendStream.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrc) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = voe_.GetLastChannel();
   unsigned int send_ssrc;
   EXPECT_EQ(0, voe_.GetLocalSSRC(channel_num, send_ssrc));
   EXPECT_NE(0U, send_ssrc);
-  channel_->SetSendSsrc(0x99);
   EXPECT_EQ(0, voe_.GetLocalSSRC(channel_num, send_ssrc));
-  EXPECT_EQ(0x99U, send_ssrc);
+  EXPECT_EQ(kSsrc1, send_ssrc);
 }
 
 // Test that we can set the outgoing SSRC properly with multiple streams.
+// SSRC is set in SetupEngine by calling AddSendStream.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrcWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
   int channel_num1 = voe_.GetLastChannel();
   unsigned int send_ssrc;
-  channel_->SetSendSsrc(0x99);
   EXPECT_EQ(0, voe_.GetLocalSSRC(channel_num1, send_ssrc));
-  EXPECT_EQ(0x99U, send_ssrc);
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_EQ(kSsrc1, send_ssrc);
+
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
   int channel_num2 = voe_.GetLastChannel();
   EXPECT_EQ(0, voe_.GetLocalSSRC(channel_num2, send_ssrc));
-  EXPECT_EQ(0x99U, send_ssrc);
+  EXPECT_EQ(kSsrc1, send_ssrc);
 }
 
 // Test that we can properly receive packets.
@@ -869,11 +876,11 @@ TEST_F(WebRtcVoiceEngineTestFake, Recv) {
 // Test that we can properly receive packets on multiple streams.
 TEST_F(WebRtcVoiceEngineTestFake, RecvWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
-  EXPECT_TRUE(channel_->AddStream(1));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   int channel_num1 = voe_.GetLastChannel();
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
   int channel_num2 = voe_.GetLastChannel();
-  EXPECT_TRUE(channel_->AddStream(3));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(3)));
   int channel_num3 = voe_.GetLastChannel();
   // Create packets with the right SSRCs.
   char packets[4][sizeof(kPcmuFrame)];
@@ -903,24 +910,24 @@ TEST_F(WebRtcVoiceEngineTestFake, RecvWithMultipleStreams) {
   EXPECT_TRUE(voe_.CheckNoPacket(channel_num2));
   EXPECT_TRUE(voe_.CheckPacket(channel_num3, packets[3],
                                sizeof(packets[3])));
-  EXPECT_TRUE(channel_->RemoveStream(3));
-  EXPECT_TRUE(channel_->RemoveStream(2));
-  EXPECT_TRUE(channel_->RemoveStream(1));
+  EXPECT_TRUE(channel_->RemoveRecvStream(3));
+  EXPECT_TRUE(channel_->RemoveRecvStream(2));
+  EXPECT_TRUE(channel_->RemoveRecvStream(1));
 }
 
 // Test that we properly handle failures to add a stream.
 TEST_F(WebRtcVoiceEngineTestFake, AddStreamFail) {
   EXPECT_TRUE(SetupEngine());
   voe_.set_fail_create_channel(true);
-  EXPECT_FALSE(channel_->AddStream(2));
+  EXPECT_FALSE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
 }
 
 // Test that we properly clean up any streams that were added, even if
 // not explicitly removed.
 TEST_F(WebRtcVoiceEngineTestFake, StreamCleanup) {
   EXPECT_TRUE(SetupEngine());
-  EXPECT_TRUE(channel_->AddStream(1));
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
   EXPECT_EQ(3, voe_.GetNumChannels());  // default channel + 2 added
   delete channel_;
   channel_ = NULL;
@@ -966,8 +973,8 @@ TEST_F(WebRtcVoiceEngineTestFake, PlayRingback) {
 // Test that we can play a ringback tone properly in a multi-stream call.
 TEST_F(WebRtcVoiceEngineTestFake, PlayRingbackWithMultipleStreams) {
   EXPECT_TRUE(SetupEngine());
-  EXPECT_TRUE(channel_->AddStream(1));
-  EXPECT_TRUE(channel_->AddStream(2));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
   int channel_num = voe_.GetLastChannel();
   EXPECT_EQ(0, voe_.IsPlayingFileLocally(channel_num));
   // Check we fail if no ringback tone specified.
@@ -1045,7 +1052,8 @@ TEST_F(WebRtcVoiceEngineTestFake, MediaEngineCallbackOnError) {
 
   // Add another stream and test on that.
   ++ssrc;
-  EXPECT_TRUE(channel_->AddStream(ssrc));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(
+      ssrc)));
   listener->Reset();
   voe_.TriggerCallbackOnError(voe_.GetLastChannel(),
                               VE_SATURATION_WARNING);
@@ -1066,8 +1074,8 @@ TEST_F(WebRtcVoiceEngineTestFake, TestSetPlayoutError) {
   codecs.push_back(kPcmuCodec);
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
-  EXPECT_TRUE(channel_->AddStream(2));
-  EXPECT_TRUE(channel_->AddStream(3));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(3)));
   EXPECT_TRUE(channel_->SetPlayout(true));
   voe_.set_playout_fail_channel(voe_.GetLastChannel() - 1);
   EXPECT_TRUE(channel_->SetPlayout(false));
@@ -1079,7 +1087,7 @@ TEST_F(WebRtcVoiceEngineTestFake, TestSetPlayoutError) {
 TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_TRUE(SetupEngine());
   uint32 ssrc = 0;
-  voe_.GetLocalSSRC(0,ssrc);
+  voe_.GetLocalSSRC(0, ssrc);
   cricket::FakeMediaProcessor vp_1;
   cricket::FakeMediaProcessor vp_2;
 
@@ -1126,7 +1134,7 @@ TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_FALSE(engine_.RegisterProcessor(0,
                                          &vp_1,
                                          cricket::MPD_RX));
-  channel_->AddStream(1);
+  channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1));
   EXPECT_TRUE(engine_.RegisterProcessor(1,
                                         &vp_1,
                                         cricket::MPD_RX));
@@ -1136,7 +1144,7 @@ TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_FALSE(engine_.RegisterProcessor(1,
                                          &vp_1,
                                          cricket::MPD_TX));
-  channel_->RemoveStream(1);
+  channel_->RemoveRecvStream(1);
 }
 
 // Tests for the actual WebRtc VoE library.

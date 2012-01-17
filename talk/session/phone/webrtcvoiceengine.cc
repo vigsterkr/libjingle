@@ -45,6 +45,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
+#include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/voiceprocessor.h"
 #include "talk/session/phone/webrtcvoe.h"
 
@@ -494,7 +495,7 @@ bool WebRtcVoiceEngine::SetOptions(int options) {
   }
 
   // No typing detection support on iOS or Android.
-#endif // !IOS && !ANDROID
+#endif  // !IOS && !ANDROID
 
   return true;
 }
@@ -1191,7 +1192,8 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
       desired_playout_(false),
       playout_(false),
       desired_send_(SEND_NOTHING),
-      send_(SEND_NOTHING) {
+      send_(SEND_NOTHING),
+      local_ssrc_(0) {
   engine->RegisterChannel(this);
   LOG(LS_VERBOSE) << "WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel "
                   << voe_channel();
@@ -1204,9 +1206,6 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
 
   // Enable RTCP (for quality stats and feedback messages)
   EnableRtcp(voe_channel());
-
-  // Create a random but nonzero send SSRC
-  SetSendSsrc(talk_base::CreateRandomNonZeroId());
 
   // Reset all recv codecs; they will be enabled via SetRecvCodecs.
   ResetRecvCodecs(voe_channel());
@@ -1226,7 +1225,7 @@ WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
   engine()->UnregisterChannel(this);
   // Remove any remaining streams.
   while (!mux_channels_.empty()) {
-    RemoveStream(mux_channels_.begin()->first);
+    RemoveRecvStream(mux_channels_.begin()->first);
   }
 
   // Delete the primary channel.
@@ -1462,7 +1461,9 @@ bool WebRtcVoiceMediaChannel::ChangePlayout(bool playout) {
 
 bool WebRtcVoiceMediaChannel::SetSend(SendFlags send) {
   desired_send_ = send;
-  return ChangeSend(desired_send_);
+  if (local_ssrc_ != 0)
+    return ChangeSend(desired_send_);
+  return true;
 }
 
 bool WebRtcVoiceMediaChannel::PauseSend() {
@@ -1573,8 +1574,45 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
   return true;
 }
 
-bool WebRtcVoiceMediaChannel::AddStream(uint32 ssrc) {
+bool WebRtcVoiceMediaChannel::AddSendStream(const StreamParams& sp) {
+  if (local_ssrc_ != 0) {
+    LOG(LS_ERROR) << "WebRtcVoiceMediaChannel supports one sending channel.";
+    return false;
+  }
+
+  if (engine()->voe()->rtp()->SetLocalSSRC(voe_channel(), sp.first_ssrc())
+        == -1) {
+    LOG_RTCERR2(SetSendSSRC, voe_channel(), sp.first_ssrc());
+    return false;
+  }
+
+  if (engine()->voe()->rtp()->SetRTCP_CNAME(voe_channel(),
+                                            sp.cname.c_str()) == -1) {
+     LOG_RTCERR2(SetRTCP_CNAME, voe_channel(), sp.cname);
+     return false;
+  }
+
+  local_ssrc_ = sp.first_ssrc();
+  if (desired_send_ != send_)
+    return ChangeSend(desired_send_);
+  return true;
+}
+
+bool WebRtcVoiceMediaChannel::RemoveSendStream(uint32 ssrc) {
+  if (ssrc != local_ssrc_) {
+    return false;
+  }
+  local_ssrc_ = 0;
+  ChangeSend(SEND_NOTHING);
+  return true;
+}
+
+bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
   talk_base::CritScope lock(&mux_channels_cs_);
+
+  if (!VERIFY(sp.ssrcs.size() == 1))
+    return false;
+  uint32 ssrc = sp.first_ssrc();
 
   if (mux_channels_.find(ssrc) != mux_channels_.end()) {
     return false;
@@ -1644,7 +1682,7 @@ bool WebRtcVoiceMediaChannel::AddStream(uint32 ssrc) {
   return SetPlayout(channel, playout_);
 }
 
-bool WebRtcVoiceMediaChannel::RemoveStream(uint32 ssrc) {
+bool WebRtcVoiceMediaChannel::RemoveRecvStream(uint32 ssrc) {
   talk_base::CritScope lock(&mux_channels_cs_);
   ChannelMap::iterator it = mux_channels_.find(ssrc);
 
@@ -1888,22 +1926,6 @@ void WebRtcVoiceMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
                                                     packet->length());
 }
 
-void WebRtcVoiceMediaChannel::SetSendSsrc(uint32 ssrc) {
-  if (engine()->voe()->rtp()->SetLocalSSRC(voe_channel(), ssrc)
-      == -1) {
-     LOG_RTCERR2(SetSendSSRC, voe_channel(), ssrc);
-  }
-}
-
-bool WebRtcVoiceMediaChannel::SetRtcpCName(const std::string& cname) {
-  if (engine()->voe()->rtp()->SetRTCP_CNAME(voe_channel(),
-                                                    cname.c_str()) == -1) {
-     LOG_RTCERR2(SetRTCP_CNAME, voe_channel(), cname);
-     return false;
-  }
-  return true;
-}
-
 bool WebRtcVoiceMediaChannel::Mute(bool muted) {
   if (engine()->voe()->volume()->SetInputMute(voe_channel(),
       muted) == -1) {
@@ -1978,7 +2000,6 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
   sinfo.echo_delay_std_ms = -1;
   if (engine()->voe()->processing()->GetEcMetricsStatus(echo_metrics_on) !=
       -1 && echo_metrics_on) {
-
     // TODO: we may want to use VoECallReport::GetEchoMetricsSummary
     // here, but it appears to be unsuitable currently. Revisit after this is
     // investigated: http://b/issue?id=5666755

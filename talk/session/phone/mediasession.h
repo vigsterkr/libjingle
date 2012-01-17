@@ -46,7 +46,6 @@ class ChannelManager;
 typedef std::vector<AudioCodec> AudioCodecs;
 typedef std::vector<VideoCodec> VideoCodecs;
 typedef std::vector<CryptoParams> CryptoParamsVec;
-typedef std::vector<StreamParams> StreamParamsVec;
 
 // SEC_ENABLED and SEC_REQUIRED should only be used if the session
 // was negotiated over TLS, to protect the inline crypto material
@@ -179,7 +178,15 @@ class MediaContentDescription : public ContentDescription {
   void AddLegacyStream(uint32 ssrc) {
     streams_.push_back(StreamParams::CreateLegacy(ssrc));
   }
-
+  // Sets the CNAME of all StreamParams if it have not been set.
+  // This can be used to set the CNAME of legacy streams.
+  void SetCnameIfEmpty(const std::string& cname) {
+    for (cricket::StreamParamsVec::iterator it = streams_.begin();
+         it != streams_.end(); ++it) {
+      if (it->cname.empty())
+        it->cname = cname;
+    }
+  }
   uint32 first_ssrc() const {
     if (streams_.empty()) {
       return 0;

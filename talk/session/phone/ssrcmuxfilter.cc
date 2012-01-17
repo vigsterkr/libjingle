@@ -32,44 +32,6 @@
 #include "talk/base/logging.h"
 #include "talk/session/phone/rtputils.h"
 
-namespace {
-
-using cricket::StreamParams;
-
-// TODO: Remove this function once cl 25538785 is landed.
-bool GetStreamBySsrc(const std::vector<StreamParams>& streams, uint32 ssrc,
-                     StreamParams* stream_out) {
-  for (std::vector<StreamParams>::const_iterator stream = streams.begin();
-       stream != streams.end(); ++stream) {
-    if (std::find(stream->ssrcs.begin(), stream->ssrcs.end(),
-                  ssrc) != stream->ssrcs.end()) {
-      if (stream_out != NULL) {
-        *stream_out = *stream;
-      }
-      return true;
-    }
-  }
-  return false;
-}
-
-// TODO: Remove this function once cl 25538785 is landed.
-bool RemoveStreamBySsrc(std::vector<StreamParams>* streams, uint32 ssrc) {
-  bool ret = false;
-  for (std::vector<StreamParams>::iterator stream = streams->begin();
-      stream != streams->end(); ) {
-    if (std::find(stream->ssrcs.begin(), stream->ssrcs.end(),
-                  ssrc) != stream->ssrcs.end()) {
-      stream = streams->erase(stream);
-      ret = true;
-    } else {
-      ++stream;
-    }
-  }
-  return ret;
-}
-
-}  // namespace
-
 namespace cricket {
 
 static const uint32 kSsrc01 = 0x01;

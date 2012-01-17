@@ -45,6 +45,7 @@
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/screencastid.h"
 #include "talk/session/phone/ssrcmuxfilter.h"
+#include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/srtpfilter.h"
 
 namespace cricket {
@@ -62,14 +63,14 @@ enum {
   MSG_EARLYMEDIATIMEOUT = 8,
   MSG_PRESSDTMF = 9,
   MSG_SETRENDERER = 10,
-  MSG_ADDSTREAM = 11,
-  MSG_REMOVESTREAM = 12,
+  MSG_ADDRECVSTREAM = 11,
+  MSG_REMOVERECVSTREAM = 12,
   MSG_SETRINGBACKTONE = 13,
   MSG_PLAYRINGBACKTONE = 14,
   MSG_SETMAXSENDBANDWIDTH = 15,
   MSG_ADDSCREENCAST = 16,
   MSG_REMOVESCREENCAST = 17,
-  MSG_SETRTCPCNAME = 18,
+  // Removed MSG_SETRTCPCNAME = 18. It is no longer used.
   MSG_SENDINTRAFRAME = 19,
   MSG_REQUESTINTRAFRAME = 20,
   MSG_SCREENCASTWINDOWEVENT = 21,
@@ -108,7 +109,6 @@ class BaseChannel
   bool secure() const { return srtp_filter_.IsActive(); }
 
   // Channel control
-  bool SetRtcpCName(const std::string& cname);
   bool SetLocalContent(const MediaContentDescription* content,
                        ContentAction action);
   bool SetRemoteContent(const MediaContentDescription* content,
@@ -119,7 +119,8 @@ class BaseChannel
   bool Mute(bool mute);
 
   // Multiplexing
-  bool RemoveStream(uint32 ssrc);
+  bool AddRecvStream(const StreamParams& sp);
+  bool RemoveRecvStream(uint32 ssrc);
 
   // Monitoring
   void StartConnectionMonitor(int cms);
@@ -215,24 +216,10 @@ class BaseChannel
   void UnmuteMedia_w();
   void ChannelWritable_w();
   void ChannelNotWritable_w();
-
-  struct StreamMessageData : public talk_base::MessageData {
-    StreamMessageData(uint32 s1, uint32 s2) : ssrc1(s1), ssrc2(s2) {}
-    uint32 ssrc1;
-    uint32 ssrc2;
-  };
-  virtual void RemoveStream_w(uint32 ssrc) = 0;
+  bool AddRecvStream_w(const StreamParams& sp);
+  bool RemoveRecvStream_w(uint32 ssrc);
 
   virtual void ChangeState() = 0;
-
-  struct SetRtcpCNameData : public talk_base::MessageData {
-    explicit SetRtcpCNameData(const std::string& cname)
-        : cname(cname), result(false) {}
-    std::string cname;
-    bool result;
-  };
-  bool SetRtcpCName_w(const std::string& cname);
-
   struct SetContentData : public talk_base::MessageData {
     SetContentData(const MediaContentDescription* content,
                    ContentAction action)
@@ -245,17 +232,22 @@ class BaseChannel
   // Gets the content appropriate to the channel (audio or video).
   virtual const MediaContentDescription* GetFirstContent(
       const SessionDescription* sdesc) = 0;
+  bool UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
+                            ContentAction action);
+  bool UpdateRemoteStreams_w(const std::vector<StreamParams>& streams,
+                             ContentAction action);
+  bool SetBaseLocalContent_w(const MediaContentDescription* content,
+                             ContentAction action);
   virtual bool SetLocalContent_w(const MediaContentDescription* content,
                                  ContentAction action) = 0;
+  bool SetBaseRemoteContent_w(const MediaContentDescription* content,
+                              ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                   ContentAction action) = 0;
 
   bool SetSrtp_w(const std::vector<CryptoParams>& params, ContentAction action,
                  ContentSource src);
   bool SetRtcpMux_w(bool enable, ContentAction action, ContentSource src);
-
-  // SSRC mux handling methods.
-  bool AddSsrcMuxStreams_w(const std::vector<StreamParams>& streams);
 
   struct SetBandwidthData : public talk_base::MessageData {
     explicit SetBandwidthData(int value) : value(value), result(false) {}
@@ -281,6 +273,8 @@ class BaseChannel
   MediaEngineInterface *media_engine_;
   BaseSession *session_;
   MediaChannel *media_channel_;
+  std::vector<StreamParams> local_streams_;
+  std::vector<StreamParams> remote_streams_;
 
   std::string content_name_;
   bool rtcp_;
@@ -312,9 +306,6 @@ class VoiceChannel : public BaseChannel {
   virtual VoiceMediaChannel* media_channel() const {
     return static_cast<VoiceMediaChannel*>(BaseChannel::media_channel());
   }
-
-  // Add an incoming stream with the specified SSRC.
-  bool AddStream(uint32 ssrc);
 
   bool SetRingbackTone(const void* buf, int len);
   void SetEarlyMedia(bool enable);
@@ -412,9 +403,6 @@ class VoiceChannel : public BaseChannel {
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                   ContentAction action);
 
-  void AddStream_w(uint32 ssrc);
-  void RemoveStream_w(uint32 ssrc);
-
   bool SetRingbackTone_w(const void* buf, int len);
   bool PlayRingbackTone_w(uint32 ssrc, bool play, bool loop);
   void HandleEarlyMediaTimeout();
@@ -454,9 +442,6 @@ class VideoChannel : public BaseChannel {
     return static_cast<VideoMediaChannel*>(BaseChannel::media_channel());
   }
 
-  // Add an incoming stream with the specified SSRC.
-  bool AddStream(uint32 ssrc, uint32 voice_ssrc);
-
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
 
   bool AddScreencast(uint32 ssrc, const ScreencastId& id);
@@ -486,9 +471,6 @@ class VideoChannel : public BaseChannel {
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                   ContentAction action);
-
-  void AddStream_w(uint32 ssrc, uint32 voice_ssrc);
-  void RemoveStream_w(uint32 ssrc);
 
   void SendIntraFrame_w() {
     media_channel()->SendIntraFrame();
