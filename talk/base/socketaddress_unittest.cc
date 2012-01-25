@@ -224,6 +224,29 @@ TEST(SocketAddressTest, TestToFromSockAddrStorage) {
   EXPECT_EQ("", addr.hostname());
   EXPECT_EQ("[::ffff:1.2.3.4]:5678", addr.ToString());
 
+  addr.Clear();
+  memset(&addr_storage, 0, sizeof(sockaddr_storage));
+  from = SocketAddress(kTestV6AddrString, 5678);
+  from.SetScopeID(6);
+  from.ToSockAddrStorage(&addr_storage);
+  EXPECT_TRUE(SocketAddressFromSockAddrStorage(addr_storage, &addr));
+  EXPECT_FALSE(addr.IsUnresolvedIP());
+  EXPECT_EQ(IPAddress(kTestV6Addr), addr.ipaddr());
+  EXPECT_EQ(5678, addr.port());
+  EXPECT_EQ("", addr.hostname());
+  EXPECT_EQ(kTestV6AddrFullString, addr.ToString());
+  EXPECT_EQ(6, addr.scope_id());
+
+  addr.Clear();
+  from.ToDualStackSockAddrStorage(&addr_storage);
+  EXPECT_TRUE(SocketAddressFromSockAddrStorage(addr_storage, &addr));
+  EXPECT_FALSE(addr.IsUnresolvedIP());
+  EXPECT_EQ(IPAddress(kTestV6Addr), addr.ipaddr());
+  EXPECT_EQ(5678, addr.port());
+  EXPECT_EQ("", addr.hostname());
+  EXPECT_EQ(kTestV6AddrFullString, addr.ToString());
+  EXPECT_EQ(6, addr.scope_id());
+
   addr = from;
   addr_storage.ss_family = AF_UNSPEC;
   EXPECT_FALSE(SocketAddressFromSockAddrStorage(addr_storage, &addr));

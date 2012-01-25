@@ -54,8 +54,8 @@ static const int kCallSetupTimeout = 30 * 1000;
 static const size_t kAllowedCandidates = 4;
 // TODO - These are magic string used by cricket::VideoChannel.
 // These should be moved to a common place.
-static const std::string kRtpVideoChannelStr = "video_rtp";
-static const std::string kRtcpVideoChannelStr = "video_rtcp";
+static const char kRtpVideoChannelStr[] = "video_rtp";
+static const char kRtcpVideoChannelStr[] = "video_rtcp";
 
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,

@@ -100,6 +100,9 @@ struct StreamParams {
   bool has_ssrc(uint32 ssrc) const {
     return std::find(ssrcs.begin(), ssrcs.end(), ssrc) != ssrcs.end();
   }
+  void add_ssrc(uint32 ssrc) {
+    ssrcs.push_back(ssrc);
+  }
 
   // Resource of the MUC jid of the participant of with this stream.
   // For 1:1 calls, should be left empty (which means remote streams

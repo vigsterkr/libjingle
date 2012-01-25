@@ -587,10 +587,11 @@ bool MainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
     AutoLock<VideoRenderer> lock(this);
 
     ASSERT(image_.get() != NULL);
-    frame->ConvertToRgbBuffer(cricket::FOURCC_ARGB, image_.get(),
-        bmi_.bmiHeader.biSizeImage,
-        bmi_.bmiHeader.biWidth *
-        (bmi_.bmiHeader.biBitCount >> 3));
+    frame->ConvertToRgbBuffer(cricket::FOURCC_ARGB,
+                              image_.get(),
+                              bmi_.bmiHeader.biSizeImage,
+                              bmi_.bmiHeader.biWidth *
+                                bmi_.bmiHeader.biBitCount / 8);
   }
 
   InvalidateRect(wnd_, NULL, TRUE);

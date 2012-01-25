@@ -458,16 +458,19 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
                              media_channel1_->codecs()[0]));
     // Now update with other codecs.
     typename T::Content update_content;
+    update_content.set_partial(true);
     CreateContent(0, kIsacCodec, kH264SvcCodec, &update_content);
     EXPECT_TRUE(channel1_->SetRemoteContent(&update_content, CA_UPDATE));
     ASSERT_EQ(1U, media_channel1_->codecs().size());
     EXPECT_TRUE(CodecMatches(update_content.codecs()[0],
                              media_channel1_->codecs()[0]));
-
-    // Now update without any codec.
+    // Now update without any codecs. This is ignored.
     typename T::Content empty_content;
+    empty_content.set_partial(true);
     EXPECT_TRUE(channel1_->SetRemoteContent(&empty_content, CA_UPDATE));
-    ASSERT_EQ(0U, media_channel1_->codecs().size());
+    ASSERT_EQ(1U, media_channel1_->codecs().size());
+    EXPECT_TRUE(CodecMatches(update_content.codecs()[0],
+                             media_channel1_->codecs()[0]));
   }
 
   // Test that Add/RemoveStream properly forward to the media channel.
@@ -518,9 +521,9 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     // Update the local streams by adding another sending stream.
     // Use a partial updated session description.
     typename T::Content content2;
-    CreateContent(0, kPcmuCodec, kH264Codec, &content2);
     content2.AddStream(stream2);
     content2.AddStream(stream3);
+    content2.set_partial(true);
     EXPECT_TRUE(channel1_->SetLocalContent(&content2, CA_UPDATE));
     ASSERT_EQ(3u, media_channel1_->send_streams().size());
     EXPECT_EQ(stream1, media_channel1_->send_streams()[0]);
@@ -530,10 +533,9 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     // Update the local streams by removing the first sending stream.
     // This is done by removing all SSRCS for this particular stream.
     typename T::Content content3;
-    CreateContent(0, kPcmuCodec, kH264Codec, &content3);
     stream1.ssrcs.clear();
     content3.AddStream(stream1);
-
+    content3.set_partial(true);
     EXPECT_TRUE(channel1_->SetLocalContent(&content3, CA_UPDATE));
     ASSERT_EQ(2u, media_channel1_->send_streams().size());
     EXPECT_EQ(stream2, media_channel1_->send_streams()[0]);
@@ -570,15 +572,16 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_EQ(0u, media_channel1_->recv_streams().size());
     EXPECT_TRUE(channel1_->SetRemoteContent(&content1, CA_OFFER));
 
+    ASSERT_EQ(1u, media_channel1_->codecs().size());
     ASSERT_EQ(1u, media_channel1_->recv_streams().size());
     EXPECT_EQ(stream1, media_channel1_->recv_streams()[0]);
 
-    // Update the local streams by adding another sending stream.
+    // Update the remote streams by adding another sending stream.
     // Use a partial updated session description.
     typename T::Content content2;
-    CreateContent(0, kPcmuCodec, kH264Codec, &content2);
     content2.AddStream(stream2);
     content2.AddStream(stream3);
+    content2.set_partial(true);
     EXPECT_TRUE(channel1_->SetRemoteContent(&content2, CA_UPDATE));
     ASSERT_EQ(3u, media_channel1_->recv_streams().size());
     EXPECT_EQ(stream1, media_channel1_->recv_streams()[0]);
@@ -588,10 +591,9 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     // Update the remote streams by removing the first stream.
     // This is done by removing all SSRCS for this particular stream.
     typename T::Content content3;
-    CreateContent(0, kPcmuCodec, kH264Codec, &content3);
     stream1.ssrcs.clear();
     content3.AddStream(stream1);
-
+    content3.set_partial(true);
     EXPECT_TRUE(channel1_->SetRemoteContent(&content3, CA_UPDATE));
     ASSERT_EQ(2u, media_channel1_->recv_streams().size());
     EXPECT_EQ(stream2, media_channel1_->recv_streams()[0]);

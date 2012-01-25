@@ -125,6 +125,7 @@ class MediaContentDescription : public ContentDescription {
   }
 
   virtual MediaType type() const = 0;
+  virtual bool has_codecs() const = 0;
 
   bool rtcp_mux() const { return rtcp_mux_; }
   void set_rtcp_mux(bool mux) { rtcp_mux_ = mux; }
@@ -227,6 +228,8 @@ class MediaContentDescriptionImpl : public MediaContentDescription {
   };
 
   const std::vector<C>& codecs() const { return codecs_; }
+  void set_codecs(const std::vector<C>& codecs) { codecs_ = codecs; }
+  virtual bool has_codecs() const { return !codecs_.empty(); }
   void AddCodec(const C& codec) {
     codecs_.push_back(codec);
   }
@@ -302,8 +305,14 @@ class MediaSessionDescriptionFactory {
 // Convenience functions.
 bool IsAudioContent(const ContentInfo* content);
 bool IsVideoContent(const ContentInfo* content);
+const ContentInfo* GetFirstAudioContent(const ContentInfos& contents);
+const ContentInfo* GetFirstVideoContent(const ContentInfos& contents);
 const ContentInfo* GetFirstAudioContent(const SessionDescription* sdesc);
 const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc);
+const AudioContentDescription* GetFirstAudioContentDescription(
+    const SessionDescription* sdesc);
+const VideoContentDescription* GetFirstVideoContentDescription(
+    const SessionDescription* sdesc);
 
 }  // namespace cricket
 

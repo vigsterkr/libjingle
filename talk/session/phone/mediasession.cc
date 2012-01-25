@@ -288,6 +288,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       // TODO: Remove this legacy stream when all apps use StreamParams.
       audio->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
+    audio->set_multistream(options.is_muc);
     audio->set_rtcp_mux(options.rtcp_mux_enabled);
     audio->set_lang(lang_);
 
@@ -340,6 +341,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       // TODO: Remove this legacy stream when all apps use StreamParams.
       video->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
+    video->set_multistream(options.is_muc);
     video->set_bandwidth(options.video_bandwidth);
     video->set_rtcp_mux(options.rtcp_mux_enabled);
 
@@ -347,11 +349,9 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       CryptoParamsVec video_cryptos;
       if (current_description) {
         // Copy crypto parameters from the previous offer.
-        const ContentInfo* info =
-            GetFirstVideoContent(current_description);
-        if (info) {
-          const VideoContentDescription* desc =
-              static_cast<const VideoContentDescription*>(info->description);
+        const VideoContentDescription* desc =
+            GetFirstVideoContentDescription(current_description);
+        if (desc) {
           video_cryptos = desc->cryptos();
         }
       }
@@ -491,10 +491,9 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
         if (current_description) {
           // Check if this crypto already exist in the previous
           // session description. Use it in that case.
-          const ContentInfo* info = GetFirstVideoContent(current_description);
-          if (info) {
-            const VideoContentDescription* desc =
-                static_cast<const VideoContentDescription*>(info->description);
+          const VideoContentDescription* desc =
+              GetFirstVideoContentDescription(current_description);
+          if (desc) {
             const CryptoParamsVec& cryptos = desc->cryptos();
             for (CryptoParamsVec::const_iterator it = cryptos.begin();
                  it != cryptos.end(); ++it) {
@@ -539,12 +538,8 @@ bool IsVideoContent(const ContentInfo* content) {
   return IsMediaContent(content, MEDIA_TYPE_VIDEO);
 }
 
-static const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
+static const ContentInfo* GetFirstMediaContent(const ContentInfos& contents,
                                                MediaType media_type) {
-  if (sdesc == NULL)
-    return NULL;
-
-  const ContentInfos& contents = sdesc->contents();
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); content++) {
     if (IsMediaContent(&*content, media_type)) {
@@ -554,12 +549,42 @@ static const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
   return NULL;
 }
 
+const ContentInfo* GetFirstAudioContent(const ContentInfos& contents) {
+  return GetFirstMediaContent(contents, MEDIA_TYPE_AUDIO);
+}
+
+const ContentInfo* GetFirstVideoContent(const ContentInfos& contents) {
+  return GetFirstMediaContent(contents, MEDIA_TYPE_VIDEO);
+}
+
+static const ContentInfo* GetFirstMediaContent(const SessionDescription* sdesc,
+                                               MediaType media_type) {
+  if (sdesc == NULL)
+    return NULL;
+
+  return GetFirstMediaContent(sdesc->contents(), media_type);
+}
+
 const ContentInfo* GetFirstAudioContent(const SessionDescription* sdesc) {
   return GetFirstMediaContent(sdesc, MEDIA_TYPE_AUDIO);
 }
 
 const ContentInfo* GetFirstVideoContent(const SessionDescription* sdesc) {
   return GetFirstMediaContent(sdesc, MEDIA_TYPE_VIDEO);
+}
+
+const AudioContentDescription* GetFirstAudioContentDescription(
+    const SessionDescription* sdesc) {
+  const ContentInfo* content = GetFirstAudioContent(sdesc);
+  const ContentDescription* description = content ? content->description : NULL;
+  return static_cast<const AudioContentDescription*>(description);
+}
+
+const VideoContentDescription* GetFirstVideoContentDescription(
+    const SessionDescription* sdesc) {
+  const ContentInfo* content = GetFirstVideoContent(sdesc);
+  const ContentDescription* description = content ? content->description : NULL;
+  return static_cast<const VideoContentDescription*>(description);
 }
 
 }  // namespace cricket

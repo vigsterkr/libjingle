@@ -311,6 +311,9 @@ mac_env = posix_env.Clone(
     #'fill_plist',
   ],
 )
+# Use static OpenSSL on mac so that we can use the latest APIs on all
+# supported mac platforms (10.5+).
+mac_env.SetBits('use_static_openssl')
 mac_env.Append(
   CPPDEFINES = [
     'OSX',

@@ -541,7 +541,6 @@ class FakeWebRtcVoiceEngine
 
   // webrtc::VoENetEqStats
   WEBRTC_STUB(GetNetworkStatistics, (int, webrtc::NetworkStatistics&));
-  WEBRTC_STUB(GetJitterStatistics, (int, webrtc::JitterStatistics&));
   WEBRTC_STUB(GetPreferredBufferSize, (int, short unsigned int&));
   WEBRTC_STUB(ResetJitterStatistics, (int));
 

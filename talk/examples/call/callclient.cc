@@ -442,8 +442,8 @@ void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
 
 void CallClient::OnCallCreate(cricket::Call* call) {
   call->SignalSessionState.connect(this, &CallClient::OnSessionState);
-  call->SignalMediaSourcesUpdate.connect(
-      this, &CallClient::OnMediaSourcesUpdate);
+  call->SignalMediaStreamsUpdate.connect(
+      this, &CallClient::OnMediaStreamsUpdate);
 }
 
 void CallClient::OnSessionState(cricket::Call* call,
@@ -489,17 +489,17 @@ void CallClient::OnSessionState(cricket::Call* call,
 
 void CallClient::OnSpeakerChanged(cricket::Call* call,
                                   cricket::Session* session,
-                                  const cricket::NamedSource& speaker) {
-  if (speaker.ssrc == 0) {
+                                  const cricket::StreamParams& speaker) {
+  if (!speaker.has_ssrcs()) {
     console_->PrintLine("Session %s has no current speaker.",
                         session->id().c_str());
   } else if (speaker.nick.empty()) {
     console_->PrintLine("Session %s speaker change to unknown (%u).",
-                        session->id().c_str(), speaker.ssrc);
+                        session->id().c_str(), speaker.first_ssrc());
   } else {
     console_->PrintLine("Session %s speaker changed to %s (%u).",
                         session->id().c_str(), speaker.nick.c_str(),
-                        speaker.ssrc);
+                        speaker.first_ssrc());
   }
 }
 
@@ -1112,20 +1112,22 @@ void CallClient::SetVolume(const std::string& level) {
   media_client_->SetOutputVolume(strtol(level.c_str(), NULL, 10));
 }
 
-void CallClient::OnMediaSourcesUpdate(cricket::Call* call,
+void CallClient::OnMediaStreamsUpdate(cricket::Call* call,
                                       cricket::Session* session,
-                                      const cricket::MediaSources& sources) {
-  for (cricket::NamedSources::const_iterator it = sources.video().begin();
-       it != sources.video().end(); ++it) {
-    if (it->removed) {
-      RemoveStaticRenderedView(it->ssrc);
-    } else {
-      if (render_) {
-        // TODO: Make dimensions and positions more configurable.
-        int offset = (50 * static_views_accumulated_count_) % 300;
-        AddStaticRenderedView(session, it->ssrc, 640, 400, 30,
-                              offset, offset);
-      }
+                                      const cricket::MediaStreams& added,
+                                      const cricket::MediaStreams& removed) {
+  for (std::vector<cricket::StreamParams>::const_iterator
+       it = removed.video().begin(); it != removed.video().end(); ++it) {
+    RemoveStaticRenderedView(it->first_ssrc());
+  }
+
+  if (render_) {
+    for (std::vector<cricket::StreamParams>::const_iterator
+         it = added.video().begin(); it != added.video().end(); ++it) {
+      // TODO: Make dimensions and positions more configurable.
+      int offset = (50 * static_views_accumulated_count_) % 300;
+      AddStaticRenderedView(session, it->first_ssrc(), 640, 400, 30,
+                            offset, offset);
     }
   }
 

@@ -341,6 +341,10 @@ class PresenterStateClient : public PubSubStateClient<bool> {
         QN_PRESENTER_PRESENTATION_TYPE) != kNotPresenting);
     return true;
   }
+
+  virtual bool StatesEqual(bool state1, bool state2) {
+    return false;  // Make every item trigger an event, even if state doesn't change.
+  }
 };
 
 HangoutPubSubClient::HangoutPubSubClient(XmppTaskParentInterface* parent,

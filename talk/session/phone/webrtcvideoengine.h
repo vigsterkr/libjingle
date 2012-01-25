@@ -158,7 +158,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
                  WebRtcVoiceEngine* voice_engine);
   bool SetDefaultCodec(const VideoCodec& codec);
   bool RebuildCodecList(const VideoCodec& max_codec);
-  void ApplyLogging();
+  void ApplyLogging(const std::string& log_filter);
   bool InitVideoEngine();
   bool SetCapturer(VideoCapturer* capturer, bool own_capturer);
 
@@ -266,7 +266,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // Creates and initializes a WebRtc video channel.
   bool ConfigureChannel(int channel_id);
   bool ConfigureReceiving(int channel_id, uint32 remote_ssrc);
-  bool SetNackFec(int red_payload_type, int fec_payload_type);
+  bool SetNackFec(int channel_id, int red_payload_type, int fec_payload_type);
   bool SetSendCodec(const webrtc::VideoCodec& codec,
                     int min_bitrate,
                     int start_bitrate,

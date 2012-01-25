@@ -137,8 +137,6 @@ bool BaseChannel::Init(TransportChannel* transport_channel,
       this, &BaseChannel::OnChannelRead);
 
   session_->SignalState.connect(this, &BaseChannel::OnSessionState);
-  session_->SignalRemoteDescriptionUpdate.connect(this,
-      &BaseChannel::OnRemoteDescriptionUpdate);
 
   OnSessionState(session(), session()->state());
   set_rtcp_transport_channel(rtcp_transport_channel);
@@ -450,16 +448,6 @@ void BaseChannel::OnSessionState(BaseSession* session,
   }
 }
 
-void BaseChannel::OnRemoteDescriptionUpdate(BaseSession* session) {
-  const MediaContentDescription* content =
-      GetFirstContent(session->remote_description());
-
-  if (content && !SetRemoteContent(content, CA_UPDATE)) {
-    LOG(LS_ERROR) << "Failure in SetRemoteContent with CA_UPDATE";
-    session->SetError(BaseSession::ERROR_CONTENT);
-  }
-}
-
 void BaseChannel::EnableMedia_w() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   if (enabled_)
@@ -713,16 +701,12 @@ bool BaseChannel::SetBaseLocalContent_w(const MediaContentDescription* content,
                                         ContentAction action) {
   bool ret = UpdateLocalStreams_w(content->streams(), action);
   // Set local SRTP parameters (what we will encrypt with).
-  if (ret) {
-    ret = SetSrtp_w(content->cryptos(), action, CS_LOCAL);
-  }
+  ret &= SetSrtp_w(content->cryptos(), action, CS_LOCAL);
   // Set local RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(content->rtcp_mux(), action, CS_LOCAL);
-  }
+  ret &= SetRtcpMux_w(content->rtcp_mux(), action, CS_LOCAL);
   // Set local RTP header extensions.
-  if (ret && content->rtp_header_extensions_set()) {
-    ret = media_channel()->SetRecvRtpHeaderExtensions(
+  if (content->rtp_header_extensions_set()) {
+    ret &= media_channel()->SetRecvRtpHeaderExtensions(
         content->rtp_header_extensions());
   }
   return ret;
@@ -732,17 +716,12 @@ bool BaseChannel::SetBaseRemoteContent_w(const MediaContentDescription* content,
                                          ContentAction action) {
   bool ret = UpdateRemoteStreams_w(content->streams(), action);
   // Set remote SRTP parameters (what the other side will encrypt with).
-  if (ret) {
-    ret = SetSrtp_w(content->cryptos(), action, CS_REMOTE);
-  }
+  ret &= SetSrtp_w(content->cryptos(), action, CS_REMOTE);
   // Set remote RTCP mux parameters.
-  if (ret) {
-    ret = SetRtcpMux_w(content->rtcp_mux(), action, CS_REMOTE);
-  }
-
+  ret &= SetRtcpMux_w(content->rtcp_mux(), action, CS_REMOTE);
   // Set remote RTP header extensions.
-  if (ret && content->rtp_header_extensions_set()) {
-    ret = media_channel()->SetSendRtpHeaderExtensions(
+  if (content->rtp_header_extensions_set()) {
+    ret &= media_channel()->SetSendRtpHeaderExtensions(
         content->rtp_header_extensions());
   }
   return ret;
@@ -995,12 +974,14 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
   const AudioContentDescription* audio =
       static_cast<const AudioContentDescription*>(content);
   ASSERT(audio != NULL);
+  if (!audio) return false;
 
   bool ret = SetBaseLocalContent_w(content, action);
-
   // Set local audio codecs (what we want to receive).
-  if (ret) {
-    ret = media_channel()->SetRecvCodecs(audio->codecs());
+  // TODO: Change action != CA_UPDATE to !audio->partial() when partial
+  // is set properly.
+  if (action != CA_UPDATE || audio->has_codecs()) {
+    ret &= media_channel()->SetRecvCodecs(audio->codecs());
   }
 
   // If everything worked, see if we can start receiving.
@@ -1021,25 +1002,29 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
   const AudioContentDescription* audio =
       static_cast<const AudioContentDescription*>(content);
   ASSERT(audio != NULL);
+  if (!audio) return false;
 
+  bool ret = true;
   // Set remote video codecs (what the other side wants to receive).
-  bool ret = media_channel()->SetSendCodecs(audio->codecs());
-
-  if (ret) {
-    ret =  SetBaseRemoteContent_w(content, action);
+  if (action != CA_UPDATE || audio->has_codecs()) {
+    ret &= media_channel()->SetSendCodecs(audio->codecs());
   }
 
-  // Tweak our audio processing settings, if needed.
-  int audio_options = 0;
-  if (audio->conference_mode()) {
-    audio_options |= OPT_CONFERENCE;
-  }
-  if (audio->agc_minus_10db()) {
-    audio_options |= OPT_AGC_MINUS_10DB;
-  }
-  if (!media_channel()->SetOptions(audio_options)) {
-    // Log an error on failure, but don't abort the call.
-    LOG(LS_ERROR) << "Failed to set voice channel options";
+  ret &= SetBaseRemoteContent_w(content, action);
+
+  if (action != CA_UPDATE) {
+    // Tweak our audio processing settings, if needed.
+    int audio_options = 0;
+    if (audio->conference_mode()) {
+      audio_options |= OPT_CONFERENCE;
+    }
+    if (audio->agc_minus_10db()) {
+      audio_options |= OPT_AGC_MINUS_10DB;
+    }
+    if (!media_channel()->SetOptions(audio_options)) {
+      // Log an error on failure, but don't abort the call.
+      LOG(LS_ERROR) << "Failed to set voice channel options";
+    }
   }
 
   // If everything worked, see if we can start sending.
@@ -1305,12 +1290,12 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
   const VideoContentDescription* video =
       static_cast<const VideoContentDescription*>(content);
   ASSERT(video != NULL);
+  if (!video) return false;
 
   bool ret = SetBaseLocalContent_w(content, action);
-
   // Set local video codecs (what we want to receive).
-  if (ret) {
-    ret = media_channel()->SetRecvCodecs(video->codecs());
+  if (action != CA_UPDATE || video->has_codecs()) {
+    ret &= media_channel()->SetRecvCodecs(video->codecs());
   }
 
   // If everything worked, see if we can start receiving.
@@ -1331,28 +1316,32 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   const VideoContentDescription* video =
       static_cast<const VideoContentDescription*>(content);
   ASSERT(video != NULL);
+  if (!video) return false;
 
+  bool ret = true;
   // Set remote video codecs (what the other side wants to receive).
-  bool ret = media_channel()->SetSendCodecs(video->codecs());
+  if (action != CA_UPDATE || video->has_codecs()) {
+    ret &= media_channel()->SetSendCodecs(video->codecs());
+  }
 
-  if (ret) {
-    ret =  SetBaseRemoteContent_w(content, action);
-  }
-  // Tweak our video processing settings, if needed.
-  int video_options = 0;
-  if (video->conference_mode()) {
-    video_options |= OPT_CONFERENCE;
-  }
-  if (!media_channel()->SetOptions(video_options)) {
-    // Log an error on failure, but don't abort the call.
-    LOG(LS_ERROR) << "Failed to set video channel options";
-  }
-  // Set bandwidth parameters (what the other side wants to get, default=auto)
-  if (ret) {
+  ret &= SetBaseRemoteContent_w(content, action);
+
+  if (action != CA_UPDATE) {
+    // Tweak our video processing settings, if needed.
+    int video_options = 0;
+    if (video->conference_mode()) {
+      video_options |= OPT_CONFERENCE;
+    }
+    if (!media_channel()->SetOptions(video_options)) {
+      // Log an error on failure, but don't abort the call.
+      LOG(LS_ERROR) << "Failed to set video channel options";
+    }
+    // Set bandwidth parameters (what the other side wants to get, default=auto)
     int bandwidth_bps = video->bandwidth();
     bool auto_bandwidth = (bandwidth_bps == kAutoBandwidth);
-    ret = media_channel()->SetSendBandwidth(auto_bandwidth, bandwidth_bps);
+    ret &= media_channel()->SetSendBandwidth(auto_bandwidth, bandwidth_bps);
   }
+
   // If everything worked, see if we can start sending.
   if (ret) {
     set_has_remote_content(true);

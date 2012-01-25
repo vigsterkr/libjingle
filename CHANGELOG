@@ -1,14 +1,19 @@
 Libjingle
 
+0.6.11 - Jan 24, 2012
+  - Improved ipv6 support.
+  - Initial DTLS support.
+  - Initial BUNDLE support.
+
 0.6.10 - Jan 11, 2012
-   - Support fullscreen screencasting of secondary displays.
-   - Add IPv6 support for libjingle's STUN components.
-   - Enable SRTP in PeerConnection v1.
-   - Bug fixes.
+  - Support fullscreen screencasting of secondary displays.
+  - Add IPv6 support for libjingle's STUN components.
+  - Enable SRTP in PeerConnection v1.
+  - Bug fixes.
 
 0.6.9 - Jan 09, 2012
-   - Enable SRTP in PeerConnection.
-   - Bug fixes.
+  - Enable SRTP in PeerConnection.
+  - Bug fixes.
 
 0.6.8 - Dec 22, 2011
   - Add a lot of unit tests

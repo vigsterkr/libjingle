@@ -382,17 +382,23 @@ bool WebRtcVoiceEngine::InitInternal() {
   // First check whether there is a valid sound device for playback.
   // TODO: Clean this up when we support setting the soundclip device.
 #ifdef WIN32
-  int num_of_devices = 0;
-  if (voe_wrapper_sc_->hw()->GetNumOfPlayoutDevices(num_of_devices) != -1 &&
-      num_of_devices > 0) {
-    if (voe_wrapper_sc_->hw()->SetPlayoutDevice(kDefaultSoundclipDeviceId)
-        == -1) {
-      LOG_RTCERR1_EX(SetPlayoutDevice, kDefaultSoundclipDeviceId,
-                      voe_wrapper_sc_->error());
-      return false;
+  // The SetPlayoutDevice may not be implemented in the case of external ADM.
+  // TODO: We should only check the adm_sc_ here, but current
+  // PeerConnection interface never set the adm_sc_, so need to check both
+  // in order to determine if the external adm is used.
+  if (!adm_ && !adm_sc_) {
+    int num_of_devices = 0;
+    if (voe_wrapper_sc_->hw()->GetNumOfPlayoutDevices(num_of_devices) != -1 &&
+        num_of_devices > 0) {
+      if (voe_wrapper_sc_->hw()->SetPlayoutDevice(kDefaultSoundclipDeviceId)
+          == -1) {
+        LOG_RTCERR1_EX(SetPlayoutDevice, kDefaultSoundclipDeviceId,
+                       voe_wrapper_sc_->error());
+        return false;
+      }
+    } else {
+      LOG(LS_WARNING) << "No valid sound playout device found.";
     }
-  } else {
-    LOG(LS_WARNING) << "No valid sound playout device found.";
   }
 #endif
 

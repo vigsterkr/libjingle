@@ -168,6 +168,13 @@ class BaseChannel
 
   SsrcMuxFilter* ssrc_filter() { return &ssrc_filter_; }
 
+  const std::vector<StreamParams>& local_streams() const {
+    return local_streams_;
+  }
+  const std::vector<StreamParams>& remote_streams() const {
+    return remote_streams_;
+  }
+
  protected:
   MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
@@ -208,7 +215,6 @@ class BaseChannel
 
   // Setting the send codec based on the remote description.
   void OnSessionState(BaseSession* session, BaseSession::State state);
-  void OnRemoteDescriptionUpdate(BaseSession* session);
 
   void EnableMedia_w();
   void DisableMedia_w();

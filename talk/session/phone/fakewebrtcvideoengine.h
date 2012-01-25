@@ -84,7 +84,10 @@ class FakeWebRtcVideoEngine
           rtcp_status_(webrtc::kRtcpNone),
           key_frame_request_method_(webrtc::kViEKeyFrameRequestNone),
           tmmbr_(false),
-          nack_(false) {
+          remb_send_(false),
+          remb_(false),
+          nack_(false),
+          hybrid_nack_fec_(false) {
       memset(&send_codec, 0, sizeof(send_codec));
     }
     int capture_id_;
@@ -96,7 +99,10 @@ class FakeWebRtcVideoEngine
     webrtc::ViERTCPMode rtcp_status_;
     webrtc::ViEKeyFrameRequestMethod key_frame_request_method_;
     bool tmmbr_;
+    bool remb_send_;  // This channel send REMB packets.
+    bool remb_;  // This channel report BWE using remb.
     bool nack_;
+    bool hybrid_nack_fec_;
     std::vector<webrtc::VideoCodec> recv_codecs;
     webrtc::VideoCodec send_codec;
   };
@@ -186,9 +192,21 @@ class FakeWebRtcVideoEngine
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->tmmbr_;
   }
+  bool GetRembStatus(int channel) const {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->remb_;
+  }
+  bool GetRembStatusSend(int channel) const {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->remb_send_;
+  }
   bool GetNackStatus(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->nack_;
+  }
+  bool GetHybridNackFecStatus(int channel) const {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->hybrid_nack_fec_;
   }
 
   bool ReceiveCodecRegistered(int channel,
@@ -258,9 +276,12 @@ class FakeWebRtcVideoEngine
     const cricket::VideoCodec& c(*codecs_[list_number]);
     if ("I420" == c.name) {
       out_codec.codecType = webrtc::kVideoCodecI420;
-    }
-    else if ("VP8" == c.name) {
+    } else if ("VP8" == c.name) {
       out_codec.codecType = webrtc::kVideoCodecVP8;
+    } else if ("red" == c.name) {
+      out_codec.codecType = webrtc::kVideoCodecRED;
+    } else if ("ulpfec" == c.name) {
+      out_codec.codecType = webrtc::kVideoCodecULPFEC;
     } else {
       out_codec.codecType = webrtc::kVideoCodecUnknown;
     }
@@ -493,18 +514,18 @@ class FakeWebRtcVideoEngine
     channels_[channel]->rtcp_status_ = mode;
     return 0;
   }
-  WEBRTC_STUB(GetRTCPStatus, (const int, webrtc::ViERTCPMode&));
+  WEBRTC_STUB_CONST(GetRTCPStatus, (const int, webrtc::ViERTCPMode&));
   WEBRTC_FUNC(SetRTCPCName, (const int channel,
                              const char rtcp_cname[KMaxRTCPCNameLength])) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->cname_.assign(rtcp_cname);
     return 0;
   }
-  WEBRTC_FUNC(GetRTCPCName, (const int channel,
-                             char rtcp_cname[KMaxRTCPCNameLength])) {
+  WEBRTC_FUNC_CONST(GetRTCPCName, (const int channel,
+                                   char rtcp_cname[KMaxRTCPCNameLength])) {
     WEBRTC_CHECK_CHANNEL(channel);
     talk_base::strcpyn(rtcp_cname, KMaxRTCPCNameLength,
-                       channels_[channel]->cname_.c_str());
+                       channels_.find(channel)->second->cname_.c_str());
     return 0;
   }
   WEBRTC_STUB_CONST(GetRemoteRTCPCName, (const int, char*));
@@ -513,18 +534,36 @@ class FakeWebRtcVideoEngine
   WEBRTC_FUNC(SetNACKStatus, (const int channel, const bool enable)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->nack_ = enable;
+    channels_[channel]->hybrid_nack_fec_ = false;
     return 0;
   }
   WEBRTC_STUB(SetFECStatus, (const int, const bool, const unsigned char,
       const unsigned char));
-  WEBRTC_STUB(SetHybridNACKFECStatus, (const int, const bool,
-      const unsigned char, const unsigned char));
+  WEBRTC_FUNC(SetHybridNACKFECStatus, (const int channel, const bool enable,
+      const unsigned char red_type, const unsigned char fec_type)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    if (red_type == fec_type ||
+        red_type == channels_[channel]->send_codec.plType ||
+        fec_type == channels_[channel]->send_codec.plType) {
+      return -1;
+    }
+    channels_[channel]->nack_ = false;
+    channels_[channel]->hybrid_nack_fec_ = true;
+    return 0;
+  }
   WEBRTC_FUNC(SetKeyFrameRequestMethod,
               (const int channel,
                const webrtc::ViEKeyFrameRequestMethod method)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->key_frame_request_method_ = method;
     return 0;
+  }
+  WEBRTC_BOOL_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
+    if (channels_.find(channel) == channels_.end())
+      return false;
+    channels_[channel]->remb_send_ = send;
+    channels_[channel]->remb_ = receive;
+    return true;
   }
   WEBRTC_FUNC(SetTMMBRStatus, (const int channel, const bool enable)) {
     WEBRTC_CHECK_CHANNEL(channel);
@@ -542,7 +581,8 @@ class FakeWebRtcVideoEngine
 
   WEBRTC_STUB(SetRTPKeepAliveStatus, (const int, bool, const char,
       const unsigned int));
-  WEBRTC_STUB(GetRTPKeepAliveStatus, (const int, bool&, char&, unsigned int&));
+  WEBRTC_STUB_CONST(GetRTPKeepAliveStatus,
+                    (const int, bool&, char&, unsigned int&));
   WEBRTC_STUB(StartRTPDump, (const int, const char*, webrtc::RTPDirections));
   WEBRTC_STUB(StopRTPDump, (const int, webrtc::RTPDirections));
   WEBRTC_STUB(RegisterRTPObserver, (const int, webrtc::ViERTPObserver&));

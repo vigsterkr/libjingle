@@ -194,13 +194,13 @@ class SrtpSession {
   static bool Init();
   void HandleEvent(const srtp_event_data_t* ev);
   static void HandleEventThunk(srtp_event_data_t* ev);
+  static std::list<SrtpSession*>* sessions();
 
   srtp_t session_;
   int rtp_auth_tag_len_;
   int rtcp_auth_tag_len_;
   talk_base::scoped_ptr<SrtpStat> srtp_stat_;
   static bool inited_;
-  static std::list<SrtpSession*> sessions_;
   int last_send_seq_num_;
   DISALLOW_COPY_AND_ASSIGN(SrtpSession);
 };

@@ -369,7 +369,6 @@ bool SrtpFilter::ParseKeyParams(const std::string& key_params,
 #ifdef HAVE_SRTP
 
 bool SrtpSession::inited_ = false;
-std::list<SrtpSession*> SrtpSession::sessions_;
 
 SrtpSession::SrtpSession()
     : session_(NULL),
@@ -377,12 +376,12 @@ SrtpSession::SrtpSession()
       rtcp_auth_tag_len_(0),
       srtp_stat_(new SrtpStat()),
       last_send_seq_num_(-1) {
-  sessions_.push_back(this);
+  sessions()->push_back(this);
   SignalSrtpError.repeat(srtp_stat_->SignalSrtpError);
 }
 
 SrtpSession::~SrtpSession() {
-  sessions_.erase(std::find(sessions_.begin(), sessions_.end(), this));
+  sessions()->erase(std::find(sessions()->begin(), sessions()->end(), this));
   if (session_) {
     srtp_dealloc(session_);
   }
@@ -582,13 +581,18 @@ void SrtpSession::HandleEvent(const srtp_event_data_t* ev) {
 }
 
 void SrtpSession::HandleEventThunk(srtp_event_data_t* ev) {
-  for (std::list<SrtpSession*>::iterator it = sessions_.begin();
-       it != sessions_.end(); ++it) {
+  for (std::list<SrtpSession*>::iterator it = sessions()->begin();
+       it != sessions()->end(); ++it) {
     if ((*it)->session_ == ev->session) {
       (*it)->HandleEvent(ev);
       break;
     }
   }
+}
+
+std::list<SrtpSession*>* SrtpSession::sessions() {
+  LIBJINGLE_DEFINE_STATIC_LOCAL(std::list<SrtpSession*>, sessions, ());
+  return &sessions;
 }
 
 #else   // !HAVE_SRTP

@@ -73,7 +73,8 @@ class Receiver;
 class Call;
 class SessionManagerTask;
 struct CallOptions;
-struct NamedSource;
+struct MediaStreams;
+struct StreamParams;
 }
 
 struct RosterItem {
@@ -201,12 +202,13 @@ class CallClient: public sigslot::has_slots<> {
                                 const std::string& mutee_nick,
                                 const buzz::XmlElement* stanza);
   void OnDevicesChange();
-  void OnMediaSourcesUpdate(cricket::Call* call,
+  void OnMediaStreamsUpdate(cricket::Call* call,
                             cricket::Session* session,
-                            const cricket::MediaSources& sources);
+                            const cricket::MediaStreams& added,
+                            const cricket::MediaStreams& removed);
   void OnSpeakerChanged(cricket::Call* call,
                         cricket::Session* session,
-                        const cricket::NamedSource& speaker_source);
+                        const cricket::StreamParams& speaker_stream);
   void OnRoomLookupResponse(buzz::MucRoomLookupTask* task,
                             const buzz::MucRoomInfo& room_info);
   void OnRoomLookupError(buzz::IqTask* task,

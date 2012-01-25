@@ -38,8 +38,7 @@
 
 // This class sets the relay and stun servers using XmppClient.
 // It enables the client to traverse Proxy and NAT.
-class AutoPortAllocator : public cricket::HttpPortAllocator,
-    public sigslot::has_slots<> {
+class AutoPortAllocator : public cricket::HttpPortAllocator {
  public:
   AutoPortAllocator(talk_base::NetworkManager* network_manager,
                     const std::string& user_agent)

@@ -108,6 +108,14 @@ class SocketAddress {
   // Returns the port part of this address.
   uint16 port() const;
 
+  // Returns the scope ID associated with this address. Scope IDs are a
+  // necessary addition to IPv6 link-local addresses, with different network
+  // interfaces having different scope-ids for their link-local addresses.
+  // IPv4 address do not have scope_ids and sockaddr_in structures do not have
+  // a field for them.
+  int scope_id() const {return scope_id_; }
+  void SetScopeID(int id) { scope_id_ = id; }
+
   // Returns the IP address (or hostname) in printable form.
   std::string IPAsString() const;
 
@@ -211,6 +219,7 @@ class SocketAddress {
   std::string hostname_;
   IPAddress ip_;
   uint16 port_;
+  int scope_id_;
   bool literal_;  // Indicates that 'hostname_' contains a literal IP string.
 };
 

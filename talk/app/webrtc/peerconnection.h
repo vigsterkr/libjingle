@@ -209,7 +209,7 @@ class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
   struct TurnConfiguration {
     TurnConfiguration(const std::string& address,
                       int port,
-                      const std::string& user_name,
+                      const std::string& username,
                       const std::string& password)
         : server(address, port),
           username(username),

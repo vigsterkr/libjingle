@@ -42,6 +42,9 @@ namespace cricket {
 #define WEBRTC_FUNC_CONST(method, args) \
   virtual int method args const
 
+#define WEBRTC_BOOL_FUNC(method, args) \
+  virtual bool method args
+
 #define WEBRTC_CHECK_CHANNEL(channel) \
   if (channels_.find(channel) == channels_.end()) return -1;
 

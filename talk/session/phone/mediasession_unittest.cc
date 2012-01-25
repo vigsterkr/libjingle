@@ -56,8 +56,9 @@ using cricket::StreamParamsVec;
 using cricket::ContentInfo;
 using cricket::CryptoParamsVec;
 using cricket::AudioContentDescription;
-using cricket::MediaContentDescription;
 using cricket::VideoContentDescription;
+using cricket::GetFirstAudioContentDescription;
+using cricket::GetFirstVideoContentDescription;
 using cricket::kAutoBandwidth;
 using cricket::AudioCodec;
 using cricket::VideoCodec;
@@ -163,29 +164,6 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
   }
 
  protected:
-  const MediaContentDescription*  GetMediaDescription(
-      const SessionDescription* sdesc,
-      const std::string& content_name) {
-    const ContentInfo* content = sdesc->GetContentByName(content_name);
-    if (content == NULL) {
-      return NULL;
-    }
-    return static_cast<const MediaContentDescription*>(
-        content->description);
-  }
-
-  const AudioContentDescription*  GetAudioDescription(
-      const SessionDescription* sdesc) {
-    return static_cast<const AudioContentDescription*>(
-        GetMediaDescription(sdesc, "audio"));
-  }
-
-  const VideoContentDescription*  GetVideoDescription(
-      const SessionDescription* sdesc) {
-    return static_cast<const VideoContentDescription*>(
-        GetMediaDescription(sdesc, "video"));
-  }
-
   MediaSessionDescriptionFactory f1_;
   MediaSessionDescriptionFactory f2_;
 };
@@ -342,56 +320,56 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswerRtcpMux) {
 
   offer.reset(f1_.CreateOffer(offer_opts, NULL));
   answer.reset(f2_.CreateAnswer(offer.get(), answer_opts, NULL));
-  ASSERT_TRUE(NULL != GetAudioDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetAudioDescription(answer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(answer.get()));
-  EXPECT_TRUE(GetAudioDescription(offer.get())->rtcp_mux());
-  EXPECT_TRUE(GetVideoDescription(offer.get())->rtcp_mux());
-  EXPECT_TRUE(GetAudioDescription(answer.get())->rtcp_mux());
-  EXPECT_TRUE(GetVideoDescription(answer.get())->rtcp_mux());
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(answer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(answer.get()));
+  EXPECT_TRUE(GetFirstAudioContentDescription(offer.get())->rtcp_mux());
+  EXPECT_TRUE(GetFirstVideoContentDescription(offer.get())->rtcp_mux());
+  EXPECT_TRUE(GetFirstAudioContentDescription(answer.get())->rtcp_mux());
+  EXPECT_TRUE(GetFirstVideoContentDescription(answer.get())->rtcp_mux());
 
   offer_opts.rtcp_mux_enabled = true;
   answer_opts.rtcp_mux_enabled = false;
 
   offer.reset(f1_.CreateOffer(offer_opts, NULL));
   answer.reset(f2_.CreateAnswer(offer.get(), answer_opts, NULL));
-  ASSERT_TRUE(NULL != GetAudioDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetAudioDescription(answer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(answer.get()));
-  EXPECT_TRUE(GetAudioDescription(offer.get())->rtcp_mux());
-  EXPECT_TRUE(GetVideoDescription(offer.get())->rtcp_mux());
-  EXPECT_FALSE(GetAudioDescription(answer.get())->rtcp_mux());
-  EXPECT_FALSE(GetVideoDescription(answer.get())->rtcp_mux());
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(answer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(answer.get()));
+  EXPECT_TRUE(GetFirstAudioContentDescription(offer.get())->rtcp_mux());
+  EXPECT_TRUE(GetFirstVideoContentDescription(offer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstAudioContentDescription(answer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstVideoContentDescription(answer.get())->rtcp_mux());
 
   offer_opts.rtcp_mux_enabled = false;
   answer_opts.rtcp_mux_enabled = true;
 
   offer.reset(f1_.CreateOffer(offer_opts, NULL));
   answer.reset(f2_.CreateAnswer(offer.get(), answer_opts, NULL));
-  ASSERT_TRUE(NULL != GetAudioDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetAudioDescription(answer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(answer.get()));
-  EXPECT_FALSE(GetAudioDescription(offer.get())->rtcp_mux());
-  EXPECT_FALSE(GetVideoDescription(offer.get())->rtcp_mux());
-  EXPECT_FALSE(GetAudioDescription(answer.get())->rtcp_mux());
-  EXPECT_FALSE(GetVideoDescription(answer.get())->rtcp_mux());
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(answer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(answer.get()));
+  EXPECT_FALSE(GetFirstAudioContentDescription(offer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstVideoContentDescription(offer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstAudioContentDescription(answer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstVideoContentDescription(answer.get())->rtcp_mux());
 
   offer_opts.rtcp_mux_enabled = false;
   answer_opts.rtcp_mux_enabled = false;
 
   offer.reset(f1_.CreateOffer(offer_opts, NULL));
   answer.reset(f2_.CreateAnswer(offer.get(), answer_opts, NULL));
-  ASSERT_TRUE(NULL != GetAudioDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(offer.get()));
-  ASSERT_TRUE(NULL != GetAudioDescription(answer.get()));
-  ASSERT_TRUE(NULL != GetVideoDescription(answer.get()));
-  EXPECT_FALSE(GetAudioDescription(offer.get())->rtcp_mux());
-  EXPECT_FALSE(GetVideoDescription(offer.get())->rtcp_mux());
-  EXPECT_FALSE(GetAudioDescription(answer.get())->rtcp_mux());
-  EXPECT_FALSE(GetVideoDescription(answer.get())->rtcp_mux());
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(offer.get()));
+  ASSERT_TRUE(NULL != GetFirstAudioContentDescription(answer.get()));
+  ASSERT_TRUE(NULL != GetFirstVideoContentDescription(answer.get()));
+  EXPECT_FALSE(GetFirstAudioContentDescription(offer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstVideoContentDescription(offer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstAudioContentDescription(answer.get())->rtcp_mux());
+  EXPECT_FALSE(GetFirstVideoContentDescription(answer.get())->rtcp_mux());
 }
 
 // Create an audio-only answer to a video offer.

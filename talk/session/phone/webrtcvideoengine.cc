@@ -49,9 +49,6 @@
 #include "talk/session/phone/webrtcvie.h"
 #include "talk/session/phone/webrtcvoe.h"
 
-// TODO Change video protection calls when WebRTC API has changed.
-#define WEBRTC_VIDEO_AVPF_NACK_ONLY
-
 namespace cricket {
 
 static const int kDefaultLogSeverity = talk_base::LS_WARNING;
@@ -272,10 +269,8 @@ class WebRtcVideoChannelInfo  {
 const WebRtcVideoEngine::VideoCodecPref
     WebRtcVideoEngine::kVideoCodecPrefs[] = {
     {kVp8PayloadName, 100, 0},
-#ifndef WEBRTC_VIDEO_AVPF_NACK_ONLY
     {kRedPayloadName, 101, 1},
     {kFecPayloadName, 102, 2},
-#endif
 };
 
 static const int64 kNsPerFrame = 33333333;  // 30fps
@@ -339,7 +334,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
   video_capturer_ = NULL;
   capture_started_ = false;
 
-  ApplyLogging();
+  ApplyLogging("");
   if (tracing_->SetTraceCallback(this) != 0) {
     LOG_RTCERR1(SetTraceCallback, this);
   }
@@ -366,6 +361,8 @@ WebRtcVideoEngine::~WebRtcVideoEngine() {
     Terminate();
   }
   tracing_->SetTraceCallback(NULL);
+  // Test to see if the media processor was deregistered properly.
+  ASSERT(SignalMediaFrame.is_empty());
 }
 
 bool WebRtcVideoEngine::Init() {
@@ -643,6 +640,18 @@ void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
     return;
   }
 
+  // TODO: This is the trigger point for Tx video processing.
+  // Once the capturer refactoring is done, we will move this into the
+  // capturer...it's not there right now because that image is in not in the
+  // I420 color space.
+  // The clients that subscribe will obtain meta info from the frame.
+  // When this trigger is switched over to capturer, need to pass in the real
+  // ssrc.
+  {
+    talk_base::CritScope cs(&signal_media_critical_);
+    SignalMediaFrame(kDummyVideoSsrc, &i420_frame);
+  }
+
   // Send I420 frame to the local renderer.
   if (local_renderer_) {
     if (local_renderer_w_ != static_cast<int>(i420_frame.GetWidth()) ||
@@ -666,8 +675,11 @@ const std::vector<VideoCodec>& WebRtcVideoEngine::codecs() const {
 }
 
 void WebRtcVideoEngine::SetLogging(int min_sev, const char* filter) {
-  log_level_ = min_sev;
-  ApplyLogging();
+  // if min_sev == -1, we keep the current log level.
+  if (min_sev >= 0) {
+    log_level_ = min_sev;
+  }
+  ApplyLogging(filter);
 }
 
 int WebRtcVideoEngine::GetLastEngineError() {
@@ -785,7 +797,7 @@ bool WebRtcVideoEngine::ConvertFromCricketVideoCodec(
   int ncodecs = vie_wrapper_->codec()->NumberOfCodecs();
   for (int i = 0; i < ncodecs; ++i) {
     if (vie_wrapper_->codec()->GetCodec(i, *out_codec) == 0 &&
-      in_codec.name == out_codec->plName) {
+        _stricmp(in_codec.name.c_str(), out_codec->plName) == 0) {
       found = true;
       break;
     }
@@ -846,7 +858,10 @@ bool WebRtcVideoEngine::EnableTimedRender() {
   return true;
 }
 
-void WebRtcVideoEngine::ApplyLogging() {
+// See https://sites.google.com/a/google.com/wavelet/
+//     Home/Magic-Flute--RTC-Engine-/Magic-Flute-Command-Line-Parameters
+// for all supported command line setttings.
+void WebRtcVideoEngine::ApplyLogging(const std::string& log_filter) {
   int filter = 0;
   switch (log_level_) {
     case talk_base::LS_VERBOSE: filter |= webrtc::kTraceAll;
@@ -856,6 +871,18 @@ void WebRtcVideoEngine::ApplyLogging() {
         webrtc::kTraceError | webrtc::kTraceCritical;
   }
   tracing_->SetTraceFilter(filter);
+
+  // Set WebRTC trace file.
+  std::vector<std::string> opts;
+  talk_base::tokenize(log_filter, ' ', '"', '"', &opts);
+  std::vector<std::string>::iterator tracefile =
+      std::find(opts.begin(), opts.end(), "tracefile");
+  if (tracefile != opts.end() && ++tracefile != opts.end()) {
+    // Write WebRTC debug output (at same loglevel) to file
+    if (tracing_->SetTraceFile(tracefile->c_str()) == -1) {
+      LOG_RTCERR1(SetTraceFile, *tracefile);
+    }
+  }
 }
 
 // Rebuilds the codec list to be only those that are less intensive
@@ -958,13 +985,17 @@ void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
   }
 }
 
-// TODO: stubs for now
 bool WebRtcVideoEngine::RegisterProcessor(
     VideoProcessor* video_processor) {
+  talk_base::CritScope cs(&signal_media_critical_);
+  SignalMediaFrame.connect(video_processor,
+                           &VideoProcessor::OnFrame);
   return true;
 }
 bool WebRtcVideoEngine::UnregisterProcessor(
     VideoProcessor* video_processor) {
+  talk_base::CritScope cs(&signal_media_critical_);
+  SignalMediaFrame.disconnect(video_processor);
   return true;
 }
 
@@ -1131,12 +1162,10 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
     return false;
   }
 
-#ifndef WEBRTC_VIDEO_AVPF_NACK_ONLY
-  // Configure FEC if enabled.
-  if (!SetNackFec(red_type, fec_type)) {
+  // Configure video protection.
+  if (!SetNackFec(vie_channel_, red_type, fec_type)) {
     return false;
   }
-#endif
 
   // Select the first matched codec.
   webrtc::VideoCodec& codec(send_codecs[0]);
@@ -1714,14 +1743,6 @@ bool WebRtcVideoMediaChannel::ConfigureChannel(int channel_id) {
                 channel_id, webrtc::kViEKeyFrameRequestPliRtcp);
     return false;
   }
-
-#ifdef WEBRTC_VIDEO_AVPF_NACK_ONLY
-  // Turn on NACK-only loss handling.
-  if (engine_->vie()->rtp()->SetNACKStatus(channel_id, true) != 0) {
-    LOG_RTCERR1(SetNACKStatus, channel_id);
-    return false;
-  }
-#endif
   return true;
 }
 
@@ -1753,10 +1774,14 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
     return false;
   }
 
-  // Turn on TMMBR-based BWE reporting.
-  // TODO: We should use REMB per default when it is implemented.
-  if (engine_->vie()->rtp()->SetTMMBRStatus(channel_id, true) != 0) {
-    LOG_RTCERR1(SetTMMBRStatus, channel_id);
+  // Turn on REMB-based BWE reporting.
+  // First parameter is channel id, second is if this channel should send REMB
+  // packets, last parameter is if it should report BWE using REMB.
+  // TODO: |send_remb| should be channel id so we can have several
+  // REMB groups.
+  bool send_remb = (remote_ssrc == 0);  // SSRC 0 is our default channel.
+  if (!engine_->vie()->rtp()->SetRembStatus(channel_id, send_remb, true)) {
+    LOG_RTCERR3(SetRembStatus, channel_id, send_remb, true);
     return false;
   }
 
@@ -1805,14 +1830,27 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
   return true;
 }
 
-bool WebRtcVideoMediaChannel::SetNackFec(int red_payload_type,
+bool WebRtcVideoMediaChannel::SetNackFec(int channel_id,
+                                         int red_payload_type,
                                          int fec_payload_type) {
-  bool enable = (red_payload_type != -1 && fec_payload_type != -1);
-  if (engine_->vie()->rtp()->SetHybridNACKFECStatus(
-          vie_channel_, enable, red_payload_type, fec_payload_type) != 0) {
-    LOG_RTCERR4(SetHybridNACKFECStatus,
-                vie_channel_, enable, red_payload_type, fec_payload_type);
-    return false;
+  // Enable hybrid NACK/FEC if negotiated and not in a conference, use only NACK
+  // otherwise.
+  bool enable = (red_payload_type != -1 && fec_payload_type != -1 &&
+      !(channel_options_ & OPT_CONFERENCE));
+  if (enable) {
+    if (engine_->vie()->rtp()->SetHybridNACKFECStatus(
+        channel_id, enable, red_payload_type, fec_payload_type) != 0) {
+      LOG_RTCERR4(SetHybridNACKFECStatus,
+                  channel_id, enable, red_payload_type, fec_payload_type);
+      return false;
+    }
+    LOG(LS_INFO) << "Hybrid NACK/FEC enabled for channel " << channel_id;
+  } else {
+    if (engine_->vie()->rtp()->SetNACKStatus(channel_id, true) != 0) {
+      LOG_RTCERR1(SetNACKStatus, channel_id);
+      return false;
+    }
+    LOG(LS_INFO) << "NACK enabled for channel " << channel_id;
   }
   return true;
 }
@@ -1842,10 +1880,25 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
 }
 
 bool WebRtcVideoMediaChannel::SetReceiveCodecs(int channel_id) {
+  int red_type = -1;
+  int fec_type = -1;
   for (std::vector<webrtc::VideoCodec>::iterator it = receive_codecs_.begin();
        it != receive_codecs_.end(); ++it) {
+    if (it->codecType == webrtc::kVideoCodecRED) {
+      red_type = it->plType;
+    } else if (it->codecType == webrtc::kVideoCodecULPFEC) {
+      fec_type = it->plType;
+    }
     if (engine()->vie()->codec()->SetReceiveCodec(channel_id, *it) != 0) {
       LOG_RTCERR2(SetReceiveCodec, channel_id, it->plName);
+      return false;
+    }
+  }
+
+  // Enable video protection. For a sending channel, this will be taken care of
+  // in SetSendCodecs.
+  if (channel_id != vie_channel_) {
+    if (!SetNackFec(channel_id, red_type, fec_type)) {
       return false;
     }
   }
