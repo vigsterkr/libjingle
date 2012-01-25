@@ -45,7 +45,7 @@
 
 namespace cricket {
 
-class StreamParams;
+struct StreamParams;
 
 // A collection of audio and video streams. Most of the methods are
 // merely for convenience. Many of these methods are keyed by ssrc,
