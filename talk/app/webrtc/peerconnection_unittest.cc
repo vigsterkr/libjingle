@@ -332,13 +332,8 @@ class P2PTestConductor : public testing::Test {
 
 // This test sets up a call between two parties. Both parties send static frames
 // to each other. Once the test is finished the number of sent frames is
-// compared to the number of recieved frames.
-// TODO - This unittest is failing when SRTP is enabled in 
-// PeerConnection. This is due to race between the media and signaling.
-// When media arrives before signal, VoiceEngine asserts when it fails
-// to decode encrypted RTP packets. Once VoiceEngine is fixed, enable 
-// this test case.
-TEST_F(P2PTestConductor, DISABLED_LocalP2PTest) {
+// compared to the number of received frames.
+TEST_F(P2PTestConductor, LocalP2PTest) {
   EXPECT_TRUE(StartSession());
   const int kMaxWaitForActivationMs = 5000;
   EXPECT_TRUE_WAIT(ActivationNotPending(), kMaxWaitForActivationMs);

@@ -271,7 +271,7 @@ RoapSession::ParseResult RoapSession::ValidateError(
   return kError;
 }
 
-const SessionDescription* RoapSession::ReleaseRemoteDescription() {
+SessionDescription* RoapSession::ReleaseRemoteDescription() {
   return remote_desc_.release();
 }
 

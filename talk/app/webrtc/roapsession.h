@@ -89,7 +89,7 @@ class RoapSession {
   ParseResult Parse(const std::string& msg);
   RoapErrorCode RemoteError();
   // Get remote SessionDescription. The ownership is transferred to the caller.
-  const SessionDescription* ReleaseRemoteDescription();
+  SessionDescription* ReleaseRemoteDescription();
   const std::vector<Candidate>& RemoteCandidates();
 
  private:
@@ -110,7 +110,7 @@ class RoapSession {
   std::string session_token_;
   std::string response_token_;
 
-  talk_base::scoped_ptr<const SessionDescription> remote_desc_;
+  talk_base::scoped_ptr<SessionDescription> remote_desc_;
   std::vector<Candidate> remote_candidates_;
 
   RoapErrorCode remote_error_;

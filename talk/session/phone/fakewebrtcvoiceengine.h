@@ -182,7 +182,7 @@ class FakeWebRtcVoiceEngine
   void TriggerProcessPacket(MediaProcessorDirection direction) {
     webrtc::ProcessingTypes pt =
         (direction == cricket::MPD_TX) ?
-            webrtc::kRecordingPerChannel : webrtc::kPlaybackAllChannelsMixed;
+            webrtc::kRecordingPerChannel : webrtc::kPlaybackPerChannel;
     if (media_processor_ != NULL) {
       media_processor_->Process(0,
                                 pt,

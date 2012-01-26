@@ -76,13 +76,19 @@ static bool VerifyAnswer(const cricket::SessionDescription* answer_desc) {
 }
 
 // Fills a MediaSessionOptions struct with the MediaTracks we want to sent given
-// the local MediaStreams.
+// the local MediaStreams. |local_streams| can be null if there are no tracks to
+// send.
 static void InitMediaSessionOptions(
     cricket::MediaSessionOptions* options,
     StreamCollectionInterface* local_streams) {
+  if (!VERIFY(options != NULL))
+      return;
   // In order to be able to receive video,
   // the has_video should always be true even if there are no video tracks.
   options->has_video = true;
+  if (local_streams == NULL)
+    return;
+
   for (size_t i = 0; i < local_streams->count(); ++i) {
     MediaStreamInterface* stream = local_streams->at(i);
 
@@ -163,13 +169,6 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
       queued_local_streams_.clear();
       queued_local_streams_.push_back(local_streams);
 
-      // If we are still Initializing we need to wait before we can handle
-      // the offer. Queue it and handle it when the state changes.
-      if (state_ == kInitializing) {
-        received_pre_offer_ = true;
-        break;
-      }
-
       if (state_ == kWaitingForAnswer) {
         // Message received out of order or Glare occurred and the decision was
         // to use the incoming offer.
@@ -177,7 +176,26 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
         // Be nice and handle this offer instead of the pending offer.
         signaling_thread_->Clear(this, MSG_SEND_QUEUED_OFFER);
       }
-      // Post a task to handle the answer.
+
+      // Provide the remote session description and the remote candidates from
+      // the parsed ROAP message to the |provider_|.
+      // The session description ownership is transferred from |roap_session_|
+      // to |provider_|.
+      provider_->SetRemoteDescription(roap_session_.ReleaseRemoteDescription(),
+                                      cricket::CA_OFFER);
+      provider_->SetRemoteCandidates(roap_session_.RemoteCandidates());
+      // Update the known remote MediaStreams.
+      UpdateRemoteStreams(provider_->remote_description());
+
+      // If we are still Initializing we need to wait until we have our local
+      // candidates before we can handle the offer. Queue it and handle it when
+      // the state changes.
+      if (state_ == kInitializing) {
+        received_pre_offer_ = true;
+        break;
+      }
+
+      // Post a task to generate the answer.
       signaling_thread_->Post(this, MSG_GENERATE_ANSWER);
       ChangeState(kWaitingForOK);
       break;
@@ -193,27 +211,29 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
         return;
       }
 
-      // Hand over the remote session description and the remote candidates from
-      // the parsed ROAP message to the provider_.
-      // The session description ownership is transferred from roap_session_ to
-      // the provider_;
-      const cricket::SessionDescription* remote_desc =
-          provider_->SetRemoteSessionDescription(
-              roap_session_.ReleaseRemoteDescription(),
-              roap_session_.RemoteCandidates());
-      // Let the provider now that the negotiation is done and both local and
-      // remote session description is now valid.
-      provider_->NegotiationDone();
+      talk_base::scoped_ptr<cricket::SessionDescription> remote_desc(
+          roap_session_.ReleaseRemoteDescription());
 
-      // Update the list of known remote MediaStreams.
-      UpdateRemoteStreams(remote_desc);
       // Pop the first item of queued StreamCollections containing local
       // MediaStreams that just have been negotiated.
       scoped_refptr<StreamCollectionInterface> streams(
           queued_local_streams_.front());
       queued_local_streams_.pop_front();
       // Update the state of the local MediaStreams.
-      UpdateSendingLocalStreams(remote_desc, streams);
+      UpdateSendingLocalStreams(remote_desc.get(), streams);
+
+      // Hand the ownership of the local session description to |provider_|.
+      provider_->SetLocalDescription(local_desc_.release(), cricket::CA_OFFER);
+
+      // Provide the remote session description and the remote candidates from
+      // the parsed ROAP message to the |provider_|.
+      // The session description ownership is transferred from |roap_session_|
+      // to |provider_|.
+      provider_->SetRemoteDescription(remote_desc.release(),
+                                      cricket::CA_ANSWER);
+      provider_->SetRemoteCandidates(roap_session_.RemoteCandidates());
+      // Update the list of known remote MediaStreams.
+      UpdateRemoteStreams(provider_->remote_description());
 
       // Let the remote peer know we have received the answer.
       SignalNewPeerConnectionMessage(roap_session_.CreateOk());
@@ -228,14 +248,15 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
     }
     case RoapSession::kOk: {
       if (state_ == kWaitingForOK) {
-        // Let the provider know the negotiation is done.
-        provider_->NegotiationDone();
-
         scoped_refptr<StreamCollectionInterface> streams(
             queued_local_streams_.front());
         queued_local_streams_.pop_front();
         // Update the state of the local streams.
-        UpdateSendingLocalStreams(local_desc_, streams);
+        UpdateSendingLocalStreams(local_desc_.get(), streams);
+
+        // Hand over the ownership of the local description to the provider.
+        provider_->SetLocalDescription(local_desc_.release(),
+                                       cricket::CA_ANSWER);
         ChangeState(kIdle);
         // Check if we have an updated offer waiting in the queue.
         if (!queued_local_streams_.empty())
@@ -328,10 +349,8 @@ void PeerConnectionSignaling::CreateOffer_s() {
   cricket::MediaSessionOptions options;
   InitMediaSessionOptions(&options, local_streams);
 
-  const cricket::SessionDescription* local_desc =
-      provider_->ProvideOffer(options);
-
-  SignalNewPeerConnectionMessage(roap_session_.CreateOffer(local_desc,
+  local_desc_.reset(provider_->CreateOffer(options));
+  SignalNewPeerConnectionMessage(roap_session_.CreateOffer(local_desc_.get(),
                                                            candidates_));
 }
 
@@ -339,19 +358,22 @@ void PeerConnectionSignaling::DoShutDown() {
   ChangeState(kShutingDown);
   signaling_thread_->Clear(this);  // Don't send queued offers or answers.
   queued_local_streams_.clear();
-  provider_->SetRemoteSessionDescription(NULL, cricket::Candidates());
-  provider_->NegotiationDone();
+  cricket::MediaSessionOptions options;
+  InitMediaSessionOptions(&options, NULL);
+
+  // Create new empty session descriptions without StreamParams.
+  // By applying these descriptions we don't send or receive any streams.
+  const SessionDescription* local_desc = provider_->CreateOffer(options);
+  SessionDescription* remote_desc = provider_->CreateAnswer(local_desc,
+                                                            options);
+
+  provider_->SetRemoteDescription(remote_desc, cricket::CA_OFFER);
+  provider_->SetLocalDescription(local_desc, cricket::CA_ANSWER);
+
   UpdateRemoteStreams(NULL);
 }
 
 void PeerConnectionSignaling::CreateAnswer_s() {
-  // Let the provider know about the remote offer.
-  // The provider takes ownership and return a pointer for us to use.
-  const cricket::SessionDescription* remote_desc =
-      provider_->SetRemoteSessionDescription(
-          roap_session_.ReleaseRemoteDescription(),
-          roap_session_.RemoteCandidates());
-
   scoped_refptr<StreamCollectionInterface> streams(
       queued_local_streams_.back());
   // Clean up all queued collections of local streams except the last one.
@@ -364,16 +386,14 @@ void PeerConnectionSignaling::CreateAnswer_s() {
   cricket::MediaSessionOptions options;
   InitMediaSessionOptions(&options, streams);
   // Create an local session description based on this.
-  local_desc_ = provider_->ProvideAnswer(options);
-
-  if (!VerifyAnswer(local_desc_)) {
+  local_desc_.reset(provider_->CreateAnswer(provider_->remote_description(),
+                                            options));
+  if (!VerifyAnswer(local_desc_.get())) {
     SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
     return;
   }
 
-  UpdateRemoteStreams(remote_desc);
-  ChangeState(kWaitingForOK);
-  SignalNewPeerConnectionMessage(roap_session_.CreateAnswer(local_desc_,
+  SignalNewPeerConnectionMessage(roap_session_.CreateAnswer(local_desc_.get(),
                                                             candidates_));
 }
 

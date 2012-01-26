@@ -940,13 +940,14 @@ bool WebRtcVoiceEngine::FindChannelNumFromSsrc(
       it != channels_.end(); ++it) {
     ASSERT(*it != NULL);
     uint32 local_ssrc;
-    if (voe()->rtp()->GetLocalSSRC((*it)->voe_channel(), local_ssrc) != -1) {
-      if (ssrc == local_ssrc) {
-        *channel_num = (*it)->voe_channel();
-      }
-    }
-    if (*channel_num == -1 && (direction & MPD_RX) != 0) {
+    if ((direction & MPD_RX) != 0) {
       *channel_num = (*it)->GetChannelNum(ssrc);
+    } else {
+      if (voe()->rtp()->GetLocalSSRC((*it)->voe_channel(), local_ssrc) != -1) {
+        if (ssrc == local_ssrc) {
+          *channel_num = (*it)->voe_channel();
+        }
+      }
     }
     if (*channel_num != -1) {
       return true;
@@ -1079,7 +1080,7 @@ bool WebRtcVoiceEngine::RegisterProcessor(
   talk_base::CritScope cs(&signal_media_critical_);
   webrtc::ProcessingTypes processing_type;
   if (direction == MPD_RX) {
-    processing_type = webrtc::kPlaybackAllChannelsMixed;
+    processing_type = webrtc::kPlaybackPerChannel;
     if (SignalRxMediaFrame.is_empty()) {
       register_with_webrtc = true;
     }
@@ -1134,13 +1135,13 @@ bool WebRtcVoiceEngine::UnregisterProcessor(
     SignalRxMediaFrame.disconnect(voice_processor);
     if (SignalRxMediaFrame.is_empty()) {
       if (voe()->media()->DeRegisterExternalMediaProcessing(channel_id,
-          webrtc::kPlaybackAllChannelsMixed) != -1) {
+          webrtc::kPlaybackPerChannel) != -1) {
         LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
                      << channel_id;
       } else {
         LOG_RTCERR2(DeRegisterExternalMediaProcessing,
                     channel_id,
-                    webrtc::kPlaybackAllChannelsMixed);
+                    webrtc::kPlaybackPerChannel);
         success = false;
       }
     }
@@ -1176,7 +1177,7 @@ void WebRtcVoiceEngine::Process(const int channel,
   if (FindChannelAndSsrc(channel, &media_channel, &ssrc)) {
     talk_base::CritScope cs(&signal_media_critical_);
     AudioFrame frame(audio10ms, length, sampling_freq, is_stereo);
-    if (type == webrtc::kPlaybackAllChannelsMixed) {
+    if (type == webrtc::kPlaybackPerChannel) {
       SignalRxMediaFrame(ssrc, &frame);
     } else if (type == webrtc::kRecordingPerChannel) {
       SignalTxMediaFrame(ssrc, &frame);
@@ -1192,6 +1193,7 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
     : WebRtcMediaChannel<VoiceMediaChannel, WebRtcVoiceEngine>(
           engine,
           engine->voe()->base()->CreateChannel()),
+      recv_codecs_set_(false),
       channel_options_(0),
       agc_adjusted_(false),
       dtmf_allowed_(false),
@@ -1272,12 +1274,21 @@ bool WebRtcVoiceMediaChannel::SetRecvCodecs(
         LOG_RTCERR2(SetRecPayloadType, voe_channel(), ToString(voe_codec));
         ret = false;
       }
+      // Set the receive codecs on all receiving channels.
+      for (ChannelMap::iterator it = mux_channels_.begin();
+           it != mux_channels_.end() && ret; ++it) {
+        if (engine()->voe()->codec()->SetRecPayloadType(
+            it->second, voe_codec) == -1) {
+          LOG_RTCERR2(SetRecPayloadType, it->second, ToString(voe_codec));
+          ret = false;
+        }
+      }
     } else {
       LOG(LS_WARNING) << "Unknown codec " << ToString(*it);
       ret = false;
     }
   }
-
+  recv_codecs_set_ = ret;
   return ret;
 }
 
@@ -1652,17 +1663,19 @@ bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
 
   // Use the same recv payload types as our default channel.
   ResetRecvCodecs(channel);
-  int ncodecs = engine()->voe()->codec()->NumOfCodecs();
-  for (int i = 0; i < ncodecs; ++i) {
-    webrtc::CodecInst voe_codec;
-    if (engine()->voe()->codec()->GetCodec(i, voe_codec) != -1) {
-      voe_codec.rate = 0;  // Needed to make GetRecPayloadType work for ISAC
-      if (engine()->voe()->codec()->GetRecPayloadType(
-          voe_channel(), voe_codec) != -1) {
-        if (engine()->voe()->codec()->SetRecPayloadType(
-            channel, voe_codec) == -1) {
-          LOG_RTCERR2(SetRecPayloadType, channel, ToString(voe_codec));
-          return false;
+  if (recv_codecs_set_) {
+    int ncodecs = engine()->voe()->codec()->NumOfCodecs();
+    for (int i = 0; i < ncodecs; ++i) {
+      webrtc::CodecInst voe_codec;
+      if (engine()->voe()->codec()->GetCodec(i, voe_codec) != -1) {
+        voe_codec.rate = 0;  // Needed to make GetRecPayloadType work for ISAC
+        if (engine()->voe()->codec()->GetRecPayloadType(
+            voe_channel(), voe_codec) != -1) {
+          if (engine()->voe()->codec()->SetRecPayloadType(
+              channel, voe_codec) == -1) {
+            LOG_RTCERR2(SetRecPayloadType, channel, ToString(voe_codec));
+            return false;
+          }
         }
       }
     }

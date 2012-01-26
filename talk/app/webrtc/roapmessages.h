@@ -103,7 +103,7 @@ class RoapAnswer : public RoapMessageBase {
   // Get remote SessionDescription if the session description has been parsed
   // and the ownership is transferred to the caller.
   // NULL otherwise.
-  const cricket::SessionDescription* ReleaseSessionDescription() {
+  cricket::SessionDescription* ReleaseSessionDescription() {
     return parsed_desc_.release();
   }
   const std::vector<cricket::Candidate>& candidates() const {
@@ -142,7 +142,7 @@ class RoapOffer : public RoapMessageBase {
   // Get remote SessionDescription if the session description has been parsed
   // and the ownership is transferred to the caller.
   // NULL otherwise.
-  const cricket::SessionDescription* ReleaseSessionDescription() {
+  cricket::SessionDescription* ReleaseSessionDescription() {
     return parsed_desc_.release();
   }
   const std::vector<cricket::Candidate>&  candidates() { return candidates_; }

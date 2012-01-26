@@ -83,16 +83,24 @@ class WebRtcSession : public cricket::BaseSession,
   // TODO - It may be necessary to supply error code as well.
   sigslot::signal0<> SignalError;
 
- protected:
   // Implements SessionDescriptionProvider
-  virtual const cricket::SessionDescription* ProvideOffer(
+  virtual cricket::SessionDescription* CreateOffer(
       const cricket::MediaSessionOptions& options);
-  virtual const cricket::SessionDescription* SetRemoteSessionDescription(
-      const cricket::SessionDescription* remote_offer,
+  virtual cricket::SessionDescription* CreateAnswer(
+      const cricket::SessionDescription* offer,
+      const cricket::MediaSessionOptions& options);
+  virtual void SetLocalDescription(const cricket::SessionDescription* desc,
+                                   cricket::ContentAction type);
+  virtual void SetRemoteDescription(cricket::SessionDescription* desc,
+                                    cricket::ContentAction type);
+  virtual void SetRemoteCandidates(
       const std::vector<cricket::Candidate>& remote_candidates);
-  virtual const cricket::SessionDescription* ProvideAnswer(
-      const cricket::MediaSessionOptions& options);
-  virtual void NegotiationDone();
+  virtual const cricket::SessionDescription* local_description() const {
+    return cricket::BaseSession::local_description();
+  }
+  virtual const cricket::SessionDescription* remote_description() const {
+    return cricket::BaseSession::remote_description();
+  }
 
  private:
   // Implements MediaProviderInterface.
@@ -115,12 +123,12 @@ class WebRtcSession : public cricket::BaseSession,
 
   // Creates channels for voice and video.
   bool CreateChannels();
+  void EnableChannels();
   virtual void OnMessage(talk_base::Message* msg);
   void InsertTransportCandidates(const cricket::Candidates& candidates);
   void Terminate();
   // Get candidate from the local candidates list by the name.
   bool CheckCandidate(const std::string& name);
-  void SetRemoteCandidates(const cricket::Candidates& candidates);
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;

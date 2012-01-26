@@ -154,7 +154,7 @@ class WebRtcSdpTest : public testing::Test {
     video->AddStream(video_stream3);
     video->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_80",
         "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32", ""));
-    video->AddCodec(VideoCodec(120, "VP8", 352, 288, 30, 0));
+    video->AddCodec(VideoCodec(120, "VP8", 640, 480, 30, 0));
     desc_.AddContent(cricket::CN_VIDEO, cricket::NS_JINGLE_RTP,
                      video.release());
 
@@ -224,6 +224,9 @@ class WebRtcSdpTest : public testing::Test {
       const VideoCodec c1 = vcd1->codecs().at(i);
       const VideoCodec c2 = vcd2->codecs().at(i);
       EXPECT_TRUE(c1.Matches(c2));
+      EXPECT_EQ(c1.width, c2.width);
+      EXPECT_EQ(c1.height, c2.height);
+      EXPECT_EQ(c1.framerate, c2.framerate);
     }
 
     // streams

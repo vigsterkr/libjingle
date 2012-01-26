@@ -136,40 +136,64 @@ class MockSessionDescriptionProvider : public SessionDescriptionProvider {
       cricket::ChannelManager* channel_manager)
       : update_session_description_counter_(0),
         session_description_factory_(
-          new cricket::MediaSessionDescriptionFactory(channel_manager)) {
+            new cricket::MediaSessionDescriptionFactory(channel_manager)),
+            offer_set_(false) {
   }
-  virtual const cricket::SessionDescription* ProvideOffer(
+  virtual cricket::SessionDescription* CreateOffer(
       const cricket::MediaSessionOptions& options) {
-    local_desc_.reset(session_description_factory_->CreateOffer(
-        options, local_desc_.get()));
+    return session_description_factory_->CreateOffer(options,
+                                                     local_desc_.get());
+  }
+  virtual cricket::SessionDescription* CreateAnswer(
+      const cricket::SessionDescription*offer,
+      const cricket::MediaSessionOptions& options) {
+    return session_description_factory_->CreateAnswer(offer, options,
+                                                      local_desc_.get());
+  }
+  virtual void SetLocalDescription(const cricket::SessionDescription* desc,
+                                   cricket::ContentAction type) {
+    local_desc_.reset(desc);
+    UpdateNegotiationState(type);
+  }
+  virtual void SetRemoteDescription(
+      cricket::SessionDescription* remote_offer,
+      cricket::ContentAction type) {
+    remote_desc_.reset(remote_offer);
+    UpdateNegotiationState(type);
+  }
+  virtual const cricket::SessionDescription* local_description() const {
     return local_desc_.get();
   }
-
-  virtual const cricket::SessionDescription* SetRemoteSessionDescription(
-      const cricket::SessionDescription* remote_offer,
-      const cricket::Candidates& remote_candidates) {
-    remote_desc_.reset(remote_offer);
+  virtual const cricket::SessionDescription* remote_description() const {
     return remote_desc_.get();
   }
-
-  virtual const cricket::SessionDescription* ProvideAnswer(
-      const cricket::MediaSessionOptions& options) {
-    local_desc_.reset(session_description_factory_->CreateAnswer(
-        remote_desc_.get(), options, local_desc_.get()));
-    return local_desc_.get();
+  virtual void SetRemoteCandidates(
+      const std::vector<cricket::Candidate>& remote_candidates) {
   }
 
-  virtual void NegotiationDone() {
-    ++update_session_description_counter_;
-  }
-
+  // |update_session_description_counter_| is the number of successful
+  // negotiations / re-negotiations.
   size_t update_session_description_counter_;
 
  protected:
+  void UpdateNegotiationState(cricket::ContentAction type) {
+    if (type  == cricket::CA_ANSWER && offer_set_) {
+      // We have received and offer and now we receive an answer.
+      // Negotiation is done. Update the counter to indicate this.
+      ++update_session_description_counter_;
+      offer_set_ = false;
+    } else {
+      // Received an offer when expecting an answer.
+      EXPECT_FALSE(offer_set_);
+      offer_set_ = true;
+    }
+  }
+
   talk_base::scoped_ptr<cricket::MediaSessionDescriptionFactory>
       session_description_factory_;
   talk_base::scoped_ptr<const cricket::SessionDescription> local_desc_;
   talk_base::scoped_ptr<const cricket::SessionDescription> remote_desc_;
+  bool offer_set_;
 };
 
 // PeerConnectionSignalingTest create two PeerConnectionSignaling instances

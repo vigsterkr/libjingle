@@ -57,6 +57,60 @@ static const size_t kAllowedCandidates = 4;
 static const char kRtpVideoChannelStr[] = "video_rtp";
 static const char kRtcpVideoChannelStr[] = "video_rtcp";
 
+// Constants for setting the default encoder size.
+// TODO: Implement proper negotiation of video resolution.
+static const int kDefaultVideoCodecId = 100;
+static const int kDefaultVideoCodecFramerate = 30;
+static const char kDefaultVideoCodecName[] = "VP8";
+static const int kDefaultVideoCodecWidth = 640;
+static const int kDefaultVideoCodecHeight = 480;
+
+// MediaSessionDescriptionFactory always creates one StreamParams for
+// legacy reasons even if options don't contain any streams.
+// We need to remove it in that case since here options contains all streams
+// we want to send.
+// TODO: This is placed in the wrong file. Can we solve this problem by
+// adding a method MediaSessionDescriptionFactory::set_add_legacy_streams(false)
+// to prevent it from creating legacy streams.
+static void RemoveLegacyStreams(const cricket::MediaSessionOptions& options,
+                                cricket::SessionDescription* description) {
+  bool found_audio_stream = false;
+  bool found_video_stream = false;
+  for (cricket::MediaSessionOptions::Streams::const_iterator it =
+      options.streams.begin();
+       it != options.streams.end(); ++it) {
+    if (it->type == cricket::MEDIA_TYPE_AUDIO)
+      found_audio_stream = true;
+
+    if (it->type == cricket::MEDIA_TYPE_VIDEO)
+      found_video_stream = true;
+  }
+  if (found_audio_stream == false) {
+    const cricket::ContentInfo* audio_info =
+        cricket::GetFirstAudioContent(description);
+      if (audio_info) {
+        const cricket::MediaContentDescription* const_media_desc =
+            static_cast<const cricket::MediaContentDescription*>(
+            audio_info->description);
+        cricket::MediaContentDescription* media_desc =
+            const_cast<cricket::MediaContentDescription*> (const_media_desc);
+        media_desc->mutable_streams().clear();
+      }
+  }
+  if (found_video_stream == false) {
+    const cricket::ContentInfo* video_info =
+        cricket::GetFirstVideoContent(description);
+      if (video_info) {
+        const cricket::MediaContentDescription* const_media_desc =
+            static_cast<const cricket::MediaContentDescription*>(
+                video_info->description);
+        cricket::MediaContentDescription* media_desc =
+               const_cast<cricket::MediaContentDescription*> (const_media_desc);
+        media_desc->mutable_streams().clear();
+      }
+  }
+}
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
@@ -76,6 +130,13 @@ WebRtcSession::~WebRtcSession() {
 bool WebRtcSession::Initialize() {
   // By default SRTP-SDES is enabled in WebRtc.
   set_secure_policy(cricket::SEC_REQUIRED);
+
+  const cricket::VideoCodec default_codec(kDefaultVideoCodecId,
+      kDefaultVideoCodecName, kDefaultVideoCodecWidth, kDefaultVideoCodecHeight,
+      kDefaultVideoCodecFramerate, 0);
+  channel_manager_->SetDefaultVideoEncoderConfig(
+      cricket::VideoEncoderConfig(default_codec));
+
   return CreateChannels();
 }
 
@@ -116,52 +177,13 @@ bool WebRtcSession::CreateChannels() {
   return true;
 }
 
-void WebRtcSession::SetRemoteCandidates(
-    const cricket::Candidates& candidates) {
-  // First partition the candidates for the proxies. During creation of channels
-  // we created CN_AUDIO (audio) and CN_VIDEO (video) proxies.
-  cricket::Candidates audio_candidates;
-  cricket::Candidates video_candidates;
-  for (cricket::Candidates::const_iterator citer = candidates.begin();
-       citer != candidates.end(); ++citer) {
-    if (((*citer).name().compare(kRtpVideoChannelStr) == 0) ||
-        ((*citer).name().compare(kRtcpVideoChannelStr)) == 0) {
-      // Candidate names for video rtp and rtcp channel
-      video_candidates.push_back(*citer);
-    } else {
-      // Candidates for audio rtp and rtcp channel
-      // Channel name will be "rtp" and "rtcp"
-      audio_candidates.push_back(*citer);
-    }
-  }
+// Enabling voice and video channel.
+void WebRtcSession::EnableChannels() {
+  if (!voice_channel_->enabled())
+    voice_channel_->Enable(true);
 
-  if (!audio_candidates.empty()) {
-    cricket::TransportProxy* audio_proxy = GetTransportProxy(cricket::CN_AUDIO);
-    if (audio_proxy) {
-      // CompleteNegotiation will set actual impl's in Proxy.
-      if (!audio_proxy->negotiated())
-        audio_proxy->CompleteNegotiation();
-      // TODO - Add a interface to TransportProxy to accept
-      // remote candidate list.
-      audio_proxy->impl()->OnRemoteCandidates(audio_candidates);
-    } else {
-      LOG(LS_INFO) << "No audio TransportProxy exists";
-    }
-  }
-
-  if (!video_candidates.empty()) {
-    cricket::TransportProxy* video_proxy = GetTransportProxy(cricket::CN_VIDEO);
-    if (video_proxy) {
-      // CompleteNegotiation will set actual impl's in Proxy.
-      if (!video_proxy->negotiated())
-        video_proxy->CompleteNegotiation();
-      // TODO - Add a interface to TransportProxy to accept
-      // remote candidate list.
-      video_proxy->impl()->OnRemoteCandidates(video_candidates);
-    } else {
-      LOG(LS_INFO) << "No video TransportProxy exists";
-    }
-  }
+  if (!video_channel_->enabled())
+    video_channel_->Enable(true);
 }
 
 void WebRtcSession::OnTransportRequestSignaling(
@@ -269,19 +291,34 @@ void WebRtcSession::SetLocalRenderer(const std::string& name,
                                      cricket::VideoRenderer* renderer) {
   ASSERT(signaling_thread()->IsCurrent());
   // TODO: Fix SetLocalRenderer.
-  //video_channel_->SetLocalRenderer(0, renderer);
+  // video_channel_->SetLocalRenderer(0, renderer);
 }
 
 void WebRtcSession::SetRemoteRenderer(const std::string& name,
                                       cricket::VideoRenderer* renderer) {
   ASSERT(signaling_thread()->IsCurrent());
 
-  // TODO: Only the ssrc = 0 is supported at the moment.
-  // Only one channel.
-  video_channel_->SetRenderer(0, renderer);
+  const cricket::ContentInfo* video_info =
+      cricket::GetFirstVideoContent(remote_description());
+  if (!video_info) {
+    LOG(LS_ERROR) << "Video not received in this call";
+  }
+
+  const cricket::MediaContentDescription* video_content =
+      static_cast<const cricket::MediaContentDescription*>(
+          video_info->description);
+  cricket::StreamParams stream;
+  if (cricket::GetStreamByNickAndName(video_content->streams(), "", name,
+                                      &stream)) {
+    video_channel_->SetRenderer(stream.first_ssrc(), renderer);
+  } else {
+    // Allow that |stream| does not exist if renderer is null but assert
+    // otherwise.
+    VERIFY(renderer == NULL);
+  }
 }
 
-const cricket::SessionDescription* WebRtcSession::ProvideOffer(
+cricket::SessionDescription* WebRtcSession::CreateOffer(
     const cricket::MediaSessionOptions& options) {
   if (!options.has_video) {
     LOG(LS_WARNING) << "To receive video, has_video flag must be set to true";
@@ -290,65 +327,119 @@ const cricket::SessionDescription* WebRtcSession::ProvideOffer(
 
   cricket::SessionDescription* offer(
       session_desc_factory_.CreateOffer(options, local_description()));
-  set_local_description(offer);
+
+  // MediaSessionDescriptionFactory always creates one StreamParams for
+  // legacy reasons even if options don't contain any streams.
+  // We need to remove it in that case since here options contains all streams
+  // we want to send.
+  RemoveLegacyStreams(options, offer);
   return offer;
 }
 
-const cricket::SessionDescription* WebRtcSession::SetRemoteSessionDescription(
-    const cricket::SessionDescription* remote_offer,
-    const std::vector<cricket::Candidate>& remote_candidates) {
-  set_remote_description(
-      const_cast<cricket::SessionDescription*>(remote_offer));
-  SetRemoteCandidates(remote_candidates);
-  return remote_offer;
-}
-
-const cricket::SessionDescription* WebRtcSession::ProvideAnswer(
+cricket::SessionDescription* WebRtcSession::CreateAnswer(
+    const cricket::SessionDescription* offer,
     const cricket::MediaSessionOptions& options) {
   cricket::SessionDescription* answer(
-      session_desc_factory_.CreateAnswer(remote_description(), options,
+      session_desc_factory_.CreateAnswer(offer, options,
                                          local_description()));
-  set_local_description(answer);
+  // MediaSessionDescriptionFactory always creates one StreamParams for
+  // legacy reasons even if options don't contain any streams.
+  // We need to remove it in that case since here options contains all streams
+  // we want to send.
+  RemoveLegacyStreams(options, answer);
   return answer;
 }
 
-void WebRtcSession::NegotiationDone() {
-  // SetState of session is called after session receives both local and
-  // remote descriptions. State transition will happen only when session
-  // is in INIT state.
-  if (state() == STATE_INIT) {
+void WebRtcSession::SetLocalDescription(const cricket::SessionDescription* desc,
+                                        cricket::ContentAction type) {
+  if (!VERIFY((type == cricket::CA_ANSWER &&
+               state() == STATE_RECEIVEDINITIATE) ||
+              (type == cricket::CA_OFFER &&
+               (state() != STATE_RECEIVEDINITIATE &&
+                state() != STATE_SENTINITIATE)))) {
+    LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
+                  << "action: " << type << " state: " << state();
+    return;
+  }
+
+  set_local_description(desc);
+  if (type == cricket::CA_ANSWER) {
+    EnableChannels();
+    SetState(STATE_SENTACCEPT);
+  } else {
     SetState(STATE_SENTINITIATE);
+  }
+}
+
+void WebRtcSession::SetRemoteDescription(cricket::SessionDescription* desc,
+                                         cricket::ContentAction type) {
+  if (!VERIFY((type == cricket::CA_ANSWER &&
+               state() == STATE_SENTINITIATE) ||
+              (type == cricket::CA_OFFER &&
+               (state() != STATE_RECEIVEDINITIATE &&
+                state() != STATE_SENTINITIATE)))) {
+    LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
+                  << "action: " << type << " state: " << state();
+    return;
+  }
+  set_remote_description(desc);
+
+  if (type  == cricket::CA_ANSWER) {
+    EnableChannels();
     SetState(STATE_RECEIVEDACCEPT);
+  } else {
+    SetState(STATE_RECEIVEDINITIATE);
+  }
+}
 
-    // Enabling voice and video channel.
-    voice_channel_->Enable(true);
-    video_channel_->Enable(true);
+void WebRtcSession::SetRemoteCandidates(
+    const cricket::Candidates& candidates) {
+  // First partition the candidates for the proxies. During creation of channels
+  // we created CN_AUDIO (audio) and CN_VIDEO (video) proxies.
+  cricket::Candidates audio_candidates;
+  cricket::Candidates video_candidates;
+  for (cricket::Candidates::const_iterator citer = candidates.begin();
+       citer != candidates.end(); ++citer) {
+    if (((*citer).name().compare(kRtpVideoChannelStr) == 0) ||
+        ((*citer).name().compare(kRtcpVideoChannelStr)) == 0) {
+      // Candidate names for video rtp and rtcp channel
+      video_candidates.push_back(*citer);
+    } else {
+      // Candidates for audio rtp and rtcp channel
+      // Channel name will be "rtp" and "rtcp"
+      audio_candidates.push_back(*citer);
+    }
   }
 
-  const cricket::ContentInfo* audio_info =
-      cricket::GetFirstAudioContent(local_description());
-  if (audio_info) {
-    const cricket::MediaContentDescription* audio_content =
-        static_cast<const cricket::MediaContentDescription*>(
-            audio_info->description);
-    // Since channels are currently not supporting multiple send streams,
-    // we can remove stream from a session by muting it.
-    // TODO - Change needed when multiple send streams support
-    // is available.
-    voice_channel_->Mute(audio_content->streams().size() == 0);
+  // TODO: Justins comment:This is bad encapsulation, suggest we add a
+  // helper to BaseSession to allow us to
+  // pass in candidates without touching the transport proxies.
+  if (!audio_candidates.empty()) {
+    cricket::TransportProxy* audio_proxy = GetTransportProxy(cricket::CN_AUDIO);
+    if (audio_proxy) {
+      // CompleteNegotiation will set actual impl's in Proxy.
+      if (!audio_proxy->negotiated())
+        audio_proxy->CompleteNegotiation();
+      // TODO - Add a interface to TransportProxy to accept
+      // remote candidate list.
+      audio_proxy->impl()->OnRemoteCandidates(audio_candidates);
+    } else {
+      LOG(LS_INFO) << "No audio TransportProxy exists";
+    }
   }
 
-  const cricket::ContentInfo* video_info =
-      cricket::GetFirstVideoContent(local_description());
-  if (video_info) {
-    const cricket::MediaContentDescription* video_content =
-        static_cast<const cricket::MediaContentDescription*>(
-            video_info->description);
-    // Since channels are currently not supporting multiple send streams,
-    // we can remove stream from a session by muting it.
-    // TODO - Change needed when multiple send streams support
-    // is available.
-    video_channel_->Mute(video_content->streams().size() == 0);
+  if (!video_candidates.empty()) {
+    cricket::TransportProxy* video_proxy = GetTransportProxy(cricket::CN_VIDEO);
+    if (video_proxy) {
+      // CompleteNegotiation will set actual impl's in Proxy.
+      if (!video_proxy->negotiated())
+        video_proxy->CompleteNegotiation();
+      // TODO - Add a interface to TransportProxy to accept
+      // remote candidate list.
+      video_proxy->impl()->OnRemoteCandidates(video_candidates);
+    } else {
+      LOG(LS_INFO) << "No video TransportProxy exists";
+    }
   }
 }
 

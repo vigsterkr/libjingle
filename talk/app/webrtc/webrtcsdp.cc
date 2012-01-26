@@ -110,6 +110,13 @@ static const int kIceFoundation = 1;
 static const char kMediaTypeVideo[] = "video";
 static const char kMediaTypeAudio[] = "audio";
 
+// Default Video resolution.
+// TODO: Implement negotiation of video resolution.
+static const int kDefaultVideoWidth = 640;
+static const int kDefaultVideoHeight = 480;
+static const int kDefaultVideoFrameRate = 30;
+static const int kDefaultVideoPreference = 0;
+
 static void BuildMediaDescription(const cricket::ContentInfo& content_info,
                                   const std::vector<Candidate>& candidates,
                                   const MediaType media_type,
@@ -689,8 +696,12 @@ bool ParseContent(const std::string& message,
       if (media_type == cricket::MEDIA_TYPE_VIDEO) {
         VideoContentDescription* video_desc =
             static_cast<VideoContentDescription*>(media_desc);
+        // TODO: We will send resolution in SDP. For now, use VGA.
         video_desc->AddCodec(cricket::VideoCodec(payload_type, encoding_name,
-                                                 0, 0, 0, 0));
+                                                 kDefaultVideoWidth,
+                                                 kDefaultVideoHeight,
+                                                 kDefaultVideoFrameRate,
+                                                 kDefaultVideoPreference));
       } else if (media_type == cricket::MEDIA_TYPE_AUDIO) {
         AudioContentDescription* audio_desc =
             static_cast<AudioContentDescription*>(media_desc);

@@ -195,7 +195,7 @@ TEST_F(PeerConnectionImplTest, AddStream) {
   EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(0)->label());
 }
 
-TEST_F(PeerConnectionImplTest, DISABLED_UpdateStream) {
+TEST_F(PeerConnectionImplTest, UpdateStream) {
   AddStream(kStreamLabel1);
   WAIT(PeerConnectionInterface::kNegotiating == observer_.state_, kTimeout);
   pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));

@@ -239,9 +239,9 @@ class PeerConnectionSignaling : public WebRtcSessionObserver,
   // Currently known remote MediaStreams.
   talk_base::scoped_refptr<StreamCollection> remote_streams_;
 
-  // Weak reference to the local session description of the local MediaStreams
-  // being negotiated.
-  const cricket::SessionDescription* local_desc_;
+  // The local session description of the local MediaStreams that is being
+  // negotiated.
+  talk_base::scoped_ptr<const cricket::SessionDescription> local_desc_;
 
   // Local MediaStreams being negotiated.
   talk_base::scoped_refptr<StreamCollection> local_streams_;

@@ -277,6 +277,25 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsWithMultipleStreams) {
   EXPECT_STREQ("telephone-event", gcodec.plname);
 }
 
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsAfterAddingStreams) {
+  EXPECT_TRUE(SetupEngine());
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kIsacCodec);
+  codecs[0].id = 106;  // collide with existing telephone-event
+
+  EXPECT_TRUE(channel_->AddRecvStream(
+      cricket::StreamParams::CreateLegacy(kSsrc1)));
+  EXPECT_TRUE(channel_->SetRecvCodecs(codecs));
+
+  int channel_num2 = voe_.GetLastChannel();
+  webrtc::CodecInst gcodec;
+  talk_base::strcpyn(gcodec.plname, ARRAY_SIZE(gcodec.plname), "ISAC");
+  gcodec.plfreq = 16000;
+  EXPECT_EQ(0, voe_.GetRecPayloadType(channel_num2, gcodec));
+  EXPECT_EQ(106, gcodec.pltype);
+  EXPECT_STREQ("ISAC", gcodec.plname);
+}
+
 // Test that we apply codecs properly.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   EXPECT_TRUE(SetupEngine());
@@ -1086,6 +1105,8 @@ TEST_F(WebRtcVoiceEngineTestFake, TestSetPlayoutError) {
 // webrtcvoiceengine works as expected
 TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_TRUE(SetupEngine());
+  channel_->AddRecvStream(
+      cricket::StreamParams::CreateLegacy(kSsrc1));
   uint32 ssrc = 0;
   voe_.GetLocalSSRC(0, ssrc);
   cricket::FakeMediaProcessor vp_1;

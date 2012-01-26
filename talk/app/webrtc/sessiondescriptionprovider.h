@@ -36,18 +36,32 @@ namespace webrtc {
 
 class SessionDescriptionProvider {
  public:
-  virtual const cricket::SessionDescription* ProvideOffer(
+  // Creates a new SessionDescription based on |options|.
+  // It does not affect the currently set local or remote SessionDescription.
+  // Caller is owner of the created SessionDescription.
+  virtual cricket::SessionDescription* CreateOffer(
       const cricket::MediaSessionOptions& options) = 0;
 
-  // Transfer ownership of remote_offer.
-  virtual const cricket::SessionDescription* SetRemoteSessionDescription(
-      const cricket::SessionDescription* remote_offer,
+  // Creates a new SessionDescription based on |offer| and |options|.
+  // It does not affect the currently set local or remote SessionDescription.
+  // Caller is owner of the created SessionDescription.
+  virtual cricket::SessionDescription* CreateAnswer(
+      const cricket::SessionDescription* offer,
+      const cricket::MediaSessionOptions& options) = 0;
+
+  // Transfers ownership of session description.
+  virtual void SetLocalDescription(const cricket::SessionDescription* desc,
+                                   cricket::ContentAction type) = 0;
+  virtual void SetRemoteDescription(cricket::SessionDescription* desc,
+                                    cricket::ContentAction type) = 0;
+  // Sets all the currently known remote candidates.
+  virtual void SetRemoteCandidates(
       const std::vector<cricket::Candidate>& remote_candidates) = 0;
 
-  virtual const cricket::SessionDescription* ProvideAnswer(
-      const cricket::MediaSessionOptions& options) = 0;
-
-  virtual void NegotiationDone() = 0;
+  // Current local session description.
+  virtual const cricket::SessionDescription* local_description() const = 0;
+  // Current remote session description.
+  virtual const cricket::SessionDescription* remote_description() const = 0;
 
  protected:
   virtual ~SessionDescriptionProvider() {}
