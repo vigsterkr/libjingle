@@ -74,6 +74,7 @@ talk.Library(env, name = "jingle",
              lin_srcs = [
                "base/latebindingsymboltable.cc",
                "base/linux.cc",
+               "base/linuxfdwalk.c",
                "base/libdbusglibsymboltable.cc",
                "session/phone/libudevsymboltable.cc",
                "session/phone/linuxdevicemanager.cc",
@@ -318,6 +319,7 @@ talk.Library(env, name = "jingle",
              extra_srcs = [
                "base/dbus.cc",
                "base/json.cc",
+               "base/linuxwindowpicker.cc",
                "base/natserver_main.cc",
                "base/maccocoasocketserver.mm",
                "base/maccocoathreadhelper.mm",
@@ -444,6 +446,7 @@ talk.Unittest(env, name = "base",
               lin_srcs = [
                 "base/latebindingsymboltable_unittest.cc",
                 "base/linux_unittest.cc",
+                "base/linuxfdwalk_unittest.cc",
               ],
               mac_srcs = [
                 "base/macsocketserver_unittest.cc",
@@ -526,7 +529,9 @@ talk.Unittest(env, name = "base",
                 "jingle",
               ],
               extra_srcs = [
+                "base/dbus_unittest.cc",
                 "base/json_unittest.cc",
+                "base/linuxwindowpicker_unittest.cc",
               ],
 )
 talk.Unittest(env, name = "p2p",
