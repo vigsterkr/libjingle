@@ -43,15 +43,13 @@ namespace webrtc {
 
 enum {
   MSG_CANDIDATE_TIMEOUT = 101,
+  MSG_CANDIDATE_DISCOVERY_TIMEOUT = 102,
 };
 
 // We allow 30 seconds to establish a connection, otherwise it's an error.
 static const int kCallSetupTimeout = 30 * 1000;
-// Session will accept one candidate per transport channel and dropping other
-// candidates generated for that channel. During the session initialization
-// one cricket::VoiceChannel and one cricket::VideoChannel will be created with
-// rtcp enabled.
-static const size_t kAllowedCandidates = 4;
+static const int kCandidateDiscoveryTimeout = 2000;
+
 // TODO - These are magic string used by cricket::VideoChannel.
 // These should be moved to a common place.
 static const char kRtpVideoChannelStr[] = "video_rtp";
@@ -120,7 +118,8 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
           cricket::NS_JINGLE_RTP, true),
       channel_manager_(channel_manager),
       observer_(NULL),
-      session_desc_factory_(channel_manager) {
+      session_desc_factory_(channel_manager),
+      offer_sent_(false) {
 }
 
 WebRtcSession::~WebRtcSession() {
@@ -174,6 +173,8 @@ bool WebRtcSession::CreateChannels() {
   // Try connecting all transport channels. This is necessary to generate
   // ICE candidates.
   SpeculativelyConnectAllTransportChannels();
+  signaling_thread()->PostDelayed(
+      kCandidateDiscoveryTimeout, this, MSG_CANDIDATE_DISCOVERY_TIMEOUT);
   return true;
 }
 
@@ -213,14 +214,16 @@ void WebRtcSession::OnTransportWritable(cricket::Transport* transport) {
 void WebRtcSession::OnTransportCandidatesReady(
     cricket::Transport* transport, const cricket::Candidates& candidates) {
   ASSERT(signaling_thread()->IsCurrent());
-  // Drop additional candidates for the same channel;
-  // local_candidates_ will have one candidate per channel.
-  if (local_candidates_.size() == kAllowedCandidates)
+  // Any new candidates after offer is sent will be dropped here.
+  if (offer_sent_)
     return;
   InsertTransportCandidates(candidates);
-  if (local_candidates_.size() == kAllowedCandidates && observer_) {
-    observer_->OnCandidatesReady(local_candidates_);
-  }
+}
+
+void WebRtcSession::SendCandidates() {
+  ASSERT(!local_candidates_.empty());
+  observer_->OnCandidatesReady(local_candidates_);
+  offer_sent_ = true;
 }
 
 void WebRtcSession::OnTransportChannelGone(cricket::Transport* transport,
@@ -234,6 +237,9 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       LOG(LS_ERROR) << "Transport is not in writable state.";
       SignalError();
       break;
+    case MSG_CANDIDATE_DISCOVERY_TIMEOUT:
+      SendCandidates();
+      break;
     default:
       break;
   }
@@ -243,26 +249,8 @@ void WebRtcSession::InsertTransportCandidates(
     const cricket::Candidates& candidates) {
   for (cricket::Candidates::const_iterator citer = candidates.begin();
        citer != candidates.end(); ++citer) {
-    // Find candidates by name, if this channel name not exists in local
-    // candidate list, store it.
-    if (!CheckCandidate((*citer).name())) {
-      local_candidates_.push_back(*citer);
-    }
+    local_candidates_.push_back(*citer);
   }
-}
-
-// Check transport candidate already available for transport channel as only
-// one cricket::Candidate allower per channel.
-bool WebRtcSession::CheckCandidate(const std::string& name) {
-  bool ret = false;
-  for (cricket::Candidates::iterator iter = local_candidates_.begin();
-       iter != local_candidates_.end(); ++iter) {
-    if ((*iter).name().compare(name) == 0) {
-      ret = true;
-      break;
-    }
-  }
-  return ret;
 }
 
 bool WebRtcSession::SetCaptureDevice(const std::string& name,

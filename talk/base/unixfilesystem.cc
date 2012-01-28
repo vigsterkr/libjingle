@@ -493,12 +493,10 @@ bool UnixFilesystem::GetDiskFreeSpace(const Pathname& path, int64 *freebytes) {
   if (0 != statvfs(existing_path.pathname().c_str(), &vfs))
     return false;
 #endif  // ANDROID
-#ifdef LINUX
+#if defined(LINUX) || defined(ANDROID)
   *freebytes = static_cast<int64>(vfs.f_bsize) * vfs.f_bavail;
 #elif defined(OSX)
   *freebytes = static_cast<int64>(vfs.f_frsize) * vfs.f_bavail;
-#elif defined(ANDROID)
-  *freebytes = static_cast<int64>(fs.f_bsize) * fs.f_bavail;
 #endif
 
   return true;

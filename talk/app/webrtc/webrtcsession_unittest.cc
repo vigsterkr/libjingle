@@ -26,13 +26,26 @@
  */
 
 #include "talk/app/webrtc/webrtcsession.h"
-#include "talk/base/thread.h"
+#include "talk/base/logging.h"
+#include "talk/base/fakenetwork.h"
+#include "talk/base/firewallsocketserver.h"
 #include "talk/base/gunit.h"
+#include "talk/base/network.h"
+#include "talk/base/physicalsocketserver.h"
+#include "talk/base/thread.h"
+#include "talk/base/virtualsocketserver.h"
+#include "talk/p2p/base/stunserver.h"
+#include "talk/p2p/base/teststunserver.h"
+#include "talk/p2p/client/basicportallocator.h"
+#include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/fakedevicemanager.h"
 #include "talk/session/phone/fakemediaengine.h"
-#include "talk/p2p/client/fakeportallocator.h"
-#include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/mediasession.h"
+
+using talk_base::SocketAddress;
+static const SocketAddress kClientAddr1("11.11.11.11", 0);
+static const SocketAddress kClientAddr2("22.22.22.22", 0);
+static const SocketAddress kStunAddr("99.99.99.1", cricket::STUN_SERVER_PORT);
 
 static const char kStream1[] = "stream1";
 static const char kVideoTrack1[] = "video1";
@@ -50,6 +63,7 @@ class MockWebRtcSessionObserver : public webrtc::WebRtcSessionObserver {
     for (cricket::Candidates::const_iterator iter = candidates.begin();
          iter != candidates.end(); ++iter) {
       candidates_.push_back(*iter);
+      LOG(LS_INFO) << iter->ToString();
     }
   }
   std::vector<cricket::Candidate> candidates_;
@@ -74,25 +88,38 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
 
 class WebRtcSessionTest : public testing::Test {
  protected:
-  virtual void SetUp() {
-    cricket::FakeMediaEngine* media_engine(new cricket::FakeMediaEngine());
-    cricket::FakeDeviceManager* device_manager(
-        new cricket::FakeDeviceManager());
+  // TODO Investigate why ChannelManager crashes, if it's created
+  // after stun_server.
+  WebRtcSessionTest()
+    : media_engine(new cricket::FakeMediaEngine()),
+      device_manager(new cricket::FakeDeviceManager()),
+     channel_manager_(new cricket::ChannelManager(
+         media_engine, device_manager, talk_base::Thread::Current())),
+      desc_factory_(new cricket::MediaSessionDescriptionFactory(
+          channel_manager_.get())),
+      pss_(new talk_base::PhysicalSocketServer),
+      vss_(new talk_base::VirtualSocketServer(pss_.get())),
+      fss_(new talk_base::FirewallSocketServer(vss_.get())),
+      ss_scope_(fss_.get()),
+      stun_server_(talk_base::Thread::Current(), kStunAddr),
+      allocator_(&network_manager_, kStunAddr,
+                 SocketAddress(), SocketAddress(), SocketAddress()) {
+    EXPECT_TRUE(channel_manager_->Init());
+  }
 
-    channel_manager_.reset(new cricket::ChannelManager(
-        media_engine, device_manager, talk_base::Thread::Current()));
-    port_allocator_.reset(new cricket::FakePortAllocator(
-        talk_base::Thread::Current(), NULL));
-    desc_factory_.reset(
-        new cricket::MediaSessionDescriptionFactory(channel_manager_.get()));
+  bool InitializeSession() {
+    return session_->Initialize();
+  }
 
-    ASSERT_TRUE(channel_manager_.get() != NULL);
+  void AddInterface(const SocketAddress& addr) {
+    network_manager_.AddInterface(addr);
+  }
+
+  void Init() {
     ASSERT_TRUE(session_.get() == NULL);
-    ASSERT_TRUE(channel_manager_.get()->Init());
-
     session_.reset(new WebRtcSessionForTest(
         channel_manager_.get(), talk_base::Thread::Current(),
-        talk_base::Thread::Current(), port_allocator_.get()));
+        talk_base::Thread::Current(), &allocator_));
     session_->RegisterObserver(&observer_);
 
     EXPECT_TRUE(session_->Initialize());
@@ -259,9 +286,17 @@ class WebRtcSessionTest : public testing::Test {
     VerifyCryptoParams(answer, false);
   }
 
-  talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
+  cricket::FakeMediaEngine* media_engine;
+  cricket::FakeDeviceManager* device_manager;
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
   talk_base::scoped_ptr<cricket::MediaSessionDescriptionFactory> desc_factory_;
+  talk_base::scoped_ptr<talk_base::PhysicalSocketServer> pss_;
+  talk_base::scoped_ptr<talk_base::VirtualSocketServer> vss_;
+  talk_base::scoped_ptr<talk_base::FirewallSocketServer> fss_;
+  talk_base::SocketServerScope ss_scope_;
+  cricket::TestStunServer stun_server_;
+  talk_base::FakeNetworkManager network_manager_;
+  cricket::BasicPortAllocator allocator_;
   talk_base::scoped_ptr<WebRtcSessionForTest> session_;
   MockWebRtcSessionObserver observer_;
   std::vector<cricket::Candidate> candidates_;
@@ -270,20 +305,44 @@ class WebRtcSessionTest : public testing::Test {
 };
 
 TEST_F(WebRtcSessionTest, TestInitialize) {
+  WebRtcSessionTest::Init();
   EXPECT_TRUE(ChannelsExist());
   CheckTransportChannels();
-  talk_base::Thread::Current()->ProcessMessages(1000);
-  EXPECT_EQ(4u, observer_.candidates_.size());
+}
+
+TEST_F(WebRtcSessionTest, TestSessionCandidates) {
+  AddInterface(kClientAddr1);
+  WebRtcSessionTest::Init();
+  EXPECT_EQ_WAIT(8u, observer_.candidates_.size(), 3000);
+}
+
+TEST_F(WebRtcSessionTest, TestMultihomeCandidataes) {
+  AddInterface(kClientAddr1);
+  AddInterface(kClientAddr2);
+  WebRtcSessionTest::Init();
+  EXPECT_EQ_WAIT(16u, observer_.candidates_.size(), 3000);
+}
+
+TEST_F(WebRtcSessionTest, TestStunError) {
+  AddInterface(kClientAddr1);
+  AddInterface(kClientAddr2);
+  fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr1);
+  WebRtcSessionTest::Init();
+  // Since kClientAddr1 is blocked, not expecting stun candidates for it.
+  EXPECT_EQ_WAIT(12u, observer_.candidates_.size(), 3000);
 }
 
 // Test creating offers and receive answers and make sure the
 // media engine creates the expected send and receive streams.
 TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
+  WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options = OptionsWithStream1();
   cricket::SessionDescription* offer = session_->CreateOffer(options);
 
+
   cricket::MediaSessionOptions options2 = OptionsWithStream2();
   cricket::SessionDescription* answer =  CreateTestAnswer(offer, options2);
+
 
   session_->SetLocalDescription(offer, cricket::CA_OFFER);
   session_->SetRemoteDescription(answer, cricket::CA_ANSWER);
@@ -322,6 +381,7 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
 // Test receiving offers and creating answers and make sure the
 // media engine creates the expected send and receive streams.
 TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
+  WebRtcSessionTest::Init();
   cricket::SessionDescription* offer = CreateTestOffer(OptionsWithStream2());
 
   cricket::MediaSessionOptions answer_options = OptionsWithStream1();
@@ -361,22 +421,27 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
 }
 
 TEST_F(WebRtcSessionTest, TestDefaultSetSecurePolicy) {
+  WebRtcSessionTest::Init();
   EXPECT_EQ(cricket::SEC_REQUIRED, session_->secure_policy());
 }
 
 TEST_F(WebRtcSessionTest, VerifyCryptoParamsInSDP) {
+  WebRtcSessionTest::Init();
   VerifyCryptoParams(session_->CreateOffer(OptionsWithStream1()), true);
 }
 
 TEST_F(WebRtcSessionTest, VerifyNoCryptoParamsInSDP) {
+  WebRtcSessionTest::Init();
   session_->set_secure_policy(cricket::SEC_DISABLED);
   VerifyNoCryptoParams(session_->CreateOffer(OptionsWithStream1()));
 }
 
 TEST_F(WebRtcSessionTest, VerifyAnswerFromNonCryptoOffer) {
+  WebRtcSessionTest::Init();
   VerifyAnswerFromNonCryptoOffer();
 }
 
 TEST_F(WebRtcSessionTest, VerifyAnswerFromCryptoOffer) {
+  WebRtcSessionTest::Init();
   VerifyAnswerFromCryptoOffer();
 }

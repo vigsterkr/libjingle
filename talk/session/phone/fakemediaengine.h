@@ -151,8 +151,10 @@ class RtpHelper : public Base {
   virtual bool RemoveRecvStream(uint32 ssrc) {
     return RemoveStreamBySsrc(&receive_streams_, ssrc);
   }
-  const std::vector<StreamParams>& send_streams() { return send_streams_; }
-  const std::vector<StreamParams>& recv_streams() {
+  const std::vector<StreamParams>& send_streams() const {
+    return send_streams_;
+  }
+  const std::vector<StreamParams>& recv_streams() const {
     return receive_streams_;
   }
   bool HasRecvStream(uint32 ssrc) const {
@@ -364,7 +366,35 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   const std::vector<VideoCodec>& codecs() const { return send_codecs(); }
   bool muted() const { return muted_; }
   bool rendering() const { return playout(); }
-  const std::map<uint32, VideoRenderer*>& renderers() const { return streams_; }
+  const std::map<uint32, VideoRenderer*>& renderers() const {
+    return renderers_;
+  }
+  bool GetSendStreamFormat(uint32 ssrc, VideoFormat* format) {
+    if (send_formats_.find(ssrc) == send_formats_.end()) {
+      return false;
+    }
+    *format = send_formats_[ssrc];
+    return true;
+  }
+  virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format) {
+    if (send_formats_.find(ssrc) == send_formats_.end()) {
+      return false;
+    }
+    send_formats_[ssrc] = format;
+    return true;
+  }
+
+  virtual bool AddSendStream(const StreamParams& sp) {
+    if (!RtpHelper<VideoMediaChannel>::AddSendStream(sp)) {
+      return false;
+    }
+    SetSendStreamDefaultFormat(sp.first_ssrc());
+    return true;
+  }
+  virtual bool RemoveSendStream(uint32 ssrc) {
+    send_formats_.erase(ssrc);
+    return RtpHelper<VideoMediaChannel>::RemoveSendStream(ssrc);
+  }
 
   virtual bool SetRecvCodecs(const std::vector<VideoCodec>& codecs) {
     if (fail_set_recv_codecs()) {
@@ -380,6 +410,11 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
       return false;
     }
     send_codecs_= codecs;
+
+    for (std::vector<StreamParams>::const_iterator it = send_streams().begin();
+        it != send_streams().end(); ++it) {
+      SetSendStreamDefaultFormat(it->first_ssrc());
+    }
     return true;
   }
   virtual bool SetRender(bool render) {
@@ -387,11 +422,11 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     return true;
   }
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* r) {
-    if (ssrc != 0 && streams_.find(ssrc) == streams_.end()) {
+    if (ssrc != 0 && renderers_.find(ssrc) == renderers_.end()) {
       return false;
     }
     if (ssrc != 0) {
-      streams_[ssrc] = r;
+      renderers_[ssrc] = r;
     }
     return true;
   }
@@ -415,13 +450,13 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   virtual bool AddRecvStream(const StreamParams& sp) {
     if (!RtpHelper<VideoMediaChannel>::AddRecvStream(sp))
       return false;
-    streams_[sp.first_ssrc()] = NULL;
+    renderers_[sp.first_ssrc()] = NULL;
     return true;
   }
   virtual bool RemoveRecvStream(uint32 ssrc) {
     if (!RtpHelper<VideoMediaChannel>::RemoveRecvStream(ssrc))
       return false;
-    streams_.erase(ssrc);
+    renderers_.erase(ssrc);
     return true;
   }
 
@@ -438,16 +473,27 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   bool sent_intra_frame() const { return sent_intra_frame_; }
   void set_requested_intra_frame(bool v) { requested_intra_frame_ = v; }
   bool requested_intra_frame() const { return requested_intra_frame_; }
-
-  bool IsScreencasting() {
-    return screen_casting_;
-  }
+  bool screen_casting() const { return screen_casting_; }
+  // TODO: remove this with FMS CL
+  bool IsScreencasting() const { return screen_casting_; }
 
  private:
+  // Be default, each send stream uses the first send codec format.
+  void SetSendStreamDefaultFormat(uint32 ssrc) {
+    if (!send_codecs_.empty()) {
+      send_formats_[ssrc] = VideoFormat(
+           send_codecs_[0].width,
+           send_codecs_[0].height,
+           cricket::VideoFormat::FpsToInterval(send_codecs_[0].framerate),
+           cricket::FOURCC_I420);
+    }
+  }
+
   FakeVideoEngine* engine_;
   std::vector<VideoCodec> recv_codecs_;
   std::vector<VideoCodec> send_codecs_;
-  std::map<uint32, VideoRenderer*> streams_;
+  std::map<uint32, VideoRenderer*> renderers_;
+  std::map<uint32, VideoFormat> send_formats_;
   bool muted_;
   bool screen_casting_;
   bool sent_intra_frame_;

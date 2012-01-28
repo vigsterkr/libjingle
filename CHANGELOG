@@ -4,6 +4,8 @@ Libjingle
   - Improved ipv6 support.
   - Initial DTLS support.
   - Initial BUNDLE support.
+  - Update Jingle protocol to multistream.
+  - WebRTC Bug fixes.
 
 0.6.10 - Jan 11, 2012
   - Support fullscreen screencasting of secondary displays.

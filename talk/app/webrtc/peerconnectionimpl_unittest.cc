@@ -65,10 +65,21 @@ static std::string CreateShutdownMessage() {
 static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
   webrtc::RoapOffer offer(msg);
   EXPECT_TRUE(offer.Parse());
+  cricket::SessionDescription* sdp_offer =
+      offer.ReleaseSessionDescription();
+  const cricket::ContentInfo* audio_content = GetFirstAudioContent(sdp_offer);
+  if (audio_content) {
+    const cricket::AudioContentDescription* desc =
+        static_cast<const cricket::AudioContentDescription*>(
+            audio_content->description);
+    cricket::CryptoParamsVec& cryptos =
+        const_cast<cricket::CryptoParamsVec&>(desc->cryptos());
+    cryptos.erase(cryptos.begin()++);
+  }
+
   webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
                             offer.session_token(), offer.response_token(),
-                            offer.seq(), offer.ReleaseSessionDescription(),
-                            offer.candidates());
+                            offer.seq(), sdp_offer, offer.candidates());
   return answer.Serialize();
 }
 

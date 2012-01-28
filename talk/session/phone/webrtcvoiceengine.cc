@@ -942,11 +942,11 @@ bool WebRtcVoiceEngine::FindChannelNumFromSsrc(
     uint32 local_ssrc;
     if ((direction & MPD_RX) != 0) {
       *channel_num = (*it)->GetChannelNum(ssrc);
-    } else {
-      if (voe()->rtp()->GetLocalSSRC((*it)->voe_channel(), local_ssrc) != -1) {
-        if (ssrc == local_ssrc) {
-          *channel_num = (*it)->voe_channel();
-        }
+    }
+    if (*channel_num == -1 &&
+        voe()->rtp()->GetLocalSSRC((*it)->voe_channel(), local_ssrc) != -1) {
+      if (ssrc == local_ssrc) {
+        *channel_num = (*it)->voe_channel();
       }
     }
     if (*channel_num != -1) {
@@ -1601,6 +1601,18 @@ bool WebRtcVoiceMediaChannel::AddSendStream(const StreamParams& sp) {
         == -1) {
     LOG_RTCERR2(SetSendSSRC, voe_channel(), sp.first_ssrc());
     return false;
+  }
+  // Set the SSRC on the receive channels.
+  // Receive channels have to have the same SSRC in order to send receiver
+  // reports with this SSRC.
+  for (ChannelMap::const_iterator it = mux_channels_.begin();
+       it != mux_channels_.end(); ++it) {
+    int channel_id = it->second;
+    if (engine()->voe()->rtp()->SetLocalSSRC(channel_id,
+                                             sp.first_ssrc()) != 0) {
+      LOG_RTCERR1(SetLocalSSRC, it->first);
+      return false;
+    }
   }
 
   if (engine()->voe()->rtp()->SetRTCP_CNAME(voe_channel(),

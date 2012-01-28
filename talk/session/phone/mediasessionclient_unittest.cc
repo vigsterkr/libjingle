@@ -2191,23 +2191,23 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     client_->session_manager()->OnIncomingMessage(streams_stanza.get());
     ASSERT_EQ(1U, last_streams_removed_.audio().size());
     ASSERT_EQ(1U, last_streams_removed_.audio()[0].ssrcs.size());
-    ASSERT_EQ(1234U, last_streams_removed_.audio()[0].first_ssrc());
+    EXPECT_EQ(1234U, last_streams_removed_.audio()[0].first_ssrc());
 
     streams_stanza.reset(buzz::XmlElement::ForStr(
         JingleStreamRemove("video", "Bob", "video1")));
     SetJingleSid(streams_stanza.get());
     client_->session_manager()->OnIncomingMessage(streams_stanza.get());
     ASSERT_EQ(1U, last_streams_removed_.video().size());
-    ASSERT_EQ(1U, last_streams_removed_.audio()[0].ssrcs.size());
-    ASSERT_EQ(5678U, last_streams_removed_.audio()[0].first_ssrc());
+    ASSERT_EQ(1U, last_streams_removed_.video()[0].ssrcs.size());
+    EXPECT_EQ(5678U, last_streams_removed_.video()[0].first_ssrc());
 
     streams_stanza.reset(buzz::XmlElement::ForStr(
         JingleStreamRemove("video", "Bob", "video2")));
     SetJingleSid(streams_stanza.get());
     client_->session_manager()->OnIncomingMessage(streams_stanza.get());
     ASSERT_EQ(1U, last_streams_removed_.video().size());
-    ASSERT_EQ(1U, last_streams_removed_.audio()[0].ssrcs.size());
-    ASSERT_EQ(5679U, last_streams_removed_.audio()[0].first_ssrc());
+    ASSERT_EQ(1U, last_streams_removed_.video()[0].ssrcs.size());
+    EXPECT_EQ(5679U, last_streams_removed_.video()[0].first_ssrc());
 
     // Duplicate removal: should be ignored.
     last_streams_removed_.mutable_audio()->clear();

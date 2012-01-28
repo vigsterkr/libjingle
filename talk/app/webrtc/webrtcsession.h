@@ -127,8 +127,7 @@ class WebRtcSession : public cricket::BaseSession,
   virtual void OnMessage(talk_base::Message* msg);
   void InsertTransportCandidates(const cricket::Candidates& candidates);
   void Terminate();
-  // Get candidate from the local candidates list by the name.
-  bool CheckCandidate(const std::string& name);
+  void SendCandidates();
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
@@ -136,6 +135,7 @@ class WebRtcSession : public cricket::BaseSession,
   cricket::Candidates local_candidates_;
   WebRtcSessionObserver* observer_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
+  bool offer_sent_;
 };
 
 }  // namespace webrtc

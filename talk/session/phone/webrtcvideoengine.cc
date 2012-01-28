@@ -1192,6 +1192,35 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   return true;
 }
 
+bool WebRtcVideoMediaChannel::SetSendStreamFormat(uint32 ssrc,
+                                                  const VideoFormat& format) {
+  // TODO: Handle multiple outgoing streams.
+  if (local_ssrc_ != ssrc) {
+    LOG(LS_ERROR) << "The specified ssrc " << ssrc
+                  << " differs from the send ssrc " << local_ssrc_;
+    return false;
+  }
+
+  if (send_codec_.get() == NULL) {
+    LOG(LS_ERROR) << "The send codec has not been set yet.";
+    return false;
+  }
+
+  webrtc::VideoCodec codec = *send_codec_.get();
+  codec.width = format.width;
+  codec.height = format.height;
+  codec.maxFramerate = VideoFormat::IntervalToFps(format.interval);
+
+  bool ret = SetSendCodec(
+      codec, send_min_bitrate_, send_start_bitrate_, send_max_bitrate_);
+  if (ret) {
+    LOG(LS_INFO) << "Update send codec resolution to "
+                 << codec.width << "x" << codec.height << "x"
+                 << static_cast<int>(codec.maxFramerate);
+  }
+  return ret;
+}
+
 bool WebRtcVideoMediaChannel::SetRender(bool render) {
   if (render == render_started_) {
     return true;  // no action required
@@ -1267,11 +1296,7 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
                   << " stream";
     return false;
   }
-  if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_,
-                                           sp.first_ssrc()) != 0) {
-    LOG_RTCERR1(SetLocalSSRC, vie_channel_);
-    return false;
-  }
+
   if (engine()->vie()->rtp()->SetRTCPCName(vie_channel_,
                                            sp.cname.c_str()) != 0) {
     LOG_RTCERR2(SetRTCPCName, vie_channel_, sp.cname.c_str());
@@ -1279,6 +1304,19 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   }
 
   local_ssrc_ = sp.first_ssrc();
+  // Set the SSRC on the receive channels and this send channel.
+  // Receive channels have to have the same SSRC in order to send receiver
+  // reports with this SSRC.
+  for (ChannelMap::const_iterator it = mux_channels_.begin();
+       it != mux_channels_.end(); ++it) {
+    WebRtcVideoChannelInfo* info = it->second;
+    int channel_id = info->channel_id();
+    if (engine()->vie()->rtp()->SetLocalSSRC(channel_id,
+                                             sp.first_ssrc()) != 0) {
+      LOG_RTCERR1(SetLocalSSRC, it->first);
+      return false;
+    }
+  }
 
   if (sending_) {
     return StartSend();
@@ -1780,10 +1818,9 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
   // TODO: |send_remb| should be channel id so we can have several
   // REMB groups.
   bool send_remb = (remote_ssrc == 0);  // SSRC 0 is our default channel.
-  if (!engine_->vie()->rtp()->SetRembStatus(channel_id, send_remb, true)) {
-    LOG_RTCERR3(SetRembStatus, channel_id, send_remb, true);
-    return false;
-  }
+  // TODO - Add return value check for SetRembStatus once webrtc
+  // revisions are synced in Chrome and Plugin.
+  engine_->vie()->rtp()->SetRembStatus(channel_id, send_remb, true);
 
   if (remote_ssrc != 0) {
     // Use the same SSRC as our default channel

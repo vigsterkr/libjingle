@@ -96,7 +96,10 @@ class FileMediaEngine : public MediaEngineInterface {
   virtual bool SetVideoCapturer(VideoCapturer* /*capturer*/, uint32 /*ssrc*/) {
     return true;
   }
-  virtual bool GetOutputVolume(int* level) { *level = 0; return true; }
+  virtual bool GetOutputVolume(int* level) {
+    *level = 0;
+    return true;
+  }
   virtual bool SetOutputVolume(int level) { return true; }
   virtual int GetInputLevel() { return 0; }
   virtual bool SetLocalMonitor(bool enable) { return true; }
@@ -208,6 +211,9 @@ class FileVideoChannel : public VideoMediaChannel {
     return true;
   }
   virtual bool SetSendCodecs(const std::vector<VideoCodec>& codecs);
+  virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format) {
+    return true;
+  }
   virtual bool SetRecvRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) {
     return true;

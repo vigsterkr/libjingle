@@ -883,6 +883,26 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrcWithMultipleStreams) {
   EXPECT_EQ(kSsrc1, send_ssrc);
 }
 
+// Test that the local SSRC is the same on sending and receiving channels if the
+// receive channel is created before the send channel.
+TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrcAfterCreatingReceiveChannel) {
+  EXPECT_TRUE(engine_.Init());
+  channel_ = engine_.CreateChannel();
+
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  int receive_channel_num = voe_.GetLastChannel();
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(1234)));
+  int send_channel_num = voe_.GetLastChannel();
+
+  unsigned int ssrc = 0;
+  EXPECT_EQ(0, voe_.GetLocalSSRC(send_channel_num, ssrc));
+  EXPECT_EQ(1234U, ssrc);
+  ssrc = 0;
+  EXPECT_EQ(0, voe_.GetLocalSSRC(receive_channel_num, ssrc));
+  EXPECT_EQ(1234U, ssrc);
+}
+
 // Test that we can properly receive packets.
 TEST_F(WebRtcVoiceEngineTestFake, Recv) {
   EXPECT_TRUE(SetupEngine());
@@ -1105,8 +1125,8 @@ TEST_F(WebRtcVoiceEngineTestFake, TestSetPlayoutError) {
 // webrtcvoiceengine works as expected
 TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_TRUE(SetupEngine());
-  channel_->AddRecvStream(
-      cricket::StreamParams::CreateLegacy(kSsrc1));
+  EXPECT_TRUE(channel_->AddRecvStream(
+      cricket::StreamParams::CreateLegacy(kSsrc1)));
   uint32 ssrc = 0;
   voe_.GetLocalSSRC(0, ssrc);
   cricket::FakeMediaProcessor vp_1;
@@ -1148,6 +1168,12 @@ TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   voe_.TriggerProcessPacket(cricket::MPD_TX);
   EXPECT_FALSE(voe_.IsExternalMediaProcessorRegistered());
   EXPECT_EQ(3, vp_1.voice_frame_count());
+  EXPECT_TRUE(channel_->RemoveRecvStream(kSsrc1));
+
+  // Test that after removing the recvstream we can we can still register
+  // the processor. This tests the 1:1 case.
+  EXPECT_TRUE(engine_.RegisterProcessor(ssrc, &vp_1, cricket::MPD_RX));
+  EXPECT_TRUE(engine_.UnregisterProcessor(ssrc, &vp_1, cricket::MPD_RX_AND_TX));
 
   // The following tests test that FindChannelNumFromSsrc is doing
   // what we expect.
@@ -1155,7 +1181,7 @@ TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_FALSE(engine_.RegisterProcessor(0,
                                          &vp_1,
                                          cricket::MPD_RX));
-  channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(engine_.RegisterProcessor(1,
                                         &vp_1,
                                         cricket::MPD_RX));
@@ -1165,7 +1191,7 @@ TEST_F(WebRtcVoiceEngineTestFake, RegisterVoiceProcessor) {
   EXPECT_FALSE(engine_.RegisterProcessor(1,
                                          &vp_1,
                                          cricket::MPD_TX));
-  channel_->RemoveRecvStream(1);
+  EXPECT_TRUE(channel_->RemoveRecvStream(1));
 }
 
 // Tests for the actual WebRtc VoE library.

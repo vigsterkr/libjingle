@@ -210,6 +210,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // VideoMediaChannel implementation
   virtual bool SetRecvCodecs(const std::vector<VideoCodec> &codecs);
   virtual bool SetSendCodecs(const std::vector<VideoCodec> &codecs);
+  virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format);
   virtual bool SetRender(bool render);
   virtual bool SetSend(bool send);
 

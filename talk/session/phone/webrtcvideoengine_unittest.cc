@@ -550,6 +550,24 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAndCname) {
   EXPECT_STREQ("cname", rtcp_cname);
 }
 
+// Test that the local SSRC is the same on sending and receiving channels if the
+// receive channel is created before the send channel.
+TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAfterCreatingReceiveChannel) {
+  EXPECT_TRUE(SetupEngine());
+
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  int receive_channel_num = vie_.GetLastChannel();
+  cricket::StreamParams stream = cricket::StreamParams::CreateLegacy(1234);
+  EXPECT_TRUE(channel_->AddSendStream(stream));
+  int send_channel_num = vie_.GetLastChannel();
+  unsigned int ssrc = 0;
+  EXPECT_EQ(0, vie_.GetLocalSSRC(send_channel_num, ssrc));
+  EXPECT_EQ(1234U, ssrc);
+  ssrc = 0;
+  EXPECT_EQ(0, vie_.GetLocalSSRC(receive_channel_num, ssrc));
+  EXPECT_EQ(1234U, ssrc);
+}
+
 // Test SetOptions with OPT_CONFERENCE flag.
 TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithConferenceMode) {
   EXPECT_TRUE(SetupEngine());
@@ -853,6 +871,11 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptDropAllFrames) {
 // TODO: Understand why we get decode errors on this test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
   Base::AdaptFramerate();
+}
+// TODO: Understand why format is set but the encoded frames do not
+// change.
+TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
+  Base::SetSendStreamFormat();
 }
 // TODO: Understand why we receive a not-quite-black frame.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_Mute) {

@@ -47,6 +47,7 @@ namespace cricket {
 
 class ScreencastId;
 struct StreamParams;
+struct VideoFormat;
 class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
@@ -410,6 +411,8 @@ class VideoMediaChannel : public MediaChannel {
   virtual bool SetRecvCodecs(const std::vector<VideoCodec> &codecs) = 0;
   // Sets the codecs/payload types to be used for outgoing media.
   virtual bool SetSendCodecs(const std::vector<VideoCodec> &codecs) = 0;
+  // Sets the format of a specified outgoing stream.
+  virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format) = 0;
   // Starts or stops playout of received video.
   virtual bool SetRender(bool render) = 0;
   // Starts or stops transmission (and potentially capture) of local video.
