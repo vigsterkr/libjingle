@@ -17,3 +17,17 @@ if [ ! -e talk/third_party/srtp ]; then
 	echo "done"
 	cd ../../
 fi
+
+if [ ! -e talk/third_party/gtest ]; then
+  if [ ! -e gtest-1.6.0.zip ]; then
+    echo "Downloading gtest..."
+    wget http://googletest.googlecode.com/files/gtest-1.6.0.zip -O gtest-1.6.0.zip
+  fi
+
+  echo -n "Extracting gtest..."
+  cd talk/third_party
+  unzip -x gtest-1.6.0.zip
+  mv gtest-1.6.0 gtest
+  echo "done"
+  cd ../../
+fi
