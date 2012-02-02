@@ -347,7 +347,7 @@ posix_env.Append(
   CXXFLAGS = [
     '-Wno-non-virtual-dtor',
     '-Wno-ctor-dtor-privacy',
-    '-fno-rtti',
+  #  '-fno-rtti',
   ],
 )
 
@@ -372,7 +372,7 @@ mac_env.Append(
   CCFLAGS = [
     '-m32',
     '-arch', 'i386',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+    '-isysroot', '/Developer/SDKs/MacOSX10.7.sdk',
     '-fasm-blocks',
   ],
   LINKFLAGS = [
@@ -384,7 +384,7 @@ mac_env.Append(
     '-ObjC',
     '-arch', 'i386',
     '-mmacosx-version-min=10.5',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+    '-isysroot', '/Developer/SDKs/MacOSX10.7.sdk',
     '-m32',
     '-dead_strip',
   ],
