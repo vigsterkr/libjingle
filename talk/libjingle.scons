@@ -11,7 +11,7 @@ talk.Library(env, name = "expat",
                "third_party/expat-2.0.1/lib/xmltok.c",
              ],
              includedirs = [
-               "third_party/expat-2.0.1/lib",
+               "third_party/expat-2.0.1",
              ],
              win_cppdefines = [
                "COMPILED_FROM_DSP",
