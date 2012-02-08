@@ -52,35 +52,7 @@ namespace cricket {
 
 class MediaContentDescription;
 struct CryptoParams;
-
-enum {
-  MSG_ENABLE = 1,
-  MSG_DISABLE = 2,
-  MSG_MUTE = 3,
-  MSG_UNMUTE = 4,
-  MSG_SETREMOTECONTENT = 5,
-  MSG_SETLOCALCONTENT = 6,
-  MSG_EARLYMEDIATIMEOUT = 8,
-  MSG_PRESSDTMF = 9,
-  MSG_SETRENDERER = 10,
-  MSG_ADDRECVSTREAM = 11,
-  MSG_REMOVERECVSTREAM = 12,
-  MSG_SETRINGBACKTONE = 13,
-  MSG_PLAYRINGBACKTONE = 14,
-  MSG_SETMAXSENDBANDWIDTH = 15,
-  MSG_ADDSCREENCAST = 16,
-  MSG_REMOVESCREENCAST = 17,
-  // Removed MSG_SETRTCPCNAME = 18. It is no longer used.
-  MSG_SENDINTRAFRAME = 19,
-  MSG_REQUESTINTRAFRAME = 20,
-  MSG_SCREENCASTWINDOWEVENT = 21,
-  MSG_RTPPACKET = 22,
-  MSG_RTCPPACKET = 23,
-  MSG_CHANNEL_ERROR = 24,
-  MSG_ENABLECPUADAPTATION = 25,
-  MSG_DISABLECPUADAPTATION = 26,
-  MSG_SCALEVOLUME = 27
-};
+struct ViewRequest;
 
 // BaseChannel contains logic common to voice and video, including
 // enable/mute, marshaling calls to a worker thread, and
@@ -226,14 +198,6 @@ class BaseChannel
   bool RemoveRecvStream_w(uint32 ssrc);
 
   virtual void ChangeState() = 0;
-  struct SetContentData : public talk_base::MessageData {
-    SetContentData(const MediaContentDescription* content,
-                   ContentAction action)
-        : content(content), action(action), result(false) {}
-    const MediaContentDescription* content;
-    ContentAction action;
-    bool result;
-  };
 
   // Gets the content appropriate to the channel (audio or video).
   virtual const MediaContentDescription* GetFirstContent(
@@ -255,11 +219,6 @@ class BaseChannel
                  ContentSource src);
   bool SetRtcpMux_w(bool enable, ContentAction action, ContentSource src);
 
-  struct SetBandwidthData : public talk_base::MessageData {
-    explicit SetBandwidthData(int value) : value(value), result(false) {}
-    int value;
-    bool result;
-  };
   bool SetMaxSendBandwidth_w(int max_bandwidth);
 
   // From MessageHandler
@@ -353,51 +312,6 @@ class VoiceChannel : public BaseChannel {
   static const int kTypingBlackoutPeriod = 1500;
 
  private:
-  struct SetRingbackToneMessageData : public talk_base::MessageData {
-    SetRingbackToneMessageData(const void* b, int l)
-        : buf(b),
-          len(l),
-          result(false) {
-    }
-    const void* buf;
-    int len;
-    bool result;
-  };
-  struct PlayRingbackToneMessageData : public talk_base::MessageData {
-    PlayRingbackToneMessageData(uint32 s, bool p, bool l)
-        : ssrc(s),
-          play(p),
-          loop(l),
-          result(false) {
-    }
-    uint32 ssrc;
-    bool play;
-    bool loop;
-    bool result;
-  };
-  struct DtmfMessageData : public talk_base::MessageData {
-    DtmfMessageData(int d, bool p)
-        : digit(d),
-          playout(p),
-          result(false) {
-    }
-    int digit;
-    bool playout;
-    bool result;
-  };
-  struct ScaleVolumeMessageData : public talk_base::MessageData {
-    ScaleVolumeMessageData(uint32 s, double l, double r)
-        : ssrc(s),
-          left(l),
-          right(r),
-          result(false) {
-    }
-    uint32 ssrc;
-    double left;
-    double right;
-    bool result;
-  };
-
   // overrides from BaseChannel
   virtual void OnChannelRead(TransportChannel* channel,
                              const char *data, size_t len);
@@ -449,6 +363,7 @@ class VideoChannel : public BaseChannel {
   }
 
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
+  bool ApplyViewRequest(const ViewRequest& request);
 
   bool AddScreencast(uint32 ssrc, const ScreencastId& id);
   bool RemoveScreencast(uint32 ssrc);
@@ -491,26 +406,7 @@ class VideoChannel : public BaseChannel {
     media_channel()->SetOptions(enable ? OPT_CPU_ADAPTATION : 0);
   }
 
-  struct RenderMessageData : public talk_base::MessageData {
-    RenderMessageData(uint32 s, VideoRenderer* r) : ssrc(s), renderer(r) {}
-    uint32 ssrc;
-    VideoRenderer* renderer;
-  };
-
-  struct ScreencastMessageData : public talk_base::MessageData {
-    ScreencastMessageData(uint32 s, const ScreencastId& id)
-        : ssrc(s), window_id(id) {}
-    uint32 ssrc;
-    ScreencastId window_id;
-  };
-
-  struct ScreencastEventData : public talk_base::MessageData {
-    ScreencastEventData(uint32 s, talk_base::WindowEvent we)
-        : ssrc(s), event(we) {}
-    uint32 ssrc;
-    talk_base::WindowEvent event;
-  };
-
+  bool ApplyViewRequest_w(const ViewRequest& request);
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
   void AddScreencast_w(uint32 ssrc, const ScreencastId&);

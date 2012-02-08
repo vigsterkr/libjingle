@@ -147,7 +147,6 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnMediaMonitor(VideoChannel *channel, const VideoMediaInfo& info);
   VoiceChannel* GetVoiceChannel(Session *session);
   VideoChannel* GetVideoChannel(Session *session);
-  bool SetSendResolutions(Session *session, const ViewRequest& view_request);
   bool UpdateVoiceChannelRemoteContent(Session *session,
                                        const AudioContentDescription* audio);
   bool UpdateVideoChannelRemoteContent(Session *session,

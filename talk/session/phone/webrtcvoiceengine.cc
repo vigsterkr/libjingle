@@ -856,7 +856,7 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
     "GetRTPStatistics() failed to measure RTT since no RTP packets have been received yet",  // NOLINT
     "GetRTPStatistics() failed to read RTP statistics from the RTP/RTCP module",
     "GetRTPStatistics() failed to retrieve RTT from the RTP/RTCP module",
-    "SenderInfoReceived No received SR",
+    "webrtc::RTCPReceiver::SenderInfoReceived No received SR",
     "StatisticsRTP() no statisitics availble",
     NULL
   };
@@ -1638,6 +1638,13 @@ bool WebRtcVoiceMediaChannel::RemoveSendStream(uint32 ssrc) {
 
 bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
   talk_base::CritScope lock(&mux_channels_cs_);
+
+  // Reuse default channel for recv stream in 1:1 call.
+  if ((channel_options_ & OPT_CONFERENCE) == 0) {
+    LOG(LS_INFO) << "Recv stream " << sp.first_ssrc()
+                 << " reuse default channel";
+    return true;
+  }
 
   if (!VERIFY(sp.ssrcs.size() == 1))
     return false;

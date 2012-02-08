@@ -46,6 +46,46 @@ using cricket::VideoCodec;
 using cricket::VideoContentDescription;
 
 // Reference sdp string
+static const char kSdpFullString[] =
+    "v=0\r\n"
+    "o=- 0 0 IN IP4 127.0.0.1\r\n"
+    "s=\r\n"
+    "t=0 0\r\n"
+    "a=group:BUNDLE audio video\r\n"
+    "m=audio 0 RTP/AVPF 103 104\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
+    "eth0 username user_rtp password password_rtp generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1235 typ host name rtcp network_name "
+    "eth0 username user_rtcp password password_rtcp generation 0\r\n"
+    "a=mid:audio\r\n"
+    "a=rtcp-mux\r\n"
+    "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
+    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
+    "a=rtpmap:103 ISAC/16000\r\n"
+    "a=rtpmap:104 ISAC/32000\r\n"
+    "a=ssrc:1 cname:stream_1_cname mslabel:local_stream_1 "
+    "label:local_audio_1\r\n"
+    "a=ssrc:4 cname:stream_2_cname mslabel:local_stream_2 "
+    "label:local_audio_2\r\n"
+    "m=video 0 RTP/AVPF 120\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1236 typ host name video_rtcp "
+    "network_name eth0 username user_video_rtcp password password_video_rtcp "
+    "generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name video_rtp "
+    "network_name eth0 username user_video_rtp password password_video_rtp "
+    "generation 0\r\n"
+    "a=mid:video\r\n"
+    "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
+    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
+    "a=rtpmap:120 VP8/0\r\n"
+    "a=ssrc:2 cname:stream_1_cname mslabel:local_stream_1 "
+    "label:local_video_1\r\n"
+    "a=ssrc:3 cname:stream_1_cname mslabel:local_stream_1 "
+    "label:local_video_2\r\n"
+    "a=ssrc:5 cname:stream_2_cname mslabel:local_stream_2 "
+    "label:local_video_3\r\n";
+
+// SDP reference string without the candidates.
 static const char kSdpString[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
@@ -59,10 +99,6 @@ static const char kSdpString[] =
     "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 ISAC/32000\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
-    "eth0 username user_rtp password password_rtp generation 0\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1235 typ host name rtcp network_name "
-    "eth0 username user_rtcp password password_rtcp generation 0\r\n"
     "a=ssrc:1 cname:stream_1_cname mslabel:local_stream_1 "
     "label:local_audio_1\r\n"
     "a=ssrc:4 cname:stream_2_cname mslabel:local_stream_2 "
@@ -72,18 +108,25 @@ static const char kSdpString[] =
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
     "a=rtpmap:120 VP8/0\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1236 typ host name video_rtcp "
-    "network_name eth0 username user_video_rtcp password password_video_rtcp "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name video_rtp "
-    "network_name eth0 username user_video_rtp password password_video_rtp "
-    "generation 0\r\n"
     "a=ssrc:2 cname:stream_1_cname mslabel:local_stream_1 "
     "label:local_video_1\r\n"
     "a=ssrc:3 cname:stream_1_cname mslabel:local_stream_1 "
     "label:local_video_2\r\n"
     "a=ssrc:5 cname:stream_2_cname mslabel:local_stream_2 "
     "label:local_video_3\r\n";
+
+// Candidates reference string.
+static const char kSdpCandidates[] =
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
+    "eth0 username user_rtp password password_rtp generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1235 typ host name rtcp network_name "
+    "eth0 username user_rtcp password password_rtcp generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1236 typ host name video_rtcp "
+    "network_name eth0 username user_video_rtcp password password_video_rtcp "
+    "generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name video_rtp "
+    "network_name eth0 username user_video_rtp password password_video_rtp "
+    "generation 0\r\n";
 
 static const char kSdpDestroyer[] = "!@#$%^&";
 
@@ -201,6 +244,10 @@ class WebRtcSdpTest : public testing::Test {
     // cryptos
     EXPECT_EQ(acd1->cryptos().size(), acd2->cryptos().size());
     EXPECT_EQ(vcd1->cryptos().size(), vcd2->cryptos().size());
+    if (acd1->cryptos().size() != acd2->cryptos().size() ||
+        vcd1->cryptos().size() != vcd2->cryptos().size()) {
+      return false;
+    }
     for (size_t i = 0; i< acd1->cryptos().size(); ++i) {
       const CryptoParams c1 = acd1->cryptos().at(i);
       const CryptoParams c2 = acd2->cryptos().at(i);
@@ -214,7 +261,11 @@ class WebRtcSdpTest : public testing::Test {
 
     // codecs
     EXPECT_EQ(acd1->codecs().size(), acd2->codecs().size());
+    if (acd1->codecs().size() != acd2->codecs().size())
+      return false;
     EXPECT_EQ(vcd1->codecs().size(), vcd2->codecs().size());
+    if (vcd1->codecs().size() != vcd2->codecs().size())
+      return false;
     for (size_t i = 0; i< acd1->codecs().size(); ++i) {
       const AudioCodec c1 = acd1->codecs().at(i);
       const AudioCodec c2 = acd2->codecs().at(i);
@@ -238,7 +289,8 @@ class WebRtcSdpTest : public testing::Test {
 
   bool CompareCandidates(const Candidates& cs1, const Candidates& cs2) {
     EXPECT_EQ(cs1.size(), cs2.size());
-
+    if (cs1.size() != cs2.size())
+      return false;
     for (size_t i = 0; i< cs1.size(); ++i) {
       const cricket::Candidate c1 = cs1.at(i);
       const cricket::Candidate c2 = cs2.at(i);
@@ -250,7 +302,7 @@ class WebRtcSdpTest : public testing::Test {
   bool ReplaceAndTryToParse(const char* search, const char* replace) {
     SessionDescription desc;
     std::vector<cricket::Candidate> candidates;
-    std::string sdp = kSdpString;
+    std::string sdp = kSdpFullString;
     talk_base::replace_substrs(search, strlen(search), replace,
         strlen(replace), &sdp);
     return webrtc::SdpDeserialize(sdp, &desc, &candidates);
@@ -264,17 +316,38 @@ class WebRtcSdpTest : public testing::Test {
 TEST_F(WebRtcSdpTest, Serialize) {
   std::string message = webrtc::SdpSerialize(desc_, candidates_);
   LOG(LS_INFO) << "SDP: " << message;
+  EXPECT_EQ(std::string(kSdpFullString), message);
+}
+
+TEST_F(WebRtcSdpTest, SerializeSessionDescription) {
+  std::string message = webrtc::SdpSerializeSessionDescription(desc_);
   EXPECT_EQ(std::string(kSdpString), message);
+}
+
+TEST_F(WebRtcSdpTest, SerializeCandidates) {
+  std::string message = webrtc::SdpSerializeCandidates(candidates_);
+  EXPECT_EQ(std::string(kSdpCandidates), message);
 }
 
 TEST_F(WebRtcSdpTest, Deserialize) {
   SessionDescription desc;
   std::vector<cricket::Candidate> candidates;
   // Deserialize
-  EXPECT_TRUE(webrtc::SdpDeserialize(kSdpString, &desc, &candidates));
+  EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &desc, &candidates));
   // Verify
   LOG(LS_INFO) << "SDP: " << webrtc::SdpSerialize(desc, candidates);
   EXPECT_TRUE(CompareSessionDescription(desc_, desc));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeSessionDescription) {
+  SessionDescription desc;
+  EXPECT_TRUE(webrtc::SdpDeserializeSessionDescription(kSdpString, &desc));
+  EXPECT_TRUE(CompareSessionDescription(desc_, desc));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeCandidates) {
+  std::vector<cricket::Candidate> candidates;
+  EXPECT_TRUE(webrtc::SdpDeserializeCandidates(kSdpCandidates, &candidates));
   EXPECT_TRUE(CompareCandidates(candidates_, candidates));
 }
 
@@ -293,4 +366,9 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
 
   // Broken media description
   EXPECT_EQ(true, ReplaceAndTryToParse("video 0 RTP/AVPF", kSdpDestroyer));
+}
+
+TEST_F(WebRtcSdpTest, FormatSdp) {
+  std::string full_sdp = webrtc::SdpFormat(kSdpString, kSdpCandidates);
+  EXPECT_EQ(kSdpFullString, full_sdp);
 }

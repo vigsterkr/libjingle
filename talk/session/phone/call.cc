@@ -607,53 +607,15 @@ void Call::OnSessionInfoMessage(Session *session,
     return;
   }
 
-  if (!SetSendResolutions(session, view_request)) {
-    LOG(LS_WARNING) << "Failed to set send resolutions.";
-  }
-}
-
-bool Call::SetSendResolutions(
-    Session *session, const ViewRequest& view_request) {
-  // TODO: Change resolution depending on ssrc.  For now,
-  // assume we have the same resolution for all, and change by setting
-  // the remote content to change the codecs, which changes the
-  // resolution.
-  //
-  // Eventually it should look something like this:
-  // VideoChannel *video_channel = GetVideoChannel(session);
-  // for (StaticVideoViews::const_iterator view =
-  //          view_request.static_video_views.begin();
-  //      view != view_request.static_video_views.end(); ++view) {
-  //   if (!video_channel->SetResolution(
-  //           view->ssrc, view->width, view->height, view->framerate)) {
-  //     LOG(LS_WARNING) <<
-  //         "Failed to set view request resolution of ssrc " << view->ssrc;
-  //   }
-  // }
-
   VideoChannel *video_channel = GetVideoChannel(session);
   if (video_channel == NULL) {
-    return false;
+    LOG(LS_WARNING) << "Ignore view request since we have no video channel.";
+    return;
   }
 
-  // If there are no views, set resolution to 0x0x0.
-  StaticVideoView target_view(0U, 0, 0, 0);
-  if (!view_request.static_video_views.empty()) {
-    target_view = view_request.static_video_views[0];
+  if (!video_channel->ApplyViewRequest(view_request)) {
+    LOG(LS_WARNING) << "Failed to ApplyViewRequest.";
   }
-  VideoContentDescription* target_video = new VideoContentDescription();
-  const VideoContentDescription* current_video =
-      GetFirstVideoContentDescription(session->remote_description());
-  for (VideoCodecs::const_iterator current_codec =
-           current_video->codecs().begin();
-       current_codec != current_video->codecs().end(); ++current_codec) {
-    VideoCodec target_codec = *current_codec;
-    target_codec.width = target_view.width;
-    target_codec.height = target_view.height;
-    target_codec.framerate = target_view.framerate;
-    target_video->AddCodec(target_codec);
-  }
-  return video_channel->SetRemoteContent(target_video, CA_UPDATE);
 }
 
 void FindStreamChanges(const std::vector<StreamParams>& streams,
@@ -668,7 +630,13 @@ void FindStreamChanges(const std::vector<StreamParams>& streams,
         removed_streams->push_back(stream);
       }
     } else {
-      added_streams->push_back(*update);
+      // There's a bug on reflector that will send <stream>s even
+      // though there is not ssrc (which means there isn't really a
+      // stream).  To work around it, we simply ignore new <stream>s
+      // that don't have any ssrcs.
+      if (update->has_ssrcs()) {
+        added_streams->push_back(*update);
+      }
     }
   }
 }

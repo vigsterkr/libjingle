@@ -108,8 +108,11 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
       return 0;
     }
     WebRtcVideoFrame video_frame;
+    // Convert 90K timestamp to ns timestamp.
+    int64 time_stamp_in_ns = (time_stamp / 90) *
+       talk_base::kNumNanosecsPerMillisec;
     video_frame.Attach(buffer, buffer_size, width_, height_,
-                       1, 1, 0, time_stamp, 0);
+                       1, 1, 0, time_stamp_in_ns, 0);
 
 
     // Sanity check on decoded frame size.
@@ -249,20 +252,20 @@ class WebRtcVideoChannelInfo  {
  public:
   explicit WebRtcVideoChannelInfo(int channel_id)
       : channel_id_(channel_id),
-        renderer_(NULL),
+        render_adapter_(NULL),
         decoder_observer_(channel_id) {
   }
   int channel_id() { return channel_id_; }
   void SetRenderer(VideoRenderer* renderer) {
-    renderer_.SetRenderer(renderer);
+    render_adapter_.SetRenderer(renderer);
   }
-  WebRtcRenderAdapter* render_adapter() { return &renderer_; }
+  WebRtcRenderAdapter* render_adapter() { return &render_adapter_; }
   WebRtcDecoderObserver* decoder_observer() { return &decoder_observer_; }
 
  private:
   int channel_id_;  // Webrtc video channel number.
   // Renderer for this channel.
-  WebRtcRenderAdapter renderer_;
+  WebRtcRenderAdapter render_adapter_;
   WebRtcDecoderObserver decoder_observer_;
 };
 
@@ -1019,6 +1022,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       render_started_(false),
       muted_(false),
       local_ssrc_(0),
+      first_receive_ssrc_(0),
       send_min_bitrate_(kMinVideoBitrate),
       send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
@@ -1276,7 +1280,7 @@ bool WebRtcVideoMediaChannel::SetSend(bool send) {
     }
   }
   sending_ = send;
-
+  
   return true;
 }
 
@@ -1337,6 +1341,17 @@ bool WebRtcVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
 }
 
 bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
+  // TODO Remove this once BWE works properly across different send
+  // and receive channels.
+  // Reuse default channel for recv stream in 1:1 call.
+  if ((channel_options_ & OPT_CONFERENCE) == 0 && first_receive_ssrc_ == 0) {
+    LOG(LS_INFO) << "Recv stream " << sp.first_ssrc()
+                 << " reuse default channel #"
+                 << vie_channel_;
+    first_receive_ssrc_ = sp.first_ssrc();
+    return true;
+  }
+
   if (mux_channels_.find(sp.first_ssrc()) != mux_channels_.end()) {
     LOG(LS_ERROR) << "Stream already exists";
     return false;
@@ -1358,10 +1373,26 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
     LOG_RTCERR1(CreateChannel, channel_id);
     return false;
   }
-  if (!ConfigureChannel(channel_id) || !ConfigureReceiving(channel_id,
-                                                           sp.first_ssrc())) {
+
+  // Get the default renderer.
+  VideoRenderer* default_renderer = NULL;
+  if ((channel_options_ & OPT_CONFERENCE) != 0) {
+    if (mux_channels_.size() == 1 &&
+        mux_channels_.find(0) != mux_channels_.end()) {
+      GetRenderer(0, &default_renderer);
+    }
+  }
+
+  if (!ConfigureChannel(channel_id) ||
+      !ConfigureReceiving(channel_id, sp.first_ssrc())) {
     engine_->vie()->base()->DeleteChannel(channel_id);
     return false;
+  }
+
+  // The first recv stream reuses the default renderer (if a default renderer
+  // has been set).
+  if (default_renderer) {
+    SetRenderer(sp.first_ssrc(), default_renderer);
   }
 
   LOG(LS_INFO) << "New video stream " << sp.first_ssrc()
@@ -1375,6 +1406,13 @@ bool WebRtcVideoMediaChannel::RemoveRecvStream(uint32 ssrc) {
   ChannelMap::iterator it = mux_channels_.find(ssrc);
 
   if (it == mux_channels_.end()) {
+    // TODO: Remove this once BWE works properly across different send
+    // and receive channels.
+    // The default channel is reused for recv stream in 1:1 call.
+    if (first_receive_ssrc_ == ssrc) {
+      first_receive_ssrc_ = 0;
+      return true;
+    }
     return false;
   }
   WebRtcVideoChannelInfo* info = it->second;
@@ -1413,6 +1451,11 @@ bool WebRtcVideoMediaChannel::StartSend() {
     LOG_RTCERR1(StartSend, vie_channel_);
     return false;
   }
+
+  // TODO Change this once REMB supporting multiple sending channels.
+  // Send remb (2nd param) and use remb for BWE (3rd param).
+  engine_->vie()->rtp()->SetRembStatus(vie_channel_, true, true);
+
   return true;
 }
 
@@ -1421,13 +1464,30 @@ bool WebRtcVideoMediaChannel::StopSend() {
     LOG_RTCERR1(StopSend, vie_channel_);
     return false;
   }
+
+  // TODO Change this once REMB supporting multiple sending channels.
+  // Don't send remb (2nd param) but use remb for BWE (3rd param).
+  engine_->vie()->rtp()->SetRembStatus(vie_channel_, false, true);
+
   return true;
 }
 
 bool WebRtcVideoMediaChannel::SetRenderer(uint32 ssrc,
                                           VideoRenderer* renderer) {
-  if (mux_channels_.find(ssrc) == mux_channels_.end())
+  if (mux_channels_.find(ssrc) == mux_channels_.end()) {
+    // TODO: Remove this once BWE works properly across different send
+    // and receive channels.
+    // The default channel is reused for recv stream in 1:1 call.
+    if (first_receive_ssrc_ == ssrc &&
+        mux_channels_.find(0) != mux_channels_.end()) {
+      LOG(LS_INFO) << "SetRenderer " << ssrc
+                   << " reuse default channel #"
+                   << vie_channel_;
+      mux_channels_[0]->SetRenderer(renderer);
+      return true;
+    }
     return false;
+  }
 
   mux_channels_[ssrc]->SetRenderer(renderer);
   return true;
@@ -1705,8 +1765,18 @@ void WebRtcVideoMediaChannel::SetInterface(NetworkInterface* iface) {
 bool WebRtcVideoMediaChannel::GetRenderer(uint32 ssrc,
                                           VideoRenderer** renderer) {
   ChannelMap::const_iterator it = mux_channels_.find(ssrc);
-  if (it == mux_channels_.end())
+  if (it == mux_channels_.end()) {
+    if (first_receive_ssrc_ == ssrc &&
+        mux_channels_.find(0) != mux_channels_.end()) {
+      LOG(LS_INFO) << " GetRenderer " << ssrc
+                   << " reuse default renderer #"
+                   << vie_channel_;
+      *renderer = mux_channels_[0]->render_adapter()->renderer();
+      return true;
+    }
     return false;
+  }
+
   *renderer = it->second->render_adapter()->renderer();
   return true;
 }
@@ -1802,9 +1872,11 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
       // Not a fatal error.
     }
   }
-  // Install a render adapter.
+
   talk_base::scoped_ptr<WebRtcVideoChannelInfo> channel_info(
       new WebRtcVideoChannelInfo(channel_id));
+
+  // Install a render adapter.
   if (engine_->vie()->render()->AddRenderer(channel_id,
       webrtc::kVideoI420, channel_info->render_adapter()) != 0) {
     LOG_RTCERR3(AddRenderer, channel_id, webrtc::kVideoI420,
@@ -1812,15 +1884,11 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
     return false;
   }
 
-  // Turn on REMB-based BWE reporting.
-  // First parameter is channel id, second is if this channel should send REMB
-  // packets, last parameter is if it should report BWE using REMB.
-  // TODO: |send_remb| should be channel id so we can have several
-  // REMB groups.
-  bool send_remb = (remote_ssrc == 0);  // SSRC 0 is our default channel.
-  // TODO - Add return value check for SetRembStatus once webrtc
-  // revisions are synced in Chrome and Plugin.
-  engine_->vie()->rtp()->SetRembStatus(channel_id, send_remb, true);
+  // TODO Change this once REMB supporting multiple sending channels.
+  // Turn off remb sending (2nd param) and turn on remb reporting (3rd param)
+  // here.
+  // For sending channel, remb sending will be turned on after StartSending.
+  engine_->vie()->rtp()->SetRembStatus(channel_id, false, true);
 
   if (remote_ssrc != 0) {
     // Use the same SSRC as our default channel

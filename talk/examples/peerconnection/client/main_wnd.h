@@ -107,8 +107,8 @@ class MainWnd : public MainWindow {
                           bool is_error);
   virtual UI current_ui() { return ui_; }
 
-  virtual cricket::VideoRenderer* local_renderer();
-  virtual cricket::VideoRenderer* remote_renderer();
+  virtual webrtc::VideoRendererWrapperInterface* local_renderer();
+  virtual webrtc::VideoRendererWrapperInterface* remote_renderer();
 
   virtual void QueueUIThreadCallback(int msg_id, void* data);
 
@@ -187,8 +187,10 @@ class MainWnd : public MainWindow {
   void HandleTabbing();
 
  private:
-  talk_base::scoped_ptr<VideoRenderer> remote_video_;
-  talk_base::scoped_ptr<VideoRenderer> local_video_;
+  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
+      local_renderer_wrapper_;
+  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
+      remote_renderer_wrapper_;
   UI ui_;
   HWND wnd_;
   DWORD ui_thread_id_;

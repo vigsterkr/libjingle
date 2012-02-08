@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.12 - Feb 07, 2012
+  - PeerConnection client for windows.
+  - Bug fixes.
+
 0.6.11 - Jan 24, 2012
   - Improved ipv6 support.
   - Initial DTLS support.

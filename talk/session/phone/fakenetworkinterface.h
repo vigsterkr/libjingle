@@ -76,9 +76,13 @@ class FakeNetworkInterface : public MediaChannel::NetworkInterface,
     return rtp_packets_.size();
   }
 
+  // Note: callers are responsible for deleting the returned buffer.
   const talk_base::Buffer* GetRtpPacket(int index) {
     talk_base::CritScope cs(&crit_);
-    return (index < NumRtpPackets()) ? &rtp_packets_[index] : NULL;
+    if (index >= NumRtpPackets()) {
+      return NULL;
+    }
+    return new talk_base::Buffer(rtp_packets_[index]);
   }
 
   int NumRtcpPackets() {
@@ -86,9 +90,13 @@ class FakeNetworkInterface : public MediaChannel::NetworkInterface,
     return rtcp_packets_.size();
   }
 
+  // Note: callers are responsible for deleting the returned buffer.
   const talk_base::Buffer* GetRtcpPacket(int index) {
     talk_base::CritScope cs(&crit_);
-    return (index < NumRtcpPackets()) ? &rtcp_packets_[index] : NULL;
+    if (index >= NumRtcpPackets()) {
+      return NULL;
+    }
+    return new talk_base::Buffer(rtcp_packets_[index]);
   }
 
   int sendbuf_size() const { return sendbuf_size_; }

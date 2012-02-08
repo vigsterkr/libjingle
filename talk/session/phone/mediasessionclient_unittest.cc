@@ -883,6 +883,38 @@ std::string JingleStreamAdd(const std::string& content_name,
       "</iq>";
 }
 
+std::string JingleStreamAddWithoutSsrc(const std::string& content_name,
+                                       const std::string& nick,
+                                       const std::string& name) {
+  return \
+      "<iq"
+      "  xmlns='jabber:client'"
+      "  from='me@mydomain.com'"
+      "  to='user@domain.com/resource'"
+      "  type='set'"
+      "  id='150'>"
+      "  <jingle"
+      "    xmlns='urn:xmpp:jingle:1'"
+      "    action='description-info'>"
+      "    <content"
+      "      xmlns='urn:xmpp:jingle:1'"
+      "      name='" + content_name + "'>"
+      "      <description"
+      "        xmlns='urn:xmpp:jingle:apps:rtp:1'"
+      "        media='" + content_name + "'>"
+      "        <streams"
+      "          xmlns='google:jingle'>"
+      "          <stream"
+      "            nick='" + nick + "'"
+      "            name='" + name + "'>"
+       "          </stream>"
+      "        </streams>"
+      "      </description>"
+      "    </content>"
+      "  </jingle>"
+      "</iq>";
+}
+
 std::string JingleStreamRemove(const std::string& content_name,
                                const std::string& nick,
                                const std::string& name) {
@@ -2125,6 +2157,20 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     ASSERT_EQ("Bob", last_streams_added_.audio()[0].nick);
     ASSERT_EQ(1U, last_streams_added_.audio()[0].ssrcs.size());
     ASSERT_EQ(1234U, last_streams_added_.audio()[0].first_ssrc());
+
+    // Ignores adds without ssrcs.
+    streams_stanza.reset(buzz::XmlElement::ForStr(
+        JingleStreamAddWithoutSsrc("audio", "Bob", "audioX")));
+    SetJingleSid(streams_stanza.get());
+    client_->session_manager()->OnIncomingMessage(streams_stanza.get());
+    ASSERT_EQ(1U, last_streams_added_.audio().size());
+    ASSERT_EQ(1234U, last_streams_added_.audio()[0].first_ssrc());
+
+    // Ignores stream updates with unknown content names. (Don't terminate).
+    streams_stanza.reset(buzz::XmlElement::ForStr(
+        JingleStreamAddWithoutSsrc("foo", "Bob", "foo")));
+    SetJingleSid(streams_stanza.get());
+    client_->session_manager()->OnIncomingMessage(streams_stanza.get());
 
     streams_stanza.reset(buzz::XmlElement::ForStr(
         JingleStreamAdd("audio", "Joe", "audio1", "2468")));

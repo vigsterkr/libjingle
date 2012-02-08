@@ -298,6 +298,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool muted_;  // Flag to tell if we need to mute video.
   // Our local SSRC. Currently only one send stream is supported.
   uint32 local_ssrc_;
+  uint32 first_receive_ssrc_;
   int send_min_bitrate_;
   int send_start_bitrate_;
   int send_max_bitrate_;

@@ -1116,22 +1116,24 @@ void CallClient::OnMediaStreamsUpdate(cricket::Call* call,
                                       cricket::Session* session,
                                       const cricket::MediaStreams& added,
                                       const cricket::MediaStreams& removed) {
-  for (std::vector<cricket::StreamParams>::const_iterator
-       it = removed.video().begin(); it != removed.video().end(); ++it) {
-    RemoveStaticRenderedView(it->first_ssrc());
-  }
-
-  if (render_) {
+  if (call->video()) {
     for (std::vector<cricket::StreamParams>::const_iterator
-         it = added.video().begin(); it != added.video().end(); ++it) {
-      // TODO: Make dimensions and positions more configurable.
-      int offset = (50 * static_views_accumulated_count_) % 300;
-      AddStaticRenderedView(session, it->first_ssrc(), 640, 400, 30,
-                            offset, offset);
+         it = removed.video().begin(); it != removed.video().end(); ++it) {
+      RemoveStaticRenderedView(it->first_ssrc());
     }
-  }
 
-  SendViewRequest(session);
+    if (render_) {
+      for (std::vector<cricket::StreamParams>::const_iterator
+           it = added.video().begin(); it != added.video().end(); ++it) {
+        // TODO: Make dimensions and positions more configurable.
+        int offset = (50 * static_views_accumulated_count_) % 300;
+        AddStaticRenderedView(session, it->first_ssrc(), 640, 400, 30,
+                              offset, offset);
+      }
+    }
+
+    SendViewRequest(session);
+  }
 }
 
 // TODO: Would these methods to add and remove views make

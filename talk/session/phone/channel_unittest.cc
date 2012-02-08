@@ -33,6 +33,7 @@
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/fakertp.h"
+#include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/mediarecorder.h"
 #include "talk/session/phone/rtpdump.h"
@@ -540,6 +541,16 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     ASSERT_EQ(2u, media_channel1_->send_streams().size());
     EXPECT_EQ(stream2, media_channel1_->send_streams()[0]);
     EXPECT_EQ(stream3, media_channel1_->send_streams()[1]);
+
+    // Update the local streams with a stream that does not change.
+    // THe update is ignored.
+    typename T::Content content4;
+    content4.AddStream(stream2);
+    content4.set_partial(true);
+    EXPECT_TRUE(channel1_->SetLocalContent(&content4, CA_UPDATE));
+    ASSERT_EQ(2u, media_channel1_->send_streams().size());
+    EXPECT_EQ(stream2, media_channel1_->send_streams()[0]);
+    EXPECT_EQ(stream3, media_channel1_->send_streams()[1]);
   }
 
   // Test that SetRemoteContent properly handles adding and removing
@@ -595,6 +606,16 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     content3.AddStream(stream1);
     content3.set_partial(true);
     EXPECT_TRUE(channel1_->SetRemoteContent(&content3, CA_UPDATE));
+    ASSERT_EQ(2u, media_channel1_->recv_streams().size());
+    EXPECT_EQ(stream2, media_channel1_->recv_streams()[0]);
+    EXPECT_EQ(stream3, media_channel1_->recv_streams()[1]);
+
+    // Update the remote streams with a stream that does not change.
+    // The update is ignored.
+    typename T::Content content4;
+    content4.AddStream(stream2);
+    content4.set_partial(true);
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content4, CA_UPDATE));
     ASSERT_EQ(2u, media_channel1_->recv_streams().size());
     EXPECT_EQ(stream2, media_channel1_->recv_streams()[0]);
     EXPECT_EQ(stream3, media_channel1_->recv_streams()[1]);
@@ -1854,4 +1875,42 @@ TEST_F(VideoChannelTest, SendSsrcMuxToSsrcMuxWithRtcpMux) {
 
 TEST_F(VideoChannelTest, TestSrtpError) {
   Base::TestSrtpError();
+}
+
+TEST_F(VideoChannelTest, TestApplyViewRequest) {
+  CreateChannels(0, 0);
+  EXPECT_TRUE(SendInitiate());
+  EXPECT_TRUE(SendAccept());
+
+  cricket::VideoFormat send_format;
+  EXPECT_TRUE(media_channel1_->GetSendStreamFormat(kSsrc1, &send_format));
+  EXPECT_EQ(640, send_format.width);
+  EXPECT_EQ(400, send_format.height);
+  EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), send_format.interval);
+
+  cricket::ViewRequest request;
+  request.static_video_views.push_back(
+      cricket::StaticVideoView(kSsrc1, 320, 200, 15));
+  EXPECT_TRUE(channel1_->ApplyViewRequest(request));
+  EXPECT_TRUE(media_channel1_->GetSendStreamFormat(kSsrc1, &send_format));
+  EXPECT_EQ(320, send_format.width);
+  EXPECT_EQ(200, send_format.height);
+  EXPECT_EQ(cricket::VideoFormat::FpsToInterval(15), send_format.interval);
+
+  // Short term hack for view request with SSRC 0. TODO: Remove this
+  // once Reflector uses the correct SSRC in view request (b/5977302).
+  request.static_video_views.clear();
+  request.static_video_views.push_back(
+      cricket::StaticVideoView(0, 160, 100, 8));
+  EXPECT_TRUE(channel1_->ApplyViewRequest(request));
+  EXPECT_TRUE(media_channel1_->GetSendStreamFormat(kSsrc1, &send_format));
+  EXPECT_EQ(160, send_format.width);
+  EXPECT_EQ(100, send_format.height);
+  EXPECT_EQ(cricket::VideoFormat::FpsToInterval(8), send_format.interval);
+
+  request.static_video_views.clear();
+  EXPECT_TRUE(channel1_->ApplyViewRequest(request));
+  EXPECT_TRUE(media_channel1_->GetSendStreamFormat(kSsrc1, &send_format));
+  EXPECT_EQ(0, send_format.width);
+  EXPECT_EQ(0, send_format.height);
 }

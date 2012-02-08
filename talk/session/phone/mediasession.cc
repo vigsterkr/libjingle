@@ -254,12 +254,14 @@ void MediaSessionOptions::RemoveStream(MediaType type,
 }
 
 MediaSessionDescriptionFactory::MediaSessionDescriptionFactory()
-    : secure_(SEC_DISABLED) {
+    : secure_(SEC_DISABLED),
+      add_legacy_(true) {
 }
 
 MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
     ChannelManager* channel_manager)
-    : secure_(SEC_DISABLED) {
+    : secure_(SEC_DISABLED),
+      add_legacy_(true) {
   channel_manager->GetSupportedAudioCodecs(&audio_codecs_);
   channel_manager->GetSupportedVideoCodecs(&video_codecs_);
 }
@@ -284,7 +286,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       return NULL;  // Abort, something went seriously wrong.
     }
 
-    if (options.streams.empty()) {
+    if (options.streams.empty() && add_legacy_) {
       // TODO: Remove this legacy stream when all apps use StreamParams.
       audio->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
@@ -337,7 +339,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
       return NULL;  // Abort, something went seriously wrong.
     }
 
-    if (options.streams.empty()) {
+    if (options.streams.empty() && add_legacy_) {
       // TODO: Remove this legacy stream when all apps use StreamParams.
       video->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
@@ -410,7 +412,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       return NULL;  // Abort, something went seriously wrong.
     }
 
-    if (options.streams.empty()) {
+    if (options.streams.empty() && add_legacy_) {
       // TODO: Remove this legacy stream when all apps use StreamParams.
       audio_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }
@@ -475,7 +477,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       return NULL;  // Abort, something went seriously wrong.
     }
 
-    if (options.streams.empty()) {
+    if (options.streams.empty() && add_legacy_) {
       // TODO: Remove this legacy stream when all apps use StreamParams.
       video_accept->AddLegacyStream(talk_base::CreateRandomNonZeroId());
     }

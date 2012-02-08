@@ -118,7 +118,8 @@ float VideoAdapter::FindClosestScale(int width, int height,
 ///////////////////////////////////////////////////////////////////////
 // Implementation of VideoAdapter
 VideoAdapter::VideoAdapter()
-    : black_output_(false),
+    : output_num_pixels_(0),
+      black_output_(false),
       is_black_(false),
       drop_frame_count_(0) {
 }

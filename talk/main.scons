@@ -100,6 +100,8 @@ root_env.AppendUnique(locales = [
     'no', 'or', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv',
     'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur', 'vi', 'zh-CN', 'zh-TW'])
 
+AddTargetGroup('all_breakpads', 'breakpad files can be built')
+
 #-------------------------------------------------------------------------------
 # W I N D O W S
 #

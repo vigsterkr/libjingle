@@ -48,12 +48,22 @@ class SessionDescription;
 
 namespace webrtc {
 
-// Serializes the passed in SessionDescription and Candidates to an SDP string.
+// Serializes the passed in SessionDescription and Candidates to a SDP string.
 // desc - The SessionDescription object to be serialized.
 // candidates - The Set of Candidate objects to be serialized.
 // return - SDP string serialized from the arguments.
 std::string SdpSerialize(const cricket::SessionDescription& desc,
                          const std::vector<cricket::Candidate>& candidates);
+
+// Serializes the passed in SessionDescription to a SDP string.
+// desc - The SessionDescription object to be serialized.
+std::string SdpSerializeSessionDescription(
+    const cricket::SessionDescription& desc);
+
+// Serializes the passed in Candidates to a SDP string.
+// candidates - The Set of Candidate objects to be serialized.
+std::string SdpSerializeCandidates(
+    const std::vector<cricket::Candidate>& candidates);
 
 // Deserializes the passed in SDP string to a SessionDescription and Candidates.
 // message - SDP string to be Deserialized.
@@ -63,6 +73,26 @@ std::string SdpSerialize(const cricket::SessionDescription& desc,
 bool SdpDeserialize(const std::string& message,
                     cricket::SessionDescription* desc,
                     std::vector<cricket::Candidate>* candidates);
+
+// Deserializes the passed in SDP string to a SessionDescription.
+// Candidates are ignored.
+// message - SDP string to be Deserialized.
+// desc - The SessionDescription object deserialized from the SDP string.
+// return - true on success, false on failure.
+bool SdpDeserializeSessionDescription(const std::string& message,
+                                      cricket::SessionDescription* desc);
+
+// Deserializes the passed in SDP string to Candidates.
+// Only the candidates are parsed from the SDP string.
+// message - SDP string to be Deserialized.
+// candidates - The set of Candidate deserialized from the SDP string.
+// return - true on success, false on failure.
+bool SdpDeserializeCandidates(const std::string& message,
+                              std::vector<cricket::Candidate>* candidates);
+
+// Formats a correct SDP string by reformatting a session description and
+// candidates.
+std::string SdpFormat(const std::string& desc, const std::string& candidates);
 
 }  // namespace webrtc
 

@@ -285,6 +285,11 @@ class MediaSessionDescriptionFactory {
   void set_video_codecs(const VideoCodecs& codecs) { video_codecs_ = codecs; }
   SecureMediaPolicy secure() const { return secure_; }
   void set_secure(SecureMediaPolicy s) { secure_ = s; }
+  // Decides if a StreamParams shall be added to the audio and video media
+  // content in SessionDescription when CreateOffer and CreateAnswer is called
+  // even if |options| don't include a Stream. This is needed to support legacy
+  // applications. |add_legacy_| is true per default.
+  void set_add_legacy_streams(bool add_legacy) { add_legacy_ = add_legacy; }
 
   SessionDescription* CreateOffer(
       const MediaSessionOptions& options,
@@ -299,6 +304,7 @@ class MediaSessionDescriptionFactory {
   AudioCodecs audio_codecs_;
   VideoCodecs video_codecs_;
   SecureMediaPolicy secure_;
+  bool add_legacy_;
   std::string lang_;
 };
 

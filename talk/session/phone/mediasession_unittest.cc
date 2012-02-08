@@ -221,6 +221,28 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoOffer) {
   ASSERT_CRYPTO(vcd, false, 1U, CS_AES_CM_128_HMAC_SHA1_80);
 }
 
+// Create an audio, video offer without legacy StreamParams.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       TestCreateOfferWithoutLegacyStreams) {
+  MediaSessionOptions opts;
+  opts.has_video = true;
+  f1_.set_add_legacy_streams(false);
+  talk_base::scoped_ptr<SessionDescription>
+      offer(f1_.CreateOffer(opts, NULL));
+  ASSERT_TRUE(offer.get() != NULL);
+  const ContentInfo* ac = offer->GetContentByName("audio");
+  const ContentInfo* vc = offer->GetContentByName("video");
+  ASSERT_TRUE(ac != NULL);
+  ASSERT_TRUE(vc != NULL);
+  const AudioContentDescription* acd =
+      static_cast<const AudioContentDescription*>(ac->description);
+  const VideoContentDescription* vcd =
+      static_cast<const VideoContentDescription*>(vc->description);
+
+  EXPECT_FALSE(vcd->has_ssrcs());             // No StreamParams.
+  EXPECT_FALSE(acd->has_ssrcs());             // No StreamParams.
+}
+
 // Create a typical audio answer, and ensure it matches what we expect.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswer) {
   f1_.set_secure(SEC_ENABLED);
@@ -276,6 +298,30 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswer) {
   EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_TRUE(vcd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(vcd, false, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+}
+
+// Create an audio, video answer without legacy StreamParams.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       TestCreateAnswerWithoutLegacyStreams) {
+  MediaSessionOptions opts;
+  opts.has_video = true;
+  f1_.set_add_legacy_streams(false);
+  f2_.set_add_legacy_streams(false);
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  ASSERT_TRUE(offer.get() != NULL);
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+  const ContentInfo* ac = answer->GetContentByName("audio");
+  const ContentInfo* vc = answer->GetContentByName("video");
+  ASSERT_TRUE(ac != NULL);
+  ASSERT_TRUE(vc != NULL);
+  const AudioContentDescription* acd =
+      static_cast<const AudioContentDescription*>(ac->description);
+  const VideoContentDescription* vcd =
+      static_cast<const VideoContentDescription*>(vc->description);
+
+  EXPECT_FALSE(acd->has_ssrcs());  // No StreamParams.
+  EXPECT_FALSE(vcd->has_ssrcs());  // No StreamParams.
 }
 
 TEST_F(MediaSessionDescriptionFactoryTest, TestPartial) {

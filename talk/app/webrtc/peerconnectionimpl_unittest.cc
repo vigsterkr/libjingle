@@ -39,6 +39,7 @@
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
+static const char kInvalidConfiguration[] = "a13151913541234:19302";
 static const uint32 kTimeout = 5000U;
 
 using talk_base::scoped_ptr;
@@ -159,7 +160,17 @@ class PeerConnectionImplTest : public testing::Test {
         talk_base::Thread::Current(), talk_base::Thread::Current(),
         port_allocator_factory_.get(), NULL);
     ASSERT_TRUE(pc_factory_.get() != NULL);
+  }
+
+  void CreatePeerConnection() {
     pc_ = pc_factory_->CreatePeerConnection(kStunConfiguration, &observer_);
+    ASSERT_TRUE(pc_.get() != NULL);
+    observer_.SetPeerConnectionInterface(pc_.get());
+    EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+  }
+
+  void CreatePeerConnectionWithInvalidConfiguration() {
+    pc_ = pc_factory_->CreatePeerConnection(kInvalidConfiguration, &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
     observer_.SetPeerConnectionInterface(pc_.get());
     EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
@@ -188,7 +199,13 @@ class PeerConnectionImplTest : public testing::Test {
   MockPeerConnectionObserver observer_;
 };
 
+TEST_F(PeerConnectionImplTest, CreatePeerConnectionWithInvalidConfiguration) {
+  CreatePeerConnectionWithInvalidConfiguration();
+  AddStream(kStreamLabel1);
+}
+
 TEST_F(PeerConnectionImplTest, AddStream) {
+  CreatePeerConnection();
   AddStream(kStreamLabel1);
   ASSERT_EQ(1u, pc_->local_streams()->count());
   EXPECT_EQ(kStreamLabel1, pc_->local_streams()->at(0)->label());
@@ -206,7 +223,8 @@ TEST_F(PeerConnectionImplTest, AddStream) {
   EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(0)->label());
 }
 
-TEST_F(PeerConnectionImplTest, UpdateStream) {
+TEST_F(PeerConnectionImplTest, DISABLED_UpdateStream) {
+  CreatePeerConnection();
   AddStream(kStreamLabel1);
   WAIT(PeerConnectionInterface::kNegotiating == observer_.state_, kTimeout);
   pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
@@ -241,6 +259,7 @@ TEST_F(PeerConnectionImplTest, UpdateStream) {
 }
 
 TEST_F(PeerConnectionImplTest, SendClose) {
+  CreatePeerConnection();
   pc_->Close();
   EXPECT_EQ(RoapMessageBase::kShutdown, observer_.last_message_.type());
   EXPECT_EQ(PeerConnectionInterface::kClosing, observer_.state_);
@@ -249,6 +268,7 @@ TEST_F(PeerConnectionImplTest, SendClose) {
 }
 
 TEST_F(PeerConnectionImplTest, ReceiveClose) {
+  CreatePeerConnection();
   pc_->ProcessSignalingMessage(CreateShutdownMessage());
   EXPECT_EQ_WAIT(RoapMessageBase::kOk, observer_.last_message_.type(),
                  kTimeout);
@@ -256,6 +276,7 @@ TEST_F(PeerConnectionImplTest, ReceiveClose) {
 }
 
 TEST_F(PeerConnectionImplTest, ReceiveCloseWhileExpectingAnswer) {
+  CreatePeerConnection();
   AddStream(kStreamLabel1);
 
   // Receive the shutdown message.

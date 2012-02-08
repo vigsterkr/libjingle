@@ -124,7 +124,7 @@ bool static ParseConfigString(const std::string& config,
     case STUNS:
     case INVALID:
     default:
-      ASSERT(!"Configuration not supported");
+      LOG(WARNING) << "Configuration not supported";
       return false;
   }
   return true;
@@ -199,8 +199,7 @@ bool PeerConnection::Initialize(const std::string& configuration,
   std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
   std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
 
-  if (!ParseConfigString(configuration, &stun_config, &turn_config))
-    return false;
+  ParseConfigString(configuration, &stun_config, &turn_config);
 
   port_allocator_.reset(factory_->port_allocator_factory()->CreatePortAllocator(
       stun_config, turn_config));

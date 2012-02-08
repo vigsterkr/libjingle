@@ -31,6 +31,7 @@
 
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
+#include "talk/examples/peerconnection/client/defaults.h"
 
 ATOM MainWnd::wnd_class_ = 0;
 const wchar_t MainWnd::kClassName[] = L"WebRTC_MainWnd";
@@ -160,8 +161,9 @@ void MainWnd::SwitchToConnectUI() {
 }
 
 void MainWnd::SwitchToPeerList(const Peers& peers) {
-  remote_video_.reset();
-  local_video_.reset();
+  // Clean up buffers from a potential previous session.
+  local_renderer_wrapper_ = NULL;
+  remote_renderer_wrapper_ = NULL;
 
   LayoutConnectUI(false);
 
@@ -191,16 +193,18 @@ void MainWnd::MessageBox(const char* caption, const char* text, bool is_error) {
   ::MessageBoxA(handle(), text, caption, flags);
 }
 
-cricket::VideoRenderer* MainWnd::local_renderer() {
-  if (!local_video_.get())
-    local_video_.reset(new VideoRenderer(handle(), 1, 1));
-  return local_video_.get();
+webrtc::VideoRendererWrapperInterface* MainWnd::local_renderer() {
+  if (!local_renderer_wrapper_.get())
+    local_renderer_wrapper_  =
+        webrtc::CreateVideoRenderer(new VideoRenderer(handle(), 1, 1));
+  return local_renderer_wrapper_.get();
 }
 
-cricket::VideoRenderer* MainWnd::remote_renderer() {
-  if (!remote_video_.get())
-    remote_video_.reset(new VideoRenderer(handle(), 1, 1));
-  return remote_video_.get();
+webrtc::VideoRendererWrapperInterface* MainWnd::remote_renderer() {
+  if (!remote_renderer_wrapper_.get())
+    remote_renderer_wrapper_ =
+        webrtc::CreateVideoRenderer(new VideoRenderer(handle(), 1, 1));
+  return remote_renderer_wrapper_.get();
 }
 
 void MainWnd::QueueUIThreadCallback(int msg_id, void* data) {
@@ -215,15 +219,21 @@ void MainWnd::OnPaint() {
   RECT rc;
   ::GetClientRect(handle(), &rc);
 
-  if (ui_ == STREAMING && remote_video_.get() && local_video_.get()) {
-    AutoLock<VideoRenderer> local_lock(local_video_.get());
-    AutoLock<VideoRenderer> remote_lock(remote_video_.get());
+  webrtc::VideoRendererWrapperInterface* renderer_wrapper = local_renderer();
+  VideoRenderer* local_renderer = renderer_wrapper ?
+      static_cast<VideoRenderer*>(renderer_wrapper->renderer()) : NULL;
+  renderer_wrapper = remote_renderer();
+  VideoRenderer* remote_renderer = renderer_wrapper ?
+      static_cast<VideoRenderer*>(renderer_wrapper->renderer()) : NULL;
+  if (ui_ == STREAMING && remote_renderer && local_renderer) {
+    AutoLock<VideoRenderer> local_lock(local_renderer);
+    AutoLock<VideoRenderer> remote_lock(remote_renderer);
 
-    const BITMAPINFO& bmi = remote_video_->bmi();
+    const BITMAPINFO& bmi = remote_renderer->bmi();
     int height = abs(bmi.bmiHeader.biHeight);
     int width = bmi.bmiHeader.biWidth;
 
-    const uint8* image = remote_video_->image();
+    const uint8* image = remote_renderer->image();
     if (image != NULL) {
       HDC dc_mem = ::CreateCompatibleDC(ps.hdc);
       ::SetStretchBltMode(dc_mem, HALFTONE);
@@ -247,7 +257,7 @@ void MainWnd::OnPaint() {
       ::FillRect(dc_mem, &logical_rect, brush);
       ::DeleteObject(brush);
 
-      int max_unit = std::max(width, height);
+      int max_unit = (std::max)(width, height);
       int x = (logical_area.x / 2) - (width / 2);
       int y = (logical_area.y / 2) - (height / 2);
 
@@ -255,8 +265,8 @@ void MainWnd::OnPaint() {
                     0, 0, width, height, image, &bmi, DIB_RGB_COLORS, SRCCOPY);
 
       if ((rc.right - rc.left) > 200 && (rc.bottom - rc.top) > 200) {
-        const BITMAPINFO& bmi = local_video_->bmi();
-        image = local_video_->image();
+        const BITMAPINFO& bmi = local_renderer->bmi();
+        image = local_renderer->image();
         int thumb_width = bmi.bmiHeader.biWidth / 4;
         int thumb_height = abs(bmi.bmiHeader.biHeight) / 4;
         StretchDIBits(dc_mem,
@@ -285,7 +295,7 @@ void MainWnd::OnPaint() {
       ::SetBkMode(ps.hdc, TRANSPARENT);
 
       std::string text(kConnecting);
-      if (!local_video_->image()) {
+      if (!local_renderer->image()) {
         text += kNoVideoStreams;
       } else {
         text += kNoIncomingStream;

@@ -474,8 +474,6 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   void set_requested_intra_frame(bool v) { requested_intra_frame_ = v; }
   bool requested_intra_frame() const { return requested_intra_frame_; }
   bool screen_casting() const { return screen_casting_; }
-  // TODO: remove this with FMS CL
-  bool IsScreencasting() const { return screen_casting_; }
 
  private:
   // Be default, each send stream uses the first send codec format.

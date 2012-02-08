@@ -49,18 +49,15 @@ class NullPeerConnectionObserver : public PeerConnectionObserver {
 };
 
 TEST(PeerConnectionFactory, CreatePCUsingInternalModules) {
-  NullPeerConnectionObserver observer;
   talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
       CreatePeerConnectionFactory());
   ASSERT_TRUE(factory.get() != NULL);
-  talk_base::scoped_refptr<PeerConnectionInterface> pc1(
-      factory->CreatePeerConnection("", &observer));
-  EXPECT_TRUE(pc1.get() == NULL);
 
-  talk_base::scoped_refptr<PeerConnectionInterface> pc2(
+  NullPeerConnectionObserver observer;
+  talk_base::scoped_refptr<PeerConnectionInterface> pc(
       factory->CreatePeerConnection(kStunConfiguration, &observer));
 
-  EXPECT_TRUE(pc2.get() != NULL);
+  EXPECT_TRUE(pc.get() != NULL);
 }
 
 TEST(PeerConnectionFactory, CreatePCUsingExternalModules) {
@@ -75,14 +72,9 @@ TEST(PeerConnectionFactory, CreatePCUsingExternalModules) {
   ASSERT_TRUE(factory.get() != NULL);
 
   NullPeerConnectionObserver observer;
-  talk_base::scoped_refptr<webrtc::PeerConnectionInterface> pc1(
-      factory->CreatePeerConnection("", &observer));
-
-  EXPECT_TRUE(pc1.get() == NULL);
-
-  talk_base::scoped_refptr<PeerConnectionInterface> pc2(
+  talk_base::scoped_refptr<PeerConnectionInterface> pc(
       factory->CreatePeerConnection(kStunConfiguration, &observer));
-  EXPECT_TRUE(pc2.get() != NULL);
+  EXPECT_TRUE(pc.get() != NULL);
 }
 
 }  // namespace webrtc

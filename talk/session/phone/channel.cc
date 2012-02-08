@@ -33,14 +33,141 @@
 #include "talk/base/logging.h"
 #include "talk/p2p/base/transportchannel.h"
 #include "talk/session/phone/channelmanager.h"
+#include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/rtputils.h"
 
 namespace cricket {
 
+enum {
+  MSG_ENABLE = 1,
+  MSG_DISABLE = 2,
+  MSG_MUTE = 3,
+  MSG_UNMUTE = 4,
+  MSG_SETREMOTECONTENT = 5,
+  MSG_SETLOCALCONTENT = 6,
+  MSG_EARLYMEDIATIMEOUT = 8,
+  MSG_PRESSDTMF = 9,
+  MSG_SETRENDERER = 10,
+  MSG_ADDRECVSTREAM = 11,
+  MSG_REMOVERECVSTREAM = 12,
+  MSG_SETRINGBACKTONE = 13,
+  MSG_PLAYRINGBACKTONE = 14,
+  MSG_SETMAXSENDBANDWIDTH = 15,
+  MSG_ADDSCREENCAST = 16,
+  MSG_REMOVESCREENCAST = 17,
+  // Removed MSG_SETRTCPCNAME = 18. It is no longer used.
+  MSG_SENDINTRAFRAME = 19,
+  MSG_REQUESTINTRAFRAME = 20,
+  MSG_SCREENCASTWINDOWEVENT = 21,
+  MSG_RTPPACKET = 22,
+  MSG_RTCPPACKET = 23,
+  MSG_CHANNEL_ERROR = 24,
+  MSG_ENABLECPUADAPTATION = 25,
+  MSG_DISABLECPUADAPTATION = 26,
+  MSG_SCALEVOLUME = 27,
+  MSG_HANDLEVIEWREQUEST = 28
+};
+
+struct SetContentData : public talk_base::MessageData {
+  SetContentData(const MediaContentDescription* content, ContentAction action)
+      : content(content),
+        action(action),
+        result(false) {
+  }
+  const MediaContentDescription* content;
+  ContentAction action;
+  bool result;
+};
+
+struct SetBandwidthData : public talk_base::MessageData {
+  explicit SetBandwidthData(int value) : value(value), result(false) {}
+  int value;
+  bool result;
+};
+
+struct SetRingbackToneMessageData : public talk_base::MessageData {
+  SetRingbackToneMessageData(const void* b, int l)
+      : buf(b),
+        len(l),
+        result(false) {
+  }
+  const void* buf;
+  int len;
+  bool result;
+};
+
+struct PlayRingbackToneMessageData : public talk_base::MessageData {
+  PlayRingbackToneMessageData(uint32 s, bool p, bool l)
+      : ssrc(s),
+        play(p),
+        loop(l),
+        result(false) {
+  }
+  uint32 ssrc;
+  bool play;
+  bool loop;
+  bool result;
+};
+struct DtmfMessageData : public talk_base::MessageData {
+  DtmfMessageData(int d, bool p)
+      : digit(d),
+        playout(p),
+        result(false) {
+  }
+  int digit;
+  bool playout;
+  bool result;
+};
+struct ScaleVolumeMessageData : public talk_base::MessageData {
+  ScaleVolumeMessageData(uint32 s, double l, double r)
+      : ssrc(s),
+        left(l),
+        right(r),
+        result(false) {
+  }
+  uint32 ssrc;
+  double left;
+  double right;
+  bool result;
+};
+
 struct PacketMessageData : public talk_base::MessageData {
   talk_base::Buffer packet;
+};
+
+struct RenderMessageData : public talk_base::MessageData {
+  RenderMessageData(uint32 s, VideoRenderer* r) : ssrc(s), renderer(r) {}
+  uint32 ssrc;
+  VideoRenderer* renderer;
+};
+
+struct ScreencastMessageData : public talk_base::MessageData {
+  ScreencastMessageData(uint32 s, const ScreencastId& id)
+      : ssrc(s),
+        window_id(id) {
+  }
+  uint32 ssrc;
+  ScreencastId window_id;
+};
+
+struct ScreencastEventData : public talk_base::MessageData {
+  ScreencastEventData(uint32 s, talk_base::WindowEvent we)
+      : ssrc(s),
+        event(we) {
+  }
+  uint32 ssrc;
+  talk_base::WindowEvent event;
+};
+
+struct ViewRequestMessageData : public talk_base::MessageData {
+  explicit ViewRequestMessageData(const ViewRequest& r)
+      : request(r),
+        result(false) {
+  }
+  ViewRequest request;
+  bool result;
 };
 
 struct VoiceChannelErrorMessageData : public talk_base::MessageData {
@@ -589,7 +716,7 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
                        << it->first_ssrc();
           return false;
         }
-      } else if (stream_exist) {
+      } else if (stream_exist && !it->has_ssrcs()) {
         if (!media_channel()->RemoveSendStream(existing_stream.first_ssrc())) {
             LOG(LS_ERROR) << "Failed to remove send stream with ssrc "
                           << it->first_ssrc() << ".";
@@ -597,8 +724,7 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
         }
         RemoveStreamBySsrc(&local_streams_, existing_stream.first_ssrc());
       } else {
-        LOG(LS_ERROR) << "Unknown send stream update.";
-        return false;
+        LOG(LS_WARNING) << "Ignore unsupported stream update";
       }
     }
     return true;
@@ -652,7 +778,7 @@ bool BaseChannel::UpdateRemoteStreams_w(
                        << it->first_ssrc();
           return false;
         }
-      } else if (stream_exists) {
+      } else if (stream_exists && !it->has_ssrcs()) {
         if (!RemoveRecvStream_w(existing_stream.first_ssrc())) {
             LOG(LS_ERROR) << "Failed to remove remote stream with ssrc "
                           << it->first_ssrc() << ".";
@@ -660,8 +786,7 @@ bool BaseChannel::UpdateRemoteStreams_w(
         }
         RemoveStreamBySsrc(&remote_streams_, existing_stream.first_ssrc());
       } else {
-        LOG(LS_ERROR) << "Unknown remote stream update.";
-        return false;
+        LOG(LS_WARNING) << "Ignore unsupported stream update";
       }
     }
     return true;
@@ -1212,6 +1337,12 @@ bool VideoChannel::SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
   return true;
 }
 
+bool VideoChannel::ApplyViewRequest(const ViewRequest& request) {
+  ViewRequestMessageData data(request);
+  Send(MSG_HANDLEVIEWREQUEST, &data);
+  return data.result;
+}
+
 bool VideoChannel::AddScreencast(uint32 ssrc, const ScreencastId& id) {
   ScreencastMessageData data(ssrc, id);
   Send(MSG_ADDSCREENCAST, &data);
@@ -1352,6 +1483,43 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
   return ret;
 }
 
+bool VideoChannel::ApplyViewRequest_w(const ViewRequest& request) {
+  bool ret = true;
+  // Set the send format for each of the local streams. If the view request
+  // does not contain a local stream, set its send format to 0x0, which will
+  // drop all frames.
+  for (std::vector<StreamParams>::const_iterator it = local_streams().begin();
+      it != local_streams().end(); ++it) {
+    VideoFormat format(0, 0, 0, cricket::FOURCC_I420);
+    StaticVideoViews::const_iterator view;
+    for (view = request.static_video_views.begin();
+        view != request.static_video_views.end(); ++view) {
+      // Sender view request from Reflector has SSRC 0 (b/5977302). Here we hack
+      // the client to apply the view request with SSRC 0. TODO: Remove
+      // 0 == view->SSRC once Reflector uses the correct SSRC in view request.
+      if (it->has_ssrc(view->ssrc) || 0 == view->ssrc) {
+        format.width = view->width;
+        format.height = view->height;
+        format.interval = cricket::VideoFormat::FpsToInterval(view->framerate);
+        break;
+      }
+    }
+
+    ret &= media_channel()->SetSendStreamFormat(it->first_ssrc(), format);
+  }
+
+  // Check if the view request has invalid streams.
+  for (StaticVideoViews::const_iterator it = request.static_video_views.begin();
+      it != request.static_video_views.end(); ++it) {
+    if (!GetStreamBySsrc(local_streams(), it->ssrc, NULL)) {
+      LOG(LS_WARNING) << "View request's SSRC " << it->ssrc
+                      << " is not in the local streams.";
+    }
+  }
+
+  return ret;
+}
+
 void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
@@ -1413,6 +1581,12 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
           static_cast<VideoChannelErrorMessageData*>(pmsg->pdata);
       SignalMediaError(this, data->ssrc, data->error);
       delete data;
+      break;
+    }
+    case MSG_HANDLEVIEWREQUEST: {
+      ViewRequestMessageData* data =
+          static_cast<ViewRequestMessageData*>(pmsg->pdata);
+      data->result = ApplyViewRequest_w(data->request);
       break;
     }
     default:

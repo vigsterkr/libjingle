@@ -25,22 +25,15 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <windows.h>
-
 #include "talk/examples/peerconnection/client/conductor.h"
 #include "talk/examples/peerconnection/client/main_wnd.h"
 #include "talk/examples/peerconnection/client/peer_connection_client.h"
-#include "system_wrappers/source/trace_impl.h"
 #include "talk/base/win32socketinit.h"
 
 
 int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
                     wchar_t* cmd_line, int cmd_show) {
   talk_base::EnsureWinsockInit();
-
-  webrtc::Trace::CreateTrace();
-  webrtc::Trace::SetTraceFile("peerconnection_client.log");
-  webrtc::Trace::SetLevelFilter(webrtc::kTraceWarning);
 
   MainWnd wnd;
   if (!wnd.Create()) {
@@ -54,7 +47,7 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   // Main loop.
   MSG msg;
   BOOL gm;
-  while ((gm = ::GetMessage(&msg, NULL, 0, 0)) && gm != -1) {
+  while ((gm = ::GetMessage(&msg, NULL, 0, 0)) != 0 && gm != -1) {
     if (!wnd.PreTranslateMessage(&msg)) {
       ::TranslateMessage(&msg);
       ::DispatchMessage(&msg);
@@ -63,7 +56,7 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   if (conductor.connection_active() || client.is_connected()) {
     while ((conductor.connection_active() || client.is_connected()) &&
-           (gm = ::GetMessage(&msg, NULL, 0, 0)) && gm != -1) {
+           (gm = ::GetMessage(&msg, NULL, 0, 0)) != 0 && gm != -1) {
       if (!wnd.PreTranslateMessage(&msg)) {
         ::TranslateMessage(&msg);
         ::DispatchMessage(&msg);

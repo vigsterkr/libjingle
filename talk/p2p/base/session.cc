@@ -960,14 +960,18 @@ bool Session::OnDescriptionInfoMessage(const SessionMessage& msg,
   }
 
   ContentInfos updated_contents = description_info.ClearContents();
-  ContentInfos::iterator it;
 
+  // TODO: Currently, reflector sends back
+  // video stream updates even for an audio-only call, which causes
+  // this to fail.  Put this back once reflector is fixed.
+  //
+  // ContentInfos::iterator it;
   // First, ensure all updates are valid before modifying remote_description_.
-  for (it = updated_contents.begin(); it != updated_contents.end(); ++it) {
-    if (remote_description()->GetContentByName(it->name) == NULL) {
-      return false;
-    }
-  }
+  // for (it = updated_contents.begin(); it != updated_contents.end(); ++it) {
+  //   if (remote_description()->GetContentByName(it->name) == NULL) {
+  //     return false;
+  //   }
+  // }
 
   // TODO: We used to replace contents from an update, but
   // that no longer works with partial updates.  We need to figure out

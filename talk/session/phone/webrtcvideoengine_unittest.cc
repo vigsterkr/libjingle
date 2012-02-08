@@ -354,6 +354,12 @@ TEST_F(WebRtcVideoEngineTestFake, KeyFrameRequestEnabled) {
 TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
+  EXPECT_TRUE(channel_->SetSend(true));
   EXPECT_TRUE(vie_.GetRembStatus(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
 }
@@ -362,8 +368,66 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
 // channel for sending remb packets.
 TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(SetupEngine());
-  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
+  EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  int new_channel_num = vie_.GetLastChannel();
+  EXPECT_NE(channel_num, new_channel_num);
+
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatus(new_channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusSend(new_channel_num));
+}
+
+// Test that AddRecvStream doesn't create new channel for 1:1 call.
+TEST_F(WebRtcVideoEngineTestFake, AddRecvStream1On1) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_EQ(channel_num, vie_.GetLastChannel());
+}
+
+// Test that AddRecvStream doesn't change remb for 1:1 call.
+TEST_F(WebRtcVideoEngineTestFake, NoRembChangeAfterAddRecvStream) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
+  EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
+}
+
+// Test remb sending is on after StartSending and off after StopSending.
+TEST_F(WebRtcVideoEngineTestFake, RembOnOff) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = vie_.GetLastChannel();
+
+  // Verify remb sending is off before StartSending.
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
+
+  // Verify remb sending is on after StartSending.
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(1)));
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+  EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
+
+  // Verify remb sending is off after StopSending.
+  EXPECT_TRUE(channel_->SetSend(false));
   EXPECT_TRUE(vie_.GetRembStatus(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
 }
@@ -827,6 +891,10 @@ TEST_F(WebRtcVideoMediaChannelTest, SetRenderer) {
 
 TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreams) {
   Base::AddRemoveRecvStreams();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreamsNoConference) {
+  Base::AddRemoveRecvStreamsNoConference();
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, AddRemoveSendStreams) {

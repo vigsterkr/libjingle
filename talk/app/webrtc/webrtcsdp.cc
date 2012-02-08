@@ -118,7 +118,6 @@ static const int kDefaultVideoFrameRate = 30;
 static const int kDefaultVideoPreference = 0;
 
 static void BuildMediaDescription(const cricket::ContentInfo& content_info,
-                                  const std::vector<Candidate>& candidates,
                                   const MediaType media_type,
                                   std::string* message);
 static void BuildRtpMap(const MediaContentDescription* media_desc,
@@ -131,13 +130,13 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
 static bool ParseSessionDescription(const std::string& message, size_t* pos);
 static bool ParseTimeDescription(const std::string& message, size_t* pos);
 static bool ParseMediaDescription(const std::string& message, size_t* pos,
-                                  cricket::SessionDescription* desc,
-                                  std::vector<Candidate>* candidates);
+                                  cricket::SessionDescription* desc);
 static bool ParseContent(const std::string& message,
                          const MediaType media_type,
                          size_t* pos,
-                         ContentDescription* content,
-                         std::vector<Candidate>* candidates);
+                         ContentDescription* content);
+static bool ParseCandidates(const std::string& message,
+                            std::vector<Candidate>* candidates);
 
 // Helper functions
 #define LOG_PREFIX_PARSING_ERROR(line_prefix) LOG(LS_ERROR) \
@@ -202,6 +201,12 @@ static bool HasAttribute(const std::string& line,
 
 std::string SdpSerialize(const cricket::SessionDescription& desc,
                          const std::vector<Candidate>& candidates) {
+  return SdpFormat(SdpSerializeSessionDescription(desc),
+                   SdpSerializeCandidates(candidates));
+}
+
+std::string SdpSerializeSessionDescription(
+    const cricket::SessionDescription& desc) {
   std::string message;
 
   // Session Description.
@@ -221,21 +226,61 @@ std::string SdpSerialize(const cricket::SessionDescription& desc,
 
   // Media Description
   if (audio_content) {
-    BuildMediaDescription(*audio_content, candidates,
-        cricket::MEDIA_TYPE_AUDIO, &message);
+    BuildMediaDescription(*audio_content, cricket::MEDIA_TYPE_AUDIO, &message);
   }
 
   if (video_content) {
-    BuildMediaDescription(*video_content, candidates,
-        cricket::MEDIA_TYPE_VIDEO, &message);
+    BuildMediaDescription(*video_content, cricket::MEDIA_TYPE_VIDEO, &message);
   }
 
   return message;
 }
 
+std::string SdpSerializeCandidates(const std::vector<Candidate>& candidates) {
+  std::string message;
+  // rfc5245
+  // a=candidate:<foundation> <component-id> <transport> <priority>
+  // <connection-address> <port> typ <candidate-types>
+  // [raddr <connection-address>] [rport <port>]
+  BuildCandidate(candidates, cricket::MEDIA_TYPE_AUDIO, &message);
+  BuildCandidate(candidates, cricket::MEDIA_TYPE_VIDEO, &message);
+  return message;
+}
+
+std::string SdpFormat(const std::string& desc, const std::string& candidates) {
+  std::string sdp;  // New sdp message.
+
+  std::vector<Candidate> candidates_vector;
+  if (!ParseCandidates(candidates, &candidates_vector))
+    return sdp;
+
+  size_t pos = 0;
+  std::string line;
+  while (GetLine(desc, &pos, &line)) {
+    AddLine(line, &sdp);  // Copy old line to new sdp.
+    if (!HasPrefix(line, kLinePrefixMedia)) {
+      continue;  // Loop until the next m line.
+    }
+    if (HasAttribute(line, kMediaTypeVideo)) {
+      BuildCandidate(candidates_vector, cricket::MEDIA_TYPE_VIDEO, &sdp);
+    } else if (HasAttribute(line, kMediaTypeAudio)) {
+      BuildCandidate(candidates_vector, cricket::MEDIA_TYPE_AUDIO, &sdp);
+    }
+  }
+
+  return sdp;
+}
+
+
 bool SdpDeserialize(const std::string& message,
                     cricket::SessionDescription* desc,
                     std::vector<Candidate>* candidates) {
+  return SdpDeserializeSessionDescription(message, desc) &&
+         SdpDeserializeCandidates(message, candidates);
+}
+
+bool SdpDeserializeSessionDescription(const std::string& message,
+                                      cricket::SessionDescription* desc) {
   size_t current_pos = 0;
 
   // Session Description
@@ -249,15 +294,19 @@ bool SdpDeserialize(const std::string& message,
   }
 
   // Media Description
-  if (!ParseMediaDescription(message, &current_pos, desc, candidates)) {
+  if (!ParseMediaDescription(message, &current_pos, desc)) {
     return false;
   }
 
   return true;
 }
 
+bool SdpDeserializeCandidates(const std::string& message,
+                              std::vector<Candidate>* candidates) {
+  return ParseCandidates(message, candidates);
+}
+
 void BuildMediaDescription(const cricket::ContentInfo& content_info,
-                           const std::vector<Candidate>& candidates,
                            const MediaType media_type,
                            std::string* message) {
   ASSERT(message != NULL);
@@ -334,12 +383,6 @@ void BuildMediaDescription(const cricket::ContentInfo& content_info,
   // a=rtpmap:<payload type> <encoding name>/<clock rate>
   // [/<encodingparameters>]
   BuildRtpMap(media_desc, media_type, message);
-
-  // rfc5245
-  // a=candidate:<foundation> <component-id> <transport> <priority>
-  // <connection-address> <port> typ <candidate-types>
-  // [raddr <connection-address>] [rport <port>]
-  BuildCandidate(candidates, media_type, message);
 
   // draft - Mechanisms for Media Source Selection in SDP
   // a=ssrc:<ssrc-id> <attribute>:<value>
@@ -521,10 +564,8 @@ bool ParseTimeDescription(const std::string& message, size_t* pos) {
 }
 
 bool ParseMediaDescription(const std::string& message, size_t* pos,
-                           cricket::SessionDescription* desc,
-                           std::vector<Candidate>* candidates) {
+                           cricket::SessionDescription* desc) {
   ASSERT(desc != NULL);
-  ASSERT(candidates != NULL);
 
   std::string line;
 
@@ -545,7 +586,7 @@ bool ParseMediaDescription(const std::string& message, size_t* pos,
       LOG(LS_WARNING) << "Unsupported media type: " << line;
     }
 
-    if (!ParseContent(message, media_type, pos, content, candidates))
+    if (!ParseContent(message, media_type, pos, content))
       return false;
   }
   return true;
@@ -554,9 +595,7 @@ bool ParseMediaDescription(const std::string& message, size_t* pos,
 bool ParseContent(const std::string& message,
                   const MediaType media_type,
                   size_t* pos,
-                  ContentDescription* content,
-                  std::vector<Candidate>* candidates) {
-  ASSERT(candidates != NULL);
+                  ContentDescription* content) {
   std::string line;
   // Loop until the next m line
   while (!HasPrefix(message, kLinePrefixMedia, *pos)) {
@@ -625,57 +664,7 @@ bool ParseContent(const std::string& message,
       const std::string key_params = fields[2];
       media_desc->AddCrypto(CryptoParams(tag, crypto_suite, key_params, ""));
     } else if (HasAttribute(line, kAttributeCandidate)) {
-      // a=candidate:<foundation> <component-id> <transport> <priority>
-      // <connection-address> <port> typ <candidate-types>
-      // [raddr <connection-address>] [rport <port>]
-      // *(SP extension-att-name SP extension-att-value)
-      // 8 mandatory fields
-      if (fields.size() < 8 || (fields[6] != kAttributeCandidateTyp)) {
-        LOG_LINE_PARSING_ERROR(line);
-        return false;
-      }
-      const std::string transport = fields[2];
-      const float priority = talk_base::FromString<float>(fields[3]);
-      const std::string connection_address = fields[4];
-      const int port = talk_base::FromString<int>(fields[5]);
-      std::string candidate_type;
-      const std::string type = fields[7];
-      if (type == kCandidateHost) {
-        candidate_type = cricket::LOCAL_PORT_TYPE;
-      } else if (type == kCandidateSrflx) {
-        candidate_type = cricket::STUN_PORT_TYPE;
-      } else if (type == kCandidateRelay) {
-        candidate_type = cricket::RELAY_PORT_TYPE;
-      } else {
-        LOG(LS_ERROR) << "Unsupported candidate type from line: " << line;
-        return false;
-      }
-
-      // extension
-      std::string name;
-      std::string network_name;
-      std::string username;
-      std::string password;
-      uint32 generation = 0;
-      for (size_t i = 8; i < (fields.size() - 1); ++i) {
-        const std::string field = fields.at(i);
-        if (field == kAttributeCandidateName) {
-          name = fields.at(++i);
-        } else if (field == kAttributeCandidateNetworkName) {
-          network_name = fields.at(++i);
-        } else if (field == kAttributeCandidateUsername) {
-          username = fields.at(++i);
-        } else if (field == kAttributeCandidatePassword) {
-          password = fields.at(++i);
-        } else if (field == kAttributeCandidateGeneration) {
-          generation = talk_base::FromString<uint32>(fields.at(++i));
-        }
-      }
-
-      SocketAddress address(connection_address, port);
-      Candidate candidate(name, transport, address, priority, username,
-          password, candidate_type, network_name, generation);
-      candidates->push_back(candidate);
+      continue;  // Parse candidates separately.
     } else if (HasAttribute(line, kAttributeRtpmap)) {
       // a=rtpmap:<payload type> <encoding name>/<clock rate>
       // [/<encodingparameters>]
@@ -711,6 +700,75 @@ bool ParseContent(const std::string& message,
     } else {
       LOG(LS_WARNING) << "Unsupported line: " << line;
     }
+  }
+  return true;
+}
+
+bool ParseCandidates(const std::string& message,
+                     std::vector<Candidate>* candidates) {
+  ASSERT(candidates != NULL);
+  std::string line;
+  size_t pos = 0;
+
+  // Loop until the next attribute line.
+  while (GetLine(message, &pos, &line)) {
+    if (!HasPrefix(line, kLinePrefixAttributes) ||
+        !HasAttribute(line, kAttributeCandidate)) {
+      continue;  // Only parse candidates
+    }
+    std::vector<std::string> fields;
+    talk_base::split(line.substr(kLinePrefixLength), kSdpDelimiter, &fields);
+    // a=candidate:<foundation> <component-id> <transport> <priority>
+    // <connection-address> <port> typ <candidate-types>
+    // [raddr <connection-address>] [rport <port>]
+    // *(SP extension-att-name SP extension-att-value)
+    // 8 mandatory fields
+    if (fields.size() < 8 || (fields[6] != kAttributeCandidateTyp)) {
+      LOG_LINE_PARSING_ERROR(line);
+      return false;
+    }
+    const std::string transport = fields[2];
+    const float priority = talk_base::FromString<float>(fields[3]);
+    const std::string connection_address = fields[4];
+    const int port = talk_base::FromString<int>(fields[5]);
+    std::string candidate_type;
+    const std::string type = fields[7];
+    if (type == kCandidateHost) {
+      candidate_type = cricket::LOCAL_PORT_TYPE;
+    } else if (type == kCandidateSrflx) {
+      candidate_type = cricket::STUN_PORT_TYPE;
+    } else if (type == kCandidateRelay) {
+      candidate_type = cricket::RELAY_PORT_TYPE;
+    } else {
+      LOG(LS_ERROR) << "Unsupported candidate type from line: " << line;
+      return false;
+    }
+
+    // extension
+    std::string name;
+    std::string network_name;
+    std::string username;
+    std::string password;
+    uint32 generation = 0;
+    for (size_t i = 8; i < (fields.size() - 1); ++i) {
+      const std::string field = fields.at(i);
+      if (field == kAttributeCandidateName) {
+        name = fields.at(++i);
+      } else if (field == kAttributeCandidateNetworkName) {
+        network_name = fields.at(++i);
+      } else if (field == kAttributeCandidateUsername) {
+        username = fields.at(++i);
+      } else if (field == kAttributeCandidatePassword) {
+        password = fields.at(++i);
+      } else if (field == kAttributeCandidateGeneration) {
+        generation = talk_base::FromString<uint32>(fields.at(++i));
+      }
+    }
+
+    SocketAddress address(connection_address, port);
+    Candidate candidate(name, transport, address, priority, username,
+        password, candidate_type, network_name, generation);
+    candidates->push_back(candidate);
   }
   return true;
 }
