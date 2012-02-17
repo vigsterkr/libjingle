@@ -66,6 +66,7 @@ class FakeWebRtcVoiceEngine
           file(false),
           vad(false),
           fec(false),
+          media_processor_registered(false),
           cn8_type(13),
           cn16_type(105),
           dtmf_type(106),
@@ -80,6 +81,7 @@ class FakeWebRtcVoiceEngine
     bool file;
     bool vad;
     bool fec;
+    bool media_processor_registered;
     int cn8_type;
     int cn16_type;
     int dtmf_type;
@@ -774,11 +776,21 @@ class FakeWebRtcVoiceEngine
   WEBRTC_FUNC(RegisterExternalMediaProcessing,
               (int channel, webrtc::ProcessingTypes type,
                webrtc::VoEMediaProcess& processObject)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    if (channels_[channel]->media_processor_registered) {
+      return -1;
+    }
+    channels_[channel]->media_processor_registered = true;
     media_processor_ = &processObject;
     return 0;
   }
   WEBRTC_FUNC(DeRegisterExternalMediaProcessing,
               (int channel, webrtc::ProcessingTypes type)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    if (!channels_[channel]->media_processor_registered) {
+      return -1;
+    }
+    channels_[channel]->media_processor_registered = false;
     media_processor_ = NULL;
     return 0;
   }

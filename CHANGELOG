@@ -1,7 +1,13 @@
 Libjingle
 
+0.6.13 - Feb 16, 2012
+  - SDP compliance to WebRTC Signaling messages.
+  - Initial BUNDLE support in Jingle messages.
+  - Implementation of WebRTC external StartRender() and StopRender().
+  - Bug fixes.
+
 0.6.12 - Feb 07, 2012
-  - PeerConnection client for windows.
+  - PeerConnection client for Windows.
   - Bug fixes.
 
 0.6.11 - Jan 24, 2012

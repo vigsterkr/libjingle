@@ -245,6 +245,9 @@ bool WebRtcVideoFrame::Reset(uint32 format, int w, int h, int dw, int dh,
       rotation != 0) {
     return false;
   }
+  if (!Validate(format, w, h, sample, sample_size)) {
+    return false;
+  }
 
   // Discard the existing buffer.
   uint8* old_buffer;

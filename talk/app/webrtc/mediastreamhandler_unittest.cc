@@ -28,7 +28,7 @@
 #include <string>
 
 #include "talk/app/webrtc/mediastreamimpl.h"
-#include "talk/app/webrtc/videotrackimpl.h"
+#include "talk/app/webrtc/videotrack.h"
 #include "talk/app/webrtc/mediastreamhandler.h"
 #include "talk/app/webrtc/streamcollectionimpl.h"
 #include "talk/base/thread.h"

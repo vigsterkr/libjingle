@@ -60,6 +60,7 @@ namespace talk_base {
 namespace {
 
 const uint32 kUpdateNetworksMessage = 1;
+const uint32 kSignalNetworksMessage = 2;
 
 // Fetch list of networks every two seconds.
 const int kNetworksUpdateIntervalMs = 2000;
@@ -90,8 +91,7 @@ void NetworkManagerBase::GetNetworks(NetworkList* result) const {
   *result = networks_;
 }
 
-void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks,
-                                          bool force_notification) {
+void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks) {
   // Sort the list so that we can detect when it changes.
   NetworkList list(new_networks);
   std::sort(list.begin(), list.end(), CompareNetworks);
@@ -127,13 +127,13 @@ void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks,
     networks_[i] = network;
   }
 
-  if (changed || force_notification)
+  if (changed)
     SignalNetworksChanged();
 }
 
 BasicNetworkManager::BasicNetworkManager()
     : thread_(NULL),
-      started_(false) {
+      start_count_(0) {
 }
 
 BasicNetworkManager::~BasicNetworkManager() {
@@ -246,7 +246,8 @@ bool BasicNetworkManager::IsIgnoredNetwork(const Network& network) {
   // Ignore local networks (lo, lo0, etc)
   // Also filter out VMware interfaces, typically named vmnet1 and vmnet8
   if (strncmp(network.name().c_str(), "lo", 2) == 0 ||
-      strncmp(network.name().c_str(), "vmnet", 5) == 0) {
+      strncmp(network.name().c_str(), "vmnet", 5) == 0 ||
+      strncmp(network.name().c_str(), "vnic", 4) == 0) {
     return true;
   }
 #elif defined(WIN32)
@@ -267,29 +268,48 @@ bool BasicNetworkManager::IsIgnoredNetwork(const Network& network) {
 }
 
 void BasicNetworkManager::StartUpdating() {
-  if (started_) {
-    sent_first_update_ = false;
-    return;
-  }
-
   thread_ = Thread::Current();
-  started_ = true;
-  sent_first_update_ = false;
-  thread_->Post(this, kUpdateNetworksMessage);
+  if (start_count_) {
+    // If network interfaces are already discovered and signal is sent,
+    // we should trigger network signal immediately for the new clients
+    // to start allocating ports.
+    if (sent_first_update_)
+      thread_->Post(this, kSignalNetworksMessage);
+    ++start_count_;
+  } else {
+    ++start_count_;
+    sent_first_update_ = false;
+    thread_->Post(this, kUpdateNetworksMessage);
+  }
 }
 
 void BasicNetworkManager::StopUpdating() {
   ASSERT(Thread::Current() == thread_);
-  started_ = false;
+  if (!start_count_)
+    return;
+
+  --start_count_;
+  if (!start_count_)
+    thread_->Clear(this);
 }
 
 void BasicNetworkManager::OnMessage(Message* msg) {
-  ASSERT(msg->message_id == kUpdateNetworksMessage);
-  DoUpdateNetworks();
+  switch (msg->message_id) {
+    case kUpdateNetworksMessage:  {
+      DoUpdateNetworks();
+      break;
+    }
+    case kSignalNetworksMessage:  {
+      SignalNetworksChanged();
+      break;
+    }
+    default:
+      ASSERT(false);
+  }
 }
 
 void BasicNetworkManager::DoUpdateNetworks() {
-  if (!started_)
+  if (!start_count_)
     return;
 
   ASSERT(Thread::Current() == thread_);
@@ -298,7 +318,7 @@ void BasicNetworkManager::DoUpdateNetworks() {
   if (!CreateNetworks(false, &list)) {
     SignalError();
   } else {
-    MergeNetworkList(list, !sent_first_update_);
+    MergeNetworkList(list);
     sent_first_update_ = true;
   }
 

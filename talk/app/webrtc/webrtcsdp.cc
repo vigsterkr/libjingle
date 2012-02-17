@@ -72,6 +72,7 @@ static const char kLinePrefixMedia[] = "m=";
 static const char kLinePrefixAttributes[] = "a=";
 
 // Attributes
+static const char kAttributeGroup[] = "group:";
 static const char kAttributeMid[] = "mid:";
 static const char kAttributeRtcpMux[] = "rtcp-mux";
 static const char kAttributeSsrc[] = "ssrc:";
@@ -103,12 +104,17 @@ static const char kLineBreak[] = "\r\n";
 static const char kSessionVersion[] = "v=0";
 static const char kSessionOrigin[] = "o=- 0 0 IN IP4 127.0.0.1";
 static const char kSessionName[] = "s=";
+static const char kSessionConnection[] = "c=IN IP4 0.0.0.0";
 static const char kTimeDescription[] = "t=0 0";
-static const char kAttrGroup[] = "a=group:BUNDLE audio video";
-static const int kIceComponent = 1;
+static const char kAttrGroup[] = "a=group:BUNDLE";
+static const int kIceComponentIdRtp = 1;
+static const int kIceComponentIdRtcp = 2;
 static const int kIceFoundation = 1;
 static const char kMediaTypeVideo[] = "video";
 static const char kMediaTypeAudio[] = "audio";
+// Since we use ICE this is just a placeholder.
+static const char kMediaPortPlaceholder = 1;
+static const char kMediaProtocol[] = "RTP/AVPF";
 
 // Default Video resolution.
 // TODO: Implement negotiation of video resolution.
@@ -127,8 +133,8 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
                            const MediaType media_type,
                            std::string* message);
 
-static bool ParseSessionDescription(const std::string& message, size_t* pos);
-static bool ParseTimeDescription(const std::string& message, size_t* pos);
+static bool ParseSessionDescription(const std::string& message, size_t* pos,
+                                    cricket::SessionDescription* desc);
 static bool ParseMediaDescription(const std::string& message, size_t* pos,
                                   cricket::SessionDescription* desc);
 static bool ParseContent(const std::string& message,
@@ -213,6 +219,7 @@ std::string SdpSerializeSessionDescription(
   AddLine(kSessionVersion, &message);
   AddLine(kSessionOrigin, &message);
   AddLine(kSessionName, &message);
+  AddLine(kSessionConnection, &message);
 
   // Time Description.
   AddLine(kTimeDescription, &message);
@@ -221,8 +228,19 @@ std::string SdpSerializeSessionDescription(
   const cricket::ContentInfo* video_content = GetFirstVideoContent(&desc);
 
   // Group
-  if (audio_content && video_content)
-    AddLine(kAttrGroup, &message);
+  if (desc.HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
+    std::string group_line = kAttrGroup;
+    const cricket::ContentGroup* group =
+        desc.GetGroupByName(cricket::GROUP_TYPE_BUNDLE);
+    ASSERT(group != NULL);
+    const std::set<std::string>& content_types = group->content_types();
+    for (std::set<std::string>::const_iterator it = content_types.begin();
+         it != content_types.end(); ++it) {
+      group_line.append(" ");
+      group_line.append(*it);
+    }
+    AddLine(group_line, &message);
+  }
 
   // Media Description
   if (audio_content) {
@@ -284,12 +302,7 @@ bool SdpDeserializeSessionDescription(const std::string& message,
   size_t current_pos = 0;
 
   // Session Description
-  if (!ParseSessionDescription(message, &current_pos)) {
-    return false;
-  }
-
-  // Time Description
-  if (!ParseTimeDescription(message, &current_pos)) {
+  if (!ParseSessionDescription(message, &current_pos, desc)) {
     return false;
   }
 
@@ -350,8 +363,8 @@ void BuildMediaDescription(const cricket::ContentInfo& content_info,
       fmt.append(talk_base::ToString<int>(it->id));
     }
   }
-  const int port = 0;
-  const char* proto = "RTP/AVPF";
+  const int port = kMediaPortPlaceholder;
+  const char* proto = kMediaProtocol;
   os.str("");
   os << kLinePrefixMedia << type << " " << port << " " << proto << fmt;
   AddLine(os.str(), message);
@@ -466,8 +479,11 @@ void BuildCandidate(const std::vector<Candidate>& candidates,
         ASSERT(false);
       }
       os.str("");
+
+      const int component_id = (it->name().find("rtp") != std::string::npos) ?
+          kIceComponentIdRtp : kIceComponentIdRtcp;
       os << kLinePrefixAttributes << kAttributeCandidate
-         << kIceFoundation << " " << kIceComponent << " "
+         << kIceFoundation << " " << component_id << " "
          << it->protocol() << " " << it->preference_str() << " "
          << it->address().IPAsString() << " "
          << it->address().PortAsString() << " "
@@ -482,7 +498,8 @@ void BuildCandidate(const std::vector<Candidate>& candidates,
   }
 }
 
-bool ParseSessionDescription(const std::string& message, size_t* pos) {
+bool ParseSessionDescription(const std::string& message, size_t* pos,
+                             cricket::SessionDescription* desc) {
   std::string line;
 
   // v=  (protocol version)
@@ -524,11 +541,6 @@ bool ParseSessionDescription(const std::string& message, size_t* pos) {
     // By pass zero or more b lines.
   }
 
-  return true;
-}
-
-bool ParseTimeDescription(const std::string& message, size_t* pos) {
-  std::string line;
   // One or more time descriptions ("t=" and "r=" lines; see below)
   // t=  (time the session is active)
   // r=* (zero or more repeat times)
@@ -557,7 +569,20 @@ bool ParseTimeDescription(const std::string& message, size_t* pos) {
 
   // a=* (zero or more session attribute lines)
   while (GetLineWithPrefix(message, pos, &line, kLinePrefixAttributes)) {
-    // TODO: parse the a=group:BUNDLE
+    if (HasAttribute(line, kAttributeGroup)) {
+      // a=group:BUNDLE video voice
+      std::vector<std::string> fields;
+      talk_base::split(line.substr(kLinePrefixLength), kSdpDelimiter, &fields);
+      if (fields.size() < 2) {
+        continue;
+      }
+      const std::string semantics = fields[0].substr(strlen(kAttributeGroup));
+      cricket::ContentGroup group(semantics);
+      for (size_t i = 1; i < fields.size(); ++i) {
+        group.AddContentName(fields[i]);
+      }
+      desc->AddGroup(group);
+    }
   }
 
   return true;

@@ -1300,6 +1300,30 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_EQ_WAIT(T::MediaChannel::ERROR_PLAY_SRTP_AUTH_FAILED, error_, 500);
   }
 
+  void TestSetChannelOptions(bool options_should_change) {
+    CreateChannels(0, 0);
+
+    channel1_->SetChannelOptions(1);
+    channel2_->SetChannelOptions(1);
+    if (options_should_change) {
+      EXPECT_EQ(1, media_channel1_->GetOptions());
+      EXPECT_EQ(1, media_channel2_->GetOptions());
+    } else {
+      EXPECT_EQ(0, media_channel1_->GetOptions());
+      EXPECT_EQ(0, media_channel2_->GetOptions());
+    }
+
+    channel1_->SetChannelOptions(2);
+    channel2_->SetChannelOptions(2);
+    if (options_should_change) {
+      EXPECT_EQ(2, media_channel1_->GetOptions());
+      EXPECT_EQ(2, media_channel2_->GetOptions());
+    } else {
+      EXPECT_EQ(0, media_channel1_->GetOptions());
+      EXPECT_EQ(0, media_channel2_->GetOptions());
+    }
+  }
+
  protected:
   cricket::FakeSession session1_;
   cricket::FakeSession session2_;
@@ -1738,6 +1762,11 @@ TEST_F(VoiceChannelTest, SendSsrcMuxToSsrcMuxWithRtcpMux) {
   Base::SendSsrcMuxToSsrcMuxWithRtcpMux();
 }
 
+TEST_F(VoiceChannelTest, TestSetChannelOptions) {
+  // SetChannelOptions should do nothing on voice channel.
+  Base::TestSetChannelOptions(false);
+}
+
 // VideoChannelTest
 TEST_F(VideoChannelTest, TestInit) {
   Base::TestInit();
@@ -1913,4 +1942,8 @@ TEST_F(VideoChannelTest, TestApplyViewRequest) {
   EXPECT_TRUE(media_channel1_->GetSendStreamFormat(kSsrc1, &send_format));
   EXPECT_EQ(0, send_format.width);
   EXPECT_EQ(0, send_format.height);
+}
+
+TEST_F(VideoChannelTest, TestSetChannelOptions) {
+  Base::TestSetChannelOptions(true);
 }

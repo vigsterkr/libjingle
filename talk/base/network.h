@@ -87,9 +87,8 @@ class NetworkManagerBase : public NetworkManager {
   // |network_map_| already has a Network object for a network listed
   // in the |list| then it is reused. Accept ownership of the Network
   // objects in the |list|. SignalNetworkListUpdated is emitted if
-  // there is a change in network configuration or
-  // |force_notification| is set to true.
-  void MergeNetworkList(const NetworkList& list, bool force_notification);
+  // there is a change in network configuration.
+  void MergeNetworkList(const NetworkList& list);
 
  private:
   typedef std::map<std::string, Network*> NetworkMap;
@@ -116,6 +115,7 @@ class BasicNetworkManager : public NetworkManagerBase,
 
   // MessageHandler interface.
   virtual void OnMessage(Message* msg);
+  bool started() { return start_count_ > 0; }
 
  protected:
   // Creates a network object for each network available on the machine.
@@ -129,8 +129,8 @@ class BasicNetworkManager : public NetworkManagerBase,
   void DoUpdateNetworks();
 
   Thread* thread_;
-  bool started_;
   bool sent_first_update_;
+  int start_count_;
 };
 
 // Represents a Unix-type network interface, with a name and single address.

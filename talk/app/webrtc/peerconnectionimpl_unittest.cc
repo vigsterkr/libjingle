@@ -40,6 +40,15 @@ static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 static const char kInvalidConfiguration[] = "a13151913541234:19302";
+static const int kDefaultStunPort = 3478;
+static const char kStunAddressOnly[] = "STUN address";
+static const char kStunInvalidPort[] = "STUN address:-1";
+static const char kStunAddressPortAndMore1[] = "STUN address:port:more";
+static const char kStunAddressPortAndMore2[] = "STUN address:port more";
+static const char kTurnAddressOnly[] = "TURN address";
+static const char kTurnInvalidPort[] = "TURN address:-1";
+static const char kTurnAddressPortAndMore1[] = "TURN address:port:more";
+static const char kTurnAddressPortAndMore2[] = "TURN address:port more";
 static const uint32 kTimeout = 5000U;
 
 using talk_base::scoped_ptr;
@@ -75,7 +84,9 @@ static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
             audio_content->description);
     cricket::CryptoParamsVec& cryptos =
         const_cast<cricket::CryptoParamsVec&>(desc->cryptos());
-    cryptos.erase(cryptos.begin()++);
+    if (!cryptos.empty()) {
+      cryptos.erase(cryptos.begin()++);
+    }
   }
 
   webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
@@ -172,8 +183,56 @@ class PeerConnectionImplTest : public testing::Test {
   void CreatePeerConnectionWithInvalidConfiguration() {
     pc_ = pc_factory_->CreatePeerConnection(kInvalidConfiguration, &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
     observer_.SetPeerConnectionInterface(pc_.get());
     EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+  }
+
+  void CreatePeerConnectionWithDifferentConfigurations() {
+    pc_ = pc_factory_->CreatePeerConnection(kStunAddressOnly, &observer_);
+    EXPECT_EQ(1u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+    EXPECT_EQ("address",
+        port_allocator_factory_->stun_configs()[0].server.hostname());
+    EXPECT_EQ(kDefaultStunPort,
+        port_allocator_factory_->stun_configs()[0].server.port());
+
+    pc_ = pc_factory_->CreatePeerConnection(kStunInvalidPort, &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+
+    pc_ = pc_factory_->CreatePeerConnection(kStunAddressPortAndMore1,
+                                            &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+
+    pc_ = pc_factory_->CreatePeerConnection(kStunAddressPortAndMore2,
+                                            &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+
+    pc_ = pc_factory_->CreatePeerConnection(kTurnAddressOnly, &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(1u, port_allocator_factory_->turn_configs().size());
+    EXPECT_EQ("address",
+        port_allocator_factory_->turn_configs()[0].server.hostname());
+    EXPECT_EQ(kDefaultStunPort,
+        port_allocator_factory_->turn_configs()[0].server.port());
+
+    pc_ = pc_factory_->CreatePeerConnection(kTurnInvalidPort, &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+
+    pc_ = pc_factory_->CreatePeerConnection(kTurnAddressPortAndMore1,
+                                            &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+
+    pc_ = pc_factory_->CreatePeerConnection(kTurnAddressPortAndMore2,
+                                            &observer_);
+    EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
   }
 
   void AddStream(const std::string& label) {
@@ -193,7 +252,7 @@ class PeerConnectionImplTest : public testing::Test {
                    kTimeout);
   }
 
-  scoped_refptr<PortAllocatorFactoryInterface> port_allocator_factory_;
+  scoped_refptr<FakePortAllocatorFactory> port_allocator_factory_;
   scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
   scoped_refptr<PeerConnectionInterface> pc_;
   MockPeerConnectionObserver observer_;
@@ -202,6 +261,11 @@ class PeerConnectionImplTest : public testing::Test {
 TEST_F(PeerConnectionImplTest, CreatePeerConnectionWithInvalidConfiguration) {
   CreatePeerConnectionWithInvalidConfiguration();
   AddStream(kStreamLabel1);
+}
+
+TEST_F(PeerConnectionImplTest,
+       CreatePeerConnectionWithDifferentConfigurations) {
+  CreatePeerConnectionWithDifferentConfigurations();
 }
 
 TEST_F(PeerConnectionImplTest, AddStream) {
@@ -285,3 +349,4 @@ TEST_F(PeerConnectionImplTest, ReceiveCloseWhileExpectingAnswer) {
                  kTimeout);
   EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
 }
+

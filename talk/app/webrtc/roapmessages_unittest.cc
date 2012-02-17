@@ -56,8 +56,9 @@ static const char kOfferReference[] =
     "   \"sdp\" : \"v=0\\r\\n"
     "o=- 0 0 IN IP4 127.0.0.1\\r\\n"
     "s=\\r\\n"
+    "c=IN IP4 0.0.0.0\\r\\n"
     "t=0 0\\r\\n"
-    "m=audio 0 RTP/AVPF\\r\\n"
+    "m=audio 1 RTP/AVPF\\r\\n"
     "a=mid:audio\\r\\n"
     "a=rtcp-mux\\r\\n"
     "a=ssrc:1 cname:stream_1_cname mslabel:local_stream_1 "
@@ -75,8 +76,9 @@ static const char kAnswerReference[] =
     "   \"sdp\" : \"v=0\\r\\n"
     "o=- 0 0 IN IP4 127.0.0.1\\r\\n"
     "s=\\r\\n"
+    "c=IN IP4 0.0.0.0\\r\\n"
     "t=0 0\\r\\n"
-    "m=audio 0 RTP/AVPF\\r\\n"
+    "m=audio 1 RTP/AVPF\\r\\n"
     "a=mid:audio\\r\\n"
     "a=rtcp-mux\\r\\n"
     "a=ssrc:1 cname:stream_1_cname mslabel:local_stream_1 "
@@ -164,7 +166,7 @@ TEST_F(RoapMessageTest, RoapOffer) {
   webrtc::RoapOffer offer(kOfferSessionId, kAnswerSessionId, "", 1, 0, &desc1_,
                           empty_candidates_);
   std::string offer_string = offer.Serialize();
-  EXPECT_TRUE(kOfferReference == offer_string);
+  EXPECT_EQ(kOfferReference, offer_string);
 
   webrtc::RoapMessageBase base;
   EXPECT_TRUE(base.Parse(kOfferReference));
@@ -178,7 +180,7 @@ TEST_F(RoapMessageTest, RoapAnswer) {
   webrtc::RoapAnswer answer(kOfferSessionId, kAnswerSessionId, "", "", 1,
                             &desc1_, empty_candidates_);
   std::string answer_string = answer.Serialize();
-  EXPECT_TRUE(kAnswerReference == answer_string);
+  EXPECT_EQ(kAnswerReference, answer_string);
 
   webrtc::RoapMessageBase base;
   EXPECT_TRUE(base.Parse(kAnswerReference));

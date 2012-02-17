@@ -49,6 +49,8 @@ const buzz::StaticQName QN_JINGLE_CONTENT = { NS_JINGLE, "content" };
 const buzz::StaticQName QN_JINGLE_CONTENT_NAME = { NS_EMPTY, "name" };
 const buzz::StaticQName QN_JINGLE_CONTENT_MEDIA = { NS_EMPTY, "media" };
 const buzz::StaticQName QN_JINGLE_REASON = { NS_JINGLE, "reason" };
+const buzz::StaticQName QN_JINGLE_DRAFT_GROUP = { NS_JINGLE_DRAFT, "group" };
+const buzz::StaticQName QN_JINGLE_DRAFT_GROUP_TYPE = { NS_EMPTY, "type" };
 const char JINGLE_CONTENT_MEDIA_AUDIO[] = "audio";
 const char JINGLE_CONTENT_MEDIA_VIDEO[] = "video";
 const char JINGLE_ACTION_SESSION_INITIATE[] = "session-initiate";
@@ -99,7 +101,7 @@ const char CN_AUDIO[] = "audio";
 const char CN_VIDEO[] = "video";
 const char CN_OTHER[] = "main";
 // other SDP related strings
-const char GN_BUNDLE[] = "BUNDLE";
+const char GROUP_TYPE_BUNDLE[] = "BUNDLE";
 
 const char NS_JINGLE_RTP[] = "urn:xmpp:jingle:apps:rtp:1";
 const buzz::StaticQName QN_JINGLE_RTP_CONTENT =

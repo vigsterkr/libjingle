@@ -28,7 +28,6 @@ if env.Bit('have_webrtc_voice') and env.Bit('have_webrtc_video'):
     libs = [
       'base',
       'expat',
-      'jpeg',
       'json',
       'p2p',
       'phone',

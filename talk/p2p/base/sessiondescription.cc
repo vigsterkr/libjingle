@@ -110,17 +110,21 @@ bool SessionDescription::RemoveContentByName(const std::string& name) {
 }
 
 void SessionDescription::RemoveGroupByName(const std::string& name) {
-  for (ContentGroups::iterator iter = groups_.begin();
-       iter != groups_.end(); ++iter) {
+  for (ContentGroups::iterator iter = content_groups_.begin();
+       iter != content_groups_.end(); ++iter) {
     if (iter->semantics() == name) {
-      groups_.erase(iter);
+      content_groups_.erase(iter);
+      iter = content_groups_.begin();
+      if (iter == content_groups_.end()) {
+        return;
+      }
     }
   }
 }
 
 bool SessionDescription::HasGroup(const std::string& name) const {
-  for (ContentGroups::const_iterator iter = groups_.begin();
-       iter != groups_.end(); ++iter) {
+  for (ContentGroups::const_iterator iter = content_groups_.begin();
+       iter != content_groups_.end(); ++iter) {
     if (iter->semantics() == name) {
       return true;
     }
@@ -130,8 +134,8 @@ bool SessionDescription::HasGroup(const std::string& name) const {
 
 const ContentGroup* SessionDescription::GetGroupByName(
     const std::string& name) const {
-  for (ContentGroups::const_iterator iter = groups_.begin();
-       iter != groups_.end(); ++iter) {
+  for (ContentGroups::const_iterator iter = content_groups_.begin();
+       iter != content_groups_.end(); ++iter) {
     if (iter->semantics() == name) {
       return &(*iter);
     }

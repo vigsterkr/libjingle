@@ -195,6 +195,42 @@ void TransportProxy::ReplaceImpl(TransportChannelProxy* channel,
   }
 }
 
+std::string BaseSession::StateToString(State state) {
+  switch (state) {
+    case Session::STATE_INIT:
+      return "STATE_INIT";
+    case Session::STATE_SENTINITIATE:
+      return "STATE_SENTINITIATE";
+    case Session::STATE_RECEIVEDINITIATE:
+      return "STATE_RECEIVEDINITIATE";
+    case Session::STATE_SENTACCEPT:
+      return "STATE_SENTACCEPT";
+    case Session::STATE_RECEIVEDACCEPT:
+      return "STATE_RECEIVEDACCEPT";
+    case Session::STATE_SENTMODIFY:
+      return "STATE_SENTMODIFY";
+    case Session::STATE_RECEIVEDMODIFY:
+      return "STATE_RECEIVEDMODIFY";
+    case Session::STATE_SENTREJECT:
+      return "STATE_SENTREJECT";
+    case Session::STATE_RECEIVEDREJECT:
+      return "STATE_RECEIVEDREJECT";
+    case Session::STATE_SENTREDIRECT:
+      return "STATE_SENTREDIRECT";
+    case Session::STATE_SENTTERMINATE:
+      return "STATE_SENTTERMINATE";
+    case Session::STATE_RECEIVEDTERMINATE:
+      return "STATE_RECEIVEDTERMINATE";
+    case Session::STATE_INPROGRESS:
+      return "STATE_INPROGRESS";
+    case Session::STATE_DEINIT:
+      return "STATE_DEINIT";
+    default:
+      break;
+  }
+  return "STATE_" + talk_base::ToString(state);
+}
+
 BaseSession::BaseSession(talk_base::Thread* signaling_thread,
                          talk_base::Thread* worker_thread,
                          PortAllocator* port_allocator,
@@ -219,6 +255,7 @@ BaseSession::~BaseSession() {
   ASSERT(signaling_thread()->IsCurrent());
 
   ASSERT(state_ != STATE_DEINIT);
+  LogState(state_, STATE_DEINIT);
   state_ = STATE_DEINIT;
   SignalState(this, state_);
 
@@ -330,6 +367,7 @@ cricket::Transport* BaseSession::CreateTransport() {
 void BaseSession::SetState(State state) {
   ASSERT(signaling_thread_->IsCurrent());
   if (state != state_) {
+    LogState(state_, state);
     state_ = state;
     SignalState(this, state_);
     signaling_thread_->Post(this, MSG_STATE);
@@ -364,8 +402,8 @@ bool BaseSession::ContentsGrouped() {
   // in SDP. It may be necessary to check content_names in groups of both
   // local and remote descriptions. Assumption here is that when this method
   // returns true, media contents can be muxed.
-  if (local_description()->HasGroup(GN_BUNDLE) &&
-      remote_description()->HasGroup(GN_BUNDLE)) {
+  if (local_description()->HasGroup(GROUP_TYPE_BUNDLE) &&
+      remote_description()->HasGroup(GROUP_TYPE_BUNDLE)) {
     return true;
   }
   return false;
@@ -379,7 +417,7 @@ bool BaseSession::MaybeEnableMuxingSupport() {
     // Always use first content name from the group for muxing. Hence ordering
     // of content names in SDP should match to the order in group.
     const ContentGroup* muxed_content_group =
-        local_description()->GetGroupByName(GN_BUNDLE);
+        local_description()->GetGroupByName(GROUP_TYPE_BUNDLE);
     const std::string* content_name =
         muxed_content_group->FirstContentName();
     if (content_name) {
@@ -410,6 +448,14 @@ void BaseSession::SetSelectedProxy(const std::string& content_name,
       }
     }
   }
+}
+
+void BaseSession::LogState(State old_state, State new_state) {
+  LOG(LS_INFO) << "Session:" << id()
+               << " Old state:" << StateToString(old_state)
+               << " New state:" << StateToString(new_state)
+               << " Type:" << content_type()
+               << " Transport:" << transport_type();
 }
 
 void BaseSession::OnMessage(talk_base::Message *pmsg) {
@@ -502,7 +548,7 @@ bool Session::Accept(const SessionDescription* sdesc) {
     LOG(LS_ERROR) << "Could not send accept message: " << error.text;
     return false;
   }
-
+  // TODO - Add BUNDLE support to transport-info messages.
   MaybeEnableMuxingSupport();  // Enable transport channel mux if supported.
   SetState(Session::STATE_SENTACCEPT);
   return true;
@@ -859,7 +905,8 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
   }
 
   set_remote_name(msg.from);
-  set_remote_description(new SessionDescription(init.ClearContents()));
+  set_remote_description(new SessionDescription(init.ClearContents(),
+                                                init.groups));
   SetState(STATE_RECEIVEDINITIATE);
 
   // Users of Session may listen to state change and call Reject().
@@ -885,7 +932,8 @@ bool Session::OnAcceptMessage(const SessionMessage& msg, MessageError* error) {
   // received, even if we haven't gotten an IQ response.
   OnInitiateAcked();
 
-  set_remote_description(new SessionDescription(accept.ClearContents()));
+  set_remote_description(new SessionDescription(accept.ClearContents(),
+                                                accept.groups));
   MaybeEnableMuxingSupport();  // Enable transport channel mux if supported.
   SetState(STATE_RECEIVEDACCEPT);
 
@@ -1069,6 +1117,7 @@ bool Session::SendInitiateMessage(const SessionDescription* sdesc,
   SessionInitiate init;
   init.contents = sdesc->contents();
   init.transports = GetEmptyTransportInfos(init.contents);
+  init.groups = sdesc->groups();
   return SendMessage(ACTION_SESSION_INITIATE, init, error);
 }
 
@@ -1079,7 +1128,7 @@ bool Session::WriteSessionAction(
   TransportParserMap trans_parsers = GetTransportParsers();
 
   return WriteSessionInitiate(protocol, init.contents, init.transports,
-                              content_parsers, trans_parsers,
+                              content_parsers, trans_parsers, init.groups,
                               elems, error);
 }
 
@@ -1090,7 +1139,7 @@ bool Session::SendAcceptMessage(const SessionDescription* sdesc,
                           sdesc->contents(),
                           GetEmptyTransportInfos(sdesc->contents()),
                           GetContentParsers(), GetTransportParsers(),
-                          &elems, error)) {
+                          sdesc->groups(), &elems, error)) {
     return false;
   }
   return SendMessage(ACTION_SESSION_ACCEPT, elems, error);

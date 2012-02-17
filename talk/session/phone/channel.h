@@ -98,6 +98,9 @@ class BaseChannel
   void StartConnectionMonitor(int cms);
   void StopConnectionMonitor();
 
+  // Configuration and setting.
+  void SetChannelOptions(int options);
+
   void set_srtp_signal_silent_time(uint32 silent_time) {
     srtp_filter_.set_signal_silent_time(silent_time);
   }
@@ -196,6 +199,9 @@ class BaseChannel
   void ChannelNotWritable_w();
   bool AddRecvStream_w(const StreamParams& sp);
   bool RemoveRecvStream_w(uint32 ssrc);
+
+  // Configuration and setting.
+  void SetChannelOptions_w(int options);
 
   virtual void ChangeState() = 0;
 
@@ -378,8 +384,6 @@ class VideoChannel : public BaseChannel {
 
   bool SendIntraFrame();
   bool RequestIntraFrame();
-  void EnableCpuAdaptation(bool enable);
-
   sigslot::signal3<VideoChannel*, uint32, VideoMediaChannel::Error>
       SignalMediaError;
 
@@ -399,12 +403,6 @@ class VideoChannel : public BaseChannel {
   void RequestIntraFrame_w() {
     media_channel()->RequestIntraFrame();
   }
-  void EnableCpuAdaptation_w(bool enable) {
-    // TODO: The following call will clear all other options, which is
-    // OK now since SetOptions is not used in video media channel. In the
-    // future, add GetOptions() method and change the options.
-    media_channel()->SetOptions(enable ? OPT_CPU_ADAPTATION : 0);
-  }
 
   bool ApplyViewRequest_w(const ViewRequest& request);
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
@@ -422,7 +420,6 @@ class VideoChannel : public BaseChannel {
                                        talk_base::WindowEvent event);
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
-
 
   VoiceChannel *voice_channel_;
   VideoRenderer *renderer_;

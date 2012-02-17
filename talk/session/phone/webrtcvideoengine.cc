@@ -39,6 +39,7 @@
 #include "talk/base/byteorder.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
+#include "talk/session/phone/filevideocapturer.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/videorenderer.h"
@@ -568,12 +569,22 @@ CaptureResult WebRtcVideoEngine::SetCapture(bool capture) {
 }
 
 VideoCapturer* WebRtcVideoEngine::CreateVideoCapturer(const Device& device) {
-  WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
-  if (!capturer->Init(device)) {
-    delete capturer;
-    return NULL;
+  if (FileVideoCapturer::IsFileVideoCapturerDevice(device)) {
+    FileVideoCapturer* capturer = new FileVideoCapturer;
+    if (!capturer->Init(device)) {
+      delete capturer;
+      return NULL;
+    }
+    capturer->set_repeat(talk_base::kForever);
+    return capturer;
+  } else {
+    WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
+    if (!capturer->Init(device)) {
+      delete capturer;
+      return NULL;
+    }
+    return capturer;
   }
-  return capturer;
 }
 
 CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
@@ -1027,7 +1038,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
       local_stream_info_(new WebRtcLocalStreamInfo()),
-      channel_options_(0) {
+      options_(0) {
   engine->RegisterChannel(this);
 }
 
@@ -1344,7 +1355,7 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
   // TODO Remove this once BWE works properly across different send
   // and receive channels.
   // Reuse default channel for recv stream in 1:1 call.
-  if ((channel_options_ & OPT_CONFERENCE) == 0 && first_receive_ssrc_ == 0) {
+  if ((options_ & OPT_CONFERENCE) == 0 && first_receive_ssrc_ == 0) {
     LOG(LS_INFO) << "Recv stream " << sp.first_ssrc()
                  << " reuse default channel #"
                  << vie_channel_;
@@ -1376,7 +1387,7 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
 
   // Get the default renderer.
   VideoRenderer* default_renderer = NULL;
-  if ((channel_options_ & OPT_CONFERENCE) != 0) {
+  if ((options_ & OPT_CONFERENCE) != 0) {
     if (mux_channels_.size() == 1 &&
         mux_channels_.find(0) != mux_channels_.end()) {
       GetRenderer(0, &default_renderer);
@@ -1506,7 +1517,7 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   // Get sender statistics and build VideoSenderInfo.
   if (engine_->vie()->rtp()->GetLocalSSRC(vie_channel_, ssrc) == 0) {
     VideoSenderInfo sinfo;
-    sinfo.ssrc = ssrc;
+    sinfo.ssrcs.push_back(ssrc);
     sinfo.codec_name = send_codec_.get() ? send_codec_->plName : "";
     sinfo.bytes_sent = bytes_sent;
     sinfo.packets_sent = packets_sent;
@@ -1563,7 +1574,7 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
       return false;
     }
     VideoReceiverInfo rinfo;
-    rinfo.ssrc = ssrc;
+    rinfo.ssrcs.push_back(ssrc);
     rinfo.bytes_rcvd = bytes_recv;
     rinfo.packets_rcvd = packets_recv;
     rinfo.packets_lost = -1;
@@ -1720,7 +1731,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
 
 bool WebRtcVideoMediaChannel::SetOptions(int options) {
   // Always accept options that are unchanged.
-  if (channel_options_ == options) {
+  if (options_ == options) {
     return true;
   }
 
@@ -1730,10 +1741,10 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
   }
 
   // Save the options, to be interpreted where appropriate.
-  channel_options_ = options;
+  options_ = options;
 
   // Adjust send codec bitrate if needed.
-  int expected_bitrate = (0 != (channel_options_ & OPT_CONFERENCE)) ?
+  int expected_bitrate = (0 != (options_ & OPT_CONFERENCE)) ?
       kConferenceModeMaxVideoBitrate : kMaxVideoBitrate;
   if (NULL != send_codec_.get() && send_max_bitrate_ != expected_bitrate) {
     // On success, SetSendCodec() will reset send_max_bitrate_ to
@@ -1744,6 +1755,18 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
                       expected_bitrate)) {
       return false;
     }
+  }
+
+  // Enable denoising if needed.
+  if (vie_capture_ != -1) {
+    bool enable = (options_ & OPT_VIDEO_NOISE_REDUCTION) != 0;
+    if (engine()->vie()->image()->EnableDenoising(vie_capture_, enable) != 0) {
+      LOG_RTCERR2(EnableDenoising, vie_capture_, enable);
+      // The EnableDenoising may return -1 when the denoising is already
+      // enabled/disabled, which should not be treated as an error.
+    }
+  } else {
+    LOG(LS_WARNING) << "SetOptions: Video Capture is not ready.";
   }
 
   return true;
@@ -1941,7 +1964,7 @@ bool WebRtcVideoMediaChannel::SetNackFec(int channel_id,
   // Enable hybrid NACK/FEC if negotiated and not in a conference, use only NACK
   // otherwise.
   bool enable = (red_payload_type != -1 && fec_payload_type != -1 &&
-      !(channel_options_ & OPT_CONFERENCE));
+      !(options_ & OPT_CONFERENCE));
   if (enable) {
     if (engine_->vie()->rtp()->SetHybridNACKFECStatus(
         channel_id, enable, red_payload_type, fec_payload_type) != 0) {

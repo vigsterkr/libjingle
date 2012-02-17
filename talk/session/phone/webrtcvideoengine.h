@@ -242,6 +242,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   }
   virtual bool SetSendBandwidth(bool autobw, int bps);
   virtual bool SetOptions(int options);
+  virtual int GetOptions() const { return options_; }
   virtual void SetInterface(NetworkInterface* iface);
 
   // Public functions for use by tests and other specialized code.
@@ -306,7 +307,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   std::vector<webrtc::VideoCodec> receive_codecs_;
   talk_base::scoped_ptr<WebRtcEncoderObserver> encoder_observer_;
   talk_base::scoped_ptr<WebRtcLocalStreamInfo> local_stream_info_;
-  int channel_options_;
+  int options_;
 
   ChannelMap mux_channels_;  // Contains all receive channels.
 };

@@ -55,8 +55,6 @@ root_env = Environment(
     '$MAIN_DIR/..',  # TODO: how can we use GOOGLECLIENT instead?
   ],
   CPPDEFINES = [
-    # Temp flag while porting to hammer.
-    'HAMMER_TIME=1',
     'LOGGING=1',
 
     # Feature selection
@@ -195,6 +193,15 @@ win_env.Append(
   ]
 )
 
+# Merge in additional windows locales not supported yet on posix
+win_env.AppendUnique(locales = [
+    'af', 'am', 'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'en-GB',
+    'es', 'es-419', 'et', 'eu', 'fa', 'fi', 'fil', 'fr', 'fr-CA', 'gl', 'gu',
+    'hi', 'hr', 'hu', 'id', 'is', 'it', 'iw', 'ja', 'kn', 'ko', 'lt', 'lv',
+    'ml', 'mr', 'ms', 'nl', 'no', 'or', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru',
+    'sk', 'sl', 'sr', 'sv', 'sw', 'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur',
+    'vi', 'zh-CN', 'zh-HK', 'zh-TW', 'zu'])
+
 # TODO: Figure out what this does; found it in
 # omaha/main.scons. This fixes the problem with redefinition
 # of OS_WINDOWS symbol.
@@ -220,10 +227,10 @@ win_dbg_env = win_env.Clone(
 
 win_dbg_env.Prepend(
   CCFLAGS = [
-      '/ZI',     # enable debugging
-      '/Od',     # disable optimizations
-      '/MTd',    # link with LIBCMTD.LIB debug lib
-      '/RTC1',   # enable runtime checks
+    '/ZI',     # enable debugging
+    '/Od',     # disable optimizations
+    '/MTd',    # link with LIBCMTD.LIB debug lib
+    '/RTC1',   # enable runtime checks
   ],
 )
 
@@ -379,7 +386,7 @@ mac_opt_env = mac_env.Clone(
 )
 mac_opt_env.Append(
   CCFLAGS = [
-    # TODO: Figure out how mk can compile without
+    # TODO: Figure out how hammer can compile without
     # this flag, then remove.  Confirmed asserts are preprocessed
     # out.  Maybe it's a different version of gcc?
     '-Wno-unused-variable',

@@ -933,6 +933,7 @@ bool WebRtcVoiceEngine::FindChannelAndSsrc(
 bool WebRtcVoiceEngine::FindChannelNumFromSsrc(
     uint32 ssrc, MediaProcessorDirection direction, int* channel_num) {
   ASSERT(channel_num != NULL);
+  ASSERT(direction == MPD_RX || direction == MPD_TX);
 
   *channel_num = -1;
   // Find corresponding channel for ssrc.
@@ -940,7 +941,7 @@ bool WebRtcVoiceEngine::FindChannelNumFromSsrc(
       it != channels_.end(); ++it) {
     ASSERT(*it != NULL);
     uint32 local_ssrc;
-    if ((direction & MPD_RX) != 0) {
+    if (direction == MPD_RX) {
       *channel_num = (*it)->GetChannelNum(ssrc);
     }
     if (*channel_num == -1 &&
@@ -1120,42 +1121,46 @@ bool WebRtcVoiceEngine::UnregisterProcessor(
     uint32 ssrc,
     VoiceProcessor* voice_processor,
     MediaProcessorDirection direction) {
-  int channel_id = -1;
-  bool found_channel = FindChannelNumFromSsrc(ssrc, direction, &channel_id);
   bool success = true;
-  if (voice_processor == NULL || !found_channel) {
+  if (voice_processor == NULL) {
     LOG(LS_WARNING) << "Media Processing Deregistration Failed. ssrc: "
-                    << ssrc
-                    << " foundChannel: "
-                    << found_channel;
+                    << ssrc;
     return false;
   }
   talk_base::CritScope cs(&signal_media_critical_);
-  if ((direction & MPD_RX) != 0) {
+  if ((direction & MPD_RX) != 0 && !SignalRxMediaFrame.is_empty()) {
     SignalRxMediaFrame.disconnect(voice_processor);
-    if (SignalRxMediaFrame.is_empty()) {
-      if (voe()->media()->DeRegisterExternalMediaProcessing(channel_id,
+    int rx_channel_id = -1;
+    bool found_rx_channel = FindChannelNumFromSsrc(ssrc,
+                                                   MPD_RX,
+                                                   &rx_channel_id);
+    if (SignalRxMediaFrame.is_empty() && found_rx_channel) {
+      if (voe()->media()->DeRegisterExternalMediaProcessing(rx_channel_id,
           webrtc::kPlaybackPerChannel) != -1) {
         LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
-                     << channel_id;
+                     << rx_channel_id;
       } else {
         LOG_RTCERR2(DeRegisterExternalMediaProcessing,
-                    channel_id,
+                    rx_channel_id,
                     webrtc::kPlaybackPerChannel);
         success = false;
       }
     }
   }
-  if ((direction & MPD_TX) != 0) {
+  if ((direction & MPD_TX) != 0 && !SignalTxMediaFrame.is_empty()) {
     SignalTxMediaFrame.disconnect(voice_processor);
-    if (SignalTxMediaFrame.is_empty()) {
-      if (voe()->media()->DeRegisterExternalMediaProcessing(channel_id,
+    int tx_channel_id = -1;
+    bool found_tx_channel = FindChannelNumFromSsrc(ssrc,
+                                                   MPD_TX,
+                                                   &tx_channel_id);
+    if (SignalTxMediaFrame.is_empty() && found_tx_channel) {
+      if (voe()->media()->DeRegisterExternalMediaProcessing(tx_channel_id,
           webrtc::kRecordingPerChannel) != -1) {
         LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
-                     << channel_id;
+                     << tx_channel_id;
       } else {
         LOG_RTCERR2(DeRegisterExternalMediaProcessing,
-                    channel_id,
+                    tx_channel_id,
                     webrtc::kRecordingPerChannel);
         success = false;
       }
@@ -1194,7 +1199,7 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
           engine,
           engine->voe()->base()->CreateChannel()),
       recv_codecs_set_(false),
-      channel_options_(0),
+      options_(0),
       agc_adjusted_(false),
       dtmf_allowed_(false),
       desired_playout_(false),
@@ -1244,7 +1249,7 @@ WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
 
 bool WebRtcVoiceMediaChannel::SetOptions(int flags) {
   // Always accept flags that are unchanged.
-  if (channel_options_ == flags) {
+  if (options_ == flags) {
     return true;
   }
 
@@ -1254,7 +1259,7 @@ bool WebRtcVoiceMediaChannel::SetOptions(int flags) {
   }
 
   // Save the options, to be interpreted where appropriate.
-  channel_options_ = flags;
+  options_ = flags;
   return true;
 }
 
@@ -1506,13 +1511,13 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
 #else
     // Multi-point conferences use conference-mode noise filtering.
     if (!engine()->SetConferenceMode(
-        0 != (channel_options_ & OPT_CONFERENCE))) {
+        0 != (options_ & OPT_CONFERENCE))) {
       LOG_RTCERR1(SetConferenceMode, voe_channel());
       return false;
     }
 #endif  // CHROMEOS
 
-    if ((channel_options_ & OPT_AGC_MINUS_10DB) && !agc_adjusted_) {
+    if ((options_ & OPT_AGC_MINUS_10DB) && !agc_adjusted_) {
       if (engine()->AdjustAgcLevel(kMinus10DbAdjustment)) {
         agc_adjusted_ = true;
       }
@@ -1640,7 +1645,7 @@ bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
   talk_base::CritScope lock(&mux_channels_cs_);
 
   // Reuse default channel for recv stream in 1:1 call.
-  if ((channel_options_ & OPT_CONFERENCE) == 0) {
+  if ((options_ & OPT_CONFERENCE) == 0) {
     LOG(LS_INFO) << "Recv stream " << sp.first_ssrc()
                  << " reuse default channel";
     return true;

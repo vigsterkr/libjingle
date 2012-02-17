@@ -139,6 +139,7 @@ struct ContentMessage {
   bool owns_contents;
   ContentInfos contents;
   TransportInfos transports;
+  ContentGroups groups;
 };
 
 typedef ContentMessage SessionInitiate;
@@ -184,6 +185,7 @@ bool WriteSessionInitiate(SignalingProtocol protocol,
                           const TransportInfos& tinfos,
                           const ContentParserMap& content_parsers,
                           const TransportParserMap& transport_parsers,
+                          const ContentGroups& groups,
                           XmlElements* elems,
                           WriteError* error);
 bool ParseSessionAccept(SignalingProtocol protocol,
@@ -197,6 +199,7 @@ bool WriteSessionAccept(SignalingProtocol protocol,
                         const TransportInfos& tinfos,
                         const ContentParserMap& content_parsers,
                         const TransportParserMap& transport_parsers,
+                        const ContentGroups& groups,
                         XmlElements* elems,
                         WriteError* error);
 bool ParseSessionTerminate(SignalingProtocol protocol,

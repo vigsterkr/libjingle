@@ -38,6 +38,7 @@
 #include "talk/session/phone/codec.h"
 // TODO: re-evaluate this include
 #include "talk/session/phone/audiomonitor.h"
+#include "talk/session/phone/streamparams.h"
 
 namespace talk_base {
 class Buffer;
@@ -89,8 +90,13 @@ enum VoiceMediaChannelOptions {
 enum VideoMediaChannelOptions {
   // Increase the output framerate by 2x by interpolating frames.
   OPT_INTERPOLATE = 0x10000,
-  // Enable video adaptation due to cpu load.
-  OPT_CPU_ADAPTATION = 0x20000
+  // Adapt the video input to the encoder based on CPU.
+  OPT_ADAPT_INPUT_TO_CPU_USAGE = 0x20000,
+  // Enable video adaption based on encoder's estimation on bandwidth and
+  // cpu load.
+  OPT_ADAPT_INPUT_TO_ENCODER = 0x40000,
+  // Enable video noise reduction.
+  OPT_VIDEO_NOISE_REDUCTION = 0x80000
 };
 
 class MediaChannel : public sigslot::has_slots<> {
@@ -145,7 +151,7 @@ class MediaChannel : public sigslot::has_slots<> {
   virtual bool SetSendBandwidth(bool autobw, int bps) = 0;
   // Sets the media options to use.
   virtual bool SetOptions(int options) = 0;
-  // TODO: add virtual int GetOptions() = 0;
+  virtual int GetOptions() const = 0;
 
  protected:
   NetworkInterface *network_interface_;
@@ -220,8 +226,7 @@ struct VoiceReceiverInfo {
 
 struct VideoSenderInfo {
   VideoSenderInfo()
-      : ssrc(0),
-        bytes_sent(0),
+      : bytes_sent(0),
         packets_sent(0),
         packets_cached(0),
         packets_lost(0),
@@ -237,7 +242,8 @@ struct VideoSenderInfo {
         preferred_bitrate(0) {
   }
 
-  uint32 ssrc;
+  std::vector<uint32> ssrcs;
+  std::vector<SsrcGroup> ssrc_groups;
   std::string codec_name;
   int bytes_sent;
   int packets_sent;
@@ -257,8 +263,7 @@ struct VideoSenderInfo {
 
 struct VideoReceiverInfo {
   VideoReceiverInfo()
-      : ssrc(0),
-        bytes_rcvd(0),
+      : bytes_rcvd(0),
         packets_rcvd(0),
         packets_lost(0),
         packets_concealed(0),
@@ -272,7 +277,8 @@ struct VideoReceiverInfo {
         framerate_output(0) {
   }
 
-  uint32 ssrc;
+  std::vector<uint32> ssrcs;
+  std::vector<SsrcGroup> ssrc_groups;
   int bytes_rcvd;
   // vector<int> layer_bytes_rcvd;
   int packets_rcvd;

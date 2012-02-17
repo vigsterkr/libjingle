@@ -30,6 +30,10 @@
 
 #include "talk/base/basictypes.h"
 
+#if defined(WIN32) || defined(LINUX) || defined(OSX)
+#define HAVE_JPEG
+#endif
+
 namespace flute {
 class MagicCamVideoRenderer;
 }
@@ -151,6 +155,10 @@ class VideoFrame {
 
   // Sets the video frame to black.
   bool SetToBlack();
+
+  // Tests if sample is valid.  Returns true if valid.
+  static bool Validate(uint32 fourcc, int w, int h,
+                       const uint8 *sample, size_t sample_size);
 
   // Size of an I420 image of given dimensions when stored as a frame buffer.
   static size_t SizeOf(size_t w, size_t h) {

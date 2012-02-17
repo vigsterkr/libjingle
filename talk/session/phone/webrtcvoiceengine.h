@@ -284,6 +284,7 @@ class WebRtcVoiceMediaChannel
   explicit WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine);
   virtual ~WebRtcVoiceMediaChannel();
   virtual bool SetOptions(int options);
+  virtual int GetOptions() const { return options_; }
   virtual bool SetRecvCodecs(const std::vector<AudioCodec> &codecs);
   virtual bool SetSendCodecs(const std::vector<AudioCodec> &codecs);
   virtual bool SetRecvRtpHeaderExtensions(
@@ -349,7 +350,7 @@ class WebRtcVoiceMediaChannel
   std::set<int> ringback_channels_;  // channels playing ringback
   bool recv_codecs_set_;
   talk_base::scoped_ptr<webrtc::CodecInst> send_codec_;
-  int channel_options_;
+  int options_;
   bool agc_adjusted_;
   bool dtmf_allowed_;
   bool desired_playout_;

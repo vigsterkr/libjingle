@@ -46,7 +46,8 @@ class FakeNetworkManager : public NetworkManagerBase,
   FakeNetworkManager()
       : thread_(Thread::Current()),
         next_index_(0),
-        started_(false) {
+        started_(false),
+        sent_first_update_(false) {
   }
 
   void AddInterface(const SocketAddress& iface) {
@@ -69,7 +70,14 @@ class FakeNetworkManager : public NetworkManagerBase,
   }
 
   virtual void StartUpdating() {
+    if (started_) {
+      if (sent_first_update_)
+        SignalNetworksChanged();
+      return;
+    }
+
     started_ = true;
+    sent_first_update_ = false;
     thread_->Post(this);
   }
 
@@ -92,13 +100,15 @@ class FakeNetworkManager : public NetworkManagerBase,
       networks.push_back(new Network(it->hostname(), it->hostname(),
                                      it->ipaddr()));
     }
-    MergeNetworkList(networks, true);
+    MergeNetworkList(networks);
+    sent_first_update_ = true;
   }
 
   Thread* thread_;
   std::vector<SocketAddress> ifaces_;
   int next_index_;
   bool started_;
+  bool sent_first_update_;
 };
 
 }  // namespace talk_base

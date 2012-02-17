@@ -144,6 +144,7 @@ class FileVideoCapturer::FileReadThread
 // Implementation of class FileVideoCapturer
 /////////////////////////////////////////////////////////////////////
 static const int64 kNumNanoSecsPerMilliSec = 1000000;
+const char* FileVideoCapturer::kVideoFileDeviceName = "video-file";
 
 FileVideoCapturer::FileVideoCapturer()
     : frame_buffer_size_(0),
@@ -157,6 +158,13 @@ FileVideoCapturer::FileVideoCapturer()
 FileVideoCapturer::~FileVideoCapturer() {
   Stop();
   delete[] static_cast<char*> (captured_frame_.data);
+}
+
+bool FileVideoCapturer::Init(const Device& device) {
+  if (!FileVideoCapturer::IsFileVideoCapturerDevice(device)) {
+    return false;
+  }
+  return Init(device.name);
 }
 
 bool FileVideoCapturer::Init(const std::string& filename) {

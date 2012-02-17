@@ -183,6 +183,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecs) {
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   webrtc::VideoCodec gcodec;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(0, gcodec.numberOfSimulcastStreams);
   EXPECT_EQ(kVP8Codec.id, gcodec.plType);
   EXPECT_EQ(kVP8Codec.width, gcodec.width);
   EXPECT_EQ(kVP8Codec.height, gcodec.height);
@@ -608,6 +609,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAndCname) {
   unsigned int ssrc = 0;
   EXPECT_EQ(0, vie_.GetLocalSSRC(channel_num, ssrc));
   EXPECT_EQ(1234U, ssrc);
+  EXPECT_EQ(1, vie_.GetNumSsrcs(channel_num));
 
   char rtcp_cname[256];
   EXPECT_EQ(0, vie_.GetRTCPCName(channel_num, rtcp_cname));
@@ -627,9 +629,11 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAfterCreatingReceiveChannel) {
   unsigned int ssrc = 0;
   EXPECT_EQ(0, vie_.GetLocalSSRC(send_channel_num, ssrc));
   EXPECT_EQ(1234U, ssrc);
+  EXPECT_EQ(1, vie_.GetNumSsrcs(send_channel_num));
   ssrc = 0;
   EXPECT_EQ(0, vie_.GetLocalSSRC(receive_channel_num, ssrc));
   EXPECT_EQ(1234U, ssrc);
+  EXPECT_EQ(1, vie_.GetNumSsrcs(receive_channel_num));
 }
 
 // Test SetOptions with OPT_CONFERENCE flag.
@@ -668,6 +672,26 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithConferenceMode) {
   EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
   EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
   EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+}
+
+// Test SetOptions with denoising flag.
+TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
+  EXPECT_TRUE(SetupEngine());
+  EXPECT_EQ(1, vie_.GetNumCapturers());
+  int channel_num = vie_.GetLastChannel();
+  int capture_id = vie_.GetCaptureId(channel_num);
+
+  // Set options with OPT_VIDEO_NOISE_REDUCTION flag.
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_VIDEO_NOISE_REDUCTION));
+
+  // Verify capture has denoising turned on.
+  EXPECT_TRUE(vie_.GetCaptureDenoising(capture_id));
+
+  // Set options back to zero.
+  EXPECT_TRUE(channel_->SetOptions(0));
+
+  // Verify capture has denoising turned off.
+  EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));
 }
 
 /////////////////////////
@@ -909,7 +933,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
 
   // Verify SetOptions returns true on a different options.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CPU_ADAPTATION));
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_ADAPT_INPUT_TO_CPU_USAGE));
 
   // Set send codecs on the channel and start sending.
   std::vector<cricket::VideoCodec> codecs;
@@ -921,7 +945,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
   EXPECT_FALSE(channel_->SetOptions(cricket::OPT_CONFERENCE));
 
   // Verify SetOptions returns true with the old options.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CPU_ADAPTATION));
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_ADAPT_INPUT_TO_CPU_USAGE));
 }
 
 // TODO: Investigate why this test is flaky.

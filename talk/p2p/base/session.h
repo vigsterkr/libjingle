@@ -177,6 +177,9 @@ class BaseSession : public sigslot::has_slots<>,
     ERROR_CONTENT = 4,   // channel errors in SetLocalContent/SetRemoteContent
   };
 
+  // Convert State to a readable string.
+  static std::string StateToString(State state);
+
   BaseSession(talk_base::Thread* signaling_thread,
               talk_base::Thread* worker_thread,
               PortAllocator* port_allocator,
@@ -358,6 +361,8 @@ class BaseSession : public sigslot::has_slots<>,
   // is used for mux.
   void SetSelectedProxy(const std::string& content_name,
                         const ContentGroup* muxed_group);
+  // Log session state.
+  void LogState(State old_state, State new_state);
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;

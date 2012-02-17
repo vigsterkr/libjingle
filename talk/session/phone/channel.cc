@@ -64,10 +64,9 @@ enum {
   MSG_RTPPACKET = 22,
   MSG_RTCPPACKET = 23,
   MSG_CHANNEL_ERROR = 24,
-  MSG_ENABLECPUADAPTATION = 25,
-  MSG_DISABLECPUADAPTATION = 26,
-  MSG_SCALEVOLUME = 27,
-  MSG_HANDLEVIEWREQUEST = 28
+  MSG_SETCHANNELOPTIONS = 25,
+  MSG_SCALEVOLUME = 26,
+  MSG_HANDLEVIEWREQUEST = 27
 };
 
 struct SetContentData : public talk_base::MessageData {
@@ -152,8 +151,8 @@ struct ScreencastMessageData : public talk_base::MessageData {
   ScreencastId window_id;
 };
 
-struct ScreencastEventData : public talk_base::MessageData {
-  ScreencastEventData(uint32 s, talk_base::WindowEvent we)
+struct ScreencastEventMessageData : public talk_base::MessageData {
+  ScreencastEventMessageData(uint32 s, talk_base::WindowEvent we)
       : ssrc(s),
         event(we) {
   }
@@ -174,7 +173,8 @@ struct VoiceChannelErrorMessageData : public talk_base::MessageData {
   VoiceChannelErrorMessageData(uint32 in_ssrc,
                                VoiceMediaChannel::Error in_error)
       : ssrc(in_ssrc),
-        error(in_error) {}
+        error(in_error) {
+  }
   uint32 ssrc;
   VoiceMediaChannel::Error error;
 };
@@ -183,7 +183,8 @@ struct VideoChannelErrorMessageData : public talk_base::MessageData {
   VideoChannelErrorMessageData(uint32 in_ssrc,
                                VideoMediaChannel::Error in_error)
       : ssrc(in_ssrc),
-        error(in_error) {}
+        error(in_error) {
+  }
   uint32 ssrc;
   VideoMediaChannel::Error error;
 };
@@ -195,9 +196,17 @@ struct SsrcMessageData : public talk_base::MessageData {
 };
 
 struct StreamMessageData : public talk_base::MessageData {
-  explicit StreamMessageData(const StreamParams& sp) : sp(sp), result(false) {}
+  explicit StreamMessageData(const StreamParams& in_sp)
+      : sp(in_sp),
+        result(false) {
+  }
   StreamParams sp;
   bool result;
+};
+
+struct ChannelOptionsMessageData : public talk_base::MessageData {
+  explicit ChannelOptionsMessageData(int in_options) : options(in_options) {}
+  int options;
 };
 
 static const char* PacketType(bool rtcp) {
@@ -575,6 +584,11 @@ void BaseChannel::OnSessionState(BaseSession* session,
   }
 }
 
+void BaseChannel::SetChannelOptions(int options) {
+  ChannelOptionsMessageData data(options);
+  Send(MSG_SETCHANNELOPTIONS, &data);
+}
+
 void BaseChannel::EnableMedia_w() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   if (enabled_)
@@ -679,6 +693,10 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
     ret = true;
   }
   return ret;
+}
+
+void BaseChannel::SetChannelOptions_w(int options) {
+  media_channel()->SetOptions(options);
 }
 
 bool BaseChannel::AddRecvStream_w(const StreamParams& sp) {
@@ -1139,12 +1157,16 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   if (action != CA_UPDATE) {
     // Tweak our audio processing settings, if needed.
-    int audio_options = 0;
+    int audio_options = media_channel()->GetOptions();
     if (audio->conference_mode()) {
       audio_options |= OPT_CONFERENCE;
+    } else {
+      audio_options &= (~OPT_CONFERENCE);
     }
     if (audio->agc_minus_10db()) {
       audio_options |= OPT_AGC_MINUS_10DB;
+    } else {
+      audio_options &= (~OPT_AGC_MINUS_10DB);
     }
     if (!media_channel()->SetOptions(audio_options)) {
       // Log an error on failure, but don't abort the call.
@@ -1365,10 +1387,6 @@ bool VideoChannel::RequestIntraFrame() {
   return true;
 }
 
-void VideoChannel::EnableCpuAdaptation(bool enable) {
-  Send(enable ? MSG_ENABLECPUADAPTATION : MSG_DISABLECPUADAPTATION);
-}
-
 void VideoChannel::ChangeState() {
   // Render incoming data if we're the active call, and we have the local
   // content. We receive data on the default channel and multiplexed streams.
@@ -1459,9 +1477,11 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   if (action != CA_UPDATE) {
     // Tweak our video processing settings, if needed.
-    int video_options = 0;
+    int video_options = media_channel()->GetOptions();
     if (video->conference_mode()) {
       video_options |= OPT_CONFERENCE;
+    } else {
+      video_options &= (~OPT_CONFERENCE);
     }
     if (!media_channel()->SetOptions(video_options)) {
       // Log an error on failure, but don't abort the call.
@@ -1541,41 +1561,44 @@ void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
 void VideoChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
     case MSG_SETRENDERER: {
-      RenderMessageData* data = static_cast<RenderMessageData*>(pmsg->pdata);
+      const RenderMessageData* data =
+          static_cast<RenderMessageData*>(pmsg->pdata);
       SetRenderer_w(data->ssrc, data->renderer);
       break;
     }
     case MSG_ADDSCREENCAST: {
-      ScreencastMessageData* data =
+      const ScreencastMessageData* data =
           static_cast<ScreencastMessageData*>(pmsg->pdata);
       AddScreencast_w(data->ssrc, data->window_id);
       break;
     }
     case MSG_REMOVESCREENCAST: {
-      ScreencastMessageData* data =
+      const ScreencastMessageData* data =
           static_cast<ScreencastMessageData*>(pmsg->pdata);
       RemoveScreencast_w(data->ssrc);
       break;
     }
     case MSG_SCREENCASTWINDOWEVENT: {
-      ScreencastEventData* data =
-          static_cast<ScreencastEventData*>(pmsg->pdata);
+      const ScreencastEventMessageData* data =
+          static_cast<ScreencastEventMessageData*>(pmsg->pdata);
       OnScreencastWindowEvent_s(data->ssrc, data->event);
       delete data;
       break;
     }
-    case MSG_SENDINTRAFRAME:
+    case MSG_SENDINTRAFRAME: {
       SendIntraFrame_w();
       break;
-    case MSG_REQUESTINTRAFRAME:
+    }
+    case MSG_REQUESTINTRAFRAME: {
       RequestIntraFrame_w();
       break;
-    case MSG_ENABLECPUADAPTATION:
-      EnableCpuAdaptation_w(true);
+    }
+    case MSG_SETCHANNELOPTIONS: {
+      const ChannelOptionsMessageData* data =
+          static_cast<ChannelOptionsMessageData*>(pmsg->pdata);
+      SetChannelOptions_w(data->options);
       break;
-    case MSG_DISABLECPUADAPTATION:
-      EnableCpuAdaptation_w(false);
-      break;
+    }
     case MSG_CHANNEL_ERROR: {
       const VideoChannelErrorMessageData* data =
           static_cast<VideoChannelErrorMessageData*>(pmsg->pdata);
@@ -1608,7 +1631,8 @@ void VideoChannel::OnMediaMonitorUpdate(
 
 void VideoChannel::OnScreencastWindowEvent(uint32 ssrc,
                                            talk_base::WindowEvent event) {
-  ScreencastEventData* pdata = new ScreencastEventData(ssrc, event);
+  ScreencastEventMessageData* pdata =
+      new ScreencastEventMessageData(ssrc, event);
   signaling_thread()->Post(this, MSG_SCREENCASTWINDOWEVENT, pdata);
 }
 

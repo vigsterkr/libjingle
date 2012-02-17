@@ -69,6 +69,7 @@ class ContentGroup {
   bool HasContentName(const std::string& content_name) const;
   const std::string* FirstContentName() const;
   const std::string& semantics() const { return semantics_; }
+  const std::set<std::string>& content_types() const { return content_types_; }
 
  private:
   std::string semantics_;
@@ -91,6 +92,10 @@ class SessionDescription {
   SessionDescription() {}
   explicit SessionDescription(const ContentInfos& contents) :
       contents_(contents) {}
+  SessionDescription(const ContentInfos& contents,
+                     const ContentGroups& groups) :
+      contents_(contents),
+      content_groups_(groups) {}
   const ContentInfo* GetContentByName(const std::string& name) const;
   const ContentInfo* FirstContentByType(const std::string& type) const;
   const ContentInfo* FirstContent() const;
@@ -100,6 +105,7 @@ class SessionDescription {
                   const ContentDescription* description);
   bool RemoveContentByName(const std::string& name);
   const ContentInfos& contents() const { return contents_; }
+  const ContentGroups& groups() const { return content_groups_; }
 
   ~SessionDescription() {
     for (ContentInfos::iterator content = contents_.begin();
@@ -108,13 +114,13 @@ class SessionDescription {
     }
   }
   bool HasGroup(const std::string& name) const;
-  void AddGroup(const ContentGroup& group) { groups_.push_back(group); }
+  void AddGroup(const ContentGroup& group) { content_groups_.push_back(group); }
   void RemoveGroupByName(const std::string& name);
   const ContentGroup* GetGroupByName(const std::string& name) const;
 
  private:
   ContentInfos contents_;
-  ContentGroups groups_;
+  ContentGroups content_groups_;
 };
 
 // Indicates whether a ContentDescription was an offer or an answer, as

@@ -113,6 +113,9 @@ class RtpHelper : public Base {
     options_ = options;
     return true;
   }
+  virtual int GetOptions() const {
+    return options_;
+  }
   virtual bool SetRecvRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) {
     recv_extensions_ = extensions;

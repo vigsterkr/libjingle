@@ -240,6 +240,7 @@ BasicPortAllocatorSession::BasicPortAllocatorSession(
 }
 
 BasicPortAllocatorSession::~BasicPortAllocatorSession() {
+  allocator_->network_manager()->StopUpdating();
   if (network_thread_ != NULL)
     network_thread_->Clear(this);
 

@@ -34,7 +34,7 @@
 #include "talk/app/webrtc/peerconnectionsignaling.h"
 #include "talk/app/webrtc/sessiondescriptionprovider.h"
 #include "talk/app/webrtc/streamcollectionimpl.h"
-#include "talk/app/webrtc/videotrackimpl.h"
+#include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
@@ -589,4 +589,3 @@ TEST_F(PeerConnectionSignalingTest, ReceiveError) {
 }
 
 }  // namespace webrtc
-

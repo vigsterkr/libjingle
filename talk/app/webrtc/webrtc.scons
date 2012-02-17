@@ -21,7 +21,7 @@ if env.Bit('have_webrtc_voice') and env.Bit('have_webrtc_video'):
       'roapmessages.cc',
       'roapsession.cc',
       'videorendererimpl.cc',
-      'videotrackimpl.cc',
+      'videotrack.cc',
       'webrtcsdp.cc',
       'webrtcsession.cc',
     ],
@@ -49,7 +49,6 @@ if env.Bit('have_webrtc_voice') and env.Bit('have_webrtc_video'):
     libs = [
       'base',
       'expat',
-      'jpeg',
       'json',
       'p2p',
       'phone',

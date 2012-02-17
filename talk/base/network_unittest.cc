@@ -49,9 +49,8 @@ class NetworkTest : public testing::Test, public sigslot::has_slots<>  {
   }
 
   void MergeNetworkList(BasicNetworkManager& network_manager,
-                        const NetworkManager::NetworkList& list,
-                        bool force_notification) {
-    network_manager.MergeNetworkList(list, force_notification);
+                        const NetworkManager::NetworkList& list) {
+    network_manager.MergeNetworkList(list);
   }
 
   bool IsIgnoredNetwork(const Network& network) {
@@ -126,6 +125,19 @@ TEST_F(NetworkTest, TestUpdateNetworks) {
   manager.StartUpdating();
   Thread::Current()->ProcessMessages(0);
   EXPECT_TRUE(callback_called_);
+  callback_called_ = false;
+  // Callback should be triggered immediately when StartUpdating
+  // is called, after network update signal is already sent.
+  manager.StartUpdating();
+  EXPECT_TRUE(manager.started());
+  Thread::Current()->ProcessMessages(0);
+  EXPECT_TRUE(callback_called_);
+  manager.StopUpdating();
+  EXPECT_TRUE(manager.started());
+  manager.StopUpdating();
+  EXPECT_FALSE(manager.started());
+  manager.StopUpdating();
+  EXPECT_FALSE(manager.started());
 }
 
 // Verify that MergeNetworkList() merges network lists properly.
@@ -138,7 +150,7 @@ TEST_F(NetworkTest, TestMergeNetworkList) {
   NetworkManager::NetworkList list;
   list.push_back(new Network(kNetwork1));
   callback_called_ = false;
-  MergeNetworkList(manager, list, false);
+  MergeNetworkList(manager, list);
   EXPECT_TRUE(callback_called_);
   list.clear();
 
@@ -151,7 +163,7 @@ TEST_F(NetworkTest, TestMergeNetworkList) {
   // Replace kNetwork1 with kNetwork2.
   list.push_back(new Network(kNetwork2));
   callback_called_ = false;
-  MergeNetworkList(manager, list, false);
+  MergeNetworkList(manager, list);
   EXPECT_TRUE(callback_called_);
   list.clear();
 
@@ -165,7 +177,7 @@ TEST_F(NetworkTest, TestMergeNetworkList) {
   list.push_back(new Network(kNetwork1));
   list.push_back(new Network(kNetwork2));
   callback_called_ = false;
-  MergeNetworkList(manager, list, false);
+  MergeNetworkList(manager, list);
   EXPECT_TRUE(callback_called_);
   list.clear();
 
@@ -181,7 +193,7 @@ TEST_F(NetworkTest, TestMergeNetworkList) {
   list.push_back(new Network(kNetwork2));
   list.push_back(new Network(kNetwork1));
   callback_called_ = false;
-  MergeNetworkList(manager, list, false);
+  MergeNetworkList(manager, list);
   EXPECT_FALSE(callback_called_);
   list.clear();
 

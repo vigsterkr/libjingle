@@ -55,6 +55,8 @@ static const char kStream2[] = "stream2";
 static const char kVideoTrack2[] = "video2";
 static const char kAudioTrack2[] = "audio2";
 
+static const int kIceCandidatesTimeout = 3000;
+
 
 class MockWebRtcSessionObserver : public webrtc::WebRtcSessionObserver {
  public:
@@ -313,14 +315,14 @@ TEST_F(WebRtcSessionTest, TestInitialize) {
 TEST_F(WebRtcSessionTest, TestSessionCandidates) {
   AddInterface(kClientAddr1);
   WebRtcSessionTest::Init();
-  EXPECT_EQ_WAIT(8u, observer_.candidates_.size(), 3000);
+  EXPECT_EQ_WAIT(8u, observer_.candidates_.size(), kIceCandidatesTimeout);
 }
 
 TEST_F(WebRtcSessionTest, TestMultihomeCandidataes) {
   AddInterface(kClientAddr1);
   AddInterface(kClientAddr2);
   WebRtcSessionTest::Init();
-  EXPECT_EQ_WAIT(16u, observer_.candidates_.size(), 3000);
+  EXPECT_EQ_WAIT(16u, observer_.candidates_.size(), kIceCandidatesTimeout);
 }
 
 TEST_F(WebRtcSessionTest, TestStunError) {
@@ -329,7 +331,7 @@ TEST_F(WebRtcSessionTest, TestStunError) {
   fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr1);
   WebRtcSessionTest::Init();
   // Since kClientAddr1 is blocked, not expecting stun candidates for it.
-  EXPECT_EQ_WAIT(12u, observer_.candidates_.size(), 3000);
+  EXPECT_EQ_WAIT(12u, observer_.candidates_.size(), kIceCandidatesTimeout);
 }
 
 // Test creating offers and receive answers and make sure the

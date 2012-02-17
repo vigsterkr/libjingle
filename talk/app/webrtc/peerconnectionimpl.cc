@@ -40,6 +40,10 @@ namespace {
 
 // The number of the tokens in the config string.
 static const size_t kConfigTokens = 2;
+// Only the STUN or TURN server address appears in the config string.
+static const size_t kConfigAddress = 1;
+// Both of the STUN or TURN server address and port appear in the config string.
+static const size_t kConfigAddressAndPort = 2;
 static const size_t kServiceCount = 5;
 // The default stun port.
 static const int kDefaultPort = 3478;
@@ -98,12 +102,21 @@ bool static ParseConfigString(const std::string& config,
   }
   std::string service_address = tokens[1];
 
+  std::string address;
   int port;
   tokens.clear();
   talk_base::tokenize(service_address, ':', &tokens);
-  if (tokens.size() != kConfigTokens) {
+  if (tokens.size() != kConfigAddress &&
+      tokens.size() != kConfigAddressAndPort) {
+    LOG(WARNING) << "Invalid server address and port: " << service_address;
+    return false;
+  }
+
+  if (tokens.size() == kConfigAddress) {
+    address = tokens[0];
     port = kDefaultPort;
   } else {
+    address = tokens[0];
     port = talk_base::FromString<int>(tokens[1]);
     if (port <= 0 || port > 0xffff) {
       LOG(WARNING) << "Invalid port: " << tokens[1];
@@ -115,10 +128,10 @@ bool static ParseConfigString(const std::string& config,
   // multiple addresses, username and password from the configuration string.
   switch (service_type) {
     case STUN:
-      stun_config->push_back(StunConfiguration(service_address, port));
+      stun_config->push_back(StunConfiguration(address, port));
       break;
     case TURN:
-      turn_config->push_back(TurnConfiguration(service_address, port, "", ""));
+      turn_config->push_back(TurnConfiguration(address, port, "", ""));
       break;
     case TURNS:
     case STUNS:

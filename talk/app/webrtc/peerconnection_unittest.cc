@@ -339,13 +339,9 @@ TEST_F(P2PTestConductor, LocalP2PTest) {
   EXPECT_TRUE_WAIT(ActivationNotPending(), kMaxWaitForActivationMs);
   EXPECT_TRUE(SessionActive());
 
-  // TODO - These are failing on Windows dbg paricular on pulse.
-  // removing check now.
-#if 0
   const int kEndFrameCount = 10;
   const int kMaxWaitForFramesMs = 5000;
   EXPECT_TRUE_WAIT(FramesNotPending(kEndFrameCount), kMaxWaitForFramesMs);
   EXPECT_TRUE(FramesReceivedCheck(kEndFrameCount));
-#endif
   EXPECT_TRUE(StopSession());
 }

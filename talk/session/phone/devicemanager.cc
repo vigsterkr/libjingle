@@ -27,9 +27,12 @@
 
 #include "talk/session/phone/devicemanager.h"
 
+#include "talk/base/fileutils.h"
 #include "talk/base/logging.h"
+#include "talk/base/pathutils.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
+#include "talk/session/phone/filevideocapturer.h"
 #include "talk/session/phone/mediacommon.h"
 
 namespace cricket {
@@ -112,6 +115,7 @@ bool DeviceManager::GetVideoCaptureDevice(const std::string& name,
                                           Device* out) {
   // If the name is empty, return the default device.
   if (name.empty() || name == kDefaultDeviceName) {
+    LOG(LS_INFO) << "Creating default VideoCapturer";
     return GetDefaultVideoCaptureDevice(out);
   }
 
@@ -123,9 +127,19 @@ bool DeviceManager::GetVideoCaptureDevice(const std::string& name,
   for (std::vector<Device>::const_iterator it = devices.begin();
       it != devices.end(); ++it) {
     if (name == it->name) {
+      LOG(LS_INFO) << "Creating VideoCapturer for " << name;
       *out = *it;
       return true;
     }
+  }
+
+  // If the name is a valid path to a file, then we'll create a simulated device
+  // with the filename. The LmiMediaEngine will know to use a FileVideoCapturer
+  // for these devices.
+  if (talk_base::Filesystem::IsFile(name)) {
+    LOG(LS_INFO) << "Creating FileVideoCapturer";
+    *out = FileVideoCapturer::CreateFileVideoCapturerDevice(name);
+    return true;
   }
 
   return false;

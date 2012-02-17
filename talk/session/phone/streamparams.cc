@@ -29,6 +29,14 @@
 
 namespace cricket {
 
+const char kFecSsrcGroupSemantics[] = "FEC";
+const char kFidSsrcGroupSemantics[] = "FID";
+const char kSimSsrcGroupSemantics[] = "SIM";
+
+bool SsrcGroup::has_semantics(const std::string& semantics_in) const {
+  return (semantics == semantics_in && ssrcs.size() > 0);
+}
+
 bool GetStreamBySsrc(const StreamParamsVec& streams, uint32 ssrc,
                      StreamParams* stream_out) {
   for (StreamParamsVec::const_iterator stream = streams.begin();
