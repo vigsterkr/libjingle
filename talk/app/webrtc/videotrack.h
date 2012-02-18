@@ -24,59 +24,57 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "talk/app/webrtc/videotrackimpl.h"
+
+#ifndef TALK_APP_WEBRTC_VIDEOTRACK_H_
+#define TALK_APP_WEBRTC_VIDEOTRACK_H_
 
 #include <string>
 
-#include "talk/session/phone/webrtcvideocapturer.h"
+#include "talk/app/webrtc/mediastream.h"
+#include "talk/app/webrtc/mediatrackimpl.h"
+#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/scoped_ref_ptr.h"
+
+#ifdef WEBRTC_RELATIVE_PATH
+#include "modules/video_capture/main/interface/video_capture.h"
+#else
+#include "third_party/webrtc/files/include/video_capture.h"
+#endif
+
+namespace cricket {
+
+class VideoCapturer;
+
+}  // namespace cricket
 
 namespace webrtc {
 
-static const char kVideoTrackKind[] = "video";
+class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
+ public:
+  // Create a video track used for remote video tracks.
+  static talk_base::scoped_refptr<VideoTrack> CreateRemote(
+      const std::string& label);
+  // Create a video track used for local video tracks.
+  static talk_base::scoped_refptr<VideoTrack> CreateLocal(
+      const std::string& label,
+      cricket::VideoCapturer* video_device);
 
-VideoTrack::VideoTrack(const std::string& label)
-    : MediaStreamTrack<LocalVideoTrackInterface>(label),
-      video_device_(NULL) {
-}
+  virtual cricket::VideoCapturer* GetVideoCapture();
+  virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
+  VideoRendererWrapperInterface* GetRenderer();
 
-VideoTrack::VideoTrack(const std::string& label,
-                       cricket::VideoCapturer* video_device)
-    : MediaStreamTrack<LocalVideoTrackInterface>(label),
-      video_device_(NULL) {
-  video_device_.reset(video_device);
-}
+  virtual std::string kind() const;
 
-void VideoTrack::SetRenderer(VideoRendererWrapperInterface* renderer) {
-  video_renderer_ = renderer;
-  Notifier<LocalVideoTrackInterface>::FireOnChanged();
-}
+ protected:
+  explicit VideoTrack(const std::string& label);
+  VideoTrack(const std::string& label, cricket::VideoCapturer* video_device);
 
-VideoRendererWrapperInterface* VideoTrack::GetRenderer() {
-  return video_renderer_.get();
-}
-
-  // Get the VideoCapture device associated with this track.
-cricket::VideoCapturer* VideoTrack::GetVideoCapture() {
-  return video_device_.get();
-}
-
-std::string VideoTrack::kind() const {
-  return kVideoTrackKind;
-}
-
-talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateRemote(
-    const std::string& label) {
-  talk_base::RefCountedObject<VideoTrack>* track =
-      new talk_base::RefCountedObject<VideoTrack>(label);
-  return track;
-}
-
-talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateLocal(
-    const std::string& label,
-    cricket::VideoCapturer* video_device) {
-  talk_base::RefCountedObject<VideoTrack>* track =
-      new talk_base::RefCountedObject<VideoTrack>(label, video_device);
-  return track;
-}
+ private:
+  talk_base::scoped_ptr<cricket::VideoCapturer> video_device_;
+  talk_base::scoped_refptr<VideoRendererWrapperInterface> video_renderer_;
+};
 
 }  // namespace webrtc
+
+#endif  // TALK_APP_WEBRTC_VIDEOTRACK_H_
