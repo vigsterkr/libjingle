@@ -213,7 +213,26 @@ class Transport : public talk_base::MessageHandler,
   virtual void OnTransportSignalingReady() {}
 
  private:
-  typedef std::map<std::string, TransportChannelImpl*> ChannelMap;
+  struct ChannelMapEntry {
+    ChannelMapEntry() : impl_(NULL), ref_(0) {}
+    explicit ChannelMapEntry(TransportChannelImpl *impl) :
+    impl_(impl), ref_(0) {}
+
+    void AddRef() { ++ref_; }
+    void DecRef() {
+      ASSERT(ref_ > 0);
+      --ref_;
+    }
+    int ref() const { return ref_; }
+
+    TransportChannelImpl* get() const { return impl_; }
+
+  private:
+    TransportChannelImpl *impl_;
+    int ref_;
+  };
+
+  typedef std::map<std::string, ChannelMapEntry> ChannelMap;
 
   // Called when the state of a channel changes.
   void OnChannelReadableState(TransportChannel* channel);

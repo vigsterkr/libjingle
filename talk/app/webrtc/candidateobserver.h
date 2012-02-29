@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2010, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,32 +25,27 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_SESSION_PHONE_VOICEPROCESSOR_H_
-#define TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+#ifndef TALK_APP_WEBRTC_CANDIDATEOBSERVER_H_
+#define TALK_APP_WEBRTC_CANDIDATEOBSERVER_H_
 
-#include "talk/base/basictypes.h"
-#include "talk/base/sigslot.h"
-#include "talk/session/phone/audioframe.h"
+#include "talk/p2p/base/candidate.h"
 
-namespace cricket {
+namespace webrtc {
 
-enum MediaProcessorDirection {
-    MPD_INVALID = 0,
-    MPD_RX = 1 << 0,
-    MPD_TX = 1 << 1,
-    MPD_RX_AND_TX = MPD_RX | MPD_TX,
-};
-
-class VoiceProcessor : public sigslot::has_slots<> {
+// This observer interface provides feedback about ice candidates found by a
+// WebRtcSession object.
+class CandidateObserver {
  public:
-  virtual ~VoiceProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data.
-  virtual void OnFrame(uint32 ssrc,
-                       MediaProcessorDirection direction,
-                       AudioFrame* frame) = 0;
+  // Found a new candidate.
+  virtual void OnCandidateFound(const std::string& content_name,
+                                const cricket::Candidate& candidate) = 0;
+
+  // All expected candidates have been collected.
+  virtual void OnCandidatesReady() = 0;
+ protected:
+  virtual ~CandidateObserver() {}
 };
 
-}  // namespace cricket
-#endif  // TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+}  // namespace webrtc
+
+#endif  // TALK_APP_WEBRTC_CANDIDATEOBSERVER_H_

@@ -77,6 +77,7 @@ class FakeWebRtcVideoEngine
   struct Channel {
     Channel()
         : capture_id_(-1),
+          original_channel_id_(-1),
           has_renderer_(false),
           render_started_(false),
           send(false),
@@ -91,6 +92,7 @@ class FakeWebRtcVideoEngine
       memset(&send_codec, 0, sizeof(send_codec));
     }
     int capture_id_;
+    int original_channel_id_;
     bool has_renderer_;
     bool render_started_;
     bool send;
@@ -153,6 +155,9 @@ class FakeWebRtcVideoEngine
 
   int GetLastChannel() const { return last_channel_; }
   int GetNumChannels() const { return channels_.size(); }
+  bool IsChannel(int channel) const {
+    return (channels_.find(channel) != channels_.end());
+  }
   void set_fail_create_channel(bool fail_create_channel) {
     fail_create_channel_ = fail_create_channel;
   }
@@ -166,6 +171,10 @@ class FakeWebRtcVideoEngine
   int GetCaptureId(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->capture_id_;
+  }
+  int GetOriginalChannelId(int channel) const {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->original_channel_id_;
   }
   bool GetHasRenderer(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -219,6 +228,15 @@ class FakeWebRtcVideoEngine
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->ssrcs_.size();
   }
+  int GetSimulcastSsrc(int channel,
+                       int simulcast_idx) const {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    if (channels_.find(channel)->second->ssrcs_.find(simulcast_idx) ==
+        channels_.find(channel)->second->ssrcs_.end()) {
+      return -1;
+    }
+    return channels_.find(channel)->second->ssrcs_[simulcast_idx];
+  }
   bool ReceiveCodecRegistered(int channel,
                               const webrtc::VideoCodec& codec) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -247,7 +265,14 @@ class FakeWebRtcVideoEngine
     channel = last_channel_;
     return 0;
   };
-  WEBRTC_STUB(CreateChannel, (int&, int));
+  WEBRTC_FUNC(CreateChannel, (int& channel, int original_channel)) {
+    WEBRTC_CHECK_CHANNEL(original_channel);
+    if (CreateChannel(channel) != 0) {
+      return -1;
+    }
+    channels_[channel]->original_channel_id_ = original_channel;
+    return 0;
+  }
   WEBRTC_FUNC(DeleteChannel, (const int channel)) {
     WEBRTC_CHECK_CHANNEL(channel);
     delete channels_[channel];

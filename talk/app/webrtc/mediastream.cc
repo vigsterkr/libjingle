@@ -25,7 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/mediastreamimpl.h"
+#include "talk/app/webrtc/mediastream.h"
 #include "talk/base/logging.h"
 
 namespace webrtc {

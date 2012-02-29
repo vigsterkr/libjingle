@@ -50,14 +50,14 @@ class SessionDescriptionProvider {
       const cricket::MediaSessionOptions& options) = 0;
 
   // Transfers ownership of session description.
-  virtual void SetLocalDescription(const cricket::SessionDescription* desc,
+  virtual bool SetLocalDescription(cricket::SessionDescription* desc,
                                    cricket::ContentAction type) = 0;
-  virtual void SetRemoteDescription(cricket::SessionDescription* desc,
+  virtual bool SetRemoteDescription(cricket::SessionDescription* desc,
                                     cricket::ContentAction type) = 0;
-  // Sets all the currently known remote candidates.
-  virtual void SetRemoteCandidates(
-      const std::vector<cricket::Candidate>& remote_candidates) = 0;
-
+  // Add a newly received remote candidate.
+  virtual bool AddRemoteCandidate(
+      const std::string& remote_content_name,
+      const cricket::Candidate& candidate) = 0;
   // Current local session description.
   virtual const cricket::SessionDescription* local_description() const = 0;
   // Current remote session description.

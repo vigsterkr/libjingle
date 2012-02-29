@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2010, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,32 +25,41 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_SESSION_PHONE_VOICEPROCESSOR_H_
-#define TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+// Implements the IceCandidateInterface.
 
-#include "talk/base/basictypes.h"
-#include "talk/base/sigslot.h"
-#include "talk/session/phone/audioframe.h"
+#ifndef TALK_APP_WEBRTC_JSEPICECANDIDATE_H_
+#define TALK_APP_WEBRTC_JSEPICECANDIDATE_H_
 
-namespace cricket {
+#include <string>
 
-enum MediaProcessorDirection {
-    MPD_INVALID = 0,
-    MPD_RX = 1 << 0,
-    MPD_TX = 1 << 1,
-    MPD_RX_AND_TX = MPD_RX | MPD_TX,
-};
+#include "talk/app/webrtc/jsep.h"
+#include "talk/base/constructormagic.h"
+#include "talk/p2p/base/candidate.h"
 
-class VoiceProcessor : public sigslot::has_slots<> {
+namespace webrtc {
+
+class JsepIceCandidate : public IceCandidateInterface {
  public:
-  virtual ~VoiceProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data.
-  virtual void OnFrame(uint32 ssrc,
-                       MediaProcessorDirection direction,
-                       AudioFrame* frame) = 0;
+  explicit JsepIceCandidate(const std::string& label);
+  ~JsepIceCandidate();
+
+  void SetCandidate(const cricket::Candidate& candidates);
+  bool Initialize(const std::string& sdp);
+
+  virtual std::string label() const { return label_;}
+  virtual const cricket::Candidate& candidate() const {
+    return candidate_;
+  }
+
+  virtual bool ToString(std::string* out) const;
+
+ private:
+  std::string label_;
+  cricket::Candidate candidate_;
+
+  DISALLOW_COPY_AND_ASSIGN(JsepIceCandidate);
 };
 
-}  // namespace cricket
-#endif  // TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+}  // namespace webrtc
+
+#endif  // TALK_APP_WEBRTC_JSEPICECANDIDATE_H_

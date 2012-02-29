@@ -31,6 +31,7 @@
 #include <map>
 #include <string>
 
+#include "talk/app/webrtc/jsepsignaling.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/peerconnectionfactoryimpl.h"
 #include "talk/app/webrtc/peerconnectionsignaling.h"
@@ -46,12 +47,14 @@ class MediaStreamHandlers;
 // It uses PeerConnectionSignaling and WebRtcSession to implement
 // the PeerConnection functionality.
 class PeerConnection : public PeerConnectionInterface,
+                       public JsepRemoteMediaStreamObserver,
                        public talk_base::MessageHandler,
                        public sigslot::has_slots<> {
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
 
-  bool Initialize(const std::string& configuration,
+  bool Initialize(bool use_roap,
+                  const std::string& configuration,
                   PeerConnectionObserver* observer);
 
   virtual ~PeerConnection();
@@ -71,6 +74,22 @@ class PeerConnection : public PeerConnectionInterface,
   virtual ReadyState ready_state();
   virtual SdpState sdp_state();
 
+  void StartIce(IceOptions options);
+
+  // Jsep functions.
+  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
+  virtual SessionDescriptionInterface* CreateAnswer(
+      const MediaHints& hints,
+      const SessionDescriptionInterface* offer);
+
+  virtual bool SetLocalDescription(Action action,
+                                   SessionDescriptionInterface* desc);
+  virtual bool SetRemoteDescription(Action action,
+                                    SessionDescriptionInterface* desc);
+  virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
+  virtual const SessionDescriptionInterface* local_description() const;
+  virtual const SessionDescriptionInterface* remote_description() const;
+
  private:
   // Implement talk_base::MessageHandler.
   void OnMessage(talk_base::Message* msg);
@@ -81,11 +100,17 @@ class PeerConnection : public PeerConnectionInterface,
   void OnRemoteStreamRemoved(MediaStreamInterface* remote_stream);
   void OnSignalingStateChange(PeerConnectionSignaling::State state);
 
+  // Implement JsepRemoteMediaStreamObserver.
+  // TODO: Remove these functions when we no longer need to support ROAP.
+  virtual void OnAddStream(MediaStreamInterface* stream);
+  virtual void OnRemoveStream(MediaStreamInterface* stream);
+
+
   void ChangeReadyState(PeerConnectionInterface::ReadyState ready_state);
   void ChangeSdpState(PeerConnectionInterface::SdpState sdp_state);
   void Terminate_s();
 
-  talk_base::Thread* signaling_thread() {
+  talk_base::Thread* signaling_thread() const {
     return factory_->signaling_thread();
   }
 
@@ -103,7 +128,8 @@ class PeerConnection : public PeerConnectionInterface,
 
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
   talk_base::scoped_ptr<WebRtcSession> session_;
-  talk_base::scoped_ptr<PeerConnectionSignaling> signaling_;
+  talk_base::scoped_ptr<PeerConnectionSignaling> roap_signaling_;
+  talk_base::scoped_ptr<JsepSignaling> jsep_signaling_;
   talk_base::scoped_ptr<MediaStreamHandlers> stream_handler_;
 };
 

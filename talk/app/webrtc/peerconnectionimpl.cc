@@ -61,13 +61,24 @@ enum ServiceType {
 };
 
 enum {
-  MSG_COMMITSTREAMCHANGES = 1,
-  MSG_PROCESSSIGNALINGMESSAGE = 2,
-  MSG_RETURNREMOTEMEDIASTREAMS = 3,
-  MSG_CLOSE = 4,
-  MSG_READYSTATE = 5,
-  MSG_SDPSTATE = 6,
-  MSG_TERMINATE = 7
+  MSG_ADDSTREAM = 1,
+  MSG_REMOVESTREAM = 2,
+  MSG_COMMITSTREAMCHANGES = 3,
+  MSG_PROCESSSIGNALINGMESSAGE = 4,
+  MSG_RETURNLOCALMEDIASTREAMS = 5,
+  MSG_RETURNREMOTEMEDIASTREAMS = 6,
+  MSG_CLOSE = 7,
+  MSG_READYSTATE = 8,
+  MSG_SDPSTATE = 9,
+  MSG_TERMINATE = 10,
+  MSG_STARTICE = 11,
+  MSG_CREATEOFFER = 12,
+  MSG_CREATEANSWER = 13,
+  MSG_SETLOCALDESCRIPTION = 14,
+  MSG_SETREMOTEDESCRIPTION = 15,
+  MSG_PROCESSICEMESSAGE = 16,
+  MSG_GETLOCALDESCRIPTION = 17,
+  MSG_GETREMOTEDESCRIPTION = 18,
 };
 
 typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
@@ -143,19 +154,45 @@ bool static ParseConfigString(const std::string& config,
   return true;
 }
 
-struct SignalingParams : public talk_base::MessageData {
-  SignalingParams(const std::string& msg,
-                  webrtc::StreamCollectionInterface* local_streams)
-      : msg(msg),
-        local_streams(local_streams) {}
-  const std::string msg;
-  talk_base::scoped_refptr<webrtc::StreamCollectionInterface> local_streams;
+typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
+    LocalMediaStreamParams;
+
+typedef talk_base::TypedMessageData<std::string> RoapSignalingParams;
+
+typedef talk_base::TypedMessageData<webrtc::PeerConnectionInterface::IceOptions>
+    StartIceParams;
+
+struct JsepSessionDescriptionParams : public talk_base::MessageData {
+  JsepSessionDescriptionParams()
+      : result(false),
+        desc(NULL),
+        const_desc(NULL) {}
+  bool result;
+  webrtc::MediaHints hints;
+  webrtc::JsepInterface::Action action;
+  webrtc::SessionDescriptionInterface* desc;
+  const webrtc::SessionDescriptionInterface* const_desc;
+};
+
+struct JsepIceCandidateParams : public talk_base::MessageData {
+  explicit JsepIceCandidateParams(
+      const webrtc::IceCandidateInterface* candidate)
+      : result(false),
+        candidate(candidate) {}
+  bool result;
+  const webrtc::IceCandidateInterface* candidate;
 };
 
 struct StreamCollectionParams : public talk_base::MessageData {
   explicit StreamCollectionParams(webrtc::StreamCollectionInterface* streams)
       : streams(streams) {}
   talk_base::scoped_refptr<webrtc::StreamCollectionInterface> streams;
+};
+
+struct MediaStreamParams : public talk_base::MessageData {
+  explicit MediaStreamParams(webrtc::MediaStreamInterface* stream)
+      : stream(stream) {}
+  talk_base::scoped_refptr<webrtc::MediaStreamInterface> stream;
 };
 
 struct ReadyStateMessage : public talk_base::MessageData {
@@ -198,12 +235,14 @@ PeerConnection::~PeerConnection() {
 // Clean up what needs to be cleaned up on the signaling thread.
 void PeerConnection::Terminate_s() {
   stream_handler_.reset();
-  signaling_.reset();
+  roap_signaling_.reset();
+  jsep_signaling_.reset();
   session_.reset();
   port_allocator_.reset();
 }
 
-bool PeerConnection::Initialize(const std::string& configuration,
+bool PeerConnection::Initialize(bool use_roap,
+                                const std::string& configuration,
                                 PeerConnectionObserver* observer) {
   ASSERT(observer != NULL);
   if (!observer)
@@ -221,31 +260,46 @@ bool PeerConnection::Initialize(const std::string& configuration,
                                    factory_->signaling_thread(),
                                    factory_->worker_thread(),
                                    port_allocator_.get()));
-  signaling_.reset(new PeerConnectionSignaling(factory_->signaling_thread(),
-                                               session_.get()));
   stream_handler_.reset(new MediaStreamHandlers(session_.get()));
 
-  signaling_->SignalNewPeerConnectionMessage.connect(
-      this, &PeerConnection::OnNewPeerConnectionMessage);
-  signaling_->SignalRemoteStreamAdded.connect(
-      this, &PeerConnection::OnRemoteStreamAdded);
-  signaling_->SignalRemoteStreamRemoved.connect(
-      this, &PeerConnection::OnRemoteStreamRemoved);
-  signaling_->SignalStateChange.connect(
-      this, &PeerConnection::OnSignalingStateChange);
-  // Register with WebRtcSession
-  session_->RegisterObserver(signaling_.get());
-
   // Initialize the WebRtcSession. It creates transport channels etc.
-  const bool result = session_->Initialize();
-  if (result)
+  if (!session_->Initialize())
+    return false;
+
+  if (use_roap) {
+    roap_signaling_.reset(new PeerConnectionSignaling(
+        factory_->signaling_thread(),
+        session_.get()));
+    roap_signaling_->SignalNewPeerConnectionMessage.connect(
+        this, &PeerConnection::OnNewPeerConnectionMessage);
+    roap_signaling_->SignalRemoteStreamAdded.connect(
+        this, &PeerConnection::OnRemoteStreamAdded);
+    roap_signaling_->SignalRemoteStreamRemoved.connect(
+        this, &PeerConnection::OnRemoteStreamRemoved);
+    roap_signaling_->SignalStateChange.connect(
+        this, &PeerConnection::OnSignalingStateChange);
+    // Register with WebRtcSession to get Ice candidates.
+    session_->RegisterObserver(roap_signaling_.get());
+
+    // ROAP expect Ice negotiation to start when PeerConnection is created.
+    session_->StartIce();
     ChangeReadyState(PeerConnectionInterface::kNegotiating);
-  return result;
+  } else {
+    jsep_signaling_.reset(new JsepSignaling(factory_->signaling_thread(),
+                                            session_.get(),
+                                            observer_,
+                                            this));
+    // Register with WebRtcSession to get Ice candidates.
+    session_->RegisterObserver(jsep_signaling_.get());
+  }
+  return true;
 }
 
 talk_base::scoped_refptr<StreamCollectionInterface>
 PeerConnection::local_streams() {
-  return local_media_streams_;
+  StreamCollectionParams msg(NULL);
+  signaling_thread()->Send(this, MSG_RETURNLOCALMEDIASTREAMS, &msg);
+  return msg.streams;
 }
 
 talk_base::scoped_refptr<StreamCollectionInterface>
@@ -256,23 +310,22 @@ PeerConnection::remote_streams() {
 }
 
 void PeerConnection::ProcessSignalingMessage(const std::string& msg) {
-  SignalingParams* parameter(new SignalingParams(
-      msg, StreamCollection::Create(local_media_streams_)));
+  RoapSignalingParams* parameter(new RoapSignalingParams(msg));
   signaling_thread()->Post(this, MSG_PROCESSSIGNALINGMESSAGE, parameter);
 }
 
 void PeerConnection::AddStream(LocalMediaStreamInterface* local_stream) {
-  local_media_streams_->AddStream(local_stream);
+  LocalMediaStreamParams msg(local_stream);
+  signaling_thread()->Send(this, MSG_ADDSTREAM, &msg);
 }
 
 void PeerConnection::RemoveStream(LocalMediaStreamInterface* remove_stream) {
-  local_media_streams_->RemoveStream(remove_stream);
+  LocalMediaStreamParams msg(remove_stream);
+  signaling_thread()->Send(this, MSG_REMOVESTREAM, &msg);
 }
 
 void PeerConnection::CommitStreamChanges() {
-  StreamCollectionParams* msg(new StreamCollectionParams(
-          StreamCollection::Create(local_media_streams_)));
-  signaling_thread()->Post(this, MSG_COMMITSTREAMCHANGES, msg);
+  signaling_thread()->Send(this, MSG_COMMITSTREAMCHANGES);
 }
 
 void PeerConnection::Close() {
@@ -291,38 +344,128 @@ PeerConnectionInterface::SdpState PeerConnection::sdp_state() {
   return msg.state;
 }
 
+void PeerConnection::StartIce(IceOptions options) {
+  StartIceParams msg(options);
+  signaling_thread()->Send(this, MSG_STARTICE, &msg);
+}
+
+SessionDescriptionInterface* PeerConnection::CreateOffer(
+    const MediaHints& hints) {
+  JsepSessionDescriptionParams msg;
+  msg.hints = hints;
+  signaling_thread()->Send(this, MSG_CREATEOFFER, &msg);
+  return msg.desc;
+}
+
+SessionDescriptionInterface* PeerConnection::CreateAnswer(
+    const MediaHints& hints,
+    const SessionDescriptionInterface* offer) {
+  JsepSessionDescriptionParams msg;
+  msg.hints = hints;
+  msg.const_desc = offer;
+  signaling_thread()->Send(this, MSG_CREATEANSWER, &msg);
+  return msg.desc;
+}
+
+bool PeerConnection::SetLocalDescription(Action action,
+                                         SessionDescriptionInterface* desc) {
+  JsepSessionDescriptionParams msg;
+  msg.action = action;
+  msg.desc = desc;
+  signaling_thread()->Send(this, MSG_SETLOCALDESCRIPTION, &msg);
+  return msg.result;
+}
+
+bool PeerConnection::SetRemoteDescription(Action action,
+                                          SessionDescriptionInterface* desc) {
+  JsepSessionDescriptionParams msg;
+  msg.action = action;
+  msg.desc = desc;
+  signaling_thread()->Send(this, MSG_SETREMOTEDESCRIPTION, &msg);
+  return msg.result;
+}
+
+bool PeerConnection::ProcessIceMessage(
+    const IceCandidateInterface* ice_candidate) {
+  JsepIceCandidateParams msg(ice_candidate);
+  signaling_thread()->Send(this, MSG_PROCESSICEMESSAGE, &msg);
+  return msg.result;
+}
+
+const SessionDescriptionInterface* PeerConnection::local_description() const {
+  JsepSessionDescriptionParams msg;
+  signaling_thread()->Send(const_cast<PeerConnection*>(this),
+                           MSG_GETLOCALDESCRIPTION, &msg);
+  return msg.const_desc;
+}
+
+const SessionDescriptionInterface* PeerConnection::remote_description() const {
+  JsepSessionDescriptionParams msg;
+  signaling_thread()->Send(const_cast<PeerConnection*>(this),
+                           MSG_GETREMOTEDESCRIPTION, &msg);
+  return msg.const_desc;
+}
+
 void PeerConnection::OnMessage(talk_base::Message* msg) {
   talk_base::MessageData* data = msg->pdata;
   switch (msg->message_id) {
+    case MSG_ADDSTREAM: {
+      LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
+      local_media_streams_->AddStream(msg->data());
+      break;
+    }
+    case MSG_REMOVESTREAM: {
+      LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
+      local_media_streams_->RemoveStream(msg->data());
+      break;
+    }
     case MSG_COMMITSTREAMCHANGES: {
       if (ready_state_ != PeerConnectionInterface::kClosed ||
           ready_state_ != PeerConnectionInterface::kClosing) {
-        StreamCollectionParams* param(
-            static_cast<StreamCollectionParams*> (data));
-        signaling_->CreateOffer(param->streams);
-        stream_handler_->CommitLocalStreams(param->streams);
+        // If we use ROAP an offer is created and we setup the local
+        // media streams.
+        if (roap_signaling_.get() != NULL) {
+          roap_signaling_->CreateOffer(local_media_streams_);
+          stream_handler_->CommitLocalStreams(local_media_streams_);
+        } else if (jsep_signaling_.get() != NULL) {
+          jsep_signaling_->SetLocalStreams(local_media_streams_);
+        }
+      }
+      break;
+    }
+    case MSG_PROCESSSIGNALINGMESSAGE: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          roap_signaling_.get() != NULL)  {
+        RoapSignalingParams* params(static_cast<RoapSignalingParams*> (data));
+        roap_signaling_->ProcessSignalingMessage(params->data(),
+                                                 local_media_streams_);
       }
       delete data;  // Because it is Posted.
       break;
     }
-    case MSG_PROCESSSIGNALINGMESSAGE: {
-      if (ready_state_ != PeerConnectionInterface::kClosed) {
-        SignalingParams* params(static_cast<SignalingParams*> (data));
-        signaling_->ProcessSignalingMessage(params->msg, params->local_streams);
-      }
-      delete data;  // Because it is Posted.
+    case MSG_RETURNLOCALMEDIASTREAMS: {
+      StreamCollectionParams* param(
+          static_cast<StreamCollectionParams*> (data));
+      param->streams = StreamCollection::Create(local_media_streams_);
       break;
     }
     case MSG_RETURNREMOTEMEDIASTREAMS: {
       StreamCollectionParams* param(
           static_cast<StreamCollectionParams*> (data));
-      param->streams = StreamCollection::Create(signaling_->remote_streams());
+      if (roap_signaling_.get() != NULL) {
+        param->streams = StreamCollection::Create(
+            roap_signaling_->remote_streams());
+      } else if (jsep_signaling_.get()) {
+        param->streams = jsep_signaling_->remote_streams();
+      }
+
       break;
     }
     case MSG_CLOSE: {
-      if (ready_state_ != PeerConnectionInterface::kClosed) {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          roap_signaling_.get() != NULL)  {
         ChangeReadyState(PeerConnectionInterface::kClosing);
-        signaling_->SendShutDown();
+        roap_signaling_->SendShutDown();
       }
       break;
     }
@@ -334,6 +477,109 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
     case MSG_SDPSTATE: {
       SdpStateMessage* msg(static_cast<SdpStateMessage*> (data));
       msg->state = sdp_state_;
+      break;
+    }
+    case MSG_STARTICE: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        // TODO: Take IceOptions into consideration.
+        session_->StartIce();
+        ChangeReadyState(PeerConnectionInterface::kNegotiating);
+      }
+      break;
+    }
+    case MSG_CREATEOFFER: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        if (jsep_signaling_.get() == NULL)  {
+          LOG(WARNING) << "Erroneous call to CreateOffer - Not a JSEP call ";
+          break;
+        }
+        JsepSessionDescriptionParams* param(
+            static_cast<JsepSessionDescriptionParams*> (data));
+
+        param->desc = jsep_signaling_->CreateOffer(param->hints);
+      }
+      break;
+    }
+    case MSG_CREATEANSWER: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        if (jsep_signaling_.get() == NULL)  {
+          LOG(WARNING) << "Erroneous call to CreateAnswer - Not a JSEP call ";
+          break;
+        }
+        JsepSessionDescriptionParams* param(
+            static_cast<JsepSessionDescriptionParams*> (data));
+        param->desc = jsep_signaling_->CreateAnswer(param->hints,
+                                                    param->const_desc);
+      }
+      break;
+    }
+    case MSG_SETLOCALDESCRIPTION: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        if (jsep_signaling_.get() == NULL)  {
+          LOG(WARNING) << "Erroneous call to SetLocalDescription"
+                       << " - Not a JSEP call ";
+          break;
+        }
+        JsepSessionDescriptionParams* param(
+            static_cast<JsepSessionDescriptionParams*> (data));
+        param->result  = jsep_signaling_->SetLocalDescription(param->action,
+                                                              param->desc);
+        stream_handler_->CommitLocalStreams(local_media_streams_);
+      }
+      break;
+    }
+    case MSG_SETREMOTEDESCRIPTION: {
+      if (ready_state_ != PeerConnectionInterface::kClosed &&
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        if (jsep_signaling_.get() == NULL)  {
+          LOG(WARNING) << "Erroneous call to SetRemoteDescription"
+                       << " - Not a JSEP call ";
+          break;
+        }
+        JsepSessionDescriptionParams* param(
+            static_cast<JsepSessionDescriptionParams*> (data));
+        param->result  = jsep_signaling_->SetRemoteDescription(param->action,
+                                                               param->desc);
+      }
+      break;
+    }
+    case MSG_PROCESSICEMESSAGE: {
+      if (ready_state_ != PeerConnectionInterface::kClosed ||
+          ready_state_ != PeerConnectionInterface::kClosing) {
+        if (jsep_signaling_.get() == NULL)  {
+          LOG(WARNING) << "Erroneous call to ProcessIceMessage"
+                       << " - Not a JSEP call ";
+          break;
+        }
+        JsepIceCandidateParams * param(
+            static_cast<JsepIceCandidateParams*> (data));
+        param->result  = jsep_signaling_->ProcessIceMessage(param->candidate);
+      }
+    }
+    case MSG_GETLOCALDESCRIPTION: {
+      if (jsep_signaling_.get() == NULL)  {
+        LOG(WARNING) << "Erroneous call to localdescription"
+                     << " - Not a JSEP call ";
+        break;
+      }
+      JsepSessionDescriptionParams* param(
+          static_cast<JsepSessionDescriptionParams*> (data));
+      param->const_desc  = jsep_signaling_->local_description();
+      break;
+    }
+    case  MSG_GETREMOTEDESCRIPTION: {
+      if (jsep_signaling_.get() == NULL)  {
+        LOG(WARNING) << "Erroneous call to remotedescription"
+                     << " - Not a JSEP call ";
+        break;
+      }
+      JsepSessionDescriptionParams* param(
+          static_cast<JsepSessionDescriptionParams*> (data));
+      param->const_desc  = jsep_signaling_->remote_description();
       break;
     }
     case MSG_TERMINATE: {
@@ -388,6 +634,16 @@ void PeerConnection::OnSignalingStateChange(
       ASSERT(!"NOT IMPLEMENTED");
       break;
   }
+}
+
+void PeerConnection::OnAddStream(MediaStreamInterface* stream) {
+  stream_handler_->AddRemoteStream(stream);
+  observer_->OnAddStream(stream);
+}
+
+void PeerConnection::OnRemoveStream(MediaStreamInterface* stream) {
+  stream_handler_->RemoveRemoteStream(stream);
+  observer_->OnRemoveStream(stream);
 }
 
 void PeerConnection::ChangeReadyState(

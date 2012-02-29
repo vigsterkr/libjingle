@@ -29,8 +29,8 @@
 #include <string>
 #include <utility>
 
-#include "talk/app/webrtc/audiotrackimpl.h"
-#include "talk/app/webrtc/mediastreamimpl.h"
+#include "talk/app/webrtc/audiotrack.h"
+#include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectionsignaling.h"
 #include "talk/app/webrtc/sessiondescriptionprovider.h"
 #include "talk/app/webrtc/streamcollectionimpl.h"
@@ -150,16 +150,18 @@ class MockSessionDescriptionProvider : public SessionDescriptionProvider {
     return session_description_factory_->CreateAnswer(offer, options,
                                                       local_desc_.get());
   }
-  virtual void SetLocalDescription(const cricket::SessionDescription* desc,
+  virtual bool SetLocalDescription(cricket::SessionDescription* desc,
                                    cricket::ContentAction type) {
     local_desc_.reset(desc);
     UpdateNegotiationState(type);
+    return true;
   }
-  virtual void SetRemoteDescription(
+  virtual bool SetRemoteDescription(
       cricket::SessionDescription* remote_offer,
       cricket::ContentAction type) {
     remote_desc_.reset(remote_offer);
     UpdateNegotiationState(type);
+    return true;
   }
   virtual const cricket::SessionDescription* local_description() const {
     return local_desc_.get();
@@ -167,8 +169,10 @@ class MockSessionDescriptionProvider : public SessionDescriptionProvider {
   virtual const cricket::SessionDescription* remote_description() const {
     return remote_desc_.get();
   }
-  virtual void SetRemoteCandidates(
-      const std::vector<cricket::Candidate>& remote_candidates) {
+  virtual bool AddRemoteCandidate(
+      const std::string& remote_content_name,
+      const cricket::Candidate& remote_candidate) {
+    return true;
   }
 
   // |update_session_description_counter_| is the number of successful
@@ -300,8 +304,8 @@ class PeerConnectionSignalingTest: public testing::Test {
   // signaling1_ send stream with label kStreamLabel1 to signaling2_.
   void SetUpOneWayCall() {
     // Initialize signaling1_ and signaling_2 by providing the candidates.
-    signaling1_->OnCandidatesReady(candidates_);
-    signaling2_->OnCandidatesReady(candidates_);
+    signaling1_->OnCandidatesReady();
+    signaling2_->OnCandidatesReady();
 
     // Create a local stream collection to be sent on signaling1_.
     talk_base::scoped_refptr<StreamCollection> local_collection1(
@@ -334,7 +338,6 @@ class PeerConnectionSignalingTest: public testing::Test {
     EXPECT_EQ(1u, signaling2_->remote_streams()->count());
   }
 
-  cricket::Candidates candidates_;
   talk_base::scoped_ptr<MockSignalingObserver> observer1_;
   talk_base::scoped_ptr<MockSignalingObserver> observer2_;
   talk_base::scoped_ptr<MockSessionDescriptionProvider> provider1_;
@@ -372,7 +375,7 @@ TEST_F(PeerConnectionSignalingTest, SimpleOneWayCall) {
   EXPECT_EQ(PeerConnectionSignaling::kInitializing, signaling1_->GetState());
 
   // Initialize signaling1_ by providing the candidates.
-  signaling1_->OnCandidatesReady(candidates_);
+  signaling1_->OnCandidatesReady();
   EXPECT_EQ(PeerConnectionSignaling::kWaitingForAnswer,
             signaling1_->GetState());
   // Process posted messages to allow signaling_1 to send the offer.
@@ -383,7 +386,7 @@ TEST_F(PeerConnectionSignalingTest, SimpleOneWayCall) {
   EXPECT_EQ(PeerConnectionSignaling::kInitializing, signaling2_->GetState());
 
   // Provide the candidates to signaling_2 and let it process the offer.
-  signaling2_->OnCandidatesReady(candidates_);
+  signaling2_->OnCandidatesReady();
   talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that the offer/answer have been exchanged and the state is good.
@@ -462,8 +465,8 @@ TEST_F(PeerConnectionSignalingTest, Glare) {
 
 TEST_F(PeerConnectionSignalingTest, AddRemoveStream) {
   // Initialize signaling1_ and signaling_2 by providing the candidates.
-  signaling1_->OnCandidatesReady(candidates_);
-  signaling2_->OnCandidatesReady(candidates_);
+  signaling1_->OnCandidatesReady();
+  signaling2_->OnCandidatesReady();
   // Create a local stream.
   std::string label(kStreamLabel1);
   talk_base::scoped_refptr<LocalMediaStreamInterface> stream(
@@ -563,7 +566,7 @@ TEST_F(PeerConnectionSignalingTest, ShutDown) {
 
 TEST_F(PeerConnectionSignalingTest, ReceiveError) {
   // Initialize signaling1_
-  signaling1_->OnCandidatesReady(candidates_);
+  signaling1_->OnCandidatesReady();
 
   talk_base::scoped_refptr<StreamCollection> local_collection1(
       CreateLocalCollection1());

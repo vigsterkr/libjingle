@@ -113,13 +113,16 @@ struct StreamParams {
     return !ssrc_groups.empty();
   }
   bool has_ssrc_group(const std::string& semantics) const {
+    return (get_ssrc_group(semantics) != NULL);
+  }
+  const SsrcGroup* get_ssrc_group(const std::string& semantics) const {
     for (std::vector<SsrcGroup>::const_iterator it = ssrc_groups.begin();
          it != ssrc_groups.end(); ++it) {
       if (it->has_semantics(semantics)) {
-        return true;
+        return &(*it);
       }
     }
-    return false;
+    return NULL;
   }
 
   // Resource of the MUC jid of the participant of with this stream.

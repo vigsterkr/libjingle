@@ -105,8 +105,21 @@ TransportChannelImpl* Transport::CreateChannel(
 TransportChannelImpl* Transport::CreateChannel_w(
     const std::string& name, const std::string& content_type) {
   ASSERT(worker_thread()->IsCurrent());
+  TransportChannelImpl *impl;
+  talk_base::CritScope cs(&crit_);
 
-  TransportChannelImpl* impl = CreateTransportChannel(name, content_type);
+  // Create the entry if it does not exist
+  if (channels_.find(name) == channels_.end()) {
+    impl = CreateTransportChannel(name, content_type);
+    channels_[name] = ChannelMapEntry(impl);
+  } else {
+    impl = channels_[name].get();
+  }
+
+  // Increase the ref count
+  channels_[name].AddRef();
+  destroyed_ = false;
+
   impl->SignalReadableState.connect(this, &Transport::OnChannelReadableState);
   impl->SignalWritableState.connect(this, &Transport::OnChannelWritableState);
   impl->SignalRequestSignaling.connect(
@@ -114,10 +127,6 @@ TransportChannelImpl* Transport::CreateChannel_w(
   impl->SignalCandidateReady.connect(this, &Transport::OnChannelCandidateReady);
   impl->SignalRouteChange.connect(this, &Transport::OnChannelRouteChange);
 
-  talk_base::CritScope cs(&crit_);
-  ASSERT(channels_.find(name) == channels_.end());
-  channels_[name] = impl;
-  destroyed_ = false;
   if (connect_requested_) {
     impl->Connect();
     if (channels_.size() == 1) {
@@ -132,7 +141,7 @@ TransportChannelImpl* Transport::CreateChannel_w(
 TransportChannelImpl* Transport::GetChannel(const std::string& name) {
   talk_base::CritScope cs(&crit_);
   ChannelMap::iterator iter = channels_.find(name);
-  return (iter != channels_.end()) ? iter->second : NULL;
+  return (iter != channels_.end()) ? iter->second.get() : NULL;
 }
 
 bool Transport::HasChannels() {
@@ -154,8 +163,12 @@ void Transport::DestroyChannel_w(const std::string& name) {
     ChannelMap::iterator iter = channels_.find(name);
     if (iter == channels_.end())
       return;
-    impl = iter->second;
-    channels_.erase(iter);
+
+    iter->second.DecRef();
+    if (!iter->second.ref()) {
+      impl = iter->second.get();
+      channels_.erase(iter);
+    }
   }
 
   if (connect_requested_ && channels_.empty()) {
@@ -209,10 +222,13 @@ void Transport::DestroyAllChannels_w() {
     for (ChannelMap::iterator iter = channels_.begin();
          iter != channels_.end();
          ++iter) {
-      impls.push_back(iter->second);
+      iter->second.DecRef();
+      if (!iter->second.ref())
+        impls.push_back(iter->second.get());
+      }
     }
-    channels_.clear();
-  }
+  channels_.clear();
+
 
   for (size_t i = 0; i < impls.size(); ++i)
     DestroyTransportChannel(impls[i]);
@@ -253,7 +269,7 @@ void Transport::CallChannels_w(TransportChannelFunc func) {
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end();
        ++iter) {
-    ((iter->second)->*func)();
+    ((iter->second.get())->*func)();
   }
 }
 
@@ -308,7 +324,7 @@ void Transport::OnRemoteCandidate_w(const Candidate& candidate) {
   ChannelMap::iterator iter = channels_.find(candidate.name());
   // It's ok for a channel to go away while this message is in transit.
   if (iter != channels_.end()) {
-    iter->second->OnCandidate(candidate);
+    iter->second.get()->OnCandidate(candidate);
   }
 }
 
@@ -347,7 +363,8 @@ bool Transport::GetTransportState_s(bool read) {
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end();
        ++iter) {
-    bool b = (read ? iter->second->readable() : iter->second->writable());
+    bool b = (read ? iter->second.get()->readable() :
+      iter->second.get()->writable());
     result = result || b;
   }
   return result;

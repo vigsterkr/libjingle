@@ -30,7 +30,7 @@
 
 #include <string>
 
-#include "talk/app/webrtc/mediastream.h"
+#include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/mediatrackimpl.h"
 #include "talk/app/webrtc/notifierimpl.h"
 #include "talk/base/scoped_ptr.h"

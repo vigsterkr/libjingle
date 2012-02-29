@@ -28,6 +28,8 @@
 #ifndef TALK_P2P_BASE_SESSIONCLIENT_H_
 #define TALK_P2P_BASE_SESSIONCLIENT_H_
 
+#include "talk/p2p/base/constants.h"
+
 namespace buzz {
 class XmlElement;
 }
@@ -36,7 +38,7 @@ namespace cricket {
 
 struct ParseError;
 class Session;
-class SessionDescription;
+class ContentDescription;
 
 class ContentParser {
  public:

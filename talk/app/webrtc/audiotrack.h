@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2011, Google Inc.
+ * Copyright 2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -24,48 +24,47 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "talk/app/webrtc/audiotrackimpl.h"
 
-#include <string>
+#ifndef TALK_APP_WEBRTC_AUDIOTRACK_H_
+#define TALK_APP_WEBRTC_AUDIOTRACK_H_
+
+#include "talk/app/webrtc/mediastreaminterface.h"
+#include "talk/app/webrtc/mediatrackimpl.h"
+#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/base/scoped_ref_ptr.h"
+
+#ifdef WEBRTC_RELATIVE_PATH
+#include "modules/audio_device/main/interface/audio_device.h"
+#else
+#include "third_party/webrtc/files/include/audio_device.h"
+#endif
 
 namespace webrtc {
 
-static const char kAudioTrackKind[] = "audio";
-
-AudioTrack::AudioTrack(const std::string& label)
-    : MediaStreamTrack<LocalAudioTrackInterface>(label),
-      audio_device_(NULL) {
-}
-
-AudioTrack::AudioTrack(const std::string& label,
-                       AudioDeviceModule* audio_device)
-    : MediaStreamTrack<LocalAudioTrackInterface>(label),
-      audio_device_(audio_device) {
-}
+class AudioTrack : public MediaStreamTrack<LocalAudioTrackInterface> {
+ public:
+  // Creates a remote audio track.
+  static talk_base::scoped_refptr<AudioTrack> CreateRemote(
+      const std::string& label);
+  // Creates a local audio track.
+  static talk_base::scoped_refptr<AudioTrack> CreateLocal(
+      const std::string& label,
+      AudioDeviceModule* audio_device);
 
   // Get the AudioDeviceModule associated with this track.
-AudioDeviceModule* AudioTrack::GetAudioDevice() {
-  return audio_device_.get();
-}
+  virtual AudioDeviceModule* GetAudioDevice();
 
   // Implement MediaStreamTrack
-std::string AudioTrack::kind() const {
-  return kAudioTrackKind;
-}
+  virtual std::string kind() const;
 
-talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateRemote(
-    const std::string& label) {
-  talk_base::RefCountedObject<AudioTrack>* track =
-      new talk_base::RefCountedObject<AudioTrack>(label);
-  return track;
-}
+ protected:
+  explicit AudioTrack(const std::string& label);
+  AudioTrack(const std::string& label, AudioDeviceModule* audio_device);
 
-talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateLocal(
-    const std::string& label,
-    AudioDeviceModule* audio_device) {
-  talk_base::RefCountedObject<AudioTrack>* track =
-      new talk_base::RefCountedObject<AudioTrack>(label, audio_device);
-  return track;
-}
+ private:
+  talk_base::scoped_refptr<AudioDeviceModule> audio_device_;
+};
 
 }  // namespace webrtc
+
+#endif  // TALK_APP_WEBRTC_AUDIOTRACK_H_

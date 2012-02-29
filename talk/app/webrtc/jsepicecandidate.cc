@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,46 +25,44 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_AUDIOTRACKIMPL_H_
-#define TALK_APP_WEBRTC_AUDIOTRACKIMPL_H_
+#include "talk/app/webrtc/jsepicecandidate.h"
 
-#include "talk/app/webrtc/mediastream.h"
-#include "talk/app/webrtc/mediatrackimpl.h"
-#include "talk/app/webrtc/notifierimpl.h"
-#include "talk/base/scoped_ref_ptr.h"
+#include <vector>
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/audio_device/main/interface/audio_device.h"
-#else
-#include "third_party/webrtc/files/include/audio_device.h"
-#endif
+#include "talk/app/webrtc/webrtcsdp.h"
 
 namespace webrtc {
 
-class AudioTrack : public MediaStreamTrack<LocalAudioTrackInterface> {
- public:
-  // Creates a remote audio track.
-  static talk_base::scoped_refptr<AudioTrack> CreateRemote(
-      const std::string& label);
-  // Creates a local audio track.
-  static talk_base::scoped_refptr<AudioTrack> CreateLocal(
-      const std::string& label,
-      AudioDeviceModule* audio_device);
+// TODO: Add locks if there are non-const methods added to the
+// interface since it can be access from both the application and jsepsignaling.
 
-  // Get the AudioDeviceModule associated with this track.
-  virtual AudioDeviceModule* GetAudioDevice();
+JsepIceCandidate::JsepIceCandidate(const std::string& label)
+    : label_(label) {
+}
 
-  // Implement MediaStreamTrack
-  virtual std::string kind() const;
+JsepIceCandidate::~JsepIceCandidate() {
+}
 
- protected:
-  explicit AudioTrack(const std::string& label);
-  AudioTrack(const std::string& label, AudioDeviceModule* audio_device);
+void JsepIceCandidate::SetCandidate(const cricket::Candidate& candidates) {
+  candidate_ = candidates;
+}
 
- private:
-  talk_base::scoped_refptr<AudioDeviceModule> audio_device_;
-};
+bool JsepIceCandidate::Initialize(const std::string& sdp) {
+  std::vector<cricket::Candidate> candidates;
+  if (!SdpDeserializeCandidates(sdp, &candidates) || candidates.size() != 1) {
+    return false;
+  }
+  candidate_ = candidates[0];
+  return true;
+}
+
+bool JsepIceCandidate::ToString(std::string* out) const {
+  if (!out)
+    return false;
+  std::vector<cricket::Candidate> candidates;
+  candidates.push_back(candidate_);
+  *out = SdpSerializeCandidates(candidates);
+  return !out->empty();
+}
 
 }  // namespace webrtc
-
-#endif  // TALK_APP_WEBRTC_AUDIOTRACKIMPL_H_

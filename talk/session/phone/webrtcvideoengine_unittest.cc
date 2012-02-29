@@ -32,6 +32,7 @@
 #include "talk/session/phone/fakewebrtcvideoengine.h"
 #include "talk/session/phone/fakewebrtcvoiceengine.h"
 #include "talk/session/phone/mediasession.h"
+#include "talk/session/phone/testutils.h"
 #include "talk/session/phone/videoengine_unittest.h"
 #include "talk/session/phone/webrtcvideocapturer.h"
 #include "talk/session/phone/webrtcvideoengine.h"
@@ -39,6 +40,10 @@
 #include "talk/session/phone/webrtcvoiceengine.h"
 
 // Tests for the WebRtcVideoEngine/VideoChannel code.
+
+static const cricket::VideoCodec kVP8Codec720p(100, "VP8", 1280, 720, 30, 0);
+static const cricket::VideoCodec kVP8Codec360p(100, "VP8", 640, 360, 30, 0);
+static const cricket::VideoCodec kVP8Codec180p(100, "VP8", 320, 180, 30, 0);
 
 static const cricket::VideoCodec kVP8Codec(100, "VP8", 640, 400, 30, 0);
 static const cricket::VideoCodec kRedCodec(101, "red", 0, 0, 0, 0);
@@ -52,7 +57,9 @@ static const cricket::VideoCodec* const kVideoCodecs[] = {
 static const unsigned int kMinBandwidthKbps = 100;
 static const unsigned int kStartBandwidthKbps = 300;
 static const unsigned int kMaxBandwidthKbps = 2000;
-static const unsigned int kConferenceModeMaxBandwidthKbps = 500;
+
+static const unsigned int kNumberOfTemporalLayers = 3;
+
 
 class FakeViEWrapper : public cricket::ViEWrapper {
  public:
@@ -195,6 +202,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecs) {
   EXPECT_FALSE(vie_.GetNackStatus(channel_num));
   // TODO: Check RTCP, PLI, TMMBR.
 }
+
 
 // Test that we constrain send codecs properly.
 TEST_F(WebRtcVideoEngineTestFake, ConstrainSendCodecs) {
@@ -512,6 +520,21 @@ TEST_F(WebRtcVideoEngineTestFake, HybridNackFecConference) {
   EXPECT_TRUE(vie_.GetNackStatus(receive_channel_num));
 }
 
+// Test that when AddRecvStream in conference mode, a new channel is created
+// for receiving. And the new channel's "original channel" is the send channel.
+TEST_F(WebRtcVideoEngineTestFake, AddRemoveRecvStreamConference) {
+  EXPECT_TRUE(SetupEngine());
+  // Setup the send channel.
+  int send_channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  // Add a receive stream.
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
+  int receive_channel_num = vie_.GetLastChannel();
+  EXPECT_EQ(send_channel_num, vie_.GetOriginalChannelId(receive_channel_num));
+  EXPECT_TRUE(channel_->RemoveRecvStream(1));
+  EXPECT_FALSE(vie_.IsChannel(receive_channel_num));
+}
+
 // Test that we can create a channel and start/stop rendering out on it.
 TEST_F(WebRtcVideoEngineTestFake, SetRender) {
   EXPECT_TRUE(SetupEngine());
@@ -596,6 +619,32 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthFixed) {
   EXPECT_EQ(768U, gcodec.maxBitrate);
 }
 
+// Test that SetSendBandwidth is ignored in conference mode.
+TEST_F(WebRtcVideoEngineTestFake, SetBandwidthInConference) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+
+  webrtc::VideoCodec gcodec;
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
+  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
+  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+
+  // Set send bandwidth.
+  EXPECT_TRUE(channel_->SetSendBandwidth(false, 768000));
+
+  // Verify bitrate not changed.
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
+  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
+  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+  EXPECT_NE(768U, gcodec.minBitrate);
+  EXPECT_NE(768U, gcodec.startBitrate);
+  EXPECT_NE(768U, gcodec.maxBitrate);
+}
+
 // Test SetSendSsrc.
 TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAndCname) {
   EXPECT_TRUE(SetupEngine());
@@ -615,6 +664,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAndCname) {
   EXPECT_EQ(0, vie_.GetRTCPCName(channel_num, rtcp_cname));
   EXPECT_STREQ("cname", rtcp_cname);
 }
+
 
 // Test that the local SSRC is the same on sending and receiving channels if the
 // receive channel is created before the send channel.
@@ -636,43 +686,6 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendSsrcAfterCreatingReceiveChannel) {
   EXPECT_EQ(1, vie_.GetNumSsrcs(receive_channel_num));
 }
 
-// Test SetOptions with OPT_CONFERENCE flag.
-TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithConferenceMode) {
-  EXPECT_TRUE(SetupEngine());
-  int channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
-
-  // Verify default send codec and bitrate.
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
-
-  // Set options with OPT_CONFERENCE flag.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
-
-  // Verify channel now has new max bitrate.
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kConferenceModeMaxBandwidthKbps, gcodec.maxBitrate);
-
-  // Set options back to zero.
-  EXPECT_TRUE(channel_->SetOptions(0));
-
-  // Verify channel now has default max bitrate again.
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
-}
 
 // Test SetOptions with denoising flag.
 TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
@@ -946,6 +959,11 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
 
   // Verify SetOptions returns true with the old options.
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_ADAPT_INPUT_TO_CPU_USAGE));
+}
+
+// Tests empty StreamParams is rejected.
+TEST_F(WebRtcVideoMediaChannelTest, RejectEmptyStreamParams) {
+  Base::RejectEmptyStreamParams();
 }
 
 // TODO: Investigate why this test is flaky.

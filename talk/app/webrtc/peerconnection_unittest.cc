@@ -29,8 +29,10 @@
 
 #include <list>
 
-#include "talk/app/webrtc/mediastream.h"
+#include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/portallocatorfactory.h"
+#include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
 #include "talk/app/webrtc/test/fakevideocapturemodule.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
@@ -85,10 +87,12 @@ class PeerConnectionP2PTestClient
       return;
     }
     // TODO: the default audio device module is used regardless of
-    // the second parameter to the CreateLocalAudioTrack(..) call. Maybe remove
-    // the second parameter from the API altogether?
+    // the second parameter to the CreateLocalAudioTrack(..) call. Pass the
+    // fake ADM anyways in case the local track is used in the future.
     talk_base::scoped_refptr<webrtc::LocalAudioTrackInterface> audio_track(
-        peer_connection_factory_->CreateLocalAudioTrack("audio_track", NULL));
+        peer_connection_factory_->CreateLocalAudioTrack(
+            "audio_track",
+            fake_audio_capture_module_));
 
     CreateLocalVideoTrack();
 
@@ -127,7 +131,11 @@ class PeerConnectionP2PTestClient
     signaling_message_receiver_ = signaling_message_receiver;
   }
 
-  bool FramesReceivedCheck(int number_of_frames) {
+  bool AudioFramesReceivedCheck(int number_of_frames) const {
+    return number_of_frames < fake_audio_capture_module_->frames_received();
+  }
+
+  bool VideoFramesReceivedCheck(int number_of_frames) {
     if (number_of_frames > signaling_message_receiver_->num_rendered_frames()) {
       return false;
     }
@@ -187,6 +195,12 @@ class PeerConnectionP2PTestClient
   }
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* /*media_stream*/) {
   }
+  virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
+    LOG(INFO) << "OnIceCandidate " << candidate->label();
+  }
+  virtual void OnIceComplete() {
+    LOG(INFO) << "OnIceComplete";
+  }
 
  private:
   explicit PeerConnectionP2PTestClient(int id)
@@ -199,13 +213,25 @@ class PeerConnectionP2PTestClient
   bool Init() {
     EXPECT_TRUE(peer_connection_.get() == NULL);
     EXPECT_TRUE(peer_connection_factory_.get() == NULL);
-    peer_connection_factory_ = webrtc::CreatePeerConnectionFactory();
+    allocator_factory_ = webrtc::PortAllocatorFactory::Create(
+        talk_base::Thread::Current());
+    if (allocator_factory_.get() == NULL) {
+      return false;
+    }
+    fake_audio_capture_module_ = FakeAudioCaptureModule::Create(
+        talk_base::Thread::Current());
+    if (fake_audio_capture_module_ == NULL) {
+      return false;
+    }
+    peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
+        talk_base::Thread::Current(), talk_base::Thread::Current(),
+        allocator_factory_, fake_audio_capture_module_);
     if (peer_connection_factory_.get() == NULL) {
       return false;
     }
 
     const std::string server_configuration = "STUN stun.l.google.com:19302";
-    peer_connection_ = peer_connection_factory_->CreatePeerConnection(
+    peer_connection_ = peer_connection_factory_->CreateRoapPeerConnection(
         server_configuration, this);
     return peer_connection_.get() != NULL;
   }
@@ -230,6 +256,8 @@ class PeerConnectionP2PTestClient
   }
 
   int id_;
+  talk_base::scoped_refptr<webrtc::PortAllocatorFactoryInterface>
+      allocator_factory_;
   talk_base::scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
   talk_base::scoped_refptr<webrtc::PeerConnectionFactoryInterface>
       peer_connection_factory_;
@@ -239,6 +267,7 @@ class PeerConnectionP2PTestClient
   // with it when this class is deleted.
   talk_base::scoped_refptr<webrtc::LocalVideoTrackInterface> video_track_;
   // Needed to keep track of number of frames send.
+  FakeAudioCaptureModule* fake_audio_capture_module_;
   FakeVideoCaptureModule* fake_video_capture_module_;
   // Ensures that fake_video_renderer_ is available as long as this class
   // exists. It also ensures destruction of the memory associated with it when
@@ -276,11 +305,16 @@ class P2PTestConductor : public testing::Test {
     if (!IsInitialized()) {
       return true;
     }
-    return FramesReceivedCheck(frames_to_receive);
+    return VideoFramesReceivedCheck(frames_to_receive) &&
+        AudioFramesReceivedCheck(frames_to_receive);
   }
-  bool FramesReceivedCheck(int frames_received) {
-    return initiating_client_->FramesReceivedCheck(frames_received) &&
-        receiving_client_->FramesReceivedCheck(frames_received);
+  bool AudioFramesReceivedCheck(int frames_received) {
+    return initiating_client_->AudioFramesReceivedCheck(frames_received) &&
+        receiving_client_->AudioFramesReceivedCheck(frames_received);
+  }
+  bool VideoFramesReceivedCheck(int frames_received) {
+    return initiating_client_->VideoFramesReceivedCheck(frames_received) &&
+        receiving_client_->VideoFramesReceivedCheck(frames_received);
   }
   ~P2PTestConductor() {
     if (initiating_client_.get() != NULL) {
@@ -342,6 +376,5 @@ TEST_F(P2PTestConductor, LocalP2PTest) {
   const int kEndFrameCount = 10;
   const int kMaxWaitForFramesMs = 5000;
   EXPECT_TRUE_WAIT(FramesNotPending(kEndFrameCount), kMaxWaitForFramesMs);
-  EXPECT_TRUE(FramesReceivedCheck(kEndFrameCount));
   EXPECT_TRUE(StopSession());
 }

@@ -1183,9 +1183,9 @@ void WebRtcVoiceEngine::Process(const int channel,
     talk_base::CritScope cs(&signal_media_critical_);
     AudioFrame frame(audio10ms, length, sampling_freq, is_stereo);
     if (type == webrtc::kPlaybackPerChannel) {
-      SignalRxMediaFrame(ssrc, &frame);
+      SignalRxMediaFrame(ssrc, MPD_RX, &frame);
     } else if (type == webrtc::kRecordingPerChannel) {
-      SignalTxMediaFrame(ssrc, &frame);
+      SignalTxMediaFrame(ssrc, MPD_TX, &frame);
     }
   } else {
     LOG(LS_WARNING) << "MediaProcess Callback invoked with unexpected channel: "

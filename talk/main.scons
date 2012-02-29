@@ -568,6 +568,10 @@ if os.environ.get("LIBFLAGS"):
   linux_cross_common_env.Append(
     _LIBFLAGS = os.environ.get("LIBFLAGS").split(' '),
   )
+if os.environ.get("LINKFLAGS"):
+  linux_cross_common_env.Prepend(
+    LINKFLAGS = os.environ.get("LINKFLAGS").split(' '),
+  )
 
 #-------------------------------------------------------------------------------
 # L I N U X -- C R O S S -- B U I L D -- A R M

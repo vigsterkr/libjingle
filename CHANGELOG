@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.14 - Feb 28, 2012
+  - Initial JSEP support in WebRtc
+  - Bug fixes.
+
 0.6.13 - Feb 16, 2012
   - SDP compliance to WebRTC Signaling messages.
   - Initial BUNDLE support in Jingle messages.

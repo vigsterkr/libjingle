@@ -33,12 +33,16 @@
 #include <string>
 #include <vector>
 
-#include "talk/p2p/base/sessionmessages.h"
-#include "talk/p2p/base/sessionmanager.h"
+#include "talk/base/refcount.h"
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/scoped_ref_ptr.h"
 #include "talk/base/socketaddress.h"
-#include "talk/p2p/base/sessionclient.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/p2p/base/port.h"
+#include "talk/p2p/base/sessionclient.h"
+#include "talk/p2p/base/sessionmanager.h"
+#include "talk/p2p/base/sessionmessages.h"
+#include "talk/p2p/base/transport.h"
 #include "talk/xmllite/xmlelement.h"
 #include "talk/xmpp/constants.h"
 
@@ -49,6 +53,9 @@ class Transport;
 class TransportChannel;
 class TransportChannelProxy;
 class TransportChannelImpl;
+
+typedef talk_base::RefCountedObject<talk_base::scoped_ptr<Transport> >
+TransportWrapper;
 
 // Used for errors that will send back a specific error message to the
 // remote peer.  We add "type" to the errors because it's needed for
@@ -84,21 +91,18 @@ class TransportProxy {
   TransportProxy(
       const std::string& sid,
       const std::string& content_name,
-      Transport* transport)
+      TransportWrapper* transport)
       : sid_(sid),
         content_name_(content_name),
         transport_(transport),
-        owner_(true),
         state_(STATE_INIT),
         sent_candidates_(false) {}
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
-  Transport* impl() const { return transport_; }
-  // TransportProxy can contain a pointer to Transport for which it's not the
-  // actual owner. In that case it shouldn't try to delete Transport object.
-  // TODO - Remove this hack when ref count support is available.
-  void SetImplementation(Transport* impl, bool owner);
+  Transport* impl() const { return transport_->get(); }
+
+  void SetImplementation(TransportWrapper* impl);
   std::string type() const;
   bool negotiated() const { return state_ == STATE_NEGOTIATED; }
   const Candidates& sent_candidates() const { return sent_candidates_; }
@@ -114,7 +118,7 @@ class TransportProxy {
   void ClearUnsentCandidates() { unsent_candidates_.clear(); }
   void SpeculativelyConnectChannels();
   void CompleteNegotiation();
-  void CopyTransportProxyChannels(TransportProxy* proxy);
+  void SetupMux(TransportProxy* proxy);
   const ChannelMap& channels() { return channels_; }
 
  private:
@@ -132,8 +136,7 @@ class TransportProxy {
 
   std::string sid_;
   std::string content_name_;
-  Transport* transport_;
-  bool owner_;
+  talk_base::scoped_refptr<TransportWrapper> transport_;
   TransportState state_;
   ChannelMap channels_;
   Candidates sent_candidates_;
@@ -293,6 +296,7 @@ class BaseSession : public sigslot::has_slots<>,
 
  protected:
   const TransportMap& transport_proxies() const { return transports_; }
+
   // Get a TransportProxy by content_name or transport. NULL if not found.
   TransportProxy* GetTransportProxy(const std::string& content_name);
   TransportProxy* GetTransportProxy(const Transport* transport);

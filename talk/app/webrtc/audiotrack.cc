@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2010, Google Inc.
+ * Copyright 2004--2011, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -24,33 +24,48 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "talk/app/webrtc/audiotrack.h"
 
-#ifndef TALK_SESSION_PHONE_VOICEPROCESSOR_H_
-#define TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+#include <string>
 
-#include "talk/base/basictypes.h"
-#include "talk/base/sigslot.h"
-#include "talk/session/phone/audioframe.h"
+namespace webrtc {
 
-namespace cricket {
+static const char kAudioTrackKind[] = "audio";
 
-enum MediaProcessorDirection {
-    MPD_INVALID = 0,
-    MPD_RX = 1 << 0,
-    MPD_TX = 1 << 1,
-    MPD_RX_AND_TX = MPD_RX | MPD_TX,
-};
+AudioTrack::AudioTrack(const std::string& label)
+    : MediaStreamTrack<LocalAudioTrackInterface>(label),
+      audio_device_(NULL) {
+}
 
-class VoiceProcessor : public sigslot::has_slots<> {
- public:
-  virtual ~VoiceProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data.
-  virtual void OnFrame(uint32 ssrc,
-                       MediaProcessorDirection direction,
-                       AudioFrame* frame) = 0;
-};
+AudioTrack::AudioTrack(const std::string& label,
+                       AudioDeviceModule* audio_device)
+    : MediaStreamTrack<LocalAudioTrackInterface>(label),
+      audio_device_(audio_device) {
+}
 
-}  // namespace cricket
-#endif  // TALK_SESSION_PHONE_VOICEPROCESSOR_H_
+  // Get the AudioDeviceModule associated with this track.
+AudioDeviceModule* AudioTrack::GetAudioDevice() {
+  return audio_device_.get();
+}
+
+  // Implement MediaStreamTrack
+std::string AudioTrack::kind() const {
+  return kAudioTrackKind;
+}
+
+talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateRemote(
+    const std::string& label) {
+  talk_base::RefCountedObject<AudioTrack>* track =
+      new talk_base::RefCountedObject<AudioTrack>(label);
+  return track;
+}
+
+talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateLocal(
+    const std::string& label,
+    AudioDeviceModule* audio_device) {
+  talk_base::RefCountedObject<AudioTrack>* track =
+      new talk_base::RefCountedObject<AudioTrack>(label, audio_device);
+  return track;
+}
+
+}  // namespace webrtc

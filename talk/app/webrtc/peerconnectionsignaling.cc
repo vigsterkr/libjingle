@@ -38,6 +38,13 @@
 #include "talk/base/messagequeue.h"
 #include "talk/session/phone/channelmanager.h"
 
+// TODO - These are magic strings that names the candidates.
+// These will be removed when this ROAP implementation is based on JSEP.
+static const char kRtpVideoChannelStr[] = "video_rtp";
+static const char kRtcpVideoChannelStr[] = "video_rtcp";
+static const char kRtpAudioChannelStr[] = "rtp";
+static const char kRtcpAudioChannelStr[] = "rtcp";
+
 using talk_base::scoped_refptr;
 
 namespace webrtc {
@@ -123,12 +130,9 @@ PeerConnectionSignaling::PeerConnectionSignaling(
 
 PeerConnectionSignaling::~PeerConnectionSignaling() {}
 
-void PeerConnectionSignaling::OnCandidatesReady(
-    const cricket::Candidates& candidates) {
+void PeerConnectionSignaling::OnCandidatesReady() {
   if (!VERIFY(state_ == kInitializing))
     return;
-  // Store the candidates.
-  candidates_ = candidates;
   // If we have a queued remote offer we need to handle this first.
   if (received_pre_offer_) {
     received_pre_offer_ = false;
@@ -141,6 +145,17 @@ void PeerConnectionSignaling::OnCandidatesReady(
   } else {
     ChangeState(kIdle);
   }
+}
+
+// TODO: OnCandidateFound is called from webrtcsession when a new
+// IceCandidate is found. Here we don't care about the |content_name| since
+// we currently filter the candidates on candidate names when we use ROAP in
+// WebRtcSession::SetRemoteCandidates.
+// This function will be removed if we implement ROAP on top of JSEP.
+void PeerConnectionSignaling::OnCandidateFound(
+    const std::string& content_name,
+    const cricket::Candidate& candidate) {
+  candidates_.push_back(candidate);
 }
 
 void PeerConnectionSignaling::ChangeState(State new_state) {
@@ -181,11 +196,9 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
       // the parsed ROAP message to the |provider_|.
       // The session description ownership is transferred from |roap_session_|
       // to |provider_|.
-      provider_->SetRemoteDescription(roap_session_.ReleaseRemoteDescription(),
-                                      cricket::CA_OFFER);
-      provider_->SetRemoteCandidates(roap_session_.RemoteCandidates());
-      // Update the known remote MediaStreams.
-      UpdateRemoteStreams(provider_->remote_description());
+      ProcessRemoteDescription(roap_session_.ReleaseRemoteDescription(),
+                               cricket::CA_OFFER,
+                               roap_session_.RemoteCandidates());
 
       // If we are still Initializing we need to wait until we have our local
       // candidates before we can handle the offer. Queue it and handle it when
@@ -229,11 +242,9 @@ void PeerConnectionSignaling::ProcessSignalingMessage(
       // the parsed ROAP message to the |provider_|.
       // The session description ownership is transferred from |roap_session_|
       // to |provider_|.
-      provider_->SetRemoteDescription(remote_desc.release(),
-                                      cricket::CA_ANSWER);
-      provider_->SetRemoteCandidates(roap_session_.RemoteCandidates());
-      // Update the list of known remote MediaStreams.
-      UpdateRemoteStreams(provider_->remote_description());
+      ProcessRemoteDescription(remote_desc.release(),
+                               cricket::CA_ANSWER,
+                               roap_session_.RemoteCandidates());
 
       // Let the remote peer know we have received the answer.
       SignalNewPeerConnectionMessage(roap_session_.CreateOk());
@@ -363,7 +374,7 @@ void PeerConnectionSignaling::DoShutDown() {
 
   // Create new empty session descriptions without StreamParams.
   // By applying these descriptions we don't send or receive any streams.
-  const SessionDescription* local_desc = provider_->CreateOffer(options);
+  SessionDescription* local_desc = provider_->CreateOffer(options);
   SessionDescription* remote_desc = provider_->CreateAnswer(local_desc,
                                                             options);
 
@@ -396,6 +407,39 @@ void PeerConnectionSignaling::CreateAnswer_s() {
   SignalNewPeerConnectionMessage(roap_session_.CreateAnswer(local_desc_.get(),
                                                             candidates_));
 }
+
+// TODO: Remove PeerConnectionSignaling::ProcessRemoteDescription
+// once the ROAP implementation is rewritten to use JSEP.
+void PeerConnectionSignaling::ProcessRemoteDescription(
+    cricket::SessionDescription* remote_description,
+    cricket::ContentAction type,
+    const cricket::Candidates& candidates) {
+
+  // Provide the remote session description and the remote candidates from
+  // the parsed ROAP message to the |provider_|.
+  // The session description ownership is transferred from |roap_session_|
+  // to |provider_|.
+  provider_->SetRemoteDescription(remote_description,
+                                  type);
+
+  // Update the known remote MediaStreams.
+  UpdateRemoteStreams(provider_->remote_description());
+
+  for (cricket::Candidates::const_iterator citer = candidates.begin();
+      citer != candidates.end(); ++citer) {
+    if ((*citer).name().compare(kRtpVideoChannelStr) == 0 ||
+        (*citer).name().compare(kRtcpVideoChannelStr) == 0) {
+      // Candidate names for video rtp and rtcp channel
+      provider_->AddRemoteCandidate(cricket::CN_VIDEO, *citer);
+    } else if ((*citer).name().compare(kRtpAudioChannelStr) == 0 ||
+        (*citer).name().compare(kRtcpAudioChannelStr) == 0) {
+      // Candidates for audio rtp and rtcp channel
+      // Channel name will be "rtp" and "rtcp"
+      provider_->AddRemoteCandidate(cricket::CN_AUDIO, *citer);
+    }
+  }
+}
+
 
 // Updates or Creates remote MediaStream objects given a
 // remote SessionDesription.

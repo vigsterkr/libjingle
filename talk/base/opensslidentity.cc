@@ -272,7 +272,7 @@ bool OpenSSLCertificate::GetDigestEVP(const std::string &algorithm,
   if (algorithm == DIGEST_SHA_1) {
     md = EVP_sha1();
   }
-#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#if OPENSSL_VERSION_NUMBER >= 0x00908000L
   else if (algorithm == DIGEST_SHA_224) {
     md = EVP_sha224();
   } else if (algorithm == DIGEST_SHA_256) {

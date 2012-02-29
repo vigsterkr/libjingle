@@ -122,6 +122,7 @@ static const int kDefaultVideoWidth = 640;
 static const int kDefaultVideoHeight = 480;
 static const int kDefaultVideoFrameRate = 30;
 static const int kDefaultVideoPreference = 0;
+static const int kDefaultVideoClockrate = 90000;
 
 static void BuildMediaDescription(const cricket::ContentInfo& content_info,
                                   const MediaType media_type,
@@ -434,7 +435,7 @@ void BuildRtpMap(const MediaContentDescription* media_desc,
       // [/<encodingparameters>]
       os.str("");
       os << kLinePrefixAttributes << kAttributeRtpmap << it->id << " "
-         << it->name << "/" << 0;
+         << it->name << "/" << kDefaultVideoClockrate;
       AddLine(os.str(), message);
     }
   } else if (media_type == cricket::MEDIA_TYPE_AUDIO) {

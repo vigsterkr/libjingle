@@ -320,8 +320,9 @@ IPAddress TruncateIP(const IPAddress& ip, int length) {
     }
     in6_addr v6addr = ip.ipv6_address();
     int position = length / 32;
-    int inner_length = (length - (position * 32));
-    int inner_mask = (0xFFFFFFFF  << (32 - inner_length));
+    int inner_length = 32 - (length - (position * 32));
+    // Note: 64bit mask constant needed to allow possible 32-bit left shift.
+    uint32 inner_mask = 0xFFFFFFFFLL  << inner_length;
     uint32* v6_as_ints =
         reinterpret_cast<uint32*>(&v6addr.s6_addr);
     in6_addr ip_addr = ip.ipv6_address();

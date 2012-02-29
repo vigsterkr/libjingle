@@ -193,8 +193,10 @@ class WebRtcVoiceEngine
   // When a voice processor registers with the engine, it is connected
   // to either the Rx or Tx signals, based on the direction parameter.
   // SignalXXMediaFrame will be invoked for every audio packet.
-  sigslot::signal2<uint32, AudioFrame*> SignalRxMediaFrame;
-  sigslot::signal2<uint32, AudioFrame*> SignalTxMediaFrame;
+  sigslot::
+      signal3<uint32, MediaProcessorDirection, AudioFrame*> SignalRxMediaFrame;
+  sigslot::
+      signal3<uint32, MediaProcessorDirection, AudioFrame*> SignalTxMediaFrame;
 
   static const int kDefaultLogSeverity = talk_base::LS_WARNING;
   static const CodecPref kCodecPrefs[];

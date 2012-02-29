@@ -30,10 +30,6 @@
 
 #include "talk/base/basictypes.h"
 
-#if defined(WIN32) || defined(LINUX) || defined(OSX)
-#define HAVE_JPEG
-#endif
-
 namespace flute {
 class MagicCamVideoRenderer;
 }

@@ -98,9 +98,9 @@ SystemInfo::SystemInfo()
   // Initialize the basic information.
 
 #if defined(__arm__)
-  cpu_arch_ = ARCH_ARM;
+  cpu_arch_ = SI_ARCH_ARM;
 #elif defined(CPU_X86)
-  cpu_arch_ = ARCH_X86;
+  cpu_arch_ = SI_ARCH_X86;
 #else
 #error "Unknown architecture."
 #endif

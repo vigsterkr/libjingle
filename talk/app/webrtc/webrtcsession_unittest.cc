@@ -58,17 +58,30 @@ static const char kAudioTrack2[] = "audio2";
 static const int kIceCandidatesTimeout = 3000;
 
 
-class MockWebRtcSessionObserver : public webrtc::WebRtcSessionObserver {
+class MockCandidateObserver : public webrtc::CandidateObserver {
  public:
-  virtual void OnCandidatesReady(
-      const std::vector<cricket::Candidate>& candidates) {
-    for (cricket::Candidates::const_iterator iter = candidates.begin();
-         iter != candidates.end(); ++iter) {
-      candidates_.push_back(*iter);
-      LOG(LS_INFO) << iter->ToString();
+  MockCandidateObserver()
+      : oncandidatesready_(false) {
+  }
+
+  // Found a new candidate.
+  virtual void OnCandidateFound(const std::string& content_name,
+                                const cricket::Candidate& candidate) {
+    if (content_name == cricket::CN_AUDIO) {
+      audio_candidates_.push_back(candidate);
+    } else if (content_name == cricket::CN_VIDEO) {
+      video_candidates_.push_back(candidate);
     }
   }
-  std::vector<cricket::Candidate> candidates_;
+
+  virtual void OnCandidatesReady() {
+    EXPECT_FALSE(oncandidatesready_);
+    oncandidatesready_ = true;
+  }
+
+  bool oncandidatesready_;
+  std::vector<cricket::Candidate> audio_candidates_;
+  std::vector<cricket::Candidate> video_candidates_;
 };
 
 class WebRtcSessionForTest : public webrtc::WebRtcSession {
@@ -85,7 +98,7 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
   using webrtc::WebRtcSession::CreateAnswer;
   using webrtc::WebRtcSession::SetLocalDescription;
   using webrtc::WebRtcSession::SetRemoteDescription;
-  using webrtc::WebRtcSession::SetRemoteCandidates;
+  using webrtc::WebRtcSession::AddRemoteCandidate;
 };
 
 class WebRtcSessionTest : public testing::Test {
@@ -107,10 +120,7 @@ class WebRtcSessionTest : public testing::Test {
       allocator_(&network_manager_, kStunAddr,
                  SocketAddress(), SocketAddress(), SocketAddress()) {
     EXPECT_TRUE(channel_manager_->Init());
-  }
-
-  bool InitializeSession() {
-    return session_->Initialize();
+    desc_factory_->set_add_legacy_streams(false);
   }
 
   void AddInterface(const SocketAddress& addr) {
@@ -125,6 +135,7 @@ class WebRtcSessionTest : public testing::Test {
     session_->RegisterObserver(&observer_);
 
     EXPECT_TRUE(session_->Initialize());
+    session_->StartIce();
 
     video_channel_ = media_engine->GetVideoChannel(0);
     voice_channel_ = media_engine->GetVoiceChannel(0);
@@ -300,7 +311,7 @@ class WebRtcSessionTest : public testing::Test {
   talk_base::FakeNetworkManager network_manager_;
   cricket::BasicPortAllocator allocator_;
   talk_base::scoped_ptr<WebRtcSessionForTest> session_;
-  MockWebRtcSessionObserver observer_;
+  MockCandidateObserver observer_;
   std::vector<cricket::Candidate> candidates_;
   cricket::FakeVideoMediaChannel* video_channel_;
   cricket::FakeVoiceMediaChannel* voice_channel_;
@@ -315,14 +326,18 @@ TEST_F(WebRtcSessionTest, TestInitialize) {
 TEST_F(WebRtcSessionTest, TestSessionCandidates) {
   AddInterface(kClientAddr1);
   WebRtcSessionTest::Init();
-  EXPECT_EQ_WAIT(8u, observer_.candidates_.size(), kIceCandidatesTimeout);
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+  EXPECT_EQ(4u, observer_.audio_candidates_.size());
+  EXPECT_EQ(4u, observer_.video_candidates_.size());
 }
 
 TEST_F(WebRtcSessionTest, TestMultihomeCandidataes) {
   AddInterface(kClientAddr1);
   AddInterface(kClientAddr2);
   WebRtcSessionTest::Init();
-  EXPECT_EQ_WAIT(16u, observer_.candidates_.size(), kIceCandidatesTimeout);
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+  EXPECT_EQ(8u, observer_.audio_candidates_.size());
+  EXPECT_EQ(8u, observer_.video_candidates_.size());
 }
 
 TEST_F(WebRtcSessionTest, TestStunError) {
@@ -331,7 +346,9 @@ TEST_F(WebRtcSessionTest, TestStunError) {
   fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr1);
   WebRtcSessionTest::Init();
   // Since kClientAddr1 is blocked, not expecting stun candidates for it.
-  EXPECT_EQ_WAIT(12u, observer_.candidates_.size(), kIceCandidatesTimeout);
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+  EXPECT_EQ(6u, observer_.audio_candidates_.size());
+  EXPECT_EQ(6u, observer_.video_candidates_.size());
 }
 
 // Test creating offers and receive answers and make sure the
@@ -341,13 +358,11 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
   cricket::MediaSessionOptions options = OptionsWithStream1();
   cricket::SessionDescription* offer = session_->CreateOffer(options);
 
-
   cricket::MediaSessionOptions options2 = OptionsWithStream2();
   cricket::SessionDescription* answer =  CreateTestAnswer(offer, options2);
 
-
-  session_->SetLocalDescription(offer, cricket::CA_OFFER);
-  session_->SetRemoteDescription(answer, cricket::CA_ANSWER);
+  EXPECT_TRUE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer, cricket::CA_ANSWER));
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   cricket::StreamParams recv_video_stream =
@@ -367,8 +382,8 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
   // Create new offer without send streams.
   offer = session_->CreateOffer(OptionsReceiveOnly());
   // Test with same answer.
-  session_->SetLocalDescription(offer, cricket::CA_OFFER);
-  session_->SetRemoteDescription(answer, cricket::CA_ANSWER);
+  EXPECT_TRUE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer, cricket::CA_ANSWER));
 
   EXPECT_EQ(0u, video_channel_->send_streams().size());
   EXPECT_EQ(0u, voice_channel_->send_streams().size());
@@ -389,8 +404,8 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   cricket::MediaSessionOptions answer_options = OptionsWithStream1();
   cricket::SessionDescription* answer =
         session_->CreateAnswer(offer, answer_options);
-  session_->SetRemoteDescription(offer, cricket::CA_OFFER);
-  session_->SetLocalDescription(answer, cricket::CA_ANSWER);
+  EXPECT_TRUE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+  EXPECT_TRUE(session_->SetLocalDescription(answer, cricket::CA_ANSWER));
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack2 == video_channel_->recv_streams()[0].name);
@@ -407,8 +422,8 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
 
   // Answer by turning off all send streams.
   answer = session_->CreateAnswer(offer, OptionsReceiveOnly());
-  session_->SetRemoteDescription(offer, cricket::CA_OFFER);
-  session_->SetLocalDescription(answer, cricket::CA_ANSWER);
+  EXPECT_TRUE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+  EXPECT_TRUE(session_->SetLocalDescription(answer, cricket::CA_ANSWER));
 
   ASSERT_EQ(2u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack1 == video_channel_->recv_streams()[0].name);
@@ -420,6 +435,71 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   // Make we have no send streams.
   EXPECT_EQ(0u, video_channel_->send_streams().size());
   EXPECT_EQ(0u, voice_channel_->send_streams().size());
+}
+
+TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  EXPECT_TRUE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+  EXPECT_FALSE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+}
+
+TEST_F(WebRtcSessionTest, TestSetRemoteOfferTwice) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  EXPECT_TRUE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+  EXPECT_FALSE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+}
+
+TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteOffer) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  EXPECT_TRUE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+  EXPECT_FALSE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+}
+
+TEST_F(WebRtcSessionTest, TestSetRemoteAndLocalOffer) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  EXPECT_TRUE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+  EXPECT_FALSE(session_->SetLocalDescription(offer, cricket::CA_OFFER));
+}
+
+TEST_F(WebRtcSessionTest, TestSetLocalAnswerWithoutOffer) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  cricket::SessionDescription* answer =
+        session_->CreateAnswer(offer, OptionsReceiveOnly());
+  EXPECT_FALSE(session_->SetLocalDescription(answer, cricket::CA_ANSWER));
+}
+
+TEST_F(WebRtcSessionTest, TestSetRemoteAnswerWithoutOffer) {
+  WebRtcSessionTest::Init();
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  cricket::SessionDescription* answer =
+        session_->CreateAnswer(offer, OptionsReceiveOnly());
+  EXPECT_FALSE(session_->SetRemoteDescription(answer, cricket::CA_ANSWER));
+}
+
+TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
+  WebRtcSessionTest::Init();
+
+  cricket::Candidate candidate1;
+  candidate1.set_name("fake_candidate1");
+
+  // Fail since we have not set a remote description
+  EXPECT_FALSE(session_->AddRemoteCandidate(cricket::CN_AUDIO, candidate1));
+
+  cricket::SessionDescription* offer = CreateTestOffer(OptionsReceiveOnly());
+  EXPECT_TRUE(session_->SetRemoteDescription(offer, cricket::CA_OFFER));
+
+  EXPECT_TRUE(session_->AddRemoteCandidate(cricket::CN_AUDIO, candidate1));
+
+  cricket::Candidate candidate2;
+  candidate1.set_name("fake_candidate2");
+
+  EXPECT_FALSE(session_->AddRemoteCandidate("bad content name", candidate2));
+  EXPECT_TRUE(session_->AddRemoteCandidate(cricket::CN_VIDEO, candidate2));
 }
 
 TEST_F(WebRtcSessionTest, TestDefaultSetSecurePolicy) {

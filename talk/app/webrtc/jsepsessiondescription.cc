@@ -1,6 +1,5 @@
-/*
- * libjingle
- * Copyright 2011, Google Inc.
+/* libjingle
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,57 +24,56 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_MEDIATRACKIMPL_H_
-#define TALK_APP_WEBRTC_MEDIATRACKIMPL_H_
+#include "talk/app/webrtc/jsepsessiondescription.h"
 
-#include <string>
-
-#include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/app/webrtc/webrtcsdp.h"
+#include "talk/p2p/base/sessiondescription.h"
 
 namespace webrtc {
 
-// MediaTrack implements the interface common to AudioTrackInterface and
-// VideoTrackInterface.
-template <typename T>
-class MediaStreamTrack : public Notifier<T> {
- public:
-  typedef typename T::TrackState TypedTrackState;
+JsepSessionDescription::JsepSessionDescription()
+    : const_description_(NULL) {
+}
 
-  virtual std::string label() const { return label_; }
-  virtual MediaStreamTrackInterface::TrackState state() const {
-    return state_;
-  }
-  virtual bool enabled() const { return enabled_; }
-  virtual bool set_enabled(bool enable) {
-    bool fire_on_change = (enable != enabled_);
-    enabled_ = enable;
-    if (fire_on_change) {
-      Notifier<T>::FireOnChanged();
-    }
-    return fire_on_change;
-  }
-  virtual bool set_state(MediaStreamTrackInterface::TrackState new_state) {
-    bool fire_on_change = (state_ != new_state);
-    state_ = new_state;
-    if (fire_on_change)
-      Notifier<T>::FireOnChanged();
-    return true;
-  }
+JsepSessionDescription::~JsepSessionDescription() {
+}
 
- protected:
-  explicit MediaStreamTrack(const std::string& label)
-      : enabled_(true),
-        label_(label),
-        state_(MediaStreamTrackInterface::kInitializing) {
-  }
+void JsepSessionDescription::SetDescription(
+    cricket::SessionDescription* description) {
+  description_.reset(description);
+  const_description_ = description_.get();
+}
 
- private:
-  bool enabled_;
-  std::string label_;
-  MediaStreamTrackInterface::TrackState state_;
-};
+void JsepSessionDescription::SetConstDescription(
+    const cricket::SessionDescription* description) {
+  description_.reset(NULL);
+  const_description_ = description_.get();
+}
+
+bool JsepSessionDescription::Initialize(const std::string& sdp) {
+  if (description_.get() != NULL)
+    return false;
+  description_.reset(new cricket::SessionDescription());
+  const_description_ = description_.get();
+  return SdpDeserialize(sdp, description_.get(), &candidates_);
+}
+
+cricket::SessionDescription* JsepSessionDescription::ReleaseDescription() {
+  return description_.release();
+}
+
+void JsepSessionDescription::AddCandidate(
+    const IceCandidateInterface* candidate) {
+  if (candidate)
+    candidates_.push_back(candidate->candidate());
+}
+
+bool JsepSessionDescription::ToString(std::string* out) const {
+  if (!const_description_ || !out)
+    return false;
+  *out = SdpSerialize(*const_description_, candidates_);
+  return !out->empty();
+}
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_MEDIATRACKIMPL_H_

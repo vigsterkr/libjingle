@@ -265,6 +265,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
  private:
   typedef std::map<uint32, WebRtcVideoChannelInfo*> ChannelMap;
 
+
   // Creates and initializes a WebRtc video channel.
   bool ConfigureChannel(int channel_id);
   bool ConfigureReceiving(int channel_id, uint32 remote_ssrc);
@@ -273,6 +274,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
                     int min_bitrate,
                     int start_bitrate,
                     int max_bitrate);
+  void LogSendCodecChange(const std::string& reason);
   // Prepares the channel with channel id |channel_id| to receive all codecs in
   // |receive_codecs_| and start receive packets.
   bool SetReceiveCodecs(int channel_id);
@@ -288,22 +290,26 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // Call Webrtc function to stop sending media on |vie_channel_|.
   // Does not affect |sending_|.
   bool StopSend();
+  // Send with one local SSRC. Normal case.
+  bool IsOneSsrcStream(const StreamParams& sp);
 
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
   int vie_channel_;
   int vie_capture_;
   webrtc::ViEExternalCapture* external_capture_;
-  bool sending_;
   bool render_started_;
   bool muted_;  // Flag to tell if we need to mute video.
-  // Our local SSRC. Currently only one send stream is supported.
-  uint32 local_ssrc_;
+
+  // |send_params_| contains local stream parameters.
+  talk_base::scoped_ptr<StreamParams> send_params_;
   uint32 first_receive_ssrc_;
   int send_min_bitrate_;
   int send_start_bitrate_;
   int send_max_bitrate_;
   talk_base::scoped_ptr<webrtc::VideoCodec> send_codec_;
+  bool sending_;
+
   std::vector<webrtc::VideoCodec> receive_codecs_;
   talk_base::scoped_ptr<WebRtcEncoderObserver> encoder_observer_;
   talk_base::scoped_ptr<WebRtcLocalStreamInfo> local_stream_info_;

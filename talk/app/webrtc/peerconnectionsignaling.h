@@ -35,9 +35,9 @@
 #include <string>
 #include <vector>
 
+#include "talk/app/webrtc/candidateobserver.h"
 #include "talk/app/webrtc/roaperrorcodes.h"
 #include "talk/app/webrtc/roapsession.h"
-#include "talk/app/webrtc/webrtcsessionobserver.h"
 #include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/scoped_ref_ptr.h"
@@ -113,7 +113,7 @@ class MediaStreamInterface;
 // pc.ProcessSignalingMessage(remote_message, &local_streams);
 
 
-class PeerConnectionSignaling : public WebRtcSessionObserver,
+class PeerConnectionSignaling : public CandidateObserver,
                                 public talk_base::MessageHandler {
  public:
   enum State {
@@ -160,11 +160,16 @@ class PeerConnectionSignaling : public WebRtcSessionObserver,
   // After calling this no more offers or answers to offers can be created.
   void SendShutDown();
 
-  // Implements WebRtcSessionObserver interface.
-  // OnCandidatesReady is called when local candidates have been collected.
+  // Implements CandidateObserver interface.
+  // OnCandidatesReady is called when all local candidates have been collected.
   // This tell PeerConnectionSignaling that it is ready to respond to offers
-  // and create offer messages.
-  virtual void OnCandidatesReady(const cricket::Candidates& candidates);
+  // or create offer messages.
+  virtual void OnCandidatesReady();
+
+  // Implements CandidateObserver interface.
+  // OnCandidatesFound is called when a local candidate has been collected.
+  virtual void OnCandidateFound(const std::string& content_name,
+                                const cricket::Candidate& candidate);
 
   // Returns all current remote MediaStreams.
   StreamCollection* remote_streams() { return remote_streams_.get(); }
@@ -213,7 +218,14 @@ class PeerConnectionSignaling : public WebRtcSessionObserver,
   // message have been received or by a call to SendShutDown.
   void DoShutDown();
 
-  // Creates and destroys remote media streams based on remote_desc.
+  // Process session description and candidates from the remote peer.
+  // Takes ownership of |remote_description|.
+  void ProcessRemoteDescription(
+      cricket::SessionDescription* remote_description,
+      cricket::ContentAction type,
+      const cricket::Candidates& candidates);
+
+  // Creates and destroys remote media streams based on |remote_desc|.
   void UpdateRemoteStreams(const cricket::SessionDescription* remote_desc);
 
   // Updates the state of local streams based on the answer_desc and the streams
@@ -241,7 +253,7 @@ class PeerConnectionSignaling : public WebRtcSessionObserver,
 
   // The local session description of the local MediaStreams that is being
   // negotiated.
-  talk_base::scoped_ptr<const cricket::SessionDescription> local_desc_;
+  talk_base::scoped_ptr<cricket::SessionDescription> local_desc_;
 
   // Local MediaStreams being negotiated.
   talk_base::scoped_refptr<StreamCollection> local_streams_;

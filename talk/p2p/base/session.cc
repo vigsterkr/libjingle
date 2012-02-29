@@ -64,19 +64,14 @@ TransportProxy::~TransportProxy() {
     iter->second->SignalDestroyed(iter->second);
     delete iter->second;
   }
-  if (owner_)
-    delete transport_;
 }
 
 std::string TransportProxy::type() const {
-  return transport_->type();
+  return transport_->get()->type();
 }
 
-void TransportProxy::SetImplementation(Transport* impl, bool owner) {
-  if (owner_ && transport_)
-     delete transport_;
+void TransportProxy::SetImplementation(TransportWrapper *impl) {
   transport_ = impl;
-  owner_ = owner;
 }
 
 TransportChannel* TransportProxy::GetChannel(const std::string& name) {
@@ -86,7 +81,7 @@ TransportChannel* TransportProxy::GetChannel(const std::string& name) {
 TransportChannel* TransportProxy::CreateChannel(
     const std::string& name, const std::string& content_type) {
   ASSERT(GetChannel(name) == NULL);
-  ASSERT(!transport_->HasChannel(name));
+  ASSERT(!transport_->get()->HasChannel(name));
 
   // We always create a proxy in case we need to change out the transport later.
   TransportChannelProxy* channel =
@@ -117,7 +112,7 @@ void TransportProxy::SpeculativelyConnectChannels() {
        iter != channels_.end(); ++iter) {
     GetOrCreateImpl(iter->first, iter->second->content_type());
   }
-  transport_->ConnectChannels();
+  transport_->get()->ConnectChannels();
 }
 
 void TransportProxy::CompleteNegotiation() {
@@ -127,7 +122,7 @@ void TransportProxy::CompleteNegotiation() {
          iter != channels_.end(); ++iter) {
       SetProxyImpl(iter->first, iter->second);
     }
-    transport_->ConnectChannels();
+    transport_->get()->ConnectChannels();
   }
 }
 
@@ -153,9 +148,9 @@ TransportChannelProxy* TransportProxy::GetProxy(const std::string& name) {
 
 TransportChannelImpl* TransportProxy::GetOrCreateImpl(
     const std::string& name, const std::string& content_type) {
-  TransportChannelImpl* impl = transport_->GetChannel(name);
+  TransportChannelImpl* impl = transport_->get()->GetChannel(name);
   if (impl == NULL) {
-    impl = transport_->CreateChannel(name, content_type);
+    impl = transport_->get()->CreateChannel(name, content_type);
     impl->set_session_id(sid_);
   }
   return impl;
@@ -165,30 +160,42 @@ void TransportProxy::SetProxyImpl(
     const std::string& name, TransportChannelProxy* proxy) {
   TransportChannelImpl* impl = GetOrCreateImpl(name, proxy->content_type());
   ASSERT(impl != NULL);
-  proxy->SetImplementation(impl, true);
+  proxy->SetImplementation(impl);
 }
 
-// This method will use TransportChannelImpls of and deletes what it owns.
-void TransportProxy::CopyTransportProxyChannels(TransportProxy* proxy) {
+// This function muxes |this| onto proxy by making a copy
+// of |proxy|'s transport and setting our TransportChannelProxies
+// to point to |proxy|'s underlying implementations.
+void TransportProxy::SetupMux(TransportProxy* proxy) {
   size_t index = 0;
+  // Copy the channels from proxy 1:1 onto us.
   for (ChannelMap::const_iterator iter = proxy->channels().begin();
        iter != proxy->channels().end(); ++iter, ++index) {
     ReplaceImpl(iter->second, index);
   }
+  // Now replace our transport. Must happen afterwards because
+  // it deletes all impls as a side effect.
+  transport_ = proxy->transport_;
 }
 
+// Mux the channel at |this->channels_[index]| (also known as
+// |target_channel| onto |channel|. The new implementation (actually
+// a ref-count-increased version of what's in |channel->impl| is
+// obtained by calling CreateChannel on |channel|'s Transport object.
 void TransportProxy::ReplaceImpl(TransportChannelProxy* channel,
                                  size_t index) {
   if (index < channels().size()) {
     ChannelMap::const_iterator iter = channels().begin();
-    // Get handle the index which needs to be replaced.
+    // map::iterator does not allow random access
     for (size_t i = 0; i < index; ++i, ++iter);
 
     TransportChannelProxy* target_channel = iter->second;
     if (target_channel) {
-      // Deleting TransportChannelImpl before replacing it.
-      transport_->DestroyChannel(iter->first);
-      target_channel->SetImplementation(channel->impl(), false);
+      // Reset the implementation on the target_channel
+      target_channel->SetImplementation(
+        // Increments ref count
+        channel->impl()->GetTransport()->CreateChannel(channel->name(),
+          channel->content_type()));
     }
   } else {
     LOG(LS_WARNING) << "invalid TransportChannelProxy index to replace";
@@ -322,7 +329,8 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
   transport->SignalChannelGone.connect(
       this, &BaseSession::OnTransportChannelGone);
 
-  transproxy = new TransportProxy(sid_, content_name, transport);
+  transproxy = new TransportProxy(sid_, content_name,
+                                  new TransportWrapper(transport));
   transports_[content_name] = transproxy;
 
   return transproxy;
@@ -442,9 +450,7 @@ void BaseSession::SetSelectedProxy(const std::string& content_name,
       if (iter->first != content_name &&
           muxed_group->HasContentName(iter->first)) {
         TransportProxy* proxy = iter->second;
-        proxy->CopyTransportProxyChannels(selected_proxy);
-        // After replacing the TransportChannels, replace Transport
-        proxy->SetImplementation(selected_proxy->impl(), false);
+        proxy->SetupMux(selected_proxy);
       }
     }
   }
