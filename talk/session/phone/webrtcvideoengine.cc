@@ -109,11 +109,11 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
       return 0;
     }
     WebRtcVideoFrame video_frame;
-    // TODO: Pass the render timestamp to the renderer after
-    // the timing control is implemented inside the renderer.
-    // Set timestamp to 0 so that the renderer will display this frame ASAP.
+    // Convert 90K timestamp to ns timestamp.
+    int64 time_stamp_in_ns = (time_stamp / 90) *
+       talk_base::kNumNanosecsPerMillisec;
     video_frame.Attach(buffer, buffer_size, width_, height_,
-                       1, 1, 0, 0, 0);
+                       1, 1, 0, time_stamp_in_ns, 0);
 
 
     // Sanity check on decoded frame size.
@@ -331,10 +331,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
   voice_engine_ = voice_engine;
   initialized_ = false;
   log_level_ = kDefaultLogSeverity;
-  // TODO: Disable the timed render and use the passthrough render
-  // after we implement the timing control inside the renderer.
-  // render_module_.reset(new WebRtcPassthroughRender());
-  EnableTimedRender();
+  render_module_.reset(new WebRtcPassthroughRender());
   local_renderer_w_ = local_renderer_h_ = 0;
   local_renderer_ = NULL;
   owns_capturer_ = false;

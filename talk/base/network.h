@@ -86,9 +86,9 @@ class NetworkManagerBase : public NetworkManager {
   // Updates |networks_| with the networks listed in |list|. If
   // |network_map_| already has a Network object for a network listed
   // in the |list| then it is reused. Accept ownership of the Network
-  // objects in the |list|. SignalNetworkListUpdated is emitted if
-  // there is a change in network configuration.
-  void MergeNetworkList(const NetworkList& list);
+  // objects in the |list|. |changed| will be set to true if there is
+  // any change in the network list.
+  void MergeNetworkList(const NetworkList& list, bool* changed);
 
  private:
   typedef std::map<std::string, Network*> NetworkMap;

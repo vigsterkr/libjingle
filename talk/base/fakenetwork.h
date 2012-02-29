@@ -100,8 +100,12 @@ class FakeNetworkManager : public NetworkManagerBase,
       networks.push_back(new Network(it->hostname(), it->hostname(),
                                      it->ipaddr()));
     }
-    MergeNetworkList(networks);
-    sent_first_update_ = true;
+    bool changed;
+    MergeNetworkList(networks, &changed);
+    if (changed || !sent_first_update_) {
+      SignalNetworksChanged();
+      sent_first_update_ = true;
+    }
   }
 
   Thread* thread_;

@@ -559,6 +559,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
             static_cast<JsepIceCandidateParams*> (data));
         param->result  = jsep_signaling_->ProcessIceMessage(param->candidate);
       }
+      break;
     }
     case MSG_GETLOCALDESCRIPTION: {
       if (jsep_signaling_.get() == NULL)  {

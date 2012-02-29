@@ -420,6 +420,9 @@ void StunAddressAttribute::Write(ByteBuffer* buf) const {
       buf->WriteBytes(reinterpret_cast<char*>(&v6addr), sizeof(v6addr));
       break;
     }
+    case STUN_ADDRESS_UNDEF:
+      ASSERT(0);  // Explicitly handled above.
+      break;
   }
 }
 

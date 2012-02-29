@@ -91,15 +91,16 @@ void NetworkManagerBase::GetNetworks(NetworkList* result) const {
   *result = networks_;
 }
 
-void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks) {
+void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks,
+                                          bool* changed) {
   // Sort the list so that we can detect when it changes.
   NetworkList list(new_networks);
   std::sort(list.begin(), list.end(), CompareNetworks);
 
-  bool changed = false;
+  *changed = false;
 
   if (networks_.size() != list.size())
-    changed = true;
+    *changed = true;
 
   networks_.resize(list.size());
 
@@ -114,21 +115,18 @@ void NetworkManagerBase::MergeNetworkList(const NetworkList& new_networks) {
     } else {
       network = iter->second;
       if (network->ip() != list[i]->ip()) {
-        changed = true;
+        *changed = true;
         network->set_ip(list[i]->ip());
       }
 
       delete list[i];
     }
 
-    if (!changed && networks_[i]->name() != network->name())
-      changed = true;
+    if (!(*changed) && networks_[i]->name() != network->name())
+      *changed = true;
 
     networks_[i] = network;
   }
-
-  if (changed)
-    SignalNetworksChanged();
 }
 
 BasicNetworkManager::BasicNetworkManager()
@@ -275,12 +273,10 @@ void BasicNetworkManager::StartUpdating() {
     // to start allocating ports.
     if (sent_first_update_)
       thread_->Post(this, kSignalNetworksMessage);
-    ++start_count_;
   } else {
-    ++start_count_;
-    sent_first_update_ = false;
     thread_->Post(this, kUpdateNetworksMessage);
   }
+  ++start_count_;
 }
 
 void BasicNetworkManager::StopUpdating() {
@@ -289,8 +285,10 @@ void BasicNetworkManager::StopUpdating() {
     return;
 
   --start_count_;
-  if (!start_count_)
+  if (!start_count_) {
     thread_->Clear(this);
+    sent_first_update_ = false;
+  }
 }
 
 void BasicNetworkManager::OnMessage(Message* msg) {
@@ -318,8 +316,12 @@ void BasicNetworkManager::DoUpdateNetworks() {
   if (!CreateNetworks(false, &list)) {
     SignalError();
   } else {
-    MergeNetworkList(list);
-    sent_first_update_ = true;
+    bool changed;
+    MergeNetworkList(list, &changed);
+    if (changed || !sent_first_update_) {
+      SignalNetworksChanged();
+      sent_first_update_ = true;
+    }
   }
 
   thread_->PostDelayed(kNetworksUpdateIntervalMs, this, kUpdateNetworksMessage);
