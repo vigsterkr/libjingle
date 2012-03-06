@@ -57,18 +57,19 @@ static const char kSdpString1[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
     "s=\r\n"
-    "c=IN IP4 0.0.0.0\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/AVPF 103\r\n"
     "a=mid:audio\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
-    "a=ssrc:1 cname:stream1 mslabel:stream1 "
-    "label:audio_1\r\n"
+    "a=ssrc:1 cname:stream1\r\n"
+    "a=ssrc:1 mslabel:stream1\r\n"
+    "a=ssrc:1 label:audio_1\r\n"
     "m=video 1 RTP/AVPF 120\r\n"
     "a=mid:video\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
-    "a=ssrc:2 cname:stream1 mslabel:stream1 "
-    "label:video_1\r\n";
+    "a=ssrc:2 cname:stream1\r\n"
+    "a=ssrc:2 mslabel:stream1\r\n"
+    "a=ssrc:2 label:video_1\r\n";
 
 // Reference SDP with two MediaStreams with label "stream1" and "stream2. Each
 // MediaStreams have one audio track and one video track.
@@ -76,22 +77,25 @@ static const char kSdpString2[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
     "s=\r\n"
-    "c=IN IP4 0.0.0.0\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/AVPF 103\r\n"
     "a=mid:audio\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
-    "a=ssrc:1 cname:stream1 mslabel:stream1 "
-    "label:audio_1\r\n"
-    "a=ssrc:3 cname:stream2 mslabel:stream2 "
-    "label:audio_2\r\n"
+    "a=ssrc:1 cname:stream1\r\n"
+    "a=ssrc:1 mslabel:stream1\r\n"
+    "a=ssrc:1 label:audio_1\r\n"
+    "a=ssrc:3 cname:stream2\r\n"
+    "a=ssrc:3 mslabel:stream2\r\n"
+    "a=ssrc:3 label:audio_2\r\n"
     "m=video 1 RTP/AVPF 120\r\n"
     "a=mid:video\r\n"
     "a=rtpmap:120 VP8/0\r\n"
-    "a=ssrc:2 cname:stream1 mslabel:stream1 "
-    "label:local_video_1\r\n"
-    "a=ssrc:4 cname:stream2 mslabel:stream2 "
-    "label:video_2\r\n";
+    "a=ssrc:2 cname:stream1\r\n"
+    "a=ssrc:2 mslabel:stream1\r\n"
+    "a=ssrc:2 label:video_1\r\n"
+    "a=ssrc:4 cname:stream2\r\n"
+    "a=ssrc:4 mslabel:stream2\r\n"
+    "a=ssrc:4 label:video_2\r\n";
 
 static const char kSdpCandidates[] =
     "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
@@ -324,8 +328,7 @@ class FakeSessionDescriptionProvider
 
 // MockSignalingObserver implements functions for listening to all signals from
 // a JsepSignaling instance.
-class MockSignalingObserver : public webrtc::JsepRemoteMediaStreamObserver,
-                              public webrtc::IceCandidateObserver {
+class MockSignalingObserver : public webrtc::JsepRemoteMediaStreamObserver {
  public:
   MockSignalingObserver()
       : ice_complete_(true),
@@ -345,16 +348,6 @@ class MockSignalingObserver : public webrtc::JsepRemoteMediaStreamObserver,
   virtual void OnRemoveStream(MediaStreamInterface* remote_stream) {
     EXPECT_EQ(MediaStreamInterface::kEnded, remote_stream->ready_state());
     remote_media_streams_->RemoveStream(remote_stream);
-  }
-
-  virtual void OnIceCandidate(const IceCandidateInterface* candidate) {
-    candidate_label_ = candidate->label();
-    candidate_ = candidate->candidate();
-    EXPECT_TRUE(candidate->ToString(&candidate_string_));
-  }
-
-  virtual void OnIceComplete() {
-    ice_complete_ = true;
   }
 
   MediaStreamInterface* RemoteStream(const std::string& label) {
@@ -391,15 +384,13 @@ class JsepSignalingForTest : public webrtc::JsepSignaling {
   explicit JsepSignalingForTest(webrtc::SessionDescriptionProvider* provider,
                                 MockSignalingObserver* observer)
       : webrtc::JsepSignaling(talk_base::Thread::Current(), provider,
-                              observer, observer) {
+                              observer) {
   };
   using webrtc::JsepSignaling::CreateOffer;
   using webrtc::JsepSignaling::CreateAnswer;
   using webrtc::JsepSignaling::SetLocalDescription;
   using webrtc::JsepSignaling::SetRemoteDescription;
   using webrtc::JsepSignaling::ProcessIceMessage;
-  using webrtc::JsepSignaling::OnCandidatesReady;
-  using webrtc::JsepSignaling::OnCandidateFound;
 };
 
 class JsepSignalingTest: public testing::Test {
@@ -534,15 +525,6 @@ TEST_F(JsepSignalingTest, SetRemoteDescription) {
                                        reference2.get()));
   EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
                                        reference2.get()));
-}
-
-TEST_F(JsepSignalingTest, OnCandidatesFound) {
-  cricket::Candidate candidate = CreateMockCandidate();
-  signaling_->OnCandidateFound(cricket::CN_AUDIO, candidate);
-  EXPECT_EQ(kSdpCandidates, observer_->candidate_string());
-  EXPECT_TRUE(cricket::CN_AUDIO == observer_->candidate_label());
-  signaling_->OnCandidatesReady();
-  EXPECT_TRUE(observer_->ice_complete());
 }
 
 TEST_F(JsepSignalingTest, ProcessIceMessage) {

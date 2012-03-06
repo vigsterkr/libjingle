@@ -58,23 +58,22 @@ static const char kAudioTrack2[] = "audio2";
 static const int kIceCandidatesTimeout = 3000;
 
 
-class MockCandidateObserver : public webrtc::CandidateObserver {
+class MockCandidateObserver : public webrtc::IceCandidateObserver {
  public:
   MockCandidateObserver()
       : oncandidatesready_(false) {
   }
 
   // Found a new candidate.
-  virtual void OnCandidateFound(const std::string& content_name,
-                                const cricket::Candidate& candidate) {
-    if (content_name == cricket::CN_AUDIO) {
-      audio_candidates_.push_back(candidate);
-    } else if (content_name == cricket::CN_VIDEO) {
-      video_candidates_.push_back(candidate);
+  virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
+    if (candidate->label() == cricket::CN_AUDIO) {
+      audio_candidates_.push_back(candidate->candidate());
+    } else if (candidate->label() == cricket::CN_VIDEO) {
+      video_candidates_.push_back(candidate->candidate());
     }
   }
 
-  virtual void OnCandidatesReady() {
+  virtual void OnIceComplete() {
     EXPECT_FALSE(oncandidatesready_);
     oncandidatesready_ = true;
   }

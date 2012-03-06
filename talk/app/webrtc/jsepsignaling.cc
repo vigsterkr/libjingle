@@ -114,11 +114,9 @@ static cricket::ContentAction GetContentAction(JsepInterface::Action action) {
 
 JsepSignaling::JsepSignaling(talk_base::Thread* signaling_thread,
                              SessionDescriptionProvider* provider,
-                             IceCandidateObserver* observer,
                              JsepRemoteMediaStreamObserver* stream_observer)
     : signaling_thread_(signaling_thread),
       provider_(provider),
-      observer_(observer),
       stream_observer_(stream_observer),
       local_description_(new JsepSessionDescription()),
       remote_streams_(StreamCollection::Create()),
@@ -164,18 +162,18 @@ SessionDescriptionInterface* JsepSignaling::CreateAnswer(
 bool JsepSignaling::SetLocalDescription(Action action,
                                         SessionDescriptionInterface* desc) {
   cricket::ContentAction content_action = GetContentAction(action);
-  bool ret = provider_->SetLocalDescription(desc->ReleaseDescription(),
+  bool ret = provider_->SetLocalDescription(desc->description()->Copy(),
                                             content_action);
-  local_description_->SetConstDescription(provider_->local_description());
+  local_description_.reset(desc);
   return ret;
 }
 
 bool JsepSignaling::SetRemoteDescription(Action action,
                                          SessionDescriptionInterface* desc) {
   cricket::ContentAction content_action = GetContentAction(action);
-  bool ret = provider_->SetRemoteDescription(desc->ReleaseDescription(),
+  bool ret = provider_->SetRemoteDescription(desc->description()->Copy(),
                                              content_action);
-  remote_description_->SetConstDescription(provider_->remote_description());
+  remote_description_.reset(desc);
 
   // It is important that we have updated the provider with the
   // remote SessionDescription before we update the streams.
@@ -190,17 +188,6 @@ bool JsepSignaling::ProcessIceMessage(const IceCandidateInterface* candidate) {
     return false;
   return provider_->AddRemoteCandidate(candidate->label(),
                                        candidate->candidate());
-}
-
-void JsepSignaling::OnCandidatesReady() {
-  observer_->OnIceComplete();
-}
-
-void JsepSignaling::OnCandidateFound(const std::string& content_name,
-                                     const cricket::Candidate& candidate) {
-  JsepIceCandidate jsep_candidate(content_name);
-  jsep_candidate.SetCandidate(candidate);
-  observer_->OnIceCandidate(&jsep_candidate);
 }
 
 // Updates or Creates remote MediaStream objects given a

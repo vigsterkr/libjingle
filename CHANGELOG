@@ -1,7 +1,14 @@
 Libjingle
 
+0.6.15 - Mar 06, 2012
+  - Add Md5Digest, Sha1Digest and HMAC that works with any digest.
+  - Add app/webrtc/test.
+  - Remove win socket dependency from byteorder.
+  - Allow to use Thread without socketserver.
+  - Bug fixes.
+
 0.6.14 - Feb 28, 2012
-  - Initial JSEP support in WebRtc
+  - Initial JSEP support in WebRTC.
   - Bug fixes.
 
 0.6.13 - Feb 16, 2012

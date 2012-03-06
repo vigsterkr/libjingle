@@ -34,7 +34,6 @@
 #include <string>
 #include <vector>
 
-#include "talk/app/webrtc/candidateobserver.h"
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/base/scoped_ptr.h"
@@ -59,9 +58,6 @@ class SessionDescriptionProvider;
 // JsepRemoteMediaStreamObserver is triggered when
 // JsepSignaling::SetRemoteDescription is called with a new
 // SessionDescription with a new set of MediaStreams.
-// TODO: It does not make sense to have two sets of observer functions-
-// JsepObserver and JsepRemoteMediaStreamObserver. It is done this way in order
-// to be able to support both ROAP and JSEP for a while.
 class JsepRemoteMediaStreamObserver {
  public:
   // Triggered when media is received on a new stream from remote peer.
@@ -81,11 +77,10 @@ class JsepRemoteMediaStreamObserver {
 //
 // JsepSignaling is Thread-compatible and all non-const methods are
 // expected to be called on the signaling thread.
-class JsepSignaling : public JsepInterface, public CandidateObserver {
+class JsepSignaling : public JsepInterface {
  public:
   JsepSignaling(talk_base::Thread* signaling_thread,
                 SessionDescriptionProvider* provider,
-                IceCandidateObserver* observer,
                 JsepRemoteMediaStreamObserver* stream_observer);
   virtual ~JsepSignaling();
 
@@ -111,14 +106,6 @@ class JsepSignaling : public JsepInterface, public CandidateObserver {
     return remote_description_.get();
   }
 
- protected:
-  // Implements CandidateObserver interface.
-  // OnCandidatesReady is called when all local candidates have been collected.
-  virtual void OnCandidatesReady();
-  // Implements CandidateObserver interface.
-  virtual void OnCandidateFound(const std::string& content_name,
-                                const cricket::Candidate& candidate);
-
  private:
   // Creates and destroys remote media streams based on |remote_desc|.
   void UpdateRemoteStreams(const cricket::SessionDescription* remote_desc);
@@ -131,12 +118,11 @@ class JsepSignaling : public JsepInterface, public CandidateObserver {
 
   talk_base::Thread* signaling_thread_;
   SessionDescriptionProvider* provider_;
-  IceCandidateObserver* observer_;
   JsepRemoteMediaStreamObserver* stream_observer_;
   talk_base::scoped_refptr<StreamCollectionInterface> local_streams_;
-  talk_base::scoped_ptr<JsepSessionDescription> local_description_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> local_description_;
   talk_base::scoped_refptr<StreamCollection> remote_streams_;
-  talk_base::scoped_ptr<JsepSessionDescription> remote_description_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> remote_description_;
 };
 
 }  // namespace webrtc

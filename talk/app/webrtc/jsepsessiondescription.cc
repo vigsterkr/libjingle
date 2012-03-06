@@ -27,12 +27,16 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 
 #include "talk/app/webrtc/webrtcsdp.h"
-#include "talk/p2p/base/sessiondescription.h"
+#include "talk/session/phone/mediasession.h"
 
 namespace webrtc {
 
-JsepSessionDescription::JsepSessionDescription()
-    : const_description_(NULL) {
+JsepSessionDescription::JsepSessionDescription() {
+}
+
+JsepSessionDescription::JsepSessionDescription(
+    const cricket::SessionDescription* description) {
+  description_.reset(description->Copy());
 }
 
 JsepSessionDescription::~JsepSessionDescription() {
@@ -41,25 +45,13 @@ JsepSessionDescription::~JsepSessionDescription() {
 void JsepSessionDescription::SetDescription(
     cricket::SessionDescription* description) {
   description_.reset(description);
-  const_description_ = description_.get();
-}
-
-void JsepSessionDescription::SetConstDescription(
-    const cricket::SessionDescription* description) {
-  description_.reset(NULL);
-  const_description_ = description_.get();
 }
 
 bool JsepSessionDescription::Initialize(const std::string& sdp) {
   if (description_.get() != NULL)
     return false;
   description_.reset(new cricket::SessionDescription());
-  const_description_ = description_.get();
   return SdpDeserialize(sdp, description_.get(), &candidates_);
-}
-
-cricket::SessionDescription* JsepSessionDescription::ReleaseDescription() {
-  return description_.release();
 }
 
 void JsepSessionDescription::AddCandidate(
@@ -69,9 +61,9 @@ void JsepSessionDescription::AddCandidate(
 }
 
 bool JsepSessionDescription::ToString(std::string* out) const {
-  if (!const_description_ || !out)
+  if (!description_.get() || !out)
     return false;
-  *out = SdpSerialize(*const_description_, candidates_);
+  *out = SdpSerialize(*description_.get(), candidates_);
   return !out->empty();
 }
 

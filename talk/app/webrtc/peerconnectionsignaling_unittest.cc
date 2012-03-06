@@ -304,8 +304,8 @@ class PeerConnectionSignalingTest: public testing::Test {
   // signaling1_ send stream with label kStreamLabel1 to signaling2_.
   void SetUpOneWayCall() {
     // Initialize signaling1_ and signaling_2 by providing the candidates.
-    signaling1_->OnCandidatesReady();
-    signaling2_->OnCandidatesReady();
+    signaling1_->OnIceComplete();
+    signaling2_->OnIceComplete();
 
     // Create a local stream collection to be sent on signaling1_.
     talk_base::scoped_refptr<StreamCollection> local_collection1(
@@ -375,7 +375,7 @@ TEST_F(PeerConnectionSignalingTest, SimpleOneWayCall) {
   EXPECT_EQ(PeerConnectionSignaling::kInitializing, signaling1_->GetState());
 
   // Initialize signaling1_ by providing the candidates.
-  signaling1_->OnCandidatesReady();
+  signaling1_->OnIceComplete();
   EXPECT_EQ(PeerConnectionSignaling::kWaitingForAnswer,
             signaling1_->GetState());
   // Process posted messages to allow signaling_1 to send the offer.
@@ -386,7 +386,7 @@ TEST_F(PeerConnectionSignalingTest, SimpleOneWayCall) {
   EXPECT_EQ(PeerConnectionSignaling::kInitializing, signaling2_->GetState());
 
   // Provide the candidates to signaling_2 and let it process the offer.
-  signaling2_->OnCandidatesReady();
+  signaling2_->OnIceComplete();
   talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that the offer/answer have been exchanged and the state is good.
@@ -465,8 +465,8 @@ TEST_F(PeerConnectionSignalingTest, Glare) {
 
 TEST_F(PeerConnectionSignalingTest, AddRemoveStream) {
   // Initialize signaling1_ and signaling_2 by providing the candidates.
-  signaling1_->OnCandidatesReady();
-  signaling2_->OnCandidatesReady();
+  signaling1_->OnIceComplete();
+  signaling2_->OnIceComplete();
   // Create a local stream.
   std::string label(kStreamLabel1);
   talk_base::scoped_refptr<LocalMediaStreamInterface> stream(
@@ -566,7 +566,7 @@ TEST_F(PeerConnectionSignalingTest, ShutDown) {
 
 TEST_F(PeerConnectionSignalingTest, ReceiveError) {
   // Initialize signaling1_
-  signaling1_->OnCandidatesReady();
+  signaling1_->OnIceComplete();
 
   talk_base::scoped_refptr<StreamCollection> local_collection1(
       CreateLocalCollection1());

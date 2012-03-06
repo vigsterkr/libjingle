@@ -159,7 +159,7 @@ class PortTest : public testing::Test {
         pss_(new talk_base::PhysicalSocketServer),
         ss_(new talk_base::VirtualSocketServer(pss_.get())),
         ss_scope_(ss_.get()),
-        network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY)),
+        network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY), 32),
         socket_factory_(talk_base::Thread::Current()),
         nat_factory1_(ss_.get(), kNatAddr1),
         nat_factory2_(ss_.get(), kNatAddr2),
@@ -169,6 +169,7 @@ class PortTest : public testing::Test {
         relay_server_(main_, kRelayUdpIntAddr, kRelayUdpExtAddr,
                       kRelayTcpIntAddr, kRelayTcpExtAddr,
                       kRelaySslTcpIntAddr, kRelaySslTcpExtAddr) {
+    network_.AddIP(talk_base::IPAddress(INADDR_ANY));
   }
 
  protected:

@@ -130,7 +130,7 @@ PeerConnectionSignaling::PeerConnectionSignaling(
 
 PeerConnectionSignaling::~PeerConnectionSignaling() {}
 
-void PeerConnectionSignaling::OnCandidatesReady() {
+void PeerConnectionSignaling::OnIceComplete() {
   if (!VERIFY(state_ == kInitializing))
     return;
   // If we have a queued remote offer we need to handle this first.
@@ -147,15 +147,13 @@ void PeerConnectionSignaling::OnCandidatesReady() {
   }
 }
 
-// TODO: OnCandidateFound is called from webrtcsession when a new
-// IceCandidate is found. Here we don't care about the |content_name| since
-// we currently filter the candidates on candidate names when we use ROAP in
-// WebRtcSession::SetRemoteCandidates.
+// TODO: OnIceCandidate is called from webrtcsession when a new
+// IceCandidate is found. Here we don't care about the content name since
+// we can create a valid SDP based on the candidate names.
 // This function will be removed if we implement ROAP on top of JSEP.
-void PeerConnectionSignaling::OnCandidateFound(
-    const std::string& content_name,
-    const cricket::Candidate& candidate) {
-  candidates_.push_back(candidate);
+void PeerConnectionSignaling::OnIceCandidate(
+    const IceCandidateInterface* candidate) {
+  candidates_.push_back(candidate->candidate());
 }
 
 void PeerConnectionSignaling::ChangeState(State new_state) {

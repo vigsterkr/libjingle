@@ -27,6 +27,7 @@
 
 #include "talk/app/webrtc/webrtcsession.h"
 
+#include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/peerconnectionsignaling.h"
@@ -212,7 +213,7 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       break;
     case MSG_CANDIDATE_DISCOVERY_TIMEOUT:
       if (observer_)
-         observer_->OnCandidatesReady();
+         observer_->OnIceComplete();
       break;
     default:
       break;
@@ -308,7 +309,8 @@ void WebRtcSession::OnTransportCandidatesReady(
   if (observer_) {
     for (cricket::Candidates::const_iterator citer = candidates.begin();
          citer != candidates.end(); ++citer) {
-      observer_->OnCandidateFound(proxy->content_name(), *citer);
+      JsepIceCandidate candidate(proxy->content_name(), *citer);
+      observer_->OnIceCandidate(&candidate);
     }
   }
 }

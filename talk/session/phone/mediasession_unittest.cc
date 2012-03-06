@@ -622,3 +622,36 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   EXPECT_EQ(kVideoTrack2, updated_video_streams[1].name);
   EXPECT_NE(updated_video_streams[1].cname, updated_video_streams[0].cname);
 }
+
+TEST(MediaSessionDescription, CopySessionDescription) {
+  SessionDescription source;
+  cricket::ContentGroup group(cricket::CN_AUDIO);
+  source.AddGroup(group);
+  AudioContentDescription* acd(new AudioContentDescription());
+  acd->set_codecs(MAKE_VECTOR(kAudioCodecs1));
+  acd->AddLegacyStream(1);
+  source.AddContent(cricket::CN_AUDIO, cricket::NS_JINGLE_RTP, acd);
+  VideoContentDescription* vcd(new VideoContentDescription());
+  vcd->set_codecs(MAKE_VECTOR(kVideoCodecs1));
+  vcd->AddLegacyStream(2);
+  source.AddContent(cricket::CN_VIDEO, cricket::NS_JINGLE_RTP, vcd);
+
+  talk_base::scoped_ptr<SessionDescription> copy(source.Copy());
+  ASSERT_TRUE(copy.get() != NULL);
+  EXPECT_TRUE(copy->HasGroup(cricket::CN_AUDIO));
+  const ContentInfo* ac = copy->GetContentByName("audio");
+  const ContentInfo* vc = copy->GetContentByName("video");
+  ASSERT_TRUE(ac != NULL);
+  ASSERT_TRUE(vc != NULL);
+  EXPECT_EQ(std::string(NS_JINGLE_RTP), ac->type);
+  const AudioContentDescription* acd_copy =
+      static_cast<const AudioContentDescription*>(ac->description);
+  EXPECT_EQ(acd->codecs(), acd_copy->codecs());
+  EXPECT_EQ(1u, acd->first_ssrc());
+
+  EXPECT_EQ(std::string(NS_JINGLE_RTP), vc->type);
+  const VideoContentDescription* vcd_copy =
+      static_cast<const VideoContentDescription*>(vc->description);
+  EXPECT_EQ(vcd->codecs(), vcd_copy->codecs());
+  EXPECT_EQ(2u, vcd->first_ssrc());
+}

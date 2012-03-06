@@ -32,6 +32,8 @@
 
 namespace webrtc {
 
+// TODO: Remove this file from the build since it is no longer used.
+
 // This observer interface provides feedback about ice candidates found by a
 // WebRtcSession object.
 class CandidateObserver {

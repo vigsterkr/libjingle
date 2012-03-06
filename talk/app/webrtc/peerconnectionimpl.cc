@@ -287,10 +287,10 @@ bool PeerConnection::Initialize(bool use_roap,
   } else {
     jsep_signaling_.reset(new JsepSignaling(factory_->signaling_thread(),
                                             session_.get(),
-                                            observer_,
                                             this));
     // Register with WebRtcSession to get Ice candidates.
-    session_->RegisterObserver(jsep_signaling_.get());
+    session_->RegisterObserver(observer);
+    session_->SignalState.connect(this, &PeerConnection::OnSessionStateChange);
   }
   return true;
 }
@@ -484,7 +484,6 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
           ready_state_ != PeerConnectionInterface::kClosing) {
         // TODO: Take IceOptions into consideration.
         session_->StartIce();
-        ChangeReadyState(PeerConnectionInterface::kNegotiating);
       }
       break;
     }
@@ -528,6 +527,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
             static_cast<JsepSessionDescriptionParams*> (data));
         param->result  = jsep_signaling_->SetLocalDescription(param->action,
                                                               param->desc);
+
         stream_handler_->CommitLocalStreams(local_media_streams_);
       }
       break;
@@ -633,6 +633,24 @@ void PeerConnection::OnSignalingStateChange(
       break;
     default:
       ASSERT(!"NOT IMPLEMENTED");
+      break;
+  }
+}
+
+void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
+                                          cricket::BaseSession::State state) {
+  switch (state) {
+    case cricket::BaseSession::STATE_INIT:
+      ChangeReadyState(PeerConnectionInterface::kNew);
+    case cricket::BaseSession::STATE_SENTINITIATE:
+    case cricket::BaseSession::STATE_RECEIVEDINITIATE:
+      ChangeReadyState(PeerConnectionInterface::kNegotiating);
+      break;
+    case cricket::BaseSession::STATE_SENTACCEPT:
+    case cricket::BaseSession::STATE_RECEIVEDACCEPT:
+      ChangeReadyState(PeerConnectionInterface::kActive);
+      break;
+    default:
       break;
   }
 }

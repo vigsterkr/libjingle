@@ -43,7 +43,7 @@ size_t PackAddressForNAT(char* buf, size_t buf_size,
   buf[0] = 0;
   buf[1] = family;
   // Writes the port.
-  *(reinterpret_cast<uint16*>(&buf[2])) = htons(remote_addr.port());
+  *(reinterpret_cast<uint16*>(&buf[2])) = HostToNetwork16(remote_addr.port());
   if (family == AF_INET) {
     ASSERT(buf_size >= kNATEncodedIPv4AddressSize);
     in_addr v4addr = ip.ipv4_address();
@@ -66,7 +66,7 @@ size_t UnpackAddressFromNAT(const char* buf, size_t buf_size,
   ASSERT(buf_size >= 8);
   ASSERT(buf[0] == 0);
   int family = buf[1];
-  uint16 port = ntohs(*(reinterpret_cast<const uint16*>(&buf[2])));
+  uint16 port = NetworkToHost16(*(reinterpret_cast<const uint16*>(&buf[2])));
   if (family == AF_INET) {
     const in_addr* v4addr = reinterpret_cast<const in_addr*>(&buf[4]);
     *remote_addr = SocketAddress(IPAddress(*v4addr), port);

@@ -595,10 +595,12 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
-        network_("network", "unittest", address_.ipaddr()),
+        network_("network", "unittest",
+                 talk_base::IPAddress(INADDR_LOOPBACK), 8),
         socket_factory_(talk_base::Thread::Current()),
         running_(false),
         port_(28653) {
+    network_.AddIP(address_.ipaddr());
   }
 
   ~TestPortAllocatorSession() {
@@ -675,6 +677,9 @@ class TestContentDescription : public cricket::ContentDescription {
                                   const std::string& content_type)
       : gingle_content_type(gingle_content_type),
         content_type(content_type) {
+  }
+  virtual ContentDescription* Copy() const {
+    return new TestContentDescription(*this);
   }
 
   std::string gingle_content_type;

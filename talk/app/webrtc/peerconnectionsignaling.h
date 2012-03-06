@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-#include "talk/app/webrtc/candidateobserver.h"
+#include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/roaperrorcodes.h"
 #include "talk/app/webrtc/roapsession.h"
 #include "talk/base/messagehandler.h"
@@ -113,7 +113,7 @@ class MediaStreamInterface;
 // pc.ProcessSignalingMessage(remote_message, &local_streams);
 
 
-class PeerConnectionSignaling : public CandidateObserver,
+class PeerConnectionSignaling : public IceCandidateObserver,
                                 public talk_base::MessageHandler {
  public:
   enum State {
@@ -160,16 +160,15 @@ class PeerConnectionSignaling : public CandidateObserver,
   // After calling this no more offers or answers to offers can be created.
   void SendShutDown();
 
-  // Implements CandidateObserver interface.
-  // OnCandidatesReady is called when all local candidates have been collected.
+  // Implements IceCandidateObserver interface.
+  // OnIceComplete is called when all local candidates have been collected.
   // This tell PeerConnectionSignaling that it is ready to respond to offers
   // or create offer messages.
-  virtual void OnCandidatesReady();
+  virtual void OnIceComplete();
 
-  // Implements CandidateObserver interface.
-  // OnCandidatesFound is called when a local candidate has been collected.
-  virtual void OnCandidateFound(const std::string& content_name,
-                                const cricket::Candidate& candidate);
+  // Implements IceCandidateObserver interface.
+  // OnIceCandidate is called when a local candidate has been collected.
+  virtual void OnIceCandidate(const IceCandidateInterface* candidate);
 
   // Returns all current remote MediaStreams.
   StreamCollection* remote_streams() { return remote_streams_.get(); }
@@ -204,12 +203,12 @@ class PeerConnectionSignaling : public CandidateObserver,
   void ChangeState(State new_state);
 
   // Creates an offer on the signaling_thread_.
-  // This is either initiated by CreateOffer or OnCandidatesReady.
+  // This is either initiated by CreateOffer or OnIceComplete.
   void CreateOffer_s();
 
   // Creates an answer on the signaling thread.
   // This is either initiated by ProcessSignalingMessage when a remote offer
-  // have been received or OnCandidatesReady.
+  // have been received or OnIceComplete.
   void CreateAnswer_s();
 
   // Notifies the provider_ and the active remote media streams
@@ -259,7 +258,7 @@ class PeerConnectionSignaling : public CandidateObserver,
   talk_base::scoped_refptr<StreamCollection> local_streams_;
 
   // The set of local transport candidates used in negotiation.
-  // This is set by OnCandidatesReady.
+  // This is set by OnIceComplete.
   cricket::Candidates candidates_;
 
   // roap_session_ holds the ROAP-specific session state and is used for

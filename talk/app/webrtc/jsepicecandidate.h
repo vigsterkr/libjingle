@@ -41,9 +41,9 @@ namespace webrtc {
 class JsepIceCandidate : public IceCandidateInterface {
  public:
   explicit JsepIceCandidate(const std::string& label);
+  explicit JsepIceCandidate(const std::string& label,
+                            const cricket::Candidate& candidate);
   ~JsepIceCandidate();
-
-  void SetCandidate(const cricket::Candidate& candidates);
   bool Initialize(const std::string& sdp);
 
   virtual std::string label() const { return label_;}

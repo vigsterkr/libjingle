@@ -30,7 +30,7 @@
 
 #include <string>
 
-#include "talk/app/webrtc/candidateobserver.h"
+#include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
 #include "talk/app/webrtc/sessiondescriptionprovider.h"
 #include "talk/base/sigslot.h"
@@ -62,7 +62,7 @@ class WebRtcSession : public cricket::BaseSession,
 
   bool Initialize();
 
-  void RegisterObserver(CandidateObserver* observer) {
+  void RegisterObserver(IceCandidateObserver* observer) {
     observer_ = observer;
   }
 
@@ -131,7 +131,7 @@ class WebRtcSession : public cricket::BaseSession,
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
-  CandidateObserver* observer_;
+  IceCandidateObserver * observer_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
 };
 

@@ -80,8 +80,6 @@ class SessionDescriptionInterface {
  public:
   virtual ~SessionDescriptionInterface() {}
   virtual const cricket::SessionDescription* description() const = 0;
-  // Release ownership of cricket::SessionDescription.
-  virtual cricket::SessionDescription* ReleaseDescription() = 0;
   // Adds the specified candidate to the description.
   // Ownership is not transferred.
   virtual void AddCandidate(const IceCandidateInterface* candidate) = 0;

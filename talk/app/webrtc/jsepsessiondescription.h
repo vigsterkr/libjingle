@@ -46,30 +46,21 @@ namespace webrtc {
 class JsepSessionDescription : public SessionDescriptionInterface {
  public:
   JsepSessionDescription();
+  explicit JsepSessionDescription(
+      const cricket::SessionDescription* description);
   ~JsepSessionDescription();
 
   bool Initialize(const std::string& sdp);
   void SetDescription(cricket::SessionDescription* description);
-  // Currently there is no way to copy a cricket::SessionDescription.
-  // Therefore we need a way to create a JsepSessionDescription with an
-  // unmutable pointer to a SessionDescription to be returned in
-  // local_description.
-  // TODO: This is a pretty bad and ugly way- We should create a
-  // way to copy a cricket::SessionDescription.
-  // Since this is hidden from the application user I would like to do that
-  // later.
-  void SetConstDescription(const cricket::SessionDescription* description);
 
   virtual const cricket::SessionDescription* description() const {
-    return const_description_;
+    return description_.get();
   }
-  virtual cricket::SessionDescription* ReleaseDescription();
   virtual void AddCandidate(const IceCandidateInterface* candidate);
   virtual bool ToString(std::string* out) const;
 
  private:
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
-  const cricket::SessionDescription* const_description_;
   std::vector<cricket::Candidate> candidates_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);

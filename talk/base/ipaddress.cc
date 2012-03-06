@@ -57,7 +57,7 @@ static in_addr ExtractMappedAddress(const in6_addr& addr);
 
 uint32 IPAddress::v4AddressAsHostOrderInteger() const {
   if (family_ == AF_INET) {
-    return ntohl(u_.ip4.s_addr);
+    return NetworkToHost32(u_.ip4.s_addr);
   } else {
     return 0;
   }
@@ -109,7 +109,7 @@ bool IPAddress::operator <(const IPAddress &other) const {
   // Comparing addresses of the same family.
   switch (family_) {
     case AF_INET: {
-      return ntohl(u_.ip4.s_addr) < ntohl(other.u_.ip4.s_addr);
+      return NetworkToHost32(u_.ip4.s_addr) < ntohl(other.u_.ip4.s_addr);
     }
     case AF_INET6: {
       return memcmp(&u_.ip6.s6_addr, &other.u_.ip6.s6_addr, 16) < 0;

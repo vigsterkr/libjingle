@@ -32,6 +32,7 @@
 #include <algorithm>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/byteorder.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 
@@ -63,10 +64,7 @@ const char* win32_inet_ntop(int af, const void *src,
   return NULL;
 }
 
-// As above, but for inet_pton. Wraps inet_addr for v4, and implements inet_pton
-// for v6. Slightly more permissive than the RFC specified inet_pton, as it uses
-// windows' inet_addr which permits octal and hexadecimal values in v4
-// addresses, while inet_pton only allows decimal.
+// As above, but for inet_pton. Implements inet_pton for v4 and v6.
 // Note that our inet_ntop will output normal 'dotted' v4 addresses only.
 int win32_inet_pton(int af, const char* src, void* dst) {
   if (!src || !dst) {
@@ -156,7 +154,7 @@ const char* inet_ntop_v6(const void* src, char* dst, socklen_t size) {
       if (runpos[i] == -1) {
         cursor += talk_base::sprintfn(cursor,
                                       INET6_ADDRSTRLEN - (cursor - dst),
-                                      "%x", ntohs(as_shorts[i]));
+                                      "%x", NetworkToHost16(as_shorts[i]));
         if (i != 7 && runpos[i + 1] != 1) {
           *cursor++ = ':';
         }
@@ -172,14 +170,46 @@ const char* inet_ntop_v6(const void* src, char* dst, socklen_t size) {
 }
 
 // Helper function for inet_pton for IPv4 addresses.
-// Uses win32's inet_addr.
+// |src| points to a character string containing an IPv4 network address in
+// dotted-decimal format, "ddd.ddd.ddd.ddd", where ddd is a decimal number
+// of up to three digits in the range 0 to 255.
+// The address is converted and copied to dst,
+// which must be sizeof(struct in_addr) (4) bytes (32 bits) long.
 int inet_pton_v4(const char* src, void* dst) {
-  uint32 ip = inet_addr(src);
-  if (ip == 0xFFFFFFFF && strcmp(src, "255.255.255.255") != 0) {
+  const int kIpv4AddressSize = 4;
+  int found = 0;
+  const char* src_pos = src;
+  unsigned char result[kIpv4AddressSize] = {0};
+
+  while (*src_pos != '\0') {
+    // strtol won't treat whitespace characters in the begining as an error,
+    // so check to ensure this is started with digit before passing to strtol.
+    if (!isdigit(*src_pos)) {
+      return 0;
+    }
+    char* end_pos;
+    long value = strtol(src_pos, &end_pos, 10);
+    if (value < 0 || value > 255 || src_pos == end_pos) {
+      return 0;
+    }
+    ++found;
+    if (found > kIpv4AddressSize) {
+      return 0;
+    }
+    result[found - 1] = static_cast<unsigned char>(value);
+    src_pos = end_pos;
+    if (*src_pos == '.') {
+      // There's more.
+      ++src_pos;
+    } else if (*src_pos != '\0') {
+      // If it's neither '.' nor '\0' then return fail.
+      return 0;
+    }
+  }
+  if (found != kIpv4AddressSize) {
     return 0;
   }
-  struct in_addr* dst_as_in_addr = reinterpret_cast<struct in_addr*>(dst);
-  dst_as_in_addr->s_addr = ip;
+  memcpy(dst, result, sizeof(result));
   return 1;
 }
 
@@ -274,7 +304,7 @@ int inet_pton_v6(const char* src, void* dst) {
       if (sscanf(readcursor, "%hx%n", &word, &bytesread) != 1) {
         return 0;
       } else {
-        *addr_cursor = htons(word);
+        *addr_cursor = HostToNetwork16(word);
         ++addr_cursor;
         readcursor += bytesread;
         if (*readcursor != ':' && *readcursor != '\0') {

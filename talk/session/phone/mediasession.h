@@ -246,6 +246,9 @@ class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
   AudioContentDescription() :
       agc_minus_10db_(false) {}
 
+  virtual ContentDescription* Copy() const {
+    return new AudioContentDescription(*this);
+  }
   virtual MediaType type() const { return MEDIA_TYPE_AUDIO; }
 
   const std::string &lang() const { return lang_; }
@@ -265,6 +268,9 @@ class AudioContentDescription : public MediaContentDescriptionImpl<AudioCodec> {
 
 class VideoContentDescription : public MediaContentDescriptionImpl<VideoCodec> {
  public:
+  virtual ContentDescription* Copy() const {
+    return new VideoContentDescription(*this);
+  }
   virtual MediaType type() const { return MEDIA_TYPE_VIDEO; }
 };
 
@@ -319,7 +325,6 @@ const AudioContentDescription* GetFirstAudioContentDescription(
     const SessionDescription* sdesc);
 const VideoContentDescription* GetFirstVideoContentDescription(
     const SessionDescription* sdesc);
-
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_

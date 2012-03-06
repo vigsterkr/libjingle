@@ -100,11 +100,12 @@ class PeerConnection : public PeerConnectionInterface,
   void OnRemoteStreamRemoved(MediaStreamInterface* remote_stream);
   void OnSignalingStateChange(PeerConnectionSignaling::State state);
 
-  // Implement JsepRemoteMediaStreamObserver.
-  // TODO: Remove these functions when we no longer need to support ROAP.
   virtual void OnAddStream(MediaStreamInterface* stream);
   virtual void OnRemoveStream(MediaStreamInterface* stream);
 
+  // Signals from WebRtcSession.
+  void OnSessionStateChange(cricket::BaseSession* session,
+                            cricket::BaseSession::State state);
 
   void ChangeReadyState(PeerConnectionInterface::ReadyState ready_state);
   void ChangeSdpState(PeerConnectionInterface::SdpState sdp_state);

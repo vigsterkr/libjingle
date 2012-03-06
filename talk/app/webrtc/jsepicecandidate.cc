@@ -40,11 +40,14 @@ JsepIceCandidate::JsepIceCandidate(const std::string& label)
     : label_(label) {
 }
 
-JsepIceCandidate::~JsepIceCandidate() {
+JsepIceCandidate::JsepIceCandidate(const std::string& label,
+                                   const cricket::Candidate& candidate)
+    : label_(label),
+      candidate_(candidate) {
 }
 
-void JsepIceCandidate::SetCandidate(const cricket::Candidate& candidates) {
-  candidate_ = candidates;
+JsepIceCandidate::~JsepIceCandidate() {
+
 }
 
 bool JsepIceCandidate::Initialize(const std::string& sdp) {

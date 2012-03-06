@@ -48,7 +48,7 @@ class StunPortTest : public testing::Test,
                      public sigslot::has_slots<> {
  public:
   StunPortTest()
-      : network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY)),
+      : network_("unittest", "unittest", talk_base::IPAddress(INADDR_ANY), 32),
         socket_factory_(talk_base::Thread::Current()),
         stun_server_(new cricket::TestStunServer(
           talk_base::Thread::Current(), kStunAddr)),

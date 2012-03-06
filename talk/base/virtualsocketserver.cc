@@ -577,7 +577,8 @@ VirtualSocketServer::~VirtualSocketServer() {
 IPAddress VirtualSocketServer::GetNextIP(int family) {
   if (family == AF_INET) {
     IPAddress next_ip(next_ipv4_);
-    next_ipv4_.s_addr = htonl(ntohl(next_ipv4_.s_addr) + 1);
+    next_ipv4_.s_addr =
+        HostToNetwork32(NetworkToHost32(next_ipv4_.s_addr) + 1);
     return next_ip;
   } else if (family == AF_INET6) {
     IPAddress next_ip(next_ipv6_);

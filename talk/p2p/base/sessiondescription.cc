@@ -76,6 +76,16 @@ const std::string* ContentGroup::FirstContentName() const {
   return (content_types_.begin() != content_types_.end()) ?
       &(*content_types_.begin()) : NULL;
 }
+
+SessionDescription* SessionDescription::Copy() const {
+  SessionDescription* copy = new SessionDescription(*this);
+  // Copy all ContentDescriptions.
+  for (ContentInfos::iterator content = copy->contents_.begin();
+      content != copy->contents().end(); ++content) {
+    content->description = content->description->Copy();
+  }
+  return copy;
+}
 const ContentInfo* SessionDescription::GetContentByName(
     const std::string& name) const {
   return FindContentInfoByName(contents_, name);
@@ -114,10 +124,7 @@ void SessionDescription::RemoveGroupByName(const std::string& name) {
        iter != content_groups_.end(); ++iter) {
     if (iter->semantics() == name) {
       content_groups_.erase(iter);
-      iter = content_groups_.begin();
-      if (iter == content_groups_.end()) {
-        return;
-      }
+      break;
     }
   }
 }

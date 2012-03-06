@@ -286,14 +286,13 @@ void Win32Socket::SetTimeout(int ms) {
 }
 
 SocketAddress Win32Socket::GetLocalAddress() const {
-  sockaddr_in addr;
+  sockaddr_storage addr;
   socklen_t addrlen = sizeof(addr);
   int result = ::getsockname(socket_, reinterpret_cast<sockaddr*>(&addr),
                              &addrlen);
   SocketAddress address;
   if (result >= 0) {
-    ASSERT(addrlen == sizeof(addr));
-    address.FromSockAddr(addr);
+    SocketAddressFromSockAddrStorage(addr, &address);
   } else {
     LOG(LS_WARNING) << "GetLocalAddress: unable to get local addr, socket="
                     << socket_;
@@ -302,15 +301,13 @@ SocketAddress Win32Socket::GetLocalAddress() const {
 }
 
 SocketAddress Win32Socket::GetRemoteAddress() const {
-  sockaddr_in addr;
+  sockaddr_storage addr;
   socklen_t addrlen = sizeof(addr);
   int result = ::getpeername(socket_, reinterpret_cast<sockaddr*>(&addr),
                              &addrlen);
-  ASSERT(addrlen == sizeof(addr));
   SocketAddress address;
   if (result >= 0) {
-    ASSERT(addrlen == sizeof(addr));
-    address.FromSockAddr(addr);
+    SocketAddressFromSockAddrStorage(addr, &address);
   } else {
     LOG(LS_WARNING) << "GetRemoteAddress: unable to get remote addr, socket="
                     << socket_;
@@ -323,9 +320,9 @@ int Win32Socket::Bind(const SocketAddress& addr) {
   if (socket_ == INVALID_SOCKET)
     return SOCKET_ERROR;
 
-  sockaddr_in saddr;
-  addr.ToSockAddr(&saddr);
-  int err = ::bind(socket_, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr));
+  sockaddr_storage saddr;
+  size_t len = addr.ToSockAddrStorage(&saddr);
+  int err = ::bind(socket_, reinterpret_cast<sockaddr*>(&saddr), len);
   UpdateLastError();
   return err;
 }
@@ -344,6 +341,7 @@ int Win32Socket::Connect(const SocketAddress& addr) {
 
   LOG_F(LS_INFO) << "async dns lookup (" << addr.IPAsString() << ")";
   DnsLookup * dns = new DnsLookup;
+  // TODO: Replace with IPv6 compatible lookup.
   dns->handle = WSAAsyncGetHostByName(sink_->handle(), WM_DNSNOTIFY,
         addr.IPAsString().c_str(), dns->buffer, sizeof(dns->buffer));
 
@@ -362,11 +360,10 @@ int Win32Socket::Connect(const SocketAddress& addr) {
 }
 
 int Win32Socket::DoConnect(const SocketAddress& addr) {
-  sockaddr_in saddr;
-  addr.ToSockAddr(&saddr);
+  sockaddr_storage saddr;
+  size_t len = addr.ToSockAddrStorage(&saddr);
   connect_time_ = Time();
-  int result = connect(socket_, reinterpret_cast<SOCKADDR*>(&saddr),
-                       sizeof(saddr));
+  int result = connect(socket_, reinterpret_cast<SOCKADDR*>(&saddr), len);
   if (result != SOCKET_ERROR) {
     state_ = CS_CONNECTED;
   } else {
@@ -418,40 +415,40 @@ int Win32Socket::SetOption(Option opt, int value) {
   return ::setsockopt(socket_, slevel, sopt, p, sizeof(value));
 }
 
-int Win32Socket::Send(const void *pv, size_t cb) {
-  int sent = ::send(socket_, reinterpret_cast<const char*>(pv), cb, 0);
+int Win32Socket::Send(const void* buffer, size_t length) {
+  int sent = ::send(socket_, reinterpret_cast<const char*>(buffer), length, 0);
   UpdateLastError();
   return sent;
 }
 
-int Win32Socket::SendTo(const void *pv, size_t cb,
+int Win32Socket::SendTo(const void* buffer, size_t length,
                         const SocketAddress& addr) {
-  sockaddr_in saddr;
-  addr.ToSockAddr(&saddr);
-  int sent = ::sendto(socket_, reinterpret_cast<const char*>(pv), cb, 0,
-                      reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr));
+  sockaddr_storage saddr;
+  size_t addr_len = addr.ToSockAddrStorage(&saddr);
+  int sent = ::sendto(socket_, reinterpret_cast<const char*>(buffer), length, 0,
+                      reinterpret_cast<sockaddr*>(&saddr), addr_len);
   UpdateLastError();
   return sent;
 }
 
-int Win32Socket::Recv(void *pv, size_t cb) {
-  int received = ::recv(socket_, static_cast<char*>(pv), cb, 0);
+int Win32Socket::Recv(void* buffer, size_t length) {
+  int received = ::recv(socket_, static_cast<char*>(buffer), length, 0);
   UpdateLastError();
-  if (closing_ && received <= static_cast<int>(cb))
+  if (closing_ && received <= static_cast<int>(length))
     PostClosed();
   return received;
 }
 
-int Win32Socket::RecvFrom(void *pv, size_t cb,
-                          SocketAddress *paddr) {
-  sockaddr_in saddr;
-  socklen_t cbAddr = sizeof(saddr);
-  int received = ::recvfrom(socket_, static_cast<char*>(pv), cb, 0,
-                            reinterpret_cast<sockaddr*>(&saddr), &cbAddr);
+int Win32Socket::RecvFrom(void* buffer, size_t length,
+                          SocketAddress* out_addr) {
+  sockaddr_storage saddr;
+  socklen_t addr_len = sizeof(saddr);
+  int received = ::recvfrom(socket_, static_cast<char*>(buffer), length, 0,
+                            reinterpret_cast<sockaddr*>(&saddr), &addr_len);
   UpdateLastError();
   if (received != SOCKET_ERROR)
-    paddr->FromSockAddr(saddr);
-  if (closing_ && received <= static_cast<int>(cb))
+    SocketAddressFromSockAddrStorage(saddr, out_addr);
+  if (closing_ && received <= static_cast<int>(length))
     PostClosed();
   return received;
 }
@@ -467,15 +464,15 @@ int Win32Socket::Listen(int backlog) {
   return err;
 }
 
-Win32Socket* Win32Socket::Accept(SocketAddress *paddr) {
-  sockaddr_in saddr;
-  socklen_t cbAddr = sizeof(saddr);
-  SOCKET s = ::accept(socket_, reinterpret_cast<sockaddr*>(&saddr), &cbAddr);
+Win32Socket* Win32Socket::Accept(SocketAddress* out_addr) {
+  sockaddr_storage saddr;
+  socklen_t addr_len = sizeof(saddr);
+  SOCKET s = ::accept(socket_, reinterpret_cast<sockaddr*>(&saddr), &addr_len);
   UpdateLastError();
   if (s == INVALID_SOCKET)
     return NULL;
-  if (paddr)
-    paddr->FromSockAddr(saddr);
+  if (out_addr)
+    SocketAddressFromSockAddrStorage(saddr, out_addr);
   Win32Socket* socket = new Win32Socket;
   if (0 == socket->Attach(s))
     return socket;

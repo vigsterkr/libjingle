@@ -32,6 +32,8 @@
 #include <string>
 #include <vector>
 
+#include "talk/base/constructormagic.h"
+
 namespace cricket {
 
 // Describes a session content. Individual content types inherit from
@@ -40,6 +42,7 @@ namespace cricket {
 class ContentDescription {
  public:
   virtual ~ContentDescription() {}
+  virtual ContentDescription* Copy() const = 0;
 };
 
 // Analagous to a <jingle><content> or <session><description>.
@@ -96,6 +99,7 @@ class SessionDescription {
                      const ContentGroups& groups) :
       contents_(contents),
       content_groups_(groups) {}
+  SessionDescription* Copy() const;
   const ContentInfo* GetContentByName(const std::string& name) const;
   const ContentInfo* FirstContentByType(const std::string& type) const;
   const ContentInfo* FirstContent() const;
@@ -115,6 +119,7 @@ class SessionDescription {
   }
   bool HasGroup(const std::string& name) const;
   void AddGroup(const ContentGroup& group) { content_groups_.push_back(group); }
+  // Remove the first group with the same semantics specified by |name|.
   void RemoveGroupByName(const std::string& name);
   const ContentGroup* GetGroupByName(const std::string& name) const;
 

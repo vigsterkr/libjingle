@@ -15,8 +15,8 @@
  *
  */
 
-#ifndef TALK_BASE_MD5_H__
-#define TALK_BASE_MD5_H__
+#ifndef TALK_BASE_MD5_H_
+#define TALK_BASE_MD5_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,4 +42,4 @@ void MD5Transform(uint32 buf[4], uint32 const in[16]);
 };
 #endif
 
-#endif // TALK_BASE_MD5_H__
+#endif // TALK_BASE_MD5_H_

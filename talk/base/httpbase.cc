@@ -862,7 +862,7 @@ HttpBase::ProcessHeaderComplete(bool chunked, size_t& data_size,
 HttpParser::ProcessResult
 HttpBase::ProcessData(const char* data, size_t len, size_t& read,
                       HttpError* error) {
-#ifdef ANDROID
+#ifndef ANDROID
   LOG_F(LS_VERBOSE) << "data: " << std::string(data, len);
 #endif // ANDROID
   if (ignore_data_ || !data_->document.get()) {

@@ -204,7 +204,6 @@ class PeerConnectionImplTest : public testing::Test {
     observer_.SetPeerConnectionInterface(pc_.get());
     EXPECT_EQ(PeerConnectionInterface::kNew, observer_.state_);
     pc_->StartIce(PeerConnectionInterface::kUseAll);
-    EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
   }
 
   void CreatePeerConnectionWithInvalidConfiguration() {
@@ -213,8 +212,8 @@ class PeerConnectionImplTest : public testing::Test {
     EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
     observer_.SetPeerConnectionInterface(pc_.get());
+    EXPECT_EQ(PeerConnectionInterface::kNew, observer_.state_);
     pc_->StartIce(PeerConnectionInterface::kUseAll);
-    EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
   }
 
   void CreatePeerConnectionWithDifferentConfigurations() {
@@ -382,19 +381,22 @@ TEST_F(PeerConnectionImplTest, RoapReceiveCloseWhileExpectingAnswer) {
   EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
 }
 
-TEST_F(PeerConnectionImplTest, InitiateCall) {
+TEST_F(PeerConnectionImplTest, Jsep_InitiateCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
-  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
-      pc_->CreateOffer(webrtc::MediaHints()));
-  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
-        pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
+  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
+  SessionDescriptionInterface* answer(
+      pc_->CreateAnswer(webrtc::MediaHints(), offer));
 
+  // SetLocalDescription takes ownership of offer.
   EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kOffer,
-                                       offer.get()));
+                                       offer));
+  EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+  // SetRemoteDescription takes ownership of answer.
   EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kAnswer,
-                                        answer.get()));
+                                        answer));
+  EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
 
   // Since we answer with the same session description as we offer we can
   // check if OnAddStream have been called.
@@ -405,15 +407,17 @@ TEST_F(PeerConnectionImplTest, Jsep_ReceiveCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
-  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
-      pc_->CreateOffer(webrtc::MediaHints()));
-  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
-        pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
-
+  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
+  SessionDescriptionInterface* answer(pc_->CreateAnswer(webrtc::MediaHints(),
+                                                        offer));
+  // SetRemoteDescription takes ownership of offer.
   EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kOffer,
-                                        offer.get()));
+                                        offer));
+  EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+  // SetLocalDescription takes ownership of answer.
   EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kAnswer,
-                                       answer.get()));
+                                       answer));
+  EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
 
   // Since we answer with the same session description as we offer we can
   // check if OnAddStream have been called.
@@ -427,10 +431,10 @@ TEST_F(PeerConnectionImplTest, Jsep_IceCandidates) {
   EXPECT_TRUE_WAIT(observer_.ice_complete_, kTimeout);
   EXPECT_FALSE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 
-  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
-        pc_->CreateOffer(webrtc::MediaHints()));
+  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
+  // SetRemoteDescription takes ownership of offer.
   EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kOffer,
-                                        offer.get()));
+                                        offer));
 
   EXPECT_TRUE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 }
