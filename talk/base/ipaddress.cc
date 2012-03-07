@@ -109,7 +109,8 @@ bool IPAddress::operator <(const IPAddress &other) const {
   // Comparing addresses of the same family.
   switch (family_) {
     case AF_INET: {
-      return NetworkToHost32(u_.ip4.s_addr) < ntohl(other.u_.ip4.s_addr);
+      return NetworkToHost32(u_.ip4.s_addr) <
+          NetworkToHost32(other.u_.ip4.s_addr);
     }
     case AF_INET6: {
       return memcmp(&u_.ip6.s6_addr, &other.u_.ip6.s6_addr, 16) < 0;
