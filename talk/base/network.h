@@ -162,10 +162,9 @@ class Network {
   // 'Best' currently means the first one added.
   // TODO: We should be preferring temporary addresses.
   // Returns an unset IP if this network has no active addresses.
-  const IPAddress& ip() const {
-    static IPAddress invalid;
+  IPAddress ip() const {
     if (ips_.size() == 0) {
-      return invalid;
+      return IPAddress();
     }
     return ips_.at(0);
   }
