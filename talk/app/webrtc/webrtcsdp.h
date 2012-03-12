@@ -48,6 +48,18 @@ class SessionDescription;
 
 namespace webrtc {
 
+class IceCandidateInterface;
+class JsepSessionDescription;
+class SessionDescriptionInterface;
+
+// Serializes the passed in SessionDescriptionInterface.
+// Serialize SessionDescription including candidates if
+// SessionDescriptionInterface has candidates.
+// desci - The SessionDescriptionInterface object to be serialized.
+// return - SDP string serialized from the arguments.
+std::string SdpSerialize(const SessionDescriptionInterface& desci);
+
+// TODO: Remove this function when ROAP doesn't need it.
 // Serializes the passed in SessionDescription and Candidates to a SDP string.
 // desc - The SessionDescription object to be serialized.
 // candidates - The Set of Candidate objects to be serialized.
@@ -55,16 +67,19 @@ namespace webrtc {
 std::string SdpSerialize(const cricket::SessionDescription& desc,
                          const std::vector<cricket::Candidate>& candidates);
 
-// Serializes the passed in SessionDescription to a SDP string.
-// desc - The SessionDescription object to be serialized.
-std::string SdpSerializeSessionDescription(
-    const cricket::SessionDescription& desc);
+// Serializes the passed in IceCandidateInterface to a SDP string.
+// candidate - The candidate to be serialized.
+std::string SdpSerializeCandidate(
+    const IceCandidateInterface& candidate);
 
-// Serializes the passed in Candidates to a SDP string.
-// candidates - The Set of Candidate objects to be serialized.
-std::string SdpSerializeCandidates(
-    const std::vector<cricket::Candidate>& candidates);
+// Deserializes the passed in SDP string to a SessionDescriptionInterface.
+// message - SDP string to be Deserialized.
+// jdesc - The JsepSessionDescription deserialized from the SDP string.
+// return - true on success, false on failure.
+bool SdpDeserialize(const std::string& message,
+                    JsepSessionDescription* jdesc);
 
+// TODO: Remove this function when ROAP doesn't need it.
 // Deserializes the passed in SDP string to a SessionDescription and Candidates.
 // message - SDP string to be Deserialized.
 // desc - The SessionDescription object deserialized from the SDP string.
@@ -74,14 +89,7 @@ bool SdpDeserialize(const std::string& message,
                     cricket::SessionDescription* desc,
                     std::vector<cricket::Candidate>* candidates);
 
-// Deserializes the passed in SDP string to a SessionDescription.
-// Candidates are ignored.
-// message - SDP string to be Deserialized.
-// desc - The SessionDescription object deserialized from the SDP string.
-// return - true on success, false on failure.
-bool SdpDeserializeSessionDescription(const std::string& message,
-                                      cricket::SessionDescription* desc);
-
+// TODO: Remove this once we switch to the IceCandidateInterface.
 // Deserializes the passed in SDP string to Candidates.
 // Only the candidates are parsed from the SDP string.
 // message - SDP string to be Deserialized.
@@ -89,11 +97,6 @@ bool SdpDeserializeSessionDescription(const std::string& message,
 // return - true on success, false on failure.
 bool SdpDeserializeCandidates(const std::string& message,
                               std::vector<cricket::Candidate>* candidates);
-
-// Formats a correct SDP string by reformatting a session description and
-// candidates.
-std::string SdpFormat(const std::string& desc, const std::string& candidates);
-
 }  // namespace webrtc
 
 #endif  // TALK_APP_WEBRTC_WEBRTCSDP_H_

@@ -35,6 +35,7 @@ if env.Bit('have_webrtc_voice') and env.Bit('have_webrtc_video'):
     name = 'peerconnection',
     srcs = [
       'test/fakeaudiocapturemodule.cc',
+      'test/fakeaudiocapturemodule_unittest.cc',
       'test/fakevideocapturemodule.cc',
       'test/fileframesource.cc',
       'test/i420framesource.cc',

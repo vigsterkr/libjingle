@@ -53,6 +53,7 @@ const buzz::StaticQName QN_JINGLE_DRAFT_GROUP = { NS_JINGLE_DRAFT, "group" };
 const buzz::StaticQName QN_JINGLE_DRAFT_GROUP_TYPE = { NS_EMPTY, "type" };
 const char JINGLE_CONTENT_MEDIA_AUDIO[] = "audio";
 const char JINGLE_CONTENT_MEDIA_VIDEO[] = "video";
+const char JINGLE_CONTENT_MEDIA_DATA[] = "data";
 const char JINGLE_ACTION_SESSION_INITIATE[] = "session-initiate";
 const char JINGLE_ACTION_SESSION_INFO[] = "session-info";
 const char JINGLE_ACTION_SESSION_ACCEPT[] = "session-accept";
@@ -99,6 +100,7 @@ const char LN_BANDWIDTH[] = "bandwidth";
 
 const char CN_AUDIO[] = "audio";
 const char CN_VIDEO[] = "video";
+const char CN_DATA[] = "data";
 const char CN_OTHER[] = "main";
 // other SDP related strings
 const char GROUP_TYPE_BUNDLE[] = "BUNDLE";

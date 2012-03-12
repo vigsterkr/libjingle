@@ -102,18 +102,24 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
     return renderer_->SetSize(width_, height_, 0) ? 0 : -1;
   }
   virtual int DeliverFrame(unsigned char* buffer, int buffer_size,
-                           unsigned int time_stamp) {
+                           uint32_t time_stamp, int64_t render_time) {
     talk_base::CritScope cs(&crit_);
     frame_rate_tracker_.Update(1);
     if (renderer_ == NULL) {
       return 0;
     }
     WebRtcVideoFrame video_frame;
-    // Convert 90K timestamp to ns timestamp.
-    int64 time_stamp_in_ns = (time_stamp / 90) *
-       talk_base::kNumNanosecsPerMillisec;
+    // Convert 90K rtp timestamp to ns timestamp.
+    int64 rtp_time_stamp_in_ns = (time_stamp / 90) *
+        talk_base::kNumNanosecsPerMillisec;
+    // Convert milisecond render time to ns timestamp.
+    int64 render_time_stamp_in_ns = render_time *
+        talk_base::kNumNanosecsPerMillisec;
+    // Send the rtp timestamp to renderer as the VideoFrame timestamp.
+    // and the render timestamp as the VideoFrame elapsed_time.
     video_frame.Attach(buffer, buffer_size, width_, height_,
-                       1, 1, 0, time_stamp_in_ns, 0);
+                       1, 1, render_time_stamp_in_ns,
+                       rtp_time_stamp_in_ns, 0);
 
 
     // Sanity check on decoded frame size.
@@ -1399,8 +1405,9 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
   // receive only channels, we connect all receiving channels
   // to our master send channel.
   int channel_id = -1;
-  if (engine_->vie()->base()->CreateChannel(channel_id, vie_channel_) != 0) {
-    LOG_RTCERR2(CreateChannel, channel_id, vie_channel_);
+  if (engine_->vie()->base()->CreateReceiveChannel(channel_id,
+                                                   vie_channel_) != 0) {
+    LOG_RTCERR2(CreateReceiveChannel, channel_id, vie_channel_);
     return false;
   }
 
@@ -1822,11 +1829,11 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
   // Enable denoising if needed.
   if (vie_capture_ != -1) {
     bool enable = (options_ & OPT_VIDEO_NOISE_REDUCTION) != 0;
-    if (engine()->vie()->image()->EnableDenoising(vie_capture_, enable) != 0) {
-      LOG_RTCERR2(EnableDenoising, vie_capture_, enable);
-      // The EnableDenoising may return -1 when the denoising is already
-      // enabled/disabled, which should not be treated as an error.
-    }
+    // The EnableDenoising may return -1 when the denoising is already
+    // enabled/disabled, which should not be treated as an error.
+    // TODO: Return false once EnableDenoising only
+    // reports the real failure.
+    engine()->vie()->image()->EnableDenoising(vie_capture_, enable);
   } else {
     LOG(LS_WARNING) << "SetOptions: Video Capture is not ready.";
   }

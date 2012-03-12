@@ -40,8 +40,10 @@ class ChannelManagerTest : public testing::Test {
 
   virtual void SetUp() {
     fme_ = new cricket::FakeMediaEngine();
+    fdme_ = new cricket::FakeDataEngine();
     fdm_ = new cricket::FakeDeviceManager();
-    cm_ = new cricket::ChannelManager(fme_, fdm_, talk_base::Thread::Current());
+    cm_ = new cricket::ChannelManager(
+        fme_, fdme_, fdm_, talk_base::Thread::Current());
     session_ = new cricket::FakeSession();
 
     std::vector<std::string> in_device_list, out_device_list, vid_device_list;
@@ -61,11 +63,13 @@ class ChannelManagerTest : public testing::Test {
     delete cm_;
     cm_ = NULL;
     fdm_ = NULL;
+    fdme_ = NULL;
     fme_ = NULL;
   }
 
   talk_base::Thread worker_;
   cricket::FakeMediaEngine* fme_;
+  cricket::FakeDataEngine* fdme_;
   cricket::FakeDeviceManager* fdm_;
   cricket::ChannelManager* cm_;
   cricket::FakeSession* session_;
@@ -113,8 +117,13 @@ TEST_F(ChannelManagerTest, CreateDestroyChannels) {
       cm_->CreateVideoChannel(session_, cricket::CN_VIDEO,
                               false, voice_channel);
   EXPECT_TRUE(video_channel != NULL);
+  cricket::DataChannel* data_channel =
+      cm_->CreateDataChannel(session_, cricket::CN_DATA,
+                             false);
+  EXPECT_TRUE(data_channel != NULL);
   cm_->DestroyVideoChannel(video_channel);
   cm_->DestroyVoiceChannel(voice_channel);
+  cm_->DestroyDataChannel(data_channel);
   cm_->Terminate();
 }
 
@@ -130,8 +139,13 @@ TEST_F(ChannelManagerTest, CreateDestroyChannelsOnThread) {
       cm_->CreateVideoChannel(session_, cricket::CN_VIDEO,
                               false, voice_channel);
   EXPECT_TRUE(video_channel != NULL);
+  cricket::DataChannel* data_channel =
+      cm_->CreateDataChannel(session_, cricket::CN_DATA,
+                             false);
+  EXPECT_TRUE(data_channel != NULL);
   cm_->DestroyVideoChannel(video_channel);
   cm_->DestroyVoiceChannel(voice_channel);
+  cm_->DestroyDataChannel(data_channel);
   cm_->Terminate();
 }
 
@@ -151,6 +165,10 @@ TEST_F(ChannelManagerTest, NoTransportChannelTest) {
       cm_->CreateVideoChannel(session_, cricket::CN_VIDEO,
                               false, voice_channel);
   EXPECT_TRUE(video_channel == NULL);
+  cricket::DataChannel* data_channel =
+      cm_->CreateDataChannel(session_, cricket::CN_DATA,
+                             false);
+  EXPECT_TRUE(data_channel == NULL);
   cm_->Terminate();
 }
 

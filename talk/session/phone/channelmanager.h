@@ -58,9 +58,16 @@ class ChannelManager : public talk_base::MessageHandler,
  public:
   // Creates the channel manager, and specifies the worker thread to use.
   explicit ChannelManager(talk_base::Thread* worker);
-  // For testing purposes. Allows the media engine and dev manager to be mocks.
-  // The ChannelManager takes ownership of these objects.
-  ChannelManager(MediaEngineInterface* me, DeviceManagerInterface* dm,
+  // For testing purposes. Allows the media engine and data media
+  // engine and dev manager to be mocks.  The ChannelManager takes
+  // ownership of these objects.
+  ChannelManager(MediaEngineInterface* me,
+                 DataEngineInterface* dme,
+                 DeviceManagerInterface* dm,
+                 talk_base::Thread* worker);
+  // Same as above, but gives an easier default DataEngine.
+  ChannelManager(MediaEngineInterface* me,
+                 DeviceManagerInterface* dm,
                  talk_base::Thread* worker);
   ~ChannelManager();
 
@@ -80,6 +87,7 @@ class ChannelManager : public talk_base::MessageHandler,
   // Can be called before starting the media engine.
   void GetSupportedAudioCodecs(std::vector<AudioCodec>* codecs) const;
   void GetSupportedVideoCodecs(std::vector<VideoCodec>* codecs) const;
+  void GetSupportedDataCodecs(std::vector<DataCodec>* codecs) const;
 
   // Indicates whether the media engine is started.
   bool initialized() const { return initialized_; }
@@ -102,6 +110,10 @@ class ChannelManager : public talk_base::MessageHandler,
       VoiceChannel* voice_channel);
   // Destroys a video channel created with the Create API.
   void DestroyVideoChannel(VideoChannel* video_channel);
+  DataChannel* CreateDataChannel(
+      BaseSession* session, const std::string& content_name, bool rtcp);
+  // Destroys a data channel created with the Create API.
+  void DestroyDataChannel(DataChannel* data_channel);
 
   // Creates a soundclip.
   Soundclip* CreateSoundclip();
@@ -167,9 +179,13 @@ class ChannelManager : public talk_base::MessageHandler,
  private:
   typedef std::vector<VoiceChannel*> VoiceChannels;
   typedef std::vector<VideoChannel*> VideoChannels;
+  typedef std::vector<DataChannel*> DataChannels;
   typedef std::vector<Soundclip*> Soundclips;
 
-  void Construct();
+  void Construct(MediaEngineInterface* me,
+                 DataEngineInterface* dme,
+                 DeviceManagerInterface* dm,
+                 talk_base::Thread* worker_thread);
   bool Send(uint32 id, talk_base::MessageData* pdata);
   void Terminate_w();
   VoiceChannel* CreateVoiceChannel_w(
@@ -179,6 +195,9 @@ class ChannelManager : public talk_base::MessageHandler,
       BaseSession* session, const std::string& content_name, bool rtcp,
       VoiceChannel* voice_channel);
   void DestroyVideoChannel_w(VideoChannel* video_channel);
+  DataChannel* CreateDataChannel_w(
+      BaseSession* session, const std::string& content_name, bool rtcp);
+  void DestroyDataChannel_w(DataChannel* data_channel);
   Soundclip* CreateSoundclip_w();
   void DestroySoundclip_w(Soundclip* soundclip);
   bool SetAudioOptions_w(int opts, const Device* in_dev,
@@ -209,6 +228,7 @@ class ChannelManager : public talk_base::MessageHandler,
   void OnMessage(talk_base::Message *message);
 
   talk_base::scoped_ptr<MediaEngineInterface> media_engine_;
+  talk_base::scoped_ptr<DataEngineInterface> data_media_engine_;
   talk_base::scoped_ptr<DeviceManagerInterface> device_manager_;
   bool initialized_;
   talk_base::Thread* main_thread_;
@@ -216,6 +236,7 @@ class ChannelManager : public talk_base::MessageHandler,
 
   VoiceChannels voice_channels_;
   VideoChannels video_channels_;
+  DataChannels data_channels_;
   Soundclips soundclips_;
 
   std::string audio_in_device_;

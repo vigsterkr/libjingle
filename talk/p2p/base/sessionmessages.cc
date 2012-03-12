@@ -588,18 +588,31 @@ buzz::XmlElement* WriteContentInfo(SignalingProtocol protocol,
   return elem;
 }
 
+bool IsWritable(SignalingProtocol protocol,
+                const ContentInfo& content,
+                const ContentParserMap& parsers) {
+  ContentParser* parser = GetContentParser(parsers, content.type);
+  if (parser == NULL) {
+    return false;
+  }
+
+  return parser->IsWritable(protocol, content.description);
+}
+
 bool WriteGingleContentInfos(const ContentInfos& contents,
                              const ContentParserMap& parsers,
                              XmlElements* elems,
                              WriteError* error) {
-  if (contents.size() == 1) {
+  if (contents.size() == 1 ||
+      (contents.size() == 2 &&
+       !IsWritable(PROTOCOL_GINGLE, contents.at(1), parsers))) {
     buzz::XmlElement* elem = WriteContentInfo(
         PROTOCOL_GINGLE, contents.front(), parsers, error);
     if (!elem)
       return false;
 
     elems->push_back(elem);
-  } else if (contents.size() == 2 &&
+  } else if (contents.size() >= 2 &&
              contents.at(0).type == NS_JINGLE_RTP &&
              contents.at(1).type == NS_JINGLE_RTP) {
      // Special-case audio + video contents so that they are "merged"

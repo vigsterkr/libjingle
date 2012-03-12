@@ -257,8 +257,8 @@ Conductor::OpenVideoCaptureDevice() {
 
   const size_t kMaxDeviceNameLength = 128;
   const size_t kMaxUniqueIdLength = 256;
-  uint8 device_name[kMaxDeviceNameLength];
-  uint8 unique_id[kMaxUniqueIdLength];
+  char device_name[kMaxDeviceNameLength];
+  char unique_id[kMaxUniqueIdLength];
 
   const size_t device_count = device_info->NumberOfDevices();
   for (size_t i = 0; i < device_count; ++i) {

@@ -25,51 +25,19 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/jsepicecandidate.h"
+#ifndef TALK_SESSION_PHONE_CONSTANTS_H_
+#define TALK_SESSION_PHONE_CONSTANTS_H_
 
-#include <vector>
+#include <string>
 
-#include "talk/app/webrtc/webrtcsdp.h"
+// This file contains constants related to media.
 
-namespace webrtc {
+namespace cricket {
 
-JsepIceCandidate::JsepIceCandidate(const std::string& label)
-    : label_(label) {
-}
+extern const int kVideoCodecClockrate;
+extern const int kDataCodecClockrate;
+extern const int kDataMaxBandwidth;
 
-JsepIceCandidate::JsepIceCandidate(const std::string& label,
-                                   const cricket::Candidate& candidate)
-    : label_(label),
-      candidate_(candidate) {
-}
+}  // namespace cricket
 
-JsepIceCandidate::~JsepIceCandidate() {
-
-}
-
-bool JsepIceCandidate::Initialize(const std::string& sdp) {
-  std::vector<cricket::Candidate> candidates;
-  if (!SdpDeserializeCandidates(sdp, &candidates) || candidates.size() != 1) {
-    return false;
-  }
-  candidate_ = candidates[0];
-  return true;
-}
-
-bool JsepIceCandidate::ToString(std::string* out) const {
-  if (!out)
-    return false;
-  *out = SdpSerializeCandidate(*this);
-  return !out->empty();
-}
-
-
-JsepCandidateColletion::~JsepCandidateColletion() {
-  for (std::vector<JsepIceCandidate*>::iterator it = candidates_.begin();
-       it != candidates_.end(); ++it) {
-    delete *it;
-  }
-}
-
-
-}  // namespace webrtc
+#endif  // TALK_SESSION_PHONE_CONSTANTS_H_

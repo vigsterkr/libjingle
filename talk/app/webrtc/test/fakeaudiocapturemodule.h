@@ -36,6 +36,7 @@
 
 #include "talk/base/basictypes.h"
 #include "talk/base/messagehandler.h"
+#include "talk/base/scoped_ref_ptr.h"
 
 #ifdef WEBRTC_RELATIVE_PATH
 #include "common_types.h"
@@ -55,10 +56,16 @@ class FakeAudioCaptureModule
     : public webrtc::AudioDeviceModule,
       public talk_base::MessageHandler {
  public:
+  // Constants here are derived by running VoE using a real ADM.
+  // The constants correspond to 10ms of mono audio at 44kHz.
+  static const uint32_t kNumberSamples = 440;
+  static const int kNumberBytesPerSample = 2;
+
   // Creates a FakeAudioCaptureModule or returns NULL on failure.
   // |process_thread| is used to push and pull audio frames to and from the
   // returned instance. Note: ownership of |process_thread| is not handed over.
-  static FakeAudioCaptureModule* Create(talk_base::Thread* process_thread);
+  static talk_base::scoped_refptr<FakeAudioCaptureModule> Create(
+      talk_base::Thread* process_thread);
 
   // Returns the number of frames that have been successfully pulled by the
   // instance. Note that correctly detecting success can only be done if the
@@ -201,11 +208,6 @@ class FakeAudioCaptureModule
   explicit FakeAudioCaptureModule(talk_base::Thread* process_thread);
 
  private:
-  // Constants here are derived by running VoE using a real ADM.
-  // The constants correspond to 10ms of mono audio at 44kHz.
-  static const uint32_t kNumberSamples = 440;
-  static const int kNumberBytesPerSample = 2;
-
   bool Initialize();
   // SetBuffer() sets all samples in send_buffer_ to |value|.
   void SetSendBuffer(int value);

@@ -51,8 +51,6 @@ void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
 
 class SignalingMessageReceiver {
  public:
-  virtual void ReceiveMessage(const std::string& msg) = 0;
-
   virtual int num_rendered_frames() = 0;
 
   // Makes it possible for the remote side to decide when to start capturing.
@@ -65,23 +63,37 @@ class SignalingMessageReceiver {
   virtual ~SignalingMessageReceiver() {}
 };
 
-class PeerConnectionP2PTestClient
-    : public webrtc::PeerConnectionObserver,
-      public SignalingMessageReceiver {
+class RoapMessageReceiver : public SignalingMessageReceiver {
  public:
-  static PeerConnectionP2PTestClient* CreateClient(int id) {
-    PeerConnectionP2PTestClient* client = new PeerConnectionP2PTestClient(id);
-    if (!client->Init()) {
-      delete client;
-      return NULL;
-    }
-    return client;
-  }
+  virtual void ReceiveMessage(const std::string& msg)  = 0;
 
-  ~PeerConnectionP2PTestClient() {
-  }
+ protected:
+  RoapMessageReceiver() {}
+  virtual ~RoapMessageReceiver() {}
+};
 
-  void StartSession() {
+class JsepMessageReceiver : public SignalingMessageReceiver {
+ public:
+  virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
+                                 std::string& msg) = 0;
+  virtual void ReceiveIceMessage(const std::string& label,
+                                 const std::string& msg) = 0;
+
+ protected:
+  JsepMessageReceiver() {}
+  virtual ~JsepMessageReceiver() {}
+};
+
+template <typename MessageReceiver>
+class PeerConnectionTestClientBase
+    : public webrtc::PeerConnectionObserver,
+      public MessageReceiver {
+ public:
+  ~PeerConnectionTestClientBase() {}
+
+  virtual void StartSession()  = 0;
+
+  void AddMediaStream() {
     if (video_track_.get() != NULL) {
       // Tracks have already been set up.
       return;
@@ -127,7 +139,7 @@ class PeerConnectionP2PTestClient
   }
 
   void set_signaling_message_receiver(
-      SignalingMessageReceiver* signaling_message_receiver) {
+      MessageReceiver* signaling_message_receiver) {
     signaling_message_receiver_ = signaling_message_receiver;
   }
 
@@ -138,16 +150,10 @@ class PeerConnectionP2PTestClient
   bool VideoFramesReceivedCheck(int number_of_frames) {
     if (number_of_frames > signaling_message_receiver_->num_rendered_frames()) {
       return false;
-    }
-    else {
+    } else {
       EXPECT_LT(number_of_frames, fake_video_capture_module_->sent_frames());
     }
     return true;
-  }
-
-  // SignalingMessageReceiver callback.
-  virtual void ReceiveMessage(const std::string& msg) {
-    peer_connection_->ProcessSignalingMessage(msg);
   }
 
   virtual int num_rendered_frames() {
@@ -160,13 +166,7 @@ class PeerConnectionP2PTestClient
   // PeerConnectionObserver callbacks.
   virtual void OnError() {}
   virtual void OnMessage(const std::string&) {}
-  virtual void OnSignalingMessage(const std::string& msg)  {
-    if (signaling_message_receiver_ == NULL) {
-      // Remote party may be deleted.
-      return;
-    }
-    signaling_message_receiver_->ReceiveMessage(msg);
-  }
+  virtual void OnSignalingMessage(const std::string& /*msg*/) {}
   virtual void OnStateChange(StateType /*state_changed*/) {}
   virtual void OnAddStream(webrtc::MediaStreamInterface* media_stream) {
     std::list<webrtc::VideoTrackInterface*> video_tracks;
@@ -193,23 +193,18 @@ class PeerConnectionP2PTestClient
       return;
     }
   }
-  virtual void OnRemoveStream(webrtc::MediaStreamInterface* /*media_stream*/) {
-  }
-  virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    LOG(INFO) << "OnIceCandidate " << candidate->label();
-  }
-  virtual void OnIceComplete() {
-    LOG(INFO) << "OnIceComplete";
-  }
+  virtual void OnRemoveStream(webrtc::MediaStreamInterface* /*media_stream*/) {}
+  virtual void OnIceCandidate(
+      const webrtc::IceCandidateInterface* /*candidate*/) {}
+  virtual void OnIceComplete() {}
 
- private:
-  explicit PeerConnectionP2PTestClient(int id)
+ protected:
+  explicit PeerConnectionTestClientBase(int id)
       : id_(id),
         fake_video_capture_module_(NULL),
         fake_video_renderer_(NULL),
         signaling_message_receiver_(NULL) {
   }
-
   bool Init() {
     EXPECT_TRUE(peer_connection_.get() == NULL);
     EXPECT_TRUE(peer_connection_factory_.get() == NULL);
@@ -231,11 +226,22 @@ class PeerConnectionP2PTestClient
     }
 
     const std::string server_configuration = "STUN stun.l.google.com:19302";
-    peer_connection_ = peer_connection_factory_->CreateRoapPeerConnection(
-        server_configuration, this);
+    peer_connection_ = CreatePeerConnection(server_configuration);
     return peer_connection_.get() != NULL;
   }
+  virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
+      CreatePeerConnection(const std::string config) = 0;
+  MessageReceiver* signaling_message_receiver() {
+    return signaling_message_receiver_;
+  }
+  webrtc::PeerConnectionFactoryInterface* peer_connection_factory() {
+    return peer_connection_factory_.get();
+  }
+  webrtc::PeerConnectionInterface* peer_connection() {
+    return peer_connection_.get();
+  }
 
+ private:
   void GenerateRecordingFileName(int track, std::string* file_name) {
     if (file_name == NULL) {
       return;
@@ -267,7 +273,7 @@ class PeerConnectionP2PTestClient
   // with it when this class is deleted.
   talk_base::scoped_refptr<webrtc::LocalVideoTrackInterface> video_track_;
   // Needed to keep track of number of frames send.
-  FakeAudioCaptureModule* fake_audio_capture_module_;
+  talk_base::scoped_refptr<FakeAudioCaptureModule> fake_audio_capture_module_;
   FakeVideoCaptureModule* fake_video_capture_module_;
   // Ensures that fake_video_renderer_ is available as long as this class
   // exists. It also ensures destruction of the memory associated with it when
@@ -278,14 +284,147 @@ class PeerConnectionP2PTestClient
   cricket::FakeVideoRenderer* fake_video_renderer_;
 
   // For remote peer communication.
-  SignalingMessageReceiver* signaling_message_receiver_;
+  MessageReceiver* signaling_message_receiver_;
 };
 
+class RoapTestClient
+    : public PeerConnectionTestClientBase<RoapMessageReceiver> {
+ public:
+  static RoapTestClient* CreateClient(int id) {
+    RoapTestClient* client(new RoapTestClient(id));
+    if (!client->Init()) {
+      delete client;
+      return NULL;
+    }
+    return client;
+  }
+
+  ~RoapTestClient() {}
+
+  // Roap implementation don't need to do anything to start.
+  virtual void StartSession() {}
+
+  // Implements PeerConnectionObserver functions needed by ROAP.
+  virtual void OnSignalingMessage(const std::string& msg) {
+    if (signaling_message_receiver() == NULL) {
+      // Remote party may be deleted.
+      return;
+    }
+    signaling_message_receiver()->ReceiveMessage(msg);
+  }
+
+  // SignalingMessageReceiver callback.
+  virtual void ReceiveMessage(const std::string& msg) {
+    peer_connection()->ProcessSignalingMessage(msg);
+  }
+
+ protected:
+  virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
+      CreatePeerConnection(const std::string config) {
+    return peer_connection_factory()->CreateRoapPeerConnection(config, this);
+  }
+
+ private:
+  explicit RoapTestClient(int id)
+      : PeerConnectionTestClientBase<RoapMessageReceiver>(id) {}
+};
+
+class JsepTestClient
+    : public PeerConnectionTestClientBase<JsepMessageReceiver> {
+ public:
+  static JsepTestClient* CreateClient(int id) {
+    JsepTestClient* client(new JsepTestClient(id));
+    if (!client->Init()) {
+      delete client;
+      return NULL;
+    }
+    return client;
+  }
+  ~JsepTestClient() {}
+
+  virtual void StartSession() {
+    talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> offer(
+        peer_connection()->CreateOffer(webrtc::MediaHints()));
+    std::string sdp;
+    EXPECT_TRUE(offer->ToString(&sdp));
+    EXPECT_TRUE(peer_connection()->SetLocalDescription(
+        webrtc::PeerConnectionInterface::kOffer, offer.release()));
+    signaling_message_receiver()->ReceiveSdpMessage(
+        webrtc::PeerConnectionInterface::kOffer, sdp);
+    peer_connection()->StartIce(webrtc::PeerConnectionInterface::kUseAll);
+  }
+  // JsepMessageReceiver callback.
+  virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
+                                 std::string& msg) {
+    if (action == webrtc::PeerConnectionInterface::kOffer) {
+      HandleIncomingOffer(msg);
+    } else {
+      HandleIncomingAnswer(msg);
+    }
+  }
+  // JsepMessageReceiver callback.
+  virtual void ReceiveIceMessage(const std::string& label,
+                                 const std::string& msg) {
+    talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
+        webrtc::CreateIceCandidate(label, msg));
+    EXPECT_TRUE(peer_connection()->ProcessIceMessage(candidate.get()));
+  }
+  // Implements PeerConnectionObserver functions needed by Jsep.
+  virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
+    LOG(INFO) << "OnIceCandidate " << candidate->label();
+    std::string ice_sdp;
+    EXPECT_TRUE(candidate->ToString(&ice_sdp));
+    if (signaling_message_receiver() == NULL) {
+      // Remote party may be deleted.
+      return;
+    }
+    signaling_message_receiver()->ReceiveIceMessage(candidate->label(),
+                                                    ice_sdp);
+  }
+  virtual void OnIceComplete() {
+    LOG(INFO) << "OnIceComplete";
+  }
+
+ protected:
+  explicit JsepTestClient(int id)
+    : PeerConnectionTestClientBase<JsepMessageReceiver>(id) {}
+
+  virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
+      CreatePeerConnection(const std::string config) {
+    return peer_connection_factory()->CreatePeerConnection(config, this);
+  }
+
+  void HandleIncomingOffer(const std::string& msg) {
+    talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> desc(
+           webrtc::CreateSessionDescription(msg));
+    talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> answer(
+        peer_connection()->CreateAnswer(webrtc::MediaHints(), desc.get()));
+    std::string sdp;
+    EXPECT_TRUE(answer->ToString(&sdp));
+    EXPECT_TRUE(peer_connection()->SetRemoteDescription(
+        webrtc::PeerConnectionInterface::kOffer,
+        desc.release()));
+    EXPECT_TRUE(peer_connection()->SetLocalDescription(
+        webrtc::PeerConnectionInterface::kAnswer,
+        answer.release()));
+    if (signaling_message_receiver()) {
+      signaling_message_receiver()->ReceiveSdpMessage(
+          webrtc::PeerConnectionInterface::kAnswer, sdp);
+    }
+    peer_connection()->StartIce(webrtc::PeerConnectionInterface::kUseAll);
+  }
+
+  void HandleIncomingAnswer(const std::string& msg) {
+    talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> desc(
+           webrtc::CreateSessionDescription(msg));
+    EXPECT_TRUE(peer_connection()->SetRemoteDescription(
+        webrtc::PeerConnectionInterface::kAnswer, desc.release()));
+  }
+};
+
+template <typename SignalingClass>
 class P2PTestConductor : public testing::Test {
  public:
-  virtual void SetUp() {
-    EXPECT_TRUE(Init());
-  }
   // Return true if session no longer is pending. I.e. if the session is active
   // or failed.
   bool ActivationNotPending() {
@@ -325,12 +464,25 @@ class P2PTestConductor : public testing::Test {
     }
   }
 
+  bool CreateTestClients() {
+    initiating_client_.reset(SignalingClass::CreateClient(0));
+    receiving_client_.reset(SignalingClass::CreateClient(1));
+    if ((initiating_client_.get() == NULL) ||
+        (receiving_client_.get() == NULL)) {
+      return false;
+    }
+    initiating_client_->set_signaling_message_receiver(receiving_client_.get());
+    receiving_client_->set_signaling_message_receiver(initiating_client_.get());
+    return true;
+  }
+
   bool StartSession() {
     if (!IsInitialized()) {
       return false;
     }
+    initiating_client_->AddMediaStream();
+    receiving_client_->AddMediaStream();
     initiating_client_->StartSession();
-    receiving_client_->StartSession();
     return true;
   }
 
@@ -343,38 +495,41 @@ class P2PTestConductor : public testing::Test {
     return true;
   }
 
- private:
-  bool Init() {
-    initiating_client_.reset(PeerConnectionP2PTestClient::CreateClient(0));
-    receiving_client_.reset(PeerConnectionP2PTestClient::CreateClient(1));
-    if ((initiating_client_.get() == NULL) ||
-        (receiving_client_.get() == NULL)) {
-      return false;
-    }
-    initiating_client_->set_signaling_message_receiver(receiving_client_.get());
-    receiving_client_->set_signaling_message_receiver(initiating_client_.get());
-    return true;
+  // This test sets up a call between two parties. Both parties send static
+  // frames to each other. Once the test is finished the number of sent frames
+  // is compared to the number of received frames.
+  void LocalP2PTest() {
+    ASSERT_TRUE(CreateTestClients());
+    EXPECT_TRUE(StartSession());
+    const int kMaxWaitForActivationMs = 5000;
+    EXPECT_TRUE_WAIT(ActivationNotPending(), kMaxWaitForActivationMs);
+    EXPECT_TRUE(SessionActive());
+
+    const int kEndFrameCount = 10;
+    const int kMaxWaitForFramesMs = 5000;
+    EXPECT_TRUE_WAIT(FramesNotPending(kEndFrameCount), kMaxWaitForFramesMs);
+    EXPECT_TRUE(StopSession());
   }
+
+ private:
   bool IsInitialized() const {
     return (initiating_client_.get() != NULL) &&
         (receiving_client_.get() != NULL);
   }
 
-  talk_base::scoped_ptr<PeerConnectionP2PTestClient> initiating_client_;
-  talk_base::scoped_ptr<PeerConnectionP2PTestClient> receiving_client_;
+  talk_base::scoped_ptr<SignalingClass> initiating_client_;
+  talk_base::scoped_ptr<SignalingClass> receiving_client_;
 };
 
-// This test sets up a call between two parties. Both parties send static frames
-// to each other. Once the test is finished the number of sent frames is
-// compared to the number of received frames.
-TEST_F(P2PTestConductor, LocalP2PTest) {
-  EXPECT_TRUE(StartSession());
-  const int kMaxWaitForActivationMs = 5000;
-  EXPECT_TRUE_WAIT(ActivationNotPending(), kMaxWaitForActivationMs);
-  EXPECT_TRUE(SessionActive());
+typedef P2PTestConductor<RoapTestClient> RoapPeerConnectionP2PTestClient;
+typedef P2PTestConductor<JsepTestClient> JsepPeerConnectionP2PTestClient;
 
-  const int kEndFrameCount = 10;
-  const int kMaxWaitForFramesMs = 5000;
-  EXPECT_TRUE_WAIT(FramesNotPending(kEndFrameCount), kMaxWaitForFramesMs);
-  EXPECT_TRUE(StopSession());
+// This test sets up a ROAP call between two parties
+TEST_F(RoapPeerConnectionP2PTestClient, LocalP2PTest) {
+  LocalP2PTest();
+}
+
+// This test sets up a Jsep call between two parties.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTest) {
+  LocalP2PTest();
 }

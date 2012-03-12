@@ -27,7 +27,11 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 
 #include "talk/app/webrtc/webrtcsdp.h"
+#include "talk/base/stringencode.h"
 #include "talk/session/phone/mediasession.h"
+
+using talk_base::scoped_ptr;
+using cricket::SessionDescription;
 
 namespace webrtc {
 
@@ -36,34 +40,51 @@ JsepSessionDescription::JsepSessionDescription() {
 
 JsepSessionDescription::JsepSessionDescription(
     const cricket::SessionDescription* description) {
-  description_.reset(description->Copy());
+  SetDescription(description->Copy());
 }
 
-JsepSessionDescription::~JsepSessionDescription() {
-}
+JsepSessionDescription::~JsepSessionDescription() {}
 
 void JsepSessionDescription::SetDescription(
     cricket::SessionDescription* description) {
   description_.reset(description);
+  candidate_collection_.resize(number_of_mediasections());
 }
 
 bool JsepSessionDescription::Initialize(const std::string& sdp) {
-  if (description_.get() != NULL)
-    return false;
-  description_.reset(new cricket::SessionDescription());
-  return SdpDeserialize(sdp, description_.get(), &candidates_);
+  return SdpDeserialize(sdp, this);
 }
 
-void JsepSessionDescription::AddCandidate(
+bool JsepSessionDescription::AddCandidate(
     const IceCandidateInterface* candidate) {
-  if (candidate)
-    candidates_.push_back(candidate->candidate());
+  if (!candidate)
+    return false;
+  size_t mediasection_index;
+  if (!talk_base::FromString<size_t>(candidate->label(), &mediasection_index))
+    return false;
+  if (mediasection_index >= number_of_mediasections())
+    return false;
+
+  candidate_collection_[mediasection_index].add(
+       new JsepIceCandidate(candidate->label(), candidate->candidate()));
+  return true;
+}
+
+size_t JsepSessionDescription::number_of_mediasections() const {
+  if (!description_.get())
+    return 0;
+  return description_->contents().size();
+}
+
+const IceCandidateColletion* JsepSessionDescription::candidates(
+    size_t mediasection_index) const {
+  return &candidate_collection_[mediasection_index];
 }
 
 bool JsepSessionDescription::ToString(std::string* out) const {
   if (!description_.get() || !out)
     return false;
-  *out = SdpSerialize(*description_.get(), candidates_);
+  *out = SdpSerialize(*this);
   return !out->empty();
 }
 

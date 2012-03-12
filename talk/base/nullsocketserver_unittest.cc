@@ -56,7 +56,9 @@ TEST_F(NullSocketServerTest, WaitAndSet) {
 TEST_F(NullSocketServerTest, TestWait) {
   uint32 start = Time();
   ss_.Wait(200, true);
-  EXPECT_GE(TimeSince(start), 200);
+  // The actual wait time is dependent on the resolution of the timer used by
+  // the Event class. Allow for the event to signal ~20ms early.
+  EXPECT_GE(TimeSince(start), 180);
 }
 
 }  // namespace talk_base

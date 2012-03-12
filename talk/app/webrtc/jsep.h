@@ -60,10 +60,13 @@ class MediaHints {
 };
 
 // Class representation of an ICE candidate.
+// An instance of this interface is supposed to be owned by one class at
+// a time and is therefore not expected to be thread safe.
 class IceCandidateInterface {
  public:
   virtual ~IceCandidateInterface() {}
   // The m= line this candidate is associated with.
+  // This is an integer index value stored as a string.
   virtual std::string label() const = 0;
   virtual const cricket::Candidate& candidate() const = 0;
   // Creates a SDP-ized form of this candidate.
@@ -75,14 +78,33 @@ class IceCandidateInterface {
 IceCandidateInterface* CreateIceCandidate(const std::string& label,
                                           const std::string& sdp);
 
+// This class represents a collection of candidates for a specific m-line.
+// This class is used in SessionDescriptionInterface to represent all known
+// candidates for a certain m-line.
+class IceCandidateColletion {
+ public:
+  virtual ~IceCandidateColletion() {}
+  virtual size_t count() const = 0;
+  virtual const IceCandidateInterface* at(size_t index) const = 0;
+};
+
 // Class representation of a Session description.
+// An instance of this interface is supposed to be owned by one class at
+// a time and is therefore not expected to be thread safe.
 class SessionDescriptionInterface {
  public:
   virtual ~SessionDescriptionInterface() {}
   virtual const cricket::SessionDescription* description() const = 0;
   // Adds the specified candidate to the description.
   // Ownership is not transferred.
-  virtual void AddCandidate(const IceCandidateInterface* candidate) = 0;
+  // Returns false if the session description does not have a media section that
+  // corresponds to the |candidate| label.
+  virtual bool AddCandidate(const IceCandidateInterface* candidate) = 0;
+  // Returns the number of m- lines in the session description.
+  virtual size_t number_of_mediasections() const = 0;
+  // Returns a collection of all candidates that belong to a certain m-line
+  virtual const IceCandidateColletion* candidates(
+      size_t mediasection_index) const = 0;
   // Serializes the description to SDP.
   virtual bool ToString(std::string* out) const = 0;
 };

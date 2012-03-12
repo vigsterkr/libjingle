@@ -508,6 +508,75 @@ class FakeSoundclipMedia : public SoundclipMedia {
   }
 };
 
+class FakeDataMediaChannel : public RtpHelper<DataMediaChannel> {
+ public:
+  explicit FakeDataMediaChannel(void* unused)
+      : muted_(false) {
+  }
+  ~FakeDataMediaChannel() {}
+  const std::vector<DataCodec>& recv_codecs() const { return recv_codecs_; }
+  const std::vector<DataCodec>& send_codecs() const { return send_codecs_; }
+  const std::vector<DataCodec>& codecs() const { return send_codecs(); }
+  bool muted() const { return muted_; }
+
+  virtual bool SetRecvCodecs(const std::vector<DataCodec> &codecs) {
+    if (fail_set_recv_codecs()) {
+      // Fake the failure in SetRecvCodecs.
+      return false;
+    }
+    recv_codecs_= codecs;
+    return true;
+  }
+  virtual bool SetSendCodecs(const std::vector<DataCodec> &codecs) {
+    if (fail_set_send_codecs()) {
+      // Fake the failure in SetSendCodecs.
+      return false;
+    }
+    send_codecs_= codecs;
+    return true;
+  }
+  virtual bool SetSend(bool send) {
+    return set_sending(send);
+  }
+  virtual bool SetReceive(bool receive) {
+    set_playout(receive);
+    return true;
+  }
+
+  virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
+  virtual bool Mute(bool on) {
+    muted_ = on;
+    return true;
+  }
+  virtual bool AddRecvStream(const StreamParams& sp) {
+    if (!RtpHelper<DataMediaChannel>::AddRecvStream(sp))
+      return false;
+    return true;
+  }
+  virtual bool RemoveRecvStream(uint32 ssrc) {
+    if (!RtpHelper<DataMediaChannel>::RemoveRecvStream(ssrc))
+      return false;
+    return true;
+  }
+
+  virtual bool SendData(
+      const SendDataParams& params, const char* data, int len) {
+    last_sent_data_params_ = params;
+    last_sent_data_ = std::string(data, len);
+    return true;
+  }
+
+  SendDataParams last_sent_data_params() { return last_sent_data_params_; }
+  std::string last_sent_data() { return last_sent_data_; }
+
+ private:
+  std::vector<DataCodec> recv_codecs_;
+  std::vector<DataCodec> send_codecs_;
+  bool muted_;
+  SendDataParams last_sent_data_params_;
+  std::string last_sent_data_;
+};
+
 // A base class for all of the shared parts between FakeVoiceEngine
 // and FakeVideoEngine.
 class FakeBaseEngine {
@@ -828,6 +897,24 @@ inline FakeVideoMediaChannel::~FakeVideoMediaChannel() {
     engine_->UnregisterChannel(this);
   }
 }
+
+class FakeDataEngine : public DataEngineInterface {
+ public:
+  virtual DataMediaChannel* CreateChannel() {
+    return new FakeDataMediaChannel(NULL);
+  }
+
+  virtual void SetDataCodecs(const std::vector<DataCodec>& data_codecs) {
+    data_codecs_ = data_codecs;
+  }
+
+  virtual const std::vector<DataCodec>& data_codecs() {
+    return data_codecs_;
+  }
+
+ private:
+  std::vector<DataCodec> data_codecs_;
+};
 
 }  // namespace cricket
 

@@ -42,12 +42,13 @@
 
 namespace talk_base {
 class Buffer;
+class Timing;
 }
 
 namespace cricket {
 
+struct RtpHeader;
 class ScreencastId;
-struct StreamParams;
 struct VideoFormat;
 class VideoRenderer;
 
@@ -294,6 +295,31 @@ struct VideoReceiverInfo {
   int framerate_output;
 };
 
+struct DataSenderInfo {
+  DataSenderInfo()
+      : ssrc(0),
+        bytes_sent(0),
+        packets_sent(0) {
+  }
+
+  uint32 ssrc;
+  std::string codec_name;
+  int bytes_sent;
+  int packets_sent;
+};
+
+struct DataReceiverInfo {
+  DataReceiverInfo()
+      : ssrc(0),
+        bytes_rcvd(0),
+        packets_rcvd(0) {
+  }
+
+  uint32 ssrc;
+  int bytes_rcvd;
+  int packets_rcvd;
+};
+
 struct BandwidthEstimationInfo {
   BandwidthEstimationInfo()
       : available_send_bandwidth(0),
@@ -332,6 +358,15 @@ struct VideoMediaInfo {
   std::vector<VideoSenderInfo> senders;
   std::vector<VideoReceiverInfo> receivers;
   std::vector<BandwidthEstimationInfo> bw_estimations;
+};
+
+struct DataMediaInfo {
+  void Clear() {
+    senders.clear();
+    receivers.clear();
+  }
+  std::vector<DataSenderInfo> senders;
+  std::vector<DataReceiverInfo> receivers;
 };
 
 class VoiceMediaChannel : public MediaChannel {
@@ -442,6 +477,102 @@ class VideoMediaChannel : public MediaChannel {
 
  protected:
   VideoRenderer *renderer_;
+};
+
+// Implemented in datamediaengine.cc.
+// TODO: Should we make this abstract and make a
+// DataMediaChannelImpl in datamediaengine.cc to avoid dependencies?
+class DataMediaChannel : public MediaChannel {
+ public:
+  struct SendDataParams {
+    uint32 ssrc;
+  };
+
+  struct ReceiveDataParams {
+    uint32 ssrc;
+    int seq_num;
+    int timestamp;
+  };
+
+  class Receiver {
+   public:
+    virtual void ReceiveData(
+        const ReceiveDataParams& params, const char* data, size_t len) = 0;
+  };
+
+  enum Error {
+    ERROR_NONE = 0,                       // No error.
+    ERROR_OTHER,                          // Other errors.
+    ERROR_SEND_SRTP_ERROR = 200,          // Generic SRTP failure.
+    ERROR_SEND_SRTP_AUTH_FAILED,          // Failed to authenticate packets.
+    ERROR_RECV_SRTP_ERROR,                // Generic SRTP failure.
+    ERROR_RECV_SRTP_AUTH_FAILED,          // Failed to authenticate packets.
+    ERROR_RECV_SRTP_REPLAY,               // Packet replay detected.
+  };
+
+  // Timing* Used for the RtpClock
+  explicit DataMediaChannel(talk_base::Timing* timing);
+  // Sets Timing == NULL, so you'll need to call set_timer() before
+  // using it.  This is needed by FakeMediaEngine.
+  DataMediaChannel();
+  virtual ~DataMediaChannel();
+
+  void set_timing(talk_base::Timing* timing) {
+    timing_ = timing;
+  }
+
+  virtual bool SetOptions(int options) { return false; }
+  virtual int GetOptions() const { return 0; }
+  virtual bool SetSendBandwidth(bool autobw, int bps);
+  virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs);
+  virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs);
+  virtual bool SetRecvRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) { return true; }
+  virtual bool SetSendRtpHeaderExtensions(
+      const std::vector<RtpHeaderExtension>& extensions) { return true; }
+  virtual bool AddSendStream(const StreamParams& sp);
+  virtual bool RemoveSendStream(uint32 ssrc);
+  virtual bool AddRecvStream(const StreamParams& sp);
+  virtual bool RemoveRecvStream(uint32 ssrc);
+  virtual bool Mute(bool on) { return false; }
+  // TODO: Implement this.
+  virtual bool GetStats(DataMediaInfo* info) { return true; }
+
+  virtual bool SetSend(bool send) {
+    sending_ = send;
+    return true;
+  }
+  virtual bool SetReceive(bool receive) {
+    receiving_ = receive;
+    return true;
+  }
+  virtual void OnPacketReceived(talk_base::Buffer* packet);
+  virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
+
+  // TODO: This should be per-stream, not per-ssrc.
+  // And we should probably allow more than one per stream.
+  virtual bool SetReceiver(uint32 ssrc, Receiver* receiver);
+  virtual bool SendData(
+      const SendDataParams& params, const char* data, int len);
+  // Signal errors from MediaChannel.  Arguments are:
+  //     ssrc(uint32), and error(DataMediaChannel::Error).
+  sigslot::signal2<uint32, DataMediaChannel::Error> SignalMediaError;
+
+ private:
+  class RtpClock;
+
+  int max_bps_;
+  bool sending_;
+  bool receiving_;
+  talk_base::Timing* timing_;
+  std::vector<DataCodec> send_codecs_;
+  std::vector<DataCodec> recv_codecs_;
+  std::vector<StreamParams> send_streams_;
+  std::vector<StreamParams> recv_streams_;
+  std::map<uint32, RtpClock*> rtp_clock_by_send_ssrc_;
+  // TODO: This should be per-stream, not per-ssrc.
+  // And we should probably allow more than one per stream.
+  std::map<uint32, Receiver*> receiver_by_recv_ssrc_;
 };
 
 }  // namespace cricket

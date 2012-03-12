@@ -68,6 +68,7 @@ extern const buzz::StaticQName QN_JINGLE_DRAFT_GROUP;
 extern const buzz::StaticQName QN_JINGLE_DRAFT_GROUP_TYPE;
 extern const char JINGLE_CONTENT_MEDIA_AUDIO[];
 extern const char JINGLE_CONTENT_MEDIA_VIDEO[];
+extern const char JINGLE_CONTENT_MEDIA_DATA[];
 extern const char JINGLE_ACTION_SESSION_INITIATE[];
 extern const char JINGLE_ACTION_SESSION_INFO[];
 extern const char JINGLE_ACTION_SESSION_ACCEPT[];
@@ -117,6 +118,7 @@ extern const char LN_BANDWIDTH[];
 // these values being the same as the ones received.
 extern const char CN_AUDIO[];
 extern const char CN_VIDEO[];
+extern const char CN_DATA[];
 extern const char CN_OTHER[];
 // other SDP related strings
 // GN stands for group name

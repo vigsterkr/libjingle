@@ -90,11 +90,13 @@ P2PTransportChannel* TransportChannelProxy::GetP2PChannel() {
 void TransportChannelProxy::OnReadableState(TransportChannel* channel) {
   ASSERT(channel == impl_);
   set_readable(impl_->readable());
+  // Note: SignalReadableState fired by set_readable.
 }
 
 void TransportChannelProxy::OnWritableState(TransportChannel* channel) {
   ASSERT(channel == impl_);
   set_writable(impl_->writable());
+  // Note: SignalWritableState fired by set_writable.
 }
 
 void TransportChannelProxy::OnReadPacket(TransportChannel* channel,

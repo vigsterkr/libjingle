@@ -68,7 +68,7 @@ FakeAudioCaptureModule::FakeAudioCaptureModule(
       frames_received_(0) {
 }
 
-FakeAudioCaptureModule* FakeAudioCaptureModule::Create(
+talk_base::scoped_refptr<FakeAudioCaptureModule> FakeAudioCaptureModule::Create(
     talk_base::Thread* process_thread) {
   if (process_thread == NULL) return NULL;
 
@@ -237,7 +237,6 @@ bool FakeAudioCaptureModule::RecordingIsInitialized() const {
 
 int32_t FakeAudioCaptureModule::StartPlayout() {
   if (!play_is_initialized_) {
-    assert(false);
     return -1;
   }
   playing_ = true;
@@ -257,7 +256,6 @@ bool FakeAudioCaptureModule::Playing() const {
 
 int32_t FakeAudioCaptureModule::StartRecording() {
   if (!rec_is_initialized_) {
-    assert(false);
     return -1;
   }
   recording_ = true;

@@ -340,6 +340,12 @@ class NullVideoEngine {
 
 typedef CompositeMediaEngine<NullVoiceEngine, NullVideoEngine> NullMediaEngine;
 
+class DataEngineInterface {
+ public:
+  virtual DataMediaChannel* CreateChannel() = 0;
+  virtual const std::vector<DataCodec>& data_codecs() = 0;
+};
+
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIAENGINE_H_

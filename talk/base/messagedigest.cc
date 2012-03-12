@@ -29,8 +29,12 @@
 
 #include <string.h>
 
+#if SSL_USE_OPENSSL
+#include "talk/base/openssldigest.h"
+#else
 #include "talk/base/md5digest.h"
 #include "talk/base/sha1digest.h"
+#endif
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringencode.h"
 
@@ -47,12 +51,22 @@ const char DIGEST_SHA_512[] = "sha-512";
 static const size_t kBlockSize = 64;  // valid for SHA-256 and down
 
 MessageDigest* MessageDigestFactory::Create(const std::string& alg) {
-  if (alg == DIGEST_MD5) {
-    return new Md5Digest();
-  } else if (alg == DIGEST_SHA_1) {
-    return new Sha1Digest();
+#if SSL_USE_OPENSSL
+  MessageDigest* digest = new OpenSSLDigest(alg);
+  if (digest->Size() == 0) {  // invalid algorithm
+    delete digest;
+    digest = NULL;
   }
-  return NULL;
+  return digest;
+#else
+  MessageDigest* digest = NULL;
+  if (alg == DIGEST_MD5) {
+    digest = new Md5Digest();
+  } else if (alg == DIGEST_SHA_1) {
+    digest = new Sha1Digest();
+  }
+  return digest;
+#endif
 }
 
 size_t ComputeDigest(MessageDigest* digest, const void* input, size_t in_len,

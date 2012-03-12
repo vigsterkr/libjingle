@@ -671,10 +671,10 @@ class FakeWebRtcVoiceEngine
     return 0;
   }
   WEBRTC_STUB(SetRTPKeepaliveStatus, (int channel, bool enable,
-                                      unsigned char unknownPayloadType,
+                                      int unknownPayloadType,
                                       int deltaTransmitTimeSeconds));
   WEBRTC_STUB(GetRTPKeepaliveStatus, (int channel, bool& enabled,
-                                      unsigned char& unknownPayloadType,
+                                      int& unknownPayloadType,
                                       int& deltaTransmitTimeSeconds));
   WEBRTC_STUB(StartRTPDump, (int channel, const char* fileNameUTF8,
                              webrtc::RTPDirections direction));
@@ -746,6 +746,8 @@ class FakeWebRtcVoiceEngine
     mode = ec_mode_;
     return 0;
   }
+  virtual void SetDelayOffsetMs(int offset) {}
+  WEBRTC_STUB(DelayOffsetMs, ());
   WEBRTC_STUB(SetAecmMode, (webrtc::AecmModes mode, bool enableCNG));
   WEBRTC_STUB(GetAecmMode, (webrtc::AecmModes& mode, bool& enabledCNG));
   WEBRTC_STUB(SetRxNsStatus, (int channel, bool enable, webrtc::NsModes mode));

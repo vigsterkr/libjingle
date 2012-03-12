@@ -49,6 +49,8 @@ typedef uint32 TimeStamp;
 
 // Returns the current time in milliseconds.
 uint32 Time();
+// Returns the current time in nanoseconds.
+uint64 TimeNanos();
 
 // Approximate time when the program started.
 uint32 StartTime();
@@ -78,7 +80,7 @@ int32 TimeDiff(uint32 later, uint32 earlier);
 // The number of milliseconds that have elapsed since 'earlier'.
 inline int32 TimeSince(uint32 earlier) {
   return TimeDiff(Time(), earlier);
-} 
+}
 
 // The number of milliseconds that will elapse between now and 'later'.
 inline int32 TimeUntil(uint32 later) {

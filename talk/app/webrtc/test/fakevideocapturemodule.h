@@ -127,7 +127,7 @@ class FakeVideoCaptureModule
     return impl_->StopSendImage();
   }
 
-  virtual const WebRtc_UWord8* CurrentDeviceName() const {
+  virtual const char* CurrentDeviceName() const {
     return impl_->CurrentDeviceName();
   }
 

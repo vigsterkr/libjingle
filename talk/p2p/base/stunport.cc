@@ -32,6 +32,7 @@
 #include "talk/base/helpers.h"
 #include "talk/base/nethelpers.h"
 #include "talk/p2p/base/common.h"
+#include "talk/p2p/base/stun.h"
 
 namespace cricket {
 
@@ -63,7 +64,8 @@ class StunPortBindingRequest : public StunRequest {
         response->GetAddress(STUN_ATTR_MAPPED_ADDRESS);
     if (!addr_attr) {
       LOG(LS_ERROR) << "Binding response missing mapped address.";
-    } else if (addr_attr->family() != 1) {
+    } else if (addr_attr->family() != STUN_ADDRESS_IPV4 &&
+               addr_attr->family() != STUN_ADDRESS_IPV6) {
       LOG(LS_ERROR) << "Binding address has bad family";
     } else {
       talk_base::SocketAddress addr(addr_attr->ipaddr(), addr_attr->port());

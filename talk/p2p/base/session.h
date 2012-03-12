@@ -349,6 +349,12 @@ class BaseSession : public sigslot::has_slots<>,
                                       const std::string& name) {
   }
 
+  virtual void OnTransportRouteChange(
+      Transport* transport,
+      const std::string& name,
+      const cricket::Candidate& remote_candidate) {
+  }
+
   // Handles messages posted to us.
   virtual void OnMessage(talk_base::Message *pmsg);
 

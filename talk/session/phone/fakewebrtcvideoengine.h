@@ -273,6 +273,9 @@ class FakeWebRtcVideoEngine
     channels_[channel]->original_channel_id_ = original_channel;
     return 0;
   }
+  WEBRTC_FUNC(CreateReceiveChannel, (int& channel, int original_channel)) {
+    return CreateChannel(channel, original_channel);
+  }
   WEBRTC_FUNC(DeleteChannel, (const int channel)) {
     WEBRTC_CHECK_CHANNEL(channel);
     delete channels_[channel];
@@ -357,6 +360,7 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&));
   WEBRTC_STUB_CONST(GetReceiveCodecStastistics, (const int,
       unsigned int&, unsigned int&));
+  WEBRTC_STUB_CONST(GetCodecTargetBitrate, (const int, unsigned int*));
   virtual unsigned int GetDiscardedPackets(const int channel) const {
     return 0;
   }
@@ -416,7 +420,7 @@ class FakeWebRtcVideoEngine
     capturers_[capture_id]->set_channel_id(-1);
     return 0;
   }
-  WEBRTC_STUB(StartCapture, (const int, const webrtc::CaptureCapability));
+  WEBRTC_STUB(StartCapture, (const int, const webrtc::CaptureCapability&));
   WEBRTC_STUB(StopCapture, (const int));
   WEBRTC_STUB(SetRotateCapturedFrames, (const int,
       const webrtc::RotateCapturedFrame));
@@ -595,12 +599,11 @@ class FakeWebRtcVideoEngine
     channels_[channel]->key_frame_request_method_ = method;
     return 0;
   }
-  WEBRTC_BOOL_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
-    if (channels_.find(channel) == channels_.end())
-      return false;
+  WEBRTC_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
+    WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->remb_send_ = send;
     channels_[channel]->remb_ = receive;
-    return true;
+    return 0;
   }
   WEBRTC_FUNC(SetTMMBRStatus, (const int channel, const bool enable)) {
     WEBRTC_CHECK_CHANNEL(channel);
@@ -615,6 +618,8 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&));
   WEBRTC_STUB_CONST(GetBandwidthUsage, (const int, unsigned int&,
       unsigned int&, unsigned int&, unsigned int&));
+  WEBRTC_STUB_CONST(GetEstimatedSendBandwidth, (const int, unsigned int*));
+  WEBRTC_STUB_CONST(GetEstimatedReceiveBandwidth, (const int, unsigned int*));
 
   WEBRTC_STUB(SetRTPKeepAliveStatus, (const int, bool, const char,
       const unsigned int));

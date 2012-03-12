@@ -111,6 +111,9 @@ TEST_F(StunPortTest, TestPrepareAddress) {
   EXPECT_TRUE_WAIT(done(), kTimeoutMs);
   ASSERT_EQ(1U, port()->candidates().size());
   EXPECT_TRUE(kLocalAddr.EqualIPs(port()->candidates()[0].address()));
+
+  // TODO: Add IPv6 tests here, once either physicalsocketserver supports
+  // IPv6, or this test is changed to use VirtualSocketServer.
 }
 
 // Test that we fail properly if we can't get an address.

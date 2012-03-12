@@ -1,5 +1,10 @@
 Libjingle
 
+0.6.16 - Mar 12, 2012
+  - Add support for data channel to libjingle.
+  - Update to use the latest webrtc.
+  - JSEP refactoring.
+
 0.6.15 - Mar 06, 2012
   - Add Md5Digest, Sha1Digest and HMAC that works with any digest.
   - Add app/webrtc/test.

@@ -56,12 +56,15 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   virtual const cricket::SessionDescription* description() const {
     return description_.get();
   }
-  virtual void AddCandidate(const IceCandidateInterface* candidate);
+  virtual bool AddCandidate(const IceCandidateInterface* candidate);
+  virtual size_t number_of_mediasections() const;
+  virtual const IceCandidateColletion* candidates(
+      size_t mediasection_index) const;
   virtual bool ToString(std::string* out) const;
 
  private:
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
-  std::vector<cricket::Candidate> candidates_;
+  std::vector<JsepCandidateColletion> candidate_collection_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);
 };

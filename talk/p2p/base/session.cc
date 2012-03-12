@@ -328,6 +328,8 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
       this, &BaseSession::OnTransportSendError);
   transport->SignalChannelGone.connect(
       this, &BaseSession::OnTransportChannelGone);
+  transport->SignalRouteChange.connect(
+      this, &BaseSession::OnTransportRouteChange);
 
   transproxy = new TransportProxy(sid_, content_name,
                                   new TransportWrapper(transport));

@@ -27,10 +27,12 @@
 
 #include <string>
 
+#include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/webrtcsdp.h"
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/session/phone/mediasession.h"
@@ -45,6 +47,11 @@ using cricket::SessionDescription;
 using cricket::StreamParams;
 using cricket::VideoCodec;
 using cricket::VideoContentDescription;
+using webrtc::IceCandidateColletion;
+using webrtc::IceCandidateInterface;
+using webrtc::JsepIceCandidate;
+using webrtc::JsepSessionDescription;
+using webrtc::SessionDescriptionInterface;
 
 // Reference sdp string
 static const char kSdpFullString[] =
@@ -137,6 +144,11 @@ static const char kSdpString[] =
     "a=ssrc:5 cname:stream_2_cname\r\n"
     "a=ssrc:5 mslabel:local_stream_2\r\n"
     "a=ssrc:5 label:local_video_3\r\n";
+
+// One candidate reference string.
+static const char kSdpOneCandidate[] =
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
+    "eth0 username user_rtp password password_rtp generation 0\r\n";
 
 // Candidates reference string.
 static const char kSdpCandidates[] =
@@ -293,6 +305,21 @@ class WebRtcSdpTest : public testing::Test {
     candidates_.push_back(candidate4);
     candidates_.push_back(candidate7);
     candidates_.push_back(candidate8);
+
+    jcandidate_.reset(new JsepIceCandidate("1", candidate1));
+
+    // Set up JsepSessionDescription.
+    jdesc_.SetDescription(desc_.Copy());
+    int mline_index = 0;
+    for (size_t i = 0; i< candidates_.size(); ++i) {
+      // In this test, the audio m line index will be 0, and the video m line
+      // will be 1.
+      mline_index = (candidates_.at(i).name().find("video") !=
+          std::string::npos) ? 1 : 0;
+      JsepIceCandidate jice(talk_base::ToString<int>(mline_index),
+                            candidates_.at(i));
+      jdesc_.AddCandidate(&jice);
+    }
   }
 
   bool CompareSessionDescription(const SessionDescription& desc1,
@@ -406,6 +433,28 @@ class WebRtcSdpTest : public testing::Test {
     return true;
   }
 
+  bool CompareSessionDescriptionInterface(
+      const SessionDescriptionInterface& desci1,
+      const SessionDescriptionInterface& desci2) {
+    EXPECT_TRUE(CompareSessionDescription(*desci1.description(),
+                                          *desci2.description()));
+    if (desci1.number_of_mediasections() != desci2.number_of_mediasections())
+      return false;
+    for (size_t i = 0; i < desci1.number_of_mediasections(); ++i) {
+      const IceCandidateColletion* cc1 = desci1.candidates(i);
+      const IceCandidateColletion* cc2 = desci2.candidates(i);
+      if (cc1->count() != cc2->count())
+        return false;
+      for (size_t j = 0; j < cc1->count(); ++j) {
+        const IceCandidateInterface* c1 = cc1->at(j);
+        const IceCandidateInterface* c2 = cc2->at(j);
+        EXPECT_EQ(c1->label(), c2->label());
+        EXPECT_TRUE(c1->candidate().IsEquivalent(c2->candidate()));
+      }
+    }
+    return true;
+  }
+
   bool ReplaceAndTryToParse(const char* search, const char* replace) {
     SessionDescription desc;
     std::vector<cricket::Candidate> candidates;
@@ -418,26 +467,43 @@ class WebRtcSdpTest : public testing::Test {
  protected:
   SessionDescription desc_;
   Candidates candidates_;
+  talk_base::scoped_ptr<IceCandidateInterface> jcandidate_;
+  JsepSessionDescription jdesc_;
 };
 
 TEST_F(WebRtcSdpTest, Serialize) {
   std::string message = webrtc::SdpSerialize(desc_, candidates_);
-  LOG(LS_INFO) << "SDP: " << message;
   EXPECT_EQ(std::string(kSdpFullString), message);
 }
 
-TEST_F(WebRtcSdpTest, SerializeSessionDescription) {
-  std::string message = webrtc::SdpSerializeSessionDescription(desc_);
+TEST_F(WebRtcSdpTest, SerializeSessionDescriptionInterface) {
+  // JsepSessionDescription with desc and candidates.
+  std::string message = webrtc::SdpSerialize(jdesc_);
+  EXPECT_EQ(std::string(kSdpFullString), message);
+}
+
+TEST_F(WebRtcSdpTest, SerializeSessionDescriptionInterfaceEmpty) {
+  JsepSessionDescription jdesc_empty;
+  EXPECT_EQ("", webrtc::SdpSerialize(jdesc_empty));
+}
+
+TEST_F(WebRtcSdpTest, SerializeSessionDescriptionInterfaceWithoutCandidates) {
+  // JsepSessionDescription with desc but without candidates.
+  JsepSessionDescription jdesc_no_candidates;
+  jdesc_no_candidates.SetDescription(desc_.Copy());
+  std::string message = webrtc::SdpSerialize(jdesc_no_candidates);
   EXPECT_EQ(std::string(kSdpString), message);
 }
 
-TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithBundle) {
+
+TEST_F(WebRtcSdpTest, SerializeSessionDescriptionInterfaceWithBundle) {
   ContentGroup group(cricket::GROUP_TYPE_BUNDLE);
   group.AddContentName(kAudioContentName);
   group.AddContentName(kVideoContentName);
   desc_.AddGroup(group);
-  std::string message = webrtc::SdpSerializeSessionDescription(desc_);
-  std::string sdp_with_bundle = kSdpString;
+  jdesc_.SetDescription(desc_.Copy());
+  std::string message = webrtc::SdpSerialize(jdesc_);
+  std::string sdp_with_bundle = kSdpFullString;
   InjectAfter("t=0 0\r\n",
               "a=group:BUNDLE audio_content_name video_content_name\r\n",
               &sdp_with_bundle);
@@ -445,8 +511,31 @@ TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithBundle) {
 }
 
 TEST_F(WebRtcSdpTest, SerializeCandidates) {
-  std::string message = webrtc::SdpSerializeCandidates(candidates_);
-  EXPECT_EQ(std::string(kSdpCandidates), message);
+  std::string message = webrtc::SdpSerializeCandidate(*jcandidate_.get());
+  EXPECT_EQ(std::string(kSdpOneCandidate), message);
+}
+
+TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionInterface) {
+  JsepSessionDescription jdesc;
+  // Deserialize
+  EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &jdesc));
+  // Verify
+  EXPECT_TRUE(CompareSessionDescriptionInterface(jdesc_, jdesc));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionInterfaceWithBundle) {
+  JsepSessionDescription jdesc_with_bundle;
+  std::string sdp_with_bundle = kSdpFullString;
+  InjectAfter("t=0 0\r\n",
+              "a=group:BUNDLE audio_content_name video_content_name\r\n",
+              &sdp_with_bundle);
+  EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_bundle, &jdesc_with_bundle));
+  ContentGroup group(cricket::GROUP_TYPE_BUNDLE);
+  group.AddContentName(kAudioContentName);
+  group.AddContentName(kVideoContentName);
+  desc_.AddGroup(group);
+  jdesc_.SetDescription(desc_.Copy());
+  EXPECT_TRUE(CompareSessionDescriptionInterface(jdesc_, jdesc_with_bundle));
 }
 
 TEST_F(WebRtcSdpTest, Deserialize) {
@@ -455,29 +544,7 @@ TEST_F(WebRtcSdpTest, Deserialize) {
   // Deserialize
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &desc, &candidates));
   // Verify
-  LOG(LS_INFO) << "SDP: " << webrtc::SdpSerialize(desc, candidates);
   EXPECT_TRUE(CompareSessionDescription(desc_, desc));
-}
-
-TEST_F(WebRtcSdpTest, DeserializeSessionDescription) {
-  SessionDescription desc;
-  EXPECT_TRUE(webrtc::SdpDeserializeSessionDescription(kSdpString, &desc));
-  EXPECT_TRUE(CompareSessionDescription(desc_, desc));
-}
-
-TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionWithBundle) {
-  SessionDescription desc_with_bundle;
-  std::string sdp_with_bundle = kSdpString;
-  InjectAfter("t=0 0\r\n",
-              "a=group:BUNDLE audio_content_name video_content_name\r\n",
-              &sdp_with_bundle);
-  EXPECT_TRUE(webrtc::SdpDeserializeSessionDescription(sdp_with_bundle,
-                                                       &desc_with_bundle));
-  ContentGroup group(cricket::GROUP_TYPE_BUNDLE);
-  group.AddContentName(kAudioContentName);
-  group.AddContentName(kVideoContentName);
-  desc_.AddGroup(group);
-  EXPECT_TRUE(CompareSessionDescription(desc_, desc_with_bundle));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidates) {
@@ -503,9 +570,4 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
 
   // Broken media description
   EXPECT_EQ(true, ReplaceAndTryToParse("video 0 RTP/AVPF", kSdpDestroyer));
-}
-
-TEST_F(WebRtcSdpTest, FormatSdp) {
-  std::string full_sdp = webrtc::SdpFormat(kSdpString, kSdpCandidates);
-  EXPECT_EQ(kSdpFullString, full_sdp);
 }
