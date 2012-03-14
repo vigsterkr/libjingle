@@ -1194,6 +1194,8 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   if (webrtc::kVideoCodecVP8 == codec.codecType) {
     codec.codecSpecific.VP8.numberOfTemporalLayers =
         kDefaultNumberOfTemporalLayers;
+    // Turn off the VP8 error resilience
+    codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
   }
 
   if (!SetSendCodec(
@@ -1304,24 +1306,19 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
     return false;
   }
 
-  size_t num_ssrcs = 1;
   if (!IsOneSsrcStream(sp)) {
       LOG(LS_ERROR) << "AddSendStream: bad local stream parameters";
       return false;
   }
 
-  // Set send SSRC(s).
-  num_ssrcs = talk_base::_min(num_ssrcs,
-      static_cast<size_t>(webrtc::kMaxSimulcastStreams));
-  for (size_t i = 0; i < num_ssrcs; ++i) {
-    if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_,
-                                             sp.ssrcs[i],
-                                             webrtc::kViEStreamTypeNormal,
-                                             i) != 0) {
-      LOG_RTCERR4(SetLocalSSRC, vie_channel_, sp.ssrcs[i],
-                  webrtc::kViEStreamTypeNormal, i);
-      return false;
-    }
+  // Set the send (local) SSRC.
+  // If there are multiple send SSRCs, we can only set the first one here, and
+  // the rest of the SSRC(s) need to be set after SetSendCodec has been called
+  // (with a codec requires multiple SSRC(s)).
+  if (engine()->vie()->rtp()->SetLocalSSRC(vie_channel_,
+                                           sp.first_ssrc()) != 0) {
+    LOG_RTCERR2(SetLocalSSRC, vie_channel_, sp.first_ssrc());
+    return false;
   }
 
   // Set RTCP CName.
@@ -1491,7 +1488,10 @@ bool WebRtcVideoMediaChannel::StartSend() {
 
   // TODO Change this once REMB supporting multiple sending channels.
   // Send remb (2nd param) and use remb for BWE (3rd param).
-  engine_->vie()->rtp()->SetRembStatus(vie_channel_, true, true);
+  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_, true, true) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, true, true);
+    return false;
+  }
 
   return true;
 }
@@ -1504,7 +1504,10 @@ bool WebRtcVideoMediaChannel::StopSend() {
 
   // TODO Change this once REMB supporting multiple sending channels.
   // Don't send remb (2nd param) but use remb for BWE (3rd param).
-  engine_->vie()->rtp()->SetRembStatus(vie_channel_, false, true);
+  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_, false, true) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, false, true);
+    return false;
+  }
 
   return true;
 }
@@ -1650,8 +1653,6 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
     bwe.transmit_bitrate = total_bitrate_sent;
     bwe.retransmit_bitrate = nack_bitrate_sent;
 
-    /*
-    // TODO Turn on this with WebRTC 3.3
     // Add bandwidth estimation.
     unsigned int estimated_send_bandwidth;
     if (engine_->vie()->rtp()->GetEstimatedSendBandwidth(
@@ -1677,7 +1678,6 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
       LOG_RTCERR2(GetCodecTargetBitrate, vie_channel_,
                   &target_enc_bitrate);
     }
-    */
 
     info->bw_estimations.push_back(bwe);
   } else {
@@ -1980,7 +1980,10 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
   // Turn off remb sending (2nd param) and turn on remb reporting (3rd param)
   // here.
   // For sending channel, remb sending will be turned on after StartSending.
-  engine_->vie()->rtp()->SetRembStatus(channel_id, false, true);
+  if (engine_->vie()->rtp()->SetRembStatus(channel_id, false, true) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, false, true);
+    return false;
+  }
 
   if (remote_ssrc != 0) {
     // Use the same SSRC as our default channel
@@ -2068,6 +2071,7 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
     LOG_RTCERR2(SetSendCodec, vie_channel_, send_codec_->plName);
     return false;
   }
+
 
   // Reset the send_codec_ only if SetSendCodec is success.
   send_codec_.reset(new webrtc::VideoCodec(target_codec));

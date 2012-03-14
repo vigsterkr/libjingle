@@ -38,7 +38,10 @@
 #include <net/if.h>
 #include <unistd.h>
 #include <errno.h>
+// There's no ifaddrs.h in Android.
+#ifndef ANDROID
 #include <ifaddrs.h>
+#endif
 #endif  // POSIX
 
 #ifdef WIN32
@@ -180,6 +183,10 @@ BasicNetworkManager::~BasicNetworkManager() {
 #ifdef POSIX
 bool BasicNetworkManager::CreateNetworks(bool include_ignored,
                                          NetworkList* networks) const {
+#ifdef ANDROID
+  // TODO: Implement CreateNetworks on Android without using ifaddrs.
+  return false;
+#else
   NetworkMap current_networks;
   struct ifaddrs* interfaces;
   int error = getifaddrs(&interfaces);
@@ -245,6 +252,7 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
   }
   freeifaddrs(interfaces);
   return true;
+#endif
 }
 #endif  // POSIX
 

@@ -162,6 +162,8 @@ class WebRtcVoiceEngine
  private:
   typedef std::vector<WebRtcSoundclipMedia *> SoundclipList;
   typedef std::vector<WebRtcVoiceMediaChannel *> ChannelList;
+  typedef sigslot::
+      signal3<uint32, MediaProcessorDirection, AudioFrame*> FrameSignal;
 
   struct CodecPref {
     const char* name;
@@ -190,13 +192,16 @@ class WebRtcVoiceEngine
   bool PauseLocalMonitor();
   bool ResumeLocalMonitor();
 
+  bool UnregisterProcessorChannel(MediaProcessorDirection channel_direction,
+                                  uint32 ssrc,
+                                  VoiceProcessor* voice_processor,
+                                  MediaProcessorDirection processor_direction);
+
   // When a voice processor registers with the engine, it is connected
   // to either the Rx or Tx signals, based on the direction parameter.
   // SignalXXMediaFrame will be invoked for every audio packet.
-  sigslot::
-      signal3<uint32, MediaProcessorDirection, AudioFrame*> SignalRxMediaFrame;
-  sigslot::
-      signal3<uint32, MediaProcessorDirection, AudioFrame*> SignalTxMediaFrame;
+  FrameSignal SignalRxMediaFrame;
+  FrameSignal SignalTxMediaFrame;
 
   static const int kDefaultLogSeverity = talk_base::LS_WARNING;
   static const CodecPref kCodecPrefs[];

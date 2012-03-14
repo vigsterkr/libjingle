@@ -200,6 +200,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecs) {
   EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
   EXPECT_TRUE(vie_.GetHybridNackFecStatus(channel_num));
   EXPECT_FALSE(vie_.GetNackStatus(channel_num));
+  EXPECT_EQ(webrtc::kResilienceOff, gcodec.codecSpecific.VP8.resilience);
   // TODO: Check RTCP, PLI, TMMBR.
 }
 
@@ -965,6 +966,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
 TEST_F(WebRtcVideoMediaChannelTest, RejectEmptyStreamParams) {
   Base::RejectEmptyStreamParams();
 }
+
 
 // TODO: Investigate why this test is flaky.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptResolution16x10) {

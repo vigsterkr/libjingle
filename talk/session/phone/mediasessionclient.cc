@@ -944,7 +944,8 @@ bool MediaSessionClient::WriteContent(SignalingProtocol protocol,
       *elem = CreateJingleDataContentElem(data, crypto_required);
     }
   } else {
-    return BadWrite("Unknown content type: " + media->type(), error);
+    return BadWrite("Unknown content type: " +
+                    talk_base::ToString<int>(media->type()), error);
   }
 
   return true;

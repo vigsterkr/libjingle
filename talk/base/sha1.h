@@ -8,20 +8,20 @@
 extern "C" {
 #endif
 
-typedef unsigned int uint32_t;
-typedef unsigned char uint8_t;
+typedef unsigned int uint32;
+typedef unsigned char uint8;
 
 typedef struct {
-    uint32_t state[5];
-    uint32_t count[2];
-    uint8_t  buffer[64];
+    uint32 state[5];
+    uint32 count[2];
+    uint8  buffer[64];
 } SHA1_CTX;
 
 #define SHA1_DIGEST_SIZE 20
 
 void SHA1Init(SHA1_CTX* context);
-void SHA1Update(SHA1_CTX* context, const uint8_t* data, const size_t len);
-void SHA1Final(SHA1_CTX* context, uint8_t digest[SHA1_DIGEST_SIZE]);
+void SHA1Update(SHA1_CTX* context, const uint8* data, const size_t len);
+void SHA1Final(SHA1_CTX* context, uint8 digest[SHA1_DIGEST_SIZE]);
 
 #ifdef __cplusplus
 }

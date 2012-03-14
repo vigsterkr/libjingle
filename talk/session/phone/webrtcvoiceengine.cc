@@ -172,6 +172,10 @@ class WebRtcSoundclipMedia : public SoundclipMedia {
   }
 
   virtual bool PlaySound(const char *buf, int len, int flags) {
+    // The voe file api is not available in chrome.
+    if (!engine_->voe_sc()->file()) {
+      return false;
+    }
     // Must stop playing the current sound (if any), because we are about to
     // modify the stream.
     if (engine_->voe_sc()->file()->StopPlayingFileLocally(webrtc_channel_)
@@ -703,6 +707,10 @@ bool WebRtcVoiceEngine::SetLocalMonitor(bool enable) {
 }
 
 bool WebRtcVoiceEngine::ChangeLocalMonitor(bool enable) {
+  // The voe file api is not available in chrome.
+  if (!voe_wrapper_->file()) {
+    return false;
+  }
   if (enable && !monitor_.get()) {
     monitor_.reset(new WebRtcMonitorStream);
     if (voe_wrapper_->file()->StartRecordingMicrophone(monitor_.get()) == -1) {
@@ -1078,41 +1086,90 @@ bool WebRtcVoiceEngine::RegisterProcessor(
         << " foundChannel: " << found_channel;
     return false;
   }
-  talk_base::CritScope cs(&signal_media_critical_);
+
   webrtc::ProcessingTypes processing_type;
-  if (direction == MPD_RX) {
-    processing_type = webrtc::kPlaybackPerChannel;
-    if (SignalRxMediaFrame.is_empty()) {
-      register_with_webrtc = true;
+  {
+    talk_base::CritScope cs(&signal_media_critical_);
+    if (direction == MPD_RX) {
+      processing_type = webrtc::kPlaybackPerChannel;
+      if (SignalRxMediaFrame.is_empty()) {
+        register_with_webrtc = true;
+      }
+      SignalRxMediaFrame.connect(voice_processor,
+                                 &VoiceProcessor::OnFrame);
+    } else {
+      processing_type = webrtc::kRecordingPerChannel;
+      if (SignalTxMediaFrame.is_empty()) {
+        register_with_webrtc = true;
+      }
+      SignalTxMediaFrame.connect(voice_processor,
+                                 &VoiceProcessor::OnFrame);
     }
-    SignalRxMediaFrame.connect(voice_processor,
-                               &VoiceProcessor::OnFrame);
-  } else {
-    processing_type = webrtc::kRecordingPerChannel;
-    if (SignalTxMediaFrame.is_empty()) {
-      register_with_webrtc = true;
-    }
-    SignalTxMediaFrame.connect(voice_processor,
-                               &VoiceProcessor::OnFrame);
   }
   if (register_with_webrtc) {
-    if (voe()->media()->
+    if (voe()->media() && voe()->media()->
         RegisterExternalMediaProcessing(channel_id,
                                         processing_type,
-                                        *this) == -1) {
+                                        *this) != -1) {
+      LOG(LS_INFO) << "Media Processing Registration Succeeded. channel:"
+                   << channel_id;
+      success = true;
+    } else {
       LOG_RTCERR2(RegisterExternalMediaProcessing,
                   channel_id,
                   processing_type);
       success = false;
-    } else {
-      LOG(LS_INFO) << "Media Processing Registration Succeeded. channel:"
-                   << channel_id;
-      success = true;
     }
   } else {
     // If we don't have to register with the engine, we just needed to
     // connect a new processor, set success to true;
     success = true;
+  }
+  return success;
+}
+
+bool WebRtcVoiceEngine::UnregisterProcessorChannel(
+    MediaProcessorDirection channel_direction,
+    uint32 ssrc,
+    VoiceProcessor* voice_processor,
+    MediaProcessorDirection processor_direction) {
+  bool success = true;
+  FrameSignal* signal;
+  webrtc::ProcessingTypes processing_type;
+  if (channel_direction == MPD_RX) {
+    signal = &SignalRxMediaFrame;
+    processing_type = webrtc::kPlaybackPerChannel;
+  } else {
+    signal = &SignalTxMediaFrame;
+    processing_type = webrtc::kRecordingPerChannel;
+  }
+
+  int deregister_id = -1;
+  {
+    talk_base::CritScope cs(&signal_media_critical_);
+    if ((processor_direction & channel_direction) != 0 && !signal->is_empty()) {
+      signal->disconnect(voice_processor);
+      int channel_id = -1;
+      bool found_channel = FindChannelNumFromSsrc(ssrc,
+                                                  channel_direction,
+                                                  &channel_id);
+      if (signal->is_empty() && found_channel) {
+        deregister_id = channel_id;
+      }
+    }
+  }
+  if (deregister_id != -1) {
+    if (voe()->media() &&
+        voe()->media()->DeRegisterExternalMediaProcessing(deregister_id,
+        processing_type) != -1) {
+      LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
+                   << deregister_id;
+    } else {
+      LOG_RTCERR2(DeRegisterExternalMediaProcessing,
+                  deregister_id,
+                  processing_type);
+      success = false;
+    }
   }
   return success;
 }
@@ -1127,44 +1184,11 @@ bool WebRtcVoiceEngine::UnregisterProcessor(
                     << ssrc;
     return false;
   }
-  talk_base::CritScope cs(&signal_media_critical_);
-  if ((direction & MPD_RX) != 0 && !SignalRxMediaFrame.is_empty()) {
-    SignalRxMediaFrame.disconnect(voice_processor);
-    int rx_channel_id = -1;
-    bool found_rx_channel = FindChannelNumFromSsrc(ssrc,
-                                                   MPD_RX,
-                                                   &rx_channel_id);
-    if (SignalRxMediaFrame.is_empty() && found_rx_channel) {
-      if (voe()->media()->DeRegisterExternalMediaProcessing(rx_channel_id,
-          webrtc::kPlaybackPerChannel) != -1) {
-        LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
-                     << rx_channel_id;
-      } else {
-        LOG_RTCERR2(DeRegisterExternalMediaProcessing,
-                    rx_channel_id,
-                    webrtc::kPlaybackPerChannel);
-        success = false;
-      }
-    }
+  if (!UnregisterProcessorChannel(MPD_RX, ssrc, voice_processor, direction)) {
+    success = false;
   }
-  if ((direction & MPD_TX) != 0 && !SignalTxMediaFrame.is_empty()) {
-    SignalTxMediaFrame.disconnect(voice_processor);
-    int tx_channel_id = -1;
-    bool found_tx_channel = FindChannelNumFromSsrc(ssrc,
-                                                   MPD_TX,
-                                                   &tx_channel_id);
-    if (SignalTxMediaFrame.is_empty() && found_tx_channel) {
-      if (voe()->media()->DeRegisterExternalMediaProcessing(tx_channel_id,
-          webrtc::kRecordingPerChannel) != -1) {
-        LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
-                     << tx_channel_id;
-      } else {
-        LOG_RTCERR2(DeRegisterExternalMediaProcessing,
-                    tx_channel_id,
-                    webrtc::kRecordingPerChannel);
-        success = false;
-      }
-    }
+  if (!UnregisterProcessorChannel(MPD_TX, ssrc, voice_processor, direction)) {
+    success = false;
   }
   return success;
 }
@@ -1541,8 +1565,12 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
       LOG_RTCERR1(StartSend, voe_channel());
       return false;
     }
-    if (engine()->voe()->file()->StopPlayingFileAsMicrophone(
-        voe_channel()) == -1) {
+    if (engine()->voe()->file() &&
+        engine()->voe()->file()->StopPlayingFileAsMicrophone(
+            voe_channel()) != -1) {
+      LOG(LS_INFO) << "File StopPlayingFileAsMicrophone Succeeded. channel:"
+                   << voe_channel();
+    } else {
       LOG_RTCERR1(StopPlayingFileAsMicrophone, voe_channel());
       return false;
     }
@@ -1551,8 +1579,12 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
     if (!ringback_tone_.get()) {
       return false;
     }
-    if (engine()->voe()->file()->StartPlayingFileAsMicrophone(
-        voe_channel(), ringback_tone_.get(), false) == -1) {
+    if (engine()->voe()->file() &&
+        engine()->voe()->file()->StartPlayingFileAsMicrophone(
+        voe_channel(), ringback_tone_.get(), false) != -1) {
+      LOG(LS_INFO) << "File StartPlayingFileAsMicrophone Succeeded. channel:"
+                   << voe_channel();
+    } else {
       LOG_RTCERR3(StartPlayingFileAsMicrophone, voe_channel(),
                   ringback_tone_.get(), false);
       return false;
@@ -1873,6 +1905,11 @@ bool WebRtcVoiceMediaChannel::PlayRingbackTone(uint32 ssrc,
     return false;
   }
 
+  // The voe file api is not available in chrome.
+  if (!engine()->voe()->file()) {
+    return false;
+  }
+
   // Determine which VoiceEngine channel to play on.
   int channel = (ssrc == 0) ? voe_channel() : GetChannelNum(ssrc);
   if (channel == -1) {
@@ -1939,15 +1976,17 @@ void WebRtcVoiceMediaChannel::OnPacketReceived(talk_base::Buffer* packet) {
   // Stop any ringback that might be playing on the channel.
   // It's possible the ringback has already stopped, ih which case we'll just
   // use the opportunity to remove the channel from ringback_channels_.
-  const std::set<int>::iterator it = ringback_channels_.find(which_channel);
-  if (it != ringback_channels_.end()) {
-    if (engine()->voe()->file()->IsPlayingFileLocally(
-        which_channel) == 1) {
-      engine()->voe()->file()->StopPlayingFileLocally(which_channel);
-      LOG(LS_INFO) << "Stopped ringback on channel " << which_channel
-                   << " due to incoming media";
+  if (engine()->voe()->file()) {
+    const std::set<int>::iterator it = ringback_channels_.find(which_channel);
+    if (it != ringback_channels_.end()) {
+      if (engine()->voe()->file()->IsPlayingFileLocally(
+          which_channel) == 1) {
+        engine()->voe()->file()->StopPlayingFileLocally(which_channel);
+        LOG(LS_INFO) << "Stopped ringback on channel " << which_channel
+                     << " due to incoming media";
+      }
+      ringback_channels_.erase(which_channel);
     }
-    ringback_channels_.erase(which_channel);
   }
 
   // Pass it off to the decoder.
