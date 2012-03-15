@@ -33,6 +33,16 @@
 
 namespace webrtc {
 
+IceCandidateInterface* CreateIceCandidate(const std::string& label,
+                                          const std::string& sdp) {
+  JsepIceCandidate* jsep_ice = new JsepIceCandidate(label);
+  if (!jsep_ice->Initialize(sdp)) {
+    delete jsep_ice;
+    return NULL;
+  }
+  return jsep_ice;
+}
+
 JsepIceCandidate::JsepIceCandidate(const std::string& label)
     : label_(label) {
 }

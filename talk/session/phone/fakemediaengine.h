@@ -560,9 +560,9 @@ class FakeDataMediaChannel : public RtpHelper<DataMediaChannel> {
   }
 
   virtual bool SendData(
-      const SendDataParams& params, const char* data, int len) {
+      const SendDataParams& params, const std::string& data) {
     last_sent_data_params_ = params;
-    last_sent_data_ = std::string(data, len);
+    last_sent_data_ = data;
     return true;
   }
 
@@ -901,7 +901,17 @@ inline FakeVideoMediaChannel::~FakeVideoMediaChannel() {
 class FakeDataEngine : public DataEngineInterface {
  public:
   virtual DataMediaChannel* CreateChannel() {
-    return new FakeDataMediaChannel(NULL);
+    FakeDataMediaChannel* ch = new FakeDataMediaChannel(this);
+    channels_.push_back(ch);
+    return ch;
+  }
+
+  FakeDataMediaChannel* GetChannel(size_t index) {
+    return (channels_.size() > index) ? channels_[index] : NULL;
+  }
+
+  void UnregisterChannel(DataMediaChannel* channel) {
+    channels_.erase(std::find(channels_.begin(), channels_.end(), channel));
   }
 
   virtual void SetDataCodecs(const std::vector<DataCodec>& data_codecs) {
@@ -913,6 +923,7 @@ class FakeDataEngine : public DataEngineInterface {
   }
 
  private:
+  std::vector<FakeDataMediaChannel*> channels_;
   std::vector<DataCodec> data_codecs_;
 };
 

@@ -46,12 +46,14 @@ namespace webrtc {
 class JsepSessionDescription : public SessionDescriptionInterface {
  public:
   JsepSessionDescription();
+  // Takes ownership of |description|.
   explicit JsepSessionDescription(
-      const cricket::SessionDescription* description);
+      cricket::SessionDescription* description);
   ~JsepSessionDescription();
 
-  bool Initialize(const std::string& sdp);
+  // Takes ownership of |description|.
   void SetDescription(cricket::SessionDescription* description);
+  bool Initialize(const std::string& sdp);
 
   virtual const cricket::SessionDescription* description() const {
     return description_.get();

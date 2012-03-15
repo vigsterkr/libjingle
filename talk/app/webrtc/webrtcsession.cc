@@ -28,9 +28,10 @@
 #include "talk/app/webrtc/webrtcsession.h"
 
 #include "talk/app/webrtc/jsepicecandidate.h"
+#include "talk/app/webrtc/jsepsessiondescription.h"
+#include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnection.h"
-#include "talk/app/webrtc/peerconnectionsignaling.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/session/phone/channel.h"
@@ -59,16 +60,30 @@ static const char kDefaultVideoCodecName[] = "VP8";
 static const int kDefaultVideoCodecWidth = 640;
 static const int kDefaultVideoCodecHeight = 480;
 
+static cricket::ContentAction GetContentAction(JsepInterface::Action action) {
+  switch (action) {
+    case JsepInterface::kOffer:
+      return cricket::CA_OFFER;
+    case JsepInterface::kAnswer:
+      return cricket::CA_ANSWER;
+    default:
+      ASSERT(!"Not supported action");
+  };
+  return cricket::CA_OFFER;
+}
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
-                             cricket::PortAllocator* port_allocator)
+                             cricket::PortAllocator* port_allocator,
+                             MediaStreamSignaling* mediastream_signaling)
     : cricket::BaseSession(signaling_thread, worker_thread, port_allocator,
                            talk_base::ToString(talk_base::CreateRandomId()),
                            cricket::NS_JINGLE_RTP, true),
       channel_manager_(channel_manager),
-      observer_(NULL),
-      session_desc_factory_(channel_manager) {
+      session_desc_factory_(channel_manager),
+      mediastream_signaling_(mediastream_signaling),
+      ice_observer_(NULL) {
 }
 
 WebRtcSession::~WebRtcSession() {
@@ -108,20 +123,31 @@ void WebRtcSession::set_secure_policy(
   session_desc_factory_.set_secure(secure_policy);
 }
 
-cricket::SessionDescription* WebRtcSession::CreateOffer(
-    const cricket::MediaSessionOptions& options) {
-  return session_desc_factory_.CreateOffer(options, local_description());
+SessionDescriptionInterface* WebRtcSession::CreateOffer(
+    const MediaHints& hints) {
+  cricket::MediaSessionOptions options =
+      mediastream_signaling_->GetMediaSessionOptions(hints);
+  cricket::SessionDescription* desc(
+      session_desc_factory_.CreateOffer(options,
+                                        BaseSession::local_description()));
+
+  return new JsepSessionDescription(desc);
 }
 
-cricket::SessionDescription* WebRtcSession::CreateAnswer(
-    const cricket::SessionDescription* offer,
-    const cricket::MediaSessionOptions& options) {
-  return session_desc_factory_.CreateAnswer(offer, options,
-                                            local_description());
+SessionDescriptionInterface* WebRtcSession::CreateAnswer(
+    const MediaHints& hints,
+    const SessionDescriptionInterface* offer) {
+  cricket::MediaSessionOptions options =
+      mediastream_signaling_->GetMediaSessionOptions(hints);
+  cricket::SessionDescription* desc(
+      session_desc_factory_.CreateAnswer(offer->description(), options,
+                                         BaseSession::local_description()));
+  return new JsepSessionDescription(desc);
 }
 
-bool WebRtcSession::SetLocalDescription(cricket::SessionDescription* desc,
-                                        cricket::ContentAction type) {
+bool WebRtcSession::SetLocalDescription(Action action,
+                                        SessionDescriptionInterface* desc) {
+  cricket::ContentAction type = GetContentAction(action);
   if ((type == cricket::CA_ANSWER &&
        state() != STATE_RECEIVEDINITIATE) ||
       (type == cricket::CA_OFFER &&
@@ -131,8 +157,15 @@ bool WebRtcSession::SetLocalDescription(cricket::SessionDescription* desc,
                   << "action: " << type << " state: " << state();
     return false;
   }
+  if (!desc || !desc->description()) {
+    LOG(LS_ERROR) << "SetLocalDescription called with an invalid session"
+                  <<" description";
+    return false;
+  }
 
-  set_local_description(desc);
+  set_local_description(desc->description()->Copy());
+  local_desc_.reset(desc);
+
   if (type == cricket::CA_ANSWER) {
     EnableChannels();
     SetState(STATE_SENTACCEPT);
@@ -142,8 +175,9 @@ bool WebRtcSession::SetLocalDescription(cricket::SessionDescription* desc,
   return true;
 }
 
-bool WebRtcSession::SetRemoteDescription(cricket::SessionDescription* desc,
-                                         cricket::ContentAction type) {
+bool WebRtcSession::SetRemoteDescription(Action action,
+                                         SessionDescriptionInterface* desc) {
+  cricket::ContentAction type = GetContentAction(action);
   if ((type == cricket::CA_ANSWER &&
        state() != STATE_SENTINITIATE) ||
       (type == cricket::CA_OFFER &&
@@ -153,7 +187,14 @@ bool WebRtcSession::SetRemoteDescription(cricket::SessionDescription* desc,
                   << "action: " << type << " state: " << state();
     return false;
   }
-  set_remote_description(desc);
+  if (!desc || !desc->description()) {
+    LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
+                  <<" description";
+    return false;
+  }
+
+  set_remote_description(desc->description()->Copy());
+  remote_desc_.reset(desc);
 
   if (type  == cricket::CA_ANSWER) {
     EnableChannels();
@@ -161,17 +202,24 @@ bool WebRtcSession::SetRemoteDescription(cricket::SessionDescription* desc,
   } else {
     SetState(STATE_RECEIVEDINITIATE);
   }
+  // Update remote MediaStreams.
+  mediastream_signaling_->UpdateRemoteStreams(desc);
   return true;
 }
 
-bool WebRtcSession::AddRemoteCandidate(const std::string& remote_content_name,
-                                       const cricket::Candidate& candidate) {
+bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   if (!remote_description()) {
     LOG(LS_ERROR) << "Remote description not set";
     return false;
   }
+
+  if (!candidate) {
+    LOG(LS_ERROR) << "ProcessIceMessage: Candidate is NULL";
+    return false;
+  }
+
   const cricket::ContentInfo* content =
-      remote_description()->GetContentByName(remote_content_name);
+      BaseSession::remote_description()->GetContentByName(candidate->label());
   if (!content) {
     LOG(LS_ERROR) << "Remote content name does not exist";
     return false;
@@ -200,7 +248,7 @@ bool WebRtcSession::AddRemoteCandidate(const std::string& remote_content_name,
   // TODO - Add a interface to TransportProxy to accept
   // a remote candidate.
   std::vector<cricket::Candidate> candidates;
-  candidates.push_back(candidate);
+  candidates.push_back(candidate->candidate());
   proxy->impl()->OnRemoteCandidates(candidates);
   return true;
 }
@@ -212,8 +260,8 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       SignalError();
       break;
     case MSG_CANDIDATE_DISCOVERY_TIMEOUT:
-      if (observer_)
-         observer_->OnIceComplete();
+      if (ice_observer_)
+         ice_observer_->OnIceComplete();
       break;
     default:
       break;
@@ -254,7 +302,7 @@ void WebRtcSession::SetRemoteRenderer(const std::string& name,
   ASSERT(signaling_thread()->IsCurrent());
 
   const cricket::ContentInfo* video_info =
-      cricket::GetFirstVideoContent(remote_description());
+      cricket::GetFirstVideoContent(BaseSession::remote_description());
   if (!video_info) {
     LOG(LS_ERROR) << "Video not received in this call";
   }
@@ -306,11 +354,11 @@ void WebRtcSession::OnTransportCandidatesReady(
     LOG(LS_ERROR) << "No Proxy found";
     return;
   }
-  if (observer_) {
+  if (ice_observer_) {
     for (cricket::Candidates::const_iterator citer = candidates.begin();
          citer != candidates.end(); ++citer) {
       JsepIceCandidate candidate(proxy->content_name(), *citer);
-      observer_->OnIceCandidate(&candidate);
+      ice_observer_->OnIceCandidate(&candidate);
     }
   }
 }

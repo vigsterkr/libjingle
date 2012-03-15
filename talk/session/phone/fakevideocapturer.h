@@ -85,6 +85,8 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     talk_base::scoped_array<char> data(new char[size]);
     memset(data.get(), 0, size);
     frame.data = data.get();
+    // TODO: SignalFrameCaptured carry returned value to be able to
+    // capture results from downstream.
     SignalFrameCaptured(this, &frame);
     return true;
   }

@@ -30,6 +30,7 @@
 #include "talk/base/buffer.h"
 #include "talk/base/logging.h"
 #include "talk/base/helpers.h"
+#include "talk/base/ratelimiter.h"
 #include "talk/base/timing.h"
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/constants.h"
@@ -83,21 +84,21 @@ bool FindCodecByName(const std::vector<cricket::DataCodec>& codecs,
   return false;
 }
 
-DataMediaChannel::DataMediaChannel(talk_base::Timing* timing)
-    : MediaChannel(),
-      max_bps_(kDataMaxBandwidth),
-      sending_(false),
-      receiving_(false),
-      timing_(timing) {
+DataMediaChannel::DataMediaChannel(talk_base::Timing* timing) {
+  Construct(timing);
 }
 
-DataMediaChannel::DataMediaChannel()
-    : MediaChannel(),
-      max_bps_(-1),
-      sending_(false),
-      receiving_(false),
-      timing_(NULL) {
+DataMediaChannel::DataMediaChannel() {
+  Construct(NULL);
 }
+
+void DataMediaChannel::Construct(talk_base::Timing* timing) {
+  sending_ = false;
+  receiving_ = false;
+  timing_ = timing;
+  send_limiter_.reset(new talk_base::RateLimiter(kDataMaxBandwidth / 8, 1.0));
+}
+
 
 DataMediaChannel::~DataMediaChannel() {
   std::map<uint32, RtpClock*>::const_iterator iter;
@@ -209,7 +210,6 @@ bool DataMediaChannel::AddRecvStream(const StreamParams& stream) {
   }
 
   recv_streams_.push_back(stream);
-  receiver_by_recv_ssrc_[stream.first_ssrc()] = NULL;
   LOG(LS_INFO) << "Added data recv stream '" << stream.name
                << "' with ssrc=" << stream.first_ssrc();
   return true;
@@ -217,7 +217,6 @@ bool DataMediaChannel::AddRecvStream(const StreamParams& stream) {
 
 bool DataMediaChannel::RemoveRecvStream(uint32 ssrc) {
   RemoveStreamBySsrc(&recv_streams_, ssrc);
-  receiver_by_recv_ssrc_.erase(ssrc);
   return true;
 }
 
@@ -270,62 +269,27 @@ void DataMediaChannel::OnPacketReceived(talk_base::Buffer* packet) {
   //              << ", timestamp=" << header.timestamp
   //              << ", len=" << data_len;
 
-  // The invariant is that if we have a stream, there is a receiver in
-  // the map, even if it is NULL.
-  Receiver* receiver = receiver_by_recv_ssrc_[header.ssrc];
-  if (!receiver) {
-    LOG(LS_WARNING) << "Not receiving packet "
-                    << header.ssrc << ":" << header.seq_num
-                    << " (" << data_len << ")" << " because no receiver set.";
-    return;
-  }
-
   ReceiveDataParams params;
   params.ssrc = header.ssrc;
   params.seq_num = header.seq_num;
   params.timestamp = header.timestamp;
-  receiver->ReceiveData(params, data, data_len);
+  SignalDataReceived(params, data, data_len);
 }
 
 bool DataMediaChannel::SetSendBandwidth(bool autobw, int bps) {
-  // TODO: Implement bandwidth throttling.
   if (autobw || bps <= 0) {
-    max_bps_ = -1;
-  } else {
-    max_bps_ = bps;
+    bps = kDataMaxBandwidth;
   }
-  LOG(LS_INFO) << "DataMediaChannel::SetSendBandwidth to " << max_bps_;
-  return true;
-}
-
-bool DataMediaChannel::SetReceiver(uint32 ssrc, Receiver* receiver) {
-  StreamParams found_stream;
-  if (!GetStreamBySsrc(recv_streams_, ssrc, &found_stream)) {
-    LOG(LS_WARNING) << "Not setting data receiver because ssrc is unknown: "
-                    << ssrc;
-    return false;
-  }
-
-  LOG(LS_INFO) << "Setting data receiver of ssrc=" << ssrc;
-  receiver_by_recv_ssrc_[ssrc] = receiver;
+  send_limiter_.reset(new talk_base::RateLimiter(bps / 8, 1.0));
+  LOG(LS_INFO) << "DataMediaChannel::SetSendBandwidth to " << bps << "bps.";
   return true;
 }
 
 bool DataMediaChannel::SendData(
-    const SendDataParams& params, const char* data, int data_len) {
-  if (data == NULL) {
-    LOG(LS_WARNING) << "Not sending NULL data.";
-    return false;
-  }
-
-  if (data_len < 0) {
-    LOG(LS_WARNING) << "Not sending data of length < 0.";
-    return false;
-  }
-
+    const SendDataParams& params, const std::string& data) {
   if (!sending_) {
     LOG(LS_WARNING) << "Not sending packet with ssrc=" << params.ssrc
-                    << " len=" << data_len << " before SetSend(true).";
+                    << " len=" << data.length() << " before SetSend(true).";
     return false;
   }
 
@@ -343,8 +307,15 @@ bool DataMediaChannel::SendData(
     return false;
   }
 
-  size_t packet_len = kMinRtpPacketLen + sizeof(kReservedSpace) + data_len;
+  size_t packet_len = kMinRtpPacketLen + sizeof(kReservedSpace) + data.length();
   if (packet_len > kDataMaxRtpPacketLen) {
+    return false;
+  }
+
+  double now = timing_->TimerNow();
+
+  if (!send_limiter_->CanUse(packet_len, now)) {
+    // TODO: Should we log something?
     return false;
   }
 
@@ -352,7 +323,7 @@ bool DataMediaChannel::SendData(
   header.payload_type = found_codec.id;
   header.ssrc = params.ssrc;
   rtp_clock_by_send_ssrc_[header.ssrc]->Tick(
-      timing_->TimerNow(), &header.seq_num, &header.timestamp);
+      now, &header.seq_num, &header.timestamp);
 
   talk_base::Buffer packet;
   packet.SetCapacity(packet_len);
@@ -361,7 +332,7 @@ bool DataMediaChannel::SendData(
     return false;
   }
   packet.AppendData(&kReservedSpace, sizeof(kReservedSpace));
-  packet.AppendData(data, data_len);
+  packet.AppendData(data.data(), data.length());
 
   // Uncomment this for easy debugging.
   // LOG(LS_INFO) << "Sent packet: "
@@ -371,6 +342,7 @@ bool DataMediaChannel::SendData(
   //              << ", len=" << data_len;
 
   network_interface()->SendPacket(&packet);
+  send_limiter_->Use(packet_len, now);
   return true;
 }
 

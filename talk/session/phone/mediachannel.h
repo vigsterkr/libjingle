@@ -42,6 +42,7 @@
 
 namespace talk_base {
 class Buffer;
+class RateLimiter;
 class Timing;
 }
 
@@ -479,6 +480,15 @@ class VideoMediaChannel : public MediaChannel {
   VideoRenderer *renderer_;
 };
 
+// Info about data received in DataMediaChannel.  For use in
+// DataMediaChannel::SignalDataReceived and in all of the signals that
+// signal fires, on up the chain.
+struct ReceiveDataParams {
+  uint32 ssrc;
+  int seq_num;
+  int timestamp;
+};
+
 // Implemented in datamediaengine.cc.
 // TODO: Should we make this abstract and make a
 // DataMediaChannelImpl in datamediaengine.cc to avoid dependencies?
@@ -486,18 +496,6 @@ class DataMediaChannel : public MediaChannel {
  public:
   struct SendDataParams {
     uint32 ssrc;
-  };
-
-  struct ReceiveDataParams {
-    uint32 ssrc;
-    int seq_num;
-    int timestamp;
-  };
-
-  class Receiver {
-   public:
-    virtual void ReceiveData(
-        const ReceiveDataParams& params, const char* data, size_t len) = 0;
   };
 
   enum Error {
@@ -549,11 +547,12 @@ class DataMediaChannel : public MediaChannel {
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
 
-  // TODO: This should be per-stream, not per-ssrc.
-  // And we should probably allow more than one per stream.
-  virtual bool SetReceiver(uint32 ssrc, Receiver* receiver);
   virtual bool SendData(
-      const SendDataParams& params, const char* data, int len);
+      const SendDataParams& params, const std::string& data);
+  // Signals when data is received (params, data, len)
+  sigslot::signal3<const ReceiveDataParams&,
+                   const char*,
+                   size_t> SignalDataReceived;
   // Signal errors from MediaChannel.  Arguments are:
   //     ssrc(uint32), and error(DataMediaChannel::Error).
   sigslot::signal2<uint32, DataMediaChannel::Error> SignalMediaError;
@@ -561,7 +560,8 @@ class DataMediaChannel : public MediaChannel {
  private:
   class RtpClock;
 
-  int max_bps_;
+  void Construct(talk_base::Timing* timing);
+
   bool sending_;
   bool receiving_;
   talk_base::Timing* timing_;
@@ -570,9 +570,7 @@ class DataMediaChannel : public MediaChannel {
   std::vector<StreamParams> send_streams_;
   std::vector<StreamParams> recv_streams_;
   std::map<uint32, RtpClock*> rtp_clock_by_send_ssrc_;
-  // TODO: This should be per-stream, not per-ssrc.
-  // And we should probably allow more than one per stream.
-  std::map<uint32, Receiver*> receiver_by_recv_ssrc_;
+  talk_base::scoped_ptr<talk_base::RateLimiter> send_limiter_;
 };
 
 }  // namespace cricket

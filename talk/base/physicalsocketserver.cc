@@ -133,9 +133,9 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   // Creates the underlying OS socket (same as the "socket" function).
-  virtual bool Create(int type) {
+  virtual bool Create(int family, int type) {
     Close();
-    s_ = ::socket(AF_INET, type, 0);
+    s_ = ::socket(family, type, 0);
     udp_ = (SOCK_DGRAM == type);
     UpdateLastError();
     if (udp_)
@@ -191,7 +191,8 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   int Connect(const SocketAddress& addr) {
     // TODO: Implicit creation is required to reconnect...
     // ...but should we make it more explicit?
-    if ((s_ == INVALID_SOCKET) && !Create(SOCK_STREAM))
+    // TODO: Move socket creation to after address resolution.
+    if ((s_ == INVALID_SOCKET) && !Create(AF_INET, SOCK_STREAM))
       return SOCKET_ERROR;
     if (addr.IsUnresolved()) {
       if (state_ != CS_CLOSED) {
@@ -790,8 +791,12 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   }
 
   virtual bool Create(int type) {
+    return Create(AF_INET, type);
+  }
+
+  virtual bool Create(int family, int type) {
     // Change the socket to be non-blocking.
-    if (!PhysicalSocket::Create(type))
+    if (!PhysicalSocket::Create(family, type))
       return false;
 
     return Initialize();
@@ -1043,8 +1048,12 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   }
 
   virtual bool Create(int type) {
+    return Create(AF_INET, type);
+  }
+
+  virtual bool Create(int family, int type) {
     // Create socket
-    if (!PhysicalSocket::Create(type))
+    if (!PhysicalSocket::Create(family, type))
       return false;
 
     if (!Initialize())
@@ -1174,8 +1183,12 @@ void PhysicalSocketServer::WakeUp() {
 }
 
 Socket* PhysicalSocketServer::CreateSocket(int type) {
+  return CreateSocket(AF_INET, type);
+}
+
+Socket* PhysicalSocketServer::CreateSocket(int family, int type) {
   PhysicalSocket* socket = new PhysicalSocket(this);
-  if (socket->Create(type)) {
+  if (socket->Create(family, type)) {
     return socket;
   } else {
     delete socket;
@@ -1184,8 +1197,12 @@ Socket* PhysicalSocketServer::CreateSocket(int type) {
 }
 
 AsyncSocket* PhysicalSocketServer::CreateAsyncSocket(int type) {
+  return CreateAsyncSocket(AF_INET, type);
+}
+
+AsyncSocket* PhysicalSocketServer::CreateAsyncSocket(int family, int type) {
   SocketDispatcher* dispatcher = new SocketDispatcher(this);
-  if (dispatcher->Create(type)) {
+  if (dispatcher->Create(family, type)) {
     return dispatcher;
   } else {
     delete dispatcher;

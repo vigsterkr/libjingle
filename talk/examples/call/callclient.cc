@@ -493,7 +493,7 @@ void CallClient::OnSessionState(cricket::Call* call,
   } else if (state == cricket::Session::STATE_RECEIVEDACCEPT) {
     console_->PrintLine("call answered");
     if (call_->has_data()) {
-      SetDataReceiverOfAllStreams(session);
+      call_->SignalDataReceived.connect(this, &CallClient::OnDataReceived);
     }
   } else if (state == cricket::Session::STATE_RECEIVEDREJECT) {
     console_->PrintLine("call not answered");
@@ -644,8 +644,7 @@ void CallClient::SendData(const std::string& stream_name,
 
   cricket::DataMediaChannel::SendDataParams params;
   params.ssrc = stream.first_ssrc();
-  call_->SendData(session_, params,
-                  text.data(), text.length());
+  call_->SendData(session_, params, text);
 }
 
 void CallClient::InviteFriend(const std::string& name) {
@@ -712,38 +711,19 @@ void CallClient::MakeCallTo(const std::string& name,
   }
 }
 
-void CallClient::SetDataReceiverOfAllStreams(cricket::Session* session) {
-  const cricket::DataContentDescription* data =
-      GetFirstDataContentDescription(session->remote_description());
-  if (data) {
-    SetDataReceiver(session, data->streams());
-  }
-}
-
-void CallClient::SetDataReceiver(
-    cricket::Session* session,
-    const std::vector<cricket::StreamParams>& streams) {
-  for (std::vector<cricket::StreamParams>::const_iterator
-           it = streams.begin(); it != streams.end(); ++it) {
-    call_->SetDataReceiver(session, it->first_ssrc(), this);
-  }
-}
-
-void CallClient::ReceiveData(
-    const cricket::DataMediaChannel::ReceiveDataParams& params,
-    const char* data, size_t len) {
-  std::string string(data, len);
-
+void CallClient::OnDataReceived(cricket::Call*,
+                                const cricket::ReceiveDataParams& params,
+                                const std::string& data) {
   cricket::StreamParams stream;
   if (GetStreamBySsrc(call_->data_recv_streams(), params.ssrc, &stream)) {
     console_->PrintLine(
-        "Received data from '%s' on stream '%s' (ssrc=%u, len=%zu): %s",
+        "Received data from '%s' on stream '%s' (ssrc=%u): %s",
         stream.nick.c_str(), stream.name.c_str(),
-        params.ssrc, len, string.c_str());
+        params.ssrc, data.c_str());
   } else {
     console_->PrintLine(
-        "Received data (ssrc=%u, len=%zu): %s",
-        params.ssrc, len, string.c_str());
+        "Received data (ssrc=%u): %s",
+        params.ssrc, data.c_str());
   }
 }
 
@@ -872,7 +852,7 @@ void CallClient::Accept(const cricket::CallOptions& options) {
     call_->SetVideoRenderer(session_, 0, remote_renderer_);
   }
   if (call_->has_data()) {
-    SetDataReceiverOfAllStreams(session_);
+    call_->SignalDataReceived.connect(this, &CallClient::OnDataReceived);
   }
   incoming_call_ = false;
 }
@@ -1221,10 +1201,6 @@ void CallClient::OnMediaStreamsUpdate(cricket::Call* call,
       }
     }
     SendViewRequest(session);
-  }
-
-  if (call_->has_data()) {
-    SetDataReceiver(session, added.data());
   }
 }
 

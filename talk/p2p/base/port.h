@@ -215,6 +215,11 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   int min_port() { return min_port_; }
   int max_port() { return max_port_; }
 
+  void set_enable_message_integrity(bool enable) {
+    enable_message_integrity_ = enable;
+  }
+  bool enable_message_integrity() { return enable_message_integrity_; }
+
  protected:
   // Fills in the local address of the port.
   void AddAddress(const talk_base::SocketAddress& address,
@@ -256,6 +261,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   AddressMap connections_;
   enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
   bool enable_port_packets_;
+  bool enable_message_integrity_;
 
  private:
   // Called when one of our connections deletes itself.

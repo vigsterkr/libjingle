@@ -355,6 +355,13 @@ const VideoContentDescription* GetFirstVideoContentDescription(
     const SessionDescription* sdesc);
 const DataContentDescription* GetFirstDataContentDescription(
     const SessionDescription* sdesc);
+bool GetStreamBySsrc(
+    const SessionDescription* sdesc, MediaType media_type,
+    uint32 ssrc, StreamParams* stream_out);
+bool GetStreamByNickAndName(
+    const SessionDescription* sdesc, MediaType media_type,
+    const std::string& nick, const std::string& name,
+    StreamParams* stream_out);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_

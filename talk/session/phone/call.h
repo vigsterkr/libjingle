@@ -70,8 +70,6 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void SetLocalRenderer(VideoRenderer* renderer);
   void SetVideoRenderer(Session* session, uint32 ssrc,
                         VideoRenderer* renderer);
-  void SetDataReceiver(Session* session, uint32 ssrc,
-                       DataMediaChannel::Receiver* receiver);
   void StartConnectionMonitor(Session* session, int cms);
   void StopConnectionMonitor(Session* session);
   void StartAudioMonitor(Session* session, int cms);
@@ -83,7 +81,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void MuteVideo(bool mute);
   void SendData(Session* session,
                 const DataMediaChannel::SendDataParams& params,
-                const char* data, int len);
+                const std::string& data);
   void PressDTMF(int event);
 
   const std::vector<Session*> &sessions();
@@ -131,6 +129,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                    Session*,
                    const MediaStreams&,
                    const MediaStreams&> SignalMediaStreamsUpdate;
+  sigslot::signal3<Call*,
+                   const ReceiveDataParams&,
+                   const std::string&> SignalDataReceived;
 
  private:
   void OnMessage(talk_base::Message* message);
@@ -157,6 +158,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnConnectionMonitor(VideoChannel* channel,
                            const std::vector<ConnectionInfo> &infos);
   void OnMediaMonitor(VideoChannel* channel, const VideoMediaInfo& info);
+  void OnDataReceived(DataChannel* channel,
+                      const ReceiveDataParams& params,
+                      const std::string& data);
   VoiceChannel* GetVoiceChannel(Session* session);
   VideoChannel* GetVideoChannel(Session* session);
   DataChannel* GetDataChannel(Session* session);

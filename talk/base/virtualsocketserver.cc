@@ -112,10 +112,10 @@ struct MessageAddress : public MessageData {
 // passed as messages using the message queue of the socket server.
 class VirtualSocket : public AsyncSocket, public MessageHandler {
  public:
-  VirtualSocket(VirtualSocketServer* server, int type, bool async)
-      : server_(server), type_(type), async_(async), state_(CS_CLOSED),
-        listen_queue_(NULL), write_enabled_(false), network_size_(0),
-        recv_buffer_size_(0), bound_(false), was_any_(false) {
+  VirtualSocket(VirtualSocketServer* server, int family, int type, bool async)
+      : server_(server), family_(family), type_(type), async_(async),
+        state_(CS_CLOSED), listen_queue_(NULL), write_enabled_(false),
+        network_size_(0), recv_buffer_size_(0), bound_(false), was_any_(false) {
     ASSERT((type_ == SOCK_DGRAM) || (type_ == SOCK_STREAM));
     ASSERT(async_ || (type_ != SOCK_STREAM));  // We only support async streams
   }
@@ -324,7 +324,8 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
       return NULL;
     }
     while (!listen_queue_->empty()) {
-      VirtualSocket* socket = new VirtualSocket(server_, type_, async_);
+      VirtualSocket* socket = new VirtualSocket(server_, AF_INET, type_,
+                                                async_);
 
       // Set the new local address to the same as this server socket.
       socket->SetLocalAddress(local_addr_);
@@ -507,6 +508,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
   }
 
   VirtualSocketServer* server_;
+  int family_;
   int type_;
   bool async_;
   ConnState state_;
@@ -600,15 +602,23 @@ uint16 VirtualSocketServer::GetNextPort() {
 }
 
 Socket* VirtualSocketServer::CreateSocket(int type) {
-  return CreateSocketInternal(type);
+  return CreateSocket(AF_INET, type);
+}
+
+Socket* VirtualSocketServer::CreateSocket(int family, int type) {
+  return CreateSocketInternal(family, type);
 }
 
 AsyncSocket* VirtualSocketServer::CreateAsyncSocket(int type) {
-  return CreateSocketInternal(type);
+  return CreateAsyncSocket(AF_INET, type);
 }
 
-VirtualSocket* VirtualSocketServer::CreateSocketInternal(int type) {
-  return new VirtualSocket(this, type, true);
+AsyncSocket* VirtualSocketServer::CreateAsyncSocket(int family, int type) {
+  return CreateSocketInternal(family, type);
+}
+
+VirtualSocket* VirtualSocketServer::CreateSocketInternal(int family, int type) {
+  return new VirtualSocket(this, family, type, true);
 }
 
 void VirtualSocketServer::SetMessageQueue(MessageQueue* msg_queue) {
@@ -777,7 +787,8 @@ int VirtualSocketServer::SendUdp(VirtualSocket* socket,
   VirtualSocket* recipient = LookupBinding(remote_addr);
   if (!recipient) {
     // Make a fake recipient for address family checking.
-    scoped_ptr<VirtualSocket> dummy_socket(CreateSocketInternal(SOCK_DGRAM));
+    scoped_ptr<VirtualSocket> dummy_socket(
+        CreateSocketInternal(AF_INET, SOCK_DGRAM));
     dummy_socket->SetLocalAddress(remote_addr);
     if (!CanInteractWith(socket, dummy_socket.get())) {
       LOG(LS_VERBOSE) << "Incompatible address families: "

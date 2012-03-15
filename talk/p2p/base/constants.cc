@@ -182,6 +182,8 @@ const char GINGLE_CANDIDATE_NAME_RTP[] = "rtp";
 const char GINGLE_CANDIDATE_NAME_RTCP[] = "rtcp";
 const char GINGLE_CANDIDATE_NAME_VIDEO_RTP[] = "video_rtp";
 const char GINGLE_CANDIDATE_NAME_VIDEO_RTCP[] = "video_rtcp";
+const char GINGLE_CANDIDATE_NAME_DATA_RTP[] = "data_rtp";
+const char GINGLE_CANDIDATE_NAME_DATA_RTCP[] = "data_rtcp";
 
 // terminate reasons and errors
 const char JINGLE_ERROR_BAD_REQUEST[] = "bad-request";

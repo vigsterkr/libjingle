@@ -185,6 +185,8 @@ extern const char GINGLE_CANDIDATE_NAME_RTP[];
 extern const char GINGLE_CANDIDATE_NAME_RTCP[];
 extern const char GINGLE_CANDIDATE_NAME_VIDEO_RTP[];
 extern const char GINGLE_CANDIDATE_NAME_VIDEO_RTCP[];
+extern const char GINGLE_CANDIDATE_NAME_DATA_RTP[];
+extern const char GINGLE_CANDIDATE_NAME_DATA_RTCP[];
 
 extern const char NS_GINGLE_RAW[];
 extern const buzz::StaticQName QN_GINGLE_RAW_TRANSPORT;

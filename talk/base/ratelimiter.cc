@@ -25,54 +25,22 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_NULLSOCKETSERVER_H_
-#define TALK_BASE_NULLSOCKETSERVER_H_
-
-#include "talk/base/event.h"
-#include "talk/base/physicalsocketserver.h"
+#include "talk/base/ratelimiter.h"
 
 namespace talk_base {
 
-// NullSocketServer
+bool RateLimiter::CanUse(size_t desired, double time) {
+  return ((time > period_end_ && desired <= max_per_period_) ||
+          (used_in_period_ + desired) <= max_per_period_);
+}
 
-class NullSocketServer : public talk_base::SocketServer {
- public:
-  NullSocketServer() : event_(false, false) {}
-
-  virtual bool Wait(int cms, bool process_io) {
-    event_.Wait(cms);
-    return true;
+void RateLimiter::Use(size_t used, double time) {
+  if (time > period_end_) {
+    period_start_ = time;
+    period_end_ = time + period_length_;
+    used_in_period_ = 0;
   }
-
-  virtual void WakeUp() {
-    event_.Set();
-  }
-
-  virtual talk_base::Socket* CreateSocket(int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::Socket* CreateSocket(int family, int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::AsyncSocket* CreateAsyncSocket(int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::AsyncSocket* CreateAsyncSocket(int family, int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-
- private:
-  talk_base::Event event_;
-};
+  used_in_period_ += used;
+}
 
 }  // namespace talk_base
-
-#endif  // TALK_BASE_NULLSOCKETSERVER_H_

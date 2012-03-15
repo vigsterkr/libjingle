@@ -2163,8 +2163,7 @@ TEST_F(DataChannelTest, TestSendData) {
   cricket::DataMediaChannel::SendDataParams params;
   params.ssrc = 42;
   std::string data = "foo";
-  ASSERT_TRUE(media_channel1_->SendData(
-      params, data.data(), data.length()));
+  ASSERT_TRUE(media_channel1_->SendData(params, data));
   EXPECT_EQ(params.ssrc,
             media_channel1_->last_sent_data_params().ssrc);
   EXPECT_EQ(data, media_channel1_->last_sent_data());

@@ -84,8 +84,8 @@ size_t UnpackAddressFromNAT(const char* buf, size_t buf_size,
 // NATSocket
 class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
  public:
-  explicit NATSocket(NATInternalSocketFactory* sf, int type)
-      : sf_(sf), type_(type), async_(true), connected_(false),
+  explicit NATSocket(NATInternalSocketFactory* sf, int family, int type)
+      : sf_(sf), family_(family), type_(type), async_(true), connected_(false),
         socket_(NULL), buf_(NULL), size_(0) {
   }
 
@@ -108,7 +108,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
     }
 
     int result;
-    socket_ = sf_->CreateInternalSocket(type_, addr, &server_addr_);
+    socket_ = sf_->CreateInternalSocket(type_, family_, addr, &server_addr_);
     result = (socket_) ? socket_->Bind(addr) : -1;
     if (result >= 0) {
       socket_->SignalConnectEvent.connect(this, &NATSocket::OnConnectEvent);
@@ -310,6 +310,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   NATInternalSocketFactory* sf_;
+  int family_;
   int type_;
   bool async_;
   bool connected_;
@@ -327,17 +328,25 @@ NATSocketFactory::NATSocketFactory(SocketFactory* factory,
 }
 
 Socket* NATSocketFactory::CreateSocket(int type) {
-  return new NATSocket(this, type);
+  return CreateSocket(AF_INET, type);
+}
+
+Socket* NATSocketFactory::CreateSocket(int family, int type) {
+  return new NATSocket(this, family, type);
 }
 
 AsyncSocket* NATSocketFactory::CreateAsyncSocket(int type) {
-  return new NATSocket(this, type);
+  return CreateAsyncSocket(AF_INET, type);
 }
 
-AsyncSocket* NATSocketFactory::CreateInternalSocket(int type,
+AsyncSocket* NATSocketFactory::CreateAsyncSocket(int family, int type) {
+  return new NATSocket(this, family, type);
+}
+
+AsyncSocket* NATSocketFactory::CreateInternalSocket(int family, int type,
     const SocketAddress& local_addr, SocketAddress* nat_addr) {
   *nat_addr = nat_addr_;
-  return factory_->CreateAsyncSocket(type);
+  return factory_->CreateAsyncSocket(family, type);
 }
 
 // NATSocketServer
@@ -365,23 +374,31 @@ void NATSocketServer::RemoveTranslator(
 }
 
 Socket* NATSocketServer::CreateSocket(int type) {
-  return new NATSocket(this, type);
+  return CreateSocket(AF_INET, type);
+}
+
+Socket* NATSocketServer::CreateSocket(int family, int type) {
+  return new NATSocket(this, family, type);
 }
 
 AsyncSocket* NATSocketServer::CreateAsyncSocket(int type) {
-  return new NATSocket(this, type);
+  return CreateAsyncSocket(AF_INET, type);
 }
 
-AsyncSocket* NATSocketServer::CreateInternalSocket(int type,
+AsyncSocket* NATSocketServer::CreateAsyncSocket(int family, int type) {
+  return new NATSocket(this, family, type);
+}
+
+AsyncSocket* NATSocketServer::CreateInternalSocket(int type, int family,
     const SocketAddress& local_addr, SocketAddress* nat_addr) {
   AsyncSocket* socket = NULL;
   Translator* nat = nats_.FindClient(local_addr);
   if (nat) {
-    socket = nat->internal_factory()->CreateAsyncSocket(type);
+    socket = nat->internal_factory()->CreateAsyncSocket(family, type);
     *nat_addr = (type == SOCK_STREAM) ?
         nat->internal_tcp_address() : nat->internal_address();
   } else {
-    socket = server_->CreateAsyncSocket(type);
+    socket = server_->CreateAsyncSocket(family, type);
   }
   return socket;
 }

@@ -479,9 +479,8 @@ class DataChannel : public BaseChannel {
     return static_cast<DataMediaChannel*>(BaseChannel::media_channel());
   }
 
-  bool SetReceiver(uint32 ssrc, DataMediaChannel::Receiver* receiver);
   bool SendData(const DataMediaChannel::SendDataParams& params,
-                const char* data, int len);
+                const std::string& data);
 
   void StartMediaMonitor(int cms);
   void StopMediaMonitor();
@@ -491,28 +490,33 @@ class DataChannel : public BaseChannel {
       SignalConnectionMonitor;
   sigslot::signal3<DataChannel*, uint32, DataMediaChannel::Error>
       SignalMediaError;
+  sigslot::signal3<DataChannel*,
+                   const ReceiveDataParams&,
+                   const std::string&>
+      SignalDataReceived;
 
  private:
-  struct DataReceiverMessageData : public talk_base::MessageData {
-    DataReceiverMessageData(uint32 ssrc,
-                            DataMediaChannel::Receiver* receiver)
-        : ssrc(ssrc),
-          receiver(receiver) {
-    }
-    uint32 ssrc;
-    DataMediaChannel::Receiver* receiver;
-  };
-
   struct SendDataMessageData : public talk_base::MessageData {
     SendDataMessageData(const DataMediaChannel::SendDataParams& params,
-                        const char* data, int len)
+                        const std::string& data)
         : params(params),
-          data(data),
-          len(len) {
+          data(data) {
     }
     const DataMediaChannel::SendDataParams params;
-    const char* data;
-    int len;
+    const std::string data;
+  };
+
+  struct DataReceivedMessageData : public talk_base::MessageData {
+    // We copy the data because the data will become invalid after we
+    // handle DataMediaChannel::SignalDataReceived but before we fire
+    // SignalDataReceived.
+    DataReceivedMessageData(
+        const ReceiveDataParams& params, const char* data, size_t len)
+        : params(params),
+          data(data, len) {
+    }
+    const ReceiveDataParams params;
+    const std::string data;
   };
 
   // overrides from BaseChannel
@@ -529,6 +533,8 @@ class DataChannel : public BaseChannel {
       SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
   virtual void OnMediaMonitorUpdate(
       DataMediaChannel *media_channel, const DataMediaInfo& info);
+  void OnDataReceived(
+      const ReceiveDataParams& params, const char* data, size_t len);
   void OnDataChannelError(uint32 ssrc, DataMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
 

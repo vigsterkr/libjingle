@@ -27,9 +27,7 @@
 
 #include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
 
-// Assert on all APIs that are not expected to be used.
-#include <assert.h>
-
+#include "talk/base/common.h"
 #include "talk/base/refcount.h"
 #include "talk/base/thread.h"
 #include "talk/base/timeutils.h"
@@ -53,10 +51,15 @@ static const int kTotalDelayMs = 0;
 static const int kClockDriftMs = 0;
 static const uint32_t kMaxVolume = 14392;
 
+enum {
+  MSG_RUN_PROCESS,
+  MSG_STOP_PROCESS,
+};
+
 FakeAudioCaptureModule::FakeAudioCaptureModule(
     talk_base::Thread* process_thread)
     : last_process_time_ms_(0),
-      audioCallback_(NULL),
+      audio_callback_(NULL),
       recording_(false),
       playing_(false),
       play_is_initialized_(false),
@@ -66,6 +69,11 @@ FakeAudioCaptureModule::FakeAudioCaptureModule(
       next_frame_time_(0),
       process_thread_(process_thread),
       frames_received_(0) {
+}
+
+FakeAudioCaptureModule::~FakeAudioCaptureModule() {
+  // Ensure that thread stops calling ProcessFrame().
+  process_thread_->Send(this, MSG_STOP_PROCESS);
 }
 
 talk_base::scoped_refptr<FakeAudioCaptureModule> FakeAudioCaptureModule::Create(
@@ -88,7 +96,7 @@ int FakeAudioCaptureModule::frames_received() const {
 int32_t FakeAudioCaptureModule::Version(char* /*version*/,
                                         uint32_t& /*remaining_buffer_in_bytes*/,
                                         uint32_t& /*position*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -112,31 +120,31 @@ int32_t FakeAudioCaptureModule::Process() {
 
 WebRtc_Word32 FakeAudioCaptureModule::ChangeUniqueId(
     const WebRtc_Word32 /*id*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::ActiveAudioLayer(
-    AudioLayer* /*audioLayer*/) const {
-  assert(false);
+    AudioLayer* /*audio_layer*/) const {
+  ASSERT(false);
   return 0;
 }
 
 webrtc::AudioDeviceModule::ErrorCode FakeAudioCaptureModule::LastError() const {
-  assert(false);
+  ASSERT(false);
   return webrtc::AudioDeviceModule::kAdmErrNone;
 }
 
 int32_t FakeAudioCaptureModule::RegisterEventObserver(
-    webrtc::AudioDeviceObserver* /*eventCallback*/) {
+    webrtc::AudioDeviceObserver* /*event_callback*/) {
   // Only used to report warnings and errors. This fake implementation won't
   // generate any so discard this callback.
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::RegisterAudioCallback(
-    webrtc::AudioTransport* audioCallback) {
-  audioCallback_ = audioCallback;
+    webrtc::AudioTransport* audio_callback) {
+  audio_callback_ = audio_callback;
   return 0;
 }
 
@@ -151,17 +159,17 @@ int32_t FakeAudioCaptureModule::Terminate() {
 }
 
 bool FakeAudioCaptureModule::Initialized() const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int16_t FakeAudioCaptureModule::PlayoutDevices() {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int16_t FakeAudioCaptureModule::RecordingDevices() {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -169,7 +177,7 @@ int32_t FakeAudioCaptureModule::PlayoutDeviceName(
     uint16_t /*index*/,
     char /*name*/[webrtc::kAdmMaxDeviceNameSize],
     char /*guid*/[webrtc::kAdmMaxGuidSize]) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -177,7 +185,7 @@ int32_t FakeAudioCaptureModule::RecordingDeviceName(
     uint16_t /*index*/,
     char /*name*/[webrtc::kAdmMaxDeviceNameSize],
     char /*guid*/[webrtc::kAdmMaxGuidSize]) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -207,7 +215,7 @@ int32_t FakeAudioCaptureModule::SetRecordingDevice(
 }
 
 int32_t FakeAudioCaptureModule::PlayoutIsAvailable(bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -221,7 +229,7 @@ bool FakeAudioCaptureModule::PlayoutIsInitialized() const {
 }
 
 int32_t FakeAudioCaptureModule::RecordingIsAvailable(bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -231,7 +239,7 @@ int32_t FakeAudioCaptureModule::InitRecording() {
 }
 
 bool FakeAudioCaptureModule::RecordingIsInitialized() const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -279,19 +287,20 @@ int32_t FakeAudioCaptureModule::SetAGC(bool /*enable*/) {
 }
 
 bool FakeAudioCaptureModule::AGC() const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::SetWaveOutVolume(uint16_t /*volumeLeft*/,
-                                                 uint16_t /*volumeRight*/) {
-  assert(false);
+int32_t FakeAudioCaptureModule::SetWaveOutVolume(uint16_t /*volume_left*/,
+                                                 uint16_t /*volume_right*/) {
+  ASSERT(false);
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::WaveOutVolume(uint16_t* /*volumeLeft*/,
-                                              uint16_t* /*volumeRight*/) const {
-  assert(false);
+int32_t FakeAudioCaptureModule::WaveOutVolume(
+    uint16_t* /*volume_left*/,
+    uint16_t* /*volume_right*/) const {
+  ASSERT(false);
   return 0;
 }
 
@@ -307,7 +316,7 @@ int32_t FakeAudioCaptureModule::InitSpeaker() {
 }
 
 bool FakeAudioCaptureModule::SpeakerIsInitialized() const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -323,119 +332,120 @@ int32_t FakeAudioCaptureModule::InitMicrophone() {
 }
 
 bool FakeAudioCaptureModule::MicrophoneIsInitialized() const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SpeakerVolumeIsAvailable(bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetSpeakerVolume(uint32_t /*volume*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SpeakerVolume(uint32_t* /*volume*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MaxSpeakerVolume(
-    uint32_t* /*maxVolume*/) const {
-  assert(false);
+    uint32_t* /*max_volume*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MinSpeakerVolume(
-    uint32_t* /*minVolume*/) const {
-  assert(false);
+    uint32_t* /*min_volume*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SpeakerVolumeStepSize(
-    uint16_t* /*stepSize*/) const {
-  assert(false);
+    uint16_t* /*step_size*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneVolumeIsAvailable(
     bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetMicrophoneVolume(uint32_t /*volume*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneVolume(uint32_t* /*volume*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::MaxMicrophoneVolume(uint32_t* maxVolume) const {
-  *maxVolume = kMaxVolume;
+int32_t FakeAudioCaptureModule::MaxMicrophoneVolume(
+    uint32_t* max_volume) const {
+  *max_volume = kMaxVolume;
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MinMicrophoneVolume(
-    uint32_t* /*minVolume*/) const {
-  assert(false);
+    uint32_t* /*min_volume*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneVolumeStepSize(
-    uint16_t* /*stepSize*/) const {
-  assert(false);
+    uint16_t* /*step_size*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SpeakerMuteIsAvailable(bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetSpeakerMute(bool /*enable*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SpeakerMute(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneMuteIsAvailable(bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetMicrophoneMute(bool /*enable*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneMute(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneBoostIsAvailable(
     bool* /*available*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetMicrophoneBoost(bool /*enable*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::MicrophoneBoost(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -454,7 +464,7 @@ int32_t FakeAudioCaptureModule::SetStereoPlayout(bool /*enable*/) {
 }
 
 int32_t FakeAudioCaptureModule::StereoPlayout(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -473,7 +483,7 @@ int32_t FakeAudioCaptureModule::SetStereoRecording(bool enable) {
 }
 
 int32_t FakeAudioCaptureModule::StereoRecording(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -482,7 +492,7 @@ int32_t FakeAudioCaptureModule::SetRecordingChannel(
   if (channel != AudioDeviceModule::kChannelBoth) {
     // There is no right or left in mono. I.e. kChannelBoth should be used for
     // mono.
-    assert(false);
+    ASSERT(false);
     return -1;
   }
   return 0;
@@ -496,96 +506,107 @@ int32_t FakeAudioCaptureModule::RecordingChannel(ChannelType* channel) const {
 }
 
 int32_t FakeAudioCaptureModule::SetPlayoutBuffer(const BufferType /*type*/,
-                                                 uint16_t /*sizeMS*/) {
-  assert(false);
+                                                 uint16_t /*size_ms*/) {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::PlayoutBuffer(BufferType* /*type*/,
-                                              uint16_t* /*sizeMS*/) const {
-  assert(false);
+                                              uint16_t* /*size_ms*/) const {
+  ASSERT(false);
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::PlayoutDelay(uint16_t* delayMS) const {
+int32_t FakeAudioCaptureModule::PlayoutDelay(uint16_t* delay_ms) const {
   // No delay since audio frames are dropped.
-  *delayMS = 0;
+  *delay_ms = 0;
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::RecordingDelay(uint16_t* /*delayMS*/) const {
-  assert(false);
+int32_t FakeAudioCaptureModule::RecordingDelay(uint16_t* /*delay_ms*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::CPULoad(uint16_t* /*load*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::StartRawOutputFileRecording(
-    const char /*pcmFileNameUTF8*/[webrtc::kAdmMaxFileNameSize]) {
-  assert(false);
+    const char /*pcm_file_name_utf8*/[webrtc::kAdmMaxFileNameSize]) {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::StopRawOutputFileRecording() {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::StartRawInputFileRecording(
-    const char /*pcmFileNameUTF8*/[webrtc::kAdmMaxFileNameSize]) {
-  assert(false);
+    const char /*pcm_file_name_utf8*/[webrtc::kAdmMaxFileNameSize]) {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::StopRawInputFileRecording() {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetRecordingSampleRate(
-    const uint32_t /*samplesPerSec*/) {
-  assert(false);
+    const uint32_t /*samples_per_sec*/) {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::RecordingSampleRate(
-    uint32_t* /*samplesPerSec*/) const {
-  assert(false);
+    uint32_t* /*samples_per_sec*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetPlayoutSampleRate(
-    const uint32_t /*samplesPerSec*/) {
-  assert(false);
+    const uint32_t /*samples_per_sec*/) {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::PlayoutSampleRate(
-    uint32_t* /*samplesPerSec*/) const {
-  assert(false);
+    uint32_t* /*samples_per_sec*/) const {
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::ResetAudioDevice() {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::SetLoudspeakerStatus(bool /*enable*/) {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
 int32_t FakeAudioCaptureModule::GetLoudspeakerStatus(bool* /*enabled*/) const {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
-void FakeAudioCaptureModule::OnMessage(talk_base::Message* /*msg*/) {
-  ProcessFrame();
+void FakeAudioCaptureModule::OnMessage(talk_base::Message* msg) {
+  switch (msg->message_id) {
+    case MSG_RUN_PROCESS:
+      ProcessFrameP();
+      break;
+    case MSG_STOP_PROCESS:
+      StopProcessP();
+      break;
+    default:
+      // All existing messages should be caught. Getting here should never
+      // happen.
+      ASSERT(false);
+  }
 }
 
 bool FakeAudioCaptureModule::Initialize() {
@@ -599,9 +620,9 @@ bool FakeAudioCaptureModule::Initialize() {
 }
 
 void FakeAudioCaptureModule::SetSendBuffer(int value) {
-  uint16* buffer_ptr = reinterpret_cast<uint16*>(send_buffer_);
+  Sample* buffer_ptr = reinterpret_cast<Sample*>(send_buffer_);
   const int buffer_size_in_samples = sizeof(send_buffer_) /
-      (sizeof(uint16) / sizeof(char));
+      kNumberBytesPerSample;
   for (int i = 0; i < buffer_size_in_samples; ++i) {
     buffer_ptr[i] = value;
   }
@@ -612,9 +633,9 @@ void FakeAudioCaptureModule::ResetRecBuffer() {
 }
 
 bool FakeAudioCaptureModule::CheckRecBuffer(int value) {
-  const uint16* buffer_ptr = reinterpret_cast<const uint16*>(rec_buffer_);
+  const Sample* buffer_ptr = reinterpret_cast<const Sample*>(rec_buffer_);
   const int buffer_size_in_samples = sizeof(rec_buffer_) /
-      (sizeof(uint16) / sizeof(char));
+      kNumberBytesPerSample;
   for (int i = 0; i < buffer_size_in_samples; ++i) {
     if (buffer_ptr[i] >= value) return true;
   }
@@ -628,28 +649,25 @@ void FakeAudioCaptureModule::UpdateProcessing() {
       // Already started.
       return;
     }
-    process_thread_->Post(this);
+    process_thread_->Post(this, MSG_RUN_PROCESS);
   } else {
-    if (!started_) {
-      // Already stopped.
-      return;
-    }
-    process_thread_->Clear(this);
+    process_thread_->Send(this, MSG_STOP_PROCESS);
   }
 }
 
-void FakeAudioCaptureModule::ProcessFrame() {
+void FakeAudioCaptureModule::ProcessFrameP() {
+  ASSERT(talk_base::Thread::Current() == process_thread_);
   if (!started_) {
     next_frame_time_ = talk_base::Time();
     started_ = true;
   }
   // Receive and send frames every kTimePerFrameMs.
-  if (audioCallback_ != NULL) {
+  if (audio_callback_ != NULL) {
     if (playing_) {
-      ReceiveFrame();
+      ReceiveFrameP();
     }
     if (recording_) {
-      SendFrame();
+      SendFrameP();
     }
   }
 
@@ -657,18 +675,19 @@ void FakeAudioCaptureModule::ProcessFrame() {
   const uint32 current_time = talk_base::Time();
   const uint32 wait_time = (next_frame_time_ > current_time) ?
       next_frame_time_ - current_time : 0;
-  process_thread_->PostDelayed(wait_time, this);
+  process_thread_->PostDelayed(wait_time, this, MSG_RUN_PROCESS);
 }
 
-void FakeAudioCaptureModule::ReceiveFrame() {
+void FakeAudioCaptureModule::ReceiveFrameP() {
+  ASSERT(talk_base::Thread::Current() == process_thread_);
   ResetRecBuffer();
   uint32_t nSamplesOut = 0;
-  if (audioCallback_->NeedMorePlayData(kNumberSamples, kNumberBytesPerSample,
+  if (audio_callback_->NeedMorePlayData(kNumberSamples, kNumberBytesPerSample,
                                        kNumberOfChannels, kSamplesPerSecond,
                                        rec_buffer_, nSamplesOut) != 0) {
-    assert(false);
+    ASSERT(false);
   }
-  assert(nSamplesOut == kNumberSamples);
+  ASSERT(nSamplesOut == kNumberSamples);
   // The SetBuffer() function ensures that after decoding, the audio buffer
   // should contain samples of similar magnitude (there is likely to be some
   // distortion due to the audio pipeline). If one sample is detected to
@@ -678,13 +697,20 @@ void FakeAudioCaptureModule::ReceiveFrame() {
   if (CheckRecBuffer(kHighSampleValue)) ++frames_received_;
 }
 
-void FakeAudioCaptureModule::SendFrame() {
-  if (audioCallback_->RecordedDataIsAvailable(send_buffer_, kNumberSamples,
+void FakeAudioCaptureModule::SendFrameP() {
+  ASSERT(talk_base::Thread::Current() == process_thread_);
+  if (audio_callback_->RecordedDataIsAvailable(send_buffer_, kNumberSamples,
                                               kNumberBytesPerSample,
                                               kNumberOfChannels,
                                               kSamplesPerSecond, kTotalDelayMs,
                                               kClockDriftMs, current_mic_level_,
                                               current_mic_level_) != 0) {
-    assert(false);
+    ASSERT(false);
   }
+}
+
+void FakeAudioCaptureModule::StopProcessP() {
+  ASSERT(talk_base::Thread::Current() == process_thread_);
+  started_ = false;
+  process_thread_->Clear(this);
 }

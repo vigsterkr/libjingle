@@ -68,7 +68,7 @@ enum {
   MSG_SCALEVOLUME = 26,
   MSG_HANDLEVIEWREQUEST = 27,
   MSG_SENDDATA = 28,
-  MSG_SETDATARECEIVER = 29
+  MSG_DATARECEIVED = 29
 };
 
 struct SetContentData : public talk_base::MessageData {
@@ -1704,6 +1704,7 @@ DataChannel::DataChannel(talk_base::Thread* thread,
 }
 
 DataChannel::~DataChannel() {
+  StopMediaMonitor();
   // this can't be done in the base class, since it calls a virtual
   DisableMedia_w();
 }
@@ -1715,6 +1716,8 @@ bool DataChannel::Init() {
                          rtcp_channel)) {
     return false;
   }
+  media_channel()->SignalDataReceived.connect(
+      this, &DataChannel::OnDataReceived);
   media_channel()->SignalMediaError.connect(
       this, &DataChannel::OnDataChannelError);
   srtp_filter()->SignalSrtpError.connect(
@@ -1722,17 +1725,10 @@ bool DataChannel::Init() {
   return true;
 }
 
-bool DataChannel::SetReceiver(
-    uint32 ssrc, DataMediaChannel::Receiver* receiver) {
-  DataReceiverMessageData data(ssrc, receiver);
-  Send(MSG_SETDATARECEIVER, &data);
-  return true;
-}
-
 bool DataChannel::SendData(
     const DataMediaChannel::SendDataParams& params,
-    const char* data, int len) {
-  SendDataMessageData message_data(params, data, len);
+    const std::string& data) {
+  SendDataMessageData message_data(params, data);
   Send(MSG_SENDDATA, &message_data);
   return true;
 }
@@ -1828,17 +1824,18 @@ void DataChannel::ChangeState() {
 
 void DataChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
-    case MSG_SETDATARECEIVER: {
-      DataReceiverMessageData* data =
-          static_cast<DataReceiverMessageData*>(pmsg->pdata);
-      media_channel()->SetReceiver(data->ssrc, data->receiver);
-      break;
-    }
     case MSG_SENDDATA: {
       SendDataMessageData* data =
           static_cast<SendDataMessageData*>(pmsg->pdata);
       // TODO: use return value?
-      media_channel()->SendData(data->params, data->data, data->len);
+      media_channel()->SendData(data->params, data->data);
+      break;
+    }
+    case MSG_DATARECEIVED: {
+      DataReceivedMessageData* data =
+          static_cast<DataReceivedMessageData*>(pmsg->pdata);
+      SignalDataReceived(this, data->params, data->data);
+      delete data;
       break;
     }
     case MSG_CHANNEL_ERROR: {
@@ -1879,6 +1876,13 @@ void DataChannel::OnMediaMonitorUpdate(
     DataMediaChannel* media_channel, const DataMediaInfo& info) {
   ASSERT(media_channel == this->media_channel());
   SignalMediaMonitor(this, info);
+}
+
+void DataChannel::OnDataReceived(
+    const ReceiveDataParams& params, const char* data, size_t len) {
+  DataReceivedMessageData* msg = new DataReceivedMessageData(
+      params, data, len);
+  signaling_thread()->Post(this, MSG_DATARECEIVED, msg);
 }
 
 void DataChannel::OnDataChannelError(

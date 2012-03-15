@@ -32,6 +32,7 @@
 
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
+#include "talk/base/messagedigest.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/common.h"
@@ -104,6 +105,11 @@ const int kPortTimeoutDelay = 30 * 1000;  // 30 seconds
 
 const uint32 MSG_CHECKTIMEOUT = 1;
 const uint32 MSG_DELETE = 1;
+
+// Mediaproxy expects username to be 16 bytes.
+const int kUsernameLength = 16;
+// Minimum password length of 22 characters as per RFC5245.
+const int kPasswordLength = 22;
 }
 
 namespace cricket {
@@ -137,11 +143,12 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       generation_(0),
       preference_(-1),
       lifetime_(LT_PRESTART),
-      enable_port_packets_(false) {
+      enable_port_packets_(false),
+      enable_message_integrity_(false) {
   ASSERT(factory_ != NULL);
 
-  set_username_fragment(talk_base::CreateRandomString(16));
-  set_password(talk_base::CreateRandomString(16));
+  set_username_fragment(talk_base::CreateRandomString(kUsernameLength));
+  set_password(talk_base::CreateRandomString(kPasswordLength));
   LOG_J(LS_INFO, this) << "Port created";
 }
 
@@ -268,8 +275,18 @@ bool Port::GetStunMessage(const char* data, size_t size,
                                            username_attr->length())
                             << " from "
                             << addr.ToString();
-      SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_BAD_REQUEST,
-                               STUN_ERROR_REASON_BAD_REQUEST);
+      SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_UNAUTHORIZED,
+                               STUN_ERROR_REASON_UNAUTHORIZED);
+      return true;
+    }
+
+    if (enable_message_integrity_ &&
+        !stun_msg->ValidateMessageIntegrity(data, size, password_)) {
+      LOG_J(LS_ERROR, this) << "Message Integrity check failed for request, "
+                            << " from "
+                            << addr.ToString();
+      SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_UNAUTHORIZED,
+                               STUN_ERROR_REASON_UNAUTHORIZED);
       return true;
     }
 
@@ -293,7 +310,6 @@ bool Port::GetStunMessage(const char* data, size_t size,
       // Do not send error response to a response
       return true;
     }
-
     out_username->assign(username_attr->bytes(),
                          username_attr->bytes() + remote_frag_len);
 
@@ -354,8 +370,11 @@ void Port::SendBindingResponse(StunMessage* request,
   addr_attr->SetIP(addr.ipaddr());
   response.AddAttribute(addr_attr);
 
+  // Adding MESSAGE-INTEGRITY attribute to the response message.
+  if (enable_message_integrity_)
+    response.AddMessageIntegrity(password_);
+
   // Send the response message.
-  // NOTE: If we wanted to, this is where we would add the HMAC.
   talk_base::ByteBuffer buf;
   response.Write(&buf);
   if (SendTo(buf.Data(), buf.Length(), addr, false) < 0) {
@@ -482,6 +501,9 @@ class ConnectionRequest : public StunRequest {
     username.append(connection_->port()->username_fragment());
     username_attr->CopyBytes(username.c_str(), username.size());
     request->AddAttribute(username_attr);
+
+    // Adding Message Integrity to the STUN request message.
+    request->AddMessageIntegrity(connection_->remote_candidate().password());
   }
 
   virtual void OnResponse(StunMessage* response) {
@@ -626,11 +648,18 @@ void Connection::OnReadPacket(const char* data, size_t size) {
         set_write_state(STATE_WRITE_CONNECT);
       break;
 
+    // Response from remote peer. Does it match request sent?
+    // This doesn't just check, it makes callbacks if transaction
+    // id's match
     case STUN_BINDING_RESPONSE:
+      if (!port_->enable_message_integrity() ||
+          msg->ValidateMessageIntegrity(
+              data, size, remote_candidate().password())) {
+        requests_.CheckResponse(msg);
+      }
+      // Otherwise silently discard the response message.
+      break;
     case STUN_BINDING_ERROR_RESPONSE:
-      // Response from remote peer. Does it match request sent?
-      // This doesn't just check, it makes callbacks if transaction
-      // id's match
       requests_.CheckResponse(msg);
       break;
 

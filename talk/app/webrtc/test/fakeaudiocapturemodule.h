@@ -31,6 +31,9 @@
 // out or record any audio so it does not need access to any hardware and can
 // therefore be used in the gtest testing framework.
 
+// Note P postfix of a function indicates that it should only be called by the
+// processing thread.
+
 #ifndef TALK_APP_WEBRTC_TEST_FAKEAUDIOCAPTUREMODULE_H_
 #define TALK_APP_WEBRTC_TEST_FAKEAUDIOCAPTUREMODULE_H_
 
@@ -56,10 +59,12 @@ class FakeAudioCaptureModule
     : public webrtc::AudioDeviceModule,
       public talk_base::MessageHandler {
  public:
-  // Constants here are derived by running VoE using a real ADM.
-  // The constants correspond to 10ms of mono audio at 44kHz.
-  static const uint32_t kNumberSamples = 440;
-  static const int kNumberBytesPerSample = 2;
+  typedef uint16 Sample;
+
+  // The value for the following constants have been derived by running VoE
+  // using a real ADM. The constants correspond to 10ms of mono audio at 44kHz.
+  enum{kNumberSamples = 440};
+  enum{kNumberBytesPerSample = sizeof(Sample)};
 
   // Creates a FakeAudioCaptureModule or returns NULL on failure.
   // |process_thread| is used to push and pull audio frames to and from the
@@ -72,11 +77,10 @@ class FakeAudioCaptureModule
   // pulled frame was generated/pushed from a FakeAudioCaptureModule.
   int frames_received() const;
 
-  // Following functions are inherited from webrtc::AudioDeviceModule they are
-  // implemented if they are called in some way by PeerConnection. The functions
-  // that are not called have an empty implementation returning success. If the
-  // function is not expected to be called an assertion is triggered if it is
-  // called.
+  // Following functions are inherited from webrtc::AudioDeviceModule.
+  // Only functions called by PeerConnection are implemented, the rest do
+  // nothing and return success. If a function is not expected to be called by
+  // PeerConnection an assertion is triggered if it is in fact called.
   virtual int32_t Version(char* version,
                           uint32_t& remaining_buffer_in_bytes,
                           uint32_t& position) const;
@@ -84,13 +88,13 @@ class FakeAudioCaptureModule
   virtual int32_t Process();
   virtual WebRtc_Word32 ChangeUniqueId(const WebRtc_Word32 id);
 
-  virtual int32_t ActiveAudioLayer(AudioLayer* audioLayer) const;
+  virtual int32_t ActiveAudioLayer(AudioLayer* audio_layer) const;
 
   virtual ErrorCode LastError() const;
   virtual int32_t RegisterEventObserver(
-      webrtc::AudioDeviceObserver* eventCallback);
+      webrtc::AudioDeviceObserver* event_callback);
 
-  virtual int32_t RegisterAudioCallback(webrtc::AudioTransport* audioCallback);
+  virtual int32_t RegisterAudioCallback(webrtc::AudioTransport* audio_callback);
 
   virtual int32_t Init();
   virtual int32_t Terminate();
@@ -127,10 +131,10 @@ class FakeAudioCaptureModule
   virtual int32_t SetAGC(bool enable);
   virtual bool AGC() const;
 
-  virtual int32_t SetWaveOutVolume(uint16_t volumeLeft,
-                                   uint16_t volumeRight);
-  virtual int32_t WaveOutVolume(uint16_t* volumeLeft,
-                                uint16_t* volumeRight) const;
+  virtual int32_t SetWaveOutVolume(uint16_t volume_left,
+                                   uint16_t volume_right);
+  virtual int32_t WaveOutVolume(uint16_t* volume_left,
+                                uint16_t* volume_right) const;
 
   virtual int32_t SpeakerIsAvailable(bool* available);
   virtual int32_t InitSpeaker();
@@ -142,17 +146,17 @@ class FakeAudioCaptureModule
   virtual int32_t SpeakerVolumeIsAvailable(bool* available);
   virtual int32_t SetSpeakerVolume(uint32_t volume);
   virtual int32_t SpeakerVolume(uint32_t* volume) const;
-  virtual int32_t MaxSpeakerVolume(uint32_t* maxVolume) const;
-  virtual int32_t MinSpeakerVolume(uint32_t* minVolume) const;
-  virtual int32_t SpeakerVolumeStepSize(uint16_t* stepSize) const;
+  virtual int32_t MaxSpeakerVolume(uint32_t* max_volume) const;
+  virtual int32_t MinSpeakerVolume(uint32_t* min_volume) const;
+  virtual int32_t SpeakerVolumeStepSize(uint16_t* step_size) const;
 
   virtual int32_t MicrophoneVolumeIsAvailable(bool* available);
   virtual int32_t SetMicrophoneVolume(uint32_t volume);
   virtual int32_t MicrophoneVolume(uint32_t* volume) const;
-  virtual int32_t MaxMicrophoneVolume(uint32_t* maxVolume) const;
+  virtual int32_t MaxMicrophoneVolume(uint32_t* max_volume) const;
 
-  virtual int32_t MinMicrophoneVolume(uint32_t* minVolume) const;
-  virtual int32_t MicrophoneVolumeStepSize(uint16_t* stepSize) const;
+  virtual int32_t MinMicrophoneVolume(uint32_t* min_volume) const;
+  virtual int32_t MicrophoneVolumeStepSize(uint16_t* step_size) const;
 
   virtual int32_t SpeakerMuteIsAvailable(bool* available);
   virtual int32_t SetSpeakerMute(bool enable);
@@ -176,25 +180,25 @@ class FakeAudioCaptureModule
   virtual int32_t RecordingChannel(ChannelType* channel) const;
 
   virtual int32_t SetPlayoutBuffer(const BufferType type,
-                                   uint16_t sizeMS = 0);
+                                   uint16_t size_ms = 0);
   virtual int32_t PlayoutBuffer(BufferType* type,
-                                uint16_t* sizeMS) const;
-  virtual int32_t PlayoutDelay(uint16_t* delayMS) const;
-  virtual int32_t RecordingDelay(uint16_t* delayMS) const;
+                                uint16_t* size_ms) const;
+  virtual int32_t PlayoutDelay(uint16_t* delay_ms) const;
+  virtual int32_t RecordingDelay(uint16_t* delay_ms) const;
 
   virtual int32_t CPULoad(uint16_t* load) const;
 
   virtual int32_t StartRawOutputFileRecording(
-      const char pcmFileNameUTF8[webrtc::kAdmMaxFileNameSize]);
+      const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]);
   virtual int32_t StopRawOutputFileRecording();
   virtual int32_t StartRawInputFileRecording(
-      const char pcmFileNameUTF8[webrtc::kAdmMaxFileNameSize]);
+      const char pcm_file_name_utf8[webrtc::kAdmMaxFileNameSize]);
   virtual int32_t StopRawInputFileRecording();
 
-  virtual int32_t SetRecordingSampleRate(const uint32_t samplesPerSec);
-  virtual int32_t RecordingSampleRate(uint32_t* samplesPerSec) const;
-  virtual int32_t SetPlayoutSampleRate(const uint32_t samplesPerSec);
-  virtual int32_t PlayoutSampleRate(uint32_t* samplesPerSec) const;
+  virtual int32_t SetRecordingSampleRate(const uint32_t samples_per_sec);
+  virtual int32_t RecordingSampleRate(uint32_t* samples_per_sec) const;
+  virtual int32_t SetPlayoutSampleRate(const uint32_t samples_per_sec);
+  virtual int32_t PlayoutSampleRate(uint32_t* samples_per_sec) const;
 
   virtual int32_t ResetAudioDevice();
   virtual int32_t SetLoudspeakerStatus(bool enable);
@@ -205,13 +209,23 @@ class FakeAudioCaptureModule
   virtual void OnMessage(talk_base::Message* msg);
 
  protected:
+  // The constructor is protected because the class needs to be created as a
+  // reference counted object (for memory managment reasons). It could be
+  // exposed in which case the burden of proper instantiation would be put on
+  // the creator of a FakeAudioCaptureModule instance. To create an instance of
+  // this class use the Create(..) API.
   explicit FakeAudioCaptureModule(talk_base::Thread* process_thread);
+  // The destructor is protected because it is reference counted and should not
+  // be deleted directly.
+  virtual ~FakeAudioCaptureModule();
 
  private:
+  // Initializes the state of the FakeAudioCaptureModule. This API is called on
+  // creation by the Create() API.
   bool Initialize();
   // SetBuffer() sets all samples in send_buffer_ to |value|.
   void SetSendBuffer(int value);
-  // Resets rec_buffer_. I.e. sets all rec_buffer_ samples to 0.
+  // Resets rec_buffer_. I.e., sets all rec_buffer_ samples to 0.
   void ResetRecBuffer();
   // Returns true if rec_buffer_ contains one or more sample greater than or
   // equal to |value|.
@@ -223,33 +237,49 @@ class FakeAudioCaptureModule
 
   // Periodcally called function that ensures that frames are pulled and pushed
   // periodically if enabled/started.
-  void ProcessFrame();
+  void ProcessFrameP();
   // Pulls frames from the registered webrtc::AudioTransport.
-  void ReceiveFrame();
+  void ReceiveFrameP();
   // Pushes frames to the registered webrtc::AudioTransport.
-  void SendFrame();
+  void SendFrameP();
+  // Stops the periodic calling of ProcessFrame() in a thread safe way.
+  void StopProcessP();
 
+  // The time in milliseconds when Process() was last called or 0 if no call
+  // has been made.
   uint32 last_process_time_ms_;
 
   // Callback for playout and recording.
-  webrtc::AudioTransport* audioCallback_;
+  webrtc::AudioTransport* audio_callback_;
 
-  bool recording_;
-  bool playing_;
+  bool recording_; // True when audio is being pushed from the instance.
+  bool playing_; // True when audio is being pulled by the instance.
 
-  bool play_is_initialized_;
-  bool rec_is_initialized_;
+  bool play_is_initialized_; // True when the instance is ready to pull audio.
+  bool rec_is_initialized_; // True when the instance is ready to push audio.
 
+  // Input to and output from RecordedDataIsAvailable(..) makes it possible to
+  // modify the current mic level. The implementation does not care about the
+  // mic level so it just feeds back what it receives.
   uint32_t current_mic_level_;
 
+  // next_frame_time_ is updated in a non-drifting manner to indicate the next
+  // wall clock time the next frame should be generated and received. started_
+  // ensures that next_frame_time_ can be initialized properly on first call.
   bool started_;
   uint32 next_frame_time_;
 
+  // User provided thread context.
   talk_base::Thread* process_thread_;
 
+  // Buffer for storing samples received from the webrtc::AudioTransport.
   char rec_buffer_[kNumberSamples * kNumberBytesPerSample];
+  // Buffer for samples to send to the webrtc::AudioTransport.
   char send_buffer_[kNumberSamples * kNumberBytesPerSample];
 
+  // Counter of frames received that have samples of high enough amplitude to
+  // indicate that the frames are not faked somewhere in the audio pipeline
+  // (e.g. by a jitter buffer).
   int frames_received_;
 };
 

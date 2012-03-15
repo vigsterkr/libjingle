@@ -248,10 +248,10 @@ Win32Socket::~Win32Socket() {
   Close();
 }
 
-bool Win32Socket::CreateT(int type) {
+bool Win32Socket::CreateT(int family, int type) {
   Close();
   int proto = (SOCK_DGRAM == type) ? IPPROTO_UDP : IPPROTO_TCP;
-  socket_ = ::WSASocket(AF_INET, type, proto, NULL, NULL, 0);
+  socket_ = ::WSASocket(family, type, proto, NULL, NULL, 0);
   if (socket_ == INVALID_SOCKET) {
     UpdateLastError();
     return false;
@@ -328,7 +328,7 @@ int Win32Socket::Bind(const SocketAddress& addr) {
 }
 
 int Win32Socket::Connect(const SocketAddress& addr) {
-  if ((socket_ == INVALID_SOCKET) && !CreateT(SOCK_STREAM))
+  if ((socket_ == INVALID_SOCKET) && !CreateT(AF_INET, SOCK_STREAM))
     return SOCKET_ERROR;
 
   if (!sink_ && !SetAsync(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE))
@@ -713,12 +713,20 @@ Win32SocketServer::~Win32SocketServer() {
 }
 
 Socket* Win32SocketServer::CreateSocket(int type) {
-  return CreateAsyncSocket(type);
+  return CreateSocket(AF_INET, type);
+}
+
+Socket* Win32SocketServer::CreateSocket(int family, int type) {
+  return CreateAsyncSocket(family, type);
 }
 
 AsyncSocket* Win32SocketServer::CreateAsyncSocket(int type) {
+  return CreateAsyncSocket(AF_INET, type);
+}
+
+AsyncSocket* Win32SocketServer::CreateAsyncSocket(int family, int type) {
   Win32Socket* socket = new Win32Socket;
-  if (socket->CreateT(type)) {
+  if (socket->CreateT(family, type)) {
     return socket;
   }
   delete socket;

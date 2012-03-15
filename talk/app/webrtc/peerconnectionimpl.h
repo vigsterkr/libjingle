@@ -31,10 +31,10 @@
 #include <map>
 #include <string>
 
-#include "talk/app/webrtc/jsepsignaling.h"
+#include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/peerconnectionfactoryimpl.h"
-#include "talk/app/webrtc/peerconnectionsignaling.h"
+#include "talk/app/webrtc/roapsignaling.h"
 #include "talk/app/webrtc/streamcollectionimpl.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/scoped_ptr.h"
@@ -44,10 +44,10 @@ namespace webrtc {
 class MediaStreamHandlers;
 
 // PeerConnectionImpl implements the PeerConnection interface.
-// It uses PeerConnectionSignaling and WebRtcSession to implement
+// It uses RoapSignaling and WebRtcSession to implement
 // the PeerConnection functionality.
 class PeerConnection : public PeerConnectionInterface,
-                       public JsepRemoteMediaStreamObserver,
+                       public RemoteMediaStreamObserver,
                        public talk_base::MessageHandler,
                        public sigslot::has_slots<> {
  public:
@@ -94,12 +94,11 @@ class PeerConnection : public PeerConnectionInterface,
   // Implement talk_base::MessageHandler.
   void OnMessage(talk_base::Message* msg);
 
-  // Signals from PeerConnectionSignaling.
+  // Signals from RoapSignaling.
   void OnNewPeerConnectionMessage(const std::string& message);
-  void OnRemoteStreamAdded(MediaStreamInterface* remote_stream);
-  void OnRemoteStreamRemoved(MediaStreamInterface* remote_stream);
-  void OnSignalingStateChange(PeerConnectionSignaling::State state);
+  void OnSignalingStateChange(RoapSignaling::State state);
 
+  // Implements RemoteMediaStreamObserver.
   virtual void OnAddStream(MediaStreamInterface* stream);
   virtual void OnRemoveStream(MediaStreamInterface* stream);
 
@@ -129,8 +128,8 @@ class PeerConnection : public PeerConnectionInterface,
 
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
   talk_base::scoped_ptr<WebRtcSession> session_;
-  talk_base::scoped_ptr<PeerConnectionSignaling> roap_signaling_;
-  talk_base::scoped_ptr<JsepSignaling> jsep_signaling_;
+  talk_base::scoped_ptr<RoapSignaling> roap_signaling_;
+  talk_base::scoped_ptr<MediaStreamSignaling> mediastream_signaling_;
   talk_base::scoped_ptr<MediaStreamHandlers> stream_handler_;
 };
 

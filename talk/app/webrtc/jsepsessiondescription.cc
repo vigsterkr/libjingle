@@ -35,12 +35,21 @@ using cricket::SessionDescription;
 
 namespace webrtc {
 
+SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
+  JsepSessionDescription* jsep_desc = new JsepSessionDescription();
+  if (!jsep_desc->Initialize(sdp)) {
+    delete jsep_desc;
+    return NULL;
+  }
+  return jsep_desc;
+}
+
 JsepSessionDescription::JsepSessionDescription() {
 }
 
 JsepSessionDescription::JsepSessionDescription(
-    const cricket::SessionDescription* description) {
-  SetDescription(description->Copy());
+    cricket::SessionDescription* description) {
+  SetDescription(description);
 }
 
 JsepSessionDescription::~JsepSessionDescription() {}

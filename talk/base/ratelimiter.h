@@ -25,54 +25,48 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_NULLSOCKETSERVER_H_
-#define TALK_BASE_NULLSOCKETSERVER_H_
+#ifndef TALK_BASE_RATELIMITER_H_
+#define TALK_BASE_RATELIMITER_H_
 
-#include "talk/base/event.h"
-#include "talk/base/physicalsocketserver.h"
+#include <stdlib.h>
+#include "talk/base/basictypes.h"
 
 namespace talk_base {
 
-// NullSocketServer
-
-class NullSocketServer : public talk_base::SocketServer {
+// Limits the rate of use to a certain maximum quantity per period of
+// time.  Use, for example, for simple bandwidth throttling.
+//
+// It's implemented like a diet plan: You have so many calories per
+// day.  If you hit the limit, you can't eat any more until the next
+// day.
+class RateLimiter {
  public:
-  NullSocketServer() : event_(false, false) {}
-
-  virtual bool Wait(int cms, bool process_io) {
-    event_.Wait(cms);
-    return true;
+  // For example, 100kb per second.
+  RateLimiter(size_t max, double period)
+      : max_per_period_(max),
+        period_length_(period),
+        used_in_period_(0),
+        period_start_(0.0),
+        period_end_(period) {
   }
+  virtual ~RateLimiter() {}
 
-  virtual void WakeUp() {
-    event_.Set();
-  }
-
-  virtual talk_base::Socket* CreateSocket(int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::Socket* CreateSocket(int family, int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::AsyncSocket* CreateAsyncSocket(int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
-  virtual talk_base::AsyncSocket* CreateAsyncSocket(int family, int type) {
-    ASSERT(false);
-    return NULL;
-  }
-
+  // Returns true if if the desired quantity is available in the
+  // current period (< (max - used)).  Once the given time passes the
+  // end of the period, used is set to zero and more use is available.
+  bool CanUse(size_t desired, double time);
+  // Increment the quantity used this period.  If past the end of a
+  // period, a new period is started.
+  void Use(size_t used, double time);
 
  private:
-  talk_base::Event event_;
+  size_t max_per_period_;
+  double period_length_;
+  size_t used_in_period_;
+  double period_start_;
+  double period_end_;
 };
 
 }  // namespace talk_base
 
-#endif  // TALK_BASE_NULLSOCKETSERVER_H_
+#endif  // TALK_BASE_RATELIMITER_H_

@@ -53,12 +53,12 @@ class FakeTiming : public talk_base::Timing {
   double now_;
 };
 
-class FakeDataReceiver : public cricket::DataMediaChannel::Receiver {
+class FakeDataReceiver : public sigslot::has_slots<> {
  public:
   FakeDataReceiver() : has_received_data_(false) {}
 
-  virtual void ReceiveData(
-      const cricket::DataMediaChannel::ReceiveDataParams& params,
+  void OnDataReceived(
+      const cricket::ReceiveDataParams& params,
       const char* data, size_t len) {
     has_received_data_ = true;
     last_received_data_ = std::string(data, len);
@@ -69,8 +69,7 @@ class FakeDataReceiver : public cricket::DataMediaChannel::Receiver {
   bool has_received_data() const { return has_received_data_; }
   std::string last_received_data() const { return last_received_data_; }
   size_t last_received_data_len() const { return last_received_data_len_; }
-  cricket::DataMediaChannel::ReceiveDataParams
-      last_received_data_params() const {
+  cricket::ReceiveDataParams last_received_data_params() const {
     return last_received_data_params_;
   }
 
@@ -78,7 +77,7 @@ class FakeDataReceiver : public cricket::DataMediaChannel::Receiver {
   bool has_received_data_;
   std::string last_received_data_;
   size_t last_received_data_len_;
-  cricket::DataMediaChannel::ReceiveDataParams last_received_data_params_;
+  cricket::ReceiveDataParams last_received_data_params_;
 };
 
 class DataMediaChannelTest : public testing::Test {
@@ -108,10 +107,12 @@ class DataMediaChannelTest : public testing::Test {
   cricket::DataMediaChannel* CreateChannel(cricket::DataEngine* dme) {
     cricket::DataMediaChannel* channel = dme->CreateChannel();
     channel->SetInterface(iface_.get());
+    channel->SignalDataReceived.connect(
+        receiver_.get(), &FakeDataReceiver::OnDataReceived);
     return channel;
   }
 
-  cricket::DataMediaChannel::Receiver* receiver() {
+  FakeDataReceiver* receiver() {
     return receiver_.get();
   }
 
@@ -127,7 +128,7 @@ class DataMediaChannelTest : public testing::Test {
     return receiver_->last_received_data_len();
   }
 
-  cricket::DataMediaChannel::ReceiveDataParams GetReceivedDataParams() {
+  cricket::ReceiveDataParams GetReceivedDataParams() {
     return receiver_->last_received_data_params();
   }
 
@@ -199,21 +200,13 @@ TEST_F(DataMediaChannelTest, SendData) {
     'f', 'o', 'o', 'd',
   };
 
-  // NULL data
-  EXPECT_FALSE(dmc->SendData(params, NULL, data.length()));
-  EXPECT_FALSE(HasSentData(0));
-
-  // Negative length
-  EXPECT_FALSE(dmc->SendData(params, data.data(), -1));
-  EXPECT_FALSE(HasSentData(0));
-
   // Not sending
-  EXPECT_FALSE(dmc->SendData(params, data.data(), data.length()));
+  EXPECT_FALSE(dmc->SendData(params, data));
   EXPECT_FALSE(HasSentData(0));
   ASSERT_TRUE(dmc->SetSend(true));
 
   // Unknown stream name.
-  EXPECT_FALSE(dmc->SendData(params, data.data(), data.length()));
+  EXPECT_FALSE(dmc->SendData(params, data));
   EXPECT_FALSE(HasSentData(0));
 
   cricket::StreamParams stream;
@@ -221,7 +214,7 @@ TEST_F(DataMediaChannelTest, SendData) {
   ASSERT_TRUE(dmc->AddSendStream(stream));
 
   // Unknown codec;
-  EXPECT_FALSE(dmc->SendData(params, data.data(), data.length()));
+  EXPECT_FALSE(dmc->SendData(params, data));
   EXPECT_FALSE(HasSentData(0));
 
   cricket::DataCodec codec;
@@ -232,11 +225,11 @@ TEST_F(DataMediaChannelTest, SendData) {
   ASSERT_TRUE(dmc->SetSendCodecs(codecs));
 
   // Length too large;
-  EXPECT_FALSE(dmc->SendData(params, data.data(), 10000000));
+  EXPECT_FALSE(dmc->SendData(params, std::string(data.data(), 10000)));
   EXPECT_FALSE(HasSentData(0));
 
   // Finally works!
-  EXPECT_TRUE(dmc->SendData(params, data.data(), data.length()));
+  EXPECT_TRUE(dmc->SendData(params, data));
   ASSERT_TRUE(HasSentData(0));
   EXPECT_EQ(sizeof(padded_data), GetSentData(0).length());
   EXPECT_EQ(0, memcmp(
@@ -250,7 +243,7 @@ TEST_F(DataMediaChannelTest, SendData) {
   // Should bump timestamp by 180000 because the clock rate is 90khz.
   SetNow(2);
 
-  EXPECT_TRUE(dmc->SendData(params, data.data(), data.length()));
+  EXPECT_TRUE(dmc->SendData(params, data));
   ASSERT_TRUE(HasSentData(1));
   EXPECT_EQ(sizeof(padded_data), GetSentData(1).length());
   EXPECT_EQ(0, memcmp(
@@ -298,16 +291,16 @@ TEST_F(DataMediaChannelTest, SendDataMultipleClocks) {
 
   std::string data = "foo";
 
-  EXPECT_TRUE(dmc1->SendData(params1, data.data(), data.length()));
-  EXPECT_TRUE(dmc2->SendData(params2, data.data(), data.length()));
+  EXPECT_TRUE(dmc1->SendData(params1, data));
+  EXPECT_TRUE(dmc2->SendData(params2, data));
 
   // Should bump timestamp by 90000 because the clock rate is 90khz.
   timing1->set_now(1);
   // Should bump timestamp by 180000 because the clock rate is 90khz.
   timing2->set_now(2);
 
-  EXPECT_TRUE(dmc1->SendData(params1, data.data(), data.length()));
-  EXPECT_TRUE(dmc2->SendData(params2, data.data(), data.length()));
+  EXPECT_TRUE(dmc1->SendData(params1, data));
+  EXPECT_TRUE(dmc2->SendData(params2, data));
 
   ASSERT_TRUE(HasSentData(3));
   cricket::RtpHeader header1a = GetSentDataHeader(0);
@@ -319,6 +312,53 @@ TEST_F(DataMediaChannelTest, SendDataMultipleClocks) {
   EXPECT_EQ(header1a.timestamp + 90000, header1b.timestamp);
   EXPECT_EQ(header2a.seq_num + 1, header2b.seq_num);
   EXPECT_EQ(header2a.timestamp + 180000, header2b.timestamp);
+}
+
+TEST_F(DataMediaChannelTest, SendDataRate) {
+  talk_base::scoped_ptr<cricket::DataMediaChannel> dmc(CreateChannel());
+
+  ASSERT_TRUE(dmc->SetSend(true));
+
+  cricket::DataCodec codec;
+  codec.id = 103;
+  codec.name = cricket::kGoogleDataCodecName;
+  std::vector<cricket::DataCodec> codecs;
+  codecs.push_back(codec);
+  ASSERT_TRUE(dmc->SetSendCodecs(codecs));
+
+  cricket::StreamParams stream;
+  stream.add_ssrc(42);
+  ASSERT_TRUE(dmc->AddSendStream(stream));
+
+  cricket::DataMediaChannel::SendDataParams params;
+  params.ssrc = 42;
+  std::string data = "food";
+
+  // With rtp overhead of 16 bytes, each one of our packets is 20
+  // bytes, or 160 bits.  So, a limit of 488bps will allow 3 packets,
+  // but not four.
+  dmc->SetSendBandwidth(false, 488);
+
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_FALSE(dmc->SendData(params, data));
+  EXPECT_FALSE(dmc->SendData(params, data));
+
+  SetNow(0.9);
+  EXPECT_FALSE(dmc->SendData(params, data));
+
+  SetNow(1.1);
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_TRUE(dmc->SendData(params, data));
+  SetNow(1.9);
+  EXPECT_TRUE(dmc->SendData(params, data));
+
+  SetNow(2.2);
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_TRUE(dmc->SendData(params, data));
+  EXPECT_FALSE(dmc->SendData(params, data));
 }
 
 TEST_F(DataMediaChannelTest, ReceiveData) {
@@ -356,12 +396,6 @@ TEST_F(DataMediaChannelTest, ReceiveData) {
   cricket::StreamParams stream;
   stream.add_ssrc(42);
   ASSERT_TRUE(dmc->AddRecvStream(stream));
-
-  // No receiver set
-  dmc->OnPacketReceived(&packet);
-  EXPECT_FALSE(HasReceivedData());
-
-  dmc->SetReceiver(42, receiver());
 
   // Finally works!
   dmc->OnPacketReceived(&packet);

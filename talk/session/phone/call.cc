@@ -189,17 +189,6 @@ void Call::SetVideoRenderer(Session* session, uint32 ssrc,
   }
 }
 
-void Call::SetDataReceiver(Session* session, uint32 ssrc,
-                           DataMediaChannel::Receiver* receiver) {
-  DataChannel* data_channel = GetDataChannel(session);
-  if (!data_channel) {
-    LOG(LS_WARNING) << "Could not set data receiver: no data channel.";
-    return;
-  }
-
-  data_channel->SetReceiver(ssrc, receiver);
-}
-
 void Call::OnMessage(talk_base::Message* message) {
   switch (message->message_id) {
   case MSG_CHECKAUTODESTROY:
@@ -272,6 +261,7 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
         session, data_offer->name, rtcp);
     if (data_channel) {
       data_channel_map_[session->id()] = data_channel;
+      data_channel->SignalDataReceived.connect(this, &Call::OnDataReceived);
     } else {
       succeeded = false;
     }
@@ -406,14 +396,14 @@ void Call::MuteVideo(bool mute) {
 
 void Call::SendData(Session* session,
                     const DataMediaChannel::SendDataParams& params,
-                    const char* data, int len) {
+                    const std::string& data) {
   DataChannel* data_channel = GetDataChannel(session);
   if (!data_channel) {
     LOG(LS_WARNING) << "Could not send data: no data channel.";
     return;
   }
 
-  data_channel->SendData(params, data, len);
+  data_channel->SendData(params, data);
 }
 
 void Call::PressDTMF(int event) {
@@ -599,6 +589,12 @@ void Call::OnConnectionMonitor(VideoChannel* channel,
 
 void Call::OnMediaMonitor(VideoChannel* channel, const VideoMediaInfo& info) {
   SignalVideoMediaMonitor(this, info);
+}
+
+void Call::OnDataReceived(DataChannel* channel,
+                          const ReceiveDataParams& params,
+                          const std::string& data) {
+  SignalDataReceived(this, params, data);
 }
 
 uint32 Call::id() {

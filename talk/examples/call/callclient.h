@@ -69,7 +69,6 @@ namespace cricket {
 class PortAllocator;
 class MediaEngineInterface;
 class MediaSessionClient;
-class Receiver;
 class Call;
 class SessionManagerTask;
 struct CallOptions;
@@ -96,8 +95,7 @@ struct StaticRenderedView {
 
 typedef std::vector<StaticRenderedView> StaticRenderedViews;
 
-class CallClient: public sigslot::has_slots<>,
-                  public cricket::DataMediaChannel::Receiver {
+class CallClient: public sigslot::has_slots<> {
  public:
   CallClient(buzz::XmppClient* xmpp_client,
              const std::string& caps_node,
@@ -222,12 +220,9 @@ class CallClient: public sigslot::has_slots<>,
   void OnRoomConfigResult(buzz::MucRoomConfigTask* task);
   void OnRoomConfigError(buzz::IqTask* task,
                          const buzz::XmlElement* stanza);
-  void SetDataReceiverOfAllStreams(cricket::Session* session);
-  void SetDataReceiver(cricket::Session* session,
-                       const std::vector<cricket::StreamParams>& streams);
-  virtual void ReceiveData(
-      const cricket::DataMediaChannel::ReceiveDataParams& params,
-      const char* data, size_t len);
+  void OnDataReceived(cricket::Call*,
+                      const cricket::ReceiveDataParams& params,
+                      const std::string& data);
   buzz::Jid GenerateRandomMucJid();
 
   void AddStaticRenderedView(

@@ -49,7 +49,7 @@ class Win32Socket : public AsyncSocket {
   Win32Socket();
   virtual ~Win32Socket();
 
-  bool CreateT(int type);
+  bool CreateT(int family, int type);
 
   int Attach(SOCKET s);
   void SetTimeout(int ms);
@@ -115,7 +115,11 @@ class Win32SocketServer : public SocketServer {
 
   // SocketServer Interface
   virtual Socket* CreateSocket(int type);
+  virtual Socket* CreateSocket(int family, int type);
+
   virtual AsyncSocket* CreateAsyncSocket(int type);
+  virtual AsyncSocket* CreateAsyncSocket(int family, int type);
+
   virtual void SetMessageQueue(MessageQueue* queue);
   virtual bool Wait(int cms, bool process_io);
   virtual void WakeUp();

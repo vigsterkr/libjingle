@@ -32,7 +32,6 @@
 
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
-#include "talk/app/webrtc/sessiondescriptionprovider.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/session.h"
@@ -50,20 +49,23 @@ class VoiceChannel;
 
 namespace webrtc {
 
+class MediaStreamSignaling;
+
 class WebRtcSession : public cricket::BaseSession,
                       public MediaProviderInterface,
-                      public SessionDescriptionProvider {
+                      public JsepInterface {
  public:
   WebRtcSession(cricket::ChannelManager* channel_manager,
                 talk_base::Thread* signaling_thread,
                 talk_base::Thread* worker_thread,
-                cricket::PortAllocator* port_allocator);
+                cricket::PortAllocator* port_allocator,
+                MediaStreamSignaling* mediastream_signaling);
   virtual ~WebRtcSession();
 
   bool Initialize();
 
   void RegisterObserver(IceCandidateObserver* observer) {
-    observer_ = observer;
+    ice_observer_ = observer;
   }
 
   void StartIce();
@@ -84,24 +86,23 @@ class WebRtcSession : public cricket::BaseSession,
   // TODO - It may be necessary to supply error code as well.
   sigslot::signal0<> SignalError;
 
- protected:
-  // Implements SessionDescriptionProvider
-  virtual cricket::SessionDescription* CreateOffer(
-      const cricket::MediaSessionOptions& options);
-  virtual cricket::SessionDescription* CreateAnswer(
-      const cricket::SessionDescription* offer,
-      const cricket::MediaSessionOptions& options);
-  virtual bool SetLocalDescription(cricket::SessionDescription* desc,
-                                   cricket::ContentAction type);
-  virtual bool SetRemoteDescription(cricket::SessionDescription* desc,
-                                    cricket::ContentAction type);
-  virtual bool AddRemoteCandidate(const std::string& remote_content_name,
-                                  const cricket::Candidate& candidate);
-  virtual const cricket::SessionDescription* local_description() const {
-    return cricket::BaseSession::local_description();
+  // Implements JsepInterface.
+  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
+  virtual SessionDescriptionInterface* CreateAnswer(
+      const MediaHints& hints,
+      const SessionDescriptionInterface* offer);
+  virtual bool SetLocalDescription(Action action,
+                                   SessionDescriptionInterface* desc);
+
+  virtual bool SetRemoteDescription(Action action,
+                                    SessionDescriptionInterface* desc);
+
+  virtual bool ProcessIceMessage(const IceCandidateInterface* candidate);
+  virtual const SessionDescriptionInterface* local_description() const {
+    return local_desc_.get();
   }
-  virtual const cricket::SessionDescription* remote_description() const {
-    return cricket::BaseSession::remote_description();
+  virtual const SessionDescriptionInterface* remote_description() const {
+    return remote_desc_.get();
   }
 
  private:
@@ -131,8 +132,11 @@ class WebRtcSession : public cricket::BaseSession,
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
-  IceCandidateObserver * observer_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
+  MediaStreamSignaling* mediastream_signaling_;
+  IceCandidateObserver * ice_observer_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
 };
 
 }  // namespace webrtc

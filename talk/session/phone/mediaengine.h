@@ -342,6 +342,7 @@ typedef CompositeMediaEngine<NullVoiceEngine, NullVideoEngine> NullMediaEngine;
 
 class DataEngineInterface {
  public:
+  virtual ~DataEngineInterface() {}
   virtual DataMediaChannel* CreateChannel() = 0;
   virtual const std::vector<DataCodec>& data_codecs() = 0;
 };
