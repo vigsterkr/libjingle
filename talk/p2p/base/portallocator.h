@@ -57,12 +57,12 @@ class PortAllocatorSession : public sigslot::has_slots<> {
  public:
   // TODO Remove session_type argument (and other places), as
   // its not used.
-  explicit PortAllocatorSession(const std::string& name,
-                                const std::string& session_type,
-                                uint32 flags) :
-      name_(name),
-      session_type_(session_type),
-      flags_(flags) {
+  PortAllocatorSession(const std::string& name,
+                       const std::string& session_type,
+                       uint32 flags)
+      : name_(name),
+        session_type_(session_type),
+        flags_(flags) {
   }
 
   // Subclasses should clean up any ports created.
@@ -84,6 +84,7 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   sigslot::signal2<PortAllocatorSession*, Port*> SignalPortReady;
   sigslot::signal2<PortAllocatorSession*,
                    const std::vector<Candidate>&> SignalCandidatesReady;
+  sigslot::signal1<PortAllocatorSession*> SignalCandidatesAllocationDone;
 
   uint32 generation() { return generation_; }
   void set_generation(uint32 generation) { generation_ = generation; }
@@ -139,6 +140,8 @@ class PortAllocator : public sigslot::has_slots<> {
   }
 
  protected:
+  // TODO - Change this version of CreateSession name to avoid method hiding
+  // when called by the derived classes.
   virtual PortAllocatorSession* CreateSession(const std::string &name,
       const std::string &session_type) = 0;
 
@@ -149,7 +152,6 @@ class PortAllocator : public sigslot::has_slots<> {
   talk_base::ProxyInfo proxy_;
   int min_port_;
   int max_port_;
-
   SessionMuxerMap muxers_;
 };
 

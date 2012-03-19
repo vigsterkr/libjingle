@@ -96,7 +96,8 @@ class TransportProxy {
         content_name_(content_name),
         transport_(transport),
         state_(STATE_INIT),
-        sent_candidates_(false) {}
+        sent_candidates_(false),
+        candidates_allocated_(false) {}
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
@@ -120,6 +121,10 @@ class TransportProxy {
   void CompleteNegotiation();
   void SetupMux(TransportProxy* proxy);
   const ChannelMap& channels() { return channels_; }
+  void set_candidates_allocated(bool allocated) {
+    candidates_allocated_ = allocated;
+  }
+  bool candidates_allocated() { return candidates_allocated_; }
 
  private:
   enum TransportState {
@@ -141,6 +146,7 @@ class TransportProxy {
   ChannelMap channels_;
   Candidates sent_candidates_;
   Candidates unsent_candidates_;
+  bool candidates_allocated_;
 };
 
 typedef std::map<std::string, TransportProxy*> TransportMap;
@@ -353,6 +359,14 @@ class BaseSession : public sigslot::has_slots<>,
       Transport* transport,
       const std::string& name,
       const cricket::Candidate& remote_candidate) {
+  }
+
+  virtual void OnTransportCandidatesAllocationDone(Transport* transport);
+
+  // Called when all transport channels allocated required candidates.
+  // This method should be used as an indication of candidates gathering process
+  // is completed and application can now send local candidates list to remote.
+  virtual void OnCandidatesAllocationDone() {
   }
 
   // Handles messages posted to us.

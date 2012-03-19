@@ -151,13 +151,6 @@ class PeerConnectionInterface : public JsepInterface,
     kSdpWaiting,
   };
 
-  // Indicates what types of local candidates should be used.
-  enum IceOptions {
-    kUseAll,
-    kNoRelay,
-    kOnlyRelay
-  };
-
   // Process a signaling message using the ROAP protocol.
   virtual void ProcessSignalingMessage(const std::string& msg) = 0;
 
@@ -196,10 +189,6 @@ class PeerConnectionInterface : public JsepInterface,
 
   // Returns the current SdpState.
   virtual SdpState sdp_state() = 0;
-
-  // Starts or updates the ICE Agent process of
-  // gathering local candidates and pinging remote candidates.
-  virtual void StartIce(IceOptions options) = 0;
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.

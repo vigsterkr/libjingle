@@ -78,6 +78,7 @@ enum {
   MSG_CANDIDATEREADY = 11,
   MSG_ROUTECHANGE = 12,
   MSG_CONNECTING = 13,
+  MSG_CANDIDATEALLOCATIONCOMPLETE = 14,
 };
 
 Transport::Transport(talk_base::Thread* signaling_thread,
@@ -370,13 +371,22 @@ bool Transport::GetTransportState_s(bool read) {
   return result;
 }
 
-void Transport::OnChannelRequestSignaling() {
+void Transport::OnChannelRequestSignaling(TransportChannelImpl* channel) {
   ASSERT(worker_thread()->IsCurrent());
-  signaling_thread()->Post(this, MSG_REQUESTSIGNALING, NULL);
+  ChannelMessage* msg = new ChannelMessage(
+      new ChannelParams(channel->name()));
+  signaling_thread()->Post(this, MSG_REQUESTSIGNALING, msg);
 }
 
-void Transport::OnChannelRequestSignaling_s() {
+void Transport::OnChannelRequestSignaling_s(const std::string& name) {
   ASSERT(signaling_thread()->IsCurrent());
+  // Resetting ICE state for the channel.
+  {
+    talk_base::CritScope cs(&crit_);
+    ChannelMap::iterator iter = channels_.find(name);
+    if (iter != channels_.end())
+      iter->second.set_candidates_allocated(false);
+  }
   SignalRequestSignaling(this);
 }
 
@@ -421,6 +431,23 @@ void Transport::OnChannelRouteChange_s(const std::string& name,
                                        const Candidate& remote_candidate) {
   ASSERT(signaling_thread()->IsCurrent());
   SignalRouteChange(this, name, remote_candidate);
+}
+
+void Transport::OnChannelCandidatesAllocationDone(
+    TransportChannelImpl* channel) {
+  ASSERT(worker_thread()->IsCurrent());
+  ChannelMap::iterator iter = channels_.find(channel->name());
+  ASSERT(iter != channels_.end());
+  iter->second.set_candidates_allocated(true);
+
+  // If all channels belonging to this Transport got signal, then
+  // forward this signal to upper layer.
+  // Can this signal arrive before all transport channels are created?
+  for (iter = channels_.begin(); iter != channels_.end(); ++iter) {
+    if (!iter->second.candidates_allocated())
+      return;
+  }
+  signaling_thread_->Post(this, MSG_CANDIDATEALLOCATIONCOMPLETE);
 }
 
 void Transport::OnMessage(talk_base::Message* msg) {
@@ -468,7 +495,12 @@ void Transport::OnMessage(talk_base::Message* msg) {
     OnChannelWritableState_s();
     break;
   case MSG_REQUESTSIGNALING:
-    OnChannelRequestSignaling_s();
+    {
+      ChannelParams* params =
+          static_cast<ChannelMessage*>(msg->pdata)->data().get();
+      OnChannelRequestSignaling_s(params->name);
+      delete params;
+    }
     break;
   case MSG_CANDIDATEREADY:
     OnChannelCandidateReady_s();
@@ -480,6 +512,9 @@ void Transport::OnMessage(talk_base::Message* msg) {
       OnChannelRouteChange_s(params->name, *params->candidate);
       delete channel_msg;
     }
+    break;
+  case MSG_CANDIDATEALLOCATIONCOMPLETE:
+    SignalCandidatesAllocationDone(this);
     break;
   }
 }

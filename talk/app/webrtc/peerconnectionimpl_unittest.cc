@@ -77,23 +77,10 @@ static std::string CreateShutdownMessage() {
 static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
   webrtc::RoapOffer offer(msg);
   EXPECT_TRUE(offer.Parse());
-  cricket::SessionDescription* sdp_offer =
-      offer.ReleaseSessionDescription();
-  const cricket::ContentInfo* audio_content = GetFirstAudioContent(sdp_offer);
-  if (audio_content) {
-    const cricket::AudioContentDescription* desc =
-        static_cast<const cricket::AudioContentDescription*>(
-            audio_content->description);
-    cricket::CryptoParamsVec& cryptos =
-        const_cast<cricket::CryptoParamsVec&>(desc->cryptos());
-    if (!cryptos.empty()) {
-      cryptos.erase(cryptos.begin()++);
-    }
-  }
-
+  std::string answer_sdp = offer.SessionDescription();
   webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
                             offer.session_token(), offer.response_token(),
-                            offer.seq(), sdp_offer, offer.candidates());
+                            offer.seq(), answer_sdp);
   return answer.Serialize();
 }
 
@@ -203,7 +190,6 @@ class PeerConnectionImplTest : public testing::Test {
     ASSERT_TRUE(pc_.get() != NULL);
     observer_.SetPeerConnectionInterface(pc_.get());
     EXPECT_EQ(PeerConnectionInterface::kNew, observer_.state_);
-    pc_->StartIce(PeerConnectionInterface::kUseAll);
   }
 
   void CreatePeerConnectionWithInvalidConfiguration() {
@@ -213,7 +199,6 @@ class PeerConnectionImplTest : public testing::Test {
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
     observer_.SetPeerConnectionInterface(pc_.get());
     EXPECT_EQ(PeerConnectionInterface::kNew, observer_.state_);
-    pc_->StartIce(PeerConnectionInterface::kUseAll);
   }
 
   void CreatePeerConnectionWithDifferentConfigurations() {
@@ -427,14 +412,22 @@ TEST_F(PeerConnectionImplTest, Jsep_ReceiveCall) {
 // Test that candidates are generated and that we can parse our own candidates.
 TEST_F(PeerConnectionImplTest, Jsep_IceCandidates) {
   CreatePeerConnection();
+  EXPECT_FALSE(pc_->StartIce(PeerConnectionInterface::kUseAll));
+
+  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
+  EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kOffer,
+                                       offer));
+  EXPECT_TRUE(pc_->StartIce(PeerConnectionInterface::kUseAll));
+
   EXPECT_TRUE_WAIT(observer_.last_candidate_.get() != NULL, kTimeout);
   EXPECT_TRUE_WAIT(observer_.ice_complete_, kTimeout);
   EXPECT_FALSE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 
-  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
-  // SetRemoteDescription takes ownership of offer.
-  EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kOffer,
-                                        offer));
+  SessionDescriptionInterface* answer(
+      pc_->CreateAnswer(webrtc::MediaHints(), pc_->local_description()));
+  // SetRemoteDescription takes ownership of answer.
+  EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kAnswer,
+                                        answer));
 
   EXPECT_TRUE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 }

@@ -359,6 +359,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
       : engine_(engine),
         muted_(false),
         screen_casting_(false),
+        screencast_fps_(0),
         sent_intra_frame_(false),
         requested_intra_frame_(false) {
   }
@@ -437,12 +438,14 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   virtual bool SetSend(bool send) {
     return set_sending(send);
   }
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
     screen_casting_ = true;
+    screencast_fps_ = fps;
     return true;
   }
   virtual bool RemoveScreencast(uint32 ssrc) {
     screen_casting_ = false;
+    screencast_fps_ = 0;
     return true;
   }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
@@ -477,6 +480,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   void set_requested_intra_frame(bool v) { requested_intra_frame_ = v; }
   bool requested_intra_frame() const { return requested_intra_frame_; }
   bool screen_casting() const { return screen_casting_; }
+  int screencast_fps() const { return screencast_fps_; }
 
  private:
   // Be default, each send stream uses the first send codec format.
@@ -497,6 +501,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   std::map<uint32, VideoFormat> send_formats_;
   bool muted_;
   bool screen_casting_;
+  int screencast_fps_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
 };

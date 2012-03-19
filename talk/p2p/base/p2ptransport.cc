@@ -174,7 +174,7 @@ bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
                                         buzz::XmlElement* elem,
                                         WriteError* error) {
   elem->SetAttr(buzz::QN_NAME, candidate.name());
-  elem->SetAttr(QN_ADDRESS, candidate.address().IPAsString());
+  elem->SetAttr(QN_ADDRESS, candidate.address().ipaddr().ToString());
   elem->SetAttr(QN_PORT, candidate.address().PortAsString());
   elem->SetAttr(QN_PREFERENCE, candidate.preference_str());
   elem->SetAttr(QN_USERNAME, candidate.username());

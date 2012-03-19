@@ -74,14 +74,13 @@ class PeerConnection : public PeerConnectionInterface,
   virtual ReadyState ready_state();
   virtual SdpState sdp_state();
 
-  void StartIce(IceOptions options);
-
   // Jsep functions.
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
       const SessionDescriptionInterface* offer);
 
+  virtual bool StartIce(IceOptions options);
   virtual bool SetLocalDescription(Action action,
                                    SessionDescriptionInterface* desc);
   virtual bool SetRemoteDescription(Action action,

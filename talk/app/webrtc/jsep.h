@@ -85,6 +85,8 @@ class IceCandidateColletion {
  public:
   virtual ~IceCandidateColletion() {}
   virtual size_t count() const = 0;
+  // Returns true if an equivalent |candidate| exist in the collection.
+  virtual bool HasCandidate(const IceCandidateInterface* candidate) const = 0;
   virtual const IceCandidateInterface* at(size_t index) const = 0;
 };
 
@@ -134,11 +136,24 @@ class JsepInterface {
     kAnswer,
   };
 
+  // Indicates what types of local candidates should be used.
+  enum IceOptions {
+    kUseAll,
+    kNoRelay,
+    kOnlyRelay
+  };
+
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints) = 0;
   // Create an answer to an offer. Returns NULL if an answer can't be created.
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
       const SessionDescriptionInterface* offer) = 0;
+
+  // Starts or updates the ICE Agent process of
+  // gathering local candidates and pinging remote candidates.
+  // SetLocalDescription must be called before calling this method.
+  virtual bool StartIce(IceOptions options) = 0;
+
   // Sets the local session description.
   // JsepInterface take ownership of |desc|.
   virtual bool SetLocalDescription(Action action,

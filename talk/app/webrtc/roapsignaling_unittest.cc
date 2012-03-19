@@ -157,6 +157,9 @@ class FakeJsep : public JsepInterface {
                                                    options,
                                                    desc));
   }
+  virtual bool StartIce(IceOptions options) {
+    return true;
+  }
   virtual bool SetLocalDescription(Action action,
                                    SessionDescriptionInterface* desc) {
     local_desc_.reset(desc);
@@ -218,9 +221,8 @@ class RoapSignalingTest: public testing::Test {
     observer1_.reset(new MockSignalingObserver());
     provider1_.reset(new FakeJsep(channel_manager_.get(),
                                   observer1_.get()));
-    signaling1_.reset(new RoapSignaling(
-        talk_base::Thread::Current(), provider1_->mediastream_signaling(),
-        provider1_.get()));
+    signaling1_.reset(new RoapSignaling(provider1_->mediastream_signaling(),
+                                        provider1_.get()));
     signaling1_->SignalNewPeerConnectionMessage.connect(
         observer1_.get(), &MockSignalingObserver::OnSignalingMessage);
     signaling1_->SignalErrorMessageReceived.connect(
@@ -231,9 +233,8 @@ class RoapSignalingTest: public testing::Test {
     observer2_.reset(new MockSignalingObserver());
     provider2_.reset(new FakeJsep(channel_manager_.get(),
                                   observer2_.get()));
-    signaling2_.reset(new RoapSignaling(
-        talk_base::Thread::Current(), provider2_->mediastream_signaling(),
-        provider2_.get()));
+    signaling2_.reset(new RoapSignaling(provider2_->mediastream_signaling(),
+                                        provider2_.get()));
     signaling2_->SignalNewPeerConnectionMessage.connect(
         observer2_.get(), &MockSignalingObserver::OnSignalingMessage);
     signaling2_->SignalErrorMessageReceived.connect(
@@ -285,10 +286,6 @@ class RoapSignalingTest: public testing::Test {
   // Initialize and setup a simple call between signaling1_ and signaling2_.
   // signaling1_ send stream with label kStreamLabel1 to signaling2_.
   void SetUpOneWayCall() {
-    // Initialize signaling1_ and signaling_2 by providing the candidates.
-    signaling1_->OnIceComplete();
-    signaling2_->OnIceComplete();
-
     // Create a local stream collection to be sent on signaling1_.
     talk_base::scoped_refptr<StreamCollection> local_collection1(
         CreateLocalCollection1());
@@ -302,14 +299,15 @@ class RoapSignalingTest: public testing::Test {
     observer2_->AnswerPeer(signaling1_.get(), local_collection1);
 
     signaling1_->CreateOffer(local_collection1);
-    EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
+    EXPECT_EQ(RoapSignaling::kInitializing,
               signaling1_->GetState());
-    EXPECT_EQ(RoapSignaling::kIdle, signaling2_->GetState());
+    // Initialize signaling1_ by providing the candidates.
+    signaling1_->OnIceComplete();
+    EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
+             signaling1_->GetState());
 
-    // Process posted messages to generate the offer and the answer to the
-    // offer.
-    talk_base::Thread::Current()->ProcessMessages(1);
-    talk_base::Thread::Current()->ProcessMessages(1);
+    EXPECT_EQ(RoapSignaling::kInitializing, signaling2_->GetState());
+    signaling2_->OnIceComplete();
 
     // Make sure all is setup.
     EXPECT_EQ(RoapSignaling::kIdle, signaling1_->GetState());
@@ -347,16 +345,12 @@ TEST_F(RoapSignalingTest, SimpleOneWayCall) {
   // local candidates ready.
   signaling1_->CreateOffer(local_collection1);
 
-  // Process posted messages.
-  talk_base::Thread::Current()->ProcessMessages(1);
   EXPECT_EQ(RoapSignaling::kInitializing, signaling1_->GetState());
 
   // Initialize signaling1_ by providing the candidates.
   signaling1_->OnIceComplete();
   EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
             signaling1_->GetState());
-  // Process posted messages to allow signaling_1 to send the offer.
-  talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that signaling_2 is still not initialized.
   // Even though it have received an offer.
@@ -364,7 +358,6 @@ TEST_F(RoapSignalingTest, SimpleOneWayCall) {
 
   // Provide the candidates to signaling_2 and let it process the offer.
   signaling2_->OnIceComplete();
-  talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that the offer/answer have been exchanged and the state is good.
   EXPECT_EQ(RoapSignaling::kIdle, signaling1_->GetState());
@@ -398,16 +391,10 @@ TEST_F(RoapSignalingTest, Glare) {
   // Peer 2 create an updated offer.
   signaling2_->CreateOffer(local_collection2);
 
-  // Process posted messages.
-  talk_base::Thread::Current()->ProcessMessages(1);
-  talk_base::Thread::Current()->ProcessMessages(1);
-
   std::string offer_1 = observer1_->last_message_;
   std::string offer_2 = observer2_->last_message_;
-  EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
-            signaling1_->GetState());
-  EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
-            signaling2_->GetState());
+  EXPECT_EQ(RoapSignaling::kWaitingForAnswer, signaling1_->GetState());
+  EXPECT_EQ(RoapSignaling::kWaitingForAnswer, signaling2_->GetState());
 
   // Connect all messages sent from Peer 1 to be received on Peer 2
   observer1_->AnswerPeer(signaling2_.get(), local_collection2);
@@ -417,9 +404,6 @@ TEST_F(RoapSignalingTest, Glare) {
   // Insert the two offers to each Peer to create the Glare.
   signaling1_->ProcessSignalingMessage(offer_2, local_collection1);
   signaling2_->ProcessSignalingMessage(offer_1, local_collection2);
-
-  talk_base::Thread::Current()->ProcessMessages(1);
-  talk_base::Thread::Current()->ProcessMessages(1);
 
   // Make sure all is good.
   EXPECT_EQ(RoapSignaling::kIdle, signaling1_->GetState());
@@ -437,9 +421,6 @@ TEST_F(RoapSignalingTest, Glare) {
 }
 
 TEST_F(RoapSignalingTest, AddRemoveStream) {
-  // Initialize signaling1_ and signaling_2 by providing the candidates.
-  signaling1_->OnIceComplete();
-  signaling2_->OnIceComplete();
   // Create a local stream.
   std::string label(kStreamLabel1);
   talk_base::scoped_refptr<LocalMediaStreamInterface> stream(
@@ -470,9 +451,10 @@ TEST_F(RoapSignalingTest, AddRemoveStream) {
 
   // Peer 1 creates an empty offer and send it to Peer2.
   signaling1_->CreateOffer(local_collection1);
-  // Process posted messages.
-  talk_base::Thread::Current()->ProcessMessages(1);
-  talk_base::Thread::Current()->ProcessMessages(1);
+
+  // Initialize signaling1_ and signaling_2 by providing the candidates.
+  signaling1_->OnIceComplete();
+  signaling2_->OnIceComplete();
 
   // Verify that both peers have updated the session descriptions.
   EXPECT_EQ(1u, provider1_->update_session_description_counter_);
@@ -482,8 +464,6 @@ TEST_F(RoapSignalingTest, AddRemoveStream) {
   local_collection2->AddStream(stream);
 
   signaling2_->CreateOffer(local_collection2);
-  talk_base::Thread::Current()->ProcessMessages(1);
-  talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that PeerConnection1 is aware of the sending stream.
   EXPECT_TRUE(observer1_->RemoteStream(label) != NULL);
@@ -496,8 +476,6 @@ TEST_F(RoapSignalingTest, AddRemoveStream) {
   local_collection2->RemoveStream(stream);
 
   signaling2_->CreateOffer(local_collection2);
-  talk_base::Thread::Current()->ProcessMessages(1);
-  talk_base::Thread::Current()->ProcessMessages(1);
 
   // Verify that PeerConnection1 is not aware of the sending stream.
   EXPECT_TRUE(observer1_->RemoteStream(label) == NULL);
@@ -513,10 +491,10 @@ TEST_F(RoapSignalingTest, ShutDown) {
 
   signaling1_->SendShutDown();
 
-  EXPECT_EQ_WAIT(RoapSignaling::kShutdownComplete,
-                 signaling1_->GetState(), 10);
-  EXPECT_EQ_WAIT(RoapSignaling::kShutdownComplete,
-                 signaling2_->GetState(), 10);
+  EXPECT_EQ(RoapSignaling::kShutdownComplete,
+            signaling1_->GetState());
+  EXPECT_EQ(RoapSignaling::kShutdownComplete,
+            signaling2_->GetState());
 
   EXPECT_EQ(0u, observer1_->remote_streams()->count());
   EXPECT_EQ(0u, observer2_->remote_streams()->count());
@@ -529,14 +507,12 @@ TEST_F(RoapSignalingTest, ShutDown) {
 }
 
 TEST_F(RoapSignalingTest, ReceiveError) {
-  // Initialize signaling1_
-  signaling1_->OnIceComplete();
-
   talk_base::scoped_refptr<StreamCollection> local_collection1(
       CreateLocalCollection1());
 
   signaling1_->CreateOffer(local_collection1);
-  talk_base::Thread::Current()->ProcessMessages(1);
+  // Initialize signaling1_
+  signaling1_->OnIceComplete();
   EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
             signaling1_->GetState());
 
@@ -550,7 +526,6 @@ TEST_F(RoapSignalingTest, ReceiveError) {
   EXPECT_EQ(RoapSignaling::kIdle, signaling1_->GetState());
 
   signaling1_->CreateOffer(local_collection1);
-  talk_base::Thread::Current()->ProcessMessages(1);
   EXPECT_EQ(RoapSignaling::kWaitingForAnswer,
             signaling1_->GetState());
 }

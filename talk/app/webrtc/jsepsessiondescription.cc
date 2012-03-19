@@ -73,7 +73,9 @@ bool JsepSessionDescription::AddCandidate(
     return false;
   if (mediasection_index >= number_of_mediasections())
     return false;
-
+  if (candidate_collection_[mediasection_index].HasCandidate(candidate)) {
+    return false;
+  }
   candidate_collection_[mediasection_index].add(
        new JsepIceCandidate(candidate->label(), candidate->candidate()));
   return true;

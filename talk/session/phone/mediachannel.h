@@ -55,6 +55,7 @@ class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
 const int kMaxRtpHeaderExtensionId = 255;
+const int kScreencastDefaultFps = 5;
 
 // A class for playing out soundclips.
 class SoundclipMedia {
@@ -447,7 +448,7 @@ class VideoMediaChannel : public MediaChannel {
     ERROR_PLAY_SRTP_REPLAY,               // Packet replay detected.
   };
 
-  VideoMediaChannel() { renderer_ = NULL; }
+  VideoMediaChannel() : renderer_(NULL) {}
   virtual ~VideoMediaChannel() {}
   // Sets the codecs/payload types to be used for incoming media.
   virtual bool SetRecvCodecs(const std::vector<VideoCodec> &codecs) = 0;
@@ -462,7 +463,7 @@ class VideoMediaChannel : public MediaChannel {
   // Sets the renderer object to be used for the specified stream.
   // If SSRC is 0, the renderer is used for the 'default' stream.
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) = 0;
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) = 0;
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) = 0;
   virtual bool RemoveScreencast(uint32 ssrc) = 0;
   // Gets quality stats for the channel.
   virtual bool GetStats(VideoMediaInfo* info) = 0;

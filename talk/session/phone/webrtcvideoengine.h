@@ -220,7 +220,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool RemoveRecvStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool GetStats(VideoMediaInfo* info);
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
     return false;
   }
   virtual bool RemoveScreencast(uint32 ssrc) {

@@ -227,6 +227,10 @@ const buzz::StaticQName QN_SEMANTICS = { cricket::NS_EMPTY, "semantics" };
 const buzz::StaticQName QN_JINGLE_LEGACY_NOTIFY = { NS_JINGLE_DRAFT, "notify" };
 const buzz::StaticQName QN_JINGLE_LEGACY_SOURCE = { NS_JINGLE_DRAFT, "source" };
 
+const char NS_GINGLE_RAW[] = "http://www.google.com/transport/raw-udp";
+const buzz::StaticQName QN_GINGLE_RAW_TRANSPORT = { NS_GINGLE_RAW, "transport" };
+const buzz::StaticQName QN_GINGLE_RAW_CHANNEL = { NS_GINGLE_RAW, "channel" };
+
 // old stuff
 #ifdef FEATURE_ENABLE_VOICEMAIL
 const char NS_VOICEMAIL[] = "http://www.google.com/session/voicemail";

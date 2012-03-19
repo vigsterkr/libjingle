@@ -54,6 +54,7 @@ namespace cricket {
 #define WEBRTC_ASSERT_CAPTURER(capturer) \
   ASSERT(capturers_.find(capturer) != capturers_.end());
 
+static const int kMinVideoBitrate = 100;
 static const int kStartVideoBitrate = 300;
 static const int kMaxVideoBitrate = 1000;
 
@@ -330,7 +331,7 @@ class FakeWebRtcVideoEngine
     out_codec.height = c.height;
     out_codec.startBitrate = kStartVideoBitrate;
     out_codec.maxBitrate = kMaxVideoBitrate;
-    out_codec.minBitrate = kStartVideoBitrate;
+    out_codec.minBitrate = kMinVideoBitrate;
     out_codec.maxFramerate = c.framerate;
     return 0;
   };
@@ -621,10 +622,10 @@ class FakeWebRtcVideoEngine
   WEBRTC_STUB_CONST(GetEstimatedSendBandwidth, (const int, unsigned int*));
   WEBRTC_STUB_CONST(GetEstimatedReceiveBandwidth, (const int, unsigned int*));
 
-  WEBRTC_STUB(SetRTPKeepAliveStatus, (const int, bool, const char,
+  WEBRTC_STUB(SetRTPKeepAliveStatus, (const int, bool, const int,
       const unsigned int));
   WEBRTC_STUB_CONST(GetRTPKeepAliveStatus,
-                    (const int, bool&, char&, unsigned int&));
+                    (const int, bool&, int&, unsigned int&));
   WEBRTC_STUB(StartRTPDump, (const int, const char*, webrtc::RTPDirections));
   WEBRTC_STUB(StopRTPDump, (const int, webrtc::RTPDirections));
   WEBRTC_STUB(RegisterRTPObserver, (const int, webrtc::ViERTPObserver&));

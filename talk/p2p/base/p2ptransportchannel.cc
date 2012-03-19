@@ -200,6 +200,8 @@ void P2PTransportChannel::AddAllocatorSession(PortAllocatorSession* session) {
   session->SignalPortReady.connect(this, &P2PTransportChannel::OnPortReady);
   session->SignalCandidatesReady.connect(
       this, &P2PTransportChannel::OnCandidatesReady);
+  session->SignalCandidatesAllocationDone.connect(
+      this, &P2PTransportChannel::OnCandidatesAllocationDone);
   session->GetInitialPorts();
   if (pinging_started_)
     session->StartGetAllPorts();
@@ -296,6 +298,11 @@ void P2PTransportChannel::OnCandidatesReady(
   for (size_t i = 0; i < candidates.size(); ++i) {
     SignalCandidateReady(this, candidates[i]);
   }
+}
+
+void P2PTransportChannel::OnCandidatesAllocationDone(
+    PortAllocatorSession* session) {
+  SignalCandidatesAllocationDone(this);
 }
 
 // Handle stun packets
@@ -524,7 +531,7 @@ void P2PTransportChannel::Allocate() {
   // Time for a new allocator, lets make sure we have a signalling channel
   // to communicate candidates through first.
   waiting_for_signaling_ = true;
-  SignalRequestSignaling();
+  SignalRequestSignaling(this);
 }
 
 // Cancels the pending allocate, if any.

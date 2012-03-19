@@ -2140,7 +2140,6 @@ bool WebRtcVideoMediaChannel::SetReceiveCodecs(int channel_id) {
 // we need to reset the send codec on vie.
 // The new send codec size should not exceed send_codec_ which is controlled
 // only by the 'jec' logic.
-// TODO: Need a unittest for this.
 bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int new_width,
                                                      int new_height,
                                                      bool* reset) {

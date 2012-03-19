@@ -233,7 +233,7 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
     return true;
   }
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id) {
+  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
     return true;
   }
   virtual bool RemoveScreencast(uint32 ssrc) { return true; }

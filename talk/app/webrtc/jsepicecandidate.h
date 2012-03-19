@@ -45,6 +45,9 @@ class JsepIceCandidate : public IceCandidateInterface {
                    const cricket::Candidate& candidate);
   ~JsepIceCandidate();
   bool Initialize(const std::string& sdp);
+  void SetCandidate(const cricket::Candidate& candidate) {
+    candidate_ = candidate;
+  }
 
   virtual std::string label() const { return label_;}
   virtual const cricket::Candidate& candidate() const {
@@ -68,6 +71,7 @@ class JsepCandidateColletion : public IceCandidateColletion {
   virtual size_t count() const {
     return candidates_.size();
   }
+  virtual bool HasCandidate(const IceCandidateInterface* candidate) const;
   // Adds and takes ownership of the JsepIceCandidate.
   virtual void add(JsepIceCandidate* candidate) {
     candidates_.push_back(candidate);

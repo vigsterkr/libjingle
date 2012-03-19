@@ -316,6 +316,10 @@ class RoapTestClient
   // SignalingMessageReceiver callback.
   virtual void ReceiveMessage(const std::string& msg) {
     peer_connection()->ProcessSignalingMessage(msg);
+    if (peer_connection()->local_streams()->count() == 0) {
+      // If we are not sending any streams ourselves it is time to add some.
+      AddMediaStream();
+    }
   }
 
  protected:
@@ -395,6 +399,10 @@ class JsepTestClient
   }
 
   void HandleIncomingOffer(const std::string& msg) {
+    if (peer_connection()->local_streams()->count() == 0) {
+      // If we are not sending any streams ourselves it is time to add some.
+      AddMediaStream();
+    }
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> desc(
            webrtc::CreateSessionDescription(msg));
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> answer(
@@ -481,7 +489,6 @@ class P2PTestConductor : public testing::Test {
       return false;
     }
     initiating_client_->AddMediaStream();
-    receiving_client_->AddMediaStream();
     initiating_client_->StartSession();
     return true;
   }

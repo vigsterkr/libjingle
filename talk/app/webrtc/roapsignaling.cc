@@ -37,13 +37,6 @@
 #include "talk/base/messagequeue.h"
 #include "talk/session/phone/channelmanager.h"
 
-// TODO - These are magic strings that names the candidates.
-// These will be removed when this ROAP implementation is based on JSEP.
-static const char kRtpVideoChannelStr[] = "video_rtp";
-static const char kRtcpVideoChannelStr[] = "video_rtcp";
-static const char kRtpAudioChannelStr[] = "rtp";
-static const char kRtcpAudioChannelStr[] = "rtcp";
-
 using talk_base::scoped_refptr;
 
 namespace webrtc {
@@ -53,42 +46,12 @@ enum {
   MSG_GENERATE_ANSWER = 2,
 };
 
-// Verifies that a SessionDescription contains as least one valid media content
-// and a valid codec.
-static bool VerifyAnswer(const cricket::SessionDescription* answer_desc) {
-  // We need to verify that at least one media content with
-  // a codec is available.
-  const cricket::ContentInfo* audio_content =
-      GetFirstAudioContent(answer_desc);
-  if (audio_content) {
-    const cricket::AudioContentDescription* audio_desc =
-        static_cast<const cricket::AudioContentDescription*>(
-            audio_content->description);
-    if (audio_desc->codecs().size() > 0) {
-      return true;
-    }
-  }
-  const cricket::ContentInfo* video_content =
-      GetFirstVideoContent(answer_desc);
-  if (video_content) {
-    const cricket::VideoContentDescription* video_desc =
-        static_cast<const cricket::VideoContentDescription*>(
-            video_content->description);
-    if (video_desc->codecs().size() > 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 RoapSignaling::RoapSignaling(
-    talk_base::Thread* signaling_thread,
     MediaStreamSignaling* mediastream_signaling,
     JsepInterface* provider)
-    : signaling_thread_(signaling_thread),
-      stream_signaling_(mediastream_signaling),
+    : stream_signaling_(mediastream_signaling),
       provider_(provider),
-      state_(kInitializing),
+      state_(kNew),
       received_pre_offer_(false),
       local_streams_(StreamCollection::Create()) {
 }
@@ -101,24 +64,19 @@ void RoapSignaling::OnIceComplete() {
   // If we have a queued remote offer we need to handle this first.
   if (received_pre_offer_) {
     received_pre_offer_ = false;
-    ChangeState(kWaitingForOK);
-    signaling_thread_->Post(this, MSG_GENERATE_ANSWER);
+    SendAnswer();
   } else if (!queued_local_streams_.empty()) {
-    // Else if we have local queued offers.
-    ChangeState(kWaitingForAnswer);
-    signaling_thread_->Post(this, MSG_SEND_QUEUED_OFFER);
+    // Else CreateOffer have been called.
+    SendOffer(provider_->local_description());
   } else {
     ChangeState(kIdle);
   }
 }
 
-// TODO: OnIceCandidate is called from webrtcsession when a new
-// IceCandidate is found. Here we don't care about the content name since
-// we can create a valid SDP based on the candidate names.
-// This function will be removed if we implement ROAP on top of JSEP.
 void RoapSignaling::OnIceCandidate(
-    const IceCandidateInterface* candidate) {
-  candidates_.push_back(candidate->candidate());
+    const IceCandidateInterface* /*candidate*/) {
+  // Ignore all candidates. We only care about when all
+  // candidates have been collected.
 }
 
 void RoapSignaling::ChangeState(State new_state) {
@@ -129,8 +87,6 @@ void RoapSignaling::ChangeState(State new_state) {
 void RoapSignaling::ProcessSignalingMessage(
     const std::string& message,
     StreamCollectionInterface* local_streams) {
-  ASSERT(talk_base::Thread::Current() == signaling_thread_);
-
   RoapSession::ParseResult result = roap_session_.Parse(message);
 
   // Signal an error message and return if a message is received after shutdown
@@ -144,36 +100,20 @@ void RoapSignaling::ProcessSignalingMessage(
 
   switch (result) {
     case RoapSession::kOffer: {
-      queued_local_streams_.clear();
-      queued_local_streams_.push_back(local_streams);
-
       if (state_ == kWaitingForAnswer) {
         // Message received out of order or Glare occurred and the decision was
         // to use the incoming offer.
         LOG(LS_INFO) << "Received offer while waiting for answer.";
-        // Be nice and handle this offer instead of the pending offer.
-        signaling_thread_->Clear(this, MSG_SEND_QUEUED_OFFER);
       }
 
       // Provide the remote session description and the remote candidates from
       // the parsed ROAP message to the |provider_|.
-      // The session description ownership is transferred from |roap_session_|
-      // to |provider_|.
-      ProcessRemoteDescription(roap_session_.ReleaseRemoteDescription(),
-                               JsepInterface::kOffer,
-                               roap_session_.RemoteCandidates());
-
-      // If we are still Initializing we need to wait until we have our local
-      // candidates before we can handle the offer. Queue it and handle it when
-      // the state changes.
-      if (state_ == kInitializing) {
-        received_pre_offer_ = true;
+      if (!ProcessRemoteDescription(roap_session_.RemoteDescription(),
+                                    JsepInterface::kOffer)) {
         break;
       }
 
-      // Post a task to generate the answer.
-      signaling_thread_->Post(this, MSG_GENERATE_ANSWER);
-      ChangeState(kWaitingForOK);
+      InitializeSendingAnswer(local_streams);
       break;
     }
     case RoapSession::kAnswerMoreComing: {
@@ -187,33 +127,34 @@ void RoapSignaling::ProcessSignalingMessage(
         return;
       }
 
-      talk_base::scoped_ptr<cricket::SessionDescription> remote_desc(
-          roap_session_.ReleaseRemoteDescription());
-
       // Pop the first item of queued StreamCollections containing local
       // MediaStreams that just have been negotiated.
       scoped_refptr<StreamCollectionInterface> streams(
           queued_local_streams_.front());
       queued_local_streams_.pop_front();
 
-      // Hand the ownership of the local session description to |provider_|.
-      provider_->SetLocalDescription(JsepInterface::kOffer,
-                                     local_desc_.release());
+      // If this is an answer to an initial offer SetLocalDescription have
+      // already been called.
+      if (local_desc_.get()) {
+        // Hand the ownership of the local session description to |provider_|.
+        provider_->SetLocalDescription(JsepInterface::kOffer,
+                                       local_desc_.release());
+      }
 
       // Provide the remote session description and the remote candidates from
       // the parsed ROAP message to the |provider_|.
-      // The session description ownership is transferred from |roap_session_|
-      // to |provider_|.
-      ProcessRemoteDescription(remote_desc.release(),
-                               JsepInterface::kAnswer,
-                               roap_session_.RemoteCandidates());
+      if (!ProcessRemoteDescription(roap_session_.RemoteDescription(),
+                                    JsepInterface::kAnswer)) {
+        break;
+      }
+
 
       // Let the remote peer know we have received the answer.
       SignalNewPeerConnectionMessage(roap_session_.CreateOk());
       // Check if we have more offers waiting in the queue.
       if (!queued_local_streams_.empty()) {
         // Send the next offer.
-        signaling_thread_->Post(this, MSG_SEND_QUEUED_OFFER);
+        InitializeSendingOffer();
       } else {
         ChangeState(kIdle);
       }
@@ -221,34 +162,26 @@ void RoapSignaling::ProcessSignalingMessage(
     }
     case RoapSession::kOk: {
       if (state_ == kWaitingForOK) {
-        scoped_refptr<StreamCollectionInterface> streams(
-            queued_local_streams_.front());
-        queued_local_streams_.pop_front();
-
-        // Hand over the ownership of the local description to the provider.
-        provider_->SetLocalDescription(JsepInterface::kAnswer,
-                                       local_desc_.release());
         ChangeState(kIdle);
         // Check if we have an updated offer waiting in the queue.
         if (!queued_local_streams_.empty())
-          signaling_thread_->Post(this, MSG_SEND_QUEUED_OFFER);
+          InitializeSendingOffer();
       } else if (state_ == kShutingDown) {
         ChangeState(kShutdownComplete);
       }
       break;
     }
-    case RoapSession::kConflict: {
+    case RoapSession::kParseConflict: {
       SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(
           kConflict));
       break;
     }
-    case RoapSession::kDoubleConflict: {
+    case RoapSession::kParseDoubleConflict: {
       SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(
           kDoubleConflict));
 
       // Recreate the offer with new sequence values etc.
-      ChangeState(kWaitingForAnswer);
-      signaling_thread_->Post(this, MSG_SEND_QUEUED_OFFER);
+      InitializeSendingOffer();
       break;
     }
     case RoapSession::kError: {
@@ -257,7 +190,6 @@ void RoapSignaling::ProcessSignalingMessage(
         SignalErrorMessageReceived(roap_session_.RemoteError());
         // An error have occurred that we can't do anything about.
         // Reset the state and wait for user action.
-        signaling_thread_->Clear(this);
         queued_local_streams_.clear();
         ChangeState(kIdle);
       }
@@ -265,8 +197,8 @@ void RoapSignaling::ProcessSignalingMessage(
     }
     case RoapSession::kShutDown: {
       DoShutDown();
-      SignalNewPeerConnectionMessage(roap_session_.CreateOk());
       ChangeState(kShutdownComplete);
+      SignalNewPeerConnectionMessage(roap_session_.CreateOk());
       break;
     }
     case RoapSession::kInvalidMessage: {
@@ -277,20 +209,16 @@ void RoapSignaling::ProcessSignalingMessage(
   }
 }
 
-void RoapSignaling::CreateOffer(
-    StreamCollectionInterface* local_streams) {
-  if (!VERIFY(talk_base::Thread::Current() == signaling_thread_ &&
-              state_ != kShutingDown && state_ != kShutdownComplete)) {
+void RoapSignaling::CreateOffer(StreamCollectionInterface* local_streams) {
+  if (!VERIFY(state_ != kShutingDown && state_ != kShutdownComplete)) {
     return;
   }
 
   queued_local_streams_.push_back(local_streams);
-  if (state_ == kIdle) {
-    // Check if we can send a new offer.
-    // Only one offer is allowed at the time.
-    ChangeState(kWaitingForAnswer);
-    signaling_thread_->Post(this, MSG_SEND_QUEUED_OFFER);
+  if (state_ == kNew || state_ == kIdle) {
+    InitializeSendingOffer();
   }
+  return;
 }
 
 void RoapSignaling::SendShutDown() {
@@ -298,34 +226,91 @@ void RoapSignaling::SendShutDown() {
   SignalNewPeerConnectionMessage(roap_session_.CreateShutDown());
 }
 
-// Implement talk_base::MessageHandler.
-void RoapSignaling::OnMessage(talk_base::Message* msg) {
-  switch (msg->message_id) {
-    case MSG_SEND_QUEUED_OFFER:
-      CreateOffer_s();
-      break;
-    case MSG_GENERATE_ANSWER:
-      CreateAnswer_s();
-      break;
-    default:
-      ASSERT(!"Invalid value in switch statement.");
-      break;
-  }
-}
-
-void RoapSignaling::CreateOffer_s() {
+void RoapSignaling::InitializeSendingOffer() {
   ASSERT(!queued_local_streams_.empty());
+
   scoped_refptr<StreamCollectionInterface> local_streams(
       queued_local_streams_.front());
+
   stream_signaling_->SetLocalStreams(local_streams);
   local_desc_.reset(provider_->CreateOffer(MediaHints()));
-  SignalNewPeerConnectionMessage(
-      roap_session_.CreateOffer(local_desc_->description(), candidates_));
+
+  // If we are still in state kNew, we need to start the ice negotiation and
+  // wait until we have our local candidates before we can send the offer.
+  // The offer is sent in OnIceComplete.
+  if (state_ == kNew) {
+    ChangeState(kInitializing);
+    provider_->SetLocalDescription(JsepInterface::kOffer,
+                                   local_desc_.release());
+    // Start Ice and set the local session description for the first time.
+    provider_->StartIce(JsepInterface::kUseAll);
+    return;
+  }
+  SendOffer(local_desc_.get());
+}
+
+void RoapSignaling::SendOffer(const SessionDescriptionInterface* local_desc) {
+  ChangeState(kWaitingForAnswer);
+  std::string sdp;
+  local_desc->ToString(&sdp);
+  SignalNewPeerConnectionMessage(roap_session_.CreateOffer(sdp));
+}
+
+void RoapSignaling::InitializeSendingAnswer(
+    StreamCollectionInterface* local_streams) {
+  if (state_ == kInitializing) {
+    LOG(LS_WARNING) << "Unexpected offer received";
+    SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
+    return;
+  }
+
+  // If we are still in state kNew, we need to start the ice negotiation and
+  // wait until we have our local candidates before we can send the answer.
+  // We need to change the state here since
+  // |provider_->SetLocalDescription| Sends tasks to other threads and we
+  // therefore run the risk of receiving tasks from other threads while doing so.
+  bool start_ice = false;
+  if (state_ == kNew) {
+    start_ice = true;
+    ChangeState(kInitializing);
+  }
+  // Clean up all queued collections of local streams.
+  queued_local_streams_.clear();
+
+  stream_signaling_->SetLocalStreams(local_streams);
+  // Create an local session description based on |local_streams|.
+  SessionDescriptionInterface* local_desc(provider_->CreateAnswer(
+      MediaHints(), provider_->remote_description()));
+  if (!local_desc || !provider_->SetLocalDescription(JsepInterface::kAnswer,
+                                                     local_desc)) {
+    LOG(LS_WARNING) << "Answer to Roap offer failed";
+    SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
+    return;
+  }
+
+  if (start_ice) {
+    if (!provider_->StartIce(JsepInterface::kUseAll)) {
+      SignalNewPeerConnectionMessage(
+          roap_session_.CreateErrorMessage(kRefused));
+      return;
+    }
+    received_pre_offer_ = true;
+    // The answer is sent in OnIceComplete.
+    return;
+  }
+  SendAnswer();
+}
+
+void RoapSignaling::SendAnswer() {
+  std::string sdp;
+  provider_->local_description()->ToString(&sdp);
+  received_pre_offer_ = false;
+  ChangeState(kWaitingForOK);
+  SignalNewPeerConnectionMessage(roap_session_.CreateAnswer(sdp));
 }
 
 void RoapSignaling::DoShutDown() {
   ChangeState(kShutingDown);
-  signaling_thread_->Clear(this);  // Don't send queued offers or answers.
   queued_local_streams_.clear();
 
   stream_signaling_->SetLocalStreams(NULL);
@@ -340,58 +325,15 @@ void RoapSignaling::DoShutDown() {
   provider_->SetLocalDescription(JsepInterface::kAnswer, local_desc);
 }
 
-void RoapSignaling::CreateAnswer_s() {
-  scoped_refptr<StreamCollectionInterface> streams(
-      queued_local_streams_.back());
-  // Clean up all queued collections of local streams except the last one.
-  // The last one is kept until the ok message is received for this answer and
-  // is needed for updating the state of the local streams.
-  queued_local_streams_.erase(queued_local_streams_.begin(),
-                              --queued_local_streams_.end());
-
-  stream_signaling_->SetLocalStreams(streams);
-  // Create an local session description based on this.
-  local_desc_.reset(provider_->CreateAnswer(MediaHints(),
-                                            provider_->remote_description()));
-  if (!VerifyAnswer(local_desc_->description())) {
-    SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
-    return;
-  }
-
-  SignalNewPeerConnectionMessage(
-      roap_session_.CreateAnswer(local_desc_->description(), candidates_));
-}
-
-void RoapSignaling::ProcessRemoteDescription(
-    cricket::SessionDescription* remote_description,
-    JsepInterface::Action action,
-    const cricket::Candidates& candidates) {
-
+bool RoapSignaling::ProcessRemoteDescription(const std::string& sdp,
+                                             JsepInterface::Action action) {
   // Provide the remote session description and the remote candidates from
   // the parsed ROAP message to the |provider_|.
-  // The session description ownership is transferred from |roap_session_|
-  // to |provider_|.
-  provider_->SetRemoteDescription(
-      action, new JsepSessionDescription(remote_description));
-
-  // Process all the remote candidates.
-  // TODO: Remove this once JsepInterface
-  // can take a JsepSessionDescription including candidates as input.
-  for (cricket::Candidates::const_iterator citer = candidates.begin();
-      citer != candidates.end(); ++citer) {
-    if ((*citer).name().compare(kRtpVideoChannelStr) == 0 ||
-        (*citer).name().compare(kRtcpVideoChannelStr) == 0) {
-      // Candidate names for video rtp and rtcp channel
-      JsepIceCandidate candidate(cricket::CN_VIDEO, *citer);
-      provider_->ProcessIceMessage(&candidate);
-    } else if ((*citer).name().compare(kRtpAudioChannelStr) == 0 ||
-        (*citer).name().compare(kRtcpAudioChannelStr) == 0) {
-      // Candidates for audio rtp and rtcp channel
-      // Channel name will be "rtp" and "rtcp"
-      JsepIceCandidate candidate(cricket::CN_AUDIO, *citer);
-      provider_->ProcessIceMessage(&candidate);
-    }
-  }
+  SessionDescriptionInterface* desc = CreateSessionDescription(sdp);
+  bool ret = provider_->SetRemoteDescription(action, desc);
+  if (!ret)
+    SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
+  return ret;
 }
 
 }  // namespace webrtc

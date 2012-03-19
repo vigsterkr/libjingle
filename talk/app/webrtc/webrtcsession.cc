@@ -34,6 +34,7 @@
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
+#include "talk/base/stringencode.h"
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/mediasession.h"
@@ -72,6 +73,22 @@ static cricket::ContentAction GetContentAction(JsepInterface::Action action) {
   return cricket::CA_OFFER;
 }
 
+static void CopyCandidatesFromSessionDescription(
+    const SessionDescriptionInterface* source_desc,
+    SessionDescriptionInterface* dest_desc) {
+  if (!source_desc)
+    return;
+  for (size_t m = 0; m < source_desc->number_of_mediasections(); ++m) {
+    const IceCandidateColletion* source_candidates = source_desc->candidates(m);
+    const IceCandidateColletion* desc_candidates = dest_desc->candidates(m);
+    for  (size_t n = 0; n < source_candidates->count(); ++n) {
+      const IceCandidateInterface* new_candidate = source_candidates->at(n);
+      if (!desc_candidates->HasCandidate(new_candidate))
+        dest_desc->AddCandidate(source_candidates->at(n));
+    }
+  }
+}
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
@@ -82,6 +99,7 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                            cricket::NS_JINGLE_RTP, true),
       channel_manager_(channel_manager),
       session_desc_factory_(channel_manager),
+      ice_started_(false),
       mediastream_signaling_(mediastream_signaling),
       ice_observer_(NULL) {
 }
@@ -110,12 +128,29 @@ bool WebRtcSession::Initialize() {
   return CreateChannels();
 }
 
-void WebRtcSession::StartIce() {
+bool WebRtcSession::StartIce(IceOptions /*options*/) {
+  if (!local_description()) {
+    LOG(LS_ERROR) << "StartIce called before SetLocalDescription";
+    return false;
+  }
+
+  // TODO: Take IceOptions into consideration and restart of the
+  // ice agent.
+  if (ice_started_) {
+    return true;
+  }
   // Try connecting all transport channels. This is necessary to generate
   // ICE candidates.
   SpeculativelyConnectAllTransportChannels();
   signaling_thread()->PostDelayed(
       kCandidateDiscoveryTimeout, this, MSG_CANDIDATE_DISCOVERY_TIMEOUT);
+
+  ice_started_ = true;
+  if (!UseCandidatesInSessionDescription(remote_desc_.get())) {
+    LOG(LS_WARNING) << "StartIce: Can't use candidates in remote session"
+                    << " description";
+  }
+  return true;
 }
 
 void WebRtcSession::set_secure_policy(
@@ -164,6 +199,7 @@ bool WebRtcSession::SetLocalDescription(Action action,
   }
 
   set_local_description(desc->description()->Copy());
+  CopyCandidatesFromSessionDescription(local_desc_.get(), desc);
   local_desc_.reset(desc);
 
   if (type == cricket::CA_ANSWER) {
@@ -194,8 +230,6 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   }
 
   set_remote_description(desc->description()->Copy());
-  remote_desc_.reset(desc);
-
   if (type  == cricket::CA_ANSWER) {
     EnableChannels();
     SetState(STATE_RECEIVEDACCEPT);
@@ -204,6 +238,16 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   }
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
+
+  // Use all candidates in this new session description if ice is started.
+  if (ice_started_ && !UseCandidatesInSessionDescription(desc)) {
+    LOG(LS_ERROR) << "SetRemoteDescription: Argument |desc| contains "
+                  << "invalid candidates";
+    return false;
+  }
+
+  CopyCandidatesFromSessionDescription(remote_desc_.get(), desc);
+  remote_desc_.reset(desc);
   return true;
 }
 
@@ -218,38 +262,16 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
     return false;
   }
 
-  const cricket::ContentInfo* content =
-      BaseSession::remote_description()->GetContentByName(candidate->label());
-  if (!content) {
-    LOG(LS_ERROR) << "Remote content name does not exist";
+  // Add this candidate to the remote session description.
+  if (!remote_desc_->AddCandidate(candidate)) {
+    LOG(LS_ERROR) << "ProcessIceMessage: Candidate can not be used. "
+                  << "Has it already been added?";
     return false;
   }
 
-  std::string local_content_name;
-  if (cricket::IsAudioContent(content)) {
-    local_content_name = cricket::CN_AUDIO;
-  } else if (cricket::IsVideoContent(content)) {
-    local_content_name = cricket::CN_VIDEO;
+  if (ice_started_) {  // Use this candidate now if we have started ice.
+    return UseCandidate(candidate);
   }
-
-  // TODO: Justins comment:This is bad encapsulation, suggest we add a
-  // helper to BaseSession to allow us to
-  // pass in candidates without touching the transport proxies.
-  cricket::TransportProxy* proxy = GetTransportProxy(local_content_name);
-  if (!proxy) {
-    LOG(LS_ERROR) << "No TransportProxy exists with name "
-                  << local_content_name;
-    return false;
-  }
-  // CompleteNegotiation will set actual impl's in Proxy.
-  if (!proxy->negotiated())
-    proxy->CompleteNegotiation();
-
-  // TODO - Add a interface to TransportProxy to accept
-  // a remote candidate.
-  std::vector<cricket::Candidate> candidates;
-  candidates.push_back(candidate->candidate());
-  proxy->impl()->OnRemoteCandidates(candidates);
   return true;
 }
 
@@ -354,13 +376,7 @@ void WebRtcSession::OnTransportCandidatesReady(
     LOG(LS_ERROR) << "No Proxy found";
     return;
   }
-  if (ice_observer_) {
-    for (cricket::Candidates::const_iterator citer = candidates.begin();
-         citer != candidates.end(); ++citer) {
-      JsepIceCandidate candidate(proxy->content_name(), *citer);
-      ice_observer_->OnIceCandidate(&candidate);
-    }
-  }
+  ProcessNewLocalCandidate(proxy->content_name(), candidates);
 }
 
 void WebRtcSession::OnTransportChannelGone(cricket::Transport* transport,
@@ -395,6 +411,108 @@ void WebRtcSession::EnableChannels() {
 
   if (!video_channel_->enabled())
     video_channel_->Enable(true);
+}
+
+void WebRtcSession::ProcessNewLocalCandidate(
+    const std::string& content_name,
+    const cricket::Candidates& candidates) {
+  std::string candidate_label;
+
+  if (!GetLocalCandidateLabel(content_name, &candidate_label)) {
+    LOG(LS_ERROR) << "ProcessNewLocalCandidate: content name "
+                  << content_name << " not found";
+    return;
+  }
+
+  for (cricket::Candidates::const_iterator citer = candidates.begin();
+      citer != candidates.end(); ++citer) {
+    JsepIceCandidate candidate(candidate_label, *citer);
+    if (ice_observer_) {
+      ice_observer_->OnIceCandidate(&candidate);
+    }
+    if (local_desc_.get()) {
+      local_desc_->AddCandidate(&candidate);
+    }
+  }
+}
+
+// Returns a label for a local ice candidate given the content name.
+bool WebRtcSession::GetLocalCandidateLabel(const std::string& content_name,
+                                           std::string* label) {
+  if (!BaseSession::local_description() || !label)
+    return false;
+
+  bool content_found = false;
+  const cricket::ContentInfos& contents =
+      BaseSession::local_description()->contents();
+  for (size_t index = 0; index < contents.size(); ++index) {
+    if (contents[index].name == content_name) {
+      *label = talk_base::ToString(index);
+      content_found = true;
+      break;
+    }
+  }
+  return content_found;
+}
+
+bool WebRtcSession::UseCandidatesInSessionDescription(
+    const SessionDescriptionInterface* remote_desc) {
+  if (!remote_desc)
+    return true;
+  bool ret = true;
+  for (size_t m = 0; m < remote_desc->number_of_mediasections(); ++m) {
+    const IceCandidateColletion* candidates = remote_desc->candidates(m);
+    for  (size_t n = 0; n < candidates->count(); ++n) {
+      ret = UseCandidate(candidates->at(n));
+      if (!ret)
+        break;
+    }
+  }
+  return ret;
+}
+
+bool WebRtcSession::UseCandidate(
+    const IceCandidateInterface* candidate) {
+
+  size_t mediacontent_index;
+  size_t remote_content_size =
+      BaseSession::remote_description()->contents().size();
+  if ((!talk_base::FromString<size_t>(candidate->label(),
+                                      &mediacontent_index)) ||
+      (mediacontent_index >= remote_content_size)) {
+    LOG(LS_ERROR) << "UseRemoteCandidateInSession: Invalid candidate label";
+    return false;
+  }
+
+  cricket::ContentInfo content =
+      BaseSession::remote_description()->contents()[mediacontent_index];
+
+  std::string local_content_name;
+  if (cricket::IsAudioContent(&content)) {
+    local_content_name = cricket::CN_AUDIO;
+  } else if (cricket::IsVideoContent(&content)) {
+    local_content_name = cricket::CN_VIDEO;
+  }
+
+  // TODO: Justins comment:This is bad encapsulation, suggest we add a
+  // helper to BaseSession to allow us to
+  // pass in candidates without touching the transport proxies.
+  cricket::TransportProxy* proxy = GetTransportProxy(local_content_name);
+  if (!proxy) {
+    LOG(LS_ERROR) << "No TransportProxy exists with name "
+                  << local_content_name;
+    return false;
+  }
+  // CompleteNegotiation will set actual impl's in Proxy.
+  if (!proxy->negotiated())
+    proxy->CompleteNegotiation();
+
+  // TODO - Add a interface to TransportProxy to accept
+  // a remote candidate.
+  std::vector<cricket::Candidate> candidates;
+  candidates.push_back(candidate->candidate());
+  proxy->impl()->OnRemoteCandidates(candidates);
+  return true;
 }
 
 }  // namespace webrtc

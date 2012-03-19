@@ -159,8 +159,14 @@ typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
 
 typedef talk_base::TypedMessageData<std::string> RoapSignalingParams;
 
-typedef talk_base::TypedMessageData<webrtc::PeerConnectionInterface::IceOptions>
-    StartIceParams;
+struct IceOptionsParams : public talk_base::MessageData {
+  explicit IceOptionsParams(webrtc::JsepInterface::IceOptions options)
+      : options(options),
+        result(false) {
+  }
+  webrtc::JsepInterface::IceOptions options;
+  bool result;
+};
 
 struct JsepSessionDescriptionParams : public talk_base::MessageData {
   JsepSessionDescriptionParams()
@@ -272,7 +278,6 @@ bool PeerConnection::Initialize(bool use_roap,
 
   if (use_roap) {
     roap_signaling_.reset(new RoapSignaling(
-        factory_->signaling_thread(),
         mediastream_signaling_.get(),
         session_.get()));
     // Register Roap as receiver of local ice candidates.
@@ -281,8 +286,6 @@ bool PeerConnection::Initialize(bool use_roap,
         this, &PeerConnection::OnNewPeerConnectionMessage);
     roap_signaling_->SignalStateChange.connect(
         this, &PeerConnection::OnSignalingStateChange);
-    // ROAP expect Ice negotiation to start when PeerConnection is created.
-    session_->StartIce();
     ChangeReadyState(PeerConnectionInterface::kNegotiating);
   } else {
     // Register PeerConnection observer as receiver of local ice candidates.
@@ -307,8 +310,8 @@ PeerConnection::remote_streams() {
 }
 
 void PeerConnection::ProcessSignalingMessage(const std::string& msg) {
-  RoapSignalingParams* parameter(new RoapSignalingParams(msg));
-  signaling_thread()->Post(this, MSG_PROCESSSIGNALINGMESSAGE, parameter);
+  RoapSignalingParams parameter(msg);
+  signaling_thread()->Send(this, MSG_PROCESSSIGNALINGMESSAGE, &parameter);
 }
 
 void PeerConnection::AddStream(LocalMediaStreamInterface* local_stream) {
@@ -341,9 +344,10 @@ PeerConnectionInterface::SdpState PeerConnection::sdp_state() {
   return msg.state;
 }
 
-void PeerConnection::StartIce(IceOptions options) {
-  StartIceParams msg(options);
+bool PeerConnection::StartIce(IceOptions options) {
+  IceOptionsParams msg(options);
   signaling_thread()->Send(this, MSG_STARTICE, &msg);
+  return msg.result;
 }
 
 SessionDescriptionInterface* PeerConnection::CreateOffer(
@@ -436,7 +440,6 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
         roap_signaling_->ProcessSignalingMessage(params->data(),
                                                  local_media_streams_);
       }
-      delete data;  // Because it is Posted.
       break;
     }
     case MSG_RETURNLOCALMEDIASTREAMS: {
@@ -472,8 +475,9 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
     case MSG_STARTICE: {
       if (ready_state_ != PeerConnectionInterface::kClosed &&
           ready_state_ != PeerConnectionInterface::kClosing) {
-        // TODO: Take IceOptions into consideration.
-        session_->StartIce();
+        IceOptionsParams* param(
+                    static_cast<IceOptionsParams*> (data));
+        param->result = session_->StartIce(param->options);
       }
       break;
     }

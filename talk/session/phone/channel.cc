@@ -145,12 +145,14 @@ struct RenderMessageData : public talk_base::MessageData {
 };
 
 struct ScreencastMessageData : public talk_base::MessageData {
-  ScreencastMessageData(uint32 s, const ScreencastId& id)
+  ScreencastMessageData(uint32 s, const ScreencastId& id, int f)
       : ssrc(s),
-        window_id(id) {
+        window_id(id),
+        fps(f) {
   }
   uint32 ssrc;
   ScreencastId window_id;
+  int fps;
 };
 
 struct ScreencastEventMessageData : public talk_base::MessageData {
@@ -1389,14 +1391,14 @@ bool VideoChannel::ApplyViewRequest(const ViewRequest& request) {
   return data.result;
 }
 
-bool VideoChannel::AddScreencast(uint32 ssrc, const ScreencastId& id) {
-  ScreencastMessageData data(ssrc, id);
+bool VideoChannel::AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
+  ScreencastMessageData data(ssrc, id, fps);
   Send(MSG_ADDSCREENCAST, &data);
   return true;
 }
 
 bool VideoChannel::RemoveScreencast(uint32 ssrc) {
-  ScreencastMessageData data(ssrc, ScreencastId());
+  ScreencastMessageData data(ssrc, ScreencastId(), 0);
   Send(MSG_REMOVESCREENCAST, &data);
   return true;
 }
@@ -1568,8 +1570,9 @@ void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
 
-void VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id) {
-  media_channel()->AddScreencast(ssrc, id);
+void VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id,
+                                   int fps) {
+  media_channel()->AddScreencast(ssrc, id, fps);
 }
 
 void VideoChannel::RemoveScreencast_w(uint32 ssrc) {
@@ -1593,7 +1596,7 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_ADDSCREENCAST: {
       const ScreencastMessageData* data =
           static_cast<ScreencastMessageData*>(pmsg->pdata);
-      AddScreencast_w(data->ssrc, data->window_id);
+      AddScreencast_w(data->ssrc, data->window_id, data->fps);
       break;
     }
     case MSG_REMOVESCREENCAST: {
@@ -1771,12 +1774,18 @@ bool DataChannel::SetLocalContent_w(const MediaContentDescription* content,
 bool DataChannel::SetRemoteContent_w(const MediaContentDescription* content,
                                      ContentAction action) {
   ASSERT(worker_thread() == talk_base::Thread::Current());
-  LOG(LS_INFO) << "Setting remote data description";
 
   const DataContentDescription* data =
       static_cast<const DataContentDescription*>(content);
   ASSERT(data != NULL);
   if (!data) return false;
+
+  // If the remote data doesn't have codecs and isn't an update, it
+  // must be empty, so ignore it.
+  if (action != CA_UPDATE && !data->has_codecs()) {
+    return true;
+  }
+  LOG(LS_INFO) << "Setting remote data description";
 
   bool ret = true;
   // Set remote video codecs (what the other side wants to receive).

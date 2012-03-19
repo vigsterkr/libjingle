@@ -43,6 +43,7 @@
 
 static const cricket::VideoCodec kVP8Codec720p(100, "VP8", 1280, 720, 30, 0);
 static const cricket::VideoCodec kVP8Codec360p(100, "VP8", 640, 360, 30, 0);
+static const cricket::VideoCodec kVP8Codec270p(100, "VP8", 480, 270, 30, 0);
 static const cricket::VideoCodec kVP8Codec180p(100, "VP8", 320, 180, 30, 0);
 
 static const cricket::VideoCodec kVP8Codec(100, "VP8", 640, 400, 30, 0);

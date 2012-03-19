@@ -1,5 +1,10 @@
 Libjingle
 
+0.6.17 - Mar 19, 2012
+  - Implemented ROAP on top of JSEP.
+  - Added a new signal after PortAllocatorSesison discoves all candidates for
+    the channel.
+
 0.6.16 - Mar 12, 2012
   - Add support for data channel to libjingle.
   - Update to use the latest webrtc.

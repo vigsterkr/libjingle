@@ -47,10 +47,12 @@
 
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
+using webrtc::IceCandidateColletion;
 using webrtc::JsepInterface;
 using webrtc::JsepSessionDescription;
 using webrtc::JsepIceCandidate;
 using webrtc::SessionDescriptionInterface;
+
 using webrtc::MediaHints;
 
 static const SocketAddress kClientAddr1("11.11.11.11", 0);
@@ -65,6 +67,13 @@ static const char kStream2[] = "stream2";
 static const char kVideoTrack2[] = "video2";
 static const char kAudioTrack2[] = "audio2";
 
+// Label of candidates belonging to the first media content.
+static const char kMediaContentLabel0[] = "0";
+static const int kMediaContentIndex0 = 0;
+
+// Label of candidates belonging to the second media content.
+static const char kMediaContentLabel1[] = "1";
+
 static const int kIceCandidatesTimeout = 3000;
 
 
@@ -76,10 +85,10 @@ class MockCandidateObserver : public webrtc::IceCandidateObserver {
 
   // Found a new candidate.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    if (candidate->label() == cricket::CN_AUDIO) {
-      audio_candidates_.push_back(candidate->candidate());
-    } else if (candidate->label() == cricket::CN_VIDEO) {
-      video_candidates_.push_back(candidate->candidate());
+    if (candidate->label() == kMediaContentLabel0) {
+      mline_0_candidates_.push_back(candidate->candidate());
+    } else if (candidate->label() == kMediaContentLabel1) {
+      mline_1_candidates_.push_back(candidate->candidate());
     }
   }
 
@@ -89,8 +98,8 @@ class MockCandidateObserver : public webrtc::IceCandidateObserver {
   }
 
   bool oncandidatesready_;
-  std::vector<cricket::Candidate> audio_candidates_;
-  std::vector<cricket::Candidate> video_candidates_;
+  std::vector<cricket::Candidate> mline_0_candidates_;
+  std::vector<cricket::Candidate> mline_1_candidates_;
 };
 
 class WebRtcSessionForTest : public webrtc::WebRtcSession {
@@ -204,26 +213,19 @@ class WebRtcSessionTest : public testing::Test {
         &mediastream_signaling_));
 
     EXPECT_TRUE(session_->Initialize());
-    session_->StartIce();
     mediastream_signaling_.UseOptionsReceiveOnly();
 
     video_channel_ = media_engine->GetVideoChannel(0);
     voice_channel_ = media_engine->GetVoiceChannel(0);
   }
 
-  void PopulateFakeCandidates() {
-    const int num_of_channels = 4;
-    const char* const channel_names[num_of_channels] = {
-        "rtp", "rtcp", "video_rtp", "video_rtcp"
-    };
-
-    // max 4 transport channels;
-    candidates_.clear();
-    for (int i = 0; i < num_of_channels; ++i) {
-      cricket::Candidate candidate;
-      candidate.set_name(channel_names[i]);
-      candidates_.push_back(candidate);
-    }
+  // Creates a local offer and applies it. Starts ice.
+  // Call mediastream_signaling_.UseOptionsWithStreamX() before this function
+  // to decide which streams to create.
+  void InitiateCall() {
+    SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+    EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
   }
 
   bool ChannelsExist() {
@@ -322,6 +324,16 @@ class WebRtcSessionTest : public testing::Test {
     ASSERT_TRUE(answer.get() != NULL);
     VerifyCryptoParams(answer->description(), false);
   }
+  // Creates and offer and an answer and applies it on the offer.
+  // Call mediastream_signaling_.UseOptionsWithStreamX() before this function
+  // to decide which streams to create.
+  void SetRemoteAndLocalSessionDescription() {
+    SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+    SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                                 offer);
+    EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  }
 
   cricket::FakeMediaEngine* media_engine;
   cricket::FakeDeviceManager* device_manager;
@@ -337,7 +349,6 @@ class WebRtcSessionTest : public testing::Test {
   FakeMediaStreamSignaling mediastream_signaling_;
   talk_base::scoped_ptr<WebRtcSessionForTest> session_;
   MockCandidateObserver observer_;
-  std::vector<cricket::Candidate> candidates_;
   cricket::FakeVideoMediaChannel* video_channel_;
   cricket::FakeVoiceMediaChannel* voice_channel_;
 };
@@ -351,18 +362,20 @@ TEST_F(WebRtcSessionTest, TestInitialize) {
 TEST_F(WebRtcSessionTest, TestSessionCandidates) {
   AddInterface(kClientAddr1);
   WebRtcSessionTest::Init();
+  WebRtcSessionTest::InitiateCall();
   EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
-  EXPECT_EQ(4u, observer_.audio_candidates_.size());
-  EXPECT_EQ(4u, observer_.video_candidates_.size());
+  EXPECT_EQ(4u, observer_.mline_0_candidates_.size());
+  EXPECT_EQ(4u, observer_.mline_1_candidates_.size());
 }
 
 TEST_F(WebRtcSessionTest, TestMultihomeCandidataes) {
   AddInterface(kClientAddr1);
   AddInterface(kClientAddr2);
   WebRtcSessionTest::Init();
+  WebRtcSessionTest::InitiateCall();
   EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
-  EXPECT_EQ(8u, observer_.audio_candidates_.size());
-  EXPECT_EQ(8u, observer_.video_candidates_.size());
+  EXPECT_EQ(8u, observer_.mline_0_candidates_.size());
+  EXPECT_EQ(8u, observer_.mline_1_candidates_.size());
 }
 
 TEST_F(WebRtcSessionTest, TestStunError) {
@@ -370,10 +383,11 @@ TEST_F(WebRtcSessionTest, TestStunError) {
   AddInterface(kClientAddr2);
   fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr1);
   WebRtcSessionTest::Init();
+  WebRtcSessionTest::InitiateCall();
   // Since kClientAddr1 is blocked, not expecting stun candidates for it.
   EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
-  EXPECT_EQ(6u, observer_.audio_candidates_.size());
-  EXPECT_EQ(6u, observer_.video_candidates_.size());
+  EXPECT_EQ(6u, observer_.mline_0_candidates_.size());
+  EXPECT_EQ(6u, observer_.mline_1_candidates_.size());
 }
 
 // Test creating offers and receive answers and make sure the
@@ -464,7 +478,7 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   EXPECT_TRUE(kAudioTrack1 == voice_channel_->recv_streams()[0].name);
   EXPECT_TRUE(kAudioTrack2 == voice_channel_->recv_streams()[1].name);
 
-  // Make we have no send streams.
+  // Make sure we have no send streams.
   EXPECT_EQ(0u, video_channel_->send_streams().size());
   EXPECT_EQ(0u, voice_channel_->send_streams().size());
 }
@@ -525,20 +539,130 @@ TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
 
   cricket::Candidate candidate1;
   candidate1.set_name("fake_candidate1");
-  JsepIceCandidate ice_candidate(cricket::CN_AUDIO, candidate1);
+  JsepIceCandidate ice_candidate(talk_base::ToString(0), candidate1);
 
   // Fail since we have not set a remote description
   EXPECT_FALSE(session_->ProcessIceMessage(&ice_candidate));
 
-  mediastream_signaling_.UseOptionsReceiveOnly();
-  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  SetRemoteAndLocalSessionDescription();
 
   EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate));
 
   JsepIceCandidate bad_ice_candidate("bad content name", candidate1);
-
   EXPECT_FALSE(session_->ProcessIceMessage(&bad_ice_candidate));
+}
+
+// Test that a remote candidate is added to the remote session description and
+// that it is retained if the remote session description is changed.
+TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
+  WebRtcSessionTest::Init();
+  cricket::Candidate candidate1;
+  candidate1.set_name("fake_candidate1");
+  JsepIceCandidate ice_candidate1(kMediaContentLabel0, candidate1);
+
+  SetRemoteAndLocalSessionDescription();
+  EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
+
+  EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate1));
+  const SessionDescriptionInterface* remote_desc =
+      session_->remote_description();
+  ASSERT_TRUE(remote_desc != NULL);
+  ASSERT_EQ(2u, remote_desc->number_of_mediasections());
+  const IceCandidateColletion* candidates =
+      remote_desc->candidates(kMediaContentIndex0);
+  ASSERT_EQ(1u, candidates->count());
+  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+
+  // Update the RemoteSessionDescription with a new session description and
+  // a candidate and check that the new remote session description contains both
+  // candidates.
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  cricket::Candidate candidate2;
+  candidate2.set_name("fake_candidate2");
+  JsepIceCandidate ice_candidate2(kMediaContentLabel0, candidate2);
+  EXPECT_TRUE(offer->AddCandidate(&ice_candidate2));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+
+  remote_desc = session_->remote_description();
+  ASSERT_TRUE(remote_desc != NULL);
+  ASSERT_EQ(2u, remote_desc->number_of_mediasections());
+  candidates = remote_desc->candidates(kMediaContentIndex0);
+  ASSERT_EQ(2u, candidates->count());
+  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+  EXPECT_TRUE(candidate2.IsEquivalent(candidates->at(0)->candidate()));
+  EXPECT_EQ(kMediaContentLabel0, candidates->at(1)->label());
+  EXPECT_TRUE(candidate1.IsEquivalent(candidates->at(1)->candidate()));
+
+  // Test that it fails if we can add the same candidate again.
+  EXPECT_FALSE(session_->ProcessIceMessage(&ice_candidate2));
+}
+
+// Test that local candidates are added to the local session description and
+// that they are retained if the local session description is changed.
+TEST_F(WebRtcSessionTest, TestLocalCandidatesAddedToSessionDescription) {
+  AddInterface(kClientAddr1);
+  WebRtcSessionTest::Init();
+  SetRemoteAndLocalSessionDescription();
+
+  const SessionDescriptionInterface* local_desc = session_->local_description();
+  const IceCandidateColletion* candidates =
+      local_desc->candidates(kMediaContentIndex0);
+  ASSERT_TRUE(candidates != NULL);
+  EXPECT_EQ(0u, candidates->count());
+
+  EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+
+  local_desc = session_->local_description();
+  candidates = local_desc->candidates(kMediaContentIndex0);
+  ASSERT_TRUE(candidates != NULL);
+  EXPECT_LT(0u, candidates->count());
+  candidates = local_desc->candidates(1);
+  ASSERT_TRUE(candidates != NULL);
+  EXPECT_LT(0u, candidates->count());
+
+  // Update the session descriptions.
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+
+  local_desc = session_->local_description();
+  candidates = local_desc->candidates(kMediaContentIndex0);
+  ASSERT_TRUE(candidates != NULL);
+  EXPECT_LT(0u, candidates->count());
+  candidates = local_desc->candidates(1);
+  ASSERT_TRUE(candidates != NULL);
+  EXPECT_LT(0u, candidates->count());
+}
+
+// Test that we can set a remote session description with remote candidates.
+TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
+  WebRtcSessionTest::Init();
+
+  cricket::Candidate candidate1;
+  candidate1.set_name("fake_candidate1");
+
+  JsepIceCandidate ice_candidate(kMediaContentLabel0, candidate1);
+  mediastream_signaling_.UseOptionsReceiveOnly();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+
+  EXPECT_TRUE(offer->AddCandidate(&ice_candidate));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+
+  const SessionDescriptionInterface* remote_desc =
+      session_->remote_description();
+  ASSERT_TRUE(remote_desc != NULL);
+  ASSERT_EQ(2u, remote_desc->number_of_mediasections());
+  const IceCandidateColletion* candidates =
+      remote_desc->candidates(kMediaContentIndex0);
+  ASSERT_EQ(1u, candidates->count());
+  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                              remote_desc);
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
+  // TODO: How do I check that the transport have got the
+  // remote candidates?
 }
 
 TEST_F(WebRtcSessionTest, TestDefaultSetSecurePolicy) {

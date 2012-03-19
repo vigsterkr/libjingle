@@ -1565,12 +1565,11 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
       LOG_RTCERR1(StartSend, voe_channel());
       return false;
     }
+    // It's OK not to have file() here, since we don't need to call Stop if
+    // no file is playing.
     if (engine()->voe()->file() &&
         engine()->voe()->file()->StopPlayingFileAsMicrophone(
-            voe_channel()) != -1) {
-      LOG(LS_INFO) << "File StopPlayingFileAsMicrophone Succeeded. channel:"
-                   << voe_channel();
-    } else {
+            voe_channel()) == -1) {
       LOG_RTCERR1(StopPlayingFileAsMicrophone, voe_channel());
       return false;
     }

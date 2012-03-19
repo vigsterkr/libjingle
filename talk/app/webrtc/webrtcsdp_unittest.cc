@@ -456,12 +456,11 @@ class WebRtcSdpTest : public testing::Test {
   }
 
   bool ReplaceAndTryToParse(const char* search, const char* replace) {
-    SessionDescription desc;
-    std::vector<cricket::Candidate> candidates;
+    JsepSessionDescription desc;
     std::string sdp = kSdpFullString;
     talk_base::replace_substrs(search, strlen(search), replace,
         strlen(replace), &sdp);
-    return webrtc::SdpDeserialize(sdp, &desc, &candidates);
+    return webrtc::SdpDeserialize(sdp, &desc);
   }
 
  protected:
@@ -470,11 +469,6 @@ class WebRtcSdpTest : public testing::Test {
   talk_base::scoped_ptr<IceCandidateInterface> jcandidate_;
   JsepSessionDescription jdesc_;
 };
-
-TEST_F(WebRtcSdpTest, Serialize) {
-  std::string message = webrtc::SdpSerialize(desc_, candidates_);
-  EXPECT_EQ(std::string(kSdpFullString), message);
-}
 
 TEST_F(WebRtcSdpTest, SerializeSessionDescriptionInterface) {
   // JsepSessionDescription with desc and candidates.
@@ -536,21 +530,6 @@ TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionInterfaceWithBundle) {
   desc_.AddGroup(group);
   jdesc_.SetDescription(desc_.Copy());
   EXPECT_TRUE(CompareSessionDescriptionInterface(jdesc_, jdesc_with_bundle));
-}
-
-TEST_F(WebRtcSdpTest, Deserialize) {
-  SessionDescription desc;
-  std::vector<cricket::Candidate> candidates;
-  // Deserialize
-  EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &desc, &candidates));
-  // Verify
-  EXPECT_TRUE(CompareSessionDescription(desc_, desc));
-}
-
-TEST_F(WebRtcSdpTest, DeserializeCandidates) {
-  std::vector<cricket::Candidate> candidates;
-  EXPECT_TRUE(webrtc::SdpDeserializeCandidates(kSdpCandidates, &candidates));
-  EXPECT_TRUE(CompareCandidates(candidates_, candidates));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {

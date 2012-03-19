@@ -408,7 +408,7 @@ class VideoChannel : public BaseChannel {
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   bool ApplyViewRequest(const ViewRequest& request);
 
-  bool AddScreencast(uint32 ssrc, const ScreencastId& id);
+  bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps);
   bool RemoveScreencast(uint32 ssrc);
 
   sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo> &>
@@ -444,7 +444,7 @@ class VideoChannel : public BaseChannel {
   bool ApplyViewRequest_w(const ViewRequest& request);
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
-  void AddScreencast_w(uint32 ssrc, const ScreencastId&);
+  void AddScreencast_w(uint32 ssrc, const ScreencastId& id, int fps);
   void RemoveScreencast_w(uint32 ssrc);
   void OnScreencastWindowEvent_s(uint32 ssrc, talk_base::WindowEvent we);
 

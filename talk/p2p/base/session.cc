@@ -330,6 +330,8 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
       this, &BaseSession::OnTransportChannelGone);
   transport->SignalRouteChange.connect(
       this, &BaseSession::OnTransportRouteChange);
+  transport->SignalCandidatesAllocationDone.connect(
+      this, &BaseSession::OnTransportCandidatesAllocationDone);
 
   transproxy = new TransportProxy(sid_, content_name,
                                   new TransportWrapper(transport));
@@ -456,6 +458,23 @@ void BaseSession::SetSelectedProxy(const std::string& content_name,
       }
     }
   }
+}
+
+void BaseSession::OnTransportCandidatesAllocationDone(Transport* transport) {
+  TransportProxy* transport_proxy = GetTransportProxy(transport);
+  if (transport_proxy) {
+    transport_proxy->set_candidates_allocated(true);
+  }
+
+  // Check all other TransportProxies got this signal.
+  for (TransportMap::iterator iter = transports_.begin();
+         iter != transports_.end(); ++iter) {
+    if (iter->second->impl() == transport) {
+      if (!iter->second->candidates_allocated())
+        return;
+    }
+  }
+  OnCandidatesAllocationDone();
 }
 
 void BaseSession::LogState(State old_state, State new_state) {
@@ -691,6 +710,12 @@ ContentParserMap Session::GetContentParsers() {
 
 void Session::OnTransportRequestSignaling(Transport* transport) {
   ASSERT(signaling_thread()->IsCurrent());
+  TransportProxy* transport_proxy = GetTransportProxy(transport);
+  ASSERT(transport_proxy != NULL);
+  if (transport_proxy) {
+    // Reset candidate allocation status for the transport proxy.
+    transport_proxy->set_candidates_allocated(false);
+  }
   SignalRequestSignaling(this);
 }
 

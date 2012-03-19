@@ -68,8 +68,6 @@ class WebRtcSession : public cricket::BaseSession,
     ice_observer_ = observer;
   }
 
-  void StartIce();
-
   const cricket::VoiceChannel* voice_channel() const {
     return voice_channel_.get();
   }
@@ -91,6 +89,7 @@ class WebRtcSession : public cricket::BaseSession,
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
       const SessionDescriptionInterface* offer);
+  virtual bool StartIce(IceOptions options);
   virtual bool SetLocalDescription(Action action,
                                    SessionDescriptionInterface* desc);
 
@@ -128,11 +127,26 @@ class WebRtcSession : public cricket::BaseSession,
 
   bool CreateChannels();  // Creates channels for voice and video.
   void EnableChannels();  // Enables sending of media.
+  // Creates a JsepIceCandidate and adds it to the local session description
+  // and notify observers. Called when a new local candidate have been found.
+  void ProcessNewLocalCandidate(const std::string& content_name,
+                                const cricket::Candidates& candidates);
+  // Returns a label for a local ice candidate given the content name.
+  // Returns false if the local session description does not have a media
+  // content called  |content_name|.
+  bool GetLocalCandidateLabel(const std::string& content_name,
+                              std::string* label);
+  // Uses all remote candidates in |remote_desc| in this session.
+  bool UseCandidatesInSessionDescription(
+      const SessionDescriptionInterface* remote_desc);
+  // Uses |candidate| in the this session.
+  bool UseCandidate(const IceCandidateInterface* candidate);
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
+  bool ice_started_;  // True if StartIce have been called.
   MediaStreamSignaling* mediastream_signaling_;
   IceCandidateObserver * ice_observer_;
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;

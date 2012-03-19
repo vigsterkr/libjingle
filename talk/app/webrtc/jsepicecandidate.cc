@@ -54,16 +54,10 @@ JsepIceCandidate::JsepIceCandidate(const std::string& label,
 }
 
 JsepIceCandidate::~JsepIceCandidate() {
-
 }
 
 bool JsepIceCandidate::Initialize(const std::string& sdp) {
-  std::vector<cricket::Candidate> candidates;
-  if (!SdpDeserializeCandidates(sdp, &candidates) || candidates.size() != 1) {
-    return false;
-  }
-  candidate_ = candidates[0];
-  return true;
+  return SdpDeserializeCandidate(sdp, this);
 }
 
 bool JsepIceCandidate::ToString(std::string* out) const {
@@ -73,7 +67,6 @@ bool JsepIceCandidate::ToString(std::string* out) const {
   return !out->empty();
 }
 
-
 JsepCandidateColletion::~JsepCandidateColletion() {
   for (std::vector<JsepIceCandidate*>::iterator it = candidates_.begin();
        it != candidates_.end(); ++it) {
@@ -81,5 +74,18 @@ JsepCandidateColletion::~JsepCandidateColletion() {
   }
 }
 
+bool JsepCandidateColletion::HasCandidate(
+    const IceCandidateInterface* candidate) const {
+  bool ret = false;
+  for (std::vector<JsepIceCandidate*>::const_iterator it = candidates_.begin();
+      it != candidates_.end(); ++it) {
+    if ((*it)->label() == candidate->label() &&
+        (*it)->candidate().IsEquivalent(candidate->candidate())) {
+      ret = true;
+      break;
+    }
+  }
+  return ret;
+}
 
 }  // namespace webrtc

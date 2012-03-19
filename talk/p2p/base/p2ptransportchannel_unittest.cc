@@ -213,8 +213,8 @@ class P2PTransportChannelTestBase : public testing::Test,
                                               const std::string& content_type) {
     cricket::P2PTransportChannel* channel = new cricket::P2PTransportChannel(
         name, content_type, NULL, GetAllocator(endpoint));
-    channel->SignalRequestSignaling.connect(channel,
-        &cricket::P2PTransportChannel::OnSignalingReady);
+    channel->SignalRequestSignaling.connect(
+        this, &P2PTransportChannelTestBase::OnChannelRequestSignaling);
     channel->SignalCandidateReady.connect(this,
         &P2PTransportChannelTestBase::OnCandidate);
     channel->SignalReadPacket.connect(
@@ -365,6 +365,9 @@ class P2PTransportChannelTestBase : public testing::Test,
     }
   }
 
+  void OnChannelRequestSignaling(cricket::TransportChannelImpl* channel) {
+    channel->OnSignalingReady();
+  }
   // We pass the candidates directly to the other side.
   void OnCandidate(cricket::TransportChannelImpl* ch,
                    const cricket::Candidate& c) {

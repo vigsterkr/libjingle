@@ -36,7 +36,6 @@
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/roaperrorcodes.h"
 #include "talk/app/webrtc/roapsession.h"
-#include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/scoped_ref_ptr.h"
 #include "talk/base/sigslot.h"
@@ -107,34 +106,29 @@ class MediaStreamInterface;
 // pc.ProcessSignalingMessage(remote_message, &local_streams);
 
 
-class RoapSignaling : public IceCandidateObserver,
-                      public talk_base::MessageHandler {
+class RoapSignaling : public IceCandidateObserver {
  public:
   enum State {
-    // Awaiting the local candidates.
+    // RoapSignaling is new. Ice has not started.
+    kNew,
+    // Ice has started. Awaiting the local candidates.
     kInitializing,
     // Ready to sent new offer or receive a new offer.
     kIdle,
     // An offer has been sent and expect an answer.
     kWaitingForAnswer,
-    // An answer have been sent and expect an ok message.
+    // An answer has been sent and expect an ok message.
     kWaitingForOK,
     // SendShutdown has been called. No more messages are processed.
     kShutingDown,
-    // Shutdown message have been received or remote peer have answered ok
+    // Shutdown message has been received or the remote peer has answered ok
     // to a sent shutdown message.
     kShutdownComplete,
   };
 
   // Constructs a RoapSignaling instance.
-  // signaling_thread - the thread where all signals will be triggered from.
-  // Also all calls to to methods are expected to be called on this thread.
   // provider - Implementation of the JsepInterface interface.
-  // This interface provides methods for returning local offer and answer
-  // session descriptions as well as functions for receiving events about
-  // negotiation completion and received remote session descriptions.
-  RoapSignaling(talk_base::Thread* signaling_thread,
-                MediaStreamSignaling* mediastream_signaling_,
+  RoapSignaling(MediaStreamSignaling* mediastream_signaling_,
                 JsepInterface* provider);
   virtual ~RoapSignaling();
 
@@ -172,7 +166,7 @@ class RoapSignaling : public IceCandidateObserver,
   // supposed to deliver this message to the remote peer.
   sigslot::signal1<const std::string&> SignalNewPeerConnectionMessage;
 
-  // The signaling state have changed.
+  // The signaling state has changed.
   sigslot::signal1<State> SignalStateChange;
 
   // Remote PeerConnection sent an error message.
@@ -182,33 +176,29 @@ class RoapSignaling : public IceCandidateObserver,
   typedef std::list<talk_base::scoped_refptr<StreamCollectionInterface> >
           StreamCollectionList;
 
-  // Implements talk_base::MessageHandler.
-  virtual void OnMessage(talk_base::Message* msg);
-
   // Change the State and triggers the SignalStateChange signal.
   void ChangeState(State new_state);
 
-  // Creates an offer on the signaling_thread_.
-  // This is either initiated by CreateOffer or OnIceComplete.
-  void CreateOffer_s();
+  // This is called by CreateOffer. Creates an offer based on the first stream
+  // collection in |queued_local_streams_|.
+  void InitializeSendingOffer();
+  // Serializes and sends |local_desc|
+  void SendOffer(const SessionDescriptionInterface* local_desc);
 
-  // Creates an answer on the signaling thread.
-  // This is either initiated by ProcessSignalingMessage when a remote offer
-  // have been received or OnIceComplete.
-  void CreateAnswer_s();
+  // This is called by ProcessSignalingMessage when a remote offer
+  // has been received.
+  void InitializeSendingAnswer(StreamCollectionInterface* local_streams);
+  // Serializes and sends |local_desc_|.
+  void SendAnswer();
 
-  // Notifies the provider_ and the active remote media streams
-  // about the shutdown.
+  // Notifies the |provider_| about the shutdown.
   // This is either initiated by ProcessSignalingMessage when a remote shutdown
-  // message have been received or by a call to SendShutDown.
+  // message has been received or by a call to SendShutDown.
   void DoShutDown();
 
-  // Process session description and candidates from the remote peer.
-  // Takes ownership of |remote_description|.
-  void ProcessRemoteDescription(
-      cricket::SessionDescription* remote_description,
-      JsepInterface::Action action,
-      const cricket::Candidates& candidates);
+  // Process session description from the remote peer.
+  bool ProcessRemoteDescription(const std::string& sdp,
+                                JsepInterface::Action action);
 
   // Updates the state of local streams based on the answer_desc and the streams
   // that have been negotiated in negotiated_streams.
@@ -216,7 +206,6 @@ class RoapSignaling : public IceCandidateObserver,
       const cricket::SessionDescription* answer_desc,
       StreamCollectionInterface* negotiated_streams);
 
-  talk_base::Thread* signaling_thread_;
   MediaStreamSignaling* stream_signaling_;
   JsepInterface* provider_;
   State state_;
@@ -225,8 +214,8 @@ class RoapSignaling : public IceCandidateObserver,
   // RoapSignaling is in kInitializing state.
   bool received_pre_offer_;
 
-  // LocalStreams queued for later use if ProcessSignalingMessage or CreateOffer
-  // is called while RoapSignaling is in kInitializing state or
+  // LocalStreams queued for later use if CreateOffer
+  // is called while RoapSignaling is in kNew state or
   // CreateOffer is called while RoapSignaling is currently sending
   // an offer.
   StreamCollectionList queued_local_streams_;
@@ -237,10 +226,6 @@ class RoapSignaling : public IceCandidateObserver,
 
   // Local MediaStreams being negotiated.
   talk_base::scoped_refptr<StreamCollection> local_streams_;
-
-  // The set of local transport candidates used in negotiation.
-  // This is set by OnIceComplete.
-  cricket::Candidates candidates_;
 
   // roap_session_ holds the ROAP-specific session state and is used for
   // creating a parsing ROAP messages.
