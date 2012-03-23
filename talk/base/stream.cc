@@ -437,7 +437,7 @@ void FileStream::Close() {
 bool FileStream::SetPosition(size_t position) {
   if (!file_)
     return false;
-  return (fseek(file_, position, SEEK_SET) == 0);
+  return (fseek(file_, static_cast<int>(position), SEEK_SET) == 0);
 }
 
 bool FileStream::GetPosition(size_t* position) const {

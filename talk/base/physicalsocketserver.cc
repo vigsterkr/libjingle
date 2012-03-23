@@ -177,7 +177,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     sockaddr_storage addr_storage;
     size_t len = bind_addr.ToSockAddrStorage(&addr_storage);
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
-    int err = ::bind(s_, addr, len);
+    int err = ::bind(s_, addr, static_cast<int>(len));
     UpdateLastError();
 #ifdef _DEBUG
     if (0 == err) {
@@ -216,7 +216,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     sockaddr_storage addr_storage;
     size_t len = connect_addr.ToSockAddrStorage(&addr_storage);
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
-    int err = ::connect(s_, addr, len);
+    int err = ::connect(s_, addr, static_cast<int>(len));
     UpdateLastError();
     if (err == 0) {
       state_ = CS_CONNECTED;
@@ -304,7 +304,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 #else
         0,
 #endif
-        reinterpret_cast<sockaddr*>(&saddr), len);
+        reinterpret_cast<sockaddr*>(&saddr), static_cast<int>(len));
     UpdateLastError();
     // We have seen minidumps where this may be false.
     ASSERT(sent <= static_cast<int>(length));

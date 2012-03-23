@@ -62,14 +62,18 @@ static const char kSdpFullString[] =
     "m=audio 2345 RTP/AVPF 103 104\r\n"
     "c=IN IP4 74.125.127.126\r\n"
     "a=rtcp:2346 IN IP4 74.125.127.126\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
-    "eth0 username user_rtp password password_rtp generation 0\r\n"
-    "a=candidate:1 2 udp 1 127.0.0.1 1235 typ host name rtcp network_name "
-    "eth0 username user_rtcp password password_rtcp generation 0\r\n"
-    "a=candidate:1 1 udp 1 74.125.127.126 2345 typ srflx name rtp network_name "
-    "eth0 username user_rtp_stun password password_rtp_stun generation 0\r\n"
-    "a=candidate:1 2 udp 1 74.125.127.126 2346 typ srflx name rtcp network_name"
-    " eth0 username user_rtcp_stun password password_rtcp_stun generation 0\r\n"
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp_audio "
+    "network_name eth0 username user_rtp password password_rtp "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 1 127.0.0.1 1235 typ host name rtcp_audio "
+    "network_name eth0 username user_rtcp password password_rtcp "
+    "generation 0\r\n"
+    "a=candidate:1 1 udp 1 74.125.127.126 2345 typ srflx name rtp_audio "
+    "network_name eth0 username user_rtp_stun password password_rtp_stun "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 1 74.125.127.126 2346 typ srflx name rtcp_audio "
+    "network_name eth0 username user_rtcp_stun password password_rtcp_stun "
+    "generation 0\r\n"
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
@@ -85,16 +89,16 @@ static const char kSdpFullString[] =
     "m=video 3457 RTP/AVPF 120\r\n"
     "c=IN IP4 74.125.224.39\r\n"
     "a=rtcp:3456 IN IP4 74.125.224.39\r\n"
-    "a=candidate:1 2 udp 1 127.0.0.1 1236 typ host name video_rtcp "
+    "a=candidate:1 2 udp 1 127.0.0.1 1236 typ host name rtcp_video "
     "network_name eth0 username user_video_rtcp password password_video_rtcp "
     "generation 0\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name video_rtp "
+    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name rtp_video "
     "network_name eth0 username user_video_rtp password password_video_rtp "
     "generation 0\r\n"
-    "a=candidate:1 2 udp 1 74.125.224.39 3456 typ relay name video_rtcp "
+    "a=candidate:1 2 udp 1 74.125.224.39 3456 typ relay name rtcp_video "
     "network_name eth0 username user_video_rtcp_relay password "
     "password_video_rtcp generation 0\r\n"
-    "a=candidate:1 1 udp 1 74.125.224.39 3457 typ relay name video_rtp "
+    "a=candidate:1 1 udp 1 74.125.224.39 3457 typ relay name rtp_video "
     "network_name eth0 username user_video_rtp_relay password "
     "password_video_rtp generation 0\r\n"
     "a=mid:video_content_name\r\n"
@@ -147,29 +151,32 @@ static const char kSdpString[] =
 
 // One candidate reference string.
 static const char kSdpOneCandidate[] =
-    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
-    "eth0 username user_rtp password password_rtp generation 0\r\n";
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp_audio network_name"
+    " eth0 username user_rtp password password_rtp generation 0\r\n";
 
 // Candidates reference string.
 static const char kSdpCandidates[] =
-    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp network_name "
-    "eth0 username user_rtp password password_rtp generation 0\r\n"
-    "a=candidate:1 2 udp 1 127.0.0.1 1235 typ host name rtcp network_name "
-    "eth0 username user_rtcp password password_rtcp generation 0\r\n"
-    "a=candidate:1 1 udp 1 74.125.127.126 2345 typ srflx name rtp network_name "
-    "eth0 username user_rtp_stun password password_rtp_stun generation 0\r\n"
-    "a=candidate:1 2 udp 1 74.125.127.126 2346 typ srflx name rtcp network_name"
-    " eth0 username user_rtcp_stun password password_rtcp_stun generation 0\r\n"
-    "a=candidate:1 2 udp 1 127.0.0.1 1236 typ host name video_rtcp "
+    "a=candidate:1 1 udp 1 127.0.0.1 1234 typ host name rtp_audio network_name"
+    " eth0 username user_rtp password password_rtp generation 0\r\n"
+    "a=candidate:1 2 udp 1 127.0.0.1 1235 typ host name rtcp_audio "
+    "network_name eth0 username user_rtcp password password_rtcp "
+    "generation 0\r\n"
+    "a=candidate:1 1 udp 1 74.125.127.126 2345 typ srflx name rtp_audio "
+    "network_name eth0 username user_rtp_stun password password_rtp_stun "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 1 74.125.127.126 2346 typ srflx name rtcp_audio "
+    "network_name eth0 username user_rtcp_stun password password_rtcp_stun "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 1 127.0.0.1 1236 typ host name rtcp_video "
     "network_name eth0 username user_video_rtcp password password_video_rtcp "
     "generation 0\r\n"
-    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name video_rtp "
+    "a=candidate:1 1 udp 1 127.0.0.1 1237 typ host name rtp_video "
     "network_name eth0 username user_video_rtp password password_video_rtp "
     "generation 0\r\n"
-    "a=candidate:1 2 udp 1 74.125.224.39 3456 typ relay name video_rtcp "
+    "a=candidate:1 2 udp 1 74.125.224.39 3456 typ relay name rtcp_video "
     "network_name eth0 username user_video_rtcp_relay password "
     "password_video_rtcp generation 0\r\n"
-    "a=candidate:1 1 udp 1 74.125.224.39 3457 typ relay name video_rtp "
+    "a=candidate:1 1 udp 1 74.125.224.39 3457 typ relay name rtp_video "
     "network_name eth0 username user_video_rtp_relay password "
     "password_video_rtp generation 0\r\n";
 
@@ -264,34 +271,34 @@ class WebRtcSdpTest : public testing::Test {
     // host
     int port = 1234;
     talk_base::SocketAddress address("127.0.0.1", port++);
-    cricket::Candidate candidate1("rtp", "udp", address, 1,
+    cricket::Candidate candidate1("rtp_audio", "udp", address, 1,
         "user_rtp", "password_rtp", "local", "eth0", 0);
     address.SetPort(port++);
-    cricket::Candidate candidate2("rtcp", "udp", address, 1,
+    cricket::Candidate candidate2("rtcp_audio", "udp", address, 1,
         "user_rtcp", "password_rtcp", "local", "eth0", 0);
     address.SetPort(port++);
-    cricket::Candidate candidate3("video_rtcp", "udp", address, 1,
+    cricket::Candidate candidate3("rtcp_video", "udp", address, 1,
         "user_video_rtcp", "password_video_rtcp", "local", "eth0", 0);
     address.SetPort(port++);
-    cricket::Candidate candidate4("video_rtp", "udp", address, 1,
+    cricket::Candidate candidate4("rtp_video", "udp", address, 1,
         "user_video_rtp", "password_video_rtp", "local", "eth0", 0);
 
     // stun
     int port_stun = 2345;
     talk_base::SocketAddress address_stun("74.125.127.126", port_stun++);
-    cricket::Candidate candidate5("rtp", "udp", address_stun, 1,
+    cricket::Candidate candidate5("rtp_audio", "udp", address_stun, 1,
         "user_rtp_stun", "password_rtp_stun", "stun", "eth0", 0);
     address_stun.SetPort(port_stun++);
-    cricket::Candidate candidate6("rtcp", "udp", address_stun, 1,
+    cricket::Candidate candidate6("rtcp_audio", "udp", address_stun, 1,
         "user_rtcp_stun", "password_rtcp_stun", "stun", "eth0", 0);
 
     // relay
     int port_relay = 3456;
     talk_base::SocketAddress address_relay("74.125.224.39", port_relay++);
-    cricket::Candidate candidate7("video_rtcp", "udp", address_relay, 1,
+    cricket::Candidate candidate7("rtcp_video", "udp", address_relay, 1,
         "user_video_rtcp_relay", "password_video_rtcp", "relay", "eth0", 0);
     address_relay.SetPort(port_relay++);
-    cricket::Candidate candidate8("video_rtp", "udp", address_relay, 1,
+    cricket::Candidate candidate8("rtp_video", "udp", address_relay, 1,
         "user_video_rtp_relay", "password_video_rtp", "relay", "eth0", 0);
 
     // voice
@@ -530,6 +537,14 @@ TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionInterfaceWithBundle) {
   desc_.AddGroup(group);
   jdesc_.SetDescription(desc_.Copy());
   EXPECT_TRUE(CompareSessionDescriptionInterface(jdesc_, jdesc_with_bundle));
+}
+
+TEST_F(WebRtcSdpTest, SdpDeserializeCandidate) {
+  const std::string kDummyLabel = "dummy_label";
+  JsepIceCandidate jcandidate(kDummyLabel);
+  EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidate, &jcandidate));
+  EXPECT_EQ(kDummyLabel, jcandidate.label());
+  EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {

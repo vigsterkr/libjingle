@@ -460,7 +460,7 @@ void SocketTest::TestTcp() {
   scoped_array<char> recv_buffer(new char[kDataSize]);
   size_t send_pos = 0, recv_pos = 0;
   for (size_t i = 0; i < kDataSize; ++i) {
-    send_buffer[i] = i;
+    send_buffer[i] = static_cast<char>(i % 256);
     recv_buffer[i] = 0;
   }
 
@@ -498,7 +498,7 @@ void SocketTest::TestTcp() {
   while (recv_pos < kDataSize) {
     // Send as much as we can if we've been cleared to send.
     while (!send_waiting_for_writability && send_pos < kDataSize) {
-      int tosend = kDataSize - send_pos;
+      int tosend = static_cast<int>(kDataSize - send_pos);
       int sent = accepted->Send(send_buffer.get() + send_pos, tosend);
       if (send_expect_success) {
         // The first Send() after connecting or getting writability should

@@ -165,8 +165,10 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateOffer(options,
                                         BaseSession::local_description()));
-
-  return new JsepSessionDescription(desc);
+  SessionDescriptionInterface* offer = new JsepSessionDescription(desc);
+  if (local_description())
+    CopyCandidatesFromSessionDescription(local_description(), offer);
+  return offer;
 }
 
 SessionDescriptionInterface* WebRtcSession::CreateAnswer(
@@ -177,7 +179,10 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateAnswer(offer->description(), options,
                                          BaseSession::local_description()));
-  return new JsepSessionDescription(desc);
+  SessionDescriptionInterface* answer = new JsepSessionDescription(desc);
+  if (local_description())
+    CopyCandidatesFromSessionDescription(local_description(), answer);
+  return answer;
 }
 
 bool WebRtcSession::SetLocalDescription(Action action,
@@ -199,7 +204,6 @@ bool WebRtcSession::SetLocalDescription(Action action,
   }
 
   set_local_description(desc->description()->Copy());
-  CopyCandidatesFromSessionDescription(local_desc_.get(), desc);
   local_desc_.reset(desc);
 
   if (type == cricket::CA_ANSWER) {
@@ -245,7 +249,7 @@ bool WebRtcSession::SetRemoteDescription(Action action,
                   << "invalid candidates";
     return false;
   }
-
+  // We retain all received candidates.
   CopyCandidatesFromSessionDescription(remote_desc_.get(), desc);
   remote_desc_.reset(desc);
   return true;
@@ -264,8 +268,7 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
 
   // Add this candidate to the remote session description.
   if (!remote_desc_->AddCandidate(candidate)) {
-    LOG(LS_ERROR) << "ProcessIceMessage: Candidate can not be used. "
-                  << "Has it already been added?";
+    LOG(LS_ERROR) << "ProcessIceMessage: Candidate cannot be used";
     return false;
   }
 

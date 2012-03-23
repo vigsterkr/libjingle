@@ -322,7 +322,9 @@ int Win32Socket::Bind(const SocketAddress& addr) {
 
   sockaddr_storage saddr;
   size_t len = addr.ToSockAddrStorage(&saddr);
-  int err = ::bind(socket_, reinterpret_cast<sockaddr*>(&saddr), len);
+  int err = ::bind(socket_,
+                   reinterpret_cast<sockaddr*>(&saddr),
+                   static_cast<int>(len));
   UpdateLastError();
   return err;
 }
@@ -363,7 +365,9 @@ int Win32Socket::DoConnect(const SocketAddress& addr) {
   sockaddr_storage saddr;
   size_t len = addr.ToSockAddrStorage(&saddr);
   connect_time_ = Time();
-  int result = connect(socket_, reinterpret_cast<SOCKADDR*>(&saddr), len);
+  int result = connect(socket_,
+                       reinterpret_cast<SOCKADDR*>(&saddr),
+                       static_cast<int>(len));
   if (result != SOCKET_ERROR) {
     state_ = CS_CONNECTED;
   } else {
@@ -416,7 +420,10 @@ int Win32Socket::SetOption(Option opt, int value) {
 }
 
 int Win32Socket::Send(const void* buffer, size_t length) {
-  int sent = ::send(socket_, reinterpret_cast<const char*>(buffer), length, 0);
+  int sent = ::send(socket_,
+                    reinterpret_cast<const char*>(buffer),
+                    static_cast<int>(length),
+                    0);
   UpdateLastError();
   return sent;
 }
@@ -425,14 +432,17 @@ int Win32Socket::SendTo(const void* buffer, size_t length,
                         const SocketAddress& addr) {
   sockaddr_storage saddr;
   size_t addr_len = addr.ToSockAddrStorage(&saddr);
-  int sent = ::sendto(socket_, reinterpret_cast<const char*>(buffer), length, 0,
-                      reinterpret_cast<sockaddr*>(&saddr), addr_len);
+  int sent = ::sendto(socket_, reinterpret_cast<const char*>(buffer),
+                      static_cast<int>(length), 0,
+                      reinterpret_cast<sockaddr*>(&saddr),
+                      static_cast<int>(addr_len));
   UpdateLastError();
   return sent;
 }
 
 int Win32Socket::Recv(void* buffer, size_t length) {
-  int received = ::recv(socket_, static_cast<char*>(buffer), length, 0);
+  int received = ::recv(socket_, static_cast<char*>(buffer),
+                        static_cast<int>(length), 0);
   UpdateLastError();
   if (closing_ && received <= static_cast<int>(length))
     PostClosed();
@@ -443,7 +453,8 @@ int Win32Socket::RecvFrom(void* buffer, size_t length,
                           SocketAddress* out_addr) {
   sockaddr_storage saddr;
   socklen_t addr_len = sizeof(saddr);
-  int received = ::recvfrom(socket_, static_cast<char*>(buffer), length, 0,
+  int received = ::recvfrom(socket_, static_cast<char*>(buffer),
+                            static_cast<int>(length), 0,
                             reinterpret_cast<sockaddr*>(&saddr), &addr_len);
   UpdateLastError();
   if (received != SOCKET_ERROR)

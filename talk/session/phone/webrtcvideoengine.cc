@@ -87,18 +87,32 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
   void SetRenderer(VideoRenderer* renderer) {
     talk_base::CritScope cs(&crit_);
     renderer_ = renderer;
+    // FrameSizeChange may have already been called when renderer was not set.
+    // If so we should call SetSize here.
+    // TODO: Add unit test for this case. Didn't do it now
+    // because the WebRtcRenderAdapter is currently hiding in cc file. No
+    // good way to get access to it from the unit test.
+    if (width_ > 0 && height_ > 0 && renderer_ != NULL) {
+      if (!renderer_->SetSize(width_, height_, 0)) {
+        LOG(LS_ERROR)
+            << "WebRtcRenderAdapter SetRenderer failed to SetSize to: "
+            << width_ << "x" << height_;
+      }
+    }
   }
   // Implementation of webrtc::ExternalRenderer.
   virtual int FrameSizeChange(unsigned int width, unsigned int height,
                               unsigned int /*number_of_streams*/) {
     talk_base::CritScope cs(&crit_);
-    if (renderer_ == NULL) {
-      return 0;
-    }
-    LOG(LS_INFO) << "WebRtcRenderAdapter frame size changed to: "
-                 << width << "x" << height;
     width_ = width;
     height_ = height;
+    LOG(LS_INFO) << "WebRtcRenderAdapter frame size changed to: "
+                 << width << "x" << height;
+    if (renderer_ == NULL) {
+      LOG(LS_VERBOSE) << "WebRtcRenderAdapter the renderer has not been set. "
+                      << "SetSize will be called later in SetRenderer."
+      return 0;
+    }
     return renderer_->SetSize(width_, height_, 0) ? 0 : -1;
   }
   virtual int DeliverFrame(unsigned char* buffer, int buffer_size,

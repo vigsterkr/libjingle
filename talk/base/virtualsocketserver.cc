@@ -427,7 +427,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
 
  private:
   struct NetworkEntry {
-    uint32 size;
+    size_t size;
     uint32 done_time;
   };
 
@@ -504,7 +504,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
     const char* cpv = static_cast<const char*>(pv);
     send_buffer_.insert(send_buffer_.end(), cpv, cpv + consumed);
     server_->SendTcp(this);
-    return consumed;
+    return static_cast<int>(consumed);
   }
 
   VirtualSocketServer* server_;
@@ -528,12 +528,12 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
 
   // Network model that enforces bandwidth and capacity constraints
   NetworkQueue network_;
-  uint32 network_size_;
+  size_t network_size_;
 
   // Data which has been received from the network
   RecvBuffer recv_buffer_;
   // The amount of data which is in flight or in recv_buffer_
-  uint32 recv_buffer_size_;
+  size_t recv_buffer_size_;
 
   // Is this socket bound?
   bool bound_;
@@ -890,7 +890,7 @@ void VirtualSocketServer::AddPacketToNetwork(VirtualSocket* sender,
   entry.size = data_size + header_size;
 
   sender->network_size_ += entry.size;
-  uint32 send_delay = SendDelay(sender->network_size_);
+  uint32 send_delay = SendDelay(static_cast<uint32>(sender->network_size_));
   entry.done_time = cur_time + send_delay;
   sender->network_.push_back(entry);
 

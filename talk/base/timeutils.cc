@@ -95,15 +95,6 @@ uint32 Time() {
   return static_cast<uint32>(TimeNanos() / kNumNanosecsPerMillisec);
 }
 
-uint32 StartTime() {
-  // Close to program execution time
-  static const uint32 g_start = Time();
-  return g_start;
-}
-
-// Make sure someone calls it so that it gets initialized
-static uint32 ignore = StartTime();
-
 uint32 TimeAfter(int32 elapsed) {
   ASSERT(elapsed >= 0);
   ASSERT(static_cast<uint32>(elapsed) < HALF);

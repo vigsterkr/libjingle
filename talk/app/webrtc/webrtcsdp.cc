@@ -272,77 +272,76 @@ static bool GetValue(const std::string& message, std::string* value) {
   return SplitByDelimiter(message, kSdpDelimiterColon, &attribute, value);
 }
 
-// Get the ip and port of the default rtp and rtcp candidate
-// for the given media_type.
-static void GetDefaultDestination(
-    const std::vector<Candidate>& candidates,
-    const MediaType media_type,
-    std::string* rtp_port,
-    std::string* rtp_ip,
-    std::string* rtcp_port,
-    std::string* rtcp_ip) {
-  // RFC 5245
-  // It is RECOMMENDED that default candidates be chosen based on the
-  // likelihood of those candidates to work with the peer that is being
-  // contacted.  It is RECOMMENDED that relayed > reflexive > host.
-  const int kPrefHost = 1;
-  const int kPrefReflexive = 2;
-  const int kPrefRelayed = 3;
-  int rtp_current_pref = 0;
-  int rtcp_current_pref = 0;
+// RFC 5245
+// It is RECOMMENDED that default candidates be chosen based on the
+// likelihood of those candidates to work with the peer that is being
+// contacted.  It is RECOMMENDED that relayed > reflexive > host.
+static const int kPreferenceUnknown = 0;
+static const int kPreferenceHost = 1;
+static const int kPreferenceReflexive = 2;
+static const int kPreferenceRelayed = 3;
+
+static int GetCandidatePreferenceFromType(const std::string& type) {
+  int preference = kPreferenceUnknown;
+  if (type == cricket::LOCAL_PORT_TYPE) {
+    preference = kPreferenceHost;
+  } else if (type == cricket::STUN_PORT_TYPE) {
+    preference = kPreferenceReflexive;
+  } else if (type == cricket::RELAY_PORT_TYPE) {
+    preference = kPreferenceRelayed;
+  } else {
+    ASSERT(false);
+  }
+  return preference;
+}
+
+// Get ip and port of the default destination from the |candidates| with
+// the given value of |component_id|.
+// RFC 5245
+// The value of |component_id| currently supported are 1 (RTP) and 2 (RTCP).
+// TODO: Decide the default destination in webrtcsession and
+// pass it down via SessionDescription.
+static bool GetDefaultDestination(const std::vector<Candidate>& candidates,
+    int component_id, std::string* port, std::string* ip) {
+  // TODO: Add component id to Candidate and stop depending on the
+  // name to determine rtp/rtcp candidate.
+  std::string target_name;
+  switch (component_id) {
+    case kIceComponentIdRtp:
+      target_name = "rtp";
+      break;
+    case kIceComponentIdRtcp:
+      target_name = "rtcp";
+      break;
+    default:
+      return false;
+  }
+  int current_preference = kPreferenceUnknown;
   for (std::vector<Candidate>::const_iterator it = candidates.begin();
        it != candidates.end(); ++it) {
-    if (((media_type == cricket::MEDIA_TYPE_VIDEO) &&
-         (it->name() == "video_rtcp" || it->name() == "video_rtp")) ||
-        ((media_type == cricket::MEDIA_TYPE_AUDIO) &&
-         (it->name() == "rtp" || it->name() == "rtcp"))) {
-      bool rtp = it->name().find("rtp") != std::string::npos;
-      int pref = kPrefHost;
-      if (it->type() == cricket::LOCAL_PORT_TYPE) {
-        pref = kPrefHost;
-      } else if (it->type() == cricket::STUN_PORT_TYPE) {
-        pref = kPrefReflexive;
-      } else if (it->type() == cricket::RELAY_PORT_TYPE) {
-        pref = kPrefRelayed;
-      } else {
-        ASSERT(false);
-      }
-      // See if this candidate is more preferable then the current one.
-      if (pref <= (rtp ? rtp_current_pref : rtcp_current_pref)) {
-        continue;
-      }
-      if (rtp) {
-        rtp_current_pref = pref;
-        *rtp_port = it->address().PortAsString();
-        *rtp_ip = it->address().IPAsString();
-      } else {
-        rtcp_current_pref = pref;
-        *rtcp_port = it->address().PortAsString();
-        *rtcp_ip = it->address().IPAsString();
-      }
+    if (it->name().find(target_name) == std::string::npos) {
+      continue;
     }
+    const int preference = GetCandidatePreferenceFromType(it->type());
+    // See if this candidate is more preferable then the current one.
+    if (preference <= current_preference) {
+      continue;
+    }
+    current_preference = preference;
+    *port = it->address().PortAsString();
+    *ip = it->address().IPAsString();
   }
+  return true;
 }
 
 // Update the media default destination.
 static void UpdateMediaDefaultDestination(
     const std::vector<Candidate>& candidates, std::string* mline) {
-  MediaType media_type;
-  if (HasAttribute(*mline, kMediaTypeVideo)) {
-    media_type = cricket::MEDIA_TYPE_VIDEO;
-  } else if (HasAttribute(*mline, kMediaTypeAudio)) {
-    media_type = cricket::MEDIA_TYPE_AUDIO;
-  } else {
-    // Not supported media.
-    return;
-  }
-
-  std::string rtp_port, rtp_ip, rtcp_port, rtcp_ip;
-  GetDefaultDestination(candidates, media_type,
-                        &rtp_port, &rtp_ip, &rtcp_port, &rtcp_ip);
   std::ostringstream os;
-  // Found default RTP candidate.
-  if (!rtp_port.empty() && !rtp_ip.empty()) {
+  std::string rtp_port, rtp_ip;
+  if (GetDefaultDestination(candidates, kIceComponentIdRtp,
+                            &rtp_port, &rtp_ip)) {
+    // Found default RTP candidate.
     // RFC 5245
     // The default candidates are added to the SDP as the default
     // destination for media.  For streams based on RTP, this is done by
@@ -367,8 +366,11 @@ static void UpdateMediaDefaultDestination(
     os << " " << kConnectionAddrtype << " " << rtp_ip;
     AddLine(os.str(), mline);
   }
-  // Found default RTCP candidate.
-  if (!rtcp_port.empty() && !rtcp_ip.empty()) {
+
+  std::string rtcp_port, rtcp_ip;
+  if (GetDefaultDestination(candidates, kIceComponentIdRtcp,
+                            &rtcp_port, &rtcp_ip)) {
+    // Found default RTCP candidate.
     // RFC 5245
     // If the agent is utilizing RTCP, it MUST encode the RTCP candidate
     // using the a=rtcp attribute as defined in RFC 3605.

@@ -73,6 +73,7 @@ static const int kMediaContentIndex0 = 0;
 
 // Label of candidates belonging to the second media content.
 static const char kMediaContentLabel1[] = "1";
+static const int kMediaContentIndex1 = 1;
 
 static const int kIceCandidatesTimeout = 3000;
 
@@ -593,8 +594,8 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   EXPECT_EQ(kMediaContentLabel0, candidates->at(1)->label());
   EXPECT_TRUE(candidate1.IsEquivalent(candidates->at(1)->candidate()));
 
-  // Test that it fails if we can add the same candidate again.
-  EXPECT_FALSE(session_->ProcessIceMessage(&ice_candidate2));
+  // Test that the candidate is ignored if we can add the same candidate again.
+  EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate2));
 }
 
 // Test that local candidates are added to the local session description and
@@ -664,6 +665,38 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
   // TODO: How do I check that the transport have got the
   // remote candidates?
 }
+
+// Test that offers and answers contains ice canidates when Ice candidates have
+// been gathered.
+TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteDescriptionWithCandidates) {
+  AddInterface(kClientAddr1);
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsReceiveOnly();
+  SetRemoteAndLocalSessionDescription();
+  EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
+  // Wait until at least one local candidate has been collected.
+  EXPECT_TRUE_WAIT(0u < observer_.mline_0_candidates_.size(),
+                   kIceCandidatesTimeout);
+  EXPECT_TRUE_WAIT(0u < observer_.mline_1_candidates_.size(),
+                   kIceCandidatesTimeout);
+
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  ASSERT_TRUE(offer->candidates(kMediaContentIndex0) != NULL);
+  EXPECT_LT(0u, offer->candidates(kMediaContentIndex0)->count());
+  ASSERT_TRUE(offer->candidates(kMediaContentIndex1) != NULL);
+  EXPECT_LT(0u, offer->candidates(kMediaContentIndex1)->count());
+
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  ASSERT_TRUE(answer->candidates(kMediaContentIndex0) != NULL);
+  EXPECT_LT(0u, answer->candidates(kMediaContentIndex0)->count());
+  ASSERT_TRUE(answer->candidates(kMediaContentIndex1) != NULL);
+  EXPECT_LT(0u, answer->candidates(kMediaContentIndex1)->count());
+
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+}
+
 
 TEST_F(WebRtcSessionTest, TestDefaultSetSecurePolicy) {
   WebRtcSessionTest::Init();

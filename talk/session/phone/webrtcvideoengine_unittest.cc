@@ -108,6 +108,36 @@ class WebRtcVideoEngineTestFake : public testing::Test {
     }
     return channel_->SendFrame(0, &frame);
   }
+  void VerifyVP8SendCodec(int channel_num,
+                          unsigned int width,
+                          unsigned int height,
+                          unsigned int layers = 0,
+                          unsigned int max_bitrate = kMaxBandwidthKbps,
+                          unsigned int min_bitrate = kMinBandwidthKbps,
+                          unsigned int start_bitrate = kStartBandwidthKbps,
+                          unsigned int fps = 30) {
+    webrtc::VideoCodec gcodec;
+    EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+
+    // Video codec properties.
+    EXPECT_EQ(webrtc::kVideoCodecVP8, gcodec.codecType);
+    EXPECT_STREQ("VP8", gcodec.plName);
+    EXPECT_EQ(100, gcodec.plType);
+    EXPECT_EQ(width, gcodec.width);
+    EXPECT_EQ(height, gcodec.height);
+    EXPECT_EQ(start_bitrate, gcodec.startBitrate);
+    EXPECT_EQ(max_bitrate, gcodec.maxBitrate);
+    EXPECT_EQ(min_bitrate, gcodec.minBitrate);
+    EXPECT_EQ(fps, gcodec.maxFramerate);
+    // VP8 specific.
+    EXPECT_EQ(false, gcodec.codecSpecific.VP8.pictureLossIndicationOn);
+    EXPECT_EQ(false, gcodec.codecSpecific.VP8.feedbackModeOn);
+    EXPECT_EQ(webrtc::kComplexityNormal, gcodec.codecSpecific.VP8.complexity);
+    EXPECT_EQ(webrtc::kResilienceOff, gcodec.codecSpecific.VP8.resilience);
+    EXPECT_EQ(kNumberOfTemporalLayers,
+              gcodec.codecSpecific.VP8.numberOfTemporalLayers);
+    EXPECT_EQ(0U, gcodec.qpMax);
+  }
   virtual void TearDown() {
     delete channel_;
     engine_.Terminate();
@@ -189,19 +219,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecs) {
   int channel_num = vie_.GetLastChannel();
   std::vector<cricket::VideoCodec> codecs(engine_.codecs());
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(0, gcodec.numberOfSimulcastStreams);
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_EQ(kVP8Codec.width, gcodec.width);
-  EXPECT_EQ(kVP8Codec.height, gcodec.height);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
   EXPECT_TRUE(vie_.GetHybridNackFecStatus(channel_num));
   EXPECT_FALSE(vie_.GetNackStatus(channel_num));
-  EXPECT_EQ(webrtc::kResilienceOff, gcodec.codecSpecific.VP8.resilience);
   // TODO: Check RTCP, PLI, TMMBR.
 }
 
@@ -225,13 +245,7 @@ TEST_F(WebRtcVideoEngineTestFake, ConstrainSendCodecs) {
 
   // Set send codec and verify codec has been constrained.
   EXPECT_TRUE(channel_->SetSendCodecs(codec_list));
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_EQ(kVP8Codec.width, gcodec.width);
-  EXPECT_EQ(kVP8Codec.height, gcodec.height);
-  EXPECT_EQ(kVP8Codec.framerate, gcodec.maxFramerate);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
 }
 
 // Test that SetSendCodecs rejects bad format.
@@ -295,17 +309,12 @@ TEST_F(WebRtcVideoEngineTestFake, ResetVieSendCodecOnNewFrameSize) {
   // Capture a smaller frame and verify vie send codec has been reset to
   // the new size.
   SendI420Frame(kVP8Codec.width / 2, kVP8Codec.height / 2);
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.width / 2, gcodec.width);
-  EXPECT_EQ(kVP8Codec.height / 2, gcodec.height);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width / 2, kVP8Codec.height / 2);
 
   // Capture a frame bigger than send_codec_ and verify vie send codec has been
   // reset (and clipped) to send_codec_.
   SendI420Frame(kVP8Codec.width * 2, kVP8Codec.height * 2);
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.width, gcodec.width);
-  EXPECT_EQ(kVP8Codec.height, gcodec.height);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
 }
 
 // Test that we set our inbound codecs properly.
@@ -582,13 +591,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthAuto) {
   int channel_num = vie_.GetLastChannel();
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_TRUE(channel_->SetSendBandwidth(true, cricket::kAutoBandwidth));
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
 }
 
 // Test that we set bandwidth properly when using auto with upper bound.
@@ -597,13 +600,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthAutoCapped) {
   int channel_num = vie_.GetLastChannel();
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_TRUE(channel_->SetSendBandwidth(true, 768000));
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(768U, gcodec.maxBitrate);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height, 0, 768U);
 }
 
 // Test that we set bandwidth properly when using a fixed bandwidth.
@@ -612,13 +609,8 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthFixed) {
   int channel_num = vie_.GetLastChannel();
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_TRUE(channel_->SetSendBandwidth(false, 768000));
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kVP8Codec.id, gcodec.plType);
-  EXPECT_STREQ(kVP8Codec.name.c_str(), gcodec.plName);
-  EXPECT_EQ(768U, gcodec.minBitrate);
-  EXPECT_EQ(768U, gcodec.startBitrate);
-  EXPECT_EQ(768U, gcodec.maxBitrate);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height, 0,
+                     768U, 768U, 768U);
 }
 
 // Test that SetSendBandwidth is ignored in conference mode.
@@ -627,17 +619,13 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthInConference) {
   int channel_num = vie_.GetLastChannel();
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
-
-  webrtc::VideoCodec gcodec;
-  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
-  EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
-  EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);
-  EXPECT_EQ(kMaxBandwidthKbps, gcodec.maxBitrate);
+  VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
 
   // Set send bandwidth.
   EXPECT_TRUE(channel_->SetSendBandwidth(false, 768000));
 
   // Verify bitrate not changed.
+  webrtc::VideoCodec gcodec;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(kMinBandwidthKbps, gcodec.minBitrate);
   EXPECT_EQ(kStartBandwidthKbps, gcodec.startBitrate);

@@ -264,11 +264,18 @@ talk_base::StreamResult FileVideoCapturer::ReadFrameHeader(
   // read the frame header from the bytebuffer.
   char header[CapturedFrame::kFrameHeaderSize];
   talk_base::StreamResult sr;
+  size_t bytes_read;
+  int error;
   sr = video_file_.Read(header,
                         CapturedFrame::kFrameHeaderSize,
-                        NULL,
-                        NULL);
+                        &bytes_read,
+                        &error);
+  LOG(LS_VERBOSE) << "Read frame header: stream_result = " << sr
+                  << ", bytes read = " << bytes_read << ", error = " << error;
   if (talk_base::SR_SUCCESS == sr) {
+    if (CapturedFrame::kFrameHeaderSize != bytes_read) {
+      return talk_base::SR_EOS;
+    }
     talk_base::ByteBuffer buffer(header, CapturedFrame::kFrameHeaderSize);
     buffer.ReadUInt32(reinterpret_cast<uint32*>(&frame->width));
     buffer.ReadUInt32(reinterpret_cast<uint32*>(&frame->height));

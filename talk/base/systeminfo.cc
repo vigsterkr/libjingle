@@ -181,7 +181,7 @@ int SystemInfo::GetMaxPhysicalCpus() {
 int SystemInfo::GetCurCpus() {
   int cur_cpus;
 #ifdef WIN32
-  DWORD process_mask, system_mask;
+  DWORD_PTR process_mask, system_mask;
   ::GetProcessAffinityMask(::GetCurrentProcess(), &process_mask, &system_mask);
   for (cur_cpus = 0; process_mask; ++cur_cpus) {
     // Sparse-ones algorithm. There are slightly faster methods out there but

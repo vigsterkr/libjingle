@@ -52,9 +52,6 @@ uint32 Time();
 // Returns the current time in nanoseconds.
 uint64 TimeNanos();
 
-// Approximate time when the program started.
-uint32 StartTime();
-
 // Returns a future timestamp, 'elapsed' milliseconds from now.
 uint32 TimeAfter(int32 elapsed);
 

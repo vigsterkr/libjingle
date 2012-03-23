@@ -370,6 +370,15 @@ TransportProxy* BaseSession::GetFirstTransportProxy() {
   return transports_.begin()->second;
 }
 
+void BaseSession::DestroyTransportProxy(
+    const std::string& content_name) {
+  TransportMap::iterator iter = transports_.find(content_name);
+  if (iter != transports_.end()) {
+    delete iter->second;
+    transports_.erase(content_name);
+  }
+}
+
 cricket::Transport* BaseSession::CreateTransport() {
   ASSERT(transport_type_ == NS_GINGLE_P2P);
   return new cricket::P2PTransport(

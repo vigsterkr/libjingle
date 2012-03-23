@@ -415,6 +415,8 @@ TEST_F(PeerConnectionImplTest, Jsep_IceCandidates) {
   EXPECT_FALSE(pc_->StartIce(PeerConnectionInterface::kUseAll));
 
   SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
+  SessionDescriptionInterface* answer(
+      pc_->CreateAnswer(webrtc::MediaHints(), offer));
   EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kOffer,
                                        offer));
   EXPECT_TRUE(pc_->StartIce(PeerConnectionInterface::kUseAll));
@@ -423,8 +425,6 @@ TEST_F(PeerConnectionImplTest, Jsep_IceCandidates) {
   EXPECT_TRUE_WAIT(observer_.ice_complete_, kTimeout);
   EXPECT_FALSE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 
-  SessionDescriptionInterface* answer(
-      pc_->CreateAnswer(webrtc::MediaHints(), pc_->local_description()));
   // SetRemoteDescription takes ownership of answer.
   EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kAnswer,
                                         answer));

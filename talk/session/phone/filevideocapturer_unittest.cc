@@ -174,6 +174,18 @@ TEST_F(FileVideoCapturerTest, TestRepeatForever) {
   EXPECT_EQ(listener.frame_height(), capture_format_.height);
 }
 
+TEST_F(FileVideoCapturerTest, TestPartialFrameHeader) {
+  EXPECT_TRUE(OpenFile("1.frame_plus_1.byte"));
+  VideoCapturerListener listener;
+  capturer_->SignalFrameCaptured.connect(
+      &listener, &VideoCapturerListener::OnFrameCaptured);
+  capturer_->set_repeat(0);
+  capture_format_ = capturer_->GetSupportedFormats()->at(0);
+  EXPECT_EQ(cricket::CR_SUCCESS, capturer_->Start(capture_format_));
+  EXPECT_TRUE_WAIT(!capturer_->IsRunning(), 1000);
+  EXPECT_EQ(1, listener.frame_count());
+}
+
 TEST_F(FileVideoCapturerTest, TestFileDevices) {
   cricket::Device not_a_file("I'm a camera", "with an id");
   EXPECT_FALSE(

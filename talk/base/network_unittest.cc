@@ -95,13 +95,13 @@ TEST_F(NetworkTest, TestCreateNetworks) {
     SocketAddress bindaddress(ip, 0);
     bindaddress.SetScopeID((*it)->scope_id());
     // TODO: Make this use talk_base::AsyncSocket once it supports IPv6.
-    int fd = socket(ip.family(), SOCK_STREAM, IPPROTO_TCP);
+    int fd = static_cast<int>(socket(ip.family(), SOCK_STREAM, IPPROTO_TCP));
     if (fd > 0) {
       size_t ipsize = bindaddress.ToSockAddrStorage(&storage);
       EXPECT_GE(ipsize, 0U);
       int success = ::bind(fd,
                            reinterpret_cast<sockaddr*>(&storage),
-                           ipsize);
+                           static_cast<int>(ipsize));
       EXPECT_EQ(0, success);
 #ifdef WIN32
       closesocket(fd);

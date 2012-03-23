@@ -148,7 +148,8 @@ const char* inet_ntop_v6(const void* src, char* dst, socklen_t size) {
     }
     const struct in_addr* as_v4 =
         reinterpret_cast<const struct in_addr*>(&(as_shorts[6]));
-    inet_ntop_v4(as_v4, cursor, (INET6_ADDRSTRLEN - (cursor - dst)));
+    inet_ntop_v4(as_v4, cursor,
+                 static_cast<socklen_t>(INET6_ADDRSTRLEN - (cursor - dst)));
   } else {
     for (int i = 0; i < run_array_size; ++i) {
       if (runpos[i] == -1) {
@@ -389,13 +390,15 @@ bool Utf8ToWindowsFilename(const std::string& utf8, std::wstring* filename) {
   // TODO: Write unittests
 
   // Convert to Utf16
-  int wlen = ::MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.length() + 1,
-                                   NULL, 0);
+  int wlen = ::MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
+                                   static_cast<int>(utf8.length() + 1), NULL,
+                                   0);
   if (0 == wlen) {
     return false;
   }
   wchar_t* wfilename = STACK_ARRAY(wchar_t, wlen);
-  if (0 == ::MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.length() + 1,
+  if (0 == ::MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
+                                 static_cast<int>(utf8.length() + 1),
                                  wfilename, wlen)) {
     return false;
   }

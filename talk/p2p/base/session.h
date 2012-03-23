@@ -307,6 +307,7 @@ class BaseSession : public sigslot::has_slots<>,
   TransportProxy* GetTransportProxy(const std::string& content_name);
   TransportProxy* GetTransportProxy(const Transport* transport);
   TransportProxy* GetFirstTransportProxy();
+  void DestroyTransportProxy(const std::string& content_name);
   // TransportProxy is owned by session.  Return proxy just for convenience.
   TransportProxy* GetOrCreateTransportProxy(const std::string& content_name);
   // Creates the actual transport object. Overridable for testing.

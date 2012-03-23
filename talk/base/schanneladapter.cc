@@ -459,7 +459,7 @@ SChannelAdapter::Flush() {
       break;
     }
   }
-  if (int remainder = outbuf.size() - pos) {
+  if (int remainder = static_cast<int>(outbuf.size() - pos)) {
     memmove(&outbuf[0], &outbuf[pos], remainder);
     outbuf.resize(remainder);
   } else {

@@ -124,6 +124,7 @@ win_env = root_env.Clone(
   TARGET_ARCH = 'x86',
 )
 
+win_env.Decider('MD5-timestamp')
 win_env.Append(
   COMPONENT_LIBRARY_PUBLISH = True,  # Put dlls in output dir too
   CCFLAGS = [
@@ -235,6 +236,44 @@ win_dbg_env.Prepend(
 )
 
 envs.append(win_dbg_env)
+
+win_dbg64_env = win_dbg_env.Clone(
+  BUILD_TYPE = 'dbg64',
+  BUILD_TYPE_DESCRIPTION = 'Windows debug 64bit build',
+  BUILD_GROUPS = ['all'],
+)
+
+win_dbg64_env.Append(
+  ARFLAGS = [
+    '/MACHINE:x64',
+  ],
+  CPPDEFINES = [
+    'WIN64',
+    'ARCH_CPU_64_BITS',
+  ],
+  LIBFLAGS = [
+    '/MACHINE:x64',
+  ],
+  LINKFLAGS = [
+    '/MACHINE:x64',
+  ],
+)
+
+win_dbg64_env.FilterOut(CPPDEFINES = ['_USE_32BIT_TIME_T'])
+
+win_dbg64_env.Prepend(
+  LIBPATH = [
+      '$VC80_DIR/vc/lib/amd64',
+      '$ATLMFC_VC80_DIR/lib/amd64',
+      '$PLATFORM_SDK_VISTA_6_0_DIR/Lib/x64',
+  ],
+)
+win_dbg64_env.PrependENVPath(
+  'PATH',
+  win_dbg64_env.Dir('$VC80_DIR/vc/bin/x86_amd64'))
+
+envs.append(win_dbg64_env)
+
 
 win_coverage_env = win_dbg_env.Clone(
   tools = ['code_coverage'],
