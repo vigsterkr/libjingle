@@ -110,7 +110,7 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
                  << width << "x" << height;
     if (renderer_ == NULL) {
       LOG(LS_VERBOSE) << "WebRtcRenderAdapter the renderer has not been set. "
-                      << "SetSize will be called later in SetRenderer."
+                      << "SetSize will be called later in SetRenderer.";
       return 0;
     }
     return renderer_->SetSize(width_, height_, 0) ? 0 : -1;
