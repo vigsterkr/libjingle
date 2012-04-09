@@ -232,6 +232,7 @@ class CallClient: public sigslot::has_slots<> {
   bool RemoveStaticRenderedView(uint32 ssrc);
   void RemoveAllStaticRenderedViews();
   void SendViewRequest(cricket::Session* session);
+  bool SelectFirstDesktopScreencastId(cricket::ScreencastId* screencastid);
 
 
   static const std::string strerror(buzz::XmppEngine::Error err);

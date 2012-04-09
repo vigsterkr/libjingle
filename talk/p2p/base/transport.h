@@ -197,8 +197,6 @@ class Transport : public talk_base::MessageHandler,
                    const buzz::XmlElement*>
       SignalTransportError;
 
-  sigslot::signal2<Transport*, const std::string&> SignalChannelGone;
-
   // (For testing purposes only.)  This indicates whether we will allow local
   // IPs (e.g. 127.*) to be used as addresses for P2P.
   bool allow_local_ips() const { return allow_local_ips_; }

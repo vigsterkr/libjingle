@@ -64,15 +64,6 @@ P2PTransport::~P2PTransport() {
 }
 
 void P2PTransport::OnTransportError(const buzz::XmlElement* error) {
-  // Need to know if it was <unknown-channel name="xxx">.
-  ASSERT(error->Name().Namespace() == type());
-  if ((error->Name() == QN_GINGLE_P2P_UNKNOWN_CHANNEL_NAME)
-      && error->HasAttr(buzz::QN_NAME)) {
-    std::string channel_name = error->Attr(buzz::QN_NAME);
-    if (HasChannel(channel_name)) {
-      SignalChannelGone(this, channel_name);
-    }
-  }
 }
 
 

@@ -95,16 +95,13 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   const std::vector<VideoCodec>& codecs() const;
   void SetLogging(int min_sev, const char* filter);
 
-  // Capture-related stuff. Will be removed with capture refactor.
-  bool SetCaptureDevice(const Device* device);
-  bool SetCaptureModule(webrtc::VideoCaptureModule* vcm);
   // If capturer is NULL, unregisters the capturer and stops capturing.
   // Otherwise sets the capturer and starts capturing.
-  bool SetVideoCapturer(VideoCapturer* capturer, uint32 /*ssrc*/);
+  bool SetVideoCapturer(VideoCapturer* capturer);
+  VideoCapturer* GetVideoCapturer() const;
   bool SetLocalRenderer(VideoRenderer* renderer);
   CaptureResult SetCapture(bool capture);
   sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;
-  virtual VideoCapturer* CreateVideoCapturer(const Device& device);
   CaptureResult UpdateCapturingState();
   bool IsCapturing() const;
   void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
@@ -160,7 +157,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool RebuildCodecList(const VideoCodec& max_codec);
   void ApplyLogging(const std::string& log_filter);
   bool InitVideoEngine();
-  bool SetCapturer(VideoCapturer* capturer, bool own_capturer);
+  bool SetCapturer(VideoCapturer* capturer);
 
   // webrtc::ViEBaseObserver implementation.
   virtual void PerformanceAlarm(const unsigned int cpu_load);
@@ -182,7 +179,6 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   talk_base::CriticalSection channels_crit_;
   VideoChannels channels_;
 
-  bool owns_capturer_;
   VideoCapturer* video_capturer_;
   bool capture_started_;
   int local_renderer_w_;
@@ -275,6 +271,10 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
                     int start_bitrate,
                     int max_bitrate);
   void LogSendCodecChange(const std::string& reason);
+  bool DropFrame() const {
+    return (send_codec_.get() == NULL ||
+            (send_codec_->width == 0 && send_codec_->height == 0));
+  }
   // Prepares the channel with channel id |channel_id| to receive all codecs in
   // |receive_codecs_| and start receive packets.
   bool SetReceiveCodecs(int channel_id);

@@ -168,7 +168,9 @@ class PortTest : public testing::Test {
         stun_server_(main_, kStunAddr),
         relay_server_(main_, kRelayUdpIntAddr, kRelayUdpExtAddr,
                       kRelayTcpIntAddr, kRelayTcpExtAddr,
-                      kRelaySslTcpIntAddr, kRelaySslTcpExtAddr) {
+                      kRelaySslTcpIntAddr, kRelaySslTcpExtAddr),
+        username_(talk_base::CreateRandomString(16)),
+        password_(talk_base::CreateRandomString(22)) {
     network_.AddIP(talk_base::IPAddress(INADDR_ANY));
   }
 
@@ -245,7 +247,7 @@ class PortTest : public testing::Test {
   UDPPort* CreateUdpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
     return UDPPort::Create(main_, socket_factory, &network_,
-                           addr.ipaddr(), 0, 0);
+                           addr.ipaddr(), 0, 0, username_, password_);
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr) {
     return CreateTcpPort(addr, &socket_factory_);
@@ -253,19 +255,19 @@ class PortTest : public testing::Test {
   TCPPort* CreateTcpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
     return TCPPort::Create(main_, socket_factory, &network_,
-                           addr.ipaddr(), 0, 0, true);
+                           addr.ipaddr(), 0, 0, username_, password_, true);
   }
   StunPort* CreateStunPort(const SocketAddress& addr,
                            talk_base::PacketSocketFactory* factory) {
     return StunPort::Create(main_, factory, &network_,
-                            addr.ipaddr(), 0, 0, kStunAddr);
+                            addr.ipaddr(), 0, 0, username_, password_,
+                            kStunAddr);
   }
   RelayPort* CreateRelayPort(const SocketAddress& addr,
                              ProtocolType int_proto, ProtocolType ext_proto) {
-    std::string user = talk_base::CreateRandomString(16);
-    std::string pass = talk_base::CreateRandomString(16);
     RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
-                                        addr.ipaddr(), 0, 0, user, pass, "");
+                                        addr.ipaddr(), 0, 0,
+                                        username_, password_, "");
     SocketAddress addrs[] =
         { kRelayUdpIntAddr, kRelayTcpIntAddr, kRelaySslTcpIntAddr };
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));
@@ -316,6 +318,8 @@ class PortTest : public testing::Test {
   talk_base::BasicPacketSocketFactory nat_socket_factory2_;
   TestStunServer stun_server_;
   TestRelayServer relay_server_;
+  std::string username_;
+  std::string password_;
 };
 
 void PortTest::TestConnectivity(const char* name1, Port* port1,

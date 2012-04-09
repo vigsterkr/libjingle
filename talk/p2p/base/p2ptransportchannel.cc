@@ -31,6 +31,9 @@
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 #include "talk/p2p/base/common.h"
+#include "talk/p2p/base/relayport.h"  // For RELAY_PORT_TYPE.
+#include "talk/p2p/base/stunport.h"  // For STUN_PORT_TYPE.
+#include "talk/p2p/client/basicportallocator.h"  // For PREF_LOCAL_STUN.
 
 namespace {
 
@@ -312,19 +315,26 @@ void P2PTransportChannel::OnUnknownAddress(
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 
   // Port has received a valid stun packet from an address that no Connection
-  // is currently available for. See if the remote user name is in the remote
-  // candidate list. If it isn't return error to the stun request.
-
-  const Candidate *candidate = NULL;
+  // is currently available for. See if we already have a candidate with the
+  // address. If it isn't we need to create new candidate for it.
+  const Candidate* candidate = NULL;
+  bool known_username = false;
+  std::string remote_password;
   std::vector<RemoteCandidate>::iterator it;
   for (it = remote_candidates_.begin(); it != remote_candidates_.end(); ++it) {
     if ((*it).username() == remote_username) {
-      candidate = &(*it);
-      break;
+      if ((*it).address() == address) {
+        candidate = &(*it);
+        break;
+      }
+      remote_password = (*it).password();
+      known_username = true;
+      // We don't want to break here because we may find a match of the address
+      // later.
     }
   }
 
-  if (candidate == NULL) {
+  if (!known_username) {
     if (port_muxed) {
       // When Ports are muxed, SignalUnknownAddress is delivered to all
       // P2PTransportChannel belong to a session. Return from here will
@@ -340,17 +350,38 @@ void P2PTransportChannel::OnUnknownAddress(
     return;
   }
 
+  Candidate new_remote_candidate;
+  if (candidate != NULL) {
+    new_remote_candidate = *candidate;
+  } else {
+    // Create a new candidate with this address.
+
+    // Unless the binding request came from a relay port, we use the port
+    // type as the candidate type. If the binding request comes from a relay
+    // port we always set type to STUN_PORT_TYPE.
+    // TODO: Fix this by adding a new type as peer-reflexive
+    // candidate. So that all the new candidates created here will be the
+    // peer-reflexive candidate.
+    std::string type = port->type();
+    if (type == RELAY_PORT_TYPE) {
+      type = STUN_PORT_TYPE;
+    }
+    // TODO: Figure out the proper way to determine the protocol.
+    ProtocolType protocol = PROTO_UDP;
+    if (port->preference() == PREF_LOCAL_TCP) {
+      protocol = PROTO_TCP;
+    }
+    // TODO: Change the preference to the preference of
+    // the peer-reflexive candidate when it's ready.
+    // For now just default to a STUN preference.
+    new_remote_candidate = Candidate(name(), ProtoToString(protocol),
+        address, PREF_LOCAL_STUN, remote_username, remote_password, type,
+        port->network()->name(), 0);
+  }
+
   // Check for connectivity to this address. Create connections
   // to this address across all local ports. First, add this as a new remote
   // address
-
-  Candidate new_remote_candidate = *candidate;
-  new_remote_candidate.set_address(address);
-  // new_remote_candidate.set_protocol(port->protocol());
-
-  // This remote username exists. Now create connections using this candidate,
-  // and resort
-
   if (CreateConnections(new_remote_candidate, port, true)) {
     // Send the pinger a successful stun response.
     port->SendBindingResponse(stun_msg, address);

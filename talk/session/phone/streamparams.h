@@ -69,6 +69,8 @@ struct SsrcGroup {
 
   bool has_semantics(const std::string& semantics) const;
 
+  std::string ToString() const;
+
   std::string semantics;  // e.g FIX, FEC, SIM.
   std::vector<uint32> ssrcs;  // SSRCs of this type.
 };
@@ -124,6 +126,8 @@ struct StreamParams {
     }
     return NULL;
   }
+
+  std::string ToString() const;
 
   // Resource of the MUC jid of the participant of with this stream.
   // For 1:1 calls, should be left empty (which means remote streams

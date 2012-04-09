@@ -417,8 +417,9 @@ void LogMessage::OutputToDebug(const std::string& str,
     // This handles dynamically allocated consoles, too.
     if (HANDLE error_handle = ::GetStdHandle(STD_ERROR_HANDLE)) {
       log_to_stderr = false;
-      unsigned long written;  // NOLINT
-      ::WriteFile(error_handle, str.data(), str.size(), &written, 0);
+      DWORD written = 0;
+      ::WriteFile(error_handle, str.data(), static_cast<DWORD>(str.size()),
+                  &written, 0);
     }
   }
 #endif  // WIN32

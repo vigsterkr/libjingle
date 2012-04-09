@@ -613,9 +613,8 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
       int index = port_offset_ + i;
       ports_[i] = cricket::UDPPort::Create(
           talk_base::Thread::Current(), &socket_factory_,
-          &network_, address_.ipaddr(), GetPort(index), GetPort(index));
-      ports_[i]->set_username_fragment(GetUsername(index));
-      ports_[i]->set_password(GetPassword(index));
+          &network_, address_.ipaddr(), GetPort(index), GetPort(index),
+          GetUsername(index), GetPassword(index));
       AddPort(ports_[i]);
     }
   }
@@ -2074,6 +2073,42 @@ class SessionTest : public testing::Test {
                 accept_xml,
                 true);
   }
+
+  void TestSendDescriptionInfo() {
+    talk_base::scoped_ptr<cricket::PortAllocator> allocator(
+        new TestPortAllocator());
+    int next_message_id = 0;
+
+    std::string content_name = "content-name";
+    std::string content_type = "content-type";
+    talk_base::scoped_ptr<TestClient> initiator(
+        new TestClient(allocator.get(), &next_message_id,
+                       kInitiator, PROTOCOL_JINGLE,
+                       content_type,
+                       content_name, "",
+                       "",  ""));
+
+    initiator->CreateSession();
+    cricket::SessionDescription* offer = NewTestSessionDescription(
+        content_name, content_type);
+    std::string initiate_xml = InitiateXml(
+        PROTOCOL_JINGLE, content_name, content_type);
+
+    cricket::ContentInfos contents;
+    TestContentDescription content(content_type, content_type);
+    contents.push_back(
+        cricket::ContentInfo(content_name, content_type, &content));
+    std::string description_info_xml = JingleDescriptionInfoXml(
+        content_name, content_type);
+
+    EXPECT_TRUE(initiator->session->Initiate(kResponder, offer));
+    initiator->ExpectSentStanza(
+        IqSet("0", kInitiator, kResponder, initiate_xml));
+
+    EXPECT_TRUE(initiator->session->SendDescriptionInfoMessage(contents));
+    initiator->ExpectSentStanza(
+        IqSet("1", kInitiator, kResponder, description_info_xml));
+  }
 };
 
 // For each of these, "X => Y = Z" means "if a client with protocol X
@@ -2233,4 +2268,8 @@ TEST_F(SessionTest, TestCandidatesInInitiateAndAccept) {
 
 TEST_F(SessionTest, TestTransportMux) {
   TestTransportMux();
+}
+
+TEST_F(SessionTest, TestSendDescriptionInfo) {
+  TestSendDescriptionInfo();
 }

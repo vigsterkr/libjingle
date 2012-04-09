@@ -105,16 +105,16 @@ const int kPortTimeoutDelay = 30 * 1000;  // 30 seconds
 
 const uint32 MSG_CHECKTIMEOUT = 1;
 const uint32 MSG_DELETE = 1;
-
-// Mediaproxy expects username to be 16 bytes.
-const int kUsernameLength = 16;
-// Minimum password length of 22 characters as per RFC5245.
-const int kPasswordLength = 22;
 }
 
 namespace cricket {
 
 static const char* const PROTO_NAMES[] = { "udp", "tcp", "ssltcp" };
+
+const float PREF_LOCAL_UDP = 1.0f;
+const float PREF_LOCAL_STUN = 0.9f;
+const float PREF_LOCAL_TCP = 0.8f;
+const float PREF_RELAY = 0.5f;
 
 const char* ProtoToString(ProtocolType proto) {
   return PROTO_NAMES[proto];
@@ -132,7 +132,8 @@ bool StringToProto(const char* value, ProtocolType* proto) {
 
 Port::Port(talk_base::Thread* thread, const std::string& type,
            talk_base::PacketSocketFactory* factory, talk_base::Network* network,
-           const talk_base::IPAddress& ip, int min_port, int max_port)
+           const talk_base::IPAddress& ip, int min_port, int max_port,
+           const std::string& username_fragment, const std::string& password)
     : thread_(thread),
       factory_(factory),
       type_(type),
@@ -142,13 +143,12 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       max_port_(max_port),
       generation_(0),
       preference_(-1),
+      username_fragment_(username_fragment),
+      password_(password),
       lifetime_(LT_PRESTART),
       enable_port_packets_(false),
       enable_message_integrity_(false) {
   ASSERT(factory_ != NULL);
-
-  set_username_fragment(talk_base::CreateRandomString(kUsernameLength));
-  set_password(talk_base::CreateRandomString(kPasswordLength));
   LOG_J(LS_INFO, this) << "Port created";
 }
 
@@ -185,7 +185,7 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_protocol(protocol);
   c.set_address(address);
   c.set_preference(preference_);
-  c.set_username(username_frag_);
+  c.set_username(username_fragment_);
   c.set_password(password_);
   c.set_network_name(network_->name());
   c.set_generation(generation_);
@@ -260,7 +260,7 @@ bool Port::GetStunMessage(const char* data, size_t size,
       stun_msg->GetByteString(STUN_ATTR_USERNAME);
 
   int remote_frag_len = (username_attr ? username_attr->length() : 0);
-  remote_frag_len -= static_cast<int>(username_frag_.size());
+  remote_frag_len -= static_cast<int>(username_fragment().size());
 
   if (stun_msg->type() == STUN_BINDING_REQUEST) {
     if (remote_frag_len < 0) {
@@ -268,8 +268,8 @@ bool Port::GetStunMessage(const char* data, size_t size,
       LOG_J(LS_ERROR, this) << "Received STUN request without username from "
                             << addr.ToString();
       return true;
-    } else if (std::memcmp(username_attr->bytes(), username_frag_.c_str(),
-                           username_frag_.size()) != 0) {
+    } else if (std::memcmp(username_attr->bytes(), username_fragment().c_str(),
+                           username_fragment().size()) != 0) {
       LOG_J(LS_ERROR, this) << "Received STUN request with bad local username "
                             << std::string(username_attr->bytes(),
                                            username_attr->length())
@@ -290,7 +290,7 @@ bool Port::GetStunMessage(const char* data, size_t size,
       return true;
     }
 
-    out_username->assign(username_attr->bytes() + username_frag_.size(),
+    out_username->assign(username_attr->bytes() + username_fragment().size(),
                          username_attr->bytes() + username_attr->length());
   } else if ((stun_msg->type() == STUN_BINDING_RESPONSE)
       || (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE)) {
@@ -300,8 +300,8 @@ bool Port::GetStunMessage(const char* data, size_t size,
       // Do not send error response to a response
       return true;
     } else if (std::memcmp(username_attr->bytes() + remote_frag_len,
-                           username_frag_.c_str(),
-                           username_frag_.size()) != 0) {
+                           username_fragment().c_str(),
+                           username_fragment().size()) != 0) {
       LOG_J(LS_ERROR, this) << "Received STUN response with bad local username "
                             << std::string(username_attr->bytes(),
                                            username_attr->length())

@@ -122,9 +122,6 @@ class WebRtcSession : public cricket::BaseSession,
   virtual void OnTransportCandidatesReady(
       cricket::Transport* transport,
       const cricket::Candidates& candidates);
-  virtual void OnTransportChannelGone(cricket::Transport* transport,
-                                      const std::string& name);
-
   bool CreateChannels();  // Creates channels for voice and video.
   void EnableChannels();  // Enables sending of media.
   // Creates a JsepIceCandidate and adds it to the local session description

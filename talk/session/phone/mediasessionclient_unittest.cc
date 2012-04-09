@@ -947,6 +947,68 @@ std::string JingleStreamAdd(const std::string& content_name,
       "</iq>";
 }
 
+std::string JingleOutboundStreamRemove(const std::string& sid,
+                                       const std::string& content_name,
+                                       const std::string& name) {
+  return \
+      "<cli:iq"
+      " to='me@mydomain.com'"
+      " type='set'"
+      " xmlns:cli='jabber:client'>"
+      "<jingle"
+      " xmlns='urn:xmpp:jingle:1'"
+      " action='description-info'"
+      " sid='" + sid + "'>"
+      "<content"
+      " name='" + content_name + "'"
+      " creator='initiator'>"
+      "<description"
+      " xmlns='urn:xmpp:jingle:apps:rtp:1'"
+      " media='" + content_name + "'>"
+      "<streams"
+      " xmlns='google:jingle'>"
+      "<stream"
+      " name='" + name + "'>"
+      "</stream>"
+      "</streams>"
+      "</description>"
+      "</content>"
+      "</jingle>"
+      "</cli:iq>";
+}
+
+std::string JingleOutboundStreamAdd(const std::string& sid,
+                                    const std::string& content_name,
+                                    const std::string& name,
+                                    const std::string& ssrc) {
+  return \
+      "<cli:iq"
+      " to='me@mydomain.com'"
+      " type='set'"
+      " xmlns:cli='jabber:client'>"
+      "<jingle"
+      " xmlns='urn:xmpp:jingle:1'"
+      " action='description-info'"
+      " sid='" + sid + "'>"
+      "<content"
+      " name='" + content_name + "'"
+      " creator='initiator'>"
+      "<description"
+      " xmlns='urn:xmpp:jingle:apps:rtp:1'"
+      " media='" + content_name + "'>"
+      "<streams"
+      " xmlns='google:jingle'>"
+      "<stream"
+      " name='" + name + "'>"
+      "<ssrc>" + ssrc + "</ssrc>"
+      "</stream>"
+      "</streams>"
+      "</description>"
+      "</content>"
+      "</jingle>"
+      "</cli:iq>";
+}
+
 std::string JingleStreamAddWithoutSsrc(const std::string& content_name,
                                        const std::string& nick,
                                        const std::string& name) {
@@ -2249,10 +2311,46 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     return size;
   }
 
-  void SetJingleSid(buzz::XmlElement* stanza) {
+  buzz::XmlElement* SetJingleSid(buzz::XmlElement* stanza) {
     buzz::XmlElement* jingle =
         stanza->FirstNamed(cricket::QN_JINGLE);
     jingle->SetAttr(cricket::QN_SID, call_->sessions()[0]->id());
+    return stanza;
+  }
+
+  void TestSendStreamUpdate() {
+    cricket::CallOptions options;
+    options.has_video = true;
+    options.is_muc = true;
+
+    client_->CreateCall();
+    call_->InitiateSession(buzz::Jid("me@mydomain.com"), options);
+    ClearStanzas();
+
+    cricket::StreamParams stream;
+    stream.name = "test-stream";
+    stream.ssrcs.push_back(1001);
+    talk_base::scoped_ptr<buzz::XmlElement> expected_stream_add(
+        buzz::XmlElement::ForStr(
+            JingleOutboundStreamAdd(
+                call_->sessions()[0]->id(),
+                "video", stream.name, "1001")));
+    talk_base::scoped_ptr<buzz::XmlElement> expected_stream_remove(
+        buzz::XmlElement::ForStr(
+            JingleOutboundStreamRemove(
+                call_->sessions()[0]->id(),
+                "video", stream.name)));
+
+    call_->SendStreamUpdate(call_->sessions()[0], stream);
+    ASSERT_EQ(1U, stanzas_.size());
+    EXPECT_EQ(expected_stream_add->Str(), stanzas_[0]->Str());
+    ClearStanzas();
+
+    stream.ssrcs.clear();
+    call_->SendStreamUpdate(call_->sessions()[0], stream);
+    ASSERT_EQ(1U, stanzas_.size());
+    EXPECT_EQ(expected_stream_remove->Str(), stanzas_[0]->Str());
+    ClearStanzas();
   }
 
   void TestStreamsUpdateAndViewRequests() {
@@ -2737,6 +2835,11 @@ TEST(MediaSessionTest, JingleIncomingAcceptWithDataSsrcs) {
 TEST(MediaSessionTest, JingleStreamsUpdateAndView) {
   talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
   test->TestStreamsUpdateAndViewRequests();
+}
+
+TEST(MediaSessionTest, JingleSendStreamUpdate) {
+  talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
+  test->TestSendStreamUpdate();
 }
 
 // Gingle tests

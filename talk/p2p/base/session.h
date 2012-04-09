@@ -350,12 +350,6 @@ class BaseSession : public sigslot::has_slots<>,
                                     const buzz::XmlElement* extra_info) {
   }
 
-  // Called when we notice that one of our local channels has no peer, so it
-  // should be destroyed.
-  virtual void OnTransportChannelGone(Transport* transport,
-                                      const std::string& name) {
-  }
-
   virtual void OnTransportRouteChange(
       Transport* transport,
       const std::string& name,
@@ -446,9 +440,6 @@ class Session : public BaseSession {
   sigslot::signal1<Session*> SignalRequestSignaling;
   void OnSignalingReady() { BaseSession::OnSignalingReady(); }
 
-  // Invoked when we notice that there is no matching channel on our peer.
-  sigslot::signal2<Session*, const std::string&> SignalChannelGone;
-
   // Takes ownership of session description.
   // TODO: Add an error argument to pass back to the caller.
   bool Initiate(const std::string& to,
@@ -472,6 +463,7 @@ class Session : public BaseSession {
   // takes ownership of the given elements.  The signal does not; the
   // parent element will be deleted after the signal.
   bool SendInfoMessage(const XmlElements& elems);
+  bool SendDescriptionInfoMessage(const ContentInfos& contents);
   sigslot::signal2<Session*, const buzz::XmlElement*> SignalInfoMessage;
 
  private:
@@ -506,9 +498,6 @@ class Session : public BaseSession {
                                     const std::string& type,
                                     const std::string& text,
                                     const buzz::XmlElement* extra_info);
-  virtual void OnTransportChannelGone(Transport* transport,
-                                      const std::string& name);
-
   virtual void OnMessage(talk_base::Message *pmsg);
 
   // Send various kinds of session messages.

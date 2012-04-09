@@ -30,10 +30,11 @@
 #include "talk/base/logging.h"
 #include "talk/base/helpers.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/sslstreamadapter.h"
 #include "talk/xmpp/constants.h"
 #include "talk/xmpp/jid.h"
+#include "talk/p2p/base/dtlstransport.h"
 #include "talk/p2p/base/p2ptransport.h"
-#include "talk/p2p/base/p2ptransportchannel.h"
 #include "talk/p2p/base/sessionclient.h"
 #include "talk/p2p/base/transport.h"
 #include "talk/p2p/base/transportchannelproxy.h"
@@ -70,7 +71,7 @@ std::string TransportProxy::type() const {
   return transport_->get()->type();
 }
 
-void TransportProxy::SetImplementation(TransportWrapper *impl) {
+void TransportProxy::SetImplementation(TransportWrapper* impl) {
   transport_ = impl;
 }
 
@@ -106,13 +107,14 @@ void TransportProxy::DestroyChannel(const std::string& name) {
 }
 
 void TransportProxy::SpeculativelyConnectChannels() {
-  ASSERT(state_ == STATE_INIT || state_ == STATE_CONNECTING);
-  state_ = STATE_CONNECTING;
-  for (ChannelMap::iterator iter = channels_.begin();
-       iter != channels_.end(); ++iter) {
-    GetOrCreateImpl(iter->first, iter->second->content_type());
+  if (state_ != STATE_NEGOTIATED) {
+    state_ = STATE_CONNECTING;
+    for (ChannelMap::iterator iter = channels_.begin();
+         iter != channels_.end(); ++iter) {
+      GetOrCreateImpl(iter->first, iter->second->content_type());
+    }
+    transport_->get()->ConnectChannels();
   }
-  transport_->get()->ConnectChannels();
 }
 
 void TransportProxy::CompleteNegotiation() {
@@ -326,8 +328,6 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
       this, &BaseSession::OnTransportCandidatesReady);
   transport->SignalTransportError.connect(
       this, &BaseSession::OnTransportSendError);
-  transport->SignalChannelGone.connect(
-      this, &BaseSession::OnTransportChannelGone);
   transport->SignalRouteChange.connect(
       this, &BaseSession::OnTransportRouteChange);
   transport->SignalCandidatesAllocationDone.connect(
@@ -381,7 +381,7 @@ void BaseSession::DestroyTransportProxy(
 
 cricket::Transport* BaseSession::CreateTransport() {
   ASSERT(transport_type_ == NS_GINGLE_P2P);
-  return new cricket::P2PTransport(
+  return new cricket::DtlsTransport<P2PTransport>(
       signaling_thread(), worker_thread(), port_allocator());
 }
 
@@ -646,6 +646,26 @@ bool Session::SendInfoMessage(const XmlElements& elems) {
   return true;
 }
 
+bool Session::SendDescriptionInfoMessage(const ContentInfos& contents) {
+  XmlElements elems;
+  WriteError write_error;
+  if (!WriteDescriptionInfo(current_protocol_,
+                            contents,
+                            GetContentParsers(),
+                            &elems, &write_error)) {
+    LOG(LS_ERROR) << "Could not write description info message: "
+                  << write_error.text;
+    return false;
+  }
+  SessionError error;
+  if (!SendMessage(ACTION_DESCRIPTION_INFO, elems, &error)) {
+    LOG(LS_ERROR) << "Could not send description info message: "
+                  << error.text;
+    return false;
+  }
+  return true;
+}
+
 TransportInfos Session::GetEmptyTransportInfos(
     const ContentInfos& contents) const {
   TransportInfos tinfos;
@@ -782,12 +802,6 @@ void Session::OnTransportSendError(Transport* transport,
                                    const buzz::XmlElement* extra_info) {
   ASSERT(signaling_thread()->IsCurrent());
   SignalErrorMessage(this, stanza, name, type, text, extra_info);
-}
-
-void Session::OnTransportChannelGone(Transport* transport,
-                                     const std::string& name) {
-  ASSERT(signaling_thread()->IsCurrent());
-  SignalChannelGone(this, name);
 }
 
 void Session::OnIncomingMessage(const SessionMessage& msg) {
@@ -1122,7 +1136,7 @@ void Session::SetError(Error error) {
     signaling_thread()->Post(this, MSG_ERROR);
 }
 
-void Session::OnMessage(talk_base::Message *pmsg) {
+void Session::OnMessage(talk_base::Message* pmsg) {
   // preserve this because BaseSession::OnMessage may modify it
   State orig_state = state();
 

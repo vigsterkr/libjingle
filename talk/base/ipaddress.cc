@@ -326,7 +326,6 @@ IPAddress TruncateIP(const IPAddress& ip, int length) {
     uint32 inner_mask = 0xFFFFFFFFLL  << inner_length;
     uint32* v6_as_ints =
         reinterpret_cast<uint32*>(&v6addr.s6_addr);
-    in6_addr ip_addr = ip.ipv6_address();
     for (int i = 0; i < 4; ++i) {
       if (i == position) {
         uint32 host_order_inner = NetworkToHost32(v6_as_ints[i]);
@@ -341,8 +340,6 @@ IPAddress TruncateIP(const IPAddress& ip, int length) {
 }
 
 int CountIPMaskBits(IPAddress mask) {
-  // Doing this the lazy/simple way.
-  // Clever bit tricks welcome but please be careful re: byte order.
   uint32 word_to_count = 0;
   int bits = 0;
   switch (mask.family()) {
@@ -370,21 +367,22 @@ int CountIPMaskBits(IPAddress mask) {
       return 0;
     }
   }
-  // Check for byte boundaries before scanning.
   if (word_to_count == 0) {
     return bits;
-  } else if (word_to_count == 0xFF000000) {
-    return bits + 8;
-  } else if (word_to_count == 0xFFFF0000) {
-    return bits + 16;
-  } else if (word_to_count == 0xFFFFFF00) {
-    return bits + 24;
   }
 
-  while (word_to_count & 0x80000000) {
-    word_to_count <<= 1;
-    ++bits;
-  }
-  return bits;
+  // Public domain bit-twiddling hack from:
+  // http://graphics.stanford.edu/~seander/bithacks.html
+  // Counts the trailing 0s in the word.
+  unsigned int zeroes = 32;
+  word_to_count &= -static_cast<int32>(word_to_count);
+  if (word_to_count) zeroes--;
+  if (word_to_count & 0x0000FFFF) zeroes -= 16;
+  if (word_to_count & 0x00FF00FF) zeroes -= 8;
+  if (word_to_count & 0x0F0F0F0F) zeroes -= 4;
+  if (word_to_count & 0x33333333) zeroes -= 2;
+  if (word_to_count & 0x55555555) zeroes -= 1;
+
+  return bits + (32 - zeroes);
 }
 }  // Namespace talk base

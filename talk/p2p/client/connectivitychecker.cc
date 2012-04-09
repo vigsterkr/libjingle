@@ -339,6 +339,8 @@ StunPort* ConnectivityChecker::CreateStunPort(
                           network->ip(),
                           0,
                           0,
+                          config->username,
+                          config->password,
                           config->stun_address);
 }
 

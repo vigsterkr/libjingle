@@ -261,7 +261,7 @@ TEST_F(ChannelManagerTest, SetVideoOptionsBeforeInit) {
   // Test that values that we set before Init are applied.
   EXPECT_TRUE(cm_->SetVideoOptions("video-in2"));
   EXPECT_TRUE(cm_->Init());
-  EXPECT_EQ("video-in2", fme_->video_in_device());
+  EXPECT_EQ("video-in2", cm_->video_device_name());
 }
 
 TEST_F(ChannelManagerTest, GetVideoOptionsBeforeInit) {
@@ -281,10 +281,10 @@ TEST_F(ChannelManagerTest, SetVideoOptions) {
   // Test setting defaults.
   EXPECT_TRUE(cm_->Init());
   EXPECT_TRUE(cm_->SetVideoOptions(""));  // will use DeviceManager default
-  EXPECT_EQ("video-in1", fme_->video_in_device());
+  EXPECT_EQ("video-in1", cm_->video_device_name());
   // Test setting specific values.
   EXPECT_TRUE(cm_->SetVideoOptions("video-in2"));
-  EXPECT_EQ("video-in2", fme_->video_in_device());
+  EXPECT_EQ("video-in2", cm_->video_device_name());
   // TODO: Add test for invalid value here.
 }
 
@@ -342,7 +342,7 @@ TEST_F(ChannelManagerTest, SetVideoOptionsUnplugPlugOneCamera) {
   // Init should fall back to avatar.
   EXPECT_TRUE(cm_->Init());
   // The media engine should use no camera.
-  EXPECT_EQ("", fme_->video_in_device());
+  EXPECT_EQ("", cm_->video_device_name());
   // The channel manager keeps the user preference "video-in".
   std::string video_in;
   EXPECT_TRUE(cm_->GetVideoOptions(&video_in));
@@ -354,7 +354,7 @@ TEST_F(ChannelManagerTest, SetVideoOptionsUnplugPlugOneCamera) {
   fdm_->SetVideoCaptureDevices(vid_device_list);
   // Init again. The user preferred device, "video-in1", is used.
   EXPECT_TRUE(cm_->Init());
-  EXPECT_EQ("video-in1", fme_->video_in_device());
+  EXPECT_EQ("video-in1", cm_->video_device_name());
   EXPECT_TRUE(cm_->GetVideoOptions(&video_in));
   EXPECT_EQ("video-in1", video_in);
 }
@@ -370,7 +370,7 @@ TEST_F(ChannelManagerTest, SetVideoOptionsUnplugPlugTwoDevices) {
   // Init should fall back to default device "video-in2".
   EXPECT_TRUE(cm_->Init());
   // The media engine should use the default device "video-in2".
-  EXPECT_EQ("video-in2", fme_->video_in_device());
+  EXPECT_EQ("video-in2", cm_->video_device_name());
   // The channel manager keeps the user preference "video-in".
   std::string video_in;
   EXPECT_TRUE(cm_->GetVideoOptions(&video_in));
@@ -382,7 +382,7 @@ TEST_F(ChannelManagerTest, SetVideoOptionsUnplugPlugTwoDevices) {
   fdm_->SetVideoCaptureDevices(vid_device_list);
   // Init again. The user preferred device, "video-in1", is used.
   EXPECT_TRUE(cm_->Init());
-  EXPECT_EQ("video-in1", fme_->video_in_device());
+  EXPECT_EQ("video-in1", cm_->video_device_name());
   EXPECT_TRUE(cm_->GetVideoOptions(&video_in));
   EXPECT_EQ("video-in1", video_in);
 }

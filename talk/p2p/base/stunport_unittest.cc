@@ -62,7 +62,8 @@ class StunPortTest : public testing::Test,
   void CreateStunPort(const talk_base::SocketAddress& server_addr) {
     stun_port_.reset(cricket::StunPort::Create(
         talk_base::Thread::Current(), &socket_factory_, &network_,
-        kLocalAddr.ipaddr(), 0, 0, server_addr));
+        kLocalAddr.ipaddr(), 0, 0, talk_base::CreateRandomString(16),
+        talk_base::CreateRandomString(22), server_addr));
     stun_port_->SignalAddressReady.connect(this,
         &StunPortTest::OnAddressReady);
     stun_port_->SignalAddressError.connect(this,

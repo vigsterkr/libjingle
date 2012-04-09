@@ -180,26 +180,31 @@ BasicNetworkManager::BasicNetworkManager()
 BasicNetworkManager::~BasicNetworkManager() {
 }
 
-#ifdef POSIX
+#if defined(ANDROID)
+
 bool BasicNetworkManager::CreateNetworks(bool include_ignored,
                                          NetworkList* networks) const {
-#ifdef ANDROID
   // TODO: Implement CreateNetworks on Android without using ifaddrs.
   return false;
-#else
+}
+
+#elif defined(POSIX) && !defined(ANDROID)
+
+void BasicNetworkManager::ConvertIfAddrs(struct ifaddrs* interfaces,
+                                         bool include_ignored,
+                                         NetworkList* networks) const {
   NetworkMap current_networks;
-  struct ifaddrs* interfaces;
-  int error = getifaddrs(&interfaces);
-  if (error != 0) {
-    LOG_ERR(LERROR) << "getifaddrs failed to gather interface data: " << error;
-    return false;
-  }
-  struct ifaddrs* cursor = interfaces;
-  while (cursor != NULL) {
+  for (struct ifaddrs* cursor = interfaces;
+       cursor != NULL; cursor = cursor->ifa_next) {
     IPAddress prefix;
     IPAddress mask;
     IPAddress ip;
     int scope_id = 0;
+
+    // Some interfaces may not have address assigned.
+    if (!cursor->ifa_addr || !cursor->ifa_netmask)
+      continue;
+
     switch (cursor->ifa_addr->sa_family) {
       case AF_INET: {
         ip = IPAddress(
@@ -218,12 +223,10 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
               reinterpret_cast<sockaddr_in6*>(cursor->ifa_addr)->sin6_scope_id;
           break;
         } else {
-          cursor = cursor->ifa_next;
           continue;
         }
       }
       default: {
-        cursor = cursor->ifa_next;
         continue;
       }
     }
@@ -248,15 +251,26 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
     } else {
       (*existing_network).second->AddIP(ip);
     }
-    cursor = cursor->ifa_next;
   }
+}
+
+bool BasicNetworkManager::CreateNetworks(bool include_ignored,
+                                         NetworkList* networks) const {
+  struct ifaddrs* interfaces;
+  int error = getifaddrs(&interfaces);
+  if (error != 0) {
+    LOG_ERR(LERROR) << "getifaddrs failed to gather interface data: " << error;
+    return false;
+  }
+
+  ConvertIfAddrs(interfaces, include_ignored, networks);
+
   freeifaddrs(interfaces);
   return true;
-#endif
 }
-#endif  // POSIX
 
-#ifdef WIN32
+#elif defined(WIN32)
+
 unsigned int GetPrefix(PIP_ADAPTER_PREFIX prefixlist,
               const IPAddress& ip, IPAddress* prefix) {
   IPAddress current_prefix;
@@ -264,7 +278,8 @@ unsigned int GetPrefix(PIP_ADAPTER_PREFIX prefixlist,
   unsigned int best_length = 0;
   while (prefixlist) {
     // Look for the longest matching prefix in the prefixlist.
-    if (prefixlist->Address.lpSockaddr->sa_family != ip.family()) {
+    if (prefixlist->Address.lpSockaddr == NULL ||
+        prefixlist->Address.lpSockaddr->sa_family != ip.family()) {
       prefixlist = prefixlist->Next;
       continue;
     }

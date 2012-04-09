@@ -25,9 +25,16 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <vector>
-#include "talk/base/gunit.h"
 #include "talk/base/network.h"
+
+#if defined(POSIX) && !defined(ANDROID)
+#include <sys/types.h>
+#include <ifaddrs.h>
+#endif  // defined(POSIX) && !defined(ANDROID)
+
+#include <vector>
+
+#include "talk/base/gunit.h"
 
 namespace talk_base {
 
@@ -55,6 +62,16 @@ class NetworkTest : public testing::Test, public sigslot::has_slots<>  {
     network_manager.CreateNetworks(include_ignored, &list);
     return list;
   }
+
+#if defined(POSIX) && !defined(ANDROID)
+  // Separated from CreateNetworks for tests.
+  static void CallConvertIfAddrs(const BasicNetworkManager& network_manager,
+                                 struct ifaddrs* interfaces,
+                                 bool include_ignored,
+                                 NetworkManager::NetworkList* networks) {
+    network_manager.ConvertIfAddrs(interfaces, include_ignored, networks);
+  }
+#endif  // defined(POSIX) && !defined(ANDROID)
 
  protected:
   bool callback_called_;
@@ -474,5 +491,20 @@ TEST_F(NetworkTest, TestIPv6Toggle) {
   }
   EXPECT_FALSE(ipv6_found);
 }
+
+#if defined(POSIX) && !defined(ANDROID)
+// Verify that we correctly handle interfaces with no address.
+TEST_F(NetworkTest, TestConvertIfAddrsNoAddress) {
+  struct ifaddrs list;
+  memset(&list, 0, sizeof(list));
+  list.ifa_name = const_cast<char*>("test_iface");
+
+  NetworkManager::NetworkList result;
+  BasicNetworkManager manager;
+  CallConvertIfAddrs(manager, &list, true, &result);
+  EXPECT_TRUE(result.empty());
+}
+#endif  // defined(POSIX) && !defined(ANDROID)
+
 
 }  // namespace talk_base

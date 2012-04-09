@@ -92,11 +92,12 @@ DeclareBit('have_libpulse',
 
 # List all the locales we localize to.
 root_env.AppendUnique(locales = [
-    'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'en-GB', 'es',
-    'es-419', 'et', 'fa', 'fi', 'fil', 'fr', 'gu', 'hi', 'hr', 'hu', 'id',
-    'is', 'it', 'iw', 'ja', 'kn', 'ko', 'lt', 'lv', 'ml', 'mr', 'ms', 'nl',
-    'no', 'or', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv',
-    'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur', 'vi', 'zh-CN', 'zh-TW'])
+    'af', 'am', 'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'en-GB',
+    'es', 'es-419', 'et', 'eu', 'fa', 'fi', 'fil', 'fr', 'fr-CA', 'gl', 'gu',
+    'hi', 'hr', 'hu', 'id', 'is', 'it', 'iw', 'ja', 'kn', 'ko', 'lt', 'lv',
+    'ml', 'mr', 'ms', 'nl', 'no', 'or', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru',
+    'sk', 'sl', 'sr', 'sv', 'sw', 'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur',
+    'vi', 'zh-CN', 'zh-HK', 'zh-TW', 'zu'])
 
 AddTargetGroup('all_breakpads', 'breakpad files can be built')
 
@@ -194,15 +195,6 @@ win_env.Append(
   ]
 )
 
-# Merge in additional windows locales not supported yet on posix
-win_env.AppendUnique(locales = [
-    'af', 'am', 'ar', 'bg', 'bn', 'ca', 'cs', 'da', 'de', 'el', 'en', 'en-GB',
-    'es', 'es-419', 'et', 'eu', 'fa', 'fi', 'fil', 'fr', 'fr-CA', 'gl', 'gu',
-    'hi', 'hr', 'hu', 'id', 'is', 'it', 'iw', 'ja', 'kn', 'ko', 'lt', 'lv',
-    'ml', 'mr', 'ms', 'nl', 'no', 'or', 'pl', 'pt-BR', 'pt-PT', 'ro', 'ru',
-    'sk', 'sl', 'sr', 'sv', 'sw', 'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur',
-    'vi', 'zh-CN', 'zh-HK', 'zh-TW', 'zu'])
-
 # TODO: Figure out what this does; found it in
 # omaha/main.scons. This fixes the problem with redefinition
 # of OS_WINDOWS symbol.
@@ -243,7 +235,13 @@ win_dbg64_env = win_dbg_env.Clone(
   BUILD_GROUPS = ['all'],
 )
 
+win_dbg64_env.FilterOut(CCFLAGS = ['/ZI'])
+
 win_dbg64_env.Append(
+  # TODO: Consider CCFLAGS '/wd4244', '/wd4267'
+  CCFLAGS = [
+    '/Zi',     # enable debugging that is 64 bit compatible
+  ],
   ARFLAGS = [
     '/MACHINE:x64',
   ],
@@ -271,6 +269,8 @@ win_dbg64_env.Prepend(
 win_dbg64_env.PrependENVPath(
   'PATH',
   win_dbg64_env.Dir('$VC80_DIR/vc/bin/x86_amd64'))
+
+win_dbg64_env.SetBits('host_platform_64bit')
 
 envs.append(win_dbg64_env)
 

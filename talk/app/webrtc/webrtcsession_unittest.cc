@@ -25,16 +25,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/webrtcsession.h"
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
+#include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/logging.h"
 #include "talk/base/fakenetwork.h"
 #include "talk/base/firewallsocketserver.h"
 #include "talk/base/gunit.h"
 #include "talk/base/network.h"
 #include "talk/base/physicalsocketserver.h"
+#include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/virtualsocketserver.h"
 #include "talk/p2p/base/stunserver.h"
@@ -335,6 +336,25 @@ class WebRtcSessionTest : public testing::Test {
     EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
     EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
   }
+  void CreateCryptoOfferAndNonCryptoAnswer(SessionDescriptionInterface** offer,
+      JsepSessionDescription** nocrypto_answer) {
+    mediastream_signaling_.UseOptionsWithStream2();
+    *offer = session_->CreateOffer(MediaHints());
+
+    mediastream_signaling_.UseOptionsWithStream1();
+    talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+        session_->CreateAnswer(MediaHints(), *offer));
+    std::string nocrypto_answer_str;
+    answer->ToString(&nocrypto_answer_str);
+    // Disable the crypto
+    const std::string kCrypto = "a=crypto";
+    const std::string kCryptoX = "a=cryptx";
+    talk_base::replace_substrs(kCrypto.c_str(), kCrypto.length(),
+                               kCryptoX.c_str(), kCryptoX.length(),
+                               &nocrypto_answer_str);
+    *nocrypto_answer = new JsepSessionDescription();
+    EXPECT_TRUE((*nocrypto_answer)->Initialize(nocrypto_answer_str));
+  }
 
   cricket::FakeMediaEngine* media_engine;
   cricket::FakeDeviceManager* device_manager;
@@ -482,6 +502,53 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   // Make sure we have no send streams.
   EXPECT_EQ(0u, video_channel_->send_streams().size());
   EXPECT_EQ(0u, voice_channel_->send_streams().size());
+}
+
+// Test we will return fail when apply an offer that doesn't have
+// crypto enabled.
+TEST_F(WebRtcSessionTest, SetNonCryptoOffer) {
+  WebRtcSessionTest::Init();
+
+  desc_factory_->set_secure(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  talk_base::scoped_ptr<JsepSessionDescription> offer(
+      new JsepSessionDescription(desc_factory_->CreateOffer(options, NULL)));
+  VerifyNoCryptoParams(offer->description());
+  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer,
+                                              offer.get()));
+  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                             offer.get()));
+}
+
+// Test we will return fail when apply an answer that doesn't have
+// crypto enabled.
+TEST_F(WebRtcSessionTest, SetLocalNonCryptoAnswer) {
+  WebRtcSessionTest::Init();
+  SessionDescriptionInterface* offer = NULL;
+  JsepSessionDescription* answer = NULL;
+  CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
+
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  // When the SetLocalDescription failed the ownership of answer wasn't
+  // transferred. So we need to delete it here.
+  delete answer;
+}
+
+// Test we will return fail when apply an answer that doesn't have
+// crypto enabled.
+TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
+  WebRtcSessionTest::Init();
+  SessionDescriptionInterface* offer = NULL;
+  JsepSessionDescription* answer = NULL;
+  CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
+
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  // When the SetRemoteDescription failed the ownership of answer wasn't
+  // transferred. So we need to delete it here.
+  delete answer;
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {

@@ -377,10 +377,10 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
   EXPECT_TRUE(channel_->AddSendStream(
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->SetSend(true));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
 }
 
@@ -393,16 +393,16 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(channel_->AddSendStream(
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->SetSend(true));
   EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   int new_channel_num = vie_.GetLastChannel();
   EXPECT_NE(channel_num, new_channel_num);
 
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
-  EXPECT_TRUE(vie_.GetRembStatus(new_channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(new_channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(new_channel_num));
 }
 
@@ -421,11 +421,11 @@ TEST_F(WebRtcVideoEngineTestFake, NoRembChangeAfterAddRecvStream) {
   EXPECT_TRUE(channel_->AddSendStream(
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->SetSend(true));
   EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
 }
 
@@ -435,7 +435,7 @@ TEST_F(WebRtcVideoEngineTestFake, RembOnOff) {
   int channel_num = vie_.GetLastChannel();
 
   // Verify remb sending is off before StartSending.
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
 
   // Verify remb sending is on after StartSending.
@@ -443,12 +443,12 @@ TEST_F(WebRtcVideoEngineTestFake, RembOnOff) {
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_TRUE(channel_->SetSend(true));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
 
   // Verify remb sending is off after StopSending.
   EXPECT_TRUE(channel_->SetSend(false));
-  EXPECT_TRUE(vie_.GetRembStatus(channel_num));
+  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
 }
 
@@ -767,44 +767,6 @@ TEST_F(WebRtcVideoEngineTest, CreateChannel) {
   delete channel;
 }
 
-TEST_F(WebRtcVideoEngineTest, SetCaptureDevice) {
-  cricket::Device device;
-  EXPECT_TRUE(engine_.Init());
-
-  EXPECT_TRUE(engine_.SetCaptureDevice(&device));
-  EXPECT_FALSE(engine_.IsCapturing());
-  // FakeVideoCapturer returns CR_SUCCESS.
-  EXPECT_EQ(cricket::CR_SUCCESS, engine_.SetCapture(true));
-  EXPECT_TRUE(engine_.IsCapturing());
-
-  EXPECT_TRUE(engine_.SetCaptureDevice(NULL));
-  EXPECT_FALSE(engine_.IsCapturing());
-}
-
-TEST_F(WebRtcVideoEngineTest, SetCaptureModule) {
-  // Use 123 to verify there's no assumption to the module id
-  FakeWebRtcVideoCaptureModule* vcm =
-      new FakeWebRtcVideoCaptureModule(NULL, 123);
-  EXPECT_TRUE(engine_.Init());
-  // The ownership of the vcm is transferred to the engine.
-  // Technically we should call vcm->AddRef since we are using the vcm below,
-  // however the FakeWebRtcVideoCaptureModule didn't implemented the refcount.
-  // So for testing, this should be fine.
-  // The SetCaptureModule call always starts the capture.
-  EXPECT_TRUE(engine_.SetCaptureModule(vcm));
-  EXPECT_TRUE(engine_.IsCapturing());
-  EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
-  EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
-  EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
-                engine_.default_codec_format().interval),
-            vcm->cap().maxFPS);
-  EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
-  EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
-
-  EXPECT_TRUE(engine_.SetCaptureModule(NULL));
-  EXPECT_FALSE(engine_.IsCapturing());
-}
-
 TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
   // Use 123 to verify there's no assumption to the module id
   FakeWebRtcVideoCaptureModule* vcm =
@@ -813,8 +775,7 @@ TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
       new cricket::WebRtcVideoCapturer);
   EXPECT_TRUE(capturer->Init(vcm));
   EXPECT_TRUE(engine_.Init());
-  const uint32 ssrc_dummy = 0;
-  EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get(), ssrc_dummy));
+  EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get()));
   EXPECT_FALSE(engine_.IsCapturing());
   EXPECT_EQ(cricket::CR_PENDING, engine_.SetCapture(true));
   EXPECT_TRUE(engine_.IsCapturing());
@@ -827,7 +788,7 @@ TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
   EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
   EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
 
-  EXPECT_TRUE(engine_.SetVideoCapturer(NULL, ssrc_dummy));
+  EXPECT_TRUE(engine_.SetVideoCapturer(NULL));
   EXPECT_FALSE(engine_.IsCapturing());
 }
 
@@ -883,8 +844,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SendAndReceiveVp8Qvga) {
 TEST_F(WebRtcVideoMediaChannelTest, SendAndReceiveH264SvcQqvga) {
   SendAndReceive(cricket::VideoCodec(100, "VP8", 160, 100, 30, 0));
 }
-// TODO: Figure out why this test doesn't work.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SendManyResizeOnce) {
+TEST_F(WebRtcVideoMediaChannelTest, SendManyResizeOnce) {
   SendManyResizeOnce();
 }
 
@@ -957,14 +917,18 @@ TEST_F(WebRtcVideoMediaChannelTest, RejectEmptyStreamParams) {
 }
 
 
-// TODO: Investigate why this test is flaky.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptResolution16x10) {
+TEST_F(WebRtcVideoMediaChannelTest, AdaptResolution16x10) {
   Base::AdaptResolution16x10();
 }
-// TODO: Investigate why this test is flaky.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptResolution4x3) {
+
+TEST_F(WebRtcVideoMediaChannelTest, AdaptResolution4x3) {
   Base::AdaptResolution4x3();
 }
+
+TEST_F(WebRtcVideoMediaChannelTest, Mute) {
+  Base::Mute();
+}
+
 // TODO: Restore this test once we support sending 0 fps.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptDropAllFrames) {
   Base::AdaptDropAllFrames();
@@ -973,12 +937,8 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptDropAllFrames) {
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
   Base::AdaptFramerate();
 }
-// TODO: Understand why format is set but the encoded frames do not
-// change.
+
+//TODO: Fix the flakey test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
   Base::SetSendStreamFormat();
-}
-// TODO: Understand why we receive a not-quite-black frame.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_Mute) {
-  Base::Mute();
 }

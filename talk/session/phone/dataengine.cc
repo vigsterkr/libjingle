@@ -45,7 +45,10 @@ static const size_t kDataMaxRtpPacketLen = 1200U;
 static const unsigned char kReservedSpace[] = {
   0x00, 0x00, 0x00, 0x00
 };
-
+// Amount of overhead SRTP may take.  We need to leave room in the
+// buffer for it, otherwise SRTP will fail later.  If SRTP ever uses
+// more than this, we need to increase this number.
+static const size_t kMaxSrtpHmacOverhead = 16;
 
 DataEngine::DataEngine() {
   data_codecs_.push_back(
@@ -307,7 +310,8 @@ bool DataMediaChannel::SendData(
     return false;
   }
 
-  size_t packet_len = kMinRtpPacketLen + sizeof(kReservedSpace) + data.length();
+  size_t packet_len = (kMinRtpPacketLen + sizeof(kReservedSpace)
+                       + data.length() + kMaxSrtpHmacOverhead);
   if (packet_len > kDataMaxRtpPacketLen) {
     return false;
   }

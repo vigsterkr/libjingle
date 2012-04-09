@@ -86,7 +86,7 @@ class FakeWebRtcVideoEngine
           key_frame_request_method_(webrtc::kViEKeyFrameRequestNone),
           tmmbr_(false),
           remb_send_(false),
-          remb_(false),
+          remb_receive_(false),
           nack_(false),
           hybrid_nack_fec_(false) {
       ssrcs_[0] = 0;  // default ssrc.
@@ -102,8 +102,8 @@ class FakeWebRtcVideoEngine
     webrtc::ViERTCPMode rtcp_status_;
     webrtc::ViEKeyFrameRequestMethod key_frame_request_method_;
     bool tmmbr_;
-    bool remb_send_;  // This channel send REMB packets.
-    bool remb_;  // This channel report BWE using remb.
+    bool remb_send_;  // This channel sends video packets.
+    bool remb_receive_;  // This channel receives video packets.
     bool nack_;
     bool hybrid_nack_fec_;
     std::vector<webrtc::VideoCodec> recv_codecs;
@@ -209,9 +209,9 @@ class FakeWebRtcVideoEngine
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->tmmbr_;
   }
-  bool GetRembStatus(int channel) const {
+  bool GetRembStatusReceive(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
-    return channels_.find(channel)->second->remb_;
+    return channels_.find(channel)->second->remb_receive_;
   }
   bool GetRembStatusSend(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -603,7 +603,7 @@ class FakeWebRtcVideoEngine
   WEBRTC_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->remb_send_ = send;
-    channels_[channel]->remb_ = receive;
+    channels_[channel]->remb_receive_ = receive;
     return 0;
   }
   WEBRTC_FUNC(SetTMMBRStatus, (const int channel, const bool enable)) {

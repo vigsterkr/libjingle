@@ -36,6 +36,7 @@
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
+#include "talk/base/windowpickerfactory.h"
 #include "talk/examples/call/console.h"
 #include "talk/examples/call/presencepushtask.h"
 #include "talk/examples/call/presenceouttask.h"
@@ -52,6 +53,7 @@
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/screencastid.h"
 #include "talk/session/phone/videorendererfactory.h"
 #include "talk/xmpp/constants.h"
 #include "talk/xmpp/hangoutpubsubclient.h"
@@ -112,6 +114,8 @@ const char* HANGOUT_COMMANDS =
 "  unrecord   Stops recording (just signalling; not actually recording.)\n"
 "  rmute [nick] Remote mute another participant.\n"
 "  block [nick] Block another participant.\n"
+"  screencast [fps] Starts screencast. \n"
+"  unscreencast Stops screencast. \n"
 "  quit       Quits the application.\n"
 "";
 
@@ -192,6 +196,24 @@ void CallClient::ParseLine(const std::string& line) {
       call_->Mute(false);
       if (InMuc()) {
         hangout_pubsub_client_->PublishAudioMuteState(false);
+      }
+    } else if (command == "screencast") {
+      // TODO: Use a random ssrc
+      std::string stream_name = "screencast";
+      uint32 ssrc = 1001;
+      int fps = GetInt(words, 1, 5);  // Default to 5 fps.
+
+      cricket::ScreencastId screencastid;
+      if (session_ && SelectFirstDesktopScreencastId(&screencastid)) {
+        call_->AddScreencast(session_, stream_name, ssrc, screencastid, fps);
+      }
+    } else if (command == "unscreencast") {
+      // TODO: Use a random ssrc
+      std::string stream_name = "screencast";
+      uint32 ssrc = 1001;
+
+      if (session_) {
+        call_->RemoveScreencast(session_, stream_name, ssrc);
       }
     } else if (command == "present") {
       if (InMuc()) {
@@ -774,6 +796,10 @@ void CallClient::OnPresenterStateChange(
     console_->PrintLine("%s now presenting.", nick.c_str());
   } else if (was_presenting && !is_presenting) {
     console_->PrintLine("%s no longer presenting.", nick.c_str());
+  } else if (was_presenting && is_presenting) {
+    console_->PrintLine("%s still presenting.", nick.c_str());
+  } else if (!was_presenting && !is_presenting) {
+    console_->PrintLine("%s still not presenting.", nick.c_str());
   }
 }
 
@@ -1270,4 +1296,28 @@ buzz::Jid CallClient::GenerateRandomMucJid() {
                       guid,
                       pmuc_domain_.c_str());
   return buzz::Jid(guid_room);
+}
+
+bool CallClient::SelectFirstDesktopScreencastId(
+    cricket::ScreencastId* screencastid) {
+  if (!talk_base::WindowPickerFactory::IsSupported()) {
+    LOG(LS_WARNING) << "Window picker not suported on this OS.";
+    return false;
+  }
+
+  talk_base::WindowPicker* picker =
+      talk_base::WindowPickerFactory::CreateWindowPicker();
+  if (!picker) {
+    LOG(LS_WARNING) << "Could not create a window picker.";
+    return false;
+  }
+
+  talk_base::DesktopDescriptionList desktops;
+  if (!picker->GetDesktopList(&desktops) || desktops.empty()) {
+    LOG(LS_WARNING) << "Could not get a list of desktops.";
+    return false;
+  }
+
+  *screencastid = cricket::ScreencastId(desktops[0].id());
+  return true;
 }

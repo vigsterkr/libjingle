@@ -89,6 +89,22 @@ static void CopyCandidatesFromSessionDescription(
   }
 }
 
+static bool HasCrypto(const cricket::SessionDescription* desc) {
+  if (!desc) {
+    return false;
+  }
+  const cricket::ContentInfos& contents = desc->contents();
+  for (size_t index = 0; index < contents.size(); ++index) {
+    const MediaContentDescription* media =
+        static_cast<const MediaContentDescription*>(
+            contents[index].description);
+    if (media && media->cryptos().empty()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
@@ -202,6 +218,12 @@ bool WebRtcSession::SetLocalDescription(Action action,
                   <<" description";
     return false;
   }
+  if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
+      !HasCrypto(desc->description())) {
+    LOG(LS_ERROR) << "SetLocalDescription called with a session"
+                  <<" description without crypto enabled";
+    return false;
+  }
 
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
@@ -230,6 +252,12 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   if (!desc || !desc->description()) {
     LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
                   <<" description";
+    return false;
+  }
+  if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
+      !HasCrypto(desc->description())) {
+    LOG(LS_ERROR) << "SetRemoteDescription called with a session"
+                  <<" description without crypto enabled";
     return false;
   }
 
@@ -299,8 +327,7 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
   ASSERT(signaling_thread()->IsCurrent());
 
   // TODO: Refactor this when there is support for multiple cameras.
-  const uint32 dummy_ssrc = 0;
-  if (!channel_manager_->SetVideoCapturer(camera, dummy_ssrc)) {
+  if (!channel_manager_->SetVideoCapturer(camera)) {
     LOG(LS_ERROR) << "Failed to set capture device.";
     return false;
   }
@@ -380,11 +407,6 @@ void WebRtcSession::OnTransportCandidatesReady(
     return;
   }
   ProcessNewLocalCandidate(proxy->content_name(), candidates);
-}
-
-void WebRtcSession::OnTransportChannelGone(cricket::Transport* transport,
-                                           const std::string& name) {
-  ASSERT(signaling_thread()->IsCurrent());
 }
 
 bool WebRtcSession::CreateChannels() {

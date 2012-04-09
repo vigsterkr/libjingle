@@ -35,6 +35,12 @@
 #include "talk/session/phone/filevideocapturer.h"
 #include "talk/session/phone/mediacommon.h"
 
+#ifdef HAVE_LMI
+#include "talk/session/phone/lmivideocapturer.h"
+#elif HAVE_WEBRTC_VIDEO
+#include "talk/session/phone/webrtcvideocapturer.h"
+#endif
+
 namespace cricket {
 // Initialize to empty string.
 const char DeviceManagerInterface::kDefaultDeviceName[] = "";
@@ -143,6 +149,38 @@ bool DeviceManager::GetVideoCaptureDevice(const std::string& name,
   }
 
   return false;
+}
+
+VideoCapturer* DeviceManager::CreateVideoCapturer(const Device& device) const {
+#if defined(IOS) || defined(ANDROID)
+  LOG_F(LS_ERROR) << " should never be called!";
+  return NULL;
+#endif
+  // TODO: throw out the creation of a file video capturer once the
+  // refactoring is completed.
+  if (FileVideoCapturer::IsFileVideoCapturerDevice(device)) {
+    FileVideoCapturer* capturer = new FileVideoCapturer;
+    if (!capturer->Init(device)) {
+      delete capturer;
+      return NULL;
+    }
+    capturer->set_repeat(talk_base::kForever);
+    return capturer;
+  }
+#ifdef HAVE_LMI
+  CricketLmiVideoCapturer* capturer = new CricketLmiVideoCapturer;
+#elif HAVE_WEBRTC_VIDEO
+  WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
+#else
+  return NULL;
+#endif
+#if defined(HAVE_LMI) || defined(HAVE_WEBRTC_VIDEO)
+  if (!capturer->Init(device)) {
+    delete capturer;
+    return NULL;
+  }
+  return capturer;
+#endif
 }
 
 bool DeviceManager::GetAudioDevices(bool input,

@@ -144,7 +144,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool SetLocalRenderer(VideoRenderer* renderer);
   // Sets the externally provided video capturer. The ssrc is the ssrc of the
   // (video) stream for which the video capturer should be set.
-  bool SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc);
+  bool SetVideoCapturer(VideoCapturer* capturer);
   // Starts and stops the local camera and renders it to the local renderer.
   CaptureResult SetVideoCapture(bool capture);
   bool capturing() const { return capturing_; }
@@ -175,6 +175,11 @@ class ChannelManager : public talk_base::MessageHandler,
   bool GetVideoCaptureDevices(std::vector<std::string>* names);
   sigslot::repeater0<> SignalDevicesChange;
   sigslot::signal1<CaptureResult> SignalVideoCaptureResult;
+
+  // Returns the current selected device. Note: Subtly different from
+  // GetVideoOptions(). See member video_device_ for more details.
+  // This API is mainly a hook used by unittests.
+  const std::string& video_device_name() const { return video_device_name_; }
 
  private:
   typedef std::vector<VoiceChannel*> VoiceChannels;
@@ -208,7 +213,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool SetVideoOptions_w(const Device* cam_device);
   bool SetDefaultVideoEncoderConfig_w(const VideoEncoderConfig& config);
   bool SetLocalRenderer_w(VideoRenderer* renderer);
-  bool SetVideoCapturer_w(VideoCapturer* capturer, uint32 ssrc);
+  bool SetVideoCapturer_w(VideoCapturer* capturer);
   CaptureResult SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);
@@ -249,6 +254,16 @@ class ChannelManager : public talk_base::MessageHandler,
 
   bool capturing_;
   bool monitoring_;
+
+  talk_base::scoped_ptr<VideoCapturer> video_capturer_;
+
+  // String containing currently set device. Note that this string is subtly
+  // different from camera_device_. E.g. camera_device_ will list unplugged
+  // but selected devices while this sting will be empty or contain current
+  // selected device.
+  // TODO: refactor the code such that there is no need to keep two
+  // strings for video devices that have subtle differences in behavior.
+  std::string video_device_name_;
 };
 
 }  // namespace cricket

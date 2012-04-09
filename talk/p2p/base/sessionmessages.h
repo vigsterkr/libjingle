@@ -215,6 +215,11 @@ bool ParseDescriptionInfo(SignalingProtocol protocol,
                           const TransportParserMap& transport_parsers,
                           DescriptionInfo* description_info,
                           ParseError* error);
+bool WriteDescriptionInfo(SignalingProtocol protocol,
+                          const ContentInfos& contents,
+                          const ContentParserMap& content_parsers,
+                          XmlElements* elems,
+                          WriteError* error);
 // Since a TransportInfo is not a transport-info message, and a
 // transport-info message is just a collection of TransportInfos, we
 // say Parse/Write TransportInfos for transport-info messages.

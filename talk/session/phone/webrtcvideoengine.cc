@@ -76,6 +76,11 @@ static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   }
 }
 
+static const bool kRembNotSending = false;
+static const bool kRembSending = true;
+// static const bool kRembNotReceiving = false;  // Not used for now.
+static const bool kRembReceiving = true;
+
 class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
  public:
   explicit WebRtcRenderAdapter(VideoRenderer* renderer)
@@ -354,7 +359,6 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
   render_module_.reset(new WebRtcPassthroughRender());
   local_renderer_w_ = local_renderer_h_ = 0;
   local_renderer_ = NULL;
-  owns_capturer_ = false;
   video_capturer_ = NULL;
   capture_started_ = false;
 
@@ -510,66 +514,12 @@ WebRtcVideoMediaChannel* WebRtcVideoEngine::CreateChannel(
   return channel;
 }
 
-bool WebRtcVideoEngine::SetCaptureDevice(const Device* device) {
-  const bool owns_capturer = true;
-  if (!device) {
-    if (!SetCapturer(NULL, owns_capturer)) {
-      return false;
-    }
-    LOG(LS_INFO) << "Camera set to NULL";
-    return true;
-  }
-  // No-op if the device hasn't changed.
-  if ((video_capturer_ != NULL) && video_capturer_->GetId() == device->id) {
-    return true;
-  }
-  // Create a new capturer for the specified device.
-  VideoCapturer* capturer = CreateVideoCapturer(*device);
-  if (!capturer) {
-    LOG(LS_ERROR) << "Failed to create camera '" << device->name << "', id='"
-                  << device->id << "'";
-    return false;
-  }
-  if (!SetCapturer(capturer, owns_capturer)) {
-    return false;
-  }
-  LOG(LS_INFO) << "Camera set to '" << device->name << "', id='"
-               << device->id << "'";
-  return true;
+bool WebRtcVideoEngine::SetVideoCapturer(VideoCapturer* capturer) {
+  return SetCapturer(capturer);
 }
 
-bool WebRtcVideoEngine::SetCaptureModule(webrtc::VideoCaptureModule* vcm) {
-  const bool owns_capturer = true;
-  if (!vcm) {
-    if (!SetCapturer(NULL, owns_capturer)) {
-      return false;
-    }
-    LOG(LS_INFO) << "Camera set to NULL";
-    return true;
-  }
-  // Create a new capturer for the specified device.
-  WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
-  if (!capturer->Init(vcm)) {
-    LOG(LS_ERROR) << "Failed to create camera from VCM";
-    delete capturer;
-    return false;
-  }
-  if (!SetCapturer(capturer, owns_capturer)) {
-    return false;
-  }
-  LOG(LS_INFO) << "Camera created with VCM";
-  CaptureResult ret = SetCapture(true);
-  if (ret != cricket::CR_SUCCESS && ret != cricket::CR_PENDING) {
-    LOG(LS_ERROR) << "Failed to start camera.";
-    return false;
-  }
-  return true;
-}
-
-bool WebRtcVideoEngine::SetVideoCapturer(VideoCapturer* capturer,
-                                         uint32 /*ssrc*/) {
-  const bool owns_capturer = false;
-  return SetCapturer(capturer, owns_capturer);
+VideoCapturer* WebRtcVideoEngine::GetVideoCapturer() const {
+  return video_capturer_;
 }
 
 bool WebRtcVideoEngine::SetLocalRenderer(VideoRenderer* renderer) {
@@ -586,25 +536,6 @@ CaptureResult WebRtcVideoEngine::SetCapture(bool capture) {
     capture_started_ = old_capture;
   }
   return res;
-}
-
-VideoCapturer* WebRtcVideoEngine::CreateVideoCapturer(const Device& device) {
-  if (FileVideoCapturer::IsFileVideoCapturerDevice(device)) {
-    FileVideoCapturer* capturer = new FileVideoCapturer;
-    if (!capturer->Init(device)) {
-      delete capturer;
-      return NULL;
-    }
-    capturer->set_repeat(talk_base::kForever);
-    return capturer;
-  } else {
-    WebRtcVideoCapturer* capturer = new WebRtcVideoCapturer;
-    if (!capturer->Init(device)) {
-      delete capturer;
-      return NULL;
-    }
-    return capturer;
-  }
 }
 
 CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
@@ -943,8 +874,7 @@ bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
   return true;
 }
 
-bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer,
-                                    bool own_capturer) {
+bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer) {
   if (capturer == NULL) {
     // Stop capturing before clearing the capturer.
     if (SetCapture(false) != CR_SUCCESS) {
@@ -960,7 +890,6 @@ bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer,
       &WebRtcVideoEngine::OnFrameCaptured);
   ClearCapturer();
   video_capturer_ = capturer;
-  owns_capturer_ = own_capturer;
   // Possibly restart the capturer if it is supposed to be running.
   CaptureResult result = UpdateCapturingState();
   if (result != CR_SUCCESS && result != CR_PENDING) {
@@ -1034,9 +963,6 @@ bool WebRtcVideoEngine::UnregisterProcessor(
 }
 
 void WebRtcVideoEngine::ClearCapturer() {
-  if (owns_capturer_) {
-    delete video_capturer_;
-  }
   video_capturer_ = NULL;
 }
 
@@ -1315,6 +1241,8 @@ int WebRtcVideoMediaChannel::GetChannelNum(uint32 ssrc) {
 }
 
 bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
+  LOG(LS_INFO) << "AddSendStream " << sp.ToString();
+
   if (send_params_.get() != NULL) {
     LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one sending channel";
     return false;
@@ -1501,9 +1429,10 @@ bool WebRtcVideoMediaChannel::StartSend() {
   }
 
   // TODO Change this once REMB supporting multiple sending channels.
-  // Send remb (2nd param) and use remb for BWE (3rd param).
-  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_, true, true) != 0) {
-    LOG_RTCERR3(SetRembStatus, vie_channel_, true, true);
+  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_,
+                                           kRembSending,
+                                           kRembReceiving) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, kRembSending, kRembReceiving);
     return false;
   }
 
@@ -1517,9 +1446,10 @@ bool WebRtcVideoMediaChannel::StopSend() {
   }
 
   // TODO Change this once REMB supporting multiple sending channels.
-  // Don't send remb (2nd param) but use remb for BWE (3rd param).
-  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_, false, true) != 0) {
-    LOG_RTCERR3(SetRembStatus, vie_channel_, false, true);
+  if (engine_->vie()->rtp()->SetRembStatus(vie_channel_,
+                                           kRembNotSending,
+                                           kRembReceiving) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, kRembNotSending, kRembReceiving);
     return false;
   }
 
@@ -1654,7 +1584,8 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   }
 
   // Build BandwidthEstimationInfo.
-  // TODO: Fill in more BWE stats once we have them.
+  // TODO: Add real unittest for this.
+  BandwidthEstimationInfo bwe;
   unsigned int total_bitrate_sent;
   unsigned int video_bitrate_sent;
   unsigned int fec_bitrate_sent;
@@ -1662,41 +1593,34 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   if (engine_->vie()->rtp()->GetBandwidthUsage(vie_channel_,
       total_bitrate_sent, video_bitrate_sent,
       fec_bitrate_sent, nack_bitrate_sent) == 0) {
-    BandwidthEstimationInfo bwe;
     bwe.actual_enc_bitrate = video_bitrate_sent;
     bwe.transmit_bitrate = total_bitrate_sent;
     bwe.retransmit_bitrate = nack_bitrate_sent;
-
-    // Add bandwidth estimation.
-    unsigned int estimated_send_bandwidth;
-    if (engine_->vie()->rtp()->GetEstimatedSendBandwidth(
-        vie_channel_, &estimated_send_bandwidth)) {
-      bwe.available_send_bandwidth = estimated_send_bandwidth;
-    } else {
-      LOG_RTCERR2(GetEstimatedSendBandwidth, vie_channel_,
-                  &estimated_send_bandwidth);
-    }
-    unsigned int estimated_recv_bandwidth;
-    if (engine_->vie()->rtp()->GetEstimatedReceiveBandwidth(
-        vie_channel_, &estimated_recv_bandwidth)) {
-      bwe.available_recv_bandwidth = estimated_recv_bandwidth;
-    } else {
-      LOG_RTCERR2(GetEstimatedRecvBandwidth, vie_channel_,
-                  &estimated_recv_bandwidth);
-    }
-    unsigned int target_enc_bitrate;
-    if (engine_->vie()->codec()->GetCodecTargetBitrate(
-        vie_channel_, &target_enc_bitrate)) {
-      bwe.target_enc_bitrate = target_enc_bitrate;
-    } else {
-      LOG_RTCERR2(GetCodecTargetBitrate, vie_channel_,
-                  &target_enc_bitrate);
-    }
-
-    info->bw_estimations.push_back(bwe);
   } else {
     LOG_RTCERR1(GetBandwidthUsage, vie_channel_);
   }
+  unsigned int estimated_send_bandwidth;
+  if (engine_->vie()->rtp()->GetEstimatedSendBandwidth(
+      vie_channel_, &estimated_send_bandwidth) == 0) {
+    bwe.available_send_bandwidth = estimated_send_bandwidth;
+  } else {
+    LOG_RTCERR1(GetEstimatedSendBandwidth, vie_channel_);
+  }
+  unsigned int estimated_recv_bandwidth;
+  if (engine_->vie()->rtp()->GetEstimatedReceiveBandwidth(
+      vie_channel_, &estimated_recv_bandwidth) == 0) {
+    bwe.available_recv_bandwidth = estimated_recv_bandwidth;
+  } else {
+    LOG_RTCERR1(GetEstimatedReceiveBandwidth, vie_channel_);
+  }
+  unsigned int target_enc_bitrate;
+  if (engine_->vie()->codec()->GetCodecTargetBitrate(
+      vie_channel_, &target_enc_bitrate) == 0) {
+    bwe.target_enc_bitrate = target_enc_bitrate;
+  } else {
+    LOG_RTCERR1(GetCodecTargetBitrate, vie_channel_);
+  }
+  info->bw_estimations.push_back(bwe);
 
   return true;
 }
@@ -1896,6 +1820,11 @@ bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
   // Update local stream statistics.
   local_stream_info_->UpdateFrame(frame->GetWidth(), frame->GetHeight());
 
+  // If we want to drop the frame.
+  if (DropFrame()) {
+    return true;
+  }
+
   // Checks if we need to reset vie send codec.
   if (!MaybeResetVieSendCodec(frame->GetWidth(), frame->GetHeight(), NULL)) {
     LOG(LS_ERROR) << "MaybeResetVieSendCodec failed with "
@@ -1994,8 +1923,10 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
   // Turn off remb sending (2nd param) and turn on remb reporting (3rd param)
   // here.
   // For sending channel, remb sending will be turned on after StartSending.
-  if (engine_->vie()->rtp()->SetRembStatus(channel_id, false, true) != 0) {
-    LOG_RTCERR3(SetRembStatus, vie_channel_, false, true);
+  if (engine_->vie()->rtp()->SetRembStatus(channel_id,
+                                           kRembNotSending,
+                                           kRembReceiving) != 0) {
+    LOG_RTCERR3(SetRembStatus, vie_channel_, kRembSending, kRembReceiving);
     return false;
   }
 
@@ -2005,11 +1936,11 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
     unsigned int send_ssrc = 0;
     webrtc::ViERTP_RTCP* rtp = engine()->vie()->rtp();
     if (rtp->GetLocalSSRC(vie_channel_, send_ssrc) == -1) {
-      LOG_RTCERR2(GetSendSSRC, channel_id, send_ssrc);
+      LOG_RTCERR2(GetLocalSSRC, channel_id, send_ssrc);
       return false;
     }
     if (rtp->SetLocalSSRC(channel_id, send_ssrc) == -1) {
-      LOG_RTCERR2(SetSendSSRC, channel_id, send_ssrc);
+      LOG_RTCERR2(SetLocalSSRC, channel_id, send_ssrc);
       return false;
     }
   }  // Else this is the the default channel and we don't change the SSRC.
@@ -2080,12 +2011,17 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
   target_codec.minBitrate = min_bitrate;
   target_codec.maxBitrate = max_bitrate;
 
+  if (codec.width == 0 && codec.height == 0) {
+    LOG(LS_INFO) << "0x0 resolution selected. We will drop all the frames.";
+  } else {
 
-  if (engine()->vie()->codec()->SetSendCodec(vie_channel_, target_codec) != 0) {
-    LOG_RTCERR2(SetSendCodec, vie_channel_, send_codec_->plName);
-    return false;
+    if (0 !=
+        engine()->vie()->codec()->SetSendCodec(vie_channel_, target_codec)) {
+      LOG_RTCERR2(SetSendCodec, vie_channel_, send_codec_->plName);
+      return false;
+    }
+
   }
-
 
   // Reset the send_codec_ only if SetSendCodec is success.
   send_codec_.reset(new webrtc::VideoCodec(target_codec));

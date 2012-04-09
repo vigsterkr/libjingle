@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 
+#include "talk/base/helpers.h"
 #include "talk/base/sigslot.h"
 #include "talk/p2p/base/port.h"
 
@@ -59,11 +60,7 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   // its not used.
   PortAllocatorSession(const std::string& name,
                        const std::string& session_type,
-                       uint32 flags)
-      : name_(name),
-        session_type_(session_type),
-        flags_(flags) {
-  }
+                       uint32 flags);
 
   // Subclasses should clean up any ports created.
   virtual ~PortAllocatorSession() {}
@@ -91,12 +88,17 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   sigslot::signal1<PortAllocatorSession*> SignalDestroyed;
 
  protected:
+  const std::string& username() const { return username_; }
+  const std::string& password() const { return password_; }
+
   std::string name_;
   std::string session_type_;
 
  private:
   uint32 flags_;
   uint32 generation_;
+  std::string username_;
+  std::string password_;
 };
 
 class PortAllocator : public sigslot::has_slots<> {

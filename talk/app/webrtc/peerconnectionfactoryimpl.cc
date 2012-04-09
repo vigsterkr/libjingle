@@ -173,8 +173,7 @@ bool PeerConnectionFactory::Initialize_s() {
   // WebRtcMediaEngine.
   cricket::WebRtcMediaEngine* webrtc_media_engine(
       new cricket::WebRtcMediaEngine(default_adm_.get(),
-                                     NULL,   // No secondary adm.
-                                     NULL));  // No vcm available.
+                                     NULL));   // No secondary adm.
 
   channel_manager_.reset(new cricket::ChannelManager(
       webrtc_media_engine, device_manager, worker_thread_));

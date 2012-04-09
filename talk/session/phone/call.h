@@ -42,6 +42,7 @@
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasession.h"
 #include "talk/session/phone/streamparams.h"
+#include "talk/session/phone/screencastid.h"
 
 namespace cricket {
 
@@ -83,6 +84,12 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                 const DataMediaChannel::SendDataParams& params,
                 const std::string& data);
   void PressDTMF(int event);
+  void AddScreencast(Session* session,
+                     const std::string& stream_name, uint32 ssrc,
+                     const ScreencastId& screencastid, int fps);
+  void RemoveScreencast(Session* session,
+                        const std::string& stream_name, uint32 ssrc);
+  void SendStreamUpdate(Session* session, const StreamParams& stream);
 
   const std::vector<Session*> &sessions();
   uint32 id();
@@ -187,7 +194,6 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void RemoveRecvStream(const StreamParams& stream,
                         BaseChannel* channel,
                         std::vector<StreamParams>* recv_streams);
-
   void ContinuePlayDTMF();
 
   uint32 id_;

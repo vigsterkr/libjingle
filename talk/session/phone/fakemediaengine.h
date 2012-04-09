@@ -784,8 +784,11 @@ class FakeVideoEngine : public FakeBaseEngine {
     renderer_ = r;
     return true;
   }
-  bool SetVideoCapturer(VideoCapturer* /*capturer*/, uint32 /*ssrc*/) {
-    return false;
+  bool SetVideoCapturer(VideoCapturer* /*capturer*/) {
+    return true;
+  }
+  VideoCapturer* GetVideoCapturer() const {
+    return NULL;
   }
   CaptureResult SetCapture(bool capture) {
     capture_ = capture;
@@ -847,7 +850,6 @@ class FakeMediaEngine
   }
   const std::string& audio_in_device() const { return voice_.in_device_; }
   const std::string& audio_out_device() const { return voice_.out_device_; }
-  const std::string& video_in_device() const { return video_.in_device_; }
   VideoRenderer* local_renderer() { return video_.renderer_; }
   int voice_loglevel() const { return voice_.loglevel_; }
   const std::string& voice_logfilter() const { return voice_.logfilter_; }

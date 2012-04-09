@@ -93,8 +93,11 @@ class FileMediaEngine : public MediaEngineInterface {
     return true;
   }
   virtual bool SetVideoCaptureDevice(const Device* cam_device) { return true; }
-  virtual bool SetVideoCapturer(VideoCapturer* /*capturer*/, uint32 /*ssrc*/) {
+  virtual bool SetVideoCapturer(VideoCapturer* /*capturer*/) {
     return true;
+  }
+  virtual VideoCapturer* GetVideoCapturer() const {
+    return NULL;
   }
   virtual bool GetOutputVolume(int* level) {
     *level = 0;

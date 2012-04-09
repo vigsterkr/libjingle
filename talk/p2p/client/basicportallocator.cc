@@ -25,6 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/p2p/client/basicportallocator.h"
+
 #include <string>
 #include <vector>
 
@@ -33,7 +35,6 @@
 #include "talk/base/helpers.h"
 #include "talk/base/host.h"
 #include "talk/base/logging.h"
-#include "talk/p2p/client/basicportallocator.h"
 #include "talk/p2p/base/common.h"
 #include "talk/p2p/base/port.h"
 #include "talk/p2p/base/relayport.h"
@@ -62,11 +63,6 @@ const int PHASE_TCP = 2;
 const int PHASE_SSLTCP = 3;
 
 const int kNumPhases = 4;
-
-const float PREF_LOCAL_UDP = 1.0f;
-const float PREF_LOCAL_STUN = 0.9f;
-const float PREF_LOCAL_TCP = 0.8f;
-const float PREF_RELAY = 0.5f;
 
 // Modifiers of the above constants
 const float RELAY_PRIMARY_PREF_MODIFIER = 0.0f;
@@ -355,8 +351,8 @@ void BasicPortAllocatorSession::OnMessage(talk_base::Message *message) {
 
 void BasicPortAllocatorSession::GetPortConfigurations() {
   PortConfiguration* config = new PortConfiguration(allocator_->stun_address(),
-                                                    CreateRandomString(16),
-                                                    CreateRandomString(16),
+                                                    username(),
+                                                    password(),
                                                     "");
   PortConfiguration::PortList ports;
   if (!allocator_->relay_address_udp().IsAny())
@@ -809,7 +805,8 @@ void AllocationSequence::CreateUDPPorts() {
                                session_->socket_factory(),
                                network_, ip_,
                                session_->allocator()->min_port(),
-                               session_->allocator()->max_port());
+                               session_->allocator()->max_port(),
+                               config_->username, config_->password);
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
@@ -828,6 +825,7 @@ void AllocationSequence::CreateTCPPorts() {
                                network_, ip_,
                                session_->allocator()->min_port(),
                                session_->allocator()->max_port(),
+                               config_->username, config_->password,
                                session_->allocator()->allow_tcp_listen());
   if (port) {
     // Increment expected candidate count.
@@ -856,6 +854,7 @@ void AllocationSequence::CreateStunPorts() {
                                 network_, ip_,
                                 session_->allocator()->min_port(),
                                 session_->allocator()->max_port(),
+                                config_->username, config_->password,
                                 config_->stun_address);
   if (port) {
     // Increment expected candidate count.

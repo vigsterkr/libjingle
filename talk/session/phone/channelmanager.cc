@@ -39,6 +39,7 @@
 #include "talk/base/stringencode.h"
 #include "talk/session/phone/dataengine.h"
 #include "talk/session/phone/soundclip.h"
+#include "talk/session/phone/videocapturer.h"
 
 namespace cricket {
 
@@ -132,12 +133,10 @@ struct LocalRenderer : public talk_base::MessageData {
 };
 
 struct Capturer : public talk_base::MessageData {
-  Capturer(VideoCapturer* c, uint32 s)
+  Capturer(VideoCapturer* c)
       : capturer(c),
-        ssrc(s),
         result(false) {}
   VideoCapturer* capturer;
-  uint32 ssrc;
   bool result;
 };
 
@@ -350,6 +349,9 @@ void ChannelManager::Terminate_w() {
   }
   while (!soundclips_.empty()) {
     DestroySoundclip_w(soundclips_.back());
+  }
+  if (!SetVideoOptions_w(NULL)) {
+    LOG(LS_WARNING) << "failed to delete video capturer";
   }
 }
 
@@ -674,8 +676,35 @@ bool ChannelManager::SetVideoOptions_w(const Device* cam_device) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   ASSERT(initialized_);
 
-  // Set the video input device
-  return media_engine_->SetVideoCaptureDevice(cam_device);
+  if (!cam_device) {
+    video_device_name_.clear();
+    media_engine_->SetVideoCapturer(NULL);
+    video_capturer_.reset(NULL);
+    LOG(LS_INFO) << "Camera set to NULL";
+    return true;
+  }
+
+  // No need to do anything if the same device is passed more than once.
+  if (video_capturer_.get() &&
+      (video_capturer_->GetId() == cam_device->id)) {
+    // No change, return success.
+    return true;
+  }
+  VideoCapturer* video_capturer = device_manager_->CreateVideoCapturer(
+      *cam_device);
+  if (!video_capturer) {
+    return false;
+  }
+
+  // Register the new video_capturer.
+  if (!media_engine_->SetVideoCapturer(video_capturer)) {
+    delete video_capturer;
+    return false;
+  }
+  // Capturer successfully updated.
+  video_capturer_.reset(video_capturer);
+  video_device_name_ = cam_device->name;
+  return true;
 }
 
 bool ChannelManager::SetDefaultVideoEncoderConfig(const VideoEncoderConfig& c) {
@@ -730,19 +759,19 @@ bool ChannelManager::SetLocalRenderer_w(VideoRenderer* renderer) {
   return media_engine_->SetLocalRenderer(renderer);
 }
 
-bool ChannelManager::SetVideoCapturer(VideoCapturer* capturer, uint32 ssrc) {
+bool ChannelManager::SetVideoCapturer(VideoCapturer* capturer) {
   bool ret = true;
   if (initialized_) {
-    Capturer capture(capturer, ssrc);
+    Capturer capture(capturer);
     ret = (Send(MSG_SETVIDEOCAPTURER, &capture) && capture.result);
   }
   return ret;
 }
 
-bool ChannelManager::SetVideoCapturer_w(VideoCapturer* capturer, uint32 ssrc) {
+bool ChannelManager::SetVideoCapturer_w(VideoCapturer* capturer) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   ASSERT(initialized_);
-  return media_engine_->SetVideoCapturer(capturer, ssrc);
+  return media_engine_->SetVideoCapturer(capturer);
 }
 
 CaptureResult ChannelManager::SetVideoCapture(bool capture) {
@@ -954,7 +983,7 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
     }
     case MSG_SETVIDEOCAPTURER: {
       Capturer* p = static_cast<Capturer*>(data);
-      p->result = SetVideoCapturer_w(p->capturer, p->ssrc);
+      p->result = SetVideoCapturer_w(p->capturer);
       break;
     }
     case MSG_SETVIDEOCAPTURE: {

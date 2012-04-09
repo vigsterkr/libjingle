@@ -334,10 +334,10 @@ TEST_F(DataMediaChannelTest, SendDataRate) {
   params.ssrc = 42;
   std::string data = "food";
 
-  // With rtp overhead of 16 bytes, each one of our packets is 20
-  // bytes, or 160 bits.  So, a limit of 488bps will allow 3 packets,
+  // With rtp overhead of 32 bytes, each one of our packets is 36
+  // bytes, or 288 bits.  So, a limit of 872bps will allow 3 packets,
   // but not four.
-  dmc->SetSendBandwidth(false, 488);
+  dmc->SetSendBandwidth(false, 872);
 
   EXPECT_TRUE(dmc->SendData(params, data));
   EXPECT_TRUE(dmc->SendData(params, data));

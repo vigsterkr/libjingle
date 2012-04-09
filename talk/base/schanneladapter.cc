@@ -230,15 +230,13 @@ SChannelAdapter::ContinueSSL() {
 int
 SChannelAdapter::ProcessContext(long int status, _SecBufferDesc* sbd_in,
                                 _SecBufferDesc* sbd_out) {
-  LoggingSeverity level = LS_ERROR;
-  if ((status == SEC_E_OK)
+  if (!(status == SEC_E_OK)
       || (status != SEC_I_CONTINUE_NEEDED)
       || (status != SEC_E_INCOMPLETE_MESSAGE)) {
-    level = LS_VERBOSE;  // Expected messages
+    LOG(LS_ERROR)
+      << "InitializeSecurityContext error: "
+      << ErrorName(status, SECURITY_ERRORS);
   }
-  LOG_V(level)
-    << "InitializeSecurityContext error: "
-    << ErrorName(status, SECURITY_ERRORS);
   //if (sbd_in)
   //  DescribeBuffers(LS_VERBOSE, "Input Buffer ", sbd_in);
   //if (sbd_out)

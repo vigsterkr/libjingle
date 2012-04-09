@@ -29,9 +29,11 @@
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/thread.h"
+#include "talk/base/window.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/session/phone/call.h"
 #include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/phone/screencastid.h"
 
 namespace cricket {
 
@@ -417,6 +419,65 @@ void Call::PressDTMF(int event) {
       ContinuePlayDTMF();
     }
   }
+}
+
+void Call::AddScreencast(Session* session,
+                         const std::string& stream_name, uint32 ssrc,
+                         const ScreencastId& screencastid, int fps) {
+  VideoChannel *video_channel = GetVideoChannel(session);
+  if (!video_channel) {
+    LOG(LS_WARNING) << "Cannot add screencast"
+                    << " because there is no video channel.";
+    return;
+  }
+
+  // TODO: Verify we aren't re-using an existing name or
+  // ssrc.
+  StreamParams stream;
+  stream.name = stream_name;
+  stream.ssrcs.push_back(ssrc);
+  SendStreamUpdate(session, stream);
+  // TODO: Wait for view request to send screencast.
+  video_channel->AddScreencast(ssrc, screencastid, fps);
+}
+
+void Call::RemoveScreencast(Session* session,
+                            const std::string& stream_name, uint32 ssrc) {
+  VideoChannel *video_channel = GetVideoChannel(session);
+  if (!video_channel) {
+    LOG(LS_WARNING) << "Cannot remove screencast"
+                    << " because there is no video channel.";
+    return;
+  }
+
+  StreamParams stream;
+  stream.name = stream_name;
+  // No ssrcs
+  video_channel->RemoveScreencast(ssrc);
+  SendStreamUpdate(session, stream);
+}
+
+void Call::SendStreamUpdate(Session* session, const StreamParams& stream) {
+  const ContentInfo* video_info =
+      GetFirstVideoContent(session->local_description());
+  if (video_info == NULL) {
+    LOG(LS_WARNING) << "Cannot send stream update for video.";
+    return;
+  }
+
+  // A "stream update" is a partial content update (a
+  // "description-info") that new stream info and nothing else.
+  talk_base::scoped_ptr<VideoContentDescription> video(
+      new VideoContentDescription());
+  video->set_multistream(true);
+  video->set_partial(true);
+  video->AddStream(stream);
+
+  std::vector<ContentInfo> contents;
+  contents.push_back(
+      ContentInfo(video_info->name, video_info->type, video.get()));
+
+  session->SendDescriptionInfoMessage(contents);
 }
 
 void Call::ContinuePlayDTMF() {
