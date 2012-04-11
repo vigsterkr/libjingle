@@ -323,12 +323,12 @@ void P2PTransportChannel::OnUnknownAddress(
   std::vector<RemoteCandidate>::iterator it;
   for (it = remote_candidates_.begin(); it != remote_candidates_.end(); ++it) {
     if ((*it).username() == remote_username) {
+      remote_password = (*it).password();
+      known_username = true;
       if ((*it).address() == address) {
         candidate = &(*it);
         break;
       }
-      remote_password = (*it).password();
-      known_username = true;
       // We don't want to break here because we may find a match of the address
       // later.
     }
