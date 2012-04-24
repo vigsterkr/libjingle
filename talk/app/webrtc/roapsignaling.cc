@@ -59,8 +59,12 @@ RoapSignaling::RoapSignaling(
 RoapSignaling::~RoapSignaling() {}
 
 void RoapSignaling::OnIceComplete() {
-  if (!VERIFY(state_ == kInitializing))
+  if (state_ != kInitializing) {
+    // TODO: We were asserting here.
+    // But if there's a network interface change, it's possible we may
+    // get OnIceComplete callback in a wrong state.
     return;
+  }
   // If we have a queued remote offer we need to handle this first.
   if (received_pre_offer_) {
     received_pre_offer_ = false;
@@ -150,7 +154,7 @@ void RoapSignaling::ProcessSignalingMessage(
 
 
       // Let the remote peer know we have received the answer.
-      SignalNewPeerConnectionMessage(roap_session_.CreateOk());
+      SignalNewPeerConnectionMessage(roap_session_.CreateOkToAnswer());
       // Check if we have more offers waiting in the queue.
       if (!queued_local_streams_.empty()) {
         // Send the next offer.
@@ -198,7 +202,7 @@ void RoapSignaling::ProcessSignalingMessage(
     case RoapSession::kShutDown: {
       DoShutDown();
       ChangeState(kShutdownComplete);
-      SignalNewPeerConnectionMessage(roap_session_.CreateOk());
+      SignalNewPeerConnectionMessage(roap_session_.CreateOkToShutdown());
       break;
     }
     case RoapSession::kInvalidMessage: {

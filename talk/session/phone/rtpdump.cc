@@ -61,11 +61,13 @@ void RtpDumpFileHeader::WriteToByteBuffer(talk_base::ByteBuffer* buf) {
 static const uint32 kDefaultTimeIncrease = 30;
 
 bool RtpDumpPacket::IsValidRtpPacket() const {
-  return !is_rtcp && data.size() >= kMinRtpPacketLen;
+  return original_data_len >= data.size() &&
+      data.size() >= kMinRtpPacketLen;
 }
 
 bool RtpDumpPacket::IsValidRtcpPacket() const {
-  return is_rtcp && data.size() >= kMinRtcpPacketLen;
+  return original_data_len == 0 &&
+      data.size() >= kMinRtcpPacketLen;
 }
 
 bool RtpDumpPacket::GetRtpPayloadType(int* pt) const {
@@ -101,10 +103,9 @@ bool RtpDumpPacket::GetRtcpType(int* type) const {
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of RtpDumpReader.
 ///////////////////////////////////////////////////////////////////////////
+
 void RtpDumpReader::SetSsrc(uint32 ssrc) {
-  // Convert ssrc to network endian for RTP packet.
-  ssrc_buffer_.Consume(ssrc_buffer_.Length());
-  ssrc_buffer_.WriteUInt32(ssrc);
+  ssrc_override_ = ssrc;
 }
 
 talk_base::StreamResult RtpDumpReader::ReadPacket(RtpDumpPacket* packet) {
@@ -129,21 +130,27 @@ talk_base::StreamResult RtpDumpReader::ReadPacket(RtpDumpPacket* packet) {
   talk_base::ByteBuffer buf(header, sizeof(header));
   uint16 dump_packet_len;
   uint16 data_len;
+  // Read the full length of the rtpdump packet, including the rtpdump header.
   buf.ReadUInt16(&dump_packet_len);
-  buf.ReadUInt16(&data_len);  // data.size() for RTP, 0 for RTCP.
-  packet->is_rtcp = (0 == data_len);
-  buf.ReadUInt32(&packet->elapsed_time);
   packet->data.resize(dump_packet_len - sizeof(header));
+  // Read the size of the original packet, which may be larger than the size in
+  // the rtpdump file, in the event that only part of the packet (perhaps just
+  // the header) was recorded. Note that this field is set to zero for RTCP
+  // packets, which have their own internal length field.
+  buf.ReadUInt16(&data_len);
+  packet->original_data_len = data_len;
+  // Read the elapsed time for this packet (different than RTP timestamp).
+  buf.ReadUInt32(&packet->elapsed_time);
 
   // Read the actual RTP or RTCP packet.
   res = stream_->ReadAll(&packet->data[0], packet->data.size(), NULL, NULL);
+
   // If the packet is RTP and we have specified a ssrc, replace the RTP ssrc
   // with the specified ssrc.
   if (res == talk_base::SR_SUCCESS &&
       packet->IsValidRtpPacket() &&
-      ssrc_buffer_.Length() == sizeof(uint32)) {
-    memcpy(&packet->data[kRtpSsrcOffset], ssrc_buffer_.Data(),
-           ssrc_buffer_.Length());
+      ssrc_override_ != 0) {
+    talk_base::SetBE32(&packet->data[kRtpSsrcOffset], ssrc_override_);
   }
 
   return res;

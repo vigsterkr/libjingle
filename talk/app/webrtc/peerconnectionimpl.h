@@ -69,6 +69,7 @@ class PeerConnection : public PeerConnectionInterface,
   virtual talk_base::scoped_refptr<StreamCollectionInterface> remote_streams();
   virtual void AddStream(LocalMediaStreamInterface* stream);
   virtual void RemoveStream(LocalMediaStreamInterface* stream);
+  virtual bool RemoveStream(const std::string& label);
   virtual void CommitStreamChanges();
   virtual void Close();
   virtual ReadyState ready_state();

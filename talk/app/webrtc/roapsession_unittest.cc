@@ -47,11 +47,27 @@ static const char kSdpDescription2[] =
     "m=fake content 3\r\n"
     "m=fake content 4\r\n";
 
-TEST(RoapSessionTest, OfferAnswer) {
+static const char kOffererSessionId[] = "offererSessionId";
+static const char kAnswererSessionId[] = "answererSessionId";
+
+static std::string GetValue(const std::string& message,
+                            const std::string& key) {
+  size_t found = message.find(key);
+  if (found == std::string::npos)
+    return "";
+  found += key.size() + 1;
+  size_t end = message.find("\n", found);
+  if (found == std::string::npos)
+      return "";
+  return message.substr(found, end-found);
+}
+
+TEST(RoapSessionTest, OfferAnswerOk) {
   RoapSession roap_session1;
   RoapSession roap_session2;
 
   std::string offer_message = roap_session1.CreateOffer(kSdpDescription1);
+  std::string offer_session_id = GetValue(offer_message, kOffererSessionId);
 
   // Check that it is valid to send to another peer.
   EXPECT_EQ(RoapSession::kOffer, roap_session2.Parse(offer_message));
@@ -61,12 +77,19 @@ TEST(RoapSessionTest, OfferAnswer) {
   EXPECT_EQ(kSdpDescription1, received_offer);
 
   std::string answer_message = roap_session2.CreateAnswer(kSdpDescription2);
+  std::string answer_session_id = GetValue(answer_message, kAnswererSessionId);
+  EXPECT_EQ(offer_session_id, GetValue(answer_message, kOffererSessionId));
 
   EXPECT_EQ(RoapSession::kAnswer, roap_session1.Parse(answer_message));
   std::string received_answer(roap_session1.RemoteDescription());
 
   EXPECT_EQ(kSdpDescription2, received_answer);
   EXPECT_NE(received_offer, received_answer);
+
+  std::string ok_message = roap_session1.CreateOkToAnswer();
+  EXPECT_EQ(RoapSession::kOk, roap_session2.Parse(ok_message));
+  EXPECT_EQ(offer_session_id, GetValue(ok_message, kOffererSessionId));
+  EXPECT_EQ(answer_session_id, GetValue(ok_message, kAnswererSessionId));
 }
 
 TEST(RoapSessionTest, InvalidInitialization) {
@@ -273,7 +296,7 @@ TEST(RoapSessionTest, ShutDownOk) {
   RoapSession roap_session2;
   EXPECT_EQ(RoapSession::kShutDown, roap_session2.Parse(shutdown));
 
-  std::string ok_message = roap_session2.CreateOk();
+  std::string ok_message = roap_session2.CreateOkToShutdown();
   EXPECT_EQ(RoapSession::kOk, roap_session1.Parse(ok_message));
 }
 

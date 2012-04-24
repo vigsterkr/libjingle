@@ -78,7 +78,15 @@ std::string RoapSession::CreateAnswer(const std::string& desc) {
   return answer.Serialize();
 }
 
-std::string RoapSession::CreateOk() {
+std::string RoapSession::CreateOkToAnswer() {
+  ASSERT(!remote_id_.empty() && !local_id_.empty());
+
+  RoapOk ok(local_id_, remote_id_, session_token_, response_token_, seq_);
+  response_token_.clear();
+  return ok.Serialize();
+}
+
+std::string RoapSession::CreateOkToShutdown() {
   ASSERT(!remote_id_.empty());
 
   if (local_id_.empty()) {
@@ -251,9 +259,15 @@ RoapSession::ParseResult RoapSession::ValidateOk(
     remote_id_ = message.answer_session_id();
   }
   bool result =
-      message.offer_session_id() == local_id_ &&
       message.seq() == seq_ &&
-      message.answer_session_id() == remote_id_;
+      // Allow  swapped offer_session_id and answer_session_id as a response to
+      // an answer since we had a defect where they were swapped.
+      // It will also be swapped in ok mesages as a response to a shutdown.
+      ((message.offer_session_id() == local_id_ &&
+       message.answer_session_id() == remote_id_) ||
+      (message.offer_session_id() == remote_id_ &&
+        message.answer_session_id() == local_id_));
+
   if (!result) {
     return kInvalidMessage;
   }

@@ -297,6 +297,14 @@ extern const char STR_SHOW_DND[];
 extern const char STR_SHOW_XA[];
 extern const char STR_SHOW_OFFLINE[];
 
+extern const char NS_GOOGLE_PSTN_CONFERENCE[];
+extern const StaticQName QN_GOOGLE_PSTN_CONFERENCE_STATUS;
+
+// Presence connection status
+extern const char STR_PSTN_CONFERENCE_STATUS_CONNECTING[];
+extern const char STR_PSTN_CONFERENCE_STATUS_CONNECTED[];
+extern const char STR_PSTN_CONFERENCE_STATUS_HANGUP[];
+
 // Subscription
 extern const char STR_SUBSCRIBE[];
 extern const char STR_SUBSCRIBED[];
@@ -371,6 +379,11 @@ extern const StaticQName QN_MUC_AFFILIATION;
 extern const StaticQName QN_MUC_ROLE;
 extern const char STR_AFFILIATION_NONE[];
 extern const char STR_ROLE_PARTICIPANT[];
+
+extern const char NS_GOOGLE_SESSION[];
+extern const StaticQName QN_GOOGLE_USER_ID;
+extern const StaticQName QN_GOOGLE_SESSION_BLOCKED;
+extern const StaticQName QN_GOOGLE_SESSION_BLOCKING;
 
 extern const char NS_MUC_OWNER[];
 extern const StaticQName QN_MUC_OWNER_QUERY;

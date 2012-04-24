@@ -47,17 +47,17 @@ SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
 JsepSessionDescription::JsepSessionDescription() {
 }
 
-JsepSessionDescription::JsepSessionDescription(
-    cricket::SessionDescription* description) {
-  SetDescription(description);
-}
-
 JsepSessionDescription::~JsepSessionDescription() {}
 
-void JsepSessionDescription::SetDescription(
-    cricket::SessionDescription* description) {
+bool JsepSessionDescription::Initialize(
+    cricket::SessionDescription* description,
+    const std::string& session_id,
+    const std::string& session_version) {
+  session_id_ = session_id;
+  session_version_ = session_version;
   description_.reset(description);
   candidate_collection_.resize(number_of_mediasections());
+  return true;
 }
 
 bool JsepSessionDescription::Initialize(const std::string& sdp) {

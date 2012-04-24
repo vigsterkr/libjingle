@@ -76,6 +76,7 @@ void FreeHostEnt(hostent* host);
 const char* inet_ntop(int af, const void *src, char* dst, socklen_t size);
 int inet_pton(int af, const char* src, void *dst);
 
+bool HasIPv6Enabled();
 }  // namespace talk_base
 
 #endif  // TALK_BASE_NETHELPERS_H_

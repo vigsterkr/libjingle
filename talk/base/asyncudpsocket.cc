@@ -45,7 +45,8 @@ AsyncUDPSocket* AsyncUDPSocket::Create(
 
 AsyncUDPSocket* AsyncUDPSocket::Create(SocketFactory* factory,
                                        const SocketAddress& bind_address) {
-  AsyncSocket* socket = factory->CreateAsyncSocket(SOCK_DGRAM);
+  AsyncSocket* socket =
+      factory->CreateAsyncSocket(bind_address.family(), SOCK_DGRAM);
   if (!socket)
     return NULL;
   return Create(socket, bind_address);

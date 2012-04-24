@@ -85,6 +85,10 @@ Connection* TCPPort::CreateConnection(const Candidate& address,
   if ((address.protocol() == "ssltcp") && (origin == ORIGIN_THIS_PORT))
     return NULL;
 
+  if (!IsCompatibleAddress(address.address())) {
+    return NULL;
+  }
+
   TCPConnection* conn = NULL;
   if (talk_base::AsyncPacketSocket* socket =
       GetIncoming(address.address(), true)) {

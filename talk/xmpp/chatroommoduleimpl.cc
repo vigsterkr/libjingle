@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -63,11 +63,11 @@ public:
   virtual const Jid member_jid() const;
   virtual XmppReturnStatus RequestEnterChatroom(const std::string& password);
   virtual XmppReturnStatus RequestExitChatroom();
-  virtual XmppReturnStatus RequestStatusChange(XmppPresenceShow status, 
+  virtual XmppReturnStatus RequestStatusChange(XmppPresenceShow status,
                                        const std::string& extended_status);
   virtual size_t GetChatroomMemberCount();
   virtual XmppReturnStatus CreateMemberEnumerator(XmppChatroomMemberEnumerator** enumerator);
-  virtual const std::string& subject();
+  virtual const std::string subject();
   virtual XmppChatroomState state() { return chatroom_state_; }
   virtual XmppReturnStatus SendMessage(const XmlElement& message);
 
@@ -84,7 +84,7 @@ private:
   XmppReturnStatus ServerChangedOtherPresence(const XmlElement& presence_element);
   XmppChatroomEnteredStatus GetEnterFailureFromXml(const XmlElement* presence);
   XmppChatroomExitedStatus GetExitFailureFromXml(const XmlElement* presence);
-  
+
   bool CheckEnterChatroomStateOk();
 
   void FireEnteredStatus(XmppChatroomEnteredStatus status);
@@ -95,7 +95,7 @@ private:
 
 
   typedef std::map<Jid, XmppChatroomMemberImpl*> JidMemberMap;
-  
+
   XmppChatroomHandler*              chatroom_handler_;
   Jid                               chatroom_jid_;
   std::string                       nickname_;
@@ -120,7 +120,7 @@ private:
   talk_base::scoped_ptr<XmppPresence>  presence_;
 };
 
-class XmppChatroomMemberEnumeratorImpl : 
+class XmppChatroomMemberEnumeratorImpl :
         public XmppChatroomMemberEnumerator  {
 public:
   XmppChatroomMemberEnumeratorImpl(XmppChatroomModuleImpl::JidMemberMap* chatroom_jid_members,
@@ -150,7 +150,7 @@ XmppChatroomModule::Create() {
 }
 
 XmppChatroomModuleImpl::XmppChatroomModuleImpl() :
-  chatroom_handler_(NULL), 
+  chatroom_handler_(NULL),
   chatroom_jid_(STR_EMPTY),
   chatroom_state_(XMPP_CHATROOM_STATE_NOT_IN_ROOM),
   chatroom_jid_members_version_(0) {
@@ -165,7 +165,7 @@ XmppChatroomModuleImpl::~XmppChatroomModuleImpl() {
 }
 
 
-bool 
+bool
 XmppChatroomModuleImpl::HandleStanza(const XmlElement* stanza) {
   ASSERT(engine() != NULL);
 
@@ -198,12 +198,12 @@ XmppChatroomModuleImpl::set_chatroom_handler(XmppChatroomHandler* handler) {
 }
 
 
-XmppChatroomHandler* 
+XmppChatroomHandler*
 XmppChatroomModuleImpl::chatroom_handler() {
   return chatroom_handler_;
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::set_chatroom_jid(const Jid& chatroom_jid) {
   if (chatroom_state_ != XMPP_CHATROOM_STATE_NOT_IN_ROOM) {
     return XMPP_RETURN_BADSTATE; // $TODO - this isn't a bad state, it's a bad call,  diff error code?
@@ -212,17 +212,17 @@ XmppChatroomModuleImpl::set_chatroom_jid(const Jid& chatroom_jid) {
     // chatroom_jid must be a bare jid
     return XMPP_RETURN_BADARGUMENT;
   }
-  
+
   chatroom_jid_ = chatroom_jid;
   return XMPP_RETURN_OK;
 }
 
-const Jid& 
+const Jid&
 XmppChatroomModuleImpl::chatroom_jid() const {
   return chatroom_jid_;
 }
 
- XmppReturnStatus 
+ XmppReturnStatus
  XmppChatroomModuleImpl::set_nickname(const std::string& nickname) {
   if (chatroom_state_ != XMPP_CHATROOM_STATE_NOT_IN_ROOM) {
     return XMPP_RETURN_BADSTATE; // $TODO - this isn't a bad state, it's a bad call,  diff error code?
@@ -231,7 +231,7 @@ XmppChatroomModuleImpl::chatroom_jid() const {
   return XMPP_RETURN_OK;
  }
 
- const std::string& 
+ const std::string&
  XmppChatroomModuleImpl::nickname() const {
   return nickname_;
  }
@@ -242,7 +242,7 @@ XmppChatroomModuleImpl::member_jid() const {
 }
 
 
-bool 
+bool
 XmppChatroomModuleImpl::CheckEnterChatroomStateOk() {
   if (chatroom_jid_.IsValid() == false) {
     ASSERT(0);
@@ -255,7 +255,7 @@ XmppChatroomModuleImpl::CheckEnterChatroomStateOk() {
   return true;
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::RequestEnterChatroom(const std::string& password) {
   UNUSED(password);
   if (!engine())
@@ -280,7 +280,7 @@ XmppChatroomModuleImpl::RequestEnterChatroom(const std::string& password) {
 }
 
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::RequestExitChatroom() {
   if (!engine())
     return XMPP_RETURN_BADSTATE;
@@ -301,8 +301,8 @@ XmppChatroomModuleImpl::RequestExitChatroom() {
   return status;
 }
 
-XmppReturnStatus 
-XmppChatroomModuleImpl::RequestStatusChange(XmppPresenceShow status, 
+XmppReturnStatus
+XmppChatroomModuleImpl::RequestStatusChange(XmppPresenceShow status,
                                      const std::string& extended_status) {
   UNUSED2(status, extended_status);
   return XMPP_RETURN_BADSTATE; //NYI
@@ -310,26 +310,26 @@ XmppChatroomModuleImpl::RequestStatusChange(XmppPresenceShow status,
 
 
 
-size_t 
+size_t
 XmppChatroomModuleImpl::GetChatroomMemberCount() {
   return chatroom_jid_members_.size();
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::CreateMemberEnumerator(XmppChatroomMemberEnumerator** enumerator) {
   *enumerator = new XmppChatroomMemberEnumeratorImpl(&chatroom_jid_members_, &chatroom_jid_members_version_);
   return XMPP_RETURN_OK;
 }
 
-const std::string& 
+const std::string
 XmppChatroomModuleImpl::subject() {
-  return STR_EMPTY; //NYI
+  return ""; //NYI
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::SendMessage(const XmlElement& message) {
   XmppReturnStatus xmpp_status = XMPP_RETURN_OK;
-  
+
   // can only send a message if we're in the room
   if (chatroom_state_ != XMPP_CHATROOM_STATE_IN_ROOM) {
     return XMPP_RETURN_BADSTATE; // $TODO - this isn't a bad state, it's a bad call,  diff error code?
@@ -338,7 +338,7 @@ XmppChatroomModuleImpl::SendMessage(const XmlElement& message) {
   if (message.Name() != QN_MESSAGE) {
     IFR(XMPP_RETURN_BADARGUMENT);
   }
-  
+
   const std::string& type = message.Attr(QN_TYPE);
   if (type != "groupchat") {
     IFR(XMPP_RETURN_BADARGUMENT);
@@ -358,7 +358,7 @@ XmppChatroomModuleImpl::SendMessage(const XmlElement& message) {
 }
 
 enum TransitionType {
-  TRANSITION_TYPE_NONE                 = 0, 
+  TRANSITION_TYPE_NONE                 = 0,
   TRANSITION_TYPE_ENTER_SUCCESS        = 1,
   TRANSITION_TYPE_ENTER_FAILURE        = 2,
   TRANSITION_TYPE_EXIT_VOLUNTARILY     = 3,
@@ -402,13 +402,13 @@ XmppChatroomModuleImpl::FireExitStatus(XmppChatroomExitedStatus status) {
     chatroom_handler_->ChatroomExitedStatus(this, status);
 }
 
-void 
+void
 XmppChatroomModuleImpl::FireMessageReceived(const XmlElement& message) {
   if (chatroom_handler_)
     chatroom_handler_->MessageReceived(this, message);
 }
 
-void 
+void
 XmppChatroomModuleImpl::FireMemberEntered(const XmppChatroomMember* entered_member) {
   // only fire if we're in the room
   if (chatroom_state_ == XMPP_CHATROOM_STATE_IN_ROOM) {
@@ -417,7 +417,7 @@ XmppChatroomModuleImpl::FireMemberEntered(const XmppChatroomMember* entered_memb
   }
 }
 
-void 
+void
 XmppChatroomModuleImpl::FireMemberExited(const XmppChatroomMember* exited_member) {
   // only fire if we're in the room
   if (chatroom_state_ == XMPP_CHATROOM_STATE_IN_ROOM) {
@@ -427,8 +427,8 @@ XmppChatroomModuleImpl::FireMemberExited(const XmppChatroomMember* exited_member
 }
 
 
-XmppReturnStatus 
-XmppChatroomModuleImpl::ServerChangedOtherPresence(const XmlElement& 
+XmppReturnStatus
+XmppChatroomModuleImpl::ServerChangedOtherPresence(const XmlElement&
                                                    presence_element) {
   XmppReturnStatus xmpp_status = XMPP_RETURN_OK;
   talk_base::scoped_ptr<XmppPresence> presence(XmppPresence::Create());
@@ -437,7 +437,7 @@ XmppChatroomModuleImpl::ServerChangedOtherPresence(const XmlElement&
   JidMemberMap::iterator pos = chatroom_jid_members_.find(presence->jid());
 
   if (pos == chatroom_jid_members_.end()) {
-    if (presence->available() == XMPP_PRESENCE_AVAILABLE) { 
+    if (presence->available() == XMPP_PRESENCE_AVAILABLE) {
       XmppChatroomMemberImpl* member = new XmppChatroomMemberImpl();
       member->SetPresence(presence.get());
       chatroom_jid_members_.insert(std::make_pair(member->member_jid(), member));
@@ -462,15 +462,15 @@ XmppChatroomModuleImpl::ServerChangedOtherPresence(const XmlElement&
   return xmpp_status;
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::ClientChangeMyPresence(XmppChatroomState new_state) {
   return ChangePresence(new_state, NULL, false);
 }
 
-XmppReturnStatus 
+XmppReturnStatus
 XmppChatroomModuleImpl::ServerChangeMyPresence(const XmlElement& presence) {
    XmppChatroomState new_state;
-   
+
    if (presence.HasAttr(QN_TYPE) == false) {
       new_state = XMPP_CHATROOM_STATE_IN_ROOM;
    } else {
@@ -481,13 +481,13 @@ XmppChatroomModuleImpl::ServerChangeMyPresence(const XmlElement& presence) {
 }
 
 XmppReturnStatus
-XmppChatroomModuleImpl::ChangePresence(XmppChatroomState new_state, 
-                                       const XmlElement* presence, 
+XmppChatroomModuleImpl::ChangePresence(XmppChatroomState new_state,
+                                       const XmlElement* presence,
                                        bool isServer) {
   UNUSED(presence);
-  
+
   XmppChatroomState old_state = chatroom_state_;
-  
+
   // do nothing if state hasn't changed
   if (old_state == new_state)
     return XMPP_RETURN_OK;
@@ -541,7 +541,7 @@ XmppChatroomModuleImpl::ChangePresence(XmppChatroomState new_state,
   return XMPP_RETURN_OK;
 }
 
-XmppChatroomEnteredStatus 
+XmppChatroomEnteredStatus
 XmppChatroomModuleImpl::GetEnterFailureFromXml(const XmlElement* presence) {
   XmppChatroomEnteredStatus status = XMPP_CHATROOM_ENTERED_FAILURE_UNSPECIFIED;
   const XmlElement* error = presence->FirstNamed(QN_ERROR);
@@ -549,7 +549,15 @@ XmppChatroomModuleImpl::GetEnterFailureFromXml(const XmlElement* presence) {
     int code = atoi(error->Attr(QN_CODE).c_str());
     switch (code) {
       case 401: status = XMPP_CHATROOM_ENTERED_FAILURE_PASSWORD_REQUIRED; break;
-      case 403: status = XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BANNED; break;
+      case 403: {
+        status = XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BANNED;
+        if (error->FirstNamed(QN_GOOGLE_SESSION_BLOCKED)) {
+          status = XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BLOCKED;
+        } else if (error->FirstNamed(QN_GOOGLE_SESSION_BLOCKING)) {
+          status = XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BLOCKING;
+        }
+        break;
+      }
       case 405: status = XMPP_CHATROOM_ENTERED_FAILURE_MAX_USERS; break;
       case 407: status = XMPP_CHATROOM_ENTERED_FAILURE_NOT_A_MEMBER; break;
       case 409: status = XMPP_CHATROOM_ENTERED_FAILURE_NICKNAME_CONFLICT; break;
@@ -558,7 +566,7 @@ XmppChatroomModuleImpl::GetEnterFailureFromXml(const XmlElement* presence) {
   return status;
 }
 
-XmppChatroomExitedStatus 
+XmppChatroomExitedStatus
 XmppChatroomModuleImpl::GetExitFailureFromXml(const XmlElement* presence) {
   XmppChatroomExitedStatus status = XMPP_CHATROOM_EXITED_UNSPECIFIED;
   const XmlElement* error = presence->FirstNamed(QN_ERROR);
@@ -576,29 +584,29 @@ XmppChatroomModuleImpl::GetExitFailureFromXml(const XmlElement* presence) {
 XmppReturnStatus
 XmppChatroomMemberImpl::SetPresence(const XmppPresence* presence) {
   ASSERT(presence != NULL);
-  
+
   // copy presence
   presence_.reset(XmppPresence::Create());
   presence_->set_raw_xml(presence->raw_xml());
   return XMPP_RETURN_OK;
 }
 
-const Jid 
+const Jid
 XmppChatroomMemberImpl::member_jid() const {
   return presence_->jid();
 }
 
-const Jid 
+const Jid
 XmppChatroomMemberImpl::full_jid() const {
   return Jid("");
 }
 
-const std::string 
+const std::string
 XmppChatroomMemberImpl::name() const {
   return member_jid().resource();
 }
 
-const XmppPresence* 
+const XmppPresence*
 XmppChatroomMemberImpl::presence() const {
   return presence_.get();
 }
@@ -656,17 +664,17 @@ XmppChatroomMemberEnumeratorImpl::Next() {
   }
 }
 
-bool 
+bool
 XmppChatroomMemberEnumeratorImpl::IsValid() {
   return map_version_created_ == *map_version_;
 }
 
-bool 
+bool
 XmppChatroomMemberEnumeratorImpl::IsBeforeBeginning() {
   return before_beginning_;
 }
 
-bool 
+bool
 XmppChatroomMemberEnumeratorImpl::IsAfterEnd() {
   return (iterator_ == map_->end());
 }

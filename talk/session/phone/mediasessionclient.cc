@@ -323,7 +323,7 @@ void ParseBandwidth(const buzz::XmlElement* parent_elem,
 }
 
 bool ParseGingleAudioContent(const buzz::XmlElement* content_elem,
-                             const ContentDescription** content,
+                             ContentDescription** content,
                              ParseError* error) {
   AudioContentDescription* audio = new AudioContentDescription();
 
@@ -356,7 +356,7 @@ bool ParseGingleAudioContent(const buzz::XmlElement* content_elem,
 }
 
 bool ParseGingleVideoContent(const buzz::XmlElement* content_elem,
-                             const ContentDescription** content,
+                             ContentDescription** content,
                              ParseError* error) {
   VideoContentDescription* video = new VideoContentDescription();
 
@@ -493,7 +493,7 @@ bool ParseJingleStreamsOrLegacySsrc(const buzz::XmlElement* desc_elem,
 }
 
 bool ParseJingleAudioContent(const buzz::XmlElement* content_elem,
-                             const ContentDescription** content,
+                             ContentDescription** content,
                              ParseError* error) {
   AudioContentDescription* audio = new AudioContentDescription();
 
@@ -522,7 +522,7 @@ bool ParseJingleAudioContent(const buzz::XmlElement* content_elem,
 }
 
 bool ParseJingleVideoContent(const buzz::XmlElement* content_elem,
-                             const ContentDescription** content,
+                             ContentDescription** content,
                              ParseError* error) {
   VideoContentDescription* video = new VideoContentDescription();
 
@@ -552,7 +552,7 @@ bool ParseJingleVideoContent(const buzz::XmlElement* content_elem,
 }
 
 bool ParseJingleDataContent(const buzz::XmlElement* content_elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error) {
   DataContentDescription* data = new DataContentDescription();
 
@@ -582,9 +582,9 @@ bool ParseJingleDataContent(const buzz::XmlElement* content_elem,
 }
 
 bool MediaSessionClient::ParseContent(SignalingProtocol protocol,
-                                     const buzz::XmlElement* content_elem,
-                                     const ContentDescription** content,
-                                     ParseError* error) {
+                                      const buzz::XmlElement* content_elem,
+                                      ContentDescription** content,
+                                      ParseError* error) {
   if (protocol == PROTOCOL_GINGLE) {
     const std::string& content_type = content_elem->Name().Namespace();
     if (NS_GINGLE_AUDIO == content_type) {

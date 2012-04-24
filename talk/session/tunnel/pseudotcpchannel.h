@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __PSEUDOTCPCHANNEL_H__
-#define __PSEUDOTCPCHANNEL_H__
+#ifndef TALK_SESSION_TUNNEL_PSEUDOTCPCHANNEL_H_
+#define TALK_SESSION_TUNNEL_PSEUDOTCPCHANNEL_H_
 
 #include "talk/base/criticalsection.h"
 #include "talk/base/messagequeue.h"
@@ -63,16 +63,17 @@ class TransportChannel;
 ///////////////////////////////////////////////////////////////////////////////
 
 class PseudoTcpChannel
-  : public IPseudoTcpNotify,
-    public talk_base::MessageHandler,
-    public sigslot::has_slots<> {
-public:
+    : public IPseudoTcpNotify,
+      public talk_base::MessageHandler,
+      public sigslot::has_slots<> {
+ public:
   // Signal thread methods
   PseudoTcpChannel(talk_base::Thread* stream_thread,
                    Session* session);
 
   bool Connect(const std::string& content_name,
-               const std::string& channel_name);
+               const std::string& channel_name,
+               int component);
   talk_base::StreamInterface* GetStream();
 
   sigslot::signal1<PseudoTcpChannel*> SignalChannelClosed;
@@ -85,7 +86,7 @@ public:
   void GetOption(PseudoTcp::Option opt, int* value);
   void SetOption(PseudoTcp::Option opt, int value);
 
-private:
+ private:
   class InternalStream;
   friend class InternalStream;
 
@@ -109,7 +110,8 @@ private:
 
   // Worker thread methods
   void OnChannelWritableState(TransportChannel* channel);
-  void OnChannelRead(TransportChannel* channel, const char* data, size_t size);
+  void OnChannelRead(TransportChannel* channel, const char* data, size_t size,
+                     int flags);
   void OnChannelConnectionChanged(TransportChannel* channel,
                                   const Candidate& candidate);
 
@@ -133,8 +135,6 @@ private:
   mutable talk_base::CriticalSection cs_;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+}  // namespace cricket
 
-} // namespace cricket
-
-#endif // __PSEUDOTCPCHANNEL_H__
+#endif  // TALK_SESSION_TUNNEL_PSEUDOTCPCHANNEL_H_

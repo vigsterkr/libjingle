@@ -29,9 +29,9 @@
 
 #include <list>
 
+#include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnection.h"
-#include "talk/app/webrtc/portallocatorfactory.h"
 #include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
 #include "talk/app/webrtc/test/fakevideocapturemodule.h"
 #include "talk/base/gunit.h"
@@ -208,8 +208,7 @@ class PeerConnectionTestClientBase
   bool Init() {
     EXPECT_TRUE(peer_connection_.get() == NULL);
     EXPECT_TRUE(peer_connection_factory_.get() == NULL);
-    allocator_factory_ = webrtc::PortAllocatorFactory::Create(
-        talk_base::Thread::Current());
+    allocator_factory_ = webrtc::FakePortAllocatorFactory::Create();
     if (allocator_factory_.get() == NULL) {
       return false;
     }

@@ -238,9 +238,11 @@ win_dbg64_env = win_dbg_env.Clone(
 win_dbg64_env.FilterOut(CCFLAGS = ['/ZI'])
 
 win_dbg64_env.Append(
-  # TODO: Consider CCFLAGS '/wd4244', '/wd4267'
   CCFLAGS = [
-    '/Zi',     # enable debugging that is 64 bit compatible
+    '/Zi',     # enable debugging that is 64 bit compatible.
+    # TODO: fix warnings and remove these disables.
+    '/wd4244', # disable cast warning
+    '/wd4267', # disable cast warning
   ],
   ARFLAGS = [
     '/MACHINE:x64',
@@ -362,6 +364,7 @@ mac_env = posix_env.Clone(
 # Use static OpenSSL on mac so that we can use the latest APIs on all
 # supported mac platforms (10.5+).
 mac_env.SetBits('use_static_openssl')
+
 mac_env.Append(
   CPPDEFINES = [
     'OSX',
@@ -433,6 +436,46 @@ mac_opt_env.Append(
   # Hammer automatically specifies -Os for mac opt.
 )
 envs.append(mac_opt_env)
+
+
+mac_dbg64_env = mac_dbg_env.Clone(
+  BUILD_TYPE = 'dbg64',
+  BUILD_TYPE_DESCRIPTION = 'Mac debug 64bit build',
+  BUILD_GROUPS = ['all'],
+)
+
+mac_dbg64_env.SetBits('host_platform_64bit')
+
+mac_dbg64_env.FilterOut(
+  CCFLAGS = [
+    '-m32',
+    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+  ],
+  LINKFLAGS = [
+    '-m32',
+    '-mmacosx-version-min=10.5',
+    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+  ],
+)
+
+
+mac_dbg64_env.Append(
+  CCFLAGS = [
+    '-m64',
+    '-fPIC',
+    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
+  ],
+  LINKFLAGS = [
+    '-m64',
+    '-mmacosx-version-min=10.6',
+    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
+  ],
+  CPPDEFINES = [
+    'ARCH_CPU_64_BITS',
+  ],
+)
+
+envs.append(mac_dbg64_env)
 
 #-------------------------------------------------------------------------------
 # L I N U X

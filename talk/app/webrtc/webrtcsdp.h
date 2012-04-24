@@ -48,21 +48,19 @@ namespace webrtc {
 class IceCandidateInterface;
 class JsepIceCandidate;
 class JsepSessionDescription;
-class SessionDescriptionInterface;
 
-// Serializes the passed in SessionDescriptionInterface.
+// Serializes the passed in JsepSessionDescription.
 // Serialize SessionDescription including candidates if
-// SessionDescriptionInterface has candidates.
-// desci - The SessionDescriptionInterface object to be serialized.
+// JsepSessionDescription has candidates.
+// jdesc - The JsepSessionDescription object to be serialized.
 // return - SDP string serialized from the arguments.
-std::string SdpSerialize(const SessionDescriptionInterface& desci);
+std::string SdpSerialize(const JsepSessionDescription& jdesc);
 
 // Serializes the passed in IceCandidateInterface to a SDP string.
 // candidate - The candidate to be serialized.
-std::string SdpSerializeCandidate(
-    const IceCandidateInterface& candidate);
+std::string SdpSerializeCandidate(const IceCandidateInterface& candidate);
 
-// Deserializes the passed in SDP string to a SessionDescriptionInterface.
+// Deserializes the passed in SDP string to a JsepSessionDescription.
 // message - SDP string to be Deserialized.
 // jdesc - The JsepSessionDescription deserialized from the SDP string.
 // return - true on success, false on failure.

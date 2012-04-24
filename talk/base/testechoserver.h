@@ -41,7 +41,8 @@ namespace talk_base {
 class TestEchoServer : public sigslot::has_slots<> {
  public:
   TestEchoServer(Thread* thread, const SocketAddress& addr)
-      : server_socket_(thread->socketserver()->CreateAsyncSocket(SOCK_STREAM)) {
+      : server_socket_(thread->socketserver()->CreateAsyncSocket(addr.family(),
+                                                                 SOCK_STREAM)) {
     server_socket_->Bind(addr);
     server_socket_->Listen(5);
     server_socket_->SignalReadEvent.connect(this, &TestEchoServer::OnAccept);

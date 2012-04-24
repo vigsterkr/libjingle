@@ -57,9 +57,9 @@ class RelayPort : public Port {
       talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
       talk_base::Network* network, const talk_base::IPAddress& ip,
       int min_port, int max_port, const std::string& username,
-      const std::string& password, const std::string& magic_cookie) {
+      const std::string& password) {
     return new RelayPort(thread, factory, network, ip, min_port, max_port,
-                         username, password, magic_cookie);
+                         username, password);
   }
   virtual ~RelayPort();
 
@@ -67,7 +67,6 @@ class RelayPort : public Port {
   void AddExternalAddress(const ProtocolAddress& addr);
 
   const std::vector<OptionValue>& options() const { return options_; }
-  const std::string& magic_cookie() const { return magic_cookie_; }
   bool HasMagicCookie(const char* data, size_t size);
 
   virtual void PrepareAddress();
@@ -87,7 +86,7 @@ class RelayPort : public Port {
   RelayPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
             talk_base::Network*, const talk_base::IPAddress& ip,
             int min_port, int max_port, const std::string& username,
-            const std::string& password, const std::string& magic_cookie);
+            const std::string& password);
   bool Init();
 
   void SetReady();
@@ -106,7 +105,6 @@ class RelayPort : public Port {
   bool ready_;
   std::vector<RelayEntry*> entries_;
   std::vector<OptionValue> options_;
-  std::string magic_cookie_;
   int error_;
 };
 

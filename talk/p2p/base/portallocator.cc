@@ -31,16 +31,11 @@
 
 namespace cricket {
 
-// Mediaproxy expects username to be 16 bytes.
-static const int kUsernameLength = 16;
-// Minimum password length of 22 characters as per RFC5245.
-static const int kPasswordLength = 22;
-
-PortAllocatorSession::PortAllocatorSession(const std::string& name,
-                                           const std::string& session_type,
+PortAllocatorSession::PortAllocatorSession(const std::string& channel_name,
+                                           int component,
                                            uint32 flags)
-    : name_(name),
-      session_type_(session_type),
+    : channel_name_(channel_name),
+      component_(component),
       flags_(flags),
       username_(talk_base::CreateRandomString(kUsernameLength)),
       password_(talk_base::CreateRandomString(kPasswordLength)) {
@@ -55,12 +50,13 @@ PortAllocator::~PortAllocator() {
 
 PortAllocatorSession* PortAllocator::CreateSession(
     const std::string& sid,
-    const std::string& name,
-    const std::string& session_type) {
+    const std::string& channel_name,
+    int component) {
   if (flags_ & PORTALLOCATOR_ENABLE_BUNDLE) {
     PortAllocatorSessionMuxer* muxer = GetSessionMuxer(sid);
     if (!muxer) {
-      PortAllocatorSession* session_impl = CreateSession(name, session_type);
+      PortAllocatorSession* session_impl = CreateSession(
+        channel_name, component);
       // Create PortAllocatorSessionMuxer object for |session_impl|.
       muxer = new PortAllocatorSessionMuxer(session_impl);
       muxer->SignalDestroyed.connect(
@@ -69,11 +65,12 @@ PortAllocatorSession* PortAllocator::CreateSession(
       muxers_[sid] = muxer;
     }
     PortAllocatorSessionProxy* proxy =
-        new PortAllocatorSessionProxy(name, session_type, flags_);
+        new PortAllocatorSessionProxy(
+          channel_name, component, flags_);
     muxer->RegisterSessionProxy(proxy);
     return proxy;
   }
-  return CreateSession(name, session_type);
+  return CreateSession(channel_name, component);
 }
 
 PortAllocatorSessionMuxer* PortAllocator::GetSessionMuxer(

@@ -115,7 +115,9 @@ class SignalThreadTest : public testing::Test, public sigslot::has_slots<> {
 
 class OwnerThread : public Thread, public sigslot::has_slots<> {
  public:
-  OwnerThread(SignalThreadTest* harness) : harness_(harness) {
+  explicit OwnerThread(SignalThreadTest* harness)
+      : harness_(harness),
+        has_run_(false) {
   }
 
   virtual void Run() {
@@ -125,14 +127,17 @@ class OwnerThread : public Thread, public sigslot::has_slots<> {
     signal_thread->Start();
     Thread::Current()->socketserver()->Wait(100, false);
     signal_thread->Release();
+    has_run_ = true;
   }
 
+  bool has_run() { return has_run_; }
   void OnWorkDone(SignalThread* signal_thread) {
     FAIL() << " This shouldn't get called.";
   }
 
  private:
   SignalThreadTest* harness_;
+  bool has_run_;
   DISALLOW_EVIL_CONSTRUCTORS(OwnerThread);
 };
 
@@ -144,7 +149,9 @@ TEST_F(SignalThreadTest, OwnerThreadGoesAway) {
     scoped_ptr<OwnerThread> owner(new OwnerThread(this));
     main_thread_ = owner.get();
     owner->Start();
-    Thread::Current()->socketserver()->Wait(200, false);
+    while (!owner->has_run()) {
+      Thread::Current()->socketserver()->Wait(10, false);
+    }
   }
   // At this point the main thread has gone away.
   // Give the SignalThread a little time to do its callback,

@@ -116,14 +116,5 @@ TEST_F(StunServerTest, TestBad) {
   Send(bad, std::strlen(bad));
 
   StunMessage* msg = Receive();
-  ASSERT_TRUE(msg != NULL);
-  EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE, msg->type());
-
-  const StunErrorCodeAttribute* err = msg->GetErrorCode();
-  EXPECT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
-  EXPECT_EQ(0, err->number());
-  EXPECT_EQ("Bad Request", err->reason());
-
-  delete msg;
+  ASSERT_TRUE(msg == NULL);
 }

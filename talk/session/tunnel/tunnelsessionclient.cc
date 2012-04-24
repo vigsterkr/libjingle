@@ -222,7 +222,7 @@ TunnelSessionClient::~TunnelSessionClient() {
 
 bool TunnelSessionClient::ParseContent(SignalingProtocol protocol,
                                        const buzz::XmlElement* elem,
-                                       const ContentDescription** content,
+                                       ContentDescription** content,
                                        ParseError* error) {
   if (const buzz::XmlElement* type_elem = elem->FirstNamed(QN_TUNNEL_TYPE)) {
     *content = new TunnelContentDescription(type_elem->BodyText());
@@ -247,7 +247,7 @@ bool TunnelSessionClient::WriteContent(
 }
 
 SessionDescription* NewTunnelSessionDescription(
-    const std::string& content_name, const ContentDescription* content) {
+    const std::string& content_name, ContentDescription* content) {
   SessionDescription* sdesc = new SessionDescription();
   sdesc->AddContent(content_name, NS_TUNNEL, content);
   return sdesc;
@@ -382,7 +382,8 @@ void TunnelSession::OnAccept() {
   const ContentInfo* content =
       session_->remote_description()->FirstContentByType(NS_TUNNEL);
   ASSERT(content != NULL);
-  VERIFY(channel_->Connect(content->name, "tcp"));
+  VERIFY(channel_->Connect(
+      content->name, "tcp", ICE_CANDIDATE_COMPONENT_DEFAULT));
 }
 
 void TunnelSession::OnTerminate() {

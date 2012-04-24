@@ -46,12 +46,10 @@ namespace webrtc {
 
 enum {
   MSG_CANDIDATE_TIMEOUT = 101,
-  MSG_CANDIDATE_DISCOVERY_TIMEOUT = 102,
 };
 
 // We allow 30 seconds to establish a connection, otherwise it's an error.
 static const int kCallSetupTimeout = 30 * 1000;
-static const int kCandidateDiscoveryTimeout = 2000;
 
 // Constants for setting the default encoder size.
 // TODO: Implement proper negotiation of video resolution.
@@ -117,7 +115,12 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
       session_desc_factory_(channel_manager),
       ice_started_(false),
       mediastream_signaling_(mediastream_signaling),
-      ice_observer_(NULL) {
+      ice_observer_(NULL),
+      // RFC 4566 suggested a Network Time Protocol (NTP) format timestamp
+      // as the session id and session version. To simplify, it should be fine
+      // to just use a random number as session id and start version from 0.
+      session_id_(talk_base::ToString(talk_base::CreateRandomId())),
+      session_version_(0) {
 }
 
 WebRtcSession::~WebRtcSession() {
@@ -158,8 +161,6 @@ bool WebRtcSession::StartIce(IceOptions /*options*/) {
   // Try connecting all transport channels. This is necessary to generate
   // ICE candidates.
   SpeculativelyConnectAllTransportChannels();
-  signaling_thread()->PostDelayed(
-      kCandidateDiscoveryTimeout, this, MSG_CANDIDATE_DISCOVERY_TIMEOUT);
 
   ice_started_ = true;
   if (!UseCandidatesInSessionDescription(remote_desc_.get())) {
@@ -181,7 +182,22 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateOffer(options,
                                         BaseSession::local_description()));
-  SessionDescriptionInterface* offer = new JsepSessionDescription(desc);
+  // RFC 3264
+  // When issuing an offer that modifies the session,
+  // the "o=" line of the new SDP MUST be identical to that in the
+  // previous SDP, except that the version in the origin field MUST
+  // increment by one from the previous SDP.
+
+  // Just increase the version number by one each time when a new offer
+  // is created regardless if it's identical to the previous one or not.
+  // The |session_version_| is a uint64, the wrap around should not happen.
+  ASSERT(session_version_ + 1 > session_version_);
+  JsepSessionDescription* offer = new JsepSessionDescription();
+  if (!offer->Initialize(desc, session_id_,
+                         talk_base::ToString(++session_version_))) {
+    delete offer;
+    return NULL;
+  }
   if (local_description())
     CopyCandidatesFromSessionDescription(local_description(), offer);
   return offer;
@@ -195,7 +211,20 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateAnswer(offer->description(), options,
                                          BaseSession::local_description()));
-  SessionDescriptionInterface* answer = new JsepSessionDescription(desc);
+  // RFC 3264
+  // If the answer is different from the offer in any way (different IP
+  // addresses, ports, etc.), the origin line MUST be different in the answer.
+  // In that case, the version number in the "o=" line of the answer is
+  // unrelated to the version number in the o line of the offer.
+  // Get a new version number by increasing the |session_version_answer_|.
+  // The |session_version_| is a uint64, the wrap around should not happen.
+  ASSERT(session_version_ + 1 > session_version_);
+  JsepSessionDescription* answer = new JsepSessionDescription();
+  if (!answer->Initialize(desc, session_id_,
+                          talk_base::ToString(++session_version_))) {
+    delete answer;
+    return NULL;
+  }
   if (local_description())
     CopyCandidatesFromSessionDescription(local_description(), answer);
   return answer;
@@ -312,10 +341,6 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       LOG(LS_ERROR) << "Transport is not in writable state.";
       SignalError();
       break;
-    case MSG_CANDIDATE_DISCOVERY_TIMEOUT:
-      if (ice_observer_)
-         ice_observer_->OnIceComplete();
-      break;
     default:
       break;
   }
@@ -407,6 +432,13 @@ void WebRtcSession::OnTransportCandidatesReady(
     return;
   }
   ProcessNewLocalCandidate(proxy->content_name(), candidates);
+}
+
+void WebRtcSession::OnCandidatesAllocationDone() {
+  ASSERT(signaling_thread()->IsCurrent());
+  if (ice_observer_) {
+    ice_observer_->OnIceComplete();
+  }
 }
 
 bool WebRtcSession::CreateChannels() {

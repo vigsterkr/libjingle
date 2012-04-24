@@ -145,7 +145,8 @@ class FakeWebRtcVideoEngine
         last_capturer_(kViECaptureIdBase - 1),
         fail_alloc_capturer_(false),
         codecs_(codecs),
-        num_codecs_(num_codecs) {
+        num_codecs_(num_codecs),
+        num_set_send_codecs_(0) {
   }
 
   ~FakeWebRtcVideoEngine() {
@@ -168,6 +169,7 @@ class FakeWebRtcVideoEngine
   void set_fail_alloc_capturer(bool fail_alloc_capturer) {
     fail_alloc_capturer_ = fail_alloc_capturer;
   }
+  int num_set_send_codecs() const { return num_set_send_codecs_; }
 
   int GetCaptureId(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -339,6 +341,7 @@ class FakeWebRtcVideoEngine
                              const webrtc::VideoCodec& codec)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->send_codec = codec;
+    ++num_set_send_codecs_;
     return 0;
   };
   WEBRTC_FUNC(GetSendCodec, (const int channel,
@@ -668,6 +671,7 @@ class FakeWebRtcVideoEngine
   bool fail_alloc_capturer_;
   const cricket::VideoCodec* const* codecs_;
   int num_codecs_;
+  int num_set_send_codecs_;  // how many times we call SetSendCodec().
 };
 
 }  // namespace cricket

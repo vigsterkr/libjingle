@@ -133,9 +133,10 @@ NewSocketPool::NewSocketPool(SocketFactory* factory) : factory_(factory) {
 NewSocketPool::~NewSocketPool() {
 }
 
-StreamInterface* 
+StreamInterface*
 NewSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
-  AsyncSocket* socket = factory_->CreateAsyncSocket(SOCK_STREAM);
+  AsyncSocket* socket =
+      factory_->CreateAsyncSocket(remote.family(), SOCK_STREAM);
   if (!socket) {
     ASSERT(false);
     if (err)
@@ -171,13 +172,19 @@ ReuseSocketPool::~ReuseSocketPool() {
   delete stream_;
 }
 
-StreamInterface* 
+StreamInterface*
 ReuseSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
   // Only one socket can be used from this "pool" at a time
   ASSERT(!checked_out_);
   if (!stream_) {
     LOG_F(LS_VERBOSE) << "Creating new socket";
-    AsyncSocket* socket = factory_->CreateAsyncSocket(SOCK_STREAM);
+    int family = remote.family();
+    // TODO: Deal with this when we/I clean up DNS resolution.
+    if (remote.IsUnresolvedIP()) {
+      family = AF_INET;
+    }
+    AsyncSocket* socket =
+        factory_->CreateAsyncSocket(family, SOCK_STREAM);
     if (!socket) {
       ASSERT(false);
       if (err)

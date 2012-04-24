@@ -72,7 +72,7 @@ class RelayPortTest : public testing::Test,
         relay_port_(cricket::RelayPort::Create(main_, &socket_factory_,
                                                &network_,
                                                kLocalAddress.ipaddr(),
-                                               0, 0, username_, password_, "")),
+                                               0, 0, username_, password_)),
         relay_server_(new cricket::RelayServer(main_)) {
   }
 

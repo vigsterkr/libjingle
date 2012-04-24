@@ -159,7 +159,7 @@ void StunRequest::Construct() {
   }
 }
 
-StunMessageType StunRequest::type() {
+int StunRequest::type() {
   ASSERT(msg_ != NULL);
   return msg_->type();
 }

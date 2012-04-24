@@ -46,17 +46,22 @@ namespace webrtc {
 class JsepSessionDescription : public SessionDescriptionInterface {
  public:
   JsepSessionDescription();
-  // Takes ownership of |description|.
-  explicit JsepSessionDescription(
-      cricket::SessionDescription* description);
-  ~JsepSessionDescription();
+  virtual ~JsepSessionDescription();
 
   // Takes ownership of |description|.
-  void SetDescription(cricket::SessionDescription* description);
+  bool Initialize(cricket::SessionDescription* description,
+      const std::string& session_id,
+      const std::string& session_version);
   bool Initialize(const std::string& sdp);
 
   virtual const cricket::SessionDescription* description() const {
     return description_.get();
+  }
+  virtual std::string session_id() const {
+    return session_id_;
+  }
+  virtual std::string session_version() const {
+    return session_version_;
   }
   virtual bool AddCandidate(const IceCandidateInterface* candidate);
   virtual size_t number_of_mediasections() const;
@@ -66,6 +71,8 @@ class JsepSessionDescription : public SessionDescriptionInterface {
 
  private:
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
+  std::string session_id_;
+  std::string session_version_;
   std::vector<JsepCandidateColletion> candidate_collection_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);

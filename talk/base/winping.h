@@ -32,6 +32,7 @@
 
 #include "talk/base/win32.h"
 #include "talk/base/basictypes.h"
+#include "talk/base/IPAddress.h"
 
 namespace talk_base {
 
@@ -52,6 +53,10 @@ typedef HANDLE (WINAPI *PIcmpCreateFile)();
 
 typedef BOOL (WINAPI *PIcmpCloseHandle)(HANDLE icmp_handle);
 
+typedef HANDLE (WINAPI *PIcmp6CreateFile)();
+
+typedef BOOL (WINAPI *PIcmp6CloseHandle)(HANDLE icmp_handle);
+
 typedef DWORD (WINAPI *PIcmpSendEcho)(
     HANDLE                   IcmpHandle,
     ULONG                    DestinationAddress,
@@ -61,6 +66,21 @@ typedef DWORD (WINAPI *PIcmpSendEcho)(
     LPVOID                   ReplyBuffer,
     DWORD                    ReplySize,
     DWORD                    Timeout);
+
+typedef DWORD (WINAPI *PIcmp6SendEcho2)(
+    HANDLE IcmpHandle,
+    HANDLE Event,
+    FARPROC ApcRoutine,
+    PVOID ApcContext,
+    struct sockaddr_in6 *SourceAddress,
+    struct sockaddr_in6 *DestinationAddress,
+    LPVOID RequestData,
+    WORD RequestSize,
+    PIP_OPTION_INFORMATION RequestOptions,
+    LPVOID ReplyBuffer,
+    DWORD ReplySize,
+    DWORD Timeout
+);
 
 class WinPing {
 public:
@@ -73,15 +93,18 @@ public:
     // Attempts to send a ping with the given parameters.
     enum PingResult { PING_FAIL, PING_TOO_LARGE, PING_TIMEOUT, PING_SUCCESS };
     PingResult Ping(
-        uint32 ip, uint32 data_size, uint32 timeout_millis, uint8 ttl,
+        IPAddress ip, uint32 data_size, uint32 timeout_millis, uint8 ttl,
         bool allow_fragments);
 
 private:
     HMODULE dll_;
     HANDLE hping_;
+    HANDLE hping6_;
     PIcmpCreateFile create_;
     PIcmpCloseHandle close_;
     PIcmpSendEcho send_;
+    PIcmp6CreateFile create6_;
+    PIcmp6SendEcho2 send6_;
     char* data_;
     uint32 dlen_;
     char* reply_;
@@ -94,4 +117,3 @@ private:
 #endif // WIN32
 
 #endif // TALK_BASE_WINPING_H__
-

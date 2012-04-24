@@ -26,14 +26,17 @@
  */
 
 #include "talk/p2p/client/socketmonitor.h"
+
 #include "talk/base/common.h"
 
 namespace cricket {
 
-const uint32 MSG_MONITOR_POLL = 1;
-const uint32 MSG_MONITOR_START = 2;
-const uint32 MSG_MONITOR_STOP = 3;
-const uint32 MSG_MONITOR_SIGNAL = 4;
+enum {
+  MSG_MONITOR_POLL,
+  MSG_MONITOR_START,
+  MSG_MONITOR_STOP,
+  MSG_MONITOR_SIGNAL
+};
 
 SocketMonitor::SocketMonitor(TransportChannel* channel,
                              talk_base::Thread* worker_thread,
@@ -62,51 +65,37 @@ void SocketMonitor::Stop() {
 
 void SocketMonitor::OnMessage(talk_base::Message *message) {
   talk_base::CritScope cs(&crit_);
-
   switch (message->message_id) {
-  case MSG_MONITOR_START:
-    ASSERT(talk_base::Thread::Current() == channel_thread_);
-    if (!monitoring_) {
-      monitoring_ = true;
-      if (GetP2PChannel() != NULL) {
-        GetP2PChannel()->SignalConnectionMonitor.connect(
-            this, &SocketMonitor::OnConnectionMonitor);
+    case MSG_MONITOR_START:
+      ASSERT(talk_base::Thread::Current() == channel_thread_);
+      if (!monitoring_) {
+        monitoring_ = true;
+        PollSocket(true);
       }
+      break;
+
+    case MSG_MONITOR_STOP:
+      ASSERT(talk_base::Thread::Current() == channel_thread_);
+      if (monitoring_) {
+        monitoring_ = false;
+        channel_thread_->Clear(this);
+      }
+      break;
+
+    case MSG_MONITOR_POLL:
+      ASSERT(talk_base::Thread::Current() == channel_thread_);
       PollSocket(true);
-    }
-    break;
+      break;
 
-  case MSG_MONITOR_STOP:
-    ASSERT(talk_base::Thread::Current() == channel_thread_);
-    if (monitoring_) {
-      monitoring_ = false;
-      if (GetP2PChannel() != NULL)
-        GetP2PChannel()->SignalConnectionMonitor.disconnect(this);
-      channel_thread_->Clear(this);
-    }
-    break;
-
-  case MSG_MONITOR_POLL:
-    ASSERT(talk_base::Thread::Current() == channel_thread_);
-    PollSocket(true);
-    break;
-
-  case MSG_MONITOR_SIGNAL:
-    {
+    case MSG_MONITOR_SIGNAL: {
       ASSERT(talk_base::Thread::Current() == monitoring_thread_);
       std::vector<ConnectionInfo> infos = connection_infos_;
       crit_.Leave();
       SignalUpdate(this, infos);
       crit_.Enter();
+      break;
     }
-    break;
   }
-}
-
-void SocketMonitor::OnConnectionMonitor(P2PTransportChannel* channel) {
-  talk_base::CritScope cs(&crit_);
-  if (monitoring_)
-    PollSocket(false);
 }
 
 void SocketMonitor::PollSocket(bool poll) {
@@ -114,40 +103,12 @@ void SocketMonitor::PollSocket(bool poll) {
   talk_base::CritScope cs(&crit_);
 
   // Gather connection infos
-  P2PTransportChannel* p2p_channel = GetP2PChannel();
-  if (p2p_channel != NULL) {
-    connection_infos_.clear();
-    const std::vector<Connection *> &connections = p2p_channel->connections();
-    std::vector<Connection *>::const_iterator it;
-    for (it = connections.begin(); it != connections.end(); it++) {
-      Connection *connection = *it;
-      ConnectionInfo info;
-      info.best_connection = p2p_channel->best_connection() == connection;
-      info.readable =
-          (connection->read_state() == Connection::STATE_READABLE);
-      info.writable =
-          (connection->write_state() == Connection::STATE_WRITABLE);
-      info.timeout =
-          (connection->write_state() == Connection::STATE_WRITE_TIMEOUT);
-      info.new_connection = !connection->reported();
-      connection->set_reported(true);
-      info.rtt = connection->rtt();
-      info.sent_total_bytes = connection->sent_total_bytes();
-      info.sent_bytes_second = connection->sent_bytes_second();
-      info.recv_total_bytes = connection->recv_total_bytes();
-      info.recv_bytes_second = connection->recv_bytes_second();
-      info.local_candidate = connection->local_candidate();
-      info.remote_candidate = connection->remote_candidate();
-      info.key = connection;
-      connection_infos_.push_back(info);
-    }
-  }
+  channel_->GetStats(&connection_infos_);
 
   // Signal the monitoring thread, start another poll timer
-
   monitoring_thread_->Post(this, MSG_MONITOR_SIGNAL);
   if (poll)
     channel_thread_->PostDelayed(rate_, this, MSG_MONITOR_POLL);
 }
 
-}
+}  // namespace cricket

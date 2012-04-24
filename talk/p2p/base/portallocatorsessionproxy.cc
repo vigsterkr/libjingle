@@ -144,7 +144,7 @@ void PortAllocatorSessionProxy::OnCandidatesReady(
   std::vector<Candidate> our_candidates;
   for (size_t i = 0; i < candidates.size(); ++i) {
     Candidate new_local_candidate = candidates[i];
-    new_local_candidate.set_name(name_);
+    new_local_candidate.set_component(component_);
     our_candidates.push_back(new_local_candidate);
   }
 

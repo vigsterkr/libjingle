@@ -90,6 +90,29 @@ int GetXmlAttr(const buzz::XmlElement* elem,
                const buzz::QName& name, int def);
 
 template <class T>
+bool GetXmlAttr(const buzz::XmlElement* elem,
+                const buzz::QName& name,
+                T* val_out) {
+  if (!elem->HasAttr(name)) {
+    return false;
+  }
+  std::string unparsed = elem->Attr(name);
+  return talk_base::FromString(unparsed, val_out);
+}
+
+template <class T>
+bool GetXmlAttr(const buzz::XmlElement* elem,
+                const buzz::QName& name,
+                const T& def,
+                T* val_out) {
+  if (!elem->HasAttr(name)) {
+    *val_out = def;
+    return true;
+  }
+  return GetXmlAttr(elem, name, val_out);
+}
+
+template <class T>
 bool AddXmlAttr(buzz::XmlElement* elem,
                 const buzz::QName& name, const T& val) {
   std::string buf;

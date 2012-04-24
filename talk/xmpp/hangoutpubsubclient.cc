@@ -381,7 +381,6 @@ HangoutPubSubClient::HangoutPubSubClient(XmppTaskParentInterface* parent,
   video_pause_state_client_.reset(new PubSubStateClient<bool>(
       nick_, media_client_.get(), QN_GOOGLE_MUC_VIDEO_PAUSE, false,
       new PublishedNickKeySerializer(), new BoolStateSerializer()));
-  // Can't just repeat because we need to watch for remote mutes.
   video_pause_state_client_->SignalStateChange.connect(
       this, &HangoutPubSubClient::OnVideoPauseStateChange);
   video_pause_state_client_->SignalPublishResult.connect(
@@ -480,17 +479,22 @@ void HangoutPubSubClient::OnPresenterPublishError(
 }
 
 // Since a remote mute is accomplished by another client setting our
-// mute state, if our state changes to muted, we should mute
-// ourselves.  Note that we never remote un-mute, though.
+// mute state, if our state changes to muted, we should mute ourselves.
+// Note that remote un-muting is disallowed by the RoomServer.
 void HangoutPubSubClient::OnAudioMuteStateChange(
     const PubSubStateChange<bool>& change) {
   bool was_muted = change.old_state;
   bool is_muted = change.new_state;
   bool remote_action = (!change.publisher_nick.empty() &&
                         (change.publisher_nick != change.published_nick));
-  if (is_muted && remote_action) {
+  if (remote_action) {
     const std::string& mutee_nick = change.published_nick;
     const std::string& muter_nick = change.publisher_nick;
+    if (!is_muted) {
+      // The server should prevent remote un-mute.
+      LOG(LS_WARNING) << muter_nick << " remote unmuted " << mutee_nick;
+      return;
+    }
     bool should_mute_locally = (mutee_nick == nick_);
     SignalRemoteMute(mutee_nick, muter_nick, should_mute_locally);
   } else {

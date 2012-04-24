@@ -112,74 +112,120 @@ class MacAsyncSocketTest : public SocketTest {
   SocketServerScope scope_;
 };
 
-TEST_F(MacAsyncSocketTest, TestConnect) {
-  SocketTest::TestConnect();
+TEST_F(MacAsyncSocketTest, TestConnectIPv4) {
+  SocketTest::TestConnectIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, TestConnectWithDnsLookup) {
-  SocketTest::TestConnectWithDnsLookup();
+TEST_F(MacAsyncSocketTest, TestConnectIPv6) {
+  SocketTest::TestConnectIPv6();
 }
 
-TEST_F(MacAsyncSocketTest, TestConnectFail) {
-  SocketTest::TestConnectFail();
+TEST_F(MacAsyncSocketTest, TestConnectWithDnsLookupIPv4) {
+  SocketTest::TestConnectWithDnsLookupIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, TestConnectWithDnsLookupIPv6) {
+  SocketTest::TestConnectWithDnsLookupIPv6();
+}
+
+TEST_F(MacAsyncSocketTest, TestConnectFailIPv4) {
+  SocketTest::TestConnectFailIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, TestConnectFailIPv6) {
+  SocketTest::TestConnectFailIPv6();
 }
 
 // Reenable once we have mac async dns
-TEST_F(MacAsyncSocketTest, DISABLED_TestConnectWithDnsLookupFail) {
-  SocketTest::TestConnectWithDnsLookupFail();
+TEST_F(MacAsyncSocketTest, DISABLED_TestConnectWithDnsLookupFailIPv4) {
+  SocketTest::TestConnectWithDnsLookupFailIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, TestConnectWithClosedSocket) {
-  SocketTest::TestConnectWithClosedSocket();
+TEST_F(MacAsyncSocketTest, DISABLED_TestConnectWithDnsLookupFailIPv6) {
+  SocketTest::TestConnectWithDnsLookupFailIPv6();
+}
+
+TEST_F(MacAsyncSocketTest, TestConnectWithClosedSocketIPv4) {
+  SocketTest::TestConnectWithClosedSocketIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, TestConnectWithClosedSocketIPv6) {
+  SocketTest::TestConnectWithClosedSocketIPv6();
 }
 
 // Flaky at the moment (10% failure rate).  Seems the client doesn't get
 // signalled in a timely manner...
-TEST_F(MacAsyncSocketTest, DISABLED_TestServerCloseDuringConnect) {
-  SocketTest::TestServerCloseDuringConnect();
+TEST_F(MacAsyncSocketTest, DISABLED_TestServerCloseDuringConnectIPv4) {
+  SocketTest::TestServerCloseDuringConnectIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, DISABLED_TestServerCloseDuringConnectIPv6) {
+  SocketTest::TestServerCloseDuringConnectIPv6();
 }
 // Flaky at the moment (0.5% failure rate).  Seems the client doesn't get
 // signalled in a timely manner...
-TEST_F(MacAsyncSocketTest, TestClientCloseDuringConnect) {
-  SocketTest::TestClientCloseDuringConnect();
+TEST_F(MacAsyncSocketTest, TestClientCloseDuringConnectIPv4) {
+  SocketTest::TestClientCloseDuringConnectIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, TestServerClose) {
-  SocketTest::TestServerClose();
+TEST_F(MacAsyncSocketTest, TestClientCloseDuringConnectIPv6) {
+  SocketTest::TestClientCloseDuringConnectIPv6();
 }
 
-TEST_F(MacAsyncSocketTest, TestCloseInClosedCallback) {
-  SocketTest::TestCloseInClosedCallback();
+TEST_F(MacAsyncSocketTest, TestServerCloseIPv4) {
+  SocketTest::TestServerCloseIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, TestSocketServerWait) {
-  SocketTest::TestSocketServerWait();
+TEST_F(MacAsyncSocketTest, TestServerCloseIPv6) {
+  SocketTest::TestServerCloseIPv6();
 }
 
-TEST_F(MacAsyncSocketTest, TestTcp) {
-  SocketTest::TestTcp();
+TEST_F(MacAsyncSocketTest, TestCloseInClosedCallbackIPv4) {
+  SocketTest::TestCloseInClosedCallbackIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, TestSingleFlowControlCallback) {
-  SocketTest::TestSingleFlowControlCallback();
+TEST_F(MacAsyncSocketTest, TestCloseInClosedCallbackIPv6) {
+  SocketTest::TestCloseInClosedCallbackIPv6();
 }
 
-TEST_F(MacAsyncSocketTest, DISABLED_TestUdp) {
-  SocketTest::TestUdp();
+TEST_F(MacAsyncSocketTest, TestSocketServerWaitIPv4) {
+  SocketTest::TestSocketServerWaitIPv4();
 }
 
-TEST_F(MacAsyncSocketTest, DISABLED_TestGetSetOptions) {
-  SocketTest::TestGetSetOptions();
+TEST_F(MacAsyncSocketTest, TestSocketServerWaitIPv6) {
+  SocketTest::TestSocketServerWaitIPv6();
 }
 
-class MacCarbonAsyncSocketTest : public MacAsyncSocketTest {
-  virtual MacBaseSocketServer* CreateSocketServer() {
-    return new MacCarbonSocketServer();
-  };
-};
+TEST_F(MacAsyncSocketTest, TestTcpIPv4) {
+  SocketTest::TestTcpIPv4();
+}
 
-TEST_F(MacCarbonAsyncSocketTest, TestSocketServerWait) {
-  SocketTest::TestSocketServerWait();
+TEST_F(MacAsyncSocketTest, TestTcpIPv6) {
+  SocketTest::TestTcpIPv6();
+}
+
+TEST_F(MacAsyncSocketTest, TestSingleFlowControlCallbackIPv4) {
+  SocketTest::TestSingleFlowControlCallbackIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, TestSingleFlowControlCallbackIPv6) {
+  SocketTest::TestSingleFlowControlCallbackIPv6();
+}
+
+TEST_F(MacAsyncSocketTest, DISABLED_TestUdpIPv4) {
+  SocketTest::TestUdpIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, DISABLED_TestUdpIPv6) {
+  SocketTest::TestUdpIPv6();
+}
+
+TEST_F(MacAsyncSocketTest, DISABLED_TestGetSetOptionsIPv4) {
+  SocketTest::TestGetSetOptionsIPv4();
+}
+
+TEST_F(MacAsyncSocketTest, DISABLED_TestGetSetOptionsIPv6) {
+  SocketTest::TestGetSetOptionsIPv6();
 }
 
 class MacCarbonAppAsyncSocketTest : public MacAsyncSocketTest {
@@ -188,8 +234,12 @@ class MacCarbonAppAsyncSocketTest : public MacAsyncSocketTest {
   };
 };
 
-TEST_F(MacCarbonAppAsyncSocketTest, TestSocketServerWait) {
-  SocketTest::TestSocketServerWait();
+TEST_F(MacCarbonAppAsyncSocketTest, TestSocketServerWaitIPv4) {
+  SocketTest::TestSocketServerWaitIPv4();
+}
+
+TEST_F(MacCarbonAppAsyncSocketTest, TestSocketServerWaitIPv6) {
+  SocketTest::TestSocketServerWaitIPv6();
 }
 
 }  // namespace talk_base

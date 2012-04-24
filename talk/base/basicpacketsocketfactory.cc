@@ -58,7 +58,8 @@ AsyncPacketSocket* BasicPacketSocketFactory::CreateUdpSocket(
     const SocketAddress& address, int min_port, int max_port) {
   // UDP sockets are simple.
   talk_base::AsyncSocket* socket =
-      socket_factory()->CreateAsyncSocket(SOCK_DGRAM);
+      socket_factory()->CreateAsyncSocket(
+          address.family(), SOCK_DGRAM);
   if (!socket) {
     return NULL;
   }
@@ -74,7 +75,8 @@ AsyncPacketSocket* BasicPacketSocketFactory::CreateUdpSocket(
 AsyncPacketSocket* BasicPacketSocketFactory::CreateServerTcpSocket(
     const SocketAddress& local_address, int min_port, int max_port, bool ssl) {
   talk_base::AsyncSocket* socket =
-      socket_factory()->CreateAsyncSocket(SOCK_STREAM);
+      socket_factory()->CreateAsyncSocket(local_address.family(),
+                                          SOCK_STREAM);
   if (!socket) {
     return NULL;
   }
@@ -102,7 +104,7 @@ AsyncPacketSocket* BasicPacketSocketFactory::CreateClientTcpSocket(
     const SocketAddress& local_address, const SocketAddress& remote_address,
     const ProxyInfo& proxy_info, const std::string& user_agent, bool ssl) {
   talk_base::AsyncSocket* socket =
-      socket_factory()->CreateAsyncSocket(SOCK_STREAM);
+      socket_factory()->CreateAsyncSocket(local_address.family(), SOCK_STREAM);
   if (!socket) {
     return NULL;
   }

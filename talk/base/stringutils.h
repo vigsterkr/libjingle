@@ -218,7 +218,7 @@ size_t strcatn(CTYPE* buffer, size_t buflen,
                const CTYPE* source, size_t srclen = SIZE_UNKNOWN) {
   if (buflen <= 0)
     return 0;
-  
+
   size_t bufpos = strlenn(buffer, buflen - 1);
   return bufpos + strcpyn(buffer + bufpos, buflen - bufpos, source, srclen);
 }
@@ -238,11 +238,6 @@ size_t vsprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format,
 
 template<class CTYPE>
 size_t sprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format, ...);
-/* This works to get GCC to notice printf argument mismatches, but then complains of missing implementation of sprintfn<char>
-template<>
-size_t sprintfn(char* buffer, size_t buflen, const char* format, ...)
-GCC_ATTR(format(printf,3,4));
-*/
 template<class CTYPE>
 size_t sprintfn(CTYPE* buffer, size_t buflen, const CTYPE* format, ...) {
   va_list args;

@@ -37,7 +37,7 @@ namespace cricket {
 // Implements a transport that only sends raw packets, no STUN.  As a result,
 // it cannot do pings to determine connectivity, so it only uses a single port
 // that it thinks will work.
-class RawTransport: public Transport, public TransportParser {
+class RawTransport : public Transport, public TransportParser {
  public:
   RawTransport(talk_base::Thread* signaling_thread,
                talk_base::Thread* worker_thread,
@@ -46,17 +46,19 @@ class RawTransport: public Transport, public TransportParser {
 
   virtual bool ParseCandidates(SignalingProtocol protocol,
                                const buzz::XmlElement* elem,
+                               const CandidateTranslator* translator,
                                Candidates* candidates,
                                ParseError* error);
   virtual bool WriteCandidates(SignalingProtocol protocol,
                                const Candidates& candidates,
+                               const CandidateTranslator* translator,
                                XmlElements* candidate_elems,
                                WriteError* error);
 
  protected:
   // Creates and destroys raw channels.
   virtual TransportChannelImpl* CreateTransportChannel(
-     const std::string& name, const std::string &content_type);
+     const std::string& name, int component);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
 
  private:

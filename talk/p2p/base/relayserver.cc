@@ -73,7 +73,7 @@ void SendStun(const StunMessage& msg,
 void SendStunError(const StunMessage& msg, talk_base::AsyncPacketSocket* socket,
                    const talk_base::SocketAddress& remote_addr, int error_code,
                    const char* error_desc, const std::string& magic_cookie) {
-  StunMessage err_msg;
+  RelayMessage err_msg;
   err_msg.SetType(GetStunErrorResponseType(msg.type()));
   err_msg.SetTransactionID(msg.transaction_id());
 
@@ -198,7 +198,7 @@ void RelayServer::OnInternalPacket(
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
-  ASSERT(!ap.destination().IsAny());
+  ASSERT(!ap.destination().IsNil());
 
   // If this did not come from an existing connection, it should be a STUN
   // allocate request.
@@ -242,7 +242,7 @@ void RelayServer::OnExternalPacket(
 
   // Get the address of the connection we just received on.
   talk_base::SocketAddressPair ap(remote_addr, socket->GetLocalAddress());
-  ASSERT(!ap.destination().IsAny());
+  ASSERT(!ap.destination().IsNil());
 
   // If this connection already exists, then forward the traffic.
   ConnectionMap::iterator piter = connections_.find(ap);
@@ -260,7 +260,7 @@ void RelayServer::OnExternalPacket(
 
   // The first packet should always be a STUN / TURN packet.  If it isn't, then
   // we should just ignore this packet.
-  StunMessage msg;
+  RelayMessage msg;
   talk_base::ByteBuffer buf(bytes, size);
   if (!msg.Read(&buf)) {
     LOG(LS_WARNING) << "Dropping packet: first packet not STUN";
@@ -309,10 +309,9 @@ bool RelayServer::HandleStun(
     talk_base::AsyncPacketSocket* socket, std::string* username,
     StunMessage* msg) {
 
-  // Parse this into a stun message.
+  // Parse this into a stun message. Eat the message if this fails.
   talk_base::ByteBuffer buf(bytes, size);
   if (!msg->Read(&buf)) {
-    SendStunError(*msg, socket, remote_addr, 400, "Bad Request", "");
     return false;
   }
 
@@ -338,7 +337,7 @@ void RelayServer::HandleStunAllocate(
     talk_base::AsyncPacketSocket* socket) {
 
   // Make sure this is a valid STUN request.
-  StunMessage request;
+  RelayMessage request;
   std::string username;
   if (!HandleStun(bytes, size, ap.source(), socket, &username, &request))
     return;
@@ -398,7 +397,7 @@ void RelayServer::HandleStun(
     RelayServerConnection* int_conn, const char* bytes, size_t size) {
 
   // Make sure this is a valid STUN request.
-  StunMessage request;
+  RelayMessage request;
   std::string username;
   if (!HandleStun(bytes, size, int_conn->addr_pair().source(),
                   int_conn->socket(), &username, &request))
@@ -427,7 +426,7 @@ void RelayServer::HandleStunAllocate(
   // Create a response message that includes an address with which external
   // clients can communicate.
 
-  StunMessage response;
+  RelayMessage response;
   response.SetType(STUN_ALLOCATE_RESPONSE);
   response.SetTransactionID(request.transaction_id());
 
@@ -500,7 +499,7 @@ void RelayServer::HandleStunSend(
     int_conn->set_default_destination(ext_addr);
     int_conn->Lock();
 
-    StunMessage response;
+    RelayMessage response;
     response.SetType(STUN_SEND_RESPONSE);
     response.SetTransactionID(request.transaction_id());
 
@@ -608,7 +607,7 @@ void RelayServerConnection::Send(
 
   // Wrap the given data in a data-indication packet.
 
-  StunMessage msg;
+  RelayMessage msg;
   msg.SetType(STUN_DATA_INDICATION);
 
   StunByteStringAttribute* magic_cookie_attr =

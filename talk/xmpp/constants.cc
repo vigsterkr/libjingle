@@ -326,6 +326,14 @@ const char STR_SHOW_DND[] = "dnd";
 const char STR_SHOW_XA[] = "xa";
 const char STR_SHOW_OFFLINE[] = "offline";
 
+const char NS_GOOGLE_PSTN_CONFERENCE[] = "http://www.google.com/pstn-conference";
+const StaticQName QN_GOOGLE_PSTN_CONFERENCE_STATUS = { NS_GOOGLE_PSTN_CONFERENCE, "status" };
+
+// Presence connection status
+const char STR_PSTN_CONFERENCE_STATUS_CONNECTING[] = "connecting";
+const char STR_PSTN_CONFERENCE_STATUS_CONNECTED[] = "connected";
+const char STR_PSTN_CONFERENCE_STATUS_HANGUP[] = "hangup";
+
 // Subscription
 const char STR_SUBSCRIBE[] = "subscribe";
 const char STR_SUBSCRIBED[] = "subscribed";
@@ -402,6 +410,12 @@ const StaticQName QN_MUC_AFFILIATION = { NS_MUC, "affiliation" };
 const StaticQName QN_MUC_ROLE = { NS_MUC, "role" };
 const char STR_AFFILIATION_NONE[] = "none";
 const char STR_ROLE_PARTICIPANT[] = "participant";
+
+const char NS_GOOGLE_SESSION[] = "http://www.google.com/session";
+const StaticQName QN_GOOGLE_USER_ID = { STR_EMPTY, "google-user-id" };
+const StaticQName QN_GOOGLE_SESSION_BLOCKED = { NS_GOOGLE_SESSION, "blocked" };
+const StaticQName QN_GOOGLE_SESSION_BLOCKING =
+    { NS_GOOGLE_SESSION, "blocking" };
 
 const char NS_MUC_OWNER[] = "http://jabber.org/protocol/muc#owner";
 const StaticQName QN_MUC_OWNER_QUERY = { NS_MUC_OWNER, "query" };

@@ -30,10 +30,8 @@
 
 #include "talk/base/logging.h"
 #include "talk/base/thread.h"
-#ifdef ANDROID
-#include <gtest/gtest.h>
-#elif LIBJINGLE_UNITTEST
-#include "third_party/gtest/include/gtest/gtest.h"
+#if defined(ANDROID) || defined(GTEST_RELATIVE_PATH)
+#include "gtest/gtest.h"
 #else
 #include "testing/base/public/gunit.h"
 #endif

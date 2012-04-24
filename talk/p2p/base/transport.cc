@@ -41,15 +41,13 @@ namespace cricket {
 
 struct ChannelParams {
   ChannelParams() : channel(NULL), candidate(NULL) {}
-  explicit ChannelParams(const std::string& name)
-      : name(name), channel(NULL), candidate(NULL) {}
-  ChannelParams(const std::string& name,
-                const std::string& content_type)
-      : name(name), content_type(content_type),
+  explicit ChannelParams(int component)
+      : component(component), channel(NULL), candidate(NULL) {}
+  ChannelParams(const std::string& name, int component)
+      : name(name), component(component),
         channel(NULL), candidate(NULL) {}
   explicit ChannelParams(cricket::Candidate* candidate) :
       channel(NULL), candidate(candidate) {
-    name = candidate->name();
   }
 
   ~ChannelParams() {
@@ -57,7 +55,7 @@ struct ChannelParams {
   }
 
   std::string name;
-  std::string content_type;
+  int component;
   cricket::TransportChannelImpl* channel;
   cricket::Candidate* candidate;
 };
@@ -97,28 +95,28 @@ Transport::~Transport() {
 }
 
 TransportChannelImpl* Transport::CreateChannel(
-    const std::string& name, const std::string& content_type) {
-  ChannelMessage msg(new ChannelParams(name, content_type));
+    const std::string& name, int component) {
+  ChannelMessage msg(new ChannelParams(name, component));
   worker_thread()->Send(this, MSG_CREATECHANNEL, &msg);
   return msg.data()->channel;
 }
 
 TransportChannelImpl* Transport::CreateChannel_w(
-    const std::string& name, const std::string& content_type) {
+    const std::string& name, int component) {
   ASSERT(worker_thread()->IsCurrent());
   TransportChannelImpl *impl;
   talk_base::CritScope cs(&crit_);
 
   // Create the entry if it does not exist
-  if (channels_.find(name) == channels_.end()) {
-    impl = CreateTransportChannel(name, content_type);
-    channels_[name] = ChannelMapEntry(impl);
+  if (channels_.find(component) == channels_.end()) {
+    impl = CreateTransportChannel(name, component);
+    channels_[component] = ChannelMapEntry(impl);
   } else {
-    impl = channels_[name].get();
+    impl = channels_[component].get();
   }
 
   // Increase the ref count
-  channels_[name].AddRef();
+  channels_[component].AddRef();
   destroyed_ = false;
 
   impl->SignalReadableState.connect(this, &Transport::OnChannelReadableState);
@@ -127,6 +125,8 @@ TransportChannelImpl* Transport::CreateChannel_w(
       this, &Transport::OnChannelRequestSignaling);
   impl->SignalCandidateReady.connect(this, &Transport::OnChannelCandidateReady);
   impl->SignalRouteChange.connect(this, &Transport::OnChannelRouteChange);
+  impl->SignalCandidatesAllocationDone.connect(
+      this, &Transport::OnChannelCandidatesAllocationDone);
 
   if (connect_requested_) {
     impl->Connect();
@@ -139,10 +139,22 @@ TransportChannelImpl* Transport::CreateChannel_w(
   return impl;
 }
 
-TransportChannelImpl* Transport::GetChannel(const std::string& name) {
+TransportChannelImpl* Transport::GetChannel(int component) {
   talk_base::CritScope cs(&crit_);
-  ChannelMap::iterator iter = channels_.find(name);
+  ChannelMap::iterator iter = channels_.find(component);
   return (iter != channels_.end()) ? iter->second.get() : NULL;
+}
+
+TransportChannelImpl* Transport::GetChannelByName(
+    const std::string& channel_name) {
+  for (ChannelMap::iterator iter = channels_.begin();
+       iter != channels_.end();
+       ++iter) {
+    if (iter->second.get()->name() == channel_name) {
+      return iter->second.get();
+    }
+  }
+  return NULL;
 }
 
 bool Transport::HasChannels() {
@@ -150,18 +162,18 @@ bool Transport::HasChannels() {
   return !channels_.empty();
 }
 
-void Transport::DestroyChannel(const std::string& name) {
-  ChannelMessage msg(new ChannelParams(name));
+void Transport::DestroyChannel(int component) {
+  ChannelMessage msg(new ChannelParams(component));
   worker_thread()->Send(this, MSG_DESTROYCHANNEL, &msg);
 }
 
-void Transport::DestroyChannel_w(const std::string& name) {
+void Transport::DestroyChannel_w(int component) {
   ASSERT(worker_thread()->IsCurrent());
 
   TransportChannelImpl* impl = NULL;
   {
     talk_base::CritScope cs(&crit_);
-    ChannelMap::iterator iter = channels_.find(name);
+    ChannelMap::iterator iter = channels_.find(component);
     if (iter == channels_.end())
       return;
 
@@ -279,7 +291,7 @@ bool Transport::VerifyCandidate(const Candidate& cand, ParseError* error) {
     return BadParse("candidate has local IP address", error);
 
   // No address zero.
-  if (cand.address().IsAny()) {
+  if (cand.address().IsNil() || cand.address().IsAny()) {
     return BadParse("candidate has address of zero", error);
   }
 
@@ -309,9 +321,10 @@ void Transport::OnRemoteCandidates(const std::vector<Candidate>& candidates) {
 void Transport::OnRemoteCandidate(const Candidate& candidate) {
   ASSERT(signaling_thread()->IsCurrent());
   if (destroyed_) return;
-  if (!HasChannel(candidate.name())) {
-    LOG(LS_WARNING) << "Ignoring candidate for unknown channel "
-                    << candidate.name();
+
+  if (!HasChannel(candidate.component())) {
+    LOG(LS_WARNING) << "Ignoring candidate for unknown component "
+                    << candidate.component();
     return;
   }
 
@@ -322,7 +335,7 @@ void Transport::OnRemoteCandidate(const Candidate& candidate) {
 
 void Transport::OnRemoteCandidate_w(const Candidate& candidate) {
   ASSERT(worker_thread()->IsCurrent());
-  ChannelMap::iterator iter = channels_.find(candidate.name());
+  ChannelMap::iterator iter = channels_.find(candidate.component());
   // It's ok for a channel to go away while this message is in transit.
   if (iter != channels_.end()) {
     iter->second.get()->OnCandidate(candidate);
@@ -374,16 +387,16 @@ bool Transport::GetTransportState_s(bool read) {
 void Transport::OnChannelRequestSignaling(TransportChannelImpl* channel) {
   ASSERT(worker_thread()->IsCurrent());
   ChannelMessage* msg = new ChannelMessage(
-      new ChannelParams(channel->name()));
+      new ChannelParams(channel->component()));
   signaling_thread()->Post(this, MSG_REQUESTSIGNALING, msg);
 }
 
-void Transport::OnChannelRequestSignaling_s(const std::string& name) {
+void Transport::OnChannelRequestSignaling_s(int component) {
   ASSERT(signaling_thread()->IsCurrent());
   // Resetting ICE state for the channel.
   {
     talk_base::CritScope cs(&crit_);
-    ChannelMap::iterator iter = channels_.find(name);
+    ChannelMap::iterator iter = channels_.find(component);
     if (iter != channels_.end())
       iter->second.set_candidates_allocated(false);
   }
@@ -424,19 +437,20 @@ void Transport::OnChannelRouteChange(TransportChannel* channel,
                                      const Candidate& remote_candidate) {
   ASSERT(worker_thread()->IsCurrent());
   ChannelParams* params = new ChannelParams(new Candidate(remote_candidate));
+  params->channel = static_cast<cricket::TransportChannelImpl*>(channel);
   signaling_thread()->Post(this, MSG_ROUTECHANGE, new ChannelMessage(params));
 }
 
-void Transport::OnChannelRouteChange_s(const std::string& name,
+void Transport::OnChannelRouteChange_s(const TransportChannel* channel,
                                        const Candidate& remote_candidate) {
   ASSERT(signaling_thread()->IsCurrent());
-  SignalRouteChange(this, name, remote_candidate);
+  SignalRouteChange(this, remote_candidate.component(), remote_candidate);
 }
 
 void Transport::OnChannelCandidatesAllocationDone(
     TransportChannelImpl* channel) {
   ASSERT(worker_thread()->IsCurrent());
-  ChannelMap::iterator iter = channels_.find(channel->name());
+  ChannelMap::iterator iter = channels_.find(channel->component());
   ASSERT(iter != channels_.end());
   iter->second.set_candidates_allocated(true);
 
@@ -456,14 +470,14 @@ void Transport::OnMessage(talk_base::Message* msg) {
     {
       ChannelParams* params =
           static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      params->channel = CreateChannel_w(params->name, params->content_type);
+      params->channel = CreateChannel_w(params->name, params->component);
     }
     break;
   case MSG_DESTROYCHANNEL:
     {
       ChannelParams* params =
           static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      DestroyChannel_w(params->name);
+      DestroyChannel_w(params->component);
     }
     break;
   case MSG_CONNECTCHANNELS:
@@ -498,7 +512,7 @@ void Transport::OnMessage(talk_base::Message* msg) {
     {
       ChannelParams* params =
           static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      OnChannelRequestSignaling_s(params->name);
+      OnChannelRequestSignaling_s(params->component);
       delete params;
     }
     break;
@@ -509,7 +523,7 @@ void Transport::OnMessage(talk_base::Message* msg) {
     {
       ChannelMessage* channel_msg = static_cast<ChannelMessage*>(msg->pdata);
       ChannelParams* params = channel_msg->data().get();
-      OnChannelRouteChange_s(params->name, *params->candidate);
+      OnChannelRouteChange_s(params->channel, *params->candidate);
       delete channel_msg;
     }
     break;

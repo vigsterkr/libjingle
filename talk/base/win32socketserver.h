@@ -74,6 +74,7 @@ class Win32Socket : public AsyncSocket {
   virtual int SetOption(Option opt, int value);
 
  private:
+  void CreateSink();
   bool SetAsync(int events);
   int DoConnect(const SocketAddress& addr);
   bool HandleClosed(int close_error);

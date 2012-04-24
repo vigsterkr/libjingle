@@ -92,15 +92,18 @@ class ProxyTest : public testing::Test {
 
 // Tests whether we can use a SOCKS5 proxy to connect to a server.
 TEST_F(ProxyTest, TestSocks5Connect) {
-  talk_base::AsyncSocket* socket = ss()->CreateAsyncSocket(SOCK_STREAM);
+  talk_base::AsyncSocket* socket =
+      ss()->CreateAsyncSocket(kSocksProxyIntAddr.family(), SOCK_STREAM);
   talk_base::AsyncSocksProxySocket* proxy_socket =
       new talk_base::AsyncSocksProxySocket(socket, kSocksProxyIntAddr,
                                            "", talk_base::CryptString());
+  // TODO: IPv6-ize these tests when proxy supports IPv6.
 
-  talk_base::TestEchoServer server(Thread::Current(), SocketAddress());
+  talk_base::TestEchoServer server(Thread::Current(),
+                                   SocketAddress(INADDR_ANY, 0));
 
   talk_base::AsyncTCPSocket* packet_socket = talk_base::AsyncTCPSocket::Create(
-      proxy_socket, SocketAddress(), server.address());
+      proxy_socket, SocketAddress(INADDR_ANY, 0), server.address());
   EXPECT_TRUE(packet_socket != NULL);
   talk_base::TestClient client(packet_socket);
 

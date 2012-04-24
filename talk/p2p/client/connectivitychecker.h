@@ -115,13 +115,14 @@ class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
  public:
   TestHttpPortAllocatorSession(
       HttpPortAllocator* allocator, const std::string &name,
-      const std::string& session_type,
+      int component,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
       const std::vector<std::string>& relay_hosts,
       const std::string& relay_token,
       const std::string& user_agent)
-      : HttpPortAllocatorSession(allocator, name, session_type, stun_hosts,
-                                 relay_hosts, relay_token, user_agent) {
+      : HttpPortAllocatorSession(
+          allocator, name, component, stun_hosts,
+          relay_hosts, relay_token, user_agent) {
   }
   void set_proxy(const talk_base::ProxyInfo& proxy) {
     proxy_ = proxy;
@@ -131,7 +132,8 @@ class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
 
   void OnRequestDone(talk_base::SignalThread* data);
 
-  sigslot::signal2<const PortConfiguration*,
+  sigslot::signal4<const std::string&, const std::string&,
+                   const PortConfiguration*,
                    const talk_base::ProxyInfo&> SignalConfigReady;
   sigslot::signal1<talk_base::AsyncHttpRequest*> SignalRequestDone;
 
@@ -205,10 +207,12 @@ class ConnectivityChecker
       talk_base::NetworkManager* network_manager,
       const std::string& user_agent,
       const std::string& relay_token);
-  virtual StunPort* CreateStunPort(const PortConfiguration* config,
-                                   talk_base::Network* network);
-  virtual RelayPort* CreateRelayPort(const PortConfiguration* config,
-                                     talk_base::Network* network);
+  virtual StunPort* CreateStunPort(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, talk_base::Network* network);
+  virtual RelayPort* CreateRelayPort(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, talk_base::Network* network);
   virtual void InitiateProxyDetection();
   virtual void SetProxyInfo(const talk_base::ProxyInfo& info);
   virtual talk_base::ProxyInfo GetProxyInfo() const;
@@ -219,8 +223,9 @@ class ConnectivityChecker
   void AllocatePorts();
   void AllocateRelayPorts();
   void CheckNetworks();
-  void CreateRelayPorts(const PortConfiguration* config,
-                        const talk_base::ProxyInfo& proxy_info);
+  void CreateRelayPorts(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, const talk_base::ProxyInfo& proxy_info);
 
   // Must be called by the worker thread.
   void CleanUp();
@@ -233,8 +238,9 @@ class ConnectivityChecker
   void OnStunAddressError(Port* port);
   void OnNetworksChanged();
   void OnProxyDetect(talk_base::SignalThread* thread);
-  void OnConfigReady(const PortConfiguration*,
-                     const talk_base::ProxyInfo& proxy);
+  void OnConfigReady(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, const talk_base::ProxyInfo& proxy);
   void OnConfigWithProxyReady(const PortConfiguration*);
   void RegisterHttpStart(int port);
   talk_base::Thread* worker_;

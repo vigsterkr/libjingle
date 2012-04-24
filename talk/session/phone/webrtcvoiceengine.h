@@ -355,7 +355,7 @@ class WebRtcVoiceMediaChannel
   typedef std::map<uint32, int> ChannelMap;
   talk_base::scoped_ptr<WebRtcSoundclipStream> ringback_tone_;
   std::set<int> ringback_channels_;  // channels playing ringback
-  bool recv_codecs_set_;
+  std::vector<AudioCodec> recv_codecs_;
   talk_base::scoped_ptr<webrtc::CodecInst> send_codec_;
   int options_;
   bool agc_adjusted_;

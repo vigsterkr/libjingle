@@ -25,30 +25,30 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/systeminfo.h"
+
 #ifdef WIN32
-#include "talk/base/scoped_ptr.h"
-#include "talk/base/win32.h"  // first because it brings in win32 stuff
+#include "talk/base/win32.h"  // NOLINT first because it brings in win32 stuff
 #ifndef EXCLUDE_D3D9
 #include <d3d9.h>
 #endif
-
+#include <intrin.h>  // for __cpuid()
+#include "talk/base/scoped_ptr.h"
 #elif defined(OSX)
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreServices/CoreServices.h>
 #include <sys/sysctl.h>
 #include "talk/base/macconversion.h"
 #elif defined(IOS)
-#include <sys/sysctl.h>
+#include <sys/sysctl.h>  // NOLINT - lint thinks this is duplicate include
 #elif defined(LINUX) || defined(ANDROID)
 #include <unistd.h>
 #include "talk/base/linux.h"
 #endif
 
 #include "talk/base/common.h"
-#include "talk/base/cpuid.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
-#include "talk/base/systeminfo.h"
 
 namespace talk_base {
 
@@ -208,12 +208,46 @@ SystemInfo::Architecture SystemInfo::GetCpuArchitecture() {
   return cpu_arch_;
 }
 
+#ifndef WIN32
+// TODO: Use gcc 4.4 provided cpuid intrinsic
+// 32 bit fpic requires ebx be preserved
+#if (defined(__pic__) || defined(__APPLE__)) && defined(__i386__)
+static inline void __cpuid(int cpu_info[4], int info_type) {
+  __asm__ volatile (  // NOLINT
+    "mov %%ebx, %%edi\n"
+    "cpuid\n"
+    "xchg %%edi, %%ebx\n"
+    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type)
+  );  // NOLINT
+}
+#elif defined(__i386__) || defined(__x86_64__)
+static inline void __cpuid(int cpu_info[4], int info_type) {
+  __asm__ volatile (  // NOLINT
+    "cpuid\n"
+    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type)
+  );  // NOLINT
+}
+#endif
+#endif  // WIN32
+
 // Returns the vendor string from the cpu, e.g. "GenuineIntel", "AuthenticAMD".
 // See "Intel Processor Identification and the CPUID Instruction"
 // (Intel document number: 241618)
 std::string SystemInfo::GetCpuVendor() {
   if (cpu_vendor_.empty()) {
-    cpu_vendor_ = talk_base::CpuInfo::GetCpuVendor();
+#ifdef CPU_X86
+    int cpu_info[4];
+    __cpuid(cpu_info, 0);
+    cpu_info[0] = cpu_info[1];  // Reorder output
+    cpu_info[1] = cpu_info[3];
+    cpu_info[2] = cpu_info[2];
+    cpu_info[3] = 0;
+    cpu_vendor_ = std::string(reinterpret_cast<char*>(&cpu_info[0]));
+#else
+    cpu_vendor_ = std::string("Undefined");
+#endif
   }
   return cpu_vendor_;
 }

@@ -589,9 +589,9 @@ std::string RedirectXml(SignalingProtocol protocol,
 class TestPortAllocatorSession : public cricket::PortAllocatorSession {
  public:
   TestPortAllocatorSession(const std::string& name,
-                           const std::string& session_type,
+                           int component,
                            const int port_offset)
-      : PortAllocatorSession(name, session_type, 0),
+      : PortAllocatorSession(name, component, 0),
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
@@ -624,8 +624,8 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
   virtual bool IsGettingAllPorts() { return running_; }
 
   void AddPort(cricket::Port* port) {
-    port->set_name(name_);
-    port->set_preference(1.0);
+    port->set_component(component_);
+    port->set_priority(2130706432U);  // pref = 1.0
     port->set_generation(0);
     port->SignalDestroyed.connect(
         this, &TestPortAllocatorSession::OnPortDestroyed);
@@ -662,9 +662,9 @@ class TestPortAllocator : public cricket::PortAllocator {
 
   virtual cricket::PortAllocatorSession*
   CreateSession(const std::string &name,
-                const std::string &content_type) {
+                int component) {
     port_offset_ += 2;
-    return new TestPortAllocatorSession(name, content_type, port_offset_ - 2);
+    return new TestPortAllocatorSession(name, component, port_offset_ - 2);
   }
 
   int port_offset_;
@@ -723,7 +723,7 @@ struct TestSessionClient: public cricket::SessionClient,
 
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const cricket::ContentDescription** content,
+                            cricket::ContentDescription** content,
                             cricket::ParseError* error) {
     std::string content_type;
     std::string gingle_content_type;
@@ -786,7 +786,7 @@ struct ChannelHandler : sigslot::has_slots<> {
   }
 
   void OnReadPacket(cricket::TransportChannel* p, const char* buf,
-                    size_t size) {
+                    size_t size, int flags) {
     if (memcmp(buf, name.c_str(), name.size()) != 0)
       return;  // drop packet if packet doesn't belong to this channel. This
                // can happen when transport channels are muxed together.
@@ -802,7 +802,8 @@ struct ChannelHandler : sigslot::has_slots<> {
   void Send(const char* data, size_t size) {
     std::string data_with_id(name);
     data_with_id += data;
-    int result = channel->SendPacket(data_with_id.c_str(), data_with_id.size());
+    int result = channel->SendPacket(data_with_id.c_str(), data_with_id.size(),
+                                     0);
     EXPECT_EQ(static_cast<int>(data_with_id.size()), result);
   }
 
@@ -1040,9 +1041,11 @@ class TestClient : public sigslot::has_slots<> {
   void CreateChannels() {
     ASSERT(session != NULL);
     chan_a = new ChannelHandler(
-        session->CreateChannel(content_name_a, channel_name_a), channel_name_a);
+        session->CreateChannel(content_name_a, channel_name_a, 1),
+        channel_name_a);
     chan_b = new ChannelHandler(
-        session->CreateChannel(content_name_b, channel_name_b), channel_name_b);
+        session->CreateChannel(content_name_b, channel_name_b, 2),
+        channel_name_b);
   }
 
   int* next_message_id;
@@ -2129,7 +2132,6 @@ TEST_F(SessionTest, GingleToGingleVideoContents) {
   TestVideoContents(PROTOCOL_GINGLE, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
-
 // Jingle => Jingle = Jingle (with other content)
 TEST_F(SessionTest, JingleToJingleOtherContent) {
   TestOtherContent(PROTOCOL_JINGLE, PROTOCOL_JINGLE, PROTOCOL_JINGLE);
@@ -2144,7 +2146,6 @@ TEST_F(SessionTest, JingleToJingleAudioContent) {
 TEST_F(SessionTest, JingleToJingleVideoContents) {
   TestVideoContents(PROTOCOL_JINGLE, PROTOCOL_JINGLE, PROTOCOL_JINGLE);
 }
-
 
 // Hybrid => Hybrid = Jingle (with other content)
 TEST_F(SessionTest, HybridToHybridOtherContent) {
@@ -2161,7 +2162,6 @@ TEST_F(SessionTest, HybridToHybridVideoContents) {
   TestVideoContents(PROTOCOL_HYBRID, PROTOCOL_HYBRID, PROTOCOL_JINGLE);
 }
 
-
 // Gingle => Hybrid = Gingle (with other content)
 TEST_F(SessionTest, GingleToHybridOtherContent) {
   TestOtherContent(PROTOCOL_GINGLE, PROTOCOL_HYBRID, PROTOCOL_GINGLE);
@@ -2176,7 +2176,6 @@ TEST_F(SessionTest, GingleToHybridAudioContent) {
 TEST_F(SessionTest, GingleToHybridVideoContents) {
   TestVideoContents(PROTOCOL_GINGLE, PROTOCOL_HYBRID, PROTOCOL_GINGLE);
 }
-
 
 // Jingle => Hybrid = Jingle (with other content)
 TEST_F(SessionTest, JingleToHybridOtherContent) {
@@ -2193,7 +2192,6 @@ TEST_F(SessionTest, JingleToHybridVideoContents) {
   TestVideoContents(PROTOCOL_JINGLE, PROTOCOL_HYBRID, PROTOCOL_JINGLE);
 }
 
-
 // Hybrid => Gingle = Gingle (with other content)
 TEST_F(SessionTest, HybridToGingleOtherContent) {
   TestOtherContent(PROTOCOL_HYBRID, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
@@ -2209,7 +2207,6 @@ TEST_F(SessionTest, HybridToGingleVideoContents) {
   TestVideoContents(PROTOCOL_HYBRID, PROTOCOL_GINGLE, PROTOCOL_GINGLE);
 }
 
-
 // Hybrid => Jingle = Jingle (with other content)
 TEST_F(SessionTest, HybridToJingleOtherContent) {
   TestOtherContent(PROTOCOL_HYBRID, PROTOCOL_JINGLE, PROTOCOL_JINGLE);
@@ -2224,7 +2221,6 @@ TEST_F(SessionTest, HybridToJingleAudioContent) {
 TEST_F(SessionTest, HybridToJingleVideoContents) {
   TestVideoContents(PROTOCOL_HYBRID, PROTOCOL_JINGLE, PROTOCOL_JINGLE);
 }
-
 
 TEST_F(SessionTest, GingleEarlyTerminationFromInitiator) {
   TestEarlyTerminationFromInitiator(PROTOCOL_GINGLE);

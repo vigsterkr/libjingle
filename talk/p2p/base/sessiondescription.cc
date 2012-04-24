@@ -31,6 +31,17 @@
 
 namespace cricket {
 
+ContentInfo* FindContentInfoByName(
+    ContentInfos& contents, const std::string& name) {
+  for (ContentInfos::iterator content = contents.begin();
+       content != contents.end(); content++) {
+    if (content->name == name) {
+      return &(*content);
+    }
+  }
+  return NULL;
+}
+
 const ContentInfo* FindContentInfoByName(
     const ContentInfos& contents, const std::string& name) {
   for (ContentInfos::const_iterator content = contents.begin();
@@ -91,6 +102,16 @@ const ContentInfo* SessionDescription::GetContentByName(
   return FindContentInfoByName(contents_, name);
 }
 
+ContentDescription* SessionDescription::GetContentDescriptionByName(
+    const std::string& name) {
+  ContentInfo* cinfo = FindContentInfoByName(contents_, name);
+  if (cinfo == NULL) {
+    return NULL;
+  }
+
+  return cinfo->description;
+}
+
 const ContentInfo* SessionDescription::FirstContentByType(
     const std::string& type) const {
   return FindContentInfoByType(contents_, type);
@@ -102,7 +123,7 @@ const ContentInfo* SessionDescription::FirstContent() const {
 
 void SessionDescription::AddContent(const std::string& name,
                                     const std::string& type,
-                                    const ContentDescription* description) {
+                                    ContentDescription* description) {
   contents_.push_back(ContentInfo(name, type, description));
 }
 

@@ -113,7 +113,7 @@ class MediaSessionClient : public SessionClient, public sigslot::has_slots<> {
 
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error);
   virtual bool IsWritable(SignalingProtocol protocol,
                           const ContentDescription* content);

@@ -45,10 +45,18 @@
 #endif  // FEATURE_ENABLE_SSL
 #endif  // USE_SSLSTREAM
 
-XmppSocket::XmppSocket(buzz::TlsOptions tls) : tls_(tls) {
+XmppSocket::XmppSocket(buzz::TlsOptions tls) : cricket_socket_(NULL),
+                                               tls_(tls) {
+  state_ = buzz::AsyncSocket::STATE_CLOSED;
+}
+
+void XmppSocket::CreateCricketSocket(int family) {
   talk_base::Thread* pth = talk_base::Thread::Current();
+  if (family == AF_UNSPEC) {
+    family = AF_INET;
+  }
   talk_base::AsyncSocket* socket =
-    pth->socketserver()->CreateAsyncSocket(SOCK_STREAM);
+      pth->socketserver()->CreateAsyncSocket(family, SOCK_STREAM);
 #ifndef USE_SSLSTREAM
 #ifdef FEATURE_ENABLE_SSL
   if (tls_ != buzz::TLS_DISABLED) {
@@ -70,8 +78,6 @@ XmppSocket::XmppSocket(buzz::TlsOptions tls) : tls_(tls) {
 #endif  // FEATURE_ENABLE_SSL
   stream_->SignalEvent.connect(this, &XmppSocket::OnEvent);
 #endif  // USE_SSLSTREAM
-
-  state_ = buzz::AsyncSocket::STATE_CLOSED;
 }
 
 XmppSocket::~XmppSocket() {
@@ -175,6 +181,9 @@ int XmppSocket::GetError() {
 }
 
 bool XmppSocket::Connect(const talk_base::SocketAddress& addr) {
+  if (cricket_socket_ == NULL) {
+    CreateCricketSocket(addr.family());
+  }
   if (cricket_socket_->Connect(addr) < 0) {
     return cricket_socket_->IsBlocking();
   }

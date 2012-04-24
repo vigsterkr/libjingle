@@ -62,23 +62,24 @@ enum ServiceType {
 
 enum {
   MSG_ADDSTREAM = 1,
-  MSG_REMOVESTREAM = 2,
-  MSG_COMMITSTREAMCHANGES = 3,
-  MSG_PROCESSSIGNALINGMESSAGE = 4,
-  MSG_RETURNLOCALMEDIASTREAMS = 5,
-  MSG_RETURNREMOTEMEDIASTREAMS = 6,
-  MSG_CLOSE = 7,
-  MSG_READYSTATE = 8,
-  MSG_SDPSTATE = 9,
-  MSG_TERMINATE = 10,
-  MSG_STARTICE = 11,
-  MSG_CREATEOFFER = 12,
-  MSG_CREATEANSWER = 13,
-  MSG_SETLOCALDESCRIPTION = 14,
-  MSG_SETREMOTEDESCRIPTION = 15,
-  MSG_PROCESSICEMESSAGE = 16,
-  MSG_GETLOCALDESCRIPTION = 17,
-  MSG_GETREMOTEDESCRIPTION = 18,
+  MSG_REMOVESTREAM,
+  MSG_REMOVESTREAM_BYLABEL,
+  MSG_COMMITSTREAMCHANGES,
+  MSG_PROCESSSIGNALINGMESSAGE,
+  MSG_RETURNLOCALMEDIASTREAMS,
+  MSG_RETURNREMOTEMEDIASTREAMS,
+  MSG_CLOSE,
+  MSG_READYSTATE,
+  MSG_SDPSTATE,
+  MSG_TERMINATE,
+  MSG_STARTICE,
+  MSG_CREATEOFFER,
+  MSG_CREATEANSWER,
+  MSG_SETLOCALDESCRIPTION,
+  MSG_SETREMOTEDESCRIPTION,
+  MSG_PROCESSICEMESSAGE,
+  MSG_GETLOCALDESCRIPTION,
+  MSG_GETREMOTEDESCRIPTION,
 };
 
 typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
@@ -165,6 +166,15 @@ struct IceOptionsParams : public talk_base::MessageData {
         result(false) {
   }
   webrtc::JsepInterface::IceOptions options;
+  bool result;
+};
+
+struct StreamLabelParams : public talk_base::MessageData {
+  explicit StreamLabelParams(const std::string& label)
+      : label(label),
+        result(false) {
+  }
+  std::string label;
   bool result;
 };
 
@@ -324,6 +334,12 @@ void PeerConnection::RemoveStream(LocalMediaStreamInterface* remove_stream) {
   signaling_thread()->Send(this, MSG_REMOVESTREAM, &msg);
 }
 
+bool PeerConnection::RemoveStream(const std::string& label) {
+  StreamLabelParams msg(label);
+  signaling_thread()->Send(this, MSG_REMOVESTREAM_BYLABEL, &msg);
+  return msg.result;
+}
+
 void PeerConnection::CommitStreamChanges() {
   signaling_thread()->Send(this, MSG_COMMITSTREAMCHANGES);
 }
@@ -413,17 +429,30 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
     case MSG_ADDSTREAM: {
       LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
       local_media_streams_->AddStream(msg->data());
+      mediastream_signaling_->SetLocalStreams(local_media_streams_);
       break;
     }
     case MSG_REMOVESTREAM: {
       LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
       local_media_streams_->RemoveStream(msg->data());
+      mediastream_signaling_->SetLocalStreams(local_media_streams_);
+      break;
+    }
+    case MSG_REMOVESTREAM_BYLABEL: {
+      StreamLabelParams* msg(static_cast<StreamLabelParams*> (data));
+      MediaStreamInterface* stream = local_media_streams_->find(msg->label);
+      if (stream) {
+        local_media_streams_->RemoveStream(stream);
+        mediastream_signaling_->SetLocalStreams(local_media_streams_);
+        msg->result = true;
+      } else {
+        msg->result = false;
+      }
       break;
     }
     case MSG_COMMITSTREAMCHANGES: {
       if (ready_state_ != PeerConnectionInterface::kClosed ||
           ready_state_ != PeerConnectionInterface::kClosing) {
-        mediastream_signaling_->SetLocalStreams(local_media_streams_);
         // If we use ROAP an offer is created and we setup the local
         // media streams.
         if (roap_signaling_.get() != NULL) {

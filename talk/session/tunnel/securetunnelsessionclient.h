@@ -83,7 +83,7 @@ class SecureTunnelSessionClient : public TunnelSessionClient {
   virtual void OnIncomingTunnel(const buzz::Jid& jid, Session *session);
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error);
   virtual bool WriteContent(SignalingProtocol protocol,
                             const ContentDescription* content,

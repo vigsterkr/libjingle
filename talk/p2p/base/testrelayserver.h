@@ -72,7 +72,7 @@ class TestRelayServer : public sigslot::has_slots<> {
   talk_base::AsyncSocket* CreateListenSocket(talk_base::Thread* thread,
       const talk_base::SocketAddress& addr) {
     talk_base::AsyncSocket* socket =
-        thread->socketserver()->CreateAsyncSocket(SOCK_STREAM);
+        thread->socketserver()->CreateAsyncSocket(addr.family(), SOCK_STREAM);
     socket->Bind(addr);
     socket->Listen(5);
     socket->SignalReadEvent.connect(this, &TestRelayServer::OnAccept);

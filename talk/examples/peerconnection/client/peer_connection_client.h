@@ -80,6 +80,7 @@ class PeerConnectionClient : public sigslot::has_slots<> {
 
  protected:
   void Close();
+  void InitSocketSignals();
   bool ConnectControlSocket();
   void OnConnect(talk_base::AsyncSocket* socket);
   void OnHangingGetConnect(talk_base::AsyncSocket* socket);
@@ -110,6 +111,7 @@ class PeerConnectionClient : public sigslot::has_slots<> {
                            size_t* peer_id, size_t* eoh);
 
   void OnClose(talk_base::AsyncSocket* socket, int err);
+
 
   PeerConnectionClientObserver* callback_;
   talk_base::SocketAddress server_address_;

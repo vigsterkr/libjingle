@@ -25,12 +25,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/winping.h"
+
+#include <Iphlpapi.h>
+#include <cassert>
+
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
-#include "talk/base/socketaddress.h"
-#include "talk/base/winping.h"
+#include "talk/base/ipaddress.h"
 #include "talk/base/logging.h"
-#include <cassert>
+#include "talk/base/nethelpers.h"
+#include "talk/base/socketaddress.h"
 
 namespace talk_base {
 
@@ -47,6 +52,12 @@ typedef struct icmp_echo_reply {
     PVOID   Data;               // Pointer to the reply data
     struct ip_option_information Options; // Reply options
 } ICMP_ECHO_REPLY, * PICMP_ECHO_REPLY;
+
+typedef struct icmpv6_echo_reply_lh {
+  sockaddr_in6    Address;
+  ULONG           Status;
+  unsigned int    RoundTripTime;
+} ICMPV6_ECHO_REPLY, *PICMPV6_ECHO_REPLY;
 
 //
 // IP_STATUS codes returned from IP APIs
@@ -123,15 +134,27 @@ typedef struct icmp_echo_reply {
 // Global Constants and Types
 //////////////////////////////////////////////////////////////////////
 
-const char * const ICMP_DLL_NAME = "icmp.dll";
+const char * const ICMP_DLL_NAME = "Iphlpapi.dll";
 const char * const ICMP_CREATE_FUNC = "IcmpCreateFile";
 const char * const ICMP_CLOSE_FUNC = "IcmpCloseHandle";
 const char * const ICMP_SEND_FUNC = "IcmpSendEcho";
+const char * const ICMP6_CREATE_FUNC = "Icmp6CreateFile";
+const char * const ICMP6_CLOSE_FUNC = "Icmp6CloseHandle";
+const char * const ICMP6_SEND_FUNC = "Icmp6SendEcho2";
 
-inline uint32 ReplySize(uint32 data_size) {
-  // A ping error message is 8 bytes long, so make sure we allow for at least
-  // 8 bytes of reply data.
-  return sizeof(ICMP_ECHO_REPLY) + talk_base::_max<uint32>(8, data_size);
+inline uint32 ReplySize(uint32 data_size, int family) {
+  if (family == AF_INET) {
+    // A ping error message is 8 bytes long, so make sure we allow for at least
+    // 8 bytes of reply data.
+    return sizeof(ICMP_ECHO_REPLY) + talk_base::_max<uint32>(8, data_size);
+  } else if (family == AF_INET6) {
+    // Per MSDN, Send6IcmpEcho2 needs at least one ICMPV6_ECHO_REPLY,
+    // 8 bytes for ICMP header, _and_ an IO_BLOCK_STATUS (2 pointers),
+    // in addition to the data size.
+    return sizeof(ICMPV6_ECHO_REPLY) + data_size + 8 + (2 * sizeof(DWORD*));
+  } else {
+    return 0;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -140,7 +163,8 @@ inline uint32 ReplySize(uint32 data_size) {
 
 WinPing::WinPing()
     : dll_(0), hping_(INVALID_HANDLE_VALUE), create_(0), close_(0), send_(0),
-      data_(0), dlen_(0), reply_(0), rlen_(0), valid_(false) {
+      create6_(0), send6_(0), data_(0), dlen_(0), reply_(0),
+      rlen_(0), valid_(false) {
 
   dll_ = LoadLibraryA(ICMP_DLL_NAME);
   if (!dll_) {
@@ -155,15 +179,27 @@ WinPing::WinPing()
     LOG(LERROR) << "GetProcAddress(ICMP_*): " << GetLastError();
     return;
   }
-
   hping_ = create_();
   if (hping_ == INVALID_HANDLE_VALUE) {
     LOG(LERROR) << "IcmpCreateFile: " << GetLastError();
     return;
   }
 
+  if (HasIPv6Enabled()) {
+    create6_ = (PIcmp6CreateFile) GetProcAddress(dll_, ICMP6_CREATE_FUNC);
+    send6_ = (PIcmp6SendEcho2) GetProcAddress(dll_, ICMP6_SEND_FUNC);
+    if (!create6_ || !send6_) {
+      LOG(LERROR) << "GetProcAddress(ICMP6_*): " << GetLastError();
+      return;
+    }
+    hping6_ = create6_();
+    if (hping6_ == INVALID_HANDLE_VALUE) {
+      LOG(LERROR) << "Icmp6CreateFile: " << GetLastError();
+    }
+  }
+
   dlen_ = 0;
-  rlen_ = ReplySize(dlen_);
+  rlen_ = ReplySize(dlen_, AF_INET);
   data_ = new char[dlen_];
   reply_ = new char[rlen_];
 
@@ -171,20 +207,25 @@ WinPing::WinPing()
 }
 
 WinPing::~WinPing() {
-  if (dll_)
-    FreeLibrary(dll_);
-
   if ((hping_ != INVALID_HANDLE_VALUE) && close_) {
     if (!close_(hping_))
       LOG(WARNING) << "IcmpCloseHandle: " << GetLastError();
   }
+  if ((hping6_ != INVALID_HANDLE_VALUE) && close_) {
+    if (!close_(hping6_)) {
+      LOG(WARNING) << "Icmp6CloseHandle: " << GetLastError();
+    }
+  }
+
+  if (dll_)
+    FreeLibrary(dll_);
 
   delete[] data_;
   delete[] reply_;
 }
 
 WinPing::PingResult WinPing::Ping(
-    uint32 ip, uint32 data_size, uint32 timeout, uint8 ttl,
+    IPAddress ip, uint32 data_size, uint32 timeout, uint8 ttl,
     bool allow_fragments) {
 
   assert(IsValid());
@@ -195,7 +236,7 @@ WinPing::PingResult WinPing::Ping(
     ipopt.Flags |= IP_FLAG_DF;
   ipopt.Ttl = ttl;
 
-  uint32 reply_size = ReplySize(data_size);
+  uint32 reply_size = ReplySize(data_size, ip.family());
 
   if (data_size > dlen_) {
     delete [] data_;
@@ -209,17 +250,29 @@ WinPing::PingResult WinPing::Ping(
     rlen_ = reply_size;
     reply_ = new char[rlen_];
   }
-
-  DWORD result = send_(hping_, talk_base::HostToNetwork32(ip),
-                       data_, uint16(data_size), &ipopt,
-                       reply_, reply_size, timeout);
+  DWORD result = 0;
+  if (ip.family() == AF_INET) {
+    result = send_(hping_, ip.ipv4_address().S_un.S_addr,
+                   data_, uint16(data_size), &ipopt,
+                   reply_, reply_size, timeout);
+  } else if (ip.family() == AF_INET6) {
+    sockaddr_in6 src = {0};
+    sockaddr_in6 dst = {0};
+    src.sin6_family = AF_INET6;
+    dst.sin6_family = AF_INET6;
+    dst.sin6_addr = ip.ipv6_address();
+    result = send6_(hping6_, NULL, NULL, NULL,
+                    &src, &dst,
+                    data_, int16(data_size), &ipopt,
+                    reply_, reply_size, timeout);
+  }
   if (result == 0) {
-    long error = GetLastError();
+    DWORD error = GetLastError();
     if (error == IP_PACKET_TOO_BIG)
       return PING_TOO_LARGE;
     if (error == IP_REQ_TIMED_OUT)
       return PING_TIMEOUT;
-    LOG(LERROR) << "IcmpSendEcho(" << talk_base::SocketAddress::IPToString(ip)
+    LOG(LERROR) << "IcmpSendEcho(" << ip.ToString()
                 << ", " << data_size << "): " << error;
     return PING_FAIL;
   }

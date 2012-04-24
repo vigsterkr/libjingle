@@ -130,7 +130,7 @@ class RelayServerTest : public testing::Test {
     talk_base::TestClient::Packet* packet = client->NextPacket();
     if (packet) {
       talk_base::ByteBuffer buf(packet->buf, packet->size);
-      msg = new StunMessage();
+      msg = new RelayMessage();
       msg->Read(&buf);
       delete packet;
     }
@@ -146,8 +146,8 @@ class RelayServerTest : public testing::Test {
     return raw;
   }
 
-  static StunMessage* CreateStunMessage(StunMessageType type) {
-    StunMessage* msg = new StunMessage();
+  static StunMessage* CreateStunMessage(int type) {
+    StunMessage* msg = new RelayMessage();
     msg->SetType(type);
     msg->SetTransactionID(
         talk_base::CreateRandomString(kStunTransactionIdLength));
@@ -188,21 +188,14 @@ class RelayServerTest : public testing::Test {
   std::string password_;
 };
 
-// Send a complete nonsense message and verify that it is rejected.
+// Send a complete nonsense message and verify that it is eaten.
 TEST_F(RelayServerTest, TestBadRequest) {
   talk_base::scoped_ptr<StunMessage> res;
 
   SendRaw1(bad, std::strlen(bad));
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
-  EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE, res->type());
-
-  const StunErrorCodeAttribute* err = res->GetErrorCode();
-  ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
-  EXPECT_EQ(0, err->number());
-  EXPECT_EQ("Bad Request", err->reason());
+  ASSERT_TRUE(res.get() == NULL);
 }
 
 // Send an allocate request without a username and verify it is rejected.

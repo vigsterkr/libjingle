@@ -151,7 +151,9 @@ void AutoDetectProxy::Next() {
     socket_ = NULL;
   }
 
-  socket_ = Thread::Current()->socketserver()->CreateAsyncSocket(SOCK_STREAM);
+  socket_ =
+      Thread::Current()->socketserver()->CreateAsyncSocket(
+          proxy_.address.family(), SOCK_STREAM);
   socket_->SignalConnectEvent.connect(this, &AutoDetectProxy::OnConnectEvent);
   socket_->SignalReadEvent.connect(this, &AutoDetectProxy::OnReadEvent);
   socket_->SignalCloseEvent.connect(this, &AutoDetectProxy::OnCloseEvent);

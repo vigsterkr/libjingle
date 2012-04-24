@@ -98,7 +98,7 @@ NetworkManager::NetworkManager() {
 NetworkManager::~NetworkManager() {
 }
 
-NetworkManagerBase::NetworkManagerBase() : ipv6_enabled_(false) {
+NetworkManagerBase::NetworkManagerBase() : ipv6_enabled_(true) {
 }
 
 NetworkManagerBase::~NetworkManagerBase() {
@@ -335,75 +335,72 @@ bool BasicNetworkManager::CreateNetworks(bool include_ignored,
   }
   int count = 0;
   while (adapter_addrs) {
-    PIP_ADAPTER_UNICAST_ADDRESS address = adapter_addrs->FirstUnicastAddress;
-    PIP_ADAPTER_PREFIX prefixlist = adapter_addrs->FirstPrefix;
-    std::string name;
-    std::string description;
+    if (adapter_addrs->OperStatus == IfOperStatusUp) {
+      PIP_ADAPTER_UNICAST_ADDRESS address = adapter_addrs->FirstUnicastAddress;
+      PIP_ADAPTER_PREFIX prefixlist = adapter_addrs->FirstPrefix;
+      std::string name;
+      std::string description;
 #ifdef _DEBUG
-    name = ToUtf8(adapter_addrs->FriendlyName,
-                  wcslen(adapter_addrs->FriendlyName));
-    LOG(LS_INFO) << "Name: " << name;
+      name = ToUtf8(adapter_addrs->FriendlyName,
+                    wcslen(adapter_addrs->FriendlyName));
 #endif
-    description = ToUtf8(adapter_addrs->Description,
-                         wcslen(adapter_addrs->Description));
-    LOG(LS_INFO) << "Description: " << description;
-    while (address) {
+      description = ToUtf8(adapter_addrs->Description,
+                           wcslen(adapter_addrs->Description));
+      for (; address; address = address->Next) {
 #ifndef _DEBUG
-      name = talk_base::ToString(count);
+        name = talk_base::ToString(count);
 #endif
 
-      IPAddress ip;
-      int scope_id = 0;
-      scoped_ptr<Network> network;
-      switch (address->Address.lpSockaddr->sa_family) {
-        case AF_INET: {
-          sockaddr_in* v4_addr =
-              reinterpret_cast<sockaddr_in*>(address->Address.lpSockaddr);
-          ip = IPAddress(v4_addr->sin_addr);
-          break;
-        }
-        case AF_INET6: {
-          if (ipv6_enabled()) {
-            sockaddr_in6* v6_addr =
-                reinterpret_cast<sockaddr_in6*>(address->Address.lpSockaddr);
-            scope_id = v6_addr->sin6_scope_id;
-            ip = IPAddress(v6_addr->sin6_addr);
+        IPAddress ip;
+        int scope_id = 0;
+        scoped_ptr<Network> network;
+        switch (address->Address.lpSockaddr->sa_family) {
+          case AF_INET: {
+            sockaddr_in* v4_addr =
+                reinterpret_cast<sockaddr_in*>(address->Address.lpSockaddr);
+            ip = IPAddress(v4_addr->sin_addr);
             break;
-          } else {
-            address = address->Next;
+          }
+          case AF_INET6: {
+            if (ipv6_enabled()) {
+              sockaddr_in6* v6_addr =
+                  reinterpret_cast<sockaddr_in6*>(address->Address.lpSockaddr);
+              scope_id = v6_addr->sin6_scope_id;
+              ip = IPAddress(v6_addr->sin6_addr);
+              break;
+            } else {
+              continue;
+            }
+          }
+          default: {
             continue;
           }
         }
-        default: {
-          address = address->Next;
-          continue;
+        IPAddress prefix;
+        int prefix_length = GetPrefix(prefixlist, ip, &prefix);
+        std::string key = MakeNetworkKey(name, prefix, prefix_length);
+        NetworkMap::iterator existing_network = current_networks.find(key);
+        if (existing_network == current_networks.end()) {
+          scoped_ptr<Network> network(new Network(name,
+                                                  description,
+                                                  prefix,
+                                                  prefix_length));
+          network->set_scope_id(scope_id);
+          network->AddIP(ip);
+          bool ignore = ((adapter_addrs->IfType == IF_TYPE_SOFTWARE_LOOPBACK) ||
+                         IsIgnoredNetwork(*network));
+          network->set_ignored(ignore);
+          if (include_ignored || !network->ignored()) {
+            networks->push_back(network.release());
+          }
+        } else {
+          (*existing_network).second->AddIP(ip);
         }
       }
-      IPAddress prefix;
-      int prefix_length = GetPrefix(prefixlist, ip, &prefix);
-      std::string key = MakeNetworkKey(name, prefix, prefix_length);
-      NetworkMap::iterator existing_network = current_networks.find(key);
-      if (existing_network == current_networks.end()) {
-        scoped_ptr<Network> network(new Network(name,
-                                                description,
-                                                prefix,
-                                                prefix_length));
-        network->set_scope_id(scope_id);
-        network->AddIP(ip);
-        bool ignore = ((adapter_addrs->IfType == IF_TYPE_SOFTWARE_LOOPBACK) ||
-                       IsIgnoredNetwork(*network));
-        network->set_ignored(ignore);
-        if (include_ignored || !network->ignored()) {
-          networks->push_back(network.release());
-        }
-      } else {
-        (*existing_network).second->AddIP(ip);
-      }
-      address = address->Next;
+      // Count is per-adapter - all 'Networks' created from the same
+      // adapter need to have the same name.
+      ++count;
     }
-    // Count is per-adapter - all 'Networks' created from the same
-    // adapter need to have the same name.
-    ++count;
     adapter_addrs = adapter_addrs->Next;
   }
   return true;

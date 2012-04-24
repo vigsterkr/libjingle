@@ -74,7 +74,8 @@ class RoapSession {
   // Creates a ROAP answer message based on the provided session description.
   // An offer must have been parsed before this function can be called.
   std::string CreateAnswer(const std::string& desc);
-  std::string CreateOk();
+  std::string CreateOkToAnswer();
+  std::string CreateOkToShutdown();
   std::string CreateShutDown();
   std::string CreateErrorMessage(RoapErrorCode error);
   ParseResult Parse(const std::string& msg);

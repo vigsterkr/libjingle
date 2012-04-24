@@ -72,6 +72,10 @@ Connection* UDPPort::CreateConnection(const Candidate& address,
   if (address.protocol() != "udp")
     return NULL;
 
+  if (!IsCompatibleAddress(address.address())) {
+    return NULL;
+  }
+
   Connection* conn = new ProxyConnection(this, 0, address);
   AddConnection(conn);
   return conn;

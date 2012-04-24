@@ -105,6 +105,8 @@ class SocketAddress {
 
   const IPAddress& ipaddr() const;
 
+  int family() const {return ip_.family(); }
+
   // Returns the port part of this address.
   uint16 port() const;
 
@@ -227,6 +229,7 @@ class SocketAddress {
 
 bool SocketAddressFromSockAddrStorage(const sockaddr_storage& saddr,
                                       SocketAddress* out);
+SocketAddress EmptySocketAddressWithFamily(int family);
 
 }  // namespace talk_base
 

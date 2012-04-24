@@ -31,6 +31,7 @@
 #include <string>
 #include <sstream>
 #include "talk/base/socketaddress.h"
+#include "talk/p2p/base/constants.h"
 
 namespace cricket {
 
@@ -38,18 +39,21 @@ namespace cricket {
 
 class Candidate {
  public:
-  Candidate() : preference_(0), generation_(0) {}
-  Candidate(const std::string& name, const std::string& protocol,
-            const talk_base::SocketAddress& address, float preference,
+  Candidate() : component_(0), priority_(0), generation_(0), foundation_(0) {}
+  Candidate(const std::string& id, int component, const std::string& protocol,
+            const talk_base::SocketAddress& address, uint32 priority,
             const std::string& username, const std::string& password,
             const std::string& type, const std::string& network_name,
-            uint32 generation)
-      : name_(name), protocol_(protocol), address_(address),
-        preference_(preference), username_(username), password_(password),
-        type_(type), network_name_(network_name), generation_(generation) {}
+            uint32 generation, int foundation)
+      : id_(id), component_(component), protocol_(protocol), address_(address),
+        priority_(priority), username_(username), password_(password),
+        type_(type), network_name_(network_name), generation_(generation),
+        foundation_(foundation) {}
+  const std::string & id() const { return id_; }
+  void set_id(const std::string & id) { id_ = id; }
 
-  const std::string & name() const { return name_; }
-  void set_name(const std::string & name) { name_ = name; }
+  const int component() const { return component_; }
+  void set_component(int component) { component_ = component; }
 
   const std::string & protocol() const { return protocol_; }
   void set_protocol(const std::string & protocol) { protocol_ = protocol; }
@@ -59,16 +63,18 @@ class Candidate {
     address_ = address;
   }
 
-  float preference() const { return preference_; }
-  void set_preference(const float preference) { preference_ = preference; }
-  const std::string preference_str() const {
-    std::ostringstream ost;
-    ost << preference_;
-    return ost.str();
+  uint32 priority() const { return priority_; }
+  void set_priority(const uint32 priority) { priority_ = priority; }
+
+  // Maps old preference (which was 0.0-1.0) to match priority (which
+  // is 0-2^32-1) to to match RFC 5245, section 4.1.2.1.  Also see
+  // https://docs.google.com/a/google.com/document/d/
+  // 1iNQDiwDKMh0NQOrCqbj3DKKRT0Dn5_5UJYhmZO-t7Uc/edit
+  float preference() const {
+    return static_cast<float>(priority_ >> 24) / 127;
   }
-  void set_preference_str(const std::string & preference) {
-    std::istringstream ist(preference);
-    ist >> preference_;
+  void set_preference(float preference) {
+    priority_ = static_cast<uint32>(preference * 127) << 24;
   }
 
   const std::string & username() const { return username_; }
@@ -98,38 +104,56 @@ class Candidate {
     ist >> generation_;
   }
 
+  const int foundation() const { return foundation_; }
+  void set_foundation(int foundation) { foundation_ = foundation; }
+
+  const talk_base::SocketAddress & related_address() const {
+    return related_address_;
+  }
+  void set_related_address(
+      const talk_base::SocketAddress & related_address) {
+    related_address_ = related_address;
+  }
+
   // Determines whether this candidate is equivalent to the given one.
   bool IsEquivalent(const Candidate& c) const {
     // We ignore the network name, since that is just debug information, and
-    // the preference, since that should be the same if the rest is (and it's
+    // the priority, since that should be the same if the rest is (and it's
     // a float so equality checking is always worrisome).
-    return (name_ == c.name_) &&
+    return (id_ == c.id_) &&
+           (component_ == c.component_) &&
            (protocol_ == c.protocol_) &&
            (address_ == c.address_) &&
            (username_ == c.username_) &&
            (password_ == c.password_) &&
            (type_ == c.type_) &&
-           (generation_ == c.generation_);
+           (generation_ == c.generation_) &&
+           (foundation_ == c.foundation_) &&
+           (related_address_ == c.related_address_);
   }
 
   std::string ToString() const {
     std::ostringstream ost;
-    ost << "Cand[" << name_ << ":" << type_ << ":" << protocol_ << ":"
+    ost << "Cand[" << id_ << ":" << component_ << ":"
+        << type_ << ":" << protocol_ << ":"
         << network_name_ << ":" << address_.ToString() << ":"
         << username_ << ":" << password_ << "]";
     return ost.str();
   }
 
  private:
-  std::string name_;
+  std::string id_;
+  int component_;
   std::string protocol_;
   talk_base::SocketAddress address_;
-  float preference_;
+  uint32 priority_;
   std::string username_;
   std::string password_;
   std::string type_;
   std::string network_name_;
   uint32 generation_;
+  int foundation_;
+  talk_base::SocketAddress related_address_;
 };
 
 }  // namespace cricket

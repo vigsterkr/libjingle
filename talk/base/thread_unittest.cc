@@ -153,12 +153,14 @@ TEST(ThreadTest, Main) {
 
   // Create the messaging client on its own thread.
   Thread th1;
-  Socket* socket = th1.socketserver()->CreateSocket(SOCK_DGRAM);
+  Socket* socket = th1.socketserver()->CreateAsyncSocket(addr.family(),
+                                                         SOCK_DGRAM);
   MessageClient msg_client(&th1, socket);
 
   // Create the socket client on its own thread.
   Thread th2;
-  AsyncSocket* asocket = th2.socketserver()->CreateAsyncSocket(SOCK_DGRAM);
+  AsyncSocket* asocket =
+      th2.socketserver()->CreateAsyncSocket(addr.family(), SOCK_DGRAM);
   SocketClient sock_client(asocket, addr, &th1, &msg_client);
 
   socket->Connect(sock_client.address());

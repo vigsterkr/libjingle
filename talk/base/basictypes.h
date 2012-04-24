@@ -104,12 +104,6 @@ typedef signed char int8;
 typedef int socklen_t;
 #endif
 
-#if defined(__GNUC__)
-#define GCC_ATTR(x) __attribute__ ((x))
-#else  // !__GNUC__
-#define GCC_ATTR(x)
-#endif  // !__GNUC__
-
 // The following only works for C++
 #ifdef __cplusplus
 namespace talk_base {

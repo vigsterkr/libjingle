@@ -54,7 +54,7 @@ namespace cricket {
 
 static const int kDefaultLogSeverity = talk_base::LS_WARNING;
 
-static const int kMinVideoBitrate = 100;
+static const int kMinVideoBitrate = 50;
 static const int kStartVideoBitrate = 300;
 static const int kMaxVideoBitrate = 2000;
 static const int kDefaultConferenceModeMaxVideoBitrate = 500;
@@ -67,7 +67,7 @@ static const char kVp8PayloadName[] = "VP8";
 static const char kRedPayloadName[] = "red";
 static const char kFecPayloadName[] = "ulpfec";
 
-static const int kDefaultNumberOfTemporalLayers = 3;
+static const int kDefaultNumberOfTemporalLayers = 1;  // 1:1
 
 static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   const char* delim = "\r\n";
@@ -1130,14 +1130,6 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   // Select the first matched codec.
   webrtc::VideoCodec& codec(send_codecs[0]);
 
-  // Set the default number of temporal layers for VP8.
-  if (webrtc::kVideoCodecVP8 == codec.codecType) {
-    codec.codecSpecific.VP8.numberOfTemporalLayers =
-        kDefaultNumberOfTemporalLayers;
-    // Turn off the VP8 error resilience
-    codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
-  }
-
   if (!SetSendCodec(
       codec, send_min_bitrate_, send_start_bitrate_, send_max_bitrate_)) {
     return false;
@@ -1324,6 +1316,11 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
                  << " reuse default channel #"
                  << vie_channel_;
     first_receive_ssrc_ = sp.first_ssrc();
+    if (render_started_) {
+      if (engine()->vie()->render()->StartRender(vie_channel_) !=0) {
+        LOG_RTCERR1(StartRender, vie_channel_);
+      }
+    }
     return true;
   }
 
@@ -1387,6 +1384,14 @@ bool WebRtcVideoMediaChannel::RemoveRecvStream(uint32 ssrc) {
     // The default channel is reused for recv stream in 1:1 call.
     if (first_receive_ssrc_ == ssrc) {
       first_receive_ssrc_ = 0;
+      // Need to stop the renderer and remove it since the render window can be
+      // deleted after this.
+      if (render_started_) {
+        if (engine()->vie()->render()->StopRender(vie_channel_) !=0) {
+          LOG_RTCERR1(StopRender, it->second->channel_id());
+        }
+      }
+      mux_channels_[0]->SetRenderer(NULL);
       return true;
     }
     return false;
@@ -2011,6 +2016,15 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
   target_codec.minBitrate = min_bitrate;
   target_codec.maxBitrate = max_bitrate;
 
+  // Set the default number of temporal layers for VP8.
+  if (webrtc::kVideoCodecVP8 == codec.codecType) {
+    target_codec.codecSpecific.VP8.numberOfTemporalLayers =
+        kDefaultNumberOfTemporalLayers;
+
+    // Turn off the VP8 error resilience
+    target_codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
+  }
+
   if (codec.width == 0 && codec.height == 0) {
     LOG(LS_INFO) << "0x0 resolution selected. We will drop all the frames.";
   } else {
@@ -2115,9 +2129,11 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int new_width,
     LOG_RTCERR1(GetSendCodec, vie_channel_);
     return false;
   }
+  const int cur_width = vie_codec.width;
+  const int cur_height = vie_codec.height;
 
   // Only reset send codec when there is a size change.
-  if (target_width != vie_codec.width || target_height != vie_codec.height) {
+  if (target_width != cur_width || target_height != cur_height) {
     // Set the new codec on vie.
     vie_codec.width = target_width;
     vie_codec.height = target_height;

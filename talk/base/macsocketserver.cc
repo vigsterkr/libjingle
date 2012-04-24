@@ -28,7 +28,7 @@ AsyncSocket* MacBaseSocketServer::CreateAsyncSocket(int family, int type) {
   if (SOCK_STREAM != type)
     return NULL;
 
-  MacAsyncSocket* socket = new MacAsyncSocket(this);
+  MacAsyncSocket* socket = new MacAsyncSocket(this, family);
   if (!socket->valid()) {
     delete socket;
     return NULL;

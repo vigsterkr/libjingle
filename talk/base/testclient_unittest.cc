@@ -27,6 +27,7 @@
 
 #include "talk/base/gunit.h"
 #include "talk/base/host.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/physicalsocketserver.h"
 #include "talk/base/testclient.h"
 #include "talk/base/testechoserver.h"
@@ -34,13 +35,11 @@
 
 using namespace talk_base;
 
-static const SocketAddress kLocalHostAnyAddr("127.0.0.1", 0);
-
-// Tests whether the TestClient can send UDP to itself.
-TEST(TestClientTest, TestUdp) {
+void TestUdpInternal(const SocketAddress& loopback) {
   Thread *main = Thread::Current();
-  AsyncSocket* socket = main->socketserver()->CreateAsyncSocket(SOCK_DGRAM);
-  socket->Bind(kLocalHostAnyAddr);
+  AsyncSocket* socket = main->socketserver()
+      ->CreateAsyncSocket(loopback.family(), SOCK_DGRAM);
+  socket->Bind(loopback);
 
   TestClient client(new AsyncUDPSocket(socket));
   SocketAddress addr = client.address(), from;
@@ -50,14 +49,14 @@ TEST(TestClientTest, TestUdp) {
   EXPECT_TRUE(client.CheckNoPacket());
 }
 
-// Tests whether the TestClient can connect to a server and exchange data.
-TEST(TestClientTest, TestTcp) {
+void TestTcpInternal(const SocketAddress& loopback) {
   Thread *main = Thread::Current();
-  TestEchoServer server(main, kLocalHostAnyAddr);
+  TestEchoServer server(main, loopback);
 
-  AsyncSocket* socket = main->socketserver()->CreateAsyncSocket(SOCK_STREAM);
+  AsyncSocket* socket = main->socketserver()
+      ->CreateAsyncSocket(loopback.family(), SOCK_STREAM);
   AsyncTCPSocket* tcp_socket = AsyncTCPSocket::Create(
-      socket, kLocalHostAnyAddr, server.address());
+      socket, loopback, server.address());
   ASSERT_TRUE(tcp_socket != NULL);
 
   TestClient client(tcp_socket);
@@ -67,4 +66,30 @@ TEST(TestClientTest, TestTcp) {
   EXPECT_TRUE(client.CheckNextPacket("foo", 3, &from));
   EXPECT_EQ(from, server.address());
   EXPECT_TRUE(client.CheckNoPacket());
+}
+
+// Tests whether the TestClient can send UDP to itself.
+TEST(TestClientTest, TestUdpIPv4) {
+  TestUdpInternal(SocketAddress("127.0.0.1", 0));
+}
+
+TEST(TestClientTest, TestUdpIPv6) {
+  if (HasIPv6Enabled()) {
+    TestUdpInternal(SocketAddress("::1", 0));
+  } else {
+    LOG(LS_INFO) << "Skipping IPv6 test.";
+  }
+}
+
+// Tests whether the TestClient can connect to a server and exchange data.
+TEST(TestClientTest, TestTcpIPv4) {
+  TestTcpInternal(SocketAddress("127.0.0.1", 0));
+}
+
+TEST(TestClientTest, TestTcpIPv6) {
+  if (HasIPv6Enabled()) {
+    TestTcpInternal(SocketAddress("::1", 0));
+  } else {
+    LOG(LS_INFO) << "Skipping IPv6 test.";
+  }
 }

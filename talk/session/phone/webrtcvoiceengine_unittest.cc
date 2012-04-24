@@ -2,6 +2,11 @@
 //
 // Author: Justin Uberti (juberti@google.com)
 
+#ifdef WIN32
+#include "talk/base/win32.h"
+#include <objbase.h>
+#endif
+
 #include "talk/base/byteorder.h"
 #include "talk/base/gunit.h"
 #include "talk/p2p/base/fakesession.h"
@@ -298,6 +303,20 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsAfterAddingStreams) {
   EXPECT_STREQ("ISAC", gcodec.plname);
 }
 
+// Test that we can apply the same set of codecs again while playing.
+TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsWhilePlaying) {
+  EXPECT_TRUE(SetupEngine());
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kIsacCodec);
+  codecs.push_back(kCn16000Codec);
+  EXPECT_TRUE(channel_->SetRecvCodecs(codecs));
+  EXPECT_TRUE(channel_->SetPlayout(true));
+  EXPECT_TRUE(channel_->SetRecvCodecs(codecs));
+
+  codecs[0].bitrate = 100;  // Change codec.
+  EXPECT_FALSE(channel_->SetRecvCodecs(codecs));
+}
+
 // Test that we apply codecs properly.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   EXPECT_TRUE(SetupEngine());
@@ -399,6 +418,43 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCNandDTMF) {
   EXPECT_EQ(13, voe_.GetSendCNPayloadType(channel_num, false));
   EXPECT_EQ(97, voe_.GetSendCNPayloadType(channel_num, true));
   EXPECT_EQ(98, voe_.GetSendTelephoneEventPayloadType(channel_num));
+}
+
+// Test that we only apply VAD if we have a CN codec that matches the
+// send codec clockrate.
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCNNoMatch) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = voe_.GetLastChannel();
+  std::vector<cricket::AudioCodec> codecs;
+  // Set ISAC(16K) and CN(16K). VAD should be activated.
+  codecs.push_back(kIsacCodec);
+  codecs.push_back(kCn16000Codec);
+  codecs[1].id = 97;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  webrtc::CodecInst gcodec;
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_STREQ("ISAC", gcodec.plname);
+  EXPECT_TRUE(voe_.GetVAD(channel_num));
+  EXPECT_EQ(97, voe_.GetSendCNPayloadType(channel_num, true));
+  // Set PCMU(8K) and CN(16K). VAD should not be activated.
+  codecs[0] = kPcmuCodec;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_STREQ("PCMU", gcodec.plname);
+  EXPECT_FALSE(voe_.GetVAD(channel_num));
+  // Set PCMU(8K) and CN(8K). VAD should be activated.
+  codecs[1] = kCn8000Codec;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_STREQ("PCMU", gcodec.plname);
+  EXPECT_TRUE(voe_.GetVAD(channel_num));
+  EXPECT_EQ(13, voe_.GetSendCNPayloadType(channel_num, false));
+   // Set ISAC(16K) and CN(8K). VAD should not be activated.
+  codecs[0] = kIsacCodec;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_STREQ("ISAC", gcodec.plname);
+  EXPECT_FALSE(voe_.GetVAD(channel_num));
 }
 
 // Test that we perform case-insensitive matching of codec names.

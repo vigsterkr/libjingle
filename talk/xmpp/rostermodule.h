@@ -79,6 +79,13 @@ enum XmppPresenceAvailable {
   XMPP_PRESENCE_ERROR       = 2,
 };
 
+enum XmppPresenceConnectionStatus {
+  XMPP_CONNECTION_STATUS_UNKNOWN    = 0,
+  XMPP_CONNECTION_STATUS_CONNECTING = 1,
+  XMPP_CONNECTION_STATUS_CONNECTED  = 2,
+  XMPP_CONNECTION_STATUS_HANGUP     = 3,
+};
+
 //! Presence Information
 //! This class stores both presence information for outgoing presence and is
 //! returned by methods in XmppRosterModule to represent recieved incoming
@@ -118,12 +125,18 @@ public:
   //! The plain text status of the presence info.
   //! If there are multiple status because of language, this will either be a
   //! status that is not tagged for language or the first available
-  virtual const std::string& status() const = 0;
+  virtual const std::string status() const = 0;
 
   //! Sets the status for the presence info.
   //! If there is more than one status present already then this will remove
   //! them all and replace it with one status element we no specified language
   virtual XmppReturnStatus set_status(const std::string& status) = 0;
+
+  //! The connection status
+  virtual XmppPresenceConnectionStatus connection_status() const = 0;
+
+  //! The focus obfuscated GAIA id
+  virtual const std::string google_user_id() const = 0;
 
   //! The raw xml of the presence update
   virtual const XmlElement* raw_xml() const = 0;
@@ -150,7 +163,7 @@ public:
   virtual XmppReturnStatus set_jid(const Jid& jid) = 0;
 
   //! The name (nickname) stored for this contact
-  virtual const std::string& name() const = 0;
+  virtual const std::string name() const = 0;
 
   //! Sets the name
   virtual XmppReturnStatus set_name(const std::string& name) = 0;
@@ -165,7 +178,7 @@ public:
 
   //! Gets a Group applied to the contact based on index.
   //! range
-  virtual const std::string& GetGroup(size_t index) const = 0;
+  virtual const std::string GetGroup(size_t index) const = 0;
 
   //! Adds a group to this contact.
   //! This will return a bad argument error if the group is already there.

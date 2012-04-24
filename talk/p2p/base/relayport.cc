@@ -189,19 +189,13 @@ RelayPort::RelayPort(
     talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
     talk_base::Network* network, const talk_base::IPAddress& ip,
     int min_port, int max_port, const std::string& username,
-    const std::string& password, const std::string& magic_cookie)
+    const std::string& password)
     : Port(thread, RELAY_PORT_TYPE, factory, network, ip, min_port, max_port,
            username, password),
       ready_(false),
-      magic_cookie_(magic_cookie),
       error_(0) {
   entries_.push_back(
       new RelayEntry(this, talk_base::SocketAddress()));
-
-  if (magic_cookie_.size() == 0) {
-    magic_cookie_.append(TURN_MAGIC_COOKIE_VALUE,
-                         sizeof(TURN_MAGIC_COOKIE_VALUE));
-  }
 }
 
 RelayPort::~RelayPort() {
@@ -249,12 +243,11 @@ const ProtocolAddress * RelayPort::ServerAddress(size_t index) const {
 }
 
 bool RelayPort::HasMagicCookie(const char* data, size_t size) {
-  if (size < 24 + magic_cookie_.size()) {
+  if (size < 24 + sizeof(TURN_MAGIC_COOKIE_VALUE)) {
     return false;
   } else {
-    return 0 == std::memcmp(data + 24,
-                            magic_cookie_.c_str(),
-                            magic_cookie_.size());
+    return 0 == std::memcmp(data + 24, TURN_MAGIC_COOKIE_VALUE,
+                            sizeof(TURN_MAGIC_COOKIE_VALUE));
   }
 }
 
@@ -275,6 +268,10 @@ Connection* RelayPort::CreateConnection(const Candidate& address,
 
   // We don't support loopback on relays
   if (address.type() == type()) {
+    return 0;
+  }
+
+  if (!IsCompatibleAddress(address.address())) {
     return 0;
   }
 
@@ -300,7 +297,7 @@ int RelayPort::SendTo(const void* data, size_t size,
   RelayEntry* entry = 0;
 
   for (size_t i = 0; i < entries_.size(); ++i) {
-    if (entries_[i]->address().IsAny() && payload) {
+    if (entries_[i]->address().IsNil() && payload) {
       entry = entries_[i];
       entry->set_address(addr);
       break;
@@ -534,15 +531,15 @@ int RelayEntry::SendTo(const void* data, size_t size,
   // likely no reason to resend this packet. If it is late, we just drop it.
   // The next send to this address will try again.
 
-  StunMessage request;
+  RelayMessage request;
   request.SetType(STUN_SEND_REQUEST);
   request.SetTransactionID(
       talk_base::CreateRandomString(kStunTransactionIdLength));
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
-  magic_cookie_attr->CopyBytes(port_->magic_cookie().c_str(),
-                               port_->magic_cookie().size());
+  magic_cookie_attr->CopyBytes(TURN_MAGIC_COOKIE_VALUE,
+                               sizeof(TURN_MAGIC_COOKIE_VALUE));
   request.AddAttribute(magic_cookie_attr);
 
   StunByteStringAttribute* username_attr =
@@ -666,7 +663,7 @@ void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   }
 
   talk_base::ByteBuffer buf(data, size);
-  StunMessage msg;
+  RelayMessage msg;
   if (!msg.Read(&buf)) {
     LOG(INFO) << "Incoming packet was not STUN";
     return;
@@ -734,9 +731,8 @@ void AllocateRequest::Prepare(StunMessage* request) {
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
-  magic_cookie_attr->CopyBytes(
-      entry_->port()->magic_cookie().c_str(),
-      entry_->port()->magic_cookie().size());
+  magic_cookie_attr->CopyBytes(TURN_MAGIC_COOKIE_VALUE,
+                               sizeof(TURN_MAGIC_COOKIE_VALUE));
   request->AddAttribute(magic_cookie_attr);
 
   StunByteStringAttribute* username_attr =

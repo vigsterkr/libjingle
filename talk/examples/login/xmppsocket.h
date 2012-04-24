@@ -40,6 +40,7 @@
 
 namespace talk_base {
   class StreamInterface;
+  class SocketAddress;
 };
 extern talk_base::AsyncSocket* cricket_socket_;
 
@@ -61,6 +62,7 @@ public:
   sigslot::signal1<int> SignalCloseEvent;
 
 private:
+  void CreateCricketSocket(int family);
 #ifndef USE_SSLSTREAM
   void OnReadEvent(talk_base::AsyncSocket * socket);
   void OnWriteEvent(talk_base::AsyncSocket * socket);

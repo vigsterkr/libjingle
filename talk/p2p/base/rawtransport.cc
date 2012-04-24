@@ -53,18 +53,25 @@ RawTransport::~RawTransport() {
 
 bool RawTransport::ParseCandidates(SignalingProtocol protocol,
                                    const buzz::XmlElement* elem,
+                                   const CandidateTranslator* translator,
                                    Candidates* candidates,
                                    ParseError* error) {
   for (const buzz::XmlElement* cand_elem = elem->FirstElement();
        cand_elem != NULL;
        cand_elem = cand_elem->NextElement()) {
     if (cand_elem->Name() == QN_GINGLE_RAW_CHANNEL) {
+      if (!cand_elem->HasAttr(buzz::QN_NAME)) {
+        return BadParse("no channel name given", error);
+      }
+      if (type() != cand_elem->Attr(buzz::QN_NAME)) {
+        return BadParse("channel named does not exist", error);
+      }
       talk_base::SocketAddress addr;
       if (!ParseRawAddress(cand_elem, &addr, error))
         return false;
 
       Candidate candidate;
-      candidate.set_name(cand_elem->Attr(buzz::QN_NAME));
+      candidate.set_component(1);
       candidate.set_address(addr);
       candidates->push_back(candidate);
     }
@@ -74,12 +81,14 @@ bool RawTransport::ParseCandidates(SignalingProtocol protocol,
 
 bool RawTransport::WriteCandidates(SignalingProtocol protocol,
                                    const Candidates& candidates,
+                                   const CandidateTranslator* translator,
                                    XmlElements* candidate_elems,
                                    WriteError* error) {
   for (std::vector<Candidate>::const_iterator
        cand = candidates.begin();
        cand != candidates.end();
        ++cand) {
+    ASSERT(cand->component() == 1);
     ASSERT(cand->protocol() == "udp");
     talk_base::SocketAddress addr = cand->address();
 
@@ -96,15 +105,10 @@ bool RawTransport::ParseRawAddress(const buzz::XmlElement* elem,
                                    talk_base::SocketAddress* addr,
                                    ParseError* error) {
   // Make sure the required attributes exist
-  if (!elem->HasAttr(buzz::QN_NAME) ||
-      !elem->HasAttr(QN_ADDRESS) ||
+  if (!elem->HasAttr(QN_ADDRESS) ||
       !elem->HasAttr(QN_PORT)) {
     return BadParse("channel missing required attribute", error);
   }
-
-  // Make sure the channel named actually exists.
-  if (!HasChannel(elem->Attr(buzz::QN_NAME)))
-    return BadParse("channel named does not exist", error);
 
   // Parse the address.
   if (!ParseAddress(elem, QN_ADDRESS, QN_PORT, addr, error))
@@ -114,8 +118,8 @@ bool RawTransport::ParseRawAddress(const buzz::XmlElement* elem,
 }
 
 TransportChannelImpl* RawTransport::CreateTransportChannel(
-    const std::string& name, const std::string& content_type) {
-  return new RawTransportChannel(name, content_type, this,
+    const std::string& name, int component) {
+  return new RawTransportChannel(name, component, this,
                                  worker_thread(),
                                  port_allocator());
 }

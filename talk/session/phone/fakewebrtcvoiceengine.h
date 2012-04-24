@@ -328,6 +328,8 @@ class FakeWebRtcVoiceEngine
                                   const webrtc::CodecInst& codec)) {
     WEBRTC_CHECK_CHANNEL(channel);
     Channel* ch = channels_[channel];
+    if (ch->playout)
+      return -1;  // Channel is in use.
     // Check if something else already has this slot.
     if (codec.pltype != -1) {
       for (std::vector<webrtc::CodecInst>::iterator it =

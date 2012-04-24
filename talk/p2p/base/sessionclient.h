@@ -44,7 +44,7 @@ class ContentParser {
  public:
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error) = 0;
   // If not IsWriteable, then a given content should be "skipped" when
   // writing in the given protocol, as if it didn't exist.  We assume
@@ -79,7 +79,7 @@ class SessionClient : public ContentParser {
 
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error) = 0;
   virtual bool WriteContent(SignalingProtocol protocol,
                             const ContentDescription* content,

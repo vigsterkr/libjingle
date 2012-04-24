@@ -33,29 +33,12 @@
 #include "talk/base/criticalsection.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
-#include "talk/p2p/base/p2ptransportchannel.h"
-#include "talk/p2p/base/port.h"
+#include "talk/p2p/base/transportchannel.h"
 
 namespace cricket {
 
-struct ConnectionInfo {
-  bool best_connection;
-  bool writable;
-  bool readable;
-  bool timeout;
-  bool new_connection;
-  size_t rtt;
-  size_t sent_total_bytes;
-  size_t sent_bytes_second;
-  size_t recv_total_bytes;
-  size_t recv_bytes_second;
-  Candidate local_candidate;
-  Candidate remote_candidate;
-  void *key;
-};
-
 class SocketMonitor : public talk_base::MessageHandler,
-    public sigslot::has_slots<> {
+                      public sigslot::has_slots<> {
  public:
   SocketMonitor(TransportChannel* channel,
                 talk_base::Thread* worker_thread,
@@ -65,15 +48,13 @@ class SocketMonitor : public talk_base::MessageHandler,
   void Start(int cms);
   void Stop();
 
-  talk_base::Thread *monitor_thread() { return monitoring_thread_; }
+  talk_base::Thread* monitor_thread() { return monitoring_thread_; }
 
-  sigslot::signal2<SocketMonitor *,
-                   const std::vector<ConnectionInfo> &> SignalUpdate;
+  sigslot::signal2<SocketMonitor*,
+                   const std::vector<ConnectionInfo>&> SignalUpdate;
 
  protected:
-  P2PTransportChannel* GetP2PChannel() { return channel_->GetP2PChannel(); }
-  void OnMessage(talk_base::Message *message);
-  void OnConnectionMonitor(P2PTransportChannel* channel);
+  void OnMessage(talk_base::Message* message);
   void PollSocket(bool poll);
 
   std::vector<ConnectionInfo> connection_infos_;

@@ -49,6 +49,7 @@ const uint32 PORTALLOCATOR_DISABLE_RELAY = 0x04;
 const uint32 PORTALLOCATOR_DISABLE_TCP = 0x08;
 const uint32 PORTALLOCATOR_ENABLE_SHAKER = 0x10;
 const uint32 PORTALLOCATOR_ENABLE_BUNDLE = 0x20;
+const uint32 PORTALLOCATOR_ENABLE_IPV6 = 0x40;
 
 const uint32 kDefaultPortAllocatorFlags = 0;
 
@@ -56,10 +57,14 @@ class PortAllocatorSessionMuxer;
 
 class PortAllocatorSession : public sigslot::has_slots<> {
  public:
-  // TODO Remove session_type argument (and other places), as
-  // its not used.
-  PortAllocatorSession(const std::string& name,
-                       const std::string& session_type,
+  // Mediaproxy expects username to be 16 bytes.
+  static const int kUsernameLength = 16;
+  // Minimum password length of 22 characters as per RFC5245. We chose
+  // 24 because of Gargamel expects password to be mutliple of 4.
+  static const int kPasswordLength = 24;
+
+  PortAllocatorSession(const std::string& channel_name,
+                       int component,
                        uint32 flags);
 
   // Subclasses should clean up any ports created.
@@ -67,8 +72,8 @@ class PortAllocatorSession : public sigslot::has_slots<> {
 
   uint32 flags() const { return flags_; }
   void set_flags(uint32 flags) { flags_ = flags; }
-  const std::string& name() const { return name_; }
-  const std::string& session_type() const { return session_type_; }
+  const std::string& channel_name() const { return channel_name_; }
+  int component() const { return component_; }
 
   // Prepares an initial set of ports to try.
   virtual void GetInitialPorts() = 0;
@@ -91,8 +96,8 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   const std::string& username() const { return username_; }
   const std::string& password() const { return password_; }
 
-  std::string name_;
-  std::string session_type_;
+  std::string channel_name_;
+  int component_;
 
  private:
   uint32 flags_;
@@ -112,8 +117,8 @@ class PortAllocator : public sigslot::has_slots<> {
 
   PortAllocatorSession* CreateSession(
       const std::string& sid,
-      const std::string& name,
-      const std::string& session_type);
+      const std::string& channel_name,
+      int component);
 
   PortAllocatorSessionMuxer* GetSessionMuxer(const std::string& sid) const;
   void OnSessionMuxerDestroyed(PortAllocatorSessionMuxer* session);
@@ -144,8 +149,9 @@ class PortAllocator : public sigslot::has_slots<> {
  protected:
   // TODO - Change this version of CreateSession name to avoid method hiding
   // when called by the derived classes.
-  virtual PortAllocatorSession* CreateSession(const std::string &name,
-      const std::string &session_type) = 0;
+  virtual PortAllocatorSession* CreateSession(
+      const std::string &channel_name,
+      int component) = 0;
 
   typedef std::map<std::string, PortAllocatorSessionMuxer*> SessionMuxerMap;
 

@@ -360,7 +360,7 @@ bool WebRtcVoiceEngine::InitInternal() {
   }
 
   // Save the default AGC configuration settings.
-  if (voe_wrapper_->processing()->SetAgcConfig(default_agc_config_) == -1) {
+  if (voe_wrapper_->processing()->GetAgcConfig(default_agc_config_) == -1) {
     LOG_RTCERR0(GetAGCConfig);
     return false;
   }
@@ -448,6 +448,7 @@ SoundclipMedia *WebRtcVoiceEngine::CreateSoundclip() {
   return soundclip;
 }
 
+// TODO: Add a comprehensive unittests for SetOptions().
 bool WebRtcVoiceEngine::SetOptions(int options) {
   // NS and typing detection are always on, if supported.
   bool aec = (options & MediaEngineInterface::ECHO_CANCELLATION) ? true : false;
@@ -864,12 +865,12 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
     "GetRTPStatistics() failed to measure RTT since no RTP packets have been received yet",  // NOLINT
     "GetRTPStatistics() failed to read RTP statistics from the RTP/RTCP module",
     "GetRTPStatistics() failed to retrieve RTT from the RTP/RTCP module",
-    "webrtc::RTCPReceiver::SenderInfoReceived No received SR",
+    "SenderInfoReceived No received SR",
     "StatisticsRTP() no statisitics availble",
     NULL
   };
   for (const char* const* p = kTracesToIgnore; *p; ++p) {
-    if (trace.find(*p) == 0) {
+    if (trace.find(*p) != std::string::npos) {
       return true;
     }
   }
@@ -1222,7 +1223,6 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
     : WebRtcMediaChannel<VoiceMediaChannel, WebRtcVoiceEngine>(
           engine,
           engine->voe()->base()->CreateChannel()),
-      recv_codecs_set_(false),
       options_(0),
       agc_adjusted_(false),
       dtmf_allowed_(false),
@@ -1292,17 +1292,24 @@ bool WebRtcVoiceMediaChannel::SetRecvCodecs(
   // Set the payload types to be used for incoming media.
   bool ret = true;
   LOG(LS_INFO) << "Setting receive voice codecs:";
+
+  if (recv_codecs_ == codecs) {
+    return true;
+  }
+
   for (std::vector<AudioCodec>::const_iterator it = codecs.begin();
        it != codecs.end() && ret; ++it) {
     webrtc::CodecInst voe_codec;
     if (engine()->FindWebRtcCodec(*it, &voe_codec)) {
       LOG(LS_INFO) << ToString(*it);
       voe_codec.pltype = it->id;
+
       if (engine()->voe()->codec()->SetRecPayloadType(
           voe_channel(), voe_codec) == -1) {
         LOG_RTCERR2(SetRecPayloadType, voe_channel(), ToString(voe_codec));
         ret = false;
       }
+
       // Set the receive codecs on all receiving channels.
       for (ChannelMap::iterator it = mux_channels_.begin();
            it != mux_channels_.end() && ret; ++it) {
@@ -1317,7 +1324,9 @@ bool WebRtcVoiceMediaChannel::SetRecvCodecs(
       ret = false;
     }
   }
-  recv_codecs_set_ = ret;
+  if (ret) {
+    recv_codecs_ = codecs;
+  }
   return ret;
 }
 
@@ -1347,8 +1356,11 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
     // Find the DTMF telephone event "codec" and tell VoiceEngine about it.
     if (_stricmp(it->name.c_str(), "telephone-event") == 0 ||
         _stricmp(it->name.c_str(), "audio/telephone-event") == 0) {
-      engine()->voe()->dtmf()->SetSendTelephoneEventPayloadType(
-          voe_channel(), it->id);
+      if (engine()->voe()->dtmf()->SetSendTelephoneEventPayloadType(
+          voe_channel(), it->id) == -1) {
+        LOG_RTCERR2(SetSendTelephoneEventPayloadType, voe_channel(), it->id);
+        return false;
+      }
       dtmf_allowed_ = true;
     }
 
@@ -1372,10 +1384,22 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
                           << " not supported.";
           continue;
       }
-      engine()->voe()->codec()->SetVADStatus(voe_channel(), true);
+      // The CN payload type for 8000 Hz clockrate is fixed at 13.
       if (cn_freq != webrtc::kFreq8000Hz) {
-        engine()->voe()->codec()->SetSendCNPayloadType(voe_channel(),
-                                                       it->id, cn_freq);
+        if (engine()->voe()->codec()->SetSendCNPayloadType(voe_channel(),
+            it->id, cn_freq) == -1) {
+          LOG_RTCERR3(SetSendCNPayloadType, voe_channel(), it->id, cn_freq);
+          return false;
+        }
+      }
+      // Only turn on VAD if we have a CN payload type that matches the
+      // clockrate for the codec we are going to use.
+      if (it->clockrate == send_codec.plfreq) {
+        LOG(LS_INFO) << "Enabling VAD";
+        if (engine()->voe()->codec()->SetVADStatus(voe_channel(), true) == -1) {
+          LOG_RTCERR2(SetVADStatus, voe_channel(), true);
+          return false;
+        }
       }
     }
 
@@ -1718,7 +1742,7 @@ bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
 
   // Use the same recv payload types as our default channel.
   ResetRecvCodecs(channel);
-  if (recv_codecs_set_) {
+  if (!recv_codecs_.empty()) {
     int ncodecs = engine()->voe()->codec()->NumOfCodecs();
     for (int i = 0; i < ncodecs; ++i) {
       webrtc::CodecInst voe_codec;

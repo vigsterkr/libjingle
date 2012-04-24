@@ -56,23 +56,28 @@ using talk_base::SocketAddress;
 
 namespace webrtc {
 
-// Line prefix
-static const int kLinePrefixLength = 2;
-static const char kLinePrefixVersion[] = "v=";
-static const char kLinePrefixOrigin[] = "o=";
-static const char kLinePrefixSessionName[] = "s=";
-static const char kLinePrefixSessionInfo[] = "i=";
-static const char kLinePrefixSessionUri[] = "u=";
-static const char kLinePrefixSessionEmail[] = "e=";
-static const char kLinePrefixSessionPhone[] = "p=";
-static const char kLinePrefixSessionBandwidth[] = "b=";
-static const char kLinePrefixTiming[] = "t=";
-static const char kLinePrefixRepeatTimes[] = "r=";
-static const char kLinePrefixTimeZone[] = "z=";
-static const char kLinePrefixEncryptionKey[] = "k=";
-static const char kLinePrefixMedia[] = "m=";
-static const char kLinePrefixConnection[] = "c=";
-static const char kLinePrefixAttributes[] = "a=";
+// Line type
+// RFC 4566
+// An SDP session description consists of a number of lines of text of
+// the form:
+// <type>=<value>
+// where <type> MUST be exactly one case-significant character.
+static const int kLinePrefixLength = 2;  // Lenght of <type>=
+static const char kLineTypeVersion = 'v';
+static const char kLineTypeOrigin = 'o';
+static const char kLineTypeSessionName = 's';
+static const char kLineTypeSessionInfo = 'i';
+static const char kLineTypeSessionUri = 'u';
+static const char kLineTypeSessionEmail = 'e';
+static const char kLineTypeSessionPhone = 'p';
+static const char kLineTypeSessionBandwidth = 'b';
+static const char kLineTypeTiming = 't';
+static const char kLineTypeRepeatTimes = 'r';
+static const char kLineTypeTimeZone = 'z';
+static const char kLineTypeEncryptionKey = 'k';
+static const char kLineTypeMedia = 'm';
+static const char kLineTypeConnection = 'c';
+static const char kLineTypeAttributes = 'a';
 
 // Attributes
 static const char kAttributeGroup[] = "group";
@@ -85,7 +90,6 @@ static const char kSSrcAttributeLabel[] = "label";
 static const char kAttributeCrypto[] = "crypto";
 static const char kAttributeCandidate[] = "candidate";
 static const char kAttributeCandidateTyp[] = "typ";
-static const char kAttributeCandidateName[] = "name";
 static const char kAttributeCandidateNetworkName[] = "network_name";
 static const char kAttributeCandidateUsername[] = "username";
 static const char kAttributeCandidatePassword[] = "password";
@@ -100,6 +104,7 @@ static const char kCandidateSrflx[] = "srflx";
 // static const char kCandidatePrflx[] = "prflx";
 static const char kCandidateRelay[] = "relay";
 
+static const char kSdpDelimiterEqual = '=';
 static const char kSdpDelimiterSpace = ' ';
 static const char kSdpDelimiterColon = ':';
 static const char kLineBreak[] = "\r\n";
@@ -107,7 +112,13 @@ static const char kLineBreak[] = "\r\n";
 // TODO: Generate the Session and Time description
 // instead of hardcoding.
 static const char kSessionVersion[] = "v=0";
-static const char kSessionOrigin[] = "o=- 0 0 IN IP4 127.0.0.1";
+// RFC 4566
+static const char kSessionOriginUsername[] = "-";
+static const char kSessionOriginSessionId[] = "0";
+static const char kSessionOriginSessionVersion[] = "0";
+static const char kSessionOriginNettype[] = "IN";
+static const char kSessionOriginAddrtype[] = "IP4";
+static const char kSessionOriginAddress[] = "127.0.0.1";
 static const char kSessionName[] = "s=";
 static const char kTimeDescription[] = "t=0 0";
 static const char kAttrGroup[] = "a=group:BUNDLE";
@@ -119,7 +130,8 @@ static const int kIceFoundation = 1;
 static const char kMediaTypeVideo[] = "video";
 static const char kMediaTypeAudio[] = "audio";
 static const char kMediaPortPlaceholder = 1;
-static const char kMediaProtocol[] = "RTP/AVPF";
+static const char kMediaProtocolAvpf[] = "RTP/AVPF";
+static const char kMediaProtocolSavpf[] = "RTP/SAVPF";
 
 // Default Video resolution.
 // TODO: Implement negotiation of video resolution.
@@ -132,7 +144,7 @@ static const int kDefaultVideoClockrate = 90000;
 // Serializes the passed in SessionDescription to a SDP string.
 // desc - The SessionDescription object to be serialized.
 static std::string SdpSerializeSessionDescription(
-    const cricket::SessionDescription& desc);
+    const JsepSessionDescription& jdesc);
 
 static void BuildMediaDescription(const cricket::ContentInfo& content_info,
                                   const MediaType media_type,
@@ -144,6 +156,8 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
                            std::string* message);
 
 static bool ParseSessionDescription(const std::string& message, size_t* pos,
+                                    std::string* session_id,
+                                    std::string* session_version,
                                     cricket::SessionDescription* desc);
 static bool ParseGroupAttribute(const std::string& line,
                                 cricket::SessionDescription* desc);
@@ -166,8 +180,8 @@ static bool ParseRtpmapAttribute(const std::string& line,
                                  MediaContentDescription* media_desc);
 
 // Helper functions
-#define LOG_PREFIX_PARSING_ERROR(line_prefix) LOG(LS_ERROR) \
-    << "Failed to parse the \"" << line_prefix << "\" line";
+#define LOG_PREFIX_PARSING_ERROR(line_type) LOG(LS_ERROR) \
+    << "Failed to parse the \"" << line_type << "\" line";
 
 #define LOG_LINE_PARSING_ERROR(line) LOG(LS_ERROR) \
     << "Failed to parse line:" << line;
@@ -195,12 +209,42 @@ static bool GetLine(const std::string& message,
     --line_end;
   }
   *line = message.substr(line_begin, (line_end - line_begin));
+  const char* cline = line->c_str();
+  // RFC 4566
+  // An SDP session description consists of a number of lines of text of
+  // the form:
+  // <type>=<value>
+  // where <type> MUST be exactly one case-significant character and
+  // <value> is structured text whose format depends on <type>.
+  // Whitespace MUST NOT be used on either side of the "=" sign.
+  if (cline[0] == kSdpDelimiterSpace ||
+      cline[1] != kSdpDelimiterEqual ||
+      cline[2] == kSdpDelimiterSpace) {
+    LOG_LINE_PARSING_ERROR(*line);
+    return false;
+  }
   return true;
 }
 
-static bool GetLineWithPrefix(const std::string& message, size_t* pos,
-                              std::string* line, const char* type) {
-  if (message.compare(*pos, kLinePrefixLength, type) != 0) {
+static bool IsLineType(const std::string& message,
+                       const char type,
+                       size_t line_start) {
+  if (message.size() < line_start + kLinePrefixLength) {
+    return false;
+  }
+  const char* cmessage = message.c_str();
+  return (cmessage[line_start] == type &&
+          cmessage[line_start + 1] == kSdpDelimiterEqual);
+}
+
+static bool IsLineType(const std::string& line,
+                       const char type) {
+  return IsLineType(line, type, 0);
+}
+
+static bool GetLineWithType(const std::string& message, size_t* pos,
+                            std::string* line, const char type) {
+  if (!IsLineType(message, type, *pos)) {
     return false;
   }
 
@@ -210,33 +254,22 @@ static bool GetLineWithPrefix(const std::string& message, size_t* pos,
   return true;
 }
 
-static bool HasPrefix(const std::string& line,
-                      const std::string& prefix,
-                      size_t pos) {
-  return (line.compare(pos, prefix.size(), prefix) == 0);
-}
-
-static bool HasPrefix(const std::string& line,
-                      const std::string& prefix) {
-  return HasPrefix(line, prefix, 0);
-}
-
 static bool HasAttribute(const std::string& line,
                          const std::string& attribute) {
   return (line.compare(kLinePrefixLength, attribute.size(), attribute) == 0);
 }
 
-// Init the |os| to "|prefix||value|:".
-static void InitLine(const std::string& prefix,
+// Init the |os| to "|type|=|value|".
+static void InitLine(const char type,
                      const std::string& value,
                      std::ostringstream* os) {
   os->str("");
-  *os << prefix << value;
+  *os << type << kSdpDelimiterEqual << value;
 }
 
 // Init the |os| to "a=|attribute|".
 static void InitAttrLine(const std::string& attribute, std::ostringstream* os) {
-  InitLine(kLinePrefixAttributes, attribute, os);
+  InitLine(kLineTypeAttributes, attribute, os);
 }
 
 static bool AddSsrcLine(uint32 ssrc_id, const std::string& attribute,
@@ -303,23 +336,10 @@ static int GetCandidatePreferenceFromType(const std::string& type) {
 // pass it down via SessionDescription.
 static bool GetDefaultDestination(const std::vector<Candidate>& candidates,
     int component_id, std::string* port, std::string* ip) {
-  // TODO: Add component id to Candidate and stop depending on the
-  // name to determine rtp/rtcp candidate.
-  std::string target_name;
-  switch (component_id) {
-    case kIceComponentIdRtp:
-      target_name = "rtp";
-      break;
-    case kIceComponentIdRtcp:
-      target_name = "rtcp";
-      break;
-    default:
-      return false;
-  }
   int current_preference = kPreferenceUnknown;
   for (std::vector<Candidate>::const_iterator it = candidates.begin();
        it != candidates.end(); ++it) {
-    if (it->name().find(target_name) == std::string::npos) {
+    if (it->component() != component_id) {
       continue;
     }
     const int preference = GetCandidatePreferenceFromType(it->type());
@@ -362,7 +382,7 @@ static void UpdateMediaDefaultDestination(
     // Add the c line.
     // RFC 4566
     // c=<nettype> <addrtype> <connection-address>
-    InitLine(kLinePrefixConnection, kConnectionNettype, &os);
+    InitLine(kLineTypeConnection, kConnectionNettype, &os);
     os << " " << kConnectionAddrtype << " " << rtp_ip;
     AddLine(os.str(), mline);
   }
@@ -402,22 +422,18 @@ static void GetCandidatesByMindex(const SessionDescriptionInterface& desci,
   }
 }
 
-std::string SdpSerialize(const SessionDescriptionInterface& desci) {
-  const cricket::SessionDescription* desc = desci.description();
-  if (!desc) {
-    return "";
-  }
-  std::string sdp = SdpSerializeSessionDescription(*desc);
+std::string SdpSerialize(const JsepSessionDescription& jdesc) {
+  std::string sdp = SdpSerializeSessionDescription(jdesc);
 
   std::string sdp_with_candiates;
   size_t pos = 0;
   std::string line;
   int mline_index = -1;
   while (GetLine(sdp, &pos, &line)) {
-    if (HasPrefix(line, kLinePrefixMedia)) {
+    if (IsLineType(line, kLineTypeMedia)) {
       ++mline_index;
       std::vector<Candidate> candidates;
-      GetCandidatesByMindex(desci, mline_index, &candidates);
+      GetCandidatesByMindex(jdesc, mline_index, &candidates);
       if (candidates.size() > 0) {
         // Media line may append other lines inside the
         // UpdateMediaDefaultDestination call, so add the kLineBreak here first.
@@ -440,25 +456,43 @@ std::string SdpSerialize(const SessionDescriptionInterface& desci) {
 }
 
 std::string SdpSerializeSessionDescription(
-    const cricket::SessionDescription& desc) {
+    const JsepSessionDescription& jdesc) {
+  const cricket::SessionDescription* desc = jdesc.description();
+  if (!desc) {
+    return "";
+  }
+
   std::string message;
 
   // Session Description.
   AddLine(kSessionVersion, &message);
-  AddLine(kSessionOrigin, &message);
+  // Session Origin
+  // RFC 4566
+  // o=<username> <sess-id> <sess-version> <nettype> <addrtype>
+  // <unicast-address>
+  std::ostringstream os;
+  InitLine(kLineTypeOrigin, kSessionOriginUsername, &os);
+  const std::string session_id = jdesc.session_id().empty() ?
+      kSessionOriginSessionId : jdesc.session_id();
+  const std::string session_version = jdesc.session_version().empty() ?
+      kSessionOriginSessionVersion : jdesc.session_version();
+  os << " " << session_id << " " << session_version << " "
+     << kSessionOriginNettype << " " << kSessionOriginAddrtype << " "
+     << kSessionOriginAddress;
+  AddLine(os.str(), &message);
   AddLine(kSessionName, &message);
 
   // Time Description.
   AddLine(kTimeDescription, &message);
 
-  const cricket::ContentInfo* audio_content = GetFirstAudioContent(&desc);
-  const cricket::ContentInfo* video_content = GetFirstVideoContent(&desc);
+  const cricket::ContentInfo* audio_content = GetFirstAudioContent(desc);
+  const cricket::ContentInfo* video_content = GetFirstVideoContent(desc);
 
   // Group
-  if (desc.HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
+  if (desc->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
     std::string group_line = kAttrGroup;
     const cricket::ContentGroup* group =
-        desc.GetGroupByName(cricket::GROUP_TYPE_BUNDLE);
+        desc->GetGroupByName(cricket::GROUP_TYPE_BUNDLE);
     ASSERT(group != NULL);
     const std::set<std::string>& content_types = group->content_types();
     for (std::set<std::string>::const_iterator it = content_types.begin();
@@ -483,7 +517,8 @@ std::string SdpSerializeSessionDescription(
 
 // Serializes the passed in IceCandidateInterface to a SDP string.
 // candidate - The candidate to be serialized.
-std::string SdpSerializeCandidate(const IceCandidateInterface& candidate) {
+std::string SdpSerializeCandidate(
+    const IceCandidateInterface& candidate) {
   std::string message;
   std::vector<cricket::Candidate> candidates;
   candidates.push_back(candidate.candidate());
@@ -493,12 +528,15 @@ std::string SdpSerializeCandidate(const IceCandidateInterface& candidate) {
 
 bool SdpDeserialize(const std::string& message,
                     JsepSessionDescription* jdesc) {
+  std::string session_id;
+  std::string session_version;
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
   size_t current_pos = 0;
 
   // Session Description
-  if (!ParseSessionDescription(message, &current_pos, desc)) {
+  if (!ParseSessionDescription(message, &current_pos,
+                               &session_id, &session_version, desc)) {
     delete desc;
     return false;
   }
@@ -513,7 +551,7 @@ bool SdpDeserialize(const std::string& message,
     return false;
   }
 
-  jdesc->SetDescription(desc);
+  jdesc->Initialize(desc, session_id, session_version);
 
   for (std::vector<JsepIceCandidate*>::const_iterator
        it = candidates.begin(); it != candidates.end(); ++it) {
@@ -527,7 +565,7 @@ bool SdpDeserializeCandidate(const std::string& message,
     JsepIceCandidate* jcandidate) {
   ASSERT(jcandidate != NULL);
 
-  if (!HasPrefix(message, kLinePrefixAttributes) ||
+  if (!IsLineType(message, kLineTypeAttributes) ||
       !HasAttribute(message, kAttributeCandidate)) {
     // Must start with a=candidate line
     return false;
@@ -545,8 +583,14 @@ bool SdpDeserializeCandidate(const std::string& message,
     LOG_LINE_PARSING_ERROR(message);
     return false;
   }
+  std::string foundation_str;
+  if (!GetValue(fields[0], &foundation_str)) {
+    return false;
+  }
+  const uint32 foundation = talk_base::FromString<uint32>(foundation_str);
+  const int component_id = talk_base::FromString<int>(fields[1]);
   const std::string transport = fields[2];
-  const float priority = talk_base::FromString<float>(fields[3]);
+  const uint32 priority = talk_base::FromString<uint32>(fields[3]);
   const std::string connection_address = fields[4];
   const int port = talk_base::FromString<int>(fields[5]);
   std::string candidate_type;
@@ -563,16 +607,15 @@ bool SdpDeserializeCandidate(const std::string& message,
   }
 
   // extension
-  std::string name;
+  std::string id;
   std::string network_name;
   std::string username;
   std::string password;
   uint32 generation = 0;
   for (size_t i = 8; i < (fields.size() - 1); ++i) {
     const std::string field = fields.at(i);
-    if (field == kAttributeCandidateName) {
-      name = fields.at(++i);
-    } else if (field == kAttributeCandidateNetworkName) {
+    // TODO: Revisit this when we support RFC 5245 candidates.
+    if (field == kAttributeCandidateNetworkName) {
       network_name = fields.at(++i);
     } else if (field == kAttributeCandidateUsername) {
       username = fields.at(++i);
@@ -584,8 +627,8 @@ bool SdpDeserializeCandidate(const std::string& message,
   }
 
   SocketAddress address(connection_address, port);
-  Candidate candidate(name, transport, address, priority, username,
-      password, candidate_type, network_name, generation);
+  Candidate candidate(id, component_id, transport, address, priority, username,
+      password, candidate_type, network_name, generation, foundation);
   jcandidate->SetCandidate(candidate);
   return true;
 }
@@ -638,8 +681,13 @@ void BuildMediaDescription(const cricket::ContentInfo& content_info,
   // The port number in the m line will be updated later when associate with
   // the candidates.
   const int port = kMediaPortPlaceholder;
-  const char* proto = kMediaProtocol;
-  InitLine(kLinePrefixMedia, type, &os);
+  const char* proto = kMediaProtocolAvpf;
+  // RFC 4568
+  // SRTP security descriptions MUST only be used with the SRTP transport.
+  if (media_desc->cryptos().size() > 0) {
+    proto = kMediaProtocolSavpf;
+  }
+  InitLine(kLineTypeMedia, type, &os);
   os << " " << port << " " << proto << fmt;
   AddLine(os.str(), message);
 
@@ -757,17 +805,14 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
       ASSERT(false);
     }
 
-    const int component_id = (it->name().find("rtp") != std::string::npos) ?
-        kIceComponentIdRtp : kIceComponentIdRtcp;
-
     InitAttrLine(kAttributeCandidate, &os);
+    // TODO: Add rel-addr and rel-port.
     os << kSdpDelimiterColon
-       << kIceFoundation << " " << component_id << " "
-       << it->protocol() << " " << it->preference_str() << " "
+       << it->foundation() << " " << it->component() << " "
+       << it->protocol() << " " << it->priority() << " "
        << it->address().IPAsString() << " "
        << it->address().PortAsString() << " "
        << kAttributeCandidateTyp << " " << type << " "
-       << kAttributeCandidateName << " " << it->name() << " "
        << kAttributeCandidateNetworkName << " " << it->network_name() << " "
        << kAttributeCandidateUsername << " " << it->username() << " "
        << kAttributeCandidatePassword << " " << it->password() << " "
@@ -777,25 +822,37 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
 }
 
 bool ParseSessionDescription(const std::string& message, size_t* pos,
+                             std::string* session_id,
+                             std::string* session_version,
                              cricket::SessionDescription* desc) {
   std::string line;
 
   // RFC 4566
   // v=  (protocol version)
-  if (!GetLineWithPrefix(message, pos, &line, kLinePrefixVersion)) {
-    LOG_PREFIX_PARSING_ERROR(kLinePrefixVersion);
+  if (!GetLineWithType(message, pos, &line, kLineTypeVersion)) {
+    LOG_PREFIX_PARSING_ERROR(kLineTypeVersion);
     return false;
   }
   // RFC 4566
-  // o=  (originator and session identifier)
-  if (!GetLineWithPrefix(message, pos, &line, kLinePrefixOrigin)) {
-    LOG_PREFIX_PARSING_ERROR(kLinePrefixOrigin);
+  // o=<username> <sess-id> <sess-version> <nettype> <addrtype>
+  // <unicast-address>
+  if (GetLineWithType(message, pos, &line, kLineTypeOrigin)) {
+    std::vector<std::string> fields;
+    talk_base::split(line.substr(kLinePrefixLength),
+                     kSdpDelimiterSpace, &fields);
+    if (fields.size() != 6) {
+      return false;
+    }
+    *session_id = fields[1];
+    *session_version = fields[2];
+  } else {
+    LOG_PREFIX_PARSING_ERROR(kLineTypeOrigin);
     return false;
   }
   // RFC 4566
   // s=  (session name)
-  if (!GetLineWithPrefix(message, pos, &line, kLinePrefixSessionName)) {
-    LOG_PREFIX_PARSING_ERROR(kLinePrefixSessionName);
+  if (!GetLineWithType(message, pos, &line, kLineTypeSessionName)) {
+    LOG_PREFIX_PARSING_ERROR(kLineTypeSessionName);
     return false;
   }
 
@@ -803,28 +860,28 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
   // Those are the optional lines, so shouldn't return false if not present.
   // RFC 4566
   // i=* (session information)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixSessionInfo);
+  GetLineWithType(message, pos, &line, kLineTypeSessionInfo);
 
   // RFC 4566
   // u=* (URI of description)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixSessionUri);
+  GetLineWithType(message, pos, &line, kLineTypeSessionUri);
 
   // RFC 4566
   // e=* (email address)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixSessionEmail);
+  GetLineWithType(message, pos, &line, kLineTypeSessionEmail);
 
   // RFC 4566
   // p=* (phone number)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixSessionPhone);
+  GetLineWithType(message, pos, &line, kLineTypeSessionPhone);
 
   // RFC 4566
   // c=* (connection information -- not required if included in
   //      all media)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixConnection);
+  GetLineWithType(message, pos, &line, kLineTypeConnection);
 
   // RFC 4566
   // b=* (zero or more bandwidth information lines)
-  while (GetLineWithPrefix(message, pos, &line, kLinePrefixSessionBandwidth)) {
+  while (GetLineWithType(message, pos, &line, kLineTypeSessionBandwidth)) {
     // By pass zero or more b lines.
   }
 
@@ -833,33 +890,33 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
   // t=  (time the session is active)
   // r=* (zero or more repeat times)
   // Ensure there's at least one time description
-  if (!GetLineWithPrefix(message, pos, &line, kLinePrefixTiming)) {
-    LOG_PREFIX_PARSING_ERROR(kLinePrefixTiming);
+  if (!GetLineWithType(message, pos, &line, kLineTypeTiming)) {
+    LOG_PREFIX_PARSING_ERROR(kLineTypeTiming);
     return false;
   }
 
-  while (GetLineWithPrefix(message, pos, &line, kLinePrefixRepeatTimes)) {
+  while (GetLineWithType(message, pos, &line, kLineTypeRepeatTimes)) {
     // By pass zero or more r lines.
   }
 
   // Go through the rest of the time descriptions
-  while (GetLineWithPrefix(message, pos, &line, kLinePrefixTiming)) {
-    while (GetLineWithPrefix(message, pos, &line, kLinePrefixRepeatTimes)) {
+  while (GetLineWithType(message, pos, &line, kLineTypeTiming)) {
+    while (GetLineWithType(message, pos, &line, kLineTypeRepeatTimes)) {
       // By pass zero or more r lines.
     }
   }
 
   // RFC 4566
   // z=* (time zone adjustments)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixTimeZone);
+  GetLineWithType(message, pos, &line, kLineTypeTimeZone);
 
   // RFC 4566
   // k=* (encryption key)
-  GetLineWithPrefix(message, pos, &line, kLinePrefixEncryptionKey);
+  GetLineWithType(message, pos, &line, kLineTypeEncryptionKey);
 
   // RFC 4566
   // a=* (zero or more session attribute lines)
-  while (GetLineWithPrefix(message, pos, &line, kLinePrefixAttributes)) {
+  while (GetLineWithType(message, pos, &line, kLineTypeAttributes)) {
     if (HasAttribute(line, kAttributeGroup)) {
       if (!ParseGroupAttribute(line, desc)) {
         LOG_LINE_PARSING_ERROR(line);
@@ -906,7 +963,7 @@ bool ParseMediaDescription(const std::string& message, size_t* pos,
   // Zero or more media descriptions
   // RFC 4566
   // m=<media> <port> <proto> <fmt>
-  while (GetLineWithPrefix(message, pos, &line, kLinePrefixMedia)) {
+  while (GetLineWithType(message, pos, &line, kLineTypeMedia)) {
     ++mline_index;
     MediaType media_type = cricket::MEDIA_TYPE_VIDEO;
     ContentDescription* content = NULL;
@@ -948,7 +1005,7 @@ bool ParseContent(const std::string& message,
   ASSERT(candidates != NULL);
   std::string line;
   // Loop until the next m line
-  while (!HasPrefix(message, kLinePrefixMedia, *pos)) {
+  while (!IsLineType(message, kLineTypeMedia, *pos)) {
     if (!GetLine(message, pos, &line)) {
       if (*pos >= message.size())
         return true;  // Done parsing
@@ -961,8 +1018,9 @@ bool ParseContent(const std::string& message,
       continue;
     }
 
-    if (!HasPrefix(line, kLinePrefixAttributes)) {
+    if (!IsLineType(line, kLineTypeAttributes)) {
       // TODO: Handle other lines if needed.
+      LOG(LS_INFO) << "Ignored line: " << line;
       continue;
     }
 
@@ -1002,7 +1060,9 @@ bool ParseContent(const std::string& message,
         return false;
       }
     } else {
-      LOG(LS_WARNING) << "Unsupported line: " << line;
+      // Only parse lines that we are interested of.
+      LOG(LS_INFO) << "Ignored line: " << line;
+      continue;
     }
   }
   return true;

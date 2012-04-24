@@ -84,9 +84,11 @@ struct SessionError : WriteError {
 // session had one ChannelMap and transport.  Now, with multiple
 // transports per session, we need multiple ChannelMaps as well.
 
+// TODO: Change this from channel name => proxy to channel
+// component => proxy.
 typedef std::map<std::string, TransportChannelProxy*> ChannelMap;
 
-class TransportProxy {
+class TransportProxy : public CandidateTranslator {
  public:
   TransportProxy(
       const std::string& sid,
@@ -110,8 +112,8 @@ class TransportProxy {
   const Candidates& unsent_candidates() const { return unsent_candidates_; }
 
   TransportChannel* GetChannel(const std::string& name);
-  TransportChannel* CreateChannel(const std::string& name,
-                                  const std::string& content_type);
+  TransportChannel* CreateChannel(const std::string& channel_name,
+                                  int component);
   void DestroyChannel(const std::string& name);
   void AddSentCandidates(const Candidates& candidates);
   void AddUnsentCandidates(const Candidates& candidates);
@@ -126,6 +128,12 @@ class TransportProxy {
   }
   bool candidates_allocated() { return candidates_allocated_; }
 
+  // As CandidateTranslator
+  virtual bool GetChannelNameFromComponent(
+      int component, std::string* channel_name) const;
+  virtual bool GetComponentFromChannelName(
+      const std::string& channel_name, int* component) const;
+
  private:
   enum TransportState {
     STATE_INIT,
@@ -133,11 +141,14 @@ class TransportProxy {
     STATE_NEGOTIATED
   };
 
-  TransportChannelProxy* GetProxy(const std::string& name);
-  void ReplaceImpl(TransportChannelProxy* channel_proxy, size_t index);
-  TransportChannelImpl* GetOrCreateImpl(const std::string& name,
-                                        const std::string& content_type);
-  void SetProxyImpl(const std::string& name, TransportChannelProxy* proxy);
+  TransportChannelProxy* GetChannelProxy(int component) const;
+  TransportChannelProxy* GetChannelProxyByName(const std::string& name) const;
+  void ReplaceChannelProxyImpl(TransportChannelProxy* channel_proxy,
+                               size_t index);
+  TransportChannelImpl* GetOrCreateChannelProxyImpl(const std::string& name,
+                                                    int component);
+  void SetChannelProxyImpl(const std::string& name,
+                           TransportChannelProxy* proxy);
 
   std::string sid_;
   std::string content_name_;
@@ -287,7 +298,8 @@ class BaseSession : public sigslot::has_slots<>,
   // shouldn't be an issue since the main thread will be blocked in
   // Send when doing so.
   virtual TransportChannel* CreateChannel(const std::string& content_name,
-                                          const std::string& channel_name);
+                                          const std::string& channel_name,
+                                          int component);
 
   // Returns the channel with the given names.
   virtual TransportChannel* GetChannel(const std::string& content_name,
@@ -352,7 +364,7 @@ class BaseSession : public sigslot::has_slots<>,
 
   virtual void OnTransportRouteChange(
       Transport* transport,
-      const std::string& name,
+      int component,
       const cricket::Candidate& remote_candidate) {
   }
 
@@ -486,6 +498,7 @@ class Session : public BaseSession {
     // Maps passed to serialization functions.
   TransportParserMap GetTransportParsers();
   ContentParserMap GetContentParsers();
+  CandidateTranslatorMap GetCandidateTranslators();
 
   virtual void OnTransportRequestSignaling(Transport* transport);
   virtual void OnTransportConnecting(Transport* transport);

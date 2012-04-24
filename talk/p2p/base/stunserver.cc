@@ -25,11 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef POSIX
-#include <errno.h>
-#endif  // POSIX
-
 #include "talk/p2p/base/stunserver.h"
+
 #include "talk/base/bytebuffer.h"
 #include "talk/base/logging.h"
 
@@ -46,39 +43,24 @@ StunServer::~StunServer() {
 void StunServer::OnPacket(
     talk_base::AsyncPacketSocket* socket, const char* buf, size_t size,
     const talk_base::SocketAddress& remote_addr) {
-
-  // TODO: If appropriate, look for the magic cookie before parsing.
-
-  // Parse the STUN message.
+  // Parse the STUN message; eat any messages that fail to parse.
   talk_base::ByteBuffer bbuf(buf, size);
   StunMessage msg;
   if (!msg.Read(&bbuf)) {
-    SendErrorResponse(msg, remote_addr, 400, "Bad Request");
     return;
   }
 
-  // TODO: If this is UDP, then we shouldn't allow non-fully-parsed messages.
-
-  // TODO: If unknown non-optiional (<= 0x7fff) attributes are found, send a
+  // TODO: If unknown non-optional (<= 0x7fff) attributes are found, send a
   //       420 "Unknown Attribute" response.
-
-  // TODO: Check that a message-integrity attribute was given (or send 401
-  //       "Unauthorized").  Check that a username attribute was given (or send
-  //       432 "Missing Username").  Look up the username and password.  If it
-  //       is missing or the HMAC is wrong, send 431 "Integrity Check Failure".
 
   // Send the message to the appropriate handler function.
   switch (msg.type()) {
-  case STUN_BINDING_REQUEST:
-    OnBindingRequest(&msg, remote_addr);
-    return;
+    case STUN_BINDING_REQUEST:
+      OnBindingRequest(&msg, remote_addr);
+      break;
 
-  case STUN_ALLOCATE_REQUEST:
-    OnAllocateRequest(&msg, remote_addr);
-    return;
-
-  default:
-    SendErrorResponse(msg, remote_addr, 600, "Operation Not Supported");
+    default:
+      SendErrorResponse(msg, remote_addr, 600, "Operation Not Supported");
   }
 }
 
@@ -93,36 +75,17 @@ void StunServer::OnBindingRequest(
   if (!msg->IsLegacy()) {
     mapped_addr = StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
   } else {
-    mapped_addr = StunAttribute::CreateAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+    mapped_addr = StunAttribute::CreateXorAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
   }
-  mapped_addr->SetPort(remote_addr.port());
-  mapped_addr->SetIP(remote_addr.ipaddr());
+  mapped_addr->SetAddress(remote_addr);
   response.AddAttribute(mapped_addr);
 
-  // TODO: Add username and message-integrity.
-
   SendResponse(response, remote_addr);
-}
-
-void StunServer::OnAllocateRequest(
-    StunMessage* msg, const talk_base::SocketAddress& addr) {
-  SendErrorResponse(*msg, addr, 600, "Operation Not Supported");
-}
-
-void StunServer::OnSharedSecretRequest(
-    StunMessage* msg, const talk_base::SocketAddress& addr) {
-  SendErrorResponse(*msg, addr, 600, "Operation Not Supported");
-}
-
-void StunServer::OnSendRequest(StunMessage* msg,
-                               const talk_base::SocketAddress& addr) {
-  SendErrorResponse(*msg, addr, 600, "Operation Not Supported");
 }
 
 void StunServer::SendErrorResponse(
     const StunMessage& msg, const talk_base::SocketAddress& addr,
     int error_code, const char* error_desc) {
-
   StunMessage err_msg;
   err_msg.SetType(GetStunErrorResponseType(msg.type()));
   err_msg.SetTransactionID(msg.transaction_id());
@@ -138,12 +101,8 @@ void StunServer::SendErrorResponse(
 
 void StunServer::SendResponse(
     const StunMessage& msg, const talk_base::SocketAddress& addr) {
-
   talk_base::ByteBuffer buf;
   msg.Write(&buf);
-
-  // TODO: Allow response addr attribute if sent from another stun server.
-
   if (socket_->SendTo(buf.Data(), buf.Length(), addr) < 0)
     LOG_ERR(LS_ERROR) << "sendto";
 }

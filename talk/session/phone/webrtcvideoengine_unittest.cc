@@ -55,11 +55,11 @@ static const cricket::VideoCodec* const kVideoCodecs[] = {
     &kUlpFecCodec
 };
 
-static const unsigned int kMinBandwidthKbps = 100;
+static const unsigned int kMinBandwidthKbps = 50;
 static const unsigned int kStartBandwidthKbps = 300;
 static const unsigned int kMaxBandwidthKbps = 2000;
 
-static const unsigned int kNumberOfTemporalLayers = 3;
+static const unsigned int kNumberOfTemporalLayers = 1;
 
 
 class FakeViEWrapper : public cricket::ViEWrapper {
@@ -134,8 +134,6 @@ class WebRtcVideoEngineTestFake : public testing::Test {
     EXPECT_EQ(false, gcodec.codecSpecific.VP8.feedbackModeOn);
     EXPECT_EQ(webrtc::kComplexityNormal, gcodec.codecSpecific.VP8.complexity);
     EXPECT_EQ(webrtc::kResilienceOff, gcodec.codecSpecific.VP8.resilience);
-    EXPECT_EQ(kNumberOfTemporalLayers,
-              gcodec.codecSpecific.VP8.numberOfTemporalLayers);
     EXPECT_EQ(0U, gcodec.qpMax);
   }
   virtual void TearDown() {
@@ -878,6 +876,10 @@ TEST_F(WebRtcVideoMediaChannelTest, SetRenderer) {
 
 TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreams) {
   Base::AddRemoveRecvStreams();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreamAndRender) {
+  Base::AddRemoveRecvStreamAndRender();
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, AddRemoveRecvStreamsNoConference) {

@@ -286,7 +286,7 @@ void Win32Socket::SetTimeout(int ms) {
 }
 
 SocketAddress Win32Socket::GetLocalAddress() const {
-  sockaddr_storage addr;
+  sockaddr_storage addr = {0};
   socklen_t addrlen = sizeof(addr);
   int result = ::getsockname(socket_, reinterpret_cast<sockaddr*>(&addr),
                              &addrlen);
@@ -301,7 +301,7 @@ SocketAddress Win32Socket::GetLocalAddress() const {
 }
 
 SocketAddress Win32Socket::GetRemoteAddress() const {
-  sockaddr_storage addr;
+  sockaddr_storage addr = {0};
   socklen_t addrlen = sizeof(addr);
   int result = ::getpeername(socket_, reinterpret_cast<sockaddr*>(&addr),
                              &addrlen);
@@ -330,19 +330,22 @@ int Win32Socket::Bind(const SocketAddress& addr) {
 }
 
 int Win32Socket::Connect(const SocketAddress& addr) {
-  if ((socket_ == INVALID_SOCKET) && !CreateT(AF_INET, SOCK_STREAM))
+  if (state_ != CS_CLOSED) {
+    SetError(EALREADY);
     return SOCKET_ERROR;
+  }
 
-  if (!sink_ && !SetAsync(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE))
-    return SOCKET_ERROR;
-
-  // If we have an IP address, connect now.
-  if (!addr.IsUnresolved()) {
+  if (!addr.IsUnresolvedIP()) {
     return DoConnect(addr);
   }
 
   LOG_F(LS_INFO) << "async dns lookup (" << addr.IPAsString() << ")";
   DnsLookup * dns = new DnsLookup;
+  if (!sink_) {
+    // Explicitly create the sink ourselves here; we can't rely on SetAsync
+    // because we don't have a socket_ yet.
+    CreateSink();
+  }
   // TODO: Replace with IPv6 compatible lookup.
   dns->handle = WSAAsyncGetHostByName(sink_->handle(), WM_DNSNOTIFY,
         addr.IPAsString().c_str(), dns->buffer, sizeof(dns->buffer));
@@ -362,7 +365,14 @@ int Win32Socket::Connect(const SocketAddress& addr) {
 }
 
 int Win32Socket::DoConnect(const SocketAddress& addr) {
-  sockaddr_storage saddr;
+  if ((socket_ == INVALID_SOCKET) && !CreateT(addr.family(), SOCK_STREAM)) {
+    return SOCKET_ERROR;
+  }
+  if (!SetAsync(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE)) {
+    return SOCKET_ERROR;
+  }
+
+  sockaddr_storage saddr = {0};
   size_t len = addr.ToSockAddrStorage(&saddr);
   connect_time_ = Time();
   int result = connect(socket_,
@@ -529,7 +539,7 @@ int Win32Socket::EstimateMTU(uint16* mtu) {
 
   for (int level = 0; PACKET_MAXIMUMS[level + 1] > 0; ++level) {
     int32 size = PACKET_MAXIMUMS[level] - IP_HEADER_SIZE - ICMP_HEADER_SIZE;
-    WinPing::PingResult result = ping.Ping(addr.ip(), size, 0, 1, false);
+    WinPing::PingResult result = ping.Ping(addr.ipaddr(), size, 0, 1, false);
     if (result == WinPing::PING_FAIL) {
       error_ = EINVAL;  // can't think of a better error ID
       return -1;
@@ -544,12 +554,19 @@ int Win32Socket::EstimateMTU(uint16* mtu) {
   return 0;
 }
 
-bool Win32Socket::SetAsync(int events) {
+void Win32Socket::CreateSink() {
   ASSERT(NULL == sink_);
 
   // Create window
   sink_ = new EventSink(this);
   sink_->Create(NULL, L"EventSink", 0, 0, 0, 0, 10, 10);
+}
+
+bool Win32Socket::SetAsync(int events) {
+  if (NULL == sink_) {
+    CreateSink();
+    ASSERT(NULL != sink_);
+  }
 
   // start the async select
   if (WSAAsyncSelect(socket_, sink_->handle(), WM_SOCKETNOTIFY, events)

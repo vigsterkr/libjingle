@@ -54,7 +54,7 @@ namespace cricket {
 class RemoteCandidate : public Candidate {
  public:
   RemoteCandidate(const Candidate& c, Port* origin_port)
-    : Candidate(c), origin_port_(origin_port) {}
+      : Candidate(c), origin_port_(origin_port) {}
 
   Port* origin_port() { return origin_port_; }
 
@@ -65,10 +65,10 @@ class RemoteCandidate : public Candidate {
 // P2PTransportChannel manages the candidates and connection process to keep
 // two P2P clients connected to each other.
 class P2PTransportChannel : public TransportChannelImpl,
-    public talk_base::MessageHandler {
+                            public talk_base::MessageHandler {
  public:
   P2PTransportChannel(const std::string &name,
-                      const std::string &content_type,
+                      int component,
                       P2PTransport* transport,
                       PortAllocator *allocator);
   virtual ~P2PTransportChannel();
@@ -78,31 +78,24 @@ class P2PTransportChannel : public TransportChannelImpl,
   virtual void Connect();
   virtual void Reset();
   virtual void OnSignalingReady();
-
-  // From TransportChannel:
-  virtual int SendPacket(const char *data, size_t len);
-  virtual int SetOption(talk_base::Socket::Option opt, int value);
-  virtual int GetError() { return error_; }
-
-  // This hack is here to allow the SocketMonitor to downcast to the
-  // P2PTransportChannel safely.
-  virtual P2PTransportChannel* GetP2PChannel() { return this; }
-
-  // These are used by the connection monitor.
-  sigslot::signal1<P2PTransportChannel*> SignalConnectionMonitor;
-  const std::vector<Connection *>& connections() const { return connections_; }
-  Connection* best_connection() const { return best_connection_; }
-
-  void set_incoming_only(bool value) { incoming_only_ = value; }
-
-  // Handler for internal messages.
-  virtual void OnMessage(talk_base::Message *pmsg);
-
   virtual void OnCandidate(const Candidate& candidate);
 
+  // From TransportChannel:
+  virtual int SendPacket(const char *data, size_t len, int flags);
+  virtual int SetOption(talk_base::Socket::Option opt, int value);
+  virtual int GetError() { return error_; }
+  virtual bool GetStats(std::vector<ConnectionInfo>* stats);
+
+  const Connection* best_connection() const { return best_connection_; }
+  void set_incoming_only(bool value) { incoming_only_ = value; }
+
  private:
+  talk_base::Thread* thread() { return worker_thread_; }
+  PortAllocatorSession* allocator_session() {
+    return allocator_sessions_.back();
+  }
+
   void Allocate();
-  void CancelPendingAllocate();
   void UpdateConnectionStates();
   void RequestSort();
   void SortConnections();
@@ -119,28 +112,27 @@ class P2PTransportChannel : public TransportChannelImpl,
   bool FindConnection(cricket::Connection* connection) const;
   void RememberRemoteCandidate(const Candidate& remote_candidate,
                                Port* origin_port);
-  void OnUnknownAddress(Port *port, const talk_base::SocketAddress &addr,
-                        StunMessage *stun_msg,
-                        const std::string &remote_username, bool port_muxed);
+  bool IsPingable(Connection* conn);
+  Connection* FindNextPingableConnection();
+  int NumPingableConnections();
+  void AddAllocatorSession(PortAllocatorSession* session);
+
   void OnPortReady(PortAllocatorSession *session, Port* port);
   void OnCandidatesReady(PortAllocatorSession *session,
                          const std::vector<Candidate>& candidates);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
-  void OnConnectionStateChange(Connection *connection);
-  void OnConnectionDestroyed(Connection *connection);
+  void OnUnknownAddress(Port *port, const talk_base::SocketAddress &addr,
+                        StunMessage *stun_msg,
+                        const std::string &remote_username, bool port_muxed);
   void OnPortDestroyed(Port* port);
+
+  void OnConnectionStateChange(Connection *connection);
   void OnReadPacket(Connection *connection, const char *data, size_t len);
+  void OnConnectionDestroyed(Connection *connection);
+
+  virtual void OnMessage(talk_base::Message *pmsg);
   void OnSort();
   void OnPing();
-  bool IsPingable(Connection* conn);
-  Connection* FindNextPingableConnection();
-  uint32 NumPingableConnections();
-  PortAllocatorSession* allocator_session() {
-    return allocator_sessions_.back();
-  }
-  void AddAllocatorSession(PortAllocatorSession* session);
-
-  talk_base::Thread* thread() const { return worker_thread_; }
 
   P2PTransport* transport_;
   PortAllocator *allocator_;
@@ -153,8 +145,6 @@ class P2PTransportChannel : public TransportChannelImpl,
   std::vector<Connection *> connections_;
   Connection *best_connection_;
   std::vector<RemoteCandidate> remote_candidates_;
-  // indicates whether StartGetAllCandidates has been called
-  bool pinging_started_;
   bool sort_dirty_;  // indicates whether another sort is needed right now
   bool was_writable_;
   bool was_timed_out_;

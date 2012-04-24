@@ -15,6 +15,7 @@
 #include "talk/base/proxydetect.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/candidate.h"
+#include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/common.h"
 #include "talk/p2p/base/port.h"
 #include "talk/p2p/base/relayport.h"
@@ -48,15 +49,16 @@ class TestHttpPortAllocator : public HttpPortAllocator {
     SetRelayToken(relay_token);
   }
   PortAllocatorSession* CreateSession(
-      const std::string& name, const std::string& session_type) {
-    return new TestHttpPortAllocatorSession(this, name, session_type,
+      const std::string& channel_name,
+      int component) {
+    return new TestHttpPortAllocatorSession(this, channel_name, component,
                                             stun_hosts(), relay_hosts(),
                                             relay_token(), user_agent());
   }
 };
 
 void TestHttpPortAllocatorSession::ConfigReady(PortConfiguration* config) {
-  SignalConfigReady(config, proxy_);
+  SignalConfigReady(username(), password(), config, proxy_);
 }
 
 void TestHttpPortAllocatorSession::OnRequestDone(
@@ -233,15 +235,15 @@ void ConnectivityChecker::OnRequestDone(talk_base::AsyncHttpRequest* request) {
 }
 
 void ConnectivityChecker::OnConfigReady(
-    const PortConfiguration* config,
-    const talk_base::ProxyInfo& proxy_info) {
+    const std::string& username, const std::string& password,
+    const PortConfiguration* config, const talk_base::ProxyInfo& proxy_info) {
   ASSERT(worker_ == talk_base::Thread::Current());
 
   // Since we send requests on both HTTP and HTTPS we will get two
   // configs per nic. Results from the second will overwrite the
   // result from the first.
   // TODO: Handle multiple pings on one nic.
-  CreateRelayPorts(config, proxy_info);
+  CreateRelayPorts(username, password, config, proxy_info);
 }
 
 void ConnectivityChecker::OnRelayAddressReady(Port* port) {
@@ -332,34 +334,26 @@ HttpPortAllocator* ConnectivityChecker::CreatePortAllocator(
 }
 
 StunPort* ConnectivityChecker::CreateStunPort(
+    const std::string& username, const std::string& password,
     const PortConfiguration* config, talk_base::Network* network) {
-  return StunPort::Create(worker_,
-                          socket_factory_.get(),
-                          network,
-                          network->ip(),
-                          0,
-                          0,
-                          config->username,
-                          config->password,
-                          config->stun_address);
+  return StunPort::Create(worker_, socket_factory_.get(),
+                          network, network->ip(), 0, 0,
+                          username, password, config->stun_address);
 }
 
 RelayPort* ConnectivityChecker::CreateRelayPort(
+    const std::string& username, const std::string& password,
     const PortConfiguration* config, talk_base::Network* network) {
-  return RelayPort::Create(worker_,
-                           socket_factory_.get(),
-                           network,
-                           network->ip(),
+  return RelayPort::Create(worker_, socket_factory_.get(),
+                           network, network->ip(),
                            port_allocator_->min_port(),
                            port_allocator_->max_port(),
-                           config->username,
-                           config->password,
-                           config->magic_cookie);
+                           username, password);
 }
 
 void ConnectivityChecker::CreateRelayPorts(
-    const PortConfiguration* config,
-    const talk_base::ProxyInfo& proxy_info) {
+    const std::string& username, const std::string& password,
+    const PortConfiguration* config, const talk_base::ProxyInfo& proxy_info) {
   PortConfiguration::RelayList::const_iterator relay;
   std::vector<talk_base::Network*> networks;
   network_manager_->GetNetworks(&networks);
@@ -387,7 +381,8 @@ void ConnectivityChecker::CreateRelayPorts(
         for (relay_port = relay->ports.begin();
              relay_port != relay->ports.end();
              ++relay_port) {
-          RelayPort* port = CreateRelayPort(config, networks[i]);
+          RelayPort* port = CreateRelayPort(username, password,
+                                            config, networks[i]);
           port->AddServerAddress(*relay_port);
           port->AddExternalAddress(*relay_port);
 
@@ -413,10 +408,11 @@ void ConnectivityChecker::CreateRelayPorts(
 }
 
 void ConnectivityChecker::AllocatePorts() {
-  PortConfiguration config(stun_address_,
-                           talk_base::CreateRandomString(16),
-                           talk_base::CreateRandomString(16),
-                           "");
+  std::string username =
+      talk_base::CreateRandomString(PortAllocatorSession::kUsernameLength);
+  std::string password =
+      talk_base::CreateRandomString(PortAllocatorSession::kPasswordLength);
+  PortConfiguration config(stun_address_);
   std::vector<talk_base::Network*> networks;
   network_manager_->GetNetworks(&networks);
   if (networks.empty()) {
@@ -427,7 +423,7 @@ void ConnectivityChecker::AllocatePorts() {
   bool allocate_relay_ports = false;
   for (uint32 i = 0; i < networks.size(); ++i) {
     if (AddNic(networks[i]->ip(), proxy_info.address)) {
-      Port* port = CreateStunPort(&config, networks[i]);
+      Port* port = CreateStunPort(username, password, &config, networks[i]);
 
       // Listen to network events.
       port->SignalAddressReady.connect(
@@ -469,7 +465,8 @@ void ConnectivityChecker::AllocateRelayPorts() {
   // Currently we are using the 'default' nic for http(s) requests.
   TestHttpPortAllocatorSession* allocator_session =
       reinterpret_cast<TestHttpPortAllocatorSession*>(
-          port_allocator_->CreateSession(kSessionNameRtp, kSessionTypeVideo));
+          port_allocator_->CreateSession(
+              kSessionNameRtp, ICE_CANDIDATE_COMPONENT_RTP));
   allocator_session->set_proxy(port_allocator_->proxy());
   allocator_session->SignalConfigReady.connect(
       this, &ConnectivityChecker::OnConfigReady);

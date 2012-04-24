@@ -35,6 +35,7 @@
 #include "talk/app/webrtc/streamcollectionimpl.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
+#include "talk/base/helpers.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
 #include "talk/session/phone/channelmanager.h"
@@ -133,7 +134,9 @@ class FakeJsep : public JsepInterface {
         stream_signaling_(talk_base::Thread::Current(), media_stream_observer),
         session_description_factory_(
             new cricket::MediaSessionDescriptionFactory(channel_manager)),
-        offer_set_(false) {
+        offer_set_(false),
+        session_id_(talk_base::ToString(talk_base::CreateRandomId())),
+        session_version_(0) {
     session_description_factory_->set_add_legacy_streams(false);
   }
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints) {
@@ -141,9 +144,15 @@ class FakeJsep : public JsepInterface {
         stream_signaling_.GetMediaSessionOptions(hints);
     const cricket::SessionDescription* desc =
         local_desc_.get() != NULL ? local_desc_->description() : NULL;
-    return new JsepSessionDescription(
-        session_description_factory_->CreateOffer(options,
-                                                  desc));
+    JsepSessionDescription* jdesc = new JsepSessionDescription();
+    if (!jdesc->Initialize(
+            session_description_factory_->CreateOffer(options, desc),
+            session_id_,
+            talk_base::ToString(++session_version_))) {
+      delete jdesc;
+      jdesc = NULL;
+    }
+    return jdesc;
   }
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
@@ -152,10 +161,16 @@ class FakeJsep : public JsepInterface {
         stream_signaling_.GetMediaSessionOptions(hints);
     const cricket::SessionDescription* desc =
         local_desc_.get() != NULL ? local_desc_->description() : NULL;
-    return new JsepSessionDescription(
-        session_description_factory_->CreateAnswer(offer->description(),
-                                                   options,
-                                                   desc));
+    JsepSessionDescription* jdesc = new JsepSessionDescription();
+    if (!jdesc->Initialize(
+            session_description_factory_->CreateAnswer(offer->description(),
+                                                       options, desc),
+            session_id_,
+            talk_base::ToString(++session_version_))) {
+      delete jdesc;
+      jdesc = NULL;
+    }
+    return jdesc;
   }
   virtual bool StartIce(IceOptions options) {
     return true;
@@ -206,6 +221,8 @@ class FakeJsep : public JsepInterface {
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
   talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
   bool offer_set_;
+  std::string session_id_;
+  uint64 session_version_;
 };
 
 // RoapSignalingTest create two RoapSignaling instances

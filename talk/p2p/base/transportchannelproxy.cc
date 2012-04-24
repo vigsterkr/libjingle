@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -33,19 +33,20 @@
 namespace cricket {
 
 TransportChannelProxy::TransportChannelProxy(const std::string& name,
-                                             const std::string& content_type)
-    : TransportChannel(name, content_type), impl_(NULL) {
+                                             int component)
+    : TransportChannel(name, component),
+      impl_(NULL) {
 }
 
 TransportChannelProxy::~TransportChannelProxy() {
   if (impl_)
-    impl_->GetTransport()->DestroyChannel(impl_->name());
+    impl_->GetTransport()->DestroyChannel(impl_->component());
 }
 
 void TransportChannelProxy::SetImplementation(TransportChannelImpl* impl) {
   // Destroy any existing impl_
   if (impl_) {
-    impl_->GetTransport()->DestroyChannel(impl_->name());
+    impl_->GetTransport()->DestroyChannel(impl_->component());
   }
 
   impl_ = impl;
@@ -63,28 +64,34 @@ void TransportChannelProxy::SetImplementation(TransportChannelImpl* impl) {
   pending_options_.clear();
 }
 
-int TransportChannelProxy::SendPacket(const char* data, size_t len) {
+int TransportChannelProxy::SendPacket(const char* data, size_t len, int flags) {
   // Fail if we don't have an impl yet.
-  return (impl_) ? impl_->SendPacket(data, len) : -1;
+  if (!impl_) {
+    return -1;
+  }
+  return impl_->SendPacket(data, len, flags);
 }
 
 int TransportChannelProxy::SetOption(talk_base::Socket::Option opt, int value) {
-  if (impl_)
-    return impl_->SetOption(opt, value);
-  pending_options_.push_back(OptionPair(opt, value));
-  return 0;
+  if (!impl_) {
+    pending_options_.push_back(OptionPair(opt, value));
+    return 0;
+  }
+  return impl_->SetOption(opt, value);
 }
 
 int TransportChannelProxy::GetError() {
-  ASSERT(impl_ != NULL);  // should not be used until channel is writable
+  if (!impl_) {
+    return 0;
+  }
   return impl_->GetError();
 }
 
-P2PTransportChannel* TransportChannelProxy::GetP2PChannel() {
-  if (impl_) {
-      return impl_->GetP2PChannel();
+bool TransportChannelProxy::GetStats(ConnectionInfos* infos) {
+  if (!impl_) {
+    return false;
   }
-  return NULL;
+  return impl_->GetStats(infos);
 }
 
 void TransportChannelProxy::OnReadableState(TransportChannel* channel) {
@@ -96,13 +103,14 @@ void TransportChannelProxy::OnReadableState(TransportChannel* channel) {
 void TransportChannelProxy::OnWritableState(TransportChannel* channel) {
   ASSERT(channel == impl_);
   set_writable(impl_->writable());
-  // Note: SignalWritableState fired by set_writable.
+  // Note: SignalWritableState fired by set_readable.
 }
 
 void TransportChannelProxy::OnReadPacket(TransportChannel* channel,
-                                         const char* data, size_t size) {
+                                         const char* data, size_t size,
+                                         int flags) {
   ASSERT(channel == impl_);
-  SignalReadPacket(this, data, size);
+  SignalReadPacket(this, data, size, flags);
 }
 
 void TransportChannelProxy::OnRouteChange(TransportChannel* channel,

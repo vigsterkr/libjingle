@@ -216,7 +216,7 @@ class BaseChannel
   // From TransportChannel
   void OnWritableState(TransportChannel* channel);
   virtual void OnChannelRead(TransportChannel* channel, const char* data,
-                             size_t len);
+                             size_t len, int flags);
 
   bool PacketIsRtcp(const TransportChannel* channel, const char* data,
                     size_t len);
@@ -357,7 +357,7 @@ class VoiceChannel : public BaseChannel {
  private:
   // overrides from BaseChannel
   virtual void OnChannelRead(TransportChannel* channel,
-                             const char *data, size_t len);
+                             const char *data, size_t len, int flags);
   virtual void ChangeState();
   virtual const MediaContentDescription* GetFirstContent(
       const SessionDescription* sdesc);

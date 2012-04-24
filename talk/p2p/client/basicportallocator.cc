@@ -65,8 +65,8 @@ const int PHASE_SSLTCP = 3;
 const int kNumPhases = 4;
 
 // Modifiers of the above constants
-const float RELAY_PRIMARY_PREF_MODIFIER = 0.0f;
-const float RELAY_BACKUP_PREF_MODIFIER = -0.2f;
+const int RELAY_PRIMARY_PRIORITY_MODIFIER = 0;  // pref = 0.0
+const int RELAY_BACKUP_PRIORITY_MODIFIER = -419430400;  // pref = -0.2
 
 // Returns the phase in which a given local candidate (or rather, the port that
 // gave rise to that local candidate) would have been created.
@@ -245,8 +245,8 @@ int BasicPortAllocator::best_writable_phase() const {
 }
 
 PortAllocatorSession *BasicPortAllocator::CreateSession(
-    const std::string &name, const std::string &session_type) {
-  return new BasicPortAllocatorSession(this, name, session_type);
+    const std::string &name, int component) {
+  return new BasicPortAllocatorSession(this, name, component);
 }
 
 void BasicPortAllocator::AddWritablePhase(int phase) {
@@ -257,9 +257,9 @@ void BasicPortAllocator::AddWritablePhase(int phase) {
 // BasicPortAllocatorSession
 BasicPortAllocatorSession::BasicPortAllocatorSession(
     BasicPortAllocator *allocator,
-    const std::string &name,
-    const std::string &session_type)
-    : PortAllocatorSession(name, session_type, allocator->flags()),
+    const std::string &channel_name,
+    int component)
+    : PortAllocatorSession(channel_name, component, allocator->flags()),
       allocator_(allocator), network_thread_(NULL),
       socket_factory_(allocator->socket_factory()), allocation_started_(false),
       network_manager_started_(false),
@@ -350,10 +350,7 @@ void BasicPortAllocatorSession::OnMessage(talk_base::Message *message) {
 }
 
 void BasicPortAllocatorSession::GetPortConfigurations() {
-  PortConfiguration* config = new PortConfiguration(allocator_->stun_address(),
-                                                    username(),
-                                                    password(),
-                                                    "");
+  PortConfiguration* config = new PortConfiguration(allocator_->stun_address());
   PortConfiguration::PortList ports;
   if (!allocator_->relay_address_udp().IsAny())
     ports.push_back(ProtocolAddress(
@@ -364,7 +361,7 @@ void BasicPortAllocatorSession::GetPortConfigurations() {
   if (!allocator_->relay_address_ssl().IsAny())
     ports.push_back(ProtocolAddress(
         allocator_->relay_address_ssl(), PROTO_SSLTCP));
-  config->AddRelay(ports, RELAY_PRIMARY_PREF_MODIFIER);
+  config->AddRelay(ports, RELAY_PRIMARY_PRIORITY_MODIFIER);
 
   ConfigReady(config);
 }
@@ -398,10 +395,12 @@ void BasicPortAllocatorSession::OnAllocate() {
 // For each network, see if we have a sequence that covers it already.  If not,
 // create a new sequence to create the appropriate ports.
 void BasicPortAllocatorSession::DoAllocate() {
+  bool done_signal_needed = false;
   std::vector<talk_base::Network*> networks;
   allocator_->network_manager()->GetNetworks(&networks);
   if (networks.empty()) {
     LOG(LS_WARNING) << "Machine has no networks; no ports will be allocated";
+    done_signal_needed = true;
   } else {
     for (uint32 i = 0; i < networks.size(); ++i) {
       PortConfiguration* config = NULL;
@@ -409,6 +408,12 @@ void BasicPortAllocatorSession::DoAllocate() {
         config = configs_.back();
 
       uint32 sequence_flags = flags();
+      if ((sequence_flags & DISABLE_ALL_PHASES) == DISABLE_ALL_PHASES) {
+        // If all the ports are disabled we should just fire the allocation
+        // done event and return.
+        done_signal_needed = true;
+        break;
+      }
 
       // Disables phases that are not specified in this config.
       if (!config || config->stun_address.IsNil()) {
@@ -418,6 +423,12 @@ void BasicPortAllocatorSession::DoAllocate() {
       if (!config || config->relays.empty()) {
         // No relay ports specified in this config.
         sequence_flags |= PORTALLOCATOR_DISABLE_RELAY;
+      }
+
+      if (!(sequence_flags & PORTALLOCATOR_ENABLE_IPV6) &&
+          networks[i]->ip().family() == AF_INET6) {
+        // Skip IPv6 networks unless the flag's been set.
+        continue;
       }
 
       // Disable phases that would only create ports equivalent to
@@ -431,15 +442,17 @@ void BasicPortAllocatorSession::DoAllocate() {
 
       AllocationSequence* sequence =
           new AllocationSequence(this, networks[i], config, sequence_flags);
+      done_signal_needed = true;
       sequence->SignalPortAllocationComplete.connect(
           this, &BasicPortAllocatorSession::OnPortAllocationComplete);
       if (running_)
         sequence->Start();
-
       sequences_.push_back(sequence);
     }
   }
-  network_thread_->Post(this, MSG_SEQUENCEOBJECTS_CREATED);
+  if (done_signal_needed) {
+    network_thread_->Post(this, MSG_SEQUENCEOBJECTS_CREATED);
+  }
 }
 
 void BasicPortAllocatorSession::OnNetworksChanged() {
@@ -458,13 +471,13 @@ void BasicPortAllocatorSession::DisableEquivalentPhases(
 
 void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
                                                  AllocationSequence * seq,
-                                                 float pref,
+                                                 uint32 priority,
                                                  bool prepare_address) {
   if (!port)
     return;
 
-  port->set_name(name_);
-  port->set_preference(pref);
+  port->set_component(component_);
+  port->set_priority(priority);
   port->set_generation(generation());
   if (allocator_->proxy().type != talk_base::PROXY_NONE)
     port->set_proxy(allocator_->user_agent(), allocator_->proxy());
@@ -806,11 +819,11 @@ void AllocationSequence::CreateUDPPorts() {
                                network_, ip_,
                                session_->allocator()->min_port(),
                                session_->allocator()->max_port(),
-                               config_->username, config_->password);
+                               session_->username(), session_->password());
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PREF_LOCAL_UDP);
+    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_UDP);
   }
 }
 
@@ -825,12 +838,12 @@ void AllocationSequence::CreateTCPPorts() {
                                network_, ip_,
                                session_->allocator()->min_port(),
                                session_->allocator()->max_port(),
-                               config_->username, config_->password,
+                               session_->username(), session_->password(),
                                session_->allocator()->allow_tcp_listen());
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PREF_LOCAL_TCP);
+    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_TCP);
   }
 }
 
@@ -854,12 +867,12 @@ void AllocationSequence::CreateStunPorts() {
                                 network_, ip_,
                                 session_->allocator()->min_port(),
                                 session_->allocator()->max_port(),
-                                config_->username, config_->password,
+                                session_->username(), session_->password(),
                                 config_->stun_address);
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PREF_LOCAL_STUN);
+    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_STUN);
   }
 }
 
@@ -886,16 +899,16 @@ void AllocationSequence::CreateRelayPorts() {
                                         network_, ip_,
                                         session_->allocator()->min_port(),
                                         session_->allocator()->max_port(),
-                                        config_->username, config_->password,
-                                        config_->magic_cookie);
+                                        session_->username(),
+                                        session_->password());
     if (port) {
       // Note: We must add the allocated port before we add addresses because
       //       the latter will create candidates that need name and preference
       //       settings.  However, we also can't prepare the address (normally
       //       done by AddAllocatedPort) until we have these addresses.  So we
       //       wait to do that until below.
-      session_->AddAllocatedPort(port, this, PREF_RELAY + relay->pref_modifier,
-                                 false);
+      int priority = PRIORITY_RELAY + relay->priority_modifier;
+      session_->AddAllocatedPort(port, this, priority, false);
 
       // Add the addresses of this protocol.
       PortConfiguration::PortList::const_iterator relay_port;
@@ -916,17 +929,15 @@ void AllocationSequence::CreateRelayPorts() {
 }
 
 // PortConfiguration
-PortConfiguration::PortConfiguration(const talk_base::SocketAddress& sa,
-                                     const std::string& un,
-                                     const std::string& pw,
-                                     const std::string& mc)
-    : stun_address(sa), username(un), password(pw), magic_cookie(mc) {
+PortConfiguration::PortConfiguration(
+    const talk_base::SocketAddress& stun_address)
+    : stun_address(stun_address) {
 }
 
-void PortConfiguration::AddRelay(const PortList& ports, float pref_modifier) {
+void PortConfiguration::AddRelay(const PortList& ports, int priority_modifier) {
   RelayServer relay;
   relay.ports = ports;
-  relay.pref_modifier = pref_modifier;
+  relay.priority_modifier = priority_modifier;
   relays.push_back(relay);
 }
 

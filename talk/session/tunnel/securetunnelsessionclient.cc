@@ -218,7 +218,7 @@ void SecureTunnelSessionClient::OnIncomingTunnel(const buzz::Jid &jid,
 
 bool SecureTunnelSessionClient::ParseContent(SignalingProtocol protocol,
                                              const buzz::XmlElement* elem,
-                                             const ContentDescription** content,
+                                             ContentDescription** content,
                                              ParseError* error) {
   const buzz::XmlElement* type_elem = elem->FirstNamed(QN_SECURE_TUNNEL_TYPE);
 
@@ -270,7 +270,7 @@ bool SecureTunnelSessionClient::WriteContent(
 }
 
 SessionDescription* NewSecureTunnelSessionDescription(
-    const std::string& content_name, const ContentDescription* content) {
+    const std::string& content_name, ContentDescription* content) {
   SessionDescription* sdesc = new SessionDescription();
   sdesc->AddContent(content_name, NS_SECURE_TUNNEL, content);
   return sdesc;
@@ -380,7 +380,8 @@ void SecureTunnelSession::OnAccept() {
   // This will try to connect the PseudoTcpChannel. If and when that
   // succeeds, then ssl negotiation will take place, and when that
   // succeeds, the tunnel stream will finally open.
-  VERIFY(channel_->Connect(content_name, "tcp"));
+  VERIFY(channel_->Connect(
+      content_name, "tcp", ICE_CANDIDATE_COMPONENT_DEFAULT));
 }
 
 }  // namespace cricket

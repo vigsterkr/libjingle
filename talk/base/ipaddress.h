@@ -122,6 +122,7 @@ bool IPFromHostEnt(hostent* hostEnt, IPAddress* out);
 bool IPFromHostEnt(hostent* hostEnt, int idx, IPAddress* out);
 bool IPFromString(const std::string& str, IPAddress* out);
 bool IPIsAny(const IPAddress& ip);
+bool IPIsUnspec(const IPAddress& ip);
 bool IPIsLoopback(const IPAddress& ip);
 bool IPIsPrivate(const IPAddress& ip);
 size_t HashIP(const IPAddress& ip);

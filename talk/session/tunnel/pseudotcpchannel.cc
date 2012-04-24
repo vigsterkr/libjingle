@@ -120,7 +120,8 @@ PseudoTcpChannel::~PseudoTcpChannel() {
 }
 
 bool PseudoTcpChannel::Connect(const std::string& content_name,
-                               const std::string& channel_name) {
+                               const std::string& channel_name,
+                               int component) {
   ASSERT(signal_thread_->IsCurrent());
   CritScope lock(&cs_);
 
@@ -130,7 +131,8 @@ bool PseudoTcpChannel::Connect(const std::string& content_name,
   ASSERT(session_ != NULL);
   worker_thread_ = session_->session_manager()->worker_thread();
   content_name_ = content_name;
-  channel_ = session_->CreateChannel(content_name, channel_name);
+  channel_ = session_->CreateChannel(
+      content_name, channel_name, component);
   channel_name_ = channel_name;
   channel_->SetOption(Socket::OPT_DONTFRAGMENT, 1);
 
@@ -338,7 +340,7 @@ void PseudoTcpChannel::OnChannelWritableState(TransportChannel* channel) {
 }
 
 void PseudoTcpChannel::OnChannelRead(TransportChannel* channel,
-                                     const char* data, size_t size) {
+                                     const char* data, size_t size, int flags) {
   //LOG_F(LS_VERBOSE) << "(" << size << ")";
   ASSERT(worker_thread_->IsCurrent());
   CritScope lock(&cs_);
@@ -371,8 +373,10 @@ void PseudoTcpChannel::OnChannelConnectionChanged(TransportChannel* channel,
   }
 
   uint16 mtu = 1280;  // safe default
-  talk_base::scoped_ptr<Socket> mtu_socket(
-      worker_thread_->socketserver()->CreateSocket(SOCK_DGRAM));
+  int family = candidate.address().family();
+  Socket* socket =
+      worker_thread_->socketserver()->CreateAsyncSocket(family, SOCK_DGRAM);
+  talk_base::scoped_ptr<Socket> mtu_socket(socket);
   if (mtu_socket->Connect(candidate.address()) < 0 ||
       mtu_socket->EstimateMTU(&mtu) < 0) {
     LOG_F(LS_WARNING) << "Failed to estimate MTU, error="

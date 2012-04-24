@@ -247,9 +247,7 @@ HttpServer::Connection::onHttpClosed(HttpError err) {
 // HttpListenServer
 ///////////////////////////////////////////////////////////////////////////////
 
-HttpListenServer::HttpListenServer()
-: listener_(Thread::Current()->socketserver()->CreateAsyncSocket(SOCK_STREAM)) {
-  listener_->SignalReadEvent.connect(this, &HttpListenServer::OnReadEvent);
+HttpListenServer::HttpListenServer() {
   SignalConnectionClosed.connect(this, &HttpListenServer::OnConnectionClosed);
 }
 
@@ -257,6 +255,11 @@ HttpListenServer::~HttpListenServer() {
 }
 
 int HttpListenServer::Listen(const SocketAddress& address) {
+  AsyncSocket* sock =
+      Thread::Current()->socketserver()->CreateAsyncSocket(address.family(),
+                                                           SOCK_STREAM);
+  listener_.reset(sock);
+  listener_->SignalReadEvent.connect(this, &HttpListenServer::OnReadEvent);
   if ((listener_->Bind(address) != SOCKET_ERROR) &&
       (listener_->Listen(5) != SOCKET_ERROR))
     return 0;
@@ -264,16 +267,22 @@ int HttpListenServer::Listen(const SocketAddress& address) {
 }
 
 bool HttpListenServer::GetAddress(SocketAddress* address) const {
+  if (listener_.get() == NULL) {
+    return false;
+  }
   *address = listener_->GetLocalAddress();
   return !address->IsNil();
 }
 
 void HttpListenServer::StopListening() {
-  listener_->Close();
+  if (listener_.get()) {
+    listener_->Close();
+  }
 }
 
 void HttpListenServer::OnReadEvent(AsyncSocket* socket) {
   ASSERT(socket == listener_.get());
+  ASSERT(listener_.get() != NULL);
   AsyncSocket* incoming = listener_->Accept(NULL);
   if (incoming) {
     StreamInterface* stream = new SocketStream(incoming);

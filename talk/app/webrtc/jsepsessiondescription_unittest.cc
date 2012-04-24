@@ -30,7 +30,9 @@
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/base/gunit.h"
+#include "talk/base/helpers.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stringencode.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
@@ -70,12 +72,17 @@ class JsepSessionDescriptionTest : public testing::Test {
   virtual void SetUp() {
     int port = 1234;
     talk_base::SocketAddress address("127.0.0.1", port++);
-    cricket::Candidate candidate("rtp", "udp", address, 1, "user_rtp",
-                                 "password_rtp", "local", "eth0", 0);
+    cricket::Candidate candidate("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP,
+                                 "udp", address, 1, "user_rtp",
+                                 "password_rtp", "local", "eth0", 0, 0);
     candidate_ = candidate;
-
+    const std::string session_id =
+        talk_base::ToString(talk_base::CreateRandomId());
+    const std::string session_version =
+        talk_base::ToString(talk_base::CreateRandomId());
     jsep_desc_.reset(new JsepSessionDescription());
-    jsep_desc_->SetDescription(CreateCricketSessionDescription());
+    ASSERT_TRUE(jsep_desc_->Initialize(CreateCricketSessionDescription(),
+        session_id, session_version));
   }
 
   std::string Serialize(const SessionDescriptionInterface* desc) {
@@ -153,4 +160,3 @@ TEST_F(JsepSessionDescriptionTest, SerializeDeserializeWithCandidates) {
 
   EXPECT_EQ(sdp_with_candidate, parsed_sdp_with_candidate);
 }
-

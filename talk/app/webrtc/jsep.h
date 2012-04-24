@@ -25,14 +25,15 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Interfaces matching the JSEP proposal.
-// http://www.ietf.org/id/draft-uberti-rtcweb-jsep-02.txt
+// Interfaces matching the draft-ietf-rtcweb-jsep-00.
 
 #ifndef TALK_APP_WEBRTC_JSEP_H_
 #define TALK_APP_WEBRTC_JSEP_H_
 
 #include <string>
 #include <vector>
+
+#include "talk/base/basictypes.h"
 
 namespace cricket {
 class SessionDescription;
@@ -97,6 +98,10 @@ class SessionDescriptionInterface {
  public:
   virtual ~SessionDescriptionInterface() {}
   virtual const cricket::SessionDescription* description() const = 0;
+  // Get the session id and session version, which are defined based on
+  // RFC 4566 for the SDP o= line.
+  virtual std::string session_id() const = 0;
+  virtual std::string session_version() const = 0;
   // Adds the specified candidate to the description.
   // Ownership is not transferred.
   // Returns false if the session description does not have a media section that

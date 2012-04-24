@@ -40,61 +40,128 @@ namespace talk_base {
 class PhysicalSocketTest : public SocketTest {
 };
 
-TEST_F(PhysicalSocketTest, TestConnect) {
-  SocketTest::TestConnect();
+TEST_F(PhysicalSocketTest, TestConnectIPv4) {
+  SocketTest::TestConnectIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestConnectWithDnsLookup) {
-  SocketTest::TestConnectWithDnsLookup();
+TEST_F(PhysicalSocketTest, TestConnectIPv6) {
+  SocketTest::TestConnectIPv6();
 }
 
-TEST_F(PhysicalSocketTest, TestConnectFail) {
-  SocketTest::TestConnectFail();
+TEST_F(PhysicalSocketTest, TestConnectWithDnsLookupIPv4) {
+  SocketTest::TestConnectWithDnsLookupIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestConnectWithDnsLookupFail) {
-  SocketTest::TestConnectWithDnsLookupFail();
+TEST_F(PhysicalSocketTest, TestConnectWithDnsLookupIPv6) {
+  SocketTest::TestConnectWithDnsLookupIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestConnectFailIPv4) {
+  SocketTest::TestConnectFailIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestConnectFailIPv6) {
+  SocketTest::TestConnectFailIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestConnectWithDnsLookupFailIPv4) {
+  SocketTest::TestConnectWithDnsLookupFailIPv4();
+}
+
+
+TEST_F(PhysicalSocketTest, TestConnectWithDnsLookupFailIPv6) {
+  SocketTest::TestConnectWithDnsLookupFailIPv6();
+}
+
+
+#ifdef OSX
+// This test crashes the OS X kernel on 10.6 (at bsd/netinet/tcp_subr.c:2118).
+TEST_F(PhysicalSocketTest, DISABLED_TestConnectWithClosedSocketIPv4) {
+#else
+TEST_F(PhysicalSocketTest, TestConnectWithClosedSocketIPv4) {
+#endif
+  SocketTest::TestConnectWithClosedSocketIPv4();
 }
 
 #ifdef OSX
 // This test crashes the OS X kernel on 10.6 (at bsd/netinet/tcp_subr.c:2118).
-TEST_F(PhysicalSocketTest, DISABLED_TestConnectWithClosedSocket) {
+TEST_F(PhysicalSocketTest, DISABLED_TestConnectWithClosedSocketIPv6) {
 #else
-TEST_F(PhysicalSocketTest, TestConnectWithClosedSocket) {
+TEST_F(PhysicalSocketTest, TestConnectWithClosedSocketIPv6) {
 #endif
-  SocketTest::TestConnectWithClosedSocket();
+  SocketTest::TestConnectWithClosedSocketIPv6();
 }
 
-TEST_F(PhysicalSocketTest, TestServerCloseDuringConnect) {
-  SocketTest::TestServerCloseDuringConnect();
+TEST_F(PhysicalSocketTest, TestConnectWhileNotClosedIPv4) {
+  SocketTest::TestConnectWhileNotClosedIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestClientCloseDuringConnect) {
-  SocketTest::TestClientCloseDuringConnect();
+TEST_F(PhysicalSocketTest, TestConnectWhileNotClosedIPv6) {
+  SocketTest::TestConnectWhileNotClosedIPv6();
 }
 
-TEST_F(PhysicalSocketTest, TestServerClose) {
-  SocketTest::TestServerClose();
+TEST_F(PhysicalSocketTest, TestServerCloseDuringConnectIPv4) {
+  SocketTest::TestServerCloseDuringConnectIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestCloseInClosedCallback) {
-  SocketTest::TestCloseInClosedCallback();
+TEST_F(PhysicalSocketTest, TestServerCloseDuringConnectIPv6) {
+  SocketTest::TestServerCloseDuringConnectIPv6();
 }
 
-TEST_F(PhysicalSocketTest, TestSocketServerWait) {
-  SocketTest::TestSocketServerWait();
+TEST_F(PhysicalSocketTest, TestClientCloseDuringConnectIPv4) {
+  SocketTest::TestClientCloseDuringConnectIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestTcp) {
-  SocketTest::TestTcp();
+TEST_F(PhysicalSocketTest, TestClientCloseDuringConnectIPv6) {
+  SocketTest::TestClientCloseDuringConnectIPv6();
 }
 
-TEST_F(PhysicalSocketTest, TestUdp) {
-  SocketTest::TestUdp();
+TEST_F(PhysicalSocketTest, TestServerCloseIPv4) {
+  SocketTest::TestServerCloseIPv4();
 }
 
-TEST_F(PhysicalSocketTest, TestGetSetOptions) {
-  SocketTest::TestGetSetOptions();
+TEST_F(PhysicalSocketTest, TestServerCloseIPv6) {
+  SocketTest::TestServerCloseIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestCloseInClosedCallbackIPv4) {
+  SocketTest::TestCloseInClosedCallbackIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestCloseInClosedCallbackIPv6) {
+  SocketTest::TestCloseInClosedCallbackIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestSocketServerWaitIPv4) {
+  SocketTest::TestSocketServerWaitIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestSocketServerWaitIPv6) {
+  SocketTest::TestSocketServerWaitIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestTcpIPv4) {
+  SocketTest::TestTcpIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestTcpIPv6) {
+  SocketTest::TestTcpIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestUdpIPv4) {
+  SocketTest::TestUdpIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestUdpIPv6) {
+  SocketTest::TestUdpIPv6();
+}
+
+TEST_F(PhysicalSocketTest, TestGetSetOptionsIPv4) {
+  SocketTest::TestGetSetOptionsIPv4();
+}
+
+TEST_F(PhysicalSocketTest, TestGetSetOptionsIPv6) {
+  SocketTest::TestGetSetOptionsIPv6();
 }
 
 #ifdef POSIX

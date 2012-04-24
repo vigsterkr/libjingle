@@ -90,6 +90,8 @@ void TestSend(
     EXPECT_TRUE(out[i]->CheckNextPacket(buf, len, &trans_addr2));
     bool are_same = (trans_addr == trans_addr2);
     ASSERT_EQ(are_same, exp_same) << "same translated address";
+    ASSERT_NE(AF_UNSPEC, trans_addr.family());
+    ASSERT_NE(AF_UNSPEC, trans_addr2.family());
   }
 
   th_int.Stop();
@@ -228,7 +230,10 @@ TEST(NatTest, TestVirtual) {
       new PhysicalSocketServer());
 
   // TODO: IPv6ize this test when the NAT stuff is v6ed.
-  SocketAddress int_addr, ext_addrs[4];
+  // int_addr needs an explicit family defined, ext_addrs will get
+  // theirs from it.
+  SocketAddress int_addr(IPAddress(INADDR_ANY), 0);
+  SocketAddress ext_addrs[4];
   int_addr.SetIP(int_vss->GetNextIP(int_addr.ipaddr().family()));
   ext_addrs[0].SetIP(ext_vss->GetNextIP(int_addr.ipaddr().family()));
   ext_addrs[1].SetIP(ext_vss->GetNextIP(int_addr.ipaddr().family()));

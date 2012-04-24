@@ -143,7 +143,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
   }
 
   virtual int Bind(const SocketAddress& addr) {
-    if (!local_addr_.IsAny()) {
+    if (!local_addr_.IsNil()) {
       error_ = EINVAL;
       return -1;
     }
@@ -164,7 +164,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
   }
 
   virtual int Close() {
-    if (!local_addr_.IsAny() && bound_) {
+    if (!local_addr_.IsNil() && bound_) {
       // Remove from the binding table.
       server_->Unbind(local_addr_, this);
       bound_ = false;
@@ -308,7 +308,7 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
   virtual int Listen(int backlog) {
     ASSERT(SOCK_STREAM == type_);
     ASSERT(CS_CLOSED == state_);
-    if (local_addr_.IsAny()) {
+    if (local_addr_.IsNil()) {
       error_ = EINVAL;
       return -1;
     }
@@ -438,11 +438,11 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
   typedef std::map<Option, int> OptionsMap;
 
   int InitiateConnect(const SocketAddress& addr, bool use_delay) {
-    if (!remote_addr_.IsAny()) {
+    if (!remote_addr_.IsNil()) {
       error_ = (CS_CONNECTED == state_) ? EISCONN : EINPROGRESS;
       return -1;
     }
-    if (local_addr_.IsAny()) {
+    if (local_addr_.IsNil()) {
       // If there's no local address set, grab a random one in the correct AF.
       int result = 0;
       if (addr.ipaddr().family() == AF_INET) {
@@ -480,7 +480,8 @@ class VirtualSocket : public AsyncSocket, public MessageHandler {
 
   int SendUdp(const void* pv, size_t cb, const SocketAddress& addr) {
     // If we have not been assigned a local port, then get one.
-    if (local_addr_.IsAny()) {
+    if (local_addr_.IsNil()) {
+      local_addr_ = EmptySocketAddressWithFamily(addr.ipaddr().family());
       int result = server_->Bind(this, &local_addr_);
       if (result != 0) {
         local_addr_.Clear();
@@ -658,7 +659,7 @@ int VirtualSocketServer::Bind(VirtualSocket* socket,
                               const SocketAddress& addr) {
   ASSERT(NULL != socket);
   // Address must be completely specified at this point
-  ASSERT(!IPIsAny(addr.ipaddr()));
+  ASSERT(!IPIsUnspec(addr.ipaddr()));
   ASSERT(addr.port() != 0);
 
   // Normalize the address (turns v6-mapped addresses into v4-addresses).
@@ -673,8 +674,10 @@ int VirtualSocketServer::Bind(VirtualSocket* socket, SocketAddress* addr) {
 
   if (IPIsAny(addr->ipaddr())) {
     addr->SetIP(GetNextIP(addr->ipaddr().family()));
-  } else {
+  } else if (!IPIsUnspec(addr->ipaddr())) {
     addr->SetIP(addr->ipaddr().Normalized());
+  } else {
+    ASSERT(false);
   }
 
   if (addr->port() == 0) {

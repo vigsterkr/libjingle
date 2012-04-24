@@ -44,13 +44,15 @@ namespace {
 // This is our magical hangup signal.
 const char kByeMessage[] = "BYE";
 
-talk_base::AsyncSocket* CreateClientSocket() {
+talk_base::AsyncSocket* CreateClientSocket(int family) {
 #ifdef WIN32
-  return new talk_base::Win32Socket();
+  talk_base::Win32Socket* sock = new talk_base::Win32Socket();
+  sock->CreateT(family, SOCK_STREAM);
+  return sock;
 #elif defined(POSIX)
   talk_base::Thread* thread = talk_base::Thread::Current();
   ASSERT(thread != NULL);
-  return thread->socketserver()->CreateAsyncSocket(SOCK_STREAM);
+  return thread->socketserver()->CreateAsyncSocket(family, SOCK_STREAM);
 #else
 #error Platform not supported.
 #endif
@@ -60,10 +62,16 @@ talk_base::AsyncSocket* CreateClientSocket() {
 
 PeerConnectionClient::PeerConnectionClient()
   : callback_(NULL),
-    control_socket_(CreateClientSocket()),
-    hanging_get_(CreateClientSocket()),
     state_(NOT_CONNECTED),
     my_id_(-1) {
+}
+
+PeerConnectionClient::~PeerConnectionClient() {
+}
+
+void PeerConnectionClient::InitSocketSignals() {
+  ASSERT(control_socket_.get() != NULL);
+  ASSERT(hanging_get_.get() != NULL);
   control_socket_->SignalCloseEvent.connect(this,
       &PeerConnectionClient::OnClose);
   hanging_get_->SignalCloseEvent.connect(this,
@@ -76,9 +84,6 @@ PeerConnectionClient::PeerConnectionClient()
       &PeerConnectionClient::OnRead);
   hanging_get_->SignalReadEvent.connect(this,
       &PeerConnectionClient::OnHangingGetRead);
-}
-
-PeerConnectionClient::~PeerConnectionClient() {
 }
 
 int PeerConnectionClient::id() const {
@@ -134,6 +139,9 @@ bool PeerConnectionClient::Connect(const std::string& server, int port,
     }
   }
 
+  control_socket_.reset(CreateClientSocket(server_address_.ipaddr().family()));
+  hanging_get_.reset(CreateClientSocket(server_address_.ipaddr().family()));
+  InitSocketSignals();
   char buffer[1024];
   sprintfn(buffer, sizeof(buffer),
            "GET /sign_in?%s HTTP/1.0\r\n\r\n", client_name.c_str());

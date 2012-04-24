@@ -23,7 +23,7 @@ static const int kCallbackFlags = kCFSocketReadCallBack |
                                   kCFSocketConnectCallBack |
                                   kCFSocketWriteCallBack;
 
-MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss)
+MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int family)
     : ss_(ss),
       socket_(NULL),
       native_socket_(INVALID_SOCKET),
@@ -32,7 +32,7 @@ MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss)
       disabled_(false),
       error_(0),
       state_(CS_CLOSED) {
-  Initialize();
+  Initialize(family);
 }
 
 MacAsyncSocket::~MacAsyncSocket() {
@@ -75,7 +75,7 @@ SocketAddress MacAsyncSocket::GetRemoteAddress() const {
 
 // Bind the socket to a local address.
 int MacAsyncSocket::Bind(const SocketAddress& address) {
-  sockaddr_storage saddr;
+  sockaddr_storage saddr = {0};
   size_t len = address.ToSockAddrStorage(&saddr);
   int err = ::bind(native_socket_, reinterpret_cast<sockaddr*>(&saddr), len);
   if (err == SOCKET_ERROR) error_ = errno;
@@ -84,12 +84,6 @@ int MacAsyncSocket::Bind(const SocketAddress& address) {
 
 // Connect to a remote address.
 int MacAsyncSocket::Connect(const SocketAddress& address) {
-  if (!valid()) {
-    Initialize();
-    if (!valid())
-      return SOCKET_ERROR;
-  }
-
   SocketAddress addr2(address);
   if (addr2.IsUnresolved()) {
     LOG(LS_VERBOSE) << "Resolving addr in MacAsyncSocket::Connect";
@@ -97,6 +91,11 @@ int MacAsyncSocket::Connect(const SocketAddress& address) {
     if (!addr2.ResolveIP(false, &error_)) {
       return SOCKET_ERROR;
     }
+  }
+  if (!valid()) {
+    Initialize(addr2.family());
+    if (!valid())
+      return SOCKET_ERROR;
   }
 
   sockaddr_storage saddr;
@@ -208,7 +207,7 @@ MacAsyncSocket* MacAsyncSocket::Accept(SocketAddress* out_addr) {
     return NULL;
   }
 
-  MacAsyncSocket* s = new MacAsyncSocket(ss_, socket_fd);
+  MacAsyncSocket* s = new MacAsyncSocket(ss_, saddr.ss_family, socket_fd);
   if (s && s->valid()) {
     s->state_ = CS_CONNECTED;
     if (out_addr)
@@ -281,7 +280,8 @@ void MacAsyncSocket::DisableCallbacks() {
   }
 }
 
-MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int native_socket)
+MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int family,
+                               int native_socket)
     : ss_(ss),
       socket_(NULL),
       native_socket_(native_socket),
@@ -290,14 +290,14 @@ MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int native_socket)
       disabled_(false),
       error_(0),
       state_(CS_CLOSED) {
-  Initialize();
+  Initialize(family);
 }
 
 // Create a new socket, wrapping the native socket if provided or creating one
 // otherwise. In case of any failure, consume the native socket.  We assume the
 // wrapped socket is in the closed state.  If this is not the case you must
 // update the state_ field for this socket yourself.
-void MacAsyncSocket::Initialize() {
+void MacAsyncSocket::Initialize(int family) {
   CFSocketContext ctx = { 0 };
   ctx.info = this;
 
@@ -306,7 +306,7 @@ void MacAsyncSocket::Initialize() {
   bool res = false;
   if (native_socket_ == INVALID_SOCKET) {
     cf_socket = CFSocketCreate(kCFAllocatorDefault,
-                               PF_INET, SOCK_STREAM, IPPROTO_TCP,
+                               family, SOCK_STREAM, IPPROTO_TCP,
                                kCallbackFlags, MacAsyncSocketCallBack, &ctx);
   } else {
     cf_socket = CFSocketCreateWithNative(kCFAllocatorDefault,

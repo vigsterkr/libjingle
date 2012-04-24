@@ -175,6 +175,10 @@ class PeerConnectionInterface : public JsepInterface,
   // CommitStreamChanges is called.
   virtual void RemoveStream(LocalMediaStreamInterface* stream) = 0;
 
+  // Remove a local stream and stop sending it.
+  // Returns false if a stream with |label| does not exist.
+  virtual bool RemoveStream(const std::string& label) = 0;
+
   // Commit Stream changes. This will start sending media on new streams
   // and stop sending media on removed streams.
   virtual void CommitStreamChanges() = 0;

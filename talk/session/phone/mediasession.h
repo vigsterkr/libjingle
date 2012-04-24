@@ -362,6 +362,25 @@ bool GetStreamByNickAndName(
     const SessionDescription* sdesc, MediaType media_type,
     const std::string& nick, const std::string& name,
     StreamParams* stream_out);
+
+// Functions for translating media candidate names.
+
+// For converting between media ICE component and G-ICE channel
+// names.  For example:
+// "rtp" <=> 1
+// "rtcp" <=> 2
+// "video_rtp" <=> 1
+// "video_rtcp" <=> 2
+// Will not convert in the general case of arbitrary channel names,
+// but is useful for cases where we have candidates for media
+// channels.
+// returns false if there is no mapping.
+bool GetMediaChannelNameFromComponent(
+    int component, cricket::MediaType media_type, std::string* channel_name);
+bool GetMediaComponentFromChannelName(
+    const std::string& channel_name, int* component);
+bool GetMediaTypeFromChannelName(
+    const std::string& channel_name, cricket::MediaType* media_type);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_

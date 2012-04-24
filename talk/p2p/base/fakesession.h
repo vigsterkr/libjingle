@@ -57,8 +57,8 @@ class FakeTransportChannel : public TransportChannelImpl,
  public:
   explicit FakeTransportChannel(Transport* transport,
                                 const std::string& name,
-                                const std::string& session_type)
-      : TransportChannelImpl(name, session_type),
+                                int component)
+      : TransportChannelImpl(name, component),
         transport_(transport),
         dest_(NULL),
         state_(STATE_INIT),
@@ -108,8 +108,11 @@ class FakeTransportChannel : public TransportChannelImpl,
     }
   }
 
-  virtual int SendPacket(const char* data, size_t len) {
+  virtual int SendPacket(const char* data, size_t len, int flags) {
     if (state_ != STATE_CONNECTED) {
+      return -1;
+    }
+    if (flags != 0) {
       return -1;
     }
     PacketMessageData* packet = new PacketMessageData(data, len);
@@ -135,7 +138,8 @@ class FakeTransportChannel : public TransportChannelImpl,
   virtual void OnMessage(talk_base::Message* msg) {
     PacketMessageData* data = static_cast<PacketMessageData*>(
         msg->pdata);
-    dest_->SignalReadPacket(dest_, data->packet.data(), data->packet.length());
+    dest_->SignalReadPacket(dest_, data->packet.data(),
+                            data->packet.length(), 0);
     delete data;
   }
 
@@ -152,7 +156,7 @@ class FakeTransportChannel : public TransportChannelImpl,
 // of doing candidates)
 class FakeTransport : public Transport {
  public:
-  typedef std::map<std::string, FakeTransportChannel*> ChannelMap;
+  typedef std::map<int, FakeTransportChannel*> ChannelMap;
   FakeTransport(talk_base::Thread* signaling_thread,
                 talk_base::Thread* worker_thread,
                 PortAllocator* alllocator = NULL)
@@ -177,32 +181,32 @@ class FakeTransport : public Transport {
 
  protected:
   virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& name, const std::string& session_type) {
-    if (channels_.find(name) != channels_.end()) {
+      const std::string& name, int component) {
+    if (channels_.find(component) != channels_.end()) {
       return NULL;
     }
     FakeTransportChannel* channel =
-        new FakeTransportChannel(this, name, session_type);
+        new FakeTransportChannel(this, name, component);
     channel->SetAsync(async_);
-    SetChannelDestination(name, channel);
-    channels_[name] = channel;
+    SetChannelDestination(component, channel);
+    channels_[component] = channel;
     return channel;
   }
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) {
-    channels_.erase(channel->name());
+    channels_.erase(channel->component());
     delete channel;
   }
 
  private:
-  FakeTransportChannel* GetFakeChannel(const std::string& name) {
-    ChannelMap::iterator it = channels_.find(name);
+  FakeTransportChannel* GetFakeChannel(int component) {
+    ChannelMap::iterator it = channels_.find(component);
     return (it != channels_.end()) ? it->second : NULL;
   }
-  void SetChannelDestination(const std::string& name,
+  void SetChannelDestination(int component,
                              FakeTransportChannel* channel) {
     FakeTransportChannel* dest_channel = NULL;
     if (dest_) {
-      dest_channel = dest_->GetFakeChannel(name);
+      dest_channel = dest_->GetFakeChannel(component);
     }
     channel->SetDestination(dest_channel);
   }
@@ -242,11 +246,13 @@ class FakeSession : public BaseSession {
   }
 
   virtual cricket::TransportChannel* CreateChannel(
-      const std::string& content_name, const std::string& name) {
+      const std::string& content_name,
+      const std::string& channel_name,
+      int component) {
     if (fail_create_channel_) {
       return NULL;
     }
-    return BaseSession::CreateChannel(content_name, name);
+    return BaseSession::CreateChannel(content_name, channel_name, component);
   }
 
   void set_fail_channel_creation(bool fail_channel_creation) {

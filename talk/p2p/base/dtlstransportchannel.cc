@@ -36,8 +36,19 @@
 
 namespace cricket {
 
+// We don't pull the RTP constants from rtputils.h, to avoid a layer violation.
 static const size_t kDtlsRecordHeaderLen = 13;
 static const size_t kMaxDtlsPacketLen = 2048;
+static const size_t kMinRtpPacketLen = 12;
+
+static bool IsDtlsPacket(const char* data, size_t len) {
+  const uint8* u = reinterpret_cast<const uint8*>(data);
+  return (len >= kDtlsRecordHeaderLen && (u[0] > 19 && u[0] < 64));
+}
+static bool IsRtpPacket(const char* data, size_t len) {
+  const uint8* u = reinterpret_cast<const uint8*>(data);
+  return (len >= kMinRtpPacketLen && (u[0] & 0xC0) == 0x80);
+}
 
 talk_base::StreamResult StreamInterfaceChannel::Read(void* buffer,
                                                      size_t buffer_len,
@@ -83,13 +94,12 @@ void StreamInterfaceChannel::OnEvent(talk_base::StreamInterface* stream,
 DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
                                            Transport* transport,
                                            TransportChannelImpl* channel)
-    : TransportChannelImpl(channel->name(), channel->content_type()),
+    : TransportChannelImpl(channel->name(), channel->component()),
       transport_(transport),
       worker_thread_(talk_base::Thread::Current()),
       channel_(channel),
       downward_(NULL),
-      dtls_started_(false),
-      dtls_bypass_data_(false) {
+      dtls_started_(false) {
   channel_->SignalReadableState.connect(this,
       &DtlsTransportChannelWrapper::OnReadableState);
   channel_->SignalWritableState.connect(this,
@@ -157,16 +167,24 @@ bool DtlsTransportChannelWrapper::SetupDtls(talk_base::SSLIdentity* identity,
 }
 
 // Called from upper layers to send a media packet.
-int DtlsTransportChannelWrapper::SendPacket(const char* data, size_t size) {
+int DtlsTransportChannelWrapper::SendPacket(const char* data, size_t size,
+                                            int flags) {
   // Fail if we're doing DTLS but it's not live yet.
   if (dtls_.get() && dtls_->GetState() != talk_base::SS_OPEN)
     return -1;
 
-  // dtls_bypass_data_ instructs us not to encrypt the data using
-  // DTLS. This is used for SRTP, which shouldn't be
-  // double-encrypted.
+  // If we've been asked to do DTLS bypass for a SRTP packet, let's double-check
+  // that this really is a SRTP packet.
+  if (flags & PF_SRTP_BYPASS) {
+    ASSERT(!srtp_ciphers_.empty());
+    if (!IsRtpPacket(data, size)) {
+      return false;
+    }
+  }
+
+  // Send using DTLS, if it's available, and we're not doing bypass.
   int result;
-  if (!dtls_.get() || dtls_bypass_data_) {
+  if (!dtls_.get() || (flags & PF_SRTP_BYPASS)) {
     result = channel_->SendPacket(data, size);
   } else {
     result = (dtls_->WriteAll(data, size, NULL, NULL) ==
@@ -222,35 +240,41 @@ void DtlsTransportChannelWrapper::OnWritableState(TransportChannel* channel) {
 }
 
 void DtlsTransportChannelWrapper::OnReadPacket(TransportChannel* channel,
-                                               const char* data, size_t size) {
+                                               const char* data, size_t size,
+                                               int flags) {
   ASSERT(talk_base::Thread::Current() == worker_thread_);
   ASSERT(channel == channel_);
-  const uint8* datau = reinterpret_cast<const uint8*>(data);
+  ASSERT(flags == 0);  // Shouldn't be doing double DTLS
 
   if (dtls_started_) {
-    // Is this potentially a DTLS packet?
-    if ((size >= kDtlsRecordHeaderLen) && (datau[0] > 19) && (datau[0] < 64)) {
+    // We should only get DTLS or SRTP packets; STUN's already been demuxed.
+    if (IsDtlsPacket(data, size)) {
+      // This looks like a DTLS packet.
       if (!HandleDtlsPacket(data, size)) {
         LOG(LS_ERROR) << "Failed to handle DTLS packet";
         return;
       }
     } else {
-      if (!dtls_bypass_data_) {
-        LOG(LS_ERROR) << "Received non-DTLS packet on non-bypass channel";
-        return;
-      }
+      // Not a DTLS packet; our handshake should be complete by now.
       if (dtls_->GetState() != talk_base::SS_OPEN) {
         LOG(LS_ERROR) << "Received non-DTLS packet before DTLS complete";
         return;
       }
+      // And it had better be a SRTP packet.
+      if (!IsRtpPacket(data, size)) {
+        LOG(LS_ERROR) << "Received unexpected non-DTLS packet";
+        return;
+      }
 
-      // We get here if we are doing SRTP because the data is
-      // not DTLS encrypted.
-      SignalReadPacket(this, data, size);
+      // Sanity check.
+      ASSERT(!srtp_ciphers_.empty());
+
+      // Signal this upwards as a bypass packet.
+      SignalReadPacket(this, data, size, PF_SRTP_BYPASS);
     }
   } else if (!dtls_.get()) {
     // This is the fallback case, where we never tried to establish DTLS.
-    SignalReadPacket(this, data, size);
+    SignalReadPacket(this, data, size, 0);
   } else {
     // TODO: Decide if this is the right thing to do.
     // This might happen if the other side goes writable and sends its client
@@ -279,7 +303,7 @@ void DtlsTransportChannelWrapper::OnDtlsEvent(talk_base::StreamInterface* dtls,
     char buf[kMaxDtlsPacketLen];
     size_t read;
     if (dtls_->Read(buf, sizeof(buf), &read, NULL) == talk_base::SR_SUCCESS) {
-      SignalReadPacket(this, buf, read);
+      SignalReadPacket(this, buf, read, 0);
     }
   }
   if (sig & talk_base::SE_CLOSE) {

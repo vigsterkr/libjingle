@@ -366,6 +366,15 @@ TEST_F(PeerConnectionImplTest, RoapReceiveCloseWhileExpectingAnswer) {
   EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
 }
 
+TEST_F(PeerConnectionImplTest, RemoveStream) {
+  CreatePeerConnection();
+  AddStream(kStreamLabel1);
+  EXPECT_EQ(1u, pc_->local_streams()->count());
+  EXPECT_FALSE(pc_->RemoveStream(kStreamLabel2));
+  EXPECT_TRUE(pc_->RemoveStream(kStreamLabel1));
+  EXPECT_EQ(0u, pc_->local_streams()->count());
+}
+
 TEST_F(PeerConnectionImplTest, Jsep_InitiateCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);

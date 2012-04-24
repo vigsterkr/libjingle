@@ -52,11 +52,11 @@ struct ContentInfo {
   ContentInfo() : description(NULL) {}
   ContentInfo(const std::string& name,
               const std::string& type,
-              const ContentDescription* description) :
+              ContentDescription* description) :
       name(name), type(type), description(description) {}
   std::string name;
   std::string type;
-  const ContentDescription* description;
+  ContentDescription* description;
 };
 
 // This class provides a mechanism to aggregate different media contents into a
@@ -101,12 +101,13 @@ class SessionDescription {
       content_groups_(groups) {}
   SessionDescription* Copy() const;
   const ContentInfo* GetContentByName(const std::string& name) const;
+  ContentDescription* GetContentDescriptionByName(const std::string& name);
   const ContentInfo* FirstContentByType(const std::string& type) const;
   const ContentInfo* FirstContent() const;
   // Takes ownership of ContentDescription*.
   void AddContent(const std::string& name,
                   const std::string& type,
-                  const ContentDescription* description);
+                  ContentDescription* description);
   bool RemoveContentByName(const std::string& name);
   const ContentInfos& contents() const { return contents_; }
   const ContentGroups& groups() const { return content_groups_; }

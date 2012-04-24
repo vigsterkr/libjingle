@@ -20,7 +20,7 @@ class MacBaseSocketServer;
 
 class MacAsyncSocket : public AsyncSocket {
  public:
-  MacAsyncSocket(MacBaseSocketServer* ss);
+  MacAsyncSocket(MacBaseSocketServer* ss, int family);
   virtual ~MacAsyncSocket();
 
   bool valid() const { return source_ != NULL; }
@@ -51,11 +51,11 @@ class MacAsyncSocket : public AsyncSocket {
 
  private:
   // Creates an async socket from an existing bsd socket
-  explicit MacAsyncSocket(MacBaseSocketServer* ss, int native_socket);
+  MacAsyncSocket(MacBaseSocketServer* ss, int family, int native_socket);
 
    // Attaches the socket to the CFRunloop and sets the wrapped bsd socket
   // to async mode
-  void Initialize();
+  void Initialize(int family);
 
   // Translate the SocketAddress into a CFDataRef to pass to CF socket
   // functions. Caller must call CFRelease on the result when done.

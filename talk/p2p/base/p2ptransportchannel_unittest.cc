@@ -82,8 +82,6 @@ static const SocketAddress kRelayTcpExtAddr("99.99.99.3", 5003);
 static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
 
-static const int kDefaultChannelsPerEndpoint = 2;
-
 // This test simulates 2 P2P endpoints that want to establish connectivity
 // with each other over various network topologies and conditions, which can be
 // specified in each individial test.
@@ -100,6 +98,7 @@ static const int kDefaultChannelsPerEndpoint = 2;
 // Note that this class is a base class for use by other tests, who will provide
 // specialized test behavior.
 class P2PTransportChannelTestBase : public testing::Test,
+                                    public talk_base::MessageHandler,
                                     public sigslot::has_slots<> {
  public:
   P2PTransportChannelTestBase()
@@ -179,6 +178,7 @@ class P2PTransportChannelTestBase : public testing::Test,
   };
 
   struct Endpoint {
+    Endpoint() : signaling_delay_(0) {}
     bool HasChannel(cricket::TransportChannel* ch) {
       return (ch == cd1_.ch_.get() || ch == cd2_.ch_.get());
     }
@@ -189,10 +189,20 @@ class P2PTransportChannelTestBase : public testing::Test,
       else
         return &cd2_;
     }
+    void SetSignalingDelay(int delay) { signaling_delay_ = delay; }
     talk_base::FakeNetworkManager network_manager_;
     talk_base::scoped_ptr<cricket::PortAllocator> allocator_;
     ChannelData cd1_;
     ChannelData cd2_;
+    int signaling_delay_;
+  };
+
+  struct CandidateData : public talk_base::MessageData {
+    CandidateData(cricket::TransportChannel* ch, const cricket::Candidate& c)
+        : channel(ch), candidate(c) {
+    }
+    cricket::TransportChannel* channel;
+    cricket::Candidate candidate;
   };
 
   ChannelData* GetChannelData(cricket::TransportChannel* channel) {
@@ -202,17 +212,23 @@ class P2PTransportChannelTestBase : public testing::Test,
       return ep2_.GetChannelData(channel);
   }
 
-  void CreateChannels() {
-    ep1_.cd1_.ch_.reset(CreateChannel(0, "a", "unittest"));
-    ep2_.cd1_.ch_.reset(CreateChannel(1, "a", "unittest"));
-    ep1_.cd2_.ch_.reset(CreateChannel(0, "b", "unittest"));
-    ep2_.cd2_.ch_.reset(CreateChannel(1, "b", "unittest"));
+  void CreateChannels(int num) {
+    ep1_.cd1_.ch_.reset(CreateChannel(
+        0, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+    ep2_.cd1_.ch_.reset(CreateChannel(
+        1, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+    if (num == 2) {
+      ep1_.cd2_.ch_.reset(CreateChannel(
+          0, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+      ep2_.cd2_.ch_.reset(CreateChannel(
+          1, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+    }
   }
   cricket::P2PTransportChannel* CreateChannel(int endpoint,
                                               const std::string& name,
-                                              const std::string& content_type) {
+                                              int component) {
     cricket::P2PTransportChannel* channel = new cricket::P2PTransportChannel(
-        name, content_type, NULL, GetAllocator(endpoint));
+        name, component, NULL, GetAllocator(endpoint));
     channel->SignalRequestSignaling.connect(
         this, &P2PTransportChannelTestBase::OnChannelRequestSignaling);
     channel->SignalCandidateReady.connect(this,
@@ -249,18 +265,23 @@ class P2PTransportChannelTestBase : public testing::Test,
   talk_base::NATSocketServer* nat() { return nss_.get(); }
   talk_base::FirewallSocketServer* fw() { return ss_.get(); }
 
+  Endpoint* GetEndpoint(int endpoint) {
+    if (endpoint == 0) {
+      return &ep1_;
+    } else if (endpoint == 1) {
+      return &ep2_;
+    } else {
+      return NULL;
+    }
+  }
   cricket::PortAllocator* GetAllocator(int endpoint) {
-    return (endpoint == 0) ? ep1_.allocator_.get() : ep2_.allocator_.get();
+    return GetEndpoint(endpoint)->allocator_.get();
   }
   void AddAddress(int endpoint, const SocketAddress& addr) {
-    talk_base::FakeNetworkManager& manager = (endpoint == 0) ?
-        ep1_.network_manager_ : ep2_.network_manager_;
-    manager.AddInterface(addr);
+    GetEndpoint(endpoint)->network_manager_.AddInterface(addr);
   }
   void RemoveAddress(int endpoint, const SocketAddress& addr) {
-    talk_base::FakeNetworkManager& manager = (endpoint == 0) ?
-        ep1_.network_manager_ : ep2_.network_manager_;
-    manager.RemoveInterface(addr);
+    GetEndpoint(endpoint)->network_manager_.RemoveInterface(addr);
   }
   void SetProxy(int endpoint, talk_base::ProxyType type) {
     talk_base::ProxyInfo info;
@@ -272,12 +293,15 @@ class P2PTransportChannelTestBase : public testing::Test,
   void SetAllocatorFlags(int endpoint, int flags) {
     GetAllocator(endpoint)->set_flags(flags);
   }
+  void SetSignalingDelay(int endpoint, int delay) {
+    GetEndpoint(endpoint)->SetSignalingDelay(delay);
+  }
 
   void Test(const Result& expected) {
     int32 connect_start = talk_base::Time(), connect_time;
 
     // Create the channels and wait for them to connect.
-    CreateChannels();
+    CreateChannels(1);
     EXPECT_TRUE_WAIT_MARGIN(ep1_ch1() != NULL &&
                             ep2_ch1() != NULL &&
                             ep1_ch1()->readable() &&
@@ -340,7 +364,7 @@ class P2PTransportChannelTestBase : public testing::Test,
       }
     }
     // Try sending some data to other end.
-    TestSendRecv(kDefaultChannelsPerEndpoint);
+    TestSendRecv(1);
 
     // Destroy the channels, and wait for them to be fully cleaned up.
     DestroyChannels();
@@ -355,7 +379,7 @@ class P2PTransportChannelTestBase : public testing::Test,
       EXPECT_TRUE_WAIT(CheckDataOnChannel(ep2_ch1(), data, len), 1000);
       EXPECT_EQ_WAIT(len, SendData(ep2_ch1(), data, len), 1000);
       EXPECT_TRUE_WAIT(CheckDataOnChannel(ep1_ch1(), data, len), 1000);
-      if (channels == kDefaultChannelsPerEndpoint) {
+      if (channels == 2 && ep1_ch2() && ep2_ch2()) {
         // local_channel2 <==> remote_channel2
         EXPECT_EQ_WAIT(len, SendData(ep1_ch2(), data, len), 1000);
         EXPECT_TRUE_WAIT(CheckDataOnChannel(ep2_ch2(), data, len), 1000);
@@ -371,21 +395,28 @@ class P2PTransportChannelTestBase : public testing::Test,
   // We pass the candidates directly to the other side.
   void OnCandidate(cricket::TransportChannelImpl* ch,
                    const cricket::Candidate& c) {
-    cricket::P2PTransportChannel* rch = GetRemoteChannel(ch);
-    LOG(LS_INFO) << "Candidate(" << ch->name() << "->" << rch->name() << "): "
-                 << c.type() << ", " << c.protocol()
+    main_->PostDelayed(GetEndpoint(ch)->signaling_delay_, this, 0,
+                       new CandidateData(ch, c));
+  }
+  void OnMessage(talk_base::Message* msg) {
+    talk_base::scoped_ptr<CandidateData> data(
+        static_cast<CandidateData*>(msg->pdata));
+    cricket::P2PTransportChannel* rch = GetRemoteChannel(data->channel);
+    const cricket::Candidate& c = data->candidate;
+    LOG(LS_INFO) << "Candidate(" << data->channel->name() << "->"
+                 << rch->name() << "): " << c.type() << ", " << c.protocol()
                  << ", " << c.address().ToString() << ", " << c.username()
                  << ", " << c.generation();
     rch->OnCandidate(c);
   }
   void OnReadPacket(cricket::TransportChannel* channel, const char* data,
-                    size_t len) {
+                    size_t len, int flags) {
     std::list<std::string>& packets = GetPacketList(channel);
     packets.push_front(std::string(data, len));
   }
   int SendData(cricket::TransportChannel* channel,
                const char* data, size_t len) {
-    return channel->SendPacket(data, len);
+    return channel->SendPacket(data, len, 0);
   }
   bool CheckDataOnChannel(cricket::TransportChannel* channel,
                           const char* data, int len) {
@@ -400,6 +431,15 @@ class P2PTransportChannelTestBase : public testing::Test,
       cricket::P2PTransportChannel* ch) {
     return (ch && ch->best_connection()) ?
         &ch->best_connection()->remote_candidate() : NULL;
+  }
+  Endpoint* GetEndpoint(cricket::TransportChannel* ch) {
+    if (ep1_.HasChannel(ch)) {
+      return &ep1_;
+    } else if (ep2_.HasChannel(ch)) {
+      return &ep2_;
+    } else {
+      return NULL;
+    }
   }
   cricket::P2PTransportChannel* GetRemoteChannel(
       cricket::TransportChannel* ch) {
@@ -549,7 +589,7 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
 const P2PTransportChannelTest::Result*
     P2PTransportChannelTest::kMatrix[NUM_CONFIGS][NUM_CONFIGS] = {
 //      OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP  PRXH  PRXS
-/*OP*/ {LULU, LULU, LULU, LULU, LULU, LULU, LULU, LTLT, LTLT, LSRS, NULL, LTLT},
+/*OP*/ {LULU, LUSU, LULU, LULU, LULU, LUSU, LULU, LTLT, LTLT, LSRS, NULL, LTLT},
 /*CO*/ {LULU, LUSU, LUSU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
 /*AD*/ {LULU, LUSU, LULU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
 /*PO*/ {LULU, LUSU, SUSU, SUSU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
@@ -621,16 +661,56 @@ P2P_TEST_SET(BLOCK_ALL_BUT_OUTGOING_HTTP)
 P2P_TEST_SET(PROXY_HTTPS)
 P2P_TEST_SET(PROXY_SOCKS)
 
+// Test the operation of GetStats.
+TEST_F(P2PTransportChannelTest, GetStats) {
+  ConfigureEndpoints(OPEN, OPEN);
+  CreateChannels(1);
+  EXPECT_TRUE_WAIT_MARGIN(ep1_ch1()->readable() && ep1_ch1()->writable() &&
+                          ep2_ch1()->readable() && ep2_ch1()->writable(),
+                          1000, 1000);
+  TestSendRecv(1);
+  cricket::ConnectionInfos infos;
+  ASSERT_TRUE(ep1_ch1()->GetStats(&infos));
+  ASSERT_EQ(1U, infos.size());
+  EXPECT_TRUE(infos[0].new_connection);
+  EXPECT_TRUE(infos[0].best_connection);
+  EXPECT_TRUE(infos[0].readable);
+  EXPECT_TRUE(infos[0].writable);
+  EXPECT_FALSE(infos[0].timeout);
+  EXPECT_EQ(10 * 36U, infos[0].sent_total_bytes);
+  EXPECT_EQ(10 * 36U, infos[0].recv_total_bytes);
+  EXPECT_GT(infos[0].rtt, 0U);
+  DestroyChannels();
+}
+
+// Test that we properly handle getting a STUN error due to slow signaling.
+TEST_F(P2PTransportChannelTest, SlowSignaling) {
+  ConfigureEndpoints(OPEN, NAT_SYMMETRIC);
+  // Make signaling from the callee take 500ms, so that the initial STUN pings
+  // from the callee beat the signaling, and so the caller responds with a
+  // unknown username error. We should just eat that and carry on; mishandling
+  // this will instead cause all the callee's connections to be discarded.
+  SetSignalingDelay(1, 1000);
+  CreateChannels(1);
+  // Wait until the callee's connections are created.
+  WAIT(ep2_ch1()->best_connection() != NULL, 1000);
+  // Wait to see if they get culled; they shouldn't.
+  WAIT(ep2_ch1()->best_connection() == NULL, 1000);
+  EXPECT_TRUE(ep2_ch1()->best_connection() != NULL);
+  DestroyChannels();
+}
+
 // Test that a host behind NAT cannot be reached when incoming_only
 // is set to true.
 TEST_F(P2PTransportChannelTest, IncomingOnlyBlocked) {
   ConfigureEndpoints(NAT_FULL_CONE, OPEN);
 
-  CreateChannels();
+  SetAllocatorFlags(0, kOnlyLocalPorts);
+  CreateChannels(1);
   ep1_ch1()->set_incoming_only(true);
 
-  // Sleep for 1 second and verify that the channels are not connected.
-  talk_base::Thread::SleepMs(1000);
+  // Pump for 1 second and verify that the channels are not connected.
+  talk_base::Thread::Current()->ProcessMessages(1000);
 
   EXPECT_FALSE(ep1_ch1()->readable());
   EXPECT_FALSE(ep1_ch1()->writable());
@@ -645,7 +725,8 @@ TEST_F(P2PTransportChannelTest, IncomingOnlyBlocked) {
 TEST_F(P2PTransportChannelTest, IncomingOnlyOpen) {
   ConfigureEndpoints(OPEN, NAT_FULL_CONE);
 
-  CreateChannels();
+  SetAllocatorFlags(0, kOnlyLocalPorts);
+  CreateChannels(1);
   ep1_ch1()->set_incoming_only(true);
 
   EXPECT_TRUE_WAIT_MARGIN(ep1_ch1() != NULL && ep2_ch1() != NULL &&
@@ -714,7 +795,7 @@ TEST_F(P2PTransportChannelMultihomedTest, TestFailover) {
   SetAllocatorFlags(1, kOnlyLocalPorts);
 
   // Create channels and let them go writable, as usual.
-  CreateChannels();
+  CreateChannels(1);
   EXPECT_TRUE_WAIT(ep1_ch1()->readable() && ep1_ch1()->writable() &&
                    ep2_ch1()->readable() && ep2_ch1()->writable(),
                    1000);
@@ -751,7 +832,7 @@ TEST_F(P2PTransportChannelMultihomedTest, TestDrain) {
   SetAllocatorFlags(1, kOnlyLocalPorts);
 
   // Create channels and let them go writable, as usual.
-  CreateChannels();
+  CreateChannels(1);
   EXPECT_TRUE_WAIT(ep1_ch1()->readable() && ep1_ch1()->writable() &&
                    ep2_ch1()->readable() && ep2_ch1()->writable(),
                    1000);
@@ -784,7 +865,7 @@ TEST_F(P2PTransportChannelTest, TestBundleAllocatorToBundleAllocator) {
   SetAllocatorFlags(0, cricket::PORTALLOCATOR_ENABLE_BUNDLE);
   SetAllocatorFlags(1, cricket::PORTALLOCATOR_ENABLE_BUNDLE);
 
-  CreateChannels();
+  CreateChannels(2);
 
   EXPECT_TRUE_WAIT(ep1_ch1()->readable() &&
                    ep1_ch1()->writable() &&
@@ -809,7 +890,7 @@ TEST_F(P2PTransportChannelTest, TestBundleAllocatorToNonBundleAllocator) {
   // Enable BUNDLE flag at one side.
   SetAllocatorFlags(0, cricket::PORTALLOCATOR_ENABLE_BUNDLE);
 
-  CreateChannels();
+  CreateChannels(2);
 
   EXPECT_TRUE_WAIT(ep1_ch1()->readable() &&
                    ep1_ch1()->writable() &&

@@ -51,12 +51,12 @@ const uint32 MSG_DESTROY_UNUSED_PORTS = 1;
 
 namespace cricket {
 
-RawTransportChannel::RawTransportChannel(const std::string &name,
-                                         const std::string &content_type,
+RawTransportChannel::RawTransportChannel(const std::string &channel_name,
+                                         int component,
                                          RawTransport* transport,
                                          talk_base::Thread *worker_thread,
                                          PortAllocator *allocator)
-  : TransportChannelImpl(name, content_type),
+  : TransportChannelImpl(channel_name, component),
     raw_transport_(transport),
     allocator_(allocator),
     allocator_session_(NULL),
@@ -74,10 +74,12 @@ RawTransportChannel::~RawTransportChannel() {
   delete allocator_session_;
 }
 
-int RawTransportChannel::SendPacket(const char *data, size_t size) {
+int RawTransportChannel::SendPacket(const char *data, size_t size, int flags) {
   if (port_ == NULL)
     return -1;
-  if (remote_address_.IsAny())
+  if (remote_address_.IsNil())
+    return -1;
+  if (flags != 0)
     return -1;
   return port_->SendTo(data, size, remote_address_, true);
 }
@@ -96,7 +98,7 @@ int RawTransportChannel::GetError() {
 void RawTransportChannel::Connect() {
   // Create an allocator that only returns stun and relay ports.
   allocator_session_ = allocator_->CreateSession(
-      session_id(), name(), content_type());
+      session_id(), name(), component());
 
   uint32 flags = PORTALLOCATOR_DISABLE_UDP | PORTALLOCATOR_DISABLE_TCP;
 
@@ -128,7 +130,7 @@ void RawTransportChannel::Reset() {
 
 void RawTransportChannel::OnCandidate(const Candidate& candidate) {
   remote_address_ = candidate.address();
-  ASSERT(!remote_address_.IsAny());
+  ASSERT(!remote_address_.IsNil());
   set_readable(true);
 
   // We can write once we have a port and a remote address.
@@ -261,7 +263,7 @@ void RawTransportChannel::OnReadPacket(
     Port* port, const char* data, size_t size,
     const talk_base::SocketAddress& addr) {
   ASSERT(port_ == port);
-  SignalReadPacket(this, data, size);
+  SignalReadPacket(this, data, size, 0);
 }
 
 void RawTransportChannel::OnMessage(talk_base::Message* msg) {

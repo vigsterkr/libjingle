@@ -99,7 +99,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   virtual SocketAddress GetRemoteAddress() const {
-    return remote_addr_;  // will be ANY if not connected
+    return remote_addr_;  // will be NIL if not connected
   }
 
   virtual int Bind(const SocketAddress& addr) {
@@ -108,7 +108,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
     }
 
     int result;
-    socket_ = sf_->CreateInternalSocket(type_, family_, addr, &server_addr_);
+    socket_ = sf_->CreateInternalSocket(family_, type_, addr, &server_addr_);
     result = (socket_) ? socket_->Bind(addr) : -1;
     if (result >= 0) {
       socket_->SignalConnectEvent.connect(this, &NATSocket::OnConnectEvent);
@@ -131,7 +131,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
 
     int result = 0;
     if (type_ == SOCK_STREAM) {
-      result = socket_->Connect(server_addr_.IsAny() ? addr : server_addr_);
+      result = socket_->Connect(server_addr_.IsNil() ? addr : server_addr_);
     } else {
       connected_ = true;
     }
@@ -150,7 +150,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
 
   virtual int SendTo(const void* data, size_t size, const SocketAddress& addr) {
     ASSERT(!connected_ || addr == remote_addr_);
-    if (server_addr_.IsAny() || type_ == SOCK_STREAM) {
+    if (server_addr_.IsNil() || type_ == SOCK_STREAM) {
       return socket_->SendTo(data, size, addr);
     }
     // This array will be too large for IPv4 packets, but only by 12 bytes.
@@ -174,7 +174,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   virtual int RecvFrom(void* data, size_t size, SocketAddress *out_addr) {
-    if (server_addr_.IsAny() || type_ == SOCK_STREAM) {
+    if (server_addr_.IsNil() || type_ == SOCK_STREAM) {
       return socket_->RecvFrom(data, size, out_addr);
     }
     // Make sure we have enough room to read the requested amount plus the
@@ -255,7 +255,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
   void OnConnectEvent(AsyncSocket* socket) {
     // If we're NATed, we need to send a request with the real addr to use.
     ASSERT(socket == socket_);
-    if (server_addr_.IsAny()) {
+    if (server_addr_.IsNil()) {
       connected_ = true;
       SignalConnectEvent(this);
     } else {
@@ -265,7 +265,7 @@ class NATSocket : public AsyncSocket, public sigslot::has_slots<> {
   void OnReadEvent(AsyncSocket* socket) {
     // If we're NATed, we need to process the connect reply.
     ASSERT(socket == socket_);
-    if (type_ == SOCK_STREAM && !server_addr_.IsAny() && !connected_) {
+    if (type_ == SOCK_STREAM && !server_addr_.IsNil() && !connected_) {
       HandleConnectReply();
     } else {
       SignalReadEvent(this);
@@ -389,7 +389,7 @@ AsyncSocket* NATSocketServer::CreateAsyncSocket(int family, int type) {
   return new NATSocket(this, family, type);
 }
 
-AsyncSocket* NATSocketServer::CreateInternalSocket(int type, int family,
+AsyncSocket* NATSocketServer::CreateInternalSocket(int family, int type,
     const SocketAddress& local_addr, SocketAddress* nat_addr) {
   AsyncSocket* socket = NULL;
   Translator* nat = nats_.FindClient(local_addr);

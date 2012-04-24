@@ -396,7 +396,7 @@ void BaseChannel::OnWritableState(TransportChannel* channel) {
 }
 
 void BaseChannel::OnChannelRead(TransportChannel* channel,
-                                const char* data, size_t len) {
+                                const char* data, size_t len, int flags) {
   // OnChannelRead gets called from P2PSocket; now pass data to MediaEngine
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 
@@ -498,7 +498,7 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
   }
 
   // Bon voyage.
-  return (channel->SendPacket(packet->data(), packet->length())
+  return (channel->SendPacket(packet->data(), packet->length(), 0)
       == static_cast<int>(packet->length()));
 }
 
@@ -997,10 +997,11 @@ VoiceChannel::~VoiceChannel() {
 }
 
 bool VoiceChannel::Init() {
-  TransportChannel* rtcp_channel = rtcp() ?
-      session()->CreateChannel(content_name(), "rtcp") : NULL;
-  if (!BaseChannel::Init(session()->CreateChannel(content_name(), "rtp"),
-                         rtcp_channel)) {
+  TransportChannel* rtcp_channel = rtcp() ? session()->CreateChannel(
+      content_name(), "rtcp", ICE_CANDIDATE_COMPONENT_RTCP) : NULL;
+  if (!BaseChannel::Init(session()->CreateChannel(
+          content_name(), "rtp", ICE_CANDIDATE_COMPONENT_RTP),
+          rtcp_channel)) {
     return false;
   }
   media_channel()->SignalMediaError.connect(
@@ -1096,8 +1097,8 @@ void VoiceChannel::GetActiveStreams_w(AudioInfo::StreamList* actives) {
 }
 
 void VoiceChannel::OnChannelRead(TransportChannel* channel,
-                                 const char* data, size_t len) {
-  BaseChannel::OnChannelRead(channel, data, len);
+                                 const char* data, size_t len, int flags) {
+  BaseChannel::OnChannelRead(channel, data, len, flags);
 
   // Set a flag when we've received an RTP packet. If we're waiting for early
   // media, this will disable the timeout.
@@ -1350,10 +1351,10 @@ VideoChannel::VideoChannel(talk_base::Thread* thread,
 }
 
 bool VideoChannel::Init() {
-  TransportChannel* rtcp_channel = rtcp() ?
-      session()->CreateChannel(content_name(), "video_rtcp") : NULL;
-  if (!BaseChannel::Init(
-          session()->CreateChannel(content_name(), "video_rtp"),
+  TransportChannel* rtcp_channel = rtcp() ? session()->CreateChannel(
+      content_name(), "video_rtcp", ICE_CANDIDATE_COMPONENT_RTCP) : NULL;
+  if (!BaseChannel::Init(session()->CreateChannel(
+          content_name(), "video_rtp", ICE_CANDIDATE_COMPONENT_RTP),
           rtcp_channel)) {
     return false;
   }
@@ -1713,10 +1714,11 @@ DataChannel::~DataChannel() {
 }
 
 bool DataChannel::Init() {
-  TransportChannel* rtcp_channel = rtcp() ?
-      session()->CreateChannel(content_name(), "data_rtcp") : NULL;
-  if (!BaseChannel::Init(session()->CreateChannel(content_name(), "data_rtp"),
-                         rtcp_channel)) {
+  TransportChannel* rtcp_channel = rtcp() ? session()->CreateChannel(
+      content_name(), "data_rtcp", ICE_CANDIDATE_COMPONENT_RTCP) : NULL;
+  if (!BaseChannel::Init(session()->CreateChannel(
+          content_name(), "data_rtp", ICE_CANDIDATE_COMPONENT_RTP),
+          rtcp_channel)) {
     return false;
   }
   media_channel()->SignalDataReceived.connect(

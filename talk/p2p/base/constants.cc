@@ -157,10 +157,13 @@ const buzz::StaticQName QN_NETWORK = { cricket::NS_EMPTY, "network" };
 const buzz::StaticQName QN_GENERATION = { cricket::NS_EMPTY, "generation" };
 const buzz::StaticQName QN_PRIORITY = { cricket::NS_EMPTY, "priority" };
 const buzz::StaticQName QN_PROTOCOL = { cricket::NS_EMPTY, "protocol" };
-const char JINGLE_CANDIDATE_TYPE_PEER_STUN[] = "prflx";
-const char JINGLE_CANDIDATE_TYPE_SERVER_STUN[] = "srflx";
-const char JINGLE_CANDIDATE_NAME_RTP[] = "1";
-const char JINGLE_CANDIDATE_NAME_RTCP[] = "2";
+const char ICE_CANDIDATE_TYPE_PEER_STUN[] = "prflx";
+const char ICE_CANDIDATE_TYPE_SERVER_STUN[] = "srflx";
+// TODO: This is media-specific, so might belong
+// somewhere like session/phone/constants.h
+const int ICE_CANDIDATE_COMPONENT_RTP = 1;
+const int ICE_CANDIDATE_COMPONENT_RTCP = 2;
+const int ICE_CANDIDATE_COMPONENT_DEFAULT = 1;
 
 // TODO Once we are full ICE-UDP compliant, use this namespace.
 // For now, just use the same as NS_GINGLE_P2P.
@@ -177,13 +180,13 @@ const buzz::StaticQName QN_ADDRESS = { cricket::NS_EMPTY, "address" };
 const buzz::StaticQName QN_USERNAME = { cricket::NS_EMPTY, "username" };
 const buzz::StaticQName QN_PASSWORD = { cricket::NS_EMPTY, "password" };
 const buzz::StaticQName QN_PREFERENCE = { cricket::NS_EMPTY, "preference" };
-const char GINGLE_CANDIDATE_TYPE_STUN[] = "stun";
-const char GINGLE_CANDIDATE_NAME_RTP[] = "rtp";
-const char GINGLE_CANDIDATE_NAME_RTCP[] = "rtcp";
-const char GINGLE_CANDIDATE_NAME_VIDEO_RTP[] = "video_rtp";
-const char GINGLE_CANDIDATE_NAME_VIDEO_RTCP[] = "video_rtcp";
-const char GINGLE_CANDIDATE_NAME_DATA_RTP[] = "data_rtp";
-const char GINGLE_CANDIDATE_NAME_DATA_RTCP[] = "data_rtcp";
+const char GICE_CANDIDATE_TYPE_STUN[] = "stun";
+const char GICE_CHANNEL_NAME_RTP[] = "rtp";
+const char GICE_CHANNEL_NAME_RTCP[] = "rtcp";
+const char GICE_CHANNEL_NAME_VIDEO_RTP[] = "video_rtp";
+const char GICE_CHANNEL_NAME_VIDEO_RTCP[] = "video_rtcp";
+const char GICE_CHANNEL_NAME_DATA_RTP[] = "data_rtp";
+const char GICE_CHANNEL_NAME_DATA_RTCP[] = "data_rtcp";
 
 // terminate reasons and errors
 const char JINGLE_ERROR_BAD_REQUEST[] = "bad-request";

@@ -36,56 +36,116 @@ class Win32SocketTest : public SocketTest {
   SocketServerScope scope_;
 };
 
-TEST_F(Win32SocketTest, TestConnect) {
-  SocketTest::TestConnect();
+TEST_F(Win32SocketTest, TestConnectIPv4) {
+  SocketTest::TestConnectIPv4();
 }
 
-TEST_F(Win32SocketTest, TestConnectWithDnsLookup) {
-  SocketTest::TestConnectWithDnsLookup();
+TEST_F(Win32SocketTest, TestConnectIPv6) {
+  SocketTest::TestConnectIPv6();
 }
 
-TEST_F(Win32SocketTest, TestConnectFail) {
-  SocketTest::TestConnectFail();
+TEST_F(Win32SocketTest, TestConnectWithDnsLookupIPv4) {
+  SocketTest::TestConnectWithDnsLookupIPv4();
 }
 
-TEST_F(Win32SocketTest, TestConnectWithDnsLookupFail) {
-  SocketTest::TestConnectWithDnsLookupFail();
+TEST_F(Win32SocketTest, TestConnectWithDnsLookupIPv6) {
+  SocketTest::TestConnectWithDnsLookupIPv6();
 }
 
-TEST_F(Win32SocketTest, TestConnectWithClosedSocket) {
-  SocketTest::TestConnectWithClosedSocket();
+TEST_F(Win32SocketTest, TestConnectFailIPv4) {
+  SocketTest::TestConnectFailIPv4();
 }
 
-TEST_F(Win32SocketTest, TestServerCloseDuringConnect) {
-  SocketTest::TestServerCloseDuringConnect();
+TEST_F(Win32SocketTest, TestConnectFailIPv6) {
+  SocketTest::TestConnectFailIPv6();
 }
 
-TEST_F(Win32SocketTest, TestClientCloseDuringConnect) {
-  SocketTest::TestClientCloseDuringConnect();
+TEST_F(Win32SocketTest, TestConnectWithDnsLookupFailIPv4) {
+  SocketTest::TestConnectWithDnsLookupFailIPv4();
 }
 
-TEST_F(Win32SocketTest, TestServerClose) {
-  SocketTest::TestServerClose();
+TEST_F(Win32SocketTest, TestConnectWithDnsLookupFailIPv6) {
+  SocketTest::TestConnectWithDnsLookupFailIPv6();
 }
 
-TEST_F(Win32SocketTest, TestCloseInClosedCallback) {
-  SocketTest::TestCloseInClosedCallback();
+TEST_F(Win32SocketTest, TestConnectWithClosedSocketIPv4) {
+  SocketTest::TestConnectWithClosedSocketIPv4();
 }
 
-TEST_F(Win32SocketTest, TestSocketServerWait) {
-  SocketTest::TestSocketServerWait();
+TEST_F(Win32SocketTest, TestConnectWithClosedSocketIPv6) {
+  SocketTest::TestConnectWithClosedSocketIPv6();
 }
 
-TEST_F(Win32SocketTest, TestTcp) {
-  SocketTest::TestTcp();
+TEST_F(Win32SocketTest, TestConnectWhileNotClosedIPv4) {
+  SocketTest::TestConnectWhileNotClosedIPv4();
 }
 
-TEST_F(Win32SocketTest, TestUdp) {
-  SocketTest::TestUdp();
+TEST_F(Win32SocketTest, TestConnectWhileNotClosedIPv6) {
+  SocketTest::TestConnectWhileNotClosedIPv6();
 }
 
-TEST_F(Win32SocketTest, TestGetSetOptions) {
-  SocketTest::TestGetSetOptions();
+TEST_F(Win32SocketTest, TestServerCloseDuringConnectIPv4) {
+  SocketTest::TestServerCloseDuringConnectIPv4();
+}
+
+TEST_F(Win32SocketTest, TestServerCloseDuringConnectIPv6) {
+  SocketTest::TestServerCloseDuringConnectIPv6();
+}
+
+TEST_F(Win32SocketTest, TestClientCloseDuringConnectIPv4) {
+  SocketTest::TestClientCloseDuringConnectIPv4();
+}
+
+TEST_F(Win32SocketTest, TestClientCloseDuringConnectIPv6) {
+  SocketTest::TestClientCloseDuringConnectIPv6();
+}
+
+TEST_F(Win32SocketTest, TestServerCloseIPv4) {
+  SocketTest::TestServerCloseIPv4();
+}
+
+TEST_F(Win32SocketTest, TestServerCloseIPv6) {
+  SocketTest::TestServerCloseIPv6();
+}
+
+TEST_F(Win32SocketTest, TestCloseInClosedCallbackIPv4) {
+  SocketTest::TestCloseInClosedCallbackIPv4();
+}
+
+TEST_F(Win32SocketTest, TestCloseInClosedCallbackIPv6) {
+  SocketTest::TestCloseInClosedCallbackIPv6();
+}
+
+TEST_F(Win32SocketTest, TestSocketServerWaitIPv4) {
+  SocketTest::TestSocketServerWaitIPv4();
+}
+
+TEST_F(Win32SocketTest, TestSocketServerWaitIPv6) {
+  SocketTest::TestSocketServerWaitIPv6();
+}
+
+TEST_F(Win32SocketTest, TestTcpIPv4) {
+  SocketTest::TestTcpIPv4();
+}
+
+TEST_F(Win32SocketTest, TestTcpIPv6) {
+  SocketTest::TestTcpIPv6();
+}
+
+TEST_F(Win32SocketTest, TestUdpIPv4) {
+  SocketTest::TestUdpIPv4();
+}
+
+TEST_F(Win32SocketTest, TestUdpIPv6) {
+  SocketTest::TestUdpIPv6();
+}
+
+TEST_F(Win32SocketTest, TestGetSetOptionsIPv4) {
+  SocketTest::TestGetSetOptionsIPv4();
+}
+
+TEST_F(Win32SocketTest, TestGetSetOptionsIPv6) {
+  SocketTest::TestGetSetOptionsIPv6();
 }
 
 }  // namespace talk_base

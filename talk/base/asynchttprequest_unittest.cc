@@ -42,8 +42,9 @@ static const char kServerResponse[] = "This is a test";
 
 class TestHttpServer : public HttpServer, public sigslot::has_slots<> {
  public:
-  TestHttpServer(Thread* thread, const SocketAddress& addr)
-      : socket_(thread->socketserver()->CreateAsyncSocket(SOCK_STREAM)) {
+  TestHttpServer(Thread* thread, const SocketAddress& addr) :
+      socket_(thread->socketserver()->CreateAsyncSocket(addr.family(),
+                                                        SOCK_STREAM)) {
     socket_->Bind(addr);
     socket_->Listen(5);
     socket_->SignalReadEvent.connect(this, &TestHttpServer::OnAccept);

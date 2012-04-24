@@ -72,11 +72,14 @@ struct RtpDumpPacket {
 
   RtpDumpPacket(const void* d, size_t s, uint32 elapsed, bool rtcp)
       : elapsed_time(elapsed),
-        is_rtcp(rtcp) {
+        original_data_len((rtcp) ? 0 : s) {
     data.resize(s);
     memcpy(&data[0], d, s);
   }
 
+  // In the rtpdump file format, RTCP packets have their data len set to zero,
+  // since RTCP has an internal length field.
+  bool is_rtcp() const { return original_data_len == 0; }
   bool IsValidRtpPacket() const;
   bool IsValidRtcpPacket() const;
   // Get the payload type, sequence number, timestampe, and SSRC of the RTP
@@ -91,9 +94,11 @@ struct RtpDumpPacket {
   bool GetRtcpType(int* type) const;
 
   static const size_t kHeaderLength = 8;
-  uint32 elapsed_time;      // Milliseconds since the start of recording.
-  bool is_rtcp;             // True if the data below is a RTCP packet.
-  std::vector<uint8> data;  // The actual RTP or RTCP packet.
+  uint32 elapsed_time;       // Milliseconds since the start of recording.
+  std::vector<uint8> data;   // The actual RTP or RTCP packet.
+  size_t original_data_len;  // The original length of the packet; may be
+                             // greater than data.size() if only part of the
+                             // packet was recorded.
 };
 
 class RtpDumpReader {
@@ -102,7 +107,8 @@ class RtpDumpReader {
       : stream_(stream),
         file_header_read_(false),
         first_line_and_file_header_len_(0),
-        start_time_ms_(0) {
+        start_time_ms_(0),
+        ssrc_override_(0) {
   }
   virtual ~RtpDumpReader() {}
 
@@ -124,7 +130,7 @@ class RtpDumpReader {
   bool file_header_read_;
   size_t first_line_and_file_header_len_;
   uint32 start_time_ms_;
-  talk_base::ByteBuffer ssrc_buffer_;
+  uint32 ssrc_override_;
 
   DISALLOW_COPY_AND_ASSIGN(RtpDumpReader);
 };
@@ -193,7 +199,7 @@ class RtpDumpWriter {
   }
   talk_base::StreamResult WritePacket(const RtpDumpPacket& packet) {
     return WritePacket(&packet.data[0], packet.data.size(), packet.elapsed_time,
-                       packet.is_rtcp);
+                       packet.is_rtcp());
   }
   uint32 GetElapsedTime() const;
 

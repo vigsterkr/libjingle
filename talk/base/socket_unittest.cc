@@ -29,6 +29,7 @@
 
 #include "talk/base/asyncudpsocket.h"
 #include "talk/base/gunit.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/socketserver.h"
 #include "talk/base/testclient.h"
 #include "talk/base/testutils.h"
@@ -36,34 +37,186 @@
 
 namespace talk_base {
 
-static const SocketAddress kEmptyAddr;
-static const SocketAddress kLoopbackAddr(IPAddress(INADDR_LOOPBACK), 0);
+#define MAYBE_SKIP_IPV6                             \
+  if (!HasIPv6Enabled()) {                          \
+    LOG(LS_INFO) << "No IPv6... skipping";          \
+    return;                                         \
+  }
 
-void SocketTest::TestConnect() {
+
+void SocketTest::TestConnectIPv4() {
+  ConnectInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestConnectIPv6() {
+  MAYBE_SKIP_IPV6;
+  ConnectInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestConnectWithDnsLookupIPv4() {
+  ConnectWithDnsLookupInternal(kIPv4Loopback, "localhost");
+}
+
+void SocketTest::TestConnectWithDnsLookupIPv6() {
+  // TODO: Enable this when DNS resolution supports IPv6.
+  LOG(LS_INFO) << "Skipping IPv6 DNS test";
+  // ConnectWithDnsLookupInternal(kIPv6Loopback, "localhost6");
+}
+
+void SocketTest::TestConnectFailIPv4() {
+  ConnectFailInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestConnectFailIPv6() {
+  MAYBE_SKIP_IPV6;
+  ConnectFailInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestConnectWithDnsLookupFailIPv4() {
+  ConnectWithDnsLookupFailInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestConnectWithDnsLookupFailIPv6() {
+  MAYBE_SKIP_IPV6;
+  ConnectWithDnsLookupFailInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestConnectWithClosedSocketIPv4() {
+  ConnectWithClosedSocketInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestConnectWithClosedSocketIPv6() {
+  MAYBE_SKIP_IPV6;
+  ConnectWithClosedSocketInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestConnectWhileNotClosedIPv4() {
+  ConnectWhileNotClosedInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestConnectWhileNotClosedIPv6() {
+  MAYBE_SKIP_IPV6;
+  ConnectWhileNotClosedInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestServerCloseDuringConnectIPv4() {
+  ServerCloseDuringConnectInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestServerCloseDuringConnectIPv6() {
+  MAYBE_SKIP_IPV6;
+  ServerCloseDuringConnectInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestClientCloseDuringConnectIPv4() {
+  ClientCloseDuringConnectInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestClientCloseDuringConnectIPv6() {
+  MAYBE_SKIP_IPV6;
+  ClientCloseDuringConnectInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestServerCloseIPv4() {
+  ServerCloseInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestServerCloseIPv6() {
+  MAYBE_SKIP_IPV6;
+  ServerCloseInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestCloseInClosedCallbackIPv4() {
+  CloseInClosedCallbackInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestCloseInClosedCallbackIPv6() {
+  MAYBE_SKIP_IPV6;
+  CloseInClosedCallbackInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestSocketServerWaitIPv4() {
+  SocketServerWaitInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestSocketServerWaitIPv6() {
+  MAYBE_SKIP_IPV6;
+  SocketServerWaitInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestTcpIPv4() {
+  TcpInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestTcpIPv6() {
+  MAYBE_SKIP_IPV6;
+  TcpInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestSingleFlowControlCallbackIPv4() {
+  SingleFlowControlCallbackInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestSingleFlowControlCallbackIPv6() {
+  MAYBE_SKIP_IPV6;
+  SingleFlowControlCallbackInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestUdpIPv4() {
+  UdpInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestUdpIPv6() {
+  MAYBE_SKIP_IPV6;
+  UdpInternal(kIPv6Loopback);
+}
+
+void SocketTest::TestGetSetOptionsIPv4() {
+  GetSetOptionsInternal(kIPv4Loopback);
+}
+
+void SocketTest::TestGetSetOptionsIPv6() {
+  MAYBE_SKIP_IPV6;
+  GetSetOptionsInternal(kIPv6Loopback);
+}
+
+// For unbound sockets, GetLocalAddress / GetRemoteAddress return AF_UNSPEC
+// values on Windows, but an empty address of the same family on Linux/MacOS X.
+bool IsUnspecOrEmptyIP(const IPAddress& address) {
+#ifndef WIN32
+  return IPIsAny(address);
+#else
+  return address.family() == AF_UNSPEC;
+#endif
+}
+
+void SocketTest::ConnectInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(loopback.family(),
+                                                        SOCK_STREAM));
   sink.Monitor(client.get());
   EXPECT_EQ(AsyncSocket::CS_CLOSED, client->GetState());
-  EXPECT_EQ(kEmptyAddr, client->GetLocalAddress());
+  EXPECT_PRED1(IsUnspecOrEmptyIP, client->GetLocalAddress().ipaddr());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
   EXPECT_EQ(AsyncSocket::CS_CONNECTING, server->GetState());
 
   // Ensure no pending server connections, since we haven't done anything yet.
   EXPECT_FALSE(sink.Check(server.get(), testing::SSE_READ));
   EXPECT_TRUE(NULL == server->Accept(&accept_addr));
-  EXPECT_EQ(kEmptyAddr, accept_addr);
+  EXPECT_TRUE(accept_addr.IsNil());
 
   // Attempt connect to listening socket.
   EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
-  EXPECT_NE(kEmptyAddr, client->GetLocalAddress());  // Implicit Bind
+  EXPECT_FALSE(client->GetLocalAddress().IsNil());
   EXPECT_NE(server->GetLocalAddress(), client->GetLocalAddress());
 
   // Client is connecting, outcome not yet determined.
@@ -75,7 +228,7 @@ void SocketTest::TestConnect() {
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
   ASSERT_TRUE(NULL != accepted.get());
-  EXPECT_NE(kEmptyAddr, accept_addr);
+  EXPECT_FALSE(accept_addr.IsNil());
   EXPECT_EQ(accepted->GetRemoteAddress(), accept_addr);
 
   // Connected from server perspective, check the addresses are correct.
@@ -91,24 +244,27 @@ void SocketTest::TestConnect() {
   EXPECT_EQ(client->GetRemoteAddress(), accepted->GetLocalAddress());
 }
 
-void SocketTest::TestConnectWithDnsLookup() {
+void SocketTest::ConnectWithDnsLookupInternal(const IPAddress& loopback,
+                                              const std::string& host) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connect to listening socket.
   SocketAddress dns_addr(server->GetLocalAddress());
-  dns_addr.SetIP("localhost");
-  EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
+  dns_addr.SetIP(host);
+  EXPECT_EQ(0, client->Connect(dns_addr));
   // TODO: Bind when doing DNS lookup.
   //EXPECT_NE(kEmptyAddr, client->GetLocalAddress());  // Implicit Bind
 
@@ -121,7 +277,7 @@ void SocketTest::TestConnectWithDnsLookup() {
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
   ASSERT_TRUE(NULL != accepted.get());
-  EXPECT_NE(kEmptyAddr, accept_addr);
+  EXPECT_FALSE(accept_addr.IsNil());
   EXPECT_EQ(accepted->GetRemoteAddress(), accept_addr);
 
   // Connected from server perspective, check the addresses are correct.
@@ -137,49 +293,53 @@ void SocketTest::TestConnectWithDnsLookup() {
   EXPECT_EQ(client->GetRemoteAddress(), accepted->GetLocalAddress());
 }
 
-void SocketTest::TestConnectFail() {
+void SocketTest::ConnectFailInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server, but don't listen yet.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
 
   // Attempt connect to a non-existent socket.
   // We don't connect to the server socket created above, since on
   // MacOS it takes about 75 seconds to get back an error!
-  SocketAddress bogus_addr(IPAddress(INADDR_LOOPBACK), 65535);
+  SocketAddress bogus_addr(loopback, 65535);
   EXPECT_EQ(0, client->Connect(bogus_addr));
 
   // Wait for connection to fail (ECONNREFUSED).
   EXPECT_EQ_WAIT(AsyncSocket::CS_CLOSED, client->GetState(), kTimeout);
   EXPECT_FALSE(sink.Check(client.get(), testing::SSE_OPEN));
   EXPECT_TRUE(sink.Check(client.get(), testing::SSE_ERROR));
-  EXPECT_EQ(kEmptyAddr, client->GetRemoteAddress());
+  EXPECT_TRUE(client->GetRemoteAddress().IsNil());
 
   // Should be no pending server connections.
   EXPECT_FALSE(sink.Check(server.get(), testing::SSE_READ));
   EXPECT_TRUE(NULL == server->Accept(&accept_addr));
-  EXPECT_EQ(kEmptyAddr, accept_addr);
+  EXPECT_EQ(IPAddress(), accept_addr.ipaddr());
 }
 
-void SocketTest::TestConnectWithDnsLookupFail() {
+void SocketTest::ConnectWithDnsLookupFailInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server, but don't listen yet.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
 
   // Attempt connect to a non-existent host.
   // We don't connect to the server socket created above, since on
@@ -191,22 +351,23 @@ void SocketTest::TestConnectWithDnsLookupFail() {
   EXPECT_EQ_WAIT(AsyncSocket::CS_CLOSED, client->GetState(), kTimeout);
   EXPECT_FALSE(sink.Check(client.get(), testing::SSE_OPEN));
   EXPECT_TRUE(sink.Check(client.get(), testing::SSE_ERROR));
-  EXPECT_EQ(kEmptyAddr, client->GetRemoteAddress());
-
+  EXPECT_TRUE(client->GetRemoteAddress().IsNil());
   // Should be no pending server connections.
   EXPECT_FALSE(sink.Check(server.get(), testing::SSE_READ));
   EXPECT_TRUE(NULL == server->Accept(&accept_addr));
-  EXPECT_EQ(kEmptyAddr, accept_addr);
+  EXPECT_TRUE(accept_addr.IsNil());
 }
 
-void SocketTest::TestConnectWithClosedSocket() {
+void SocketTest::ConnectWithClosedSocketInternal(const IPAddress& loopback) {
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Create a client and put in to CS_CLOSED state.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   EXPECT_EQ(0, client->Close());
   EXPECT_EQ(AsyncSocket::CS_CLOSED, client->GetState());
 
@@ -215,18 +376,62 @@ void SocketTest::TestConnectWithClosedSocket() {
   EXPECT_EQ(AsyncSocket::CS_CONNECTING, client->GetState());
 }
 
-void SocketTest::TestServerCloseDuringConnect() {
+void SocketTest::ConnectWhileNotClosedInternal(const IPAddress& loopback) {
+  // Create server and listen.
   testing::StreamSink sink;
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
+  sink.Monitor(server.get());
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
+  EXPECT_EQ(0, server->Listen(5));
+  // Create client, connect.
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
+  EXPECT_EQ(0, client->Connect(SocketAddress(server->GetLocalAddress())));
+  EXPECT_EQ(AsyncSocket::CS_CONNECTING, client->GetState());
+  // Try to connect again. Should fail, but not interfere with original attempt.
+  EXPECT_EQ(SOCKET_ERROR,
+            client->Connect(SocketAddress(server->GetLocalAddress())));
+
+  // Accept the original connection.
   SocketAddress accept_addr;
+  EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
+  scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
+  ASSERT_TRUE(NULL != accepted.get());
+  EXPECT_FALSE(accept_addr.IsNil());
+
+  // Check the states and addresses.
+  EXPECT_EQ(AsyncSocket::CS_CONNECTED, accepted->GetState());
+  EXPECT_EQ(server->GetLocalAddress(), accepted->GetLocalAddress());
+  EXPECT_EQ(client->GetLocalAddress(), accepted->GetRemoteAddress());
+  EXPECT_EQ_WAIT(AsyncSocket::CS_CONNECTED, client->GetState(), kTimeout);
+  EXPECT_EQ(client->GetRemoteAddress(), server->GetLocalAddress());
+  EXPECT_EQ(client->GetRemoteAddress(), accepted->GetLocalAddress());
+
+  // Try to connect again, to an unresolved hostname.
+  // Shouldn't break anything.
+  EXPECT_EQ(SOCKET_ERROR,
+            client->Connect(SocketAddress("localhost",
+                                          server->GetLocalAddress().port())));
+  EXPECT_EQ(AsyncSocket::CS_CONNECTED, accepted->GetState());
+  EXPECT_EQ(AsyncSocket::CS_CONNECTED, client->GetState());
+  EXPECT_EQ(client->GetRemoteAddress(), server->GetLocalAddress());
+  EXPECT_EQ(client->GetRemoteAddress(), accepted->GetLocalAddress());
+}
+
+void SocketTest::ServerCloseDuringConnectInternal(const IPAddress& loopback) {
+  testing::StreamSink sink;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connect to listening socket.
@@ -242,18 +447,20 @@ void SocketTest::TestServerCloseDuringConnect() {
   client->Close();
 }
 
-void SocketTest::TestClientCloseDuringConnect() {
+void SocketTest::ClientCloseDuringConnectInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connect to listening socket.
@@ -278,18 +485,20 @@ void SocketTest::TestClientCloseDuringConnect() {
   EXPECT_FALSE(sink.Check(client.get(), testing::SSE_CLOSE));
 }
 
-void SocketTest::TestServerClose() {
+void SocketTest::ServerCloseInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connection.
@@ -325,11 +534,11 @@ void SocketTest::TestServerClose() {
   // Now we should close, but the remote address will remain.
   EXPECT_EQ_WAIT(AsyncSocket::CS_CLOSED, client->GetState(), kTimeout);
   EXPECT_TRUE(sink.Check(client.get(), testing::SSE_CLOSE));
-  EXPECT_NE(kEmptyAddr, client->GetRemoteAddress());
+  EXPECT_FALSE(client->GetRemoteAddress().IsAnyIP());
 
   // The closer should not get a close signal.
   EXPECT_FALSE(sink.Check(accepted.get(), testing::SSE_CLOSE));
-  EXPECT_EQ(kEmptyAddr, accepted->GetRemoteAddress());
+  EXPECT_TRUE(accepted->GetRemoteAddress().IsNil());
 
   // And the closee should only get a single signal.
   Thread::Current()->ProcessMessages(0);
@@ -338,7 +547,7 @@ void SocketTest::TestServerClose() {
   // Close down the client and ensure all is good.
   client->Close();
   EXPECT_FALSE(sink.Check(client.get(), testing::SSE_CLOSE));
-  EXPECT_EQ(kEmptyAddr, client->GetRemoteAddress());
+  EXPECT_TRUE(client->GetRemoteAddress().IsNil());
 }
 
 class SocketCloser : public sigslot::has_slots<> {
@@ -349,20 +558,22 @@ class SocketCloser : public sigslot::has_slots<> {
   }
 };
 
-void SocketTest::TestCloseInClosedCallback() {
+void SocketTest::CloseInClosedCallbackInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketCloser closer;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
   client->SignalCloseEvent.connect(&closer, &SocketCloser::OnClose);
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connection.
@@ -402,16 +613,18 @@ class Sleeper : public MessageHandler {
   }
 };
 
-void SocketTest::TestSocketServerWait() {
+void SocketTest::SocketServerWaitInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create & connect server and client sockets.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
@@ -450,7 +663,7 @@ void SocketTest::TestSocketServerWait() {
   EXPECT_LT(0, accepted->Recv(buf, 1024));
 }
 
-void SocketTest::TestTcp() {
+void SocketTest::TcpInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
@@ -465,13 +678,15 @@ void SocketTest::TestTcp() {
   }
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connection.
@@ -568,18 +783,20 @@ void SocketTest::TestTcp() {
   client->Close();
 }
 
-void SocketTest::TestSingleFlowControlCallback() {
+void SocketTest::SingleFlowControlCallbackInternal(const IPAddress& loopback) {
   testing::StreamSink sink;
   SocketAddress accept_addr;
 
   // Create client.
-  scoped_ptr<AsyncSocket> client(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> client(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(client.get());
 
   // Create server and listen.
-  scoped_ptr<AsyncSocket> server(ss_->CreateAsyncSocket(SOCK_STREAM));
+  scoped_ptr<AsyncSocket> server(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_STREAM));
   sink.Monitor(server.get());
-  EXPECT_EQ(0, server->Bind(kLoopbackAddr));
+  EXPECT_EQ(0, server->Bind(SocketAddress(loopback, 0)));
   EXPECT_EQ(0, server->Listen(5));
 
   // Attempt connection.
@@ -631,13 +848,14 @@ void SocketTest::TestSingleFlowControlCallback() {
   client->Close();
 }
 
-void SocketTest::TestUdp() {
+void SocketTest::UdpInternal(const IPAddress& loopback) {
+  SocketAddress empty = EmptySocketAddressWithFamily(loopback.family());
   // Test basic bind and connect behavior.
-  SocketAddress addr1(kLoopbackAddr);
-  AsyncSocket* socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
+  AsyncSocket* socket =
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_DGRAM);
   EXPECT_EQ(AsyncSocket::CS_CLOSED, socket->GetState());
-  EXPECT_EQ(0, socket->Bind(addr1));
-  addr1 = socket->GetLocalAddress();
+  EXPECT_EQ(0, socket->Bind(SocketAddress(loopback, 0)));
+  SocketAddress addr1 = socket->GetLocalAddress();
   EXPECT_EQ(0, socket->Connect(addr1));
   EXPECT_EQ(AsyncSocket::CS_CONNECTED, socket->GetState());
   socket->Close();
@@ -645,10 +863,10 @@ void SocketTest::TestUdp() {
   delete socket;
 
   // Test send/receive behavior.
-  scoped_ptr<TestClient> client1(new TestClient(
-      AsyncUDPSocket::Create(ss_, addr1)));
-  scoped_ptr<TestClient> client2(new TestClient(
-      AsyncUDPSocket::Create(ss_, SocketAddress())));
+  scoped_ptr<TestClient> client1(
+      new TestClient(AsyncUDPSocket::Create(ss_, addr1)));
+  scoped_ptr<TestClient> client2(
+      new TestClient(AsyncUDPSocket::Create(ss_, empty)));
 
   SocketAddress addr2;
   EXPECT_EQ(3, client2->SendTo("foo", 3, addr1));
@@ -658,10 +876,9 @@ void SocketTest::TestUdp() {
   EXPECT_EQ(6, client1->SendTo("bizbaz", 6, addr2));
   EXPECT_TRUE(client2->CheckNextPacket("bizbaz", 6, &addr3));
   EXPECT_EQ(addr3, addr1);
-
   // TODO: figure out what the intent is here
   for (int i = 0; i < 10; ++i) {
-    client2.reset(new TestClient(AsyncUDPSocket::Create(ss_, SocketAddress())));
+    client2.reset(new TestClient(AsyncUDPSocket::Create(ss_, empty)));
 
     SocketAddress addr4;
     EXPECT_EQ(3, client2->SendTo("foo", 3, addr1));
@@ -677,9 +894,10 @@ void SocketTest::TestUdp() {
   }
 }
 
-void SocketTest::TestGetSetOptions() {
-  talk_base::scoped_ptr<AsyncSocket> socket(ss_->CreateAsyncSocket(SOCK_DGRAM));
-  socket->Bind(kLoopbackAddr);
+void SocketTest::GetSetOptionsInternal(const IPAddress& loopback) {
+  talk_base::scoped_ptr<AsyncSocket> socket(
+      ss_->CreateAsyncSocket(loopback.family(), SOCK_DGRAM));
+  socket->Bind(SocketAddress(loopback, 0));
 
   // Check SNDBUF/RCVBUF.
   const int desired_size = 12345;
@@ -709,25 +927,30 @@ void SocketTest::TestGetSetOptions() {
   ASSERT_EQ(-1, socket->GetOption(Socket::OPT_NODELAY, &current_nd));
   ASSERT_EQ(-1, socket->SetOption(Socket::OPT_NODELAY, desired_nd));
 
-  // Try estimating MTU.
-  talk_base::scoped_ptr<AsyncSocket>
-      mtu_socket(ss_->CreateAsyncSocket(SOCK_DGRAM));
-  mtu_socket->Bind(kLoopbackAddr);
-  uint16 mtu;
-  // should fail until we connect
-  ASSERT_EQ(-1, mtu_socket->EstimateMTU(&mtu));
-  mtu_socket->Connect(kLoopbackAddr);
+  // Skip the esimate MTU test for IPv6 for now.
+  if (loopback.family() != AF_INET6) {
+    // Try estimating MTU.
+    talk_base::scoped_ptr<AsyncSocket>
+        mtu_socket(
+            ss_->CreateAsyncSocket(loopback.family(), SOCK_DGRAM));
+    mtu_socket->Bind(SocketAddress(loopback, 0));
+    uint16 mtu;
+    // should fail until we connect
+    ASSERT_EQ(-1, mtu_socket->EstimateMTU(&mtu));
+    mtu_socket->Connect(SocketAddress(loopback, 0));
 #if defined(WIN32)
-  // now it should succeed
-  ASSERT_NE(-1, mtu_socket->EstimateMTU(&mtu));
-  ASSERT_GE(mtu, 1492);  // should be at least the 1492 "plateau" on localhost
+    // now it should succeed
+    ASSERT_NE(-1, mtu_socket->EstimateMTU(&mtu));
+    ASSERT_GE(mtu, 1492);  // should be at least the 1492 "plateau" on localhost
 #elif defined(OSX)
-  // except on OSX, where it's not yet implemented
-  ASSERT_EQ(-1, mtu_socket->EstimateMTU(&mtu));
+    // except on OSX, where it's not yet implemented
+    ASSERT_EQ(-1, mtu_socket->EstimateMTU(&mtu));
 #else
-  // and the behavior seems unpredictable on Linux, failing on the build machine
-  // but succeeding on my Ubiquity instance.
+    // and the behavior seems unpredictable on Linux,
+    // failing on the build machine
+    // but succeeding on my Ubiquity instance.
 #endif
+  }
 }
 
 }  // namespace talk_base

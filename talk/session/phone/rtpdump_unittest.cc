@@ -48,6 +48,7 @@ TEST(RtpDumpTest, ReadRtpDumpPacket) {
   int seq_num;
   uint32 ts;
   uint32 ssrc;
+  EXPECT_FALSE(rtp_packet.is_rtcp());
   EXPECT_TRUE(rtp_packet.IsValidRtpPacket());
   EXPECT_FALSE(rtp_packet.IsValidRtcpPacket());
   EXPECT_TRUE(rtp_packet.GetRtpPayloadType(&type));
@@ -64,6 +65,7 @@ TEST(RtpDumpTest, ReadRtpDumpPacket) {
   RtpTestUtility::kTestRawRtcpPackets[0].WriteToByteBuffer(&rtcp_buf);
   RtpDumpPacket rtcp_packet(rtcp_buf.Data(), rtcp_buf.Length(), 0, true);
 
+  EXPECT_TRUE(rtcp_packet.is_rtcp());
   EXPECT_FALSE(rtcp_packet.IsValidRtpPacket());
   EXPECT_TRUE(rtcp_packet.IsValidRtcpPacket());
   EXPECT_TRUE(rtcp_packet.GetRtcpType(&type));
@@ -125,7 +127,7 @@ TEST(RtpDumpTest, WriteReadSameRtp) {
   RtpDumpPacket packet;
   RtpDumpReader reader(&stream);
   for (size_t i = 0; i < RtpTestUtility::GetTestPacketCount(); ++i) {
-    EXPECT_EQ(talk_base::SR_SUCCESS , reader.ReadPacket(&packet));
+    EXPECT_EQ(talk_base::SR_SUCCESS, reader.ReadPacket(&packet));
     uint32 ssrc;
     EXPECT_TRUE(GetRtpSsrc(&packet.data[0], packet.data.size(), &ssrc));
     EXPECT_EQ(kTestSsrc, ssrc);
@@ -139,7 +141,9 @@ TEST(RtpDumpTest, WriteReadSameRtp) {
   const uint32 send_ssrc = kTestSsrc + 1;
   reader_w_ssrc.SetSsrc(send_ssrc);
   for (size_t i = 0; i < RtpTestUtility::GetTestPacketCount(); ++i) {
-    EXPECT_EQ(talk_base::SR_SUCCESS , reader_w_ssrc.ReadPacket(&packet));
+    EXPECT_EQ(talk_base::SR_SUCCESS, reader_w_ssrc.ReadPacket(&packet));
+    EXPECT_FALSE(packet.is_rtcp());
+    EXPECT_EQ(packet.original_data_len, packet.data.size());
     uint32 ssrc;
     EXPECT_TRUE(GetRtpSsrc(&packet.data[0], packet.data.size(), &ssrc));
     EXPECT_EQ(send_ssrc, ssrc);
@@ -162,7 +166,9 @@ TEST(RtpDumpTest, WriteReadSameRtcp) {
   RtpDumpReader reader(&stream);
   reader.SetSsrc(kTestSsrc + 1);  // Does not affect RTCP packet.
   for (size_t i = 0; i < RtpTestUtility::GetTestPacketCount(); ++i) {
-    EXPECT_EQ(talk_base::SR_SUCCESS , reader.ReadPacket(&packet));
+    EXPECT_EQ(talk_base::SR_SUCCESS, reader.ReadPacket(&packet));
+    EXPECT_TRUE(packet.is_rtcp());
+    EXPECT_EQ(0U, packet.original_data_len);
   }
   // No more packets to read.
   EXPECT_EQ(talk_base::SR_EOS, reader.ReadPacket(&packet));
@@ -186,11 +192,12 @@ TEST(RtpDumpTest, WriteReadRtpHeadersOnly) {
   RtpDumpPacket packet;
   RtpDumpReader reader(&stream);
   for (size_t i = 0; i < RtpTestUtility::GetTestPacketCount(); ++i) {
-    EXPECT_EQ(talk_base::SR_SUCCESS , reader.ReadPacket(&packet));
-    EXPECT_FALSE(packet.is_rtcp);
+    EXPECT_EQ(talk_base::SR_SUCCESS, reader.ReadPacket(&packet));
+    EXPECT_FALSE(packet.is_rtcp());
     size_t len = 0;
     packet.GetRtpHeaderLen(&len);
     EXPECT_EQ(len, packet.data.size());
+    EXPECT_GT(packet.original_data_len, packet.data.size());
   }
   // No more packets to read.
   EXPECT_EQ(talk_base::SR_EOS, reader.ReadPacket(&packet));
@@ -213,8 +220,9 @@ TEST(RtpDumpTest, WriteReadRtcpOnly) {
   RtpDumpPacket packet;
   RtpDumpReader reader(&stream);
   for (size_t i = 0; i < RtpTestUtility::GetTestPacketCount(); ++i) {
-    EXPECT_EQ(talk_base::SR_SUCCESS , reader.ReadPacket(&packet));
-    EXPECT_TRUE(packet.is_rtcp);
+    EXPECT_EQ(talk_base::SR_SUCCESS, reader.ReadPacket(&packet));
+    EXPECT_TRUE(packet.is_rtcp());
+    EXPECT_EQ(0U, packet.original_data_len);
   }
   // No more packets to read.
   EXPECT_EQ(talk_base::SR_EOS, reader.ReadPacket(&packet));

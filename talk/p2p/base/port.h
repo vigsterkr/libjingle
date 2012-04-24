@@ -52,10 +52,11 @@ namespace cricket {
 class Connection;
 class ConnectionRequest;
 
-extern const float PREF_LOCAL_UDP;
-extern const float PREF_LOCAL_STUN;
-extern const float PREF_LOCAL_TCP;
-extern const float PREF_RELAY;
+// TODO: Use the priority values from RFC 5245.
+extern const uint32 PRIORITY_LOCAL_UDP;
+extern const uint32 PRIORITY_LOCAL_STUN;
+extern const uint32 PRIORITY_LOCAL_TCP;
+extern const uint32 PRIORITY_RELAY;
 
 enum ProtocolType {
   PROTO_UDP,
@@ -95,14 +96,20 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
     factory_ = factory;
   }
 
-  // Each port is identified by a name (for debugging purposes).
-  const std::string& name() const { return name_; }
-  void set_name(const std::string& name) { name_ = name; }
+  // For debugging purposes.
+  const std::string& content_name() const { return content_name_; }
+  void set_content_name(const std::string& content_name) {
+    content_name_ = content_name;
+  }
 
-  // A value in [0,1] that indicates the preference for this port versus other
-  // ports on this client.  (Larger indicates more preference.)
-  float preference() const { return preference_; }
-  void set_preference(float preference) { preference_ = preference; }
+  int component() const { return component_; }
+  void set_component(int component) { component_ = component; }
+
+  // A value in [0,2**32-1] that indicates the priority for this port
+  // versus other ports on this client.  (Larger indicates more
+  // priorty.)
+  uint32 priority() const { return priority_; }
+  void set_priority(uint32 priority) { priority_ = priority; }
 
   // Identifies the port type.
   const std::string& type() const { return type_; }
@@ -243,6 +250,9 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
                       const talk_base::SocketAddress& addr,
                       StunMessage** out_msg, std::string* out_username);
 
+  // Checks if the address in addr is compatible with the port's ip.
+  bool IsCompatibleAddress(const talk_base::SocketAddress& addr);
+
  private:
   // Called when one of our connections deletes itself.
   void OnConnectionDestroyed(Connection* conn);
@@ -258,8 +268,9 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   int min_port_;
   int max_port_;
   uint32 generation_;
-  std::string name_;
-  float preference_;
+  std::string content_name_;
+  int component_;
+  uint32 priority_;
   std::string username_fragment_;
   std::string password_;
   std::vector<Candidate> candidates_;

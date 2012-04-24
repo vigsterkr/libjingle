@@ -130,9 +130,20 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
     return dtls_.get() != NULL;
   }
 
+  // Called to send a packet (via DTLS, if turned on).
+  virtual int SendPacket(const char* data, size_t size, int flags);
 
-  // TODO: Hoist these to TransportChannel, so that Voice/VideoChannel
-  // can use them.
+  // TransportChannel calls that we forward to the wrapped transport.
+  virtual int SetOption(talk_base::Socket::Option opt, int value) {
+    return channel_->SetOption(opt, value);
+  }
+  virtual int GetError() {
+    return channel_->GetError();
+  }
+  virtual bool GetStats(ConnectionInfos* infos) {
+    return channel_->GetStats(infos);
+  }
+
   // Set up the ciphers to use for DTLS-SRTP. If this method is not called
   // before DTLS starts, or |ciphers| is empty, SRTP keys won't be negotiated.
   // This method should be called before SetupDtls.
@@ -141,13 +152,6 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
       return false;
     }
     srtp_ciphers_ = ciphers;
-    return true;
-  }
-  // Controls whether data sent over this channel should bypass DTLS encryption,
-  // and be sent in the "clear" (because it's been encrypted externally, as is
-  // the case for DTLS-SRTP).
-  bool SetBypassData(bool bypass) {
-    dtls_bypass_data_ = bypass;
     return true;
   }
   // Once DTLS has established (i.e., this channel is writable), this method
@@ -162,20 +166,6 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
                             size_t result_len) {
     return (dtls_.get()) ? dtls_->ExportKeyingMaterial(label, context,
         context_len, use_context, result, result_len) : false;
-  }
-
-  // Called to send a packet (via DTLS, if turned on).
-  virtual int SendPacket(const char* data, size_t size);
-
-  // TransportChannel calls that we forward to the wrapped transport.
-  virtual int SetOption(talk_base::Socket::Option opt, int value) {
-    return channel_->SetOption(opt, value);
-  }
-  virtual int GetError() {
-    return channel_->GetError();
-  }
-  virtual P2PTransportChannel* GetP2PChannel() {
-    return channel_->GetP2PChannel();
   }
 
   // TransportChannelImpl calls.
@@ -203,7 +193,8 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
  private:
   void OnReadableState(TransportChannel* channel);
   void OnWritableState(TransportChannel* channel);
-  void OnReadPacket(TransportChannel* channel, const char* data, size_t size);
+  void OnReadPacket(TransportChannel* channel, const char* data, size_t size,
+                    int flags);
   void OnDtlsEvent(talk_base::StreamInterface* stream_, int sig, int err);
   bool MaybeStartDtls();
   bool HandleDtlsPacket(const char* data, size_t size);
@@ -221,7 +212,6 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   StreamInterfaceChannel* downward_;  // Wrapper for channel_, owned by dtls_.
   bool dtls_started_;  // Whether the DTLS handshake has actually started.
   std::vector<std::string> srtp_ciphers_;  // SRTP ciphers to use with DTLS.
-  bool dtls_bypass_data_;  // Whether data transfer should skip DTLS (for SRTP).
 
   DISALLOW_COPY_AND_ASSIGN(DtlsTransportChannelWrapper);
 };

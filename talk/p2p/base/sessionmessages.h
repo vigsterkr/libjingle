@@ -161,6 +161,19 @@ struct SessionRedirect {
   std::string target;
 };
 
+// Used during parsing and writing to map component to channel name
+// and back.  This is primarily for converting old G-ICE candidate
+// signalling to new ICE candidate classes.
+class CandidateTranslator {
+ public:
+  virtual bool GetChannelNameFromComponent(
+      int component, std::string* channel_name) const = 0;
+  virtual bool GetComponentFromChannelName(
+      const std::string& channel_name, int* component) const = 0;
+};
+
+// Content name => translator
+typedef std::map<std::string, CandidateTranslator*> CandidateTranslatorMap;
 
 bool IsSessionMessage(const buzz::XmlElement* stanza);
 bool ParseSessionMessage(const buzz::XmlElement* stanza,
@@ -178,6 +191,7 @@ bool ParseSessionInitiate(SignalingProtocol protocol,
                           const buzz::XmlElement* action_elem,
                           const ContentParserMap& content_parsers,
                           const TransportParserMap& transport_parsers,
+                          const CandidateTranslatorMap& translators,
                           SessionInitiate* init,
                           ParseError* error);
 bool WriteSessionInitiate(SignalingProtocol protocol,
@@ -185,6 +199,7 @@ bool WriteSessionInitiate(SignalingProtocol protocol,
                           const TransportInfos& tinfos,
                           const ContentParserMap& content_parsers,
                           const TransportParserMap& transport_parsers,
+                          const CandidateTranslatorMap& translators,
                           const ContentGroups& groups,
                           XmlElements* elems,
                           WriteError* error);
@@ -192,6 +207,7 @@ bool ParseSessionAccept(SignalingProtocol protocol,
                         const buzz::XmlElement* action_elem,
                         const ContentParserMap& content_parsers,
                         const TransportParserMap& transport_parsers,
+                        const CandidateTranslatorMap& translators,
                         SessionAccept* accept,
                         ParseError* error);
 bool WriteSessionAccept(SignalingProtocol protocol,
@@ -199,6 +215,7 @@ bool WriteSessionAccept(SignalingProtocol protocol,
                         const TransportInfos& tinfos,
                         const ContentParserMap& content_parsers,
                         const TransportParserMap& transport_parsers,
+                        const CandidateTranslatorMap& translators,
                         const ContentGroups& groups,
                         XmlElements* elems,
                         WriteError* error);
@@ -213,6 +230,7 @@ bool ParseDescriptionInfo(SignalingProtocol protocol,
                           const buzz::XmlElement* action_elem,
                           const ContentParserMap& content_parsers,
                           const TransportParserMap& transport_parsers,
+                          const CandidateTranslatorMap& translators,
                           DescriptionInfo* description_info,
                           ParseError* error);
 bool WriteDescriptionInfo(SignalingProtocol protocol,
@@ -227,11 +245,13 @@ bool ParseTransportInfos(SignalingProtocol protocol,
                          const buzz::XmlElement* action_elem,
                          const ContentInfos& contents,
                          const TransportParserMap& trans_parsers,
+                         const CandidateTranslatorMap& translators,
                          TransportInfos* tinfos,
                          ParseError* error);
 bool WriteTransportInfos(SignalingProtocol protocol,
                          const TransportInfos& tinfos,
                          const TransportParserMap& trans_parsers,
+                         const CandidateTranslatorMap& translators,
                          XmlElements* elems,
                          WriteError* error);
 // Handles both Gingle and Jingle syntax.

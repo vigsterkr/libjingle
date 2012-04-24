@@ -23,8 +23,8 @@ static const talk_base::SocketAddress kStunAddr("44.44.44.44", 4444);
 static const talk_base::SocketAddress kRelayAddr("55.55.55.55", 5555);
 static const talk_base::SocketAddress kProxyAddr("66.66.66.66", 6666);
 static const talk_base::ProxyType kProxyType = talk_base::PROXY_HTTPS;
-static const char kSessionName[] = "rtp_test";
-static const char kSessionType[] = "http://www.google.com/session/test";
+static const char kChannelName[] = "rtp_test";
+static const int kComponent = 1;
 static const char kRelayHost[] = "relay.google.com";
 static const char kRelayToken[] =
     "CAESFwoOb2phQGdvb2dsZS5jb20Q043h47MmGhBTB1rbfIXkhuarDCZe+xF6";
@@ -46,22 +46,11 @@ class FakeRelayPort : public RelayPort {
  public:
   FakeRelayPort(talk_base::Thread* thread,
                 talk_base::PacketSocketFactory* factory,
-                talk_base::Network* network,
-                const talk_base::IPAddress& ip,
-                int min_port,
-                int max_port,
-                const std::string& username,
-                const std::string& password,
-                const std::string& magic_cookie)
-      : RelayPort(thread,
-                  factory,
-                  network,
-                  ip,
-                  min_port,
-                  max_port,
-                  username,
-                  password,
-                  magic_cookie) {
+                talk_base::Network* network, const talk_base::IPAddress& ip,
+                int min_port, int max_port,
+                const std::string& username, const std::string& password)
+      : RelayPort(thread, factory, network, ip, min_port, max_port,
+                  username, password) {
   }
 
   // Just signal that we are done.
@@ -77,20 +66,11 @@ class FakeStunPort : public StunPort {
                talk_base::PacketSocketFactory* factory,
                talk_base::Network* network,
                const talk_base::IPAddress& ip,
-               int min_port,
-               int max_port,
-               const std::string& username,
-               const std::string& password,
+               int min_port, int max_port,
+               const std::string& username, const std::string& password,
                const talk_base::SocketAddress& server_addr)
-      : StunPort(thread,
-                 factory,
-                 network,
-                 ip,
-                 min_port,
-                 max_port,
-                 username,
-                 password,
-                 server_addr) {
+      : StunPort(thread, factory, network, ip, min_port, max_port,
+                 username, password, server_addr) {
   }
 
   // Just set external address and signal that we are done.
@@ -106,15 +86,15 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
  public:
   FakeHttpPortAllocatorSession(
       HttpPortAllocator* allocator,
-      const std::string& name,
-      const std::string& session_type,
+      const std::string& channel_name,
+      int component,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
       const std::vector<std::string>& relay_hosts,
       const std::string& relay_token,
       const std::string& agent)
       : TestHttpPortAllocatorSession(allocator,
-                                     name,
-                                     session_type,
+                                     channel_name,
+                                     component,
                                      stun_hosts,
                                      relay_hosts,
                                      relay_token,
@@ -162,14 +142,14 @@ class FakeHttpPortAllocator : public HttpPortAllocator {
   }
 
   virtual PortAllocatorSession* CreateSession(const std::string& name,
-                                              const std::string& session_type) {
+                                              int component) {
     std::vector<talk_base::SocketAddress> stun_hosts;
     stun_hosts.push_back(kStunAddr);
     std::vector<std::string> relay_hosts;
     relay_hosts.push_back(kRelayHost);
     return new FakeHttpPortAllocatorSession(this,
-                                            kSessionName,
-                                            kSessionType,
+                                            kChannelName,
+                                            component,
                                             stun_hosts,
                                             relay_hosts,
                                             kRelayToken,
@@ -223,29 +203,22 @@ class ConnectivityCheckerForTest : public ConnectivityChecker {
         new FakeHttpPortAllocator(network_manager, user_agent);
     return fake_port_allocator_;
   }
-  virtual StunPort* CreateStunPort(const PortConfiguration* config,
-                                   talk_base::Network* network) {
-    return new FakeStunPort(worker(),
-                            socket_factory_,
-                            network,
-                            network->ip(),
-                            kMinPort,
-                            kMaxPort,
-                            config->username,
-                            config->password,
+  virtual StunPort* CreateStunPort(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, talk_base::Network* network) {
+    return new FakeStunPort(worker(), socket_factory_,
+                            network, network->ip(),
+                            kMinPort, kMaxPort,
+                            username, password,
                             config->stun_address);
   }
-  virtual RelayPort* CreateRelayPort(const PortConfiguration* config,
-                                     talk_base::Network* network) {
-    return new FakeRelayPort(worker(),
-                             socket_factory_,
-                             network,
-                             network->ip(),
-                             kMinPort,
-                             kMaxPort,
-                             config->username,
-                             config->password,
-                             config->magic_cookie);
+  virtual RelayPort* CreateRelayPort(
+      const std::string& username, const std::string& password,
+      const PortConfiguration* config, talk_base::Network* network) {
+    return new FakeRelayPort(worker(), socket_factory_,
+                             network, network->ip(),
+                             kMinPort, kMaxPort,
+                             username, password);
   }
   virtual void InitiateProxyDetection() {
     if (!proxy_initiated_) {

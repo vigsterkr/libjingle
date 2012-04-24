@@ -75,8 +75,12 @@ MacCocoaSocketServer::~MacCocoaSocketServer() {
 }
 
 AsyncSocket* MacCocoaSocketServer::CreateAsyncSocket(int type) {
+  return CreateAsyncSocket(AF_INET, type);
+}
+
+AsyncSocket* MacCocoaSocketServer::CreateAsyncSocket(int family, int type) {
   assert(type == SOCK_STREAM);
-  return new MacAsyncSocket();
+  return new MacAsyncSocket(family);
 }
 
 bool MacCocoaSocketServer::Wait(int cms, bool process_io) {

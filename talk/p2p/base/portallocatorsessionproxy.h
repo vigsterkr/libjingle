@@ -68,10 +68,10 @@ class PortAllocatorSessionMuxer : public sigslot::has_slots<> {
 
 class PortAllocatorSessionProxy : public PortAllocatorSession {
  public:
-  PortAllocatorSessionProxy(const std::string& name,
-                            const std::string& session_type,
+  PortAllocatorSessionProxy(const std::string& channel_name,
+                            int component,
                             uint32 flags)
-      : PortAllocatorSession(name, session_type, flags),
+      : PortAllocatorSession(channel_name, component, flags),
         impl_(NULL) {}
 
   virtual ~PortAllocatorSessionProxy();

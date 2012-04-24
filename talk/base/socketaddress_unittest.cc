@@ -50,10 +50,9 @@ const std::string kTestV6AddrFullString =
 TEST(SocketAddressTest, TestDefaultCtor) {
   SocketAddress addr;
   EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
+  EXPECT_EQ(IPAddress(), addr.ipaddr());
   EXPECT_EQ(0, addr.port());
   EXPECT_EQ("", addr.hostname());
-  EXPECT_EQ("0.0.0.0:0", addr.ToString());
 }
 
 TEST(SocketAddressTest, TestIPPortCtor) {
@@ -98,7 +97,7 @@ TEST(SocketAddressTest, TestSpecialStringPortCtor) {
 TEST(SocketAddressTest, TestHostnamePortCtor) {
   SocketAddress addr("a.b.com", 5678);
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
+  EXPECT_EQ(IPAddress(), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
@@ -152,7 +151,7 @@ TEST(SocketAddressTest, TestSetIPFromHostname) {
   addr.SetIP("a.b.com");
   addr.SetPort(5678);
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
+  EXPECT_EQ(IPAddress(), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());
@@ -186,7 +185,7 @@ TEST(SocketAddressTest, TestFromHostname) {
   SocketAddress addr;
   EXPECT_TRUE(addr.FromString("a.b.com:5678"));
   EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_EQ(IPAddress(INADDR_ANY), addr.ipaddr());
+  EXPECT_EQ(IPAddress(), addr.ipaddr());
   EXPECT_EQ(5678, addr.port());
   EXPECT_EQ("a.b.com", addr.hostname());
   EXPECT_EQ("a.b.com:5678", addr.ToString());

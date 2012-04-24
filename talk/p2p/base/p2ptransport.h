@@ -34,7 +34,7 @@
 
 namespace cricket {
 
-class P2PTransport: public Transport {
+class P2PTransport : public Transport {
  public:
   P2PTransport(talk_base::Thread* signaling_thread,
                talk_base::Thread* worker_thread,
@@ -46,7 +46,7 @@ class P2PTransport: public Transport {
  protected:
   // Creates and destroys P2PTransportChannel.
   virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& name, const std::string& content_type);
+      const std::string& name, int component);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
 
   friend class P2PTransportChannel;
@@ -57,19 +57,28 @@ class P2PTransport: public Transport {
 class P2PTransportParser : public TransportParser {
  public:
   P2PTransportParser() {}
+  // Translator may be null, in which case ParseCandidates should
+  // return false if there are candidates to parse.  We can't not call
+  // ParseCandidates because there's no way to know ahead of time if
+  // there are candidates or not.
   virtual bool ParseCandidates(SignalingProtocol protocol,
                                const buzz::XmlElement* elem,
+                               const CandidateTranslator* translator,
                                Candidates* candidates,
                                ParseError* error);
   virtual bool WriteCandidates(SignalingProtocol protocol,
                                const Candidates& candidates,
+                               const CandidateTranslator* translator,
                                XmlElements* candidate_elems,
                                WriteError* error);
- private:
   bool ParseCandidate(const buzz::XmlElement* elem,
+                      const CandidateTranslator* translator,
                       Candidate* candidate,
                       ParseError* error);
+
+ private:
   bool WriteCandidate(const Candidate& candidate,
+                      const CandidateTranslator* translator,
                       buzz::XmlElement* elem,
                       WriteError* error);
   bool VerifyUsernameFormat(const std::string& username,

@@ -35,6 +35,7 @@
 #include "talk/base/asyncsocket.h"
 #include "talk/base/common.h"
 #include "talk/base/gunit.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/stream.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
@@ -280,13 +281,13 @@ private:
 class SocketTestClient : public sigslot::has_slots<> {
 public:
   SocketTestClient() {
-    Init(NULL);
+    Init(NULL, AF_INET);
   }
   SocketTestClient(AsyncSocket* socket) {
-    Init(socket);
+    Init(socket, socket->GetLocalAddress().family());
   }
   SocketTestClient(const SocketAddress& address) {
-    Init(NULL);
+    Init(NULL, address.family());
     socket_->Connect(address);
   }
 
@@ -326,10 +327,10 @@ public:
 private:
   typedef std::vector<char> Buffer;
 
-  void Init(AsyncSocket* socket) {
+  void Init(AsyncSocket* socket, int family) {
     if (!socket) {
       socket = Thread::Current()->socketserver()
-                                ->CreateAsyncSocket(SOCK_STREAM);
+          ->CreateAsyncSocket(family, SOCK_STREAM);
     }
     socket_.reset(socket);
     socket_->SignalConnectEvent.connect(this,
@@ -387,7 +388,8 @@ private:
 class SocketTestServer : public sigslot::has_slots<> {
  public:
   SocketTestServer(const SocketAddress& address)
-  : socket_(Thread::Current()->socketserver()->CreateAsyncSocket(SOCK_STREAM))
+      : socket_(Thread::Current()->socketserver()
+                ->CreateAsyncSocket(address.family(), SOCK_STREAM))
   {
     socket_->SignalReadEvent.connect(this, &SocketTestServer::OnReadEvent);
     socket_->Bind(address);

@@ -165,15 +165,16 @@ class VirtualSocketServerTest : public testing::Test {
   }
 
   void BasicTest(const SocketAddress& initial_addr) {
-    AsyncSocket* socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
+    AsyncSocket* socket = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_DGRAM);
     socket->Bind(initial_addr);
     SocketAddress server_addr = socket->GetLocalAddress();
     // Make sure VSS didn't switch families on us.
-    EXPECT_EQ(server_addr.ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server_addr.family(), initial_addr.family());
 
     TestClient* client1 = new TestClient(new AsyncUDPSocket(socket));
-    AsyncSocket* socket2 = ss_->CreateAsyncSocket(SOCK_DGRAM);
+    AsyncSocket* socket2 =
+        ss_->CreateAsyncSocket(initial_addr.family(), SOCK_DGRAM);
     TestClient* client2 = new TestClient(new AsyncUDPSocket(socket2));
 
     SocketAddress client2_addr;
@@ -185,8 +186,9 @@ class VirtualSocketServerTest : public testing::Test {
     EXPECT_TRUE(client2->CheckNextPacket("bizbaz", 6, &client1_addr));
     EXPECT_EQ(client1_addr, server_addr);
 
+    SocketAddress empty = EmptySocketAddressWithFamily(initial_addr.family());
     for (int i = 0; i < 10; i++) {
-      client2 = new TestClient(AsyncUDPSocket::Create(ss_, SocketAddress()));
+      client2 = new TestClient(AsyncUDPSocket::Create(ss_, empty));
 
       SocketAddress next_client2_addr;
       EXPECT_EQ(3, client2->SendTo("foo", 3, server_addr));
@@ -207,32 +209,35 @@ class VirtualSocketServerTest : public testing::Test {
   void ConnectTest(const SocketAddress& initial_addr) {
     testing::StreamSink sink;
     SocketAddress accept_addr;
-    const SocketAddress kEmptyAddr;
+    const SocketAddress kEmptyAddr =
+        EmptySocketAddressWithFamily(initial_addr.family());
 
     // Create client
-    AsyncSocket* client = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* client = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(client);
     EXPECT_EQ(client->GetState(), AsyncSocket::CS_CLOSED);
-    EXPECT_EQ(client->GetLocalAddress(), kEmptyAddr);
+    EXPECT_TRUE(client->GetLocalAddress().IsNil());
 
     // Create server
-    AsyncSocket* server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* server = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(server);
     EXPECT_NE(0, server->Listen(5));  // Bind required
     EXPECT_EQ(0, server->Bind(initial_addr));
-    EXPECT_EQ(server->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server->GetLocalAddress().family(), initial_addr.family());
     EXPECT_EQ(0, server->Listen(5));
     EXPECT_EQ(server->GetState(), AsyncSocket::CS_CONNECTING);
 
     // No pending server connections
     EXPECT_FALSE(sink.Check(server, testing::SSE_READ));
     EXPECT_TRUE(NULL == server->Accept(&accept_addr));
-    EXPECT_EQ(accept_addr, kEmptyAddr);
+    EXPECT_EQ(AF_UNSPEC, accept_addr.family());
 
     // Attempt connect to listening socket
     EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
     EXPECT_NE(client->GetLocalAddress(), kEmptyAddr);  // Implicit Bind
+    EXPECT_NE(AF_UNSPEC, client->GetLocalAddress().family());  // Implicit Bind
     EXPECT_NE(client->GetLocalAddress(), server->GetLocalAddress());
 
     // Client is connecting
@@ -271,18 +276,21 @@ class VirtualSocketServerTest : public testing::Test {
   void ConnectToNonListenerTest(const SocketAddress& initial_addr) {
     testing::StreamSink sink;
     SocketAddress accept_addr;
-    const SocketAddress kEmptyAddr;
+    const SocketAddress nil_addr;
+    const SocketAddress empty_addr =
+        EmptySocketAddressWithFamily(initial_addr.family());
 
     // Create client
-    AsyncSocket* client = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* client = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(client);
 
     // Create server
-    AsyncSocket* server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* server = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(server);
     EXPECT_EQ(0, server->Bind(initial_addr));
-    EXPECT_EQ(server->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server->GetLocalAddress().family(), initial_addr.family());
     // Attempt connect to non-listening socket
     EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
 
@@ -291,30 +299,32 @@ class VirtualSocketServerTest : public testing::Test {
     // No pending server connections
     EXPECT_FALSE(sink.Check(server, testing::SSE_READ));
     EXPECT_TRUE(NULL == server->Accept(&accept_addr));
-    EXPECT_EQ(accept_addr, kEmptyAddr);
+    EXPECT_EQ(accept_addr, nil_addr);
 
     // Connection failed
     EXPECT_EQ(client->GetState(), AsyncSocket::CS_CLOSED);
     EXPECT_FALSE(sink.Check(client, testing::SSE_OPEN));
     EXPECT_TRUE(sink.Check(client, testing::SSE_ERROR));
-    EXPECT_EQ(client->GetRemoteAddress(), kEmptyAddr);
+    EXPECT_EQ(client->GetRemoteAddress(), nil_addr);
   }
 
   void CloseDuringConnectTest(const SocketAddress& initial_addr) {
     testing::StreamSink sink;
     SocketAddress accept_addr;
-    const SocketAddress kEmptyAddr;
+    const SocketAddress empty_addr =
+        EmptySocketAddressWithFamily(initial_addr.family());
 
     // Create client and server
-    AsyncSocket* client = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* client = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(client);
-    AsyncSocket* server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* server = ss_->CreateAsyncSocket(initial_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(server);
 
     // Initiate connect
     EXPECT_EQ(0, server->Bind(initial_addr));
-    EXPECT_EQ(server->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, server->Listen(5));
     EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
@@ -331,13 +341,12 @@ class VirtualSocketServerTest : public testing::Test {
 
     // New server
     delete server;
-    server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    server = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(server);
 
     // Initiate connect
     EXPECT_EQ(0, server->Bind(initial_addr));
-    EXPECT_EQ(server->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, server->Listen(5));
     EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
@@ -356,13 +365,12 @@ class VirtualSocketServerTest : public testing::Test {
 
     // New server
     delete server;
-    server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    server = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(server);
 
     // Initiate connect
     EXPECT_EQ(0, server->Bind(initial_addr));
-    EXPECT_EQ(server->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(server->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, server->Listen(5));
     EXPECT_EQ(0, client->Connect(server->GetLocalAddress()));
@@ -395,18 +403,16 @@ class VirtualSocketServerTest : public testing::Test {
     const SocketAddress kEmptyAddr;
 
     // Create clients
-    AsyncSocket* a = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* a = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(a);
     a->Bind(initial_addr);
-    EXPECT_EQ(a->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(a->GetLocalAddress().family(), initial_addr.family());
 
 
-    AsyncSocket* b = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* b = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(b);
     b->Bind(initial_addr);
-    EXPECT_EQ(b->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(b->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, a->Connect(b->GetLocalAddress()));
     EXPECT_EQ(0, b->Connect(a->GetLocalAddress()));
@@ -445,17 +451,15 @@ class VirtualSocketServerTest : public testing::Test {
     const SocketAddress kEmptyAddr;
 
     // Connect two sockets
-    AsyncSocket* a = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* a = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(a);
     a->Bind(initial_addr);
-    EXPECT_EQ(a->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(a->GetLocalAddress().family(), initial_addr.family());
 
-    AsyncSocket* b = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* b = ss_->CreateAsyncSocket(initial_addr.family(), SOCK_STREAM);
     sink.Monitor(b);
     b->Bind(initial_addr);
-    EXPECT_EQ(b->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(b->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, a->Connect(b->GetLocalAddress()));
     EXPECT_EQ(0, b->Connect(a->GetLocalAddress()));
@@ -567,15 +571,15 @@ class VirtualSocketServerTest : public testing::Test {
     const SocketAddress kEmptyAddr;
 
     // Connect two sockets
-    AsyncSocket* a = ss_->CreateAsyncSocket(SOCK_STREAM);
-    AsyncSocket* b = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* a = ss_->CreateAsyncSocket(initial_addr.family(),
+                                            SOCK_STREAM);
+    AsyncSocket* b = ss_->CreateAsyncSocket(initial_addr.family(),
+                                            SOCK_STREAM);
     a->Bind(initial_addr);
-    EXPECT_EQ(a->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(a->GetLocalAddress().family(), initial_addr.family());
 
     b->Bind(initial_addr);
-    EXPECT_EQ(b->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(b->GetLocalAddress().family(), initial_addr.family());
 
     EXPECT_EQ(0, a->Connect(b->GetLocalAddress()));
     EXPECT_EQ(0, b->Connect(a->GetLocalAddress()));
@@ -618,14 +622,14 @@ class VirtualSocketServerTest : public testing::Test {
   }
 
   void BandwidthTest(const SocketAddress& initial_addr) {
-    AsyncSocket* send_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
-    AsyncSocket* recv_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
+    AsyncSocket* send_socket =
+        ss_->CreateAsyncSocket(initial_addr.family(), SOCK_DGRAM);
+    AsyncSocket* recv_socket =
+        ss_->CreateAsyncSocket(initial_addr.family(), SOCK_DGRAM);
     ASSERT_EQ(0, send_socket->Bind(initial_addr));
     ASSERT_EQ(0, recv_socket->Bind(initial_addr));
-    EXPECT_EQ(send_socket->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
-    EXPECT_EQ(recv_socket->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(send_socket->GetLocalAddress().family(), initial_addr.family());
+    EXPECT_EQ(recv_socket->GetLocalAddress().family(), initial_addr.family());
     ASSERT_EQ(0, send_socket->Connect(recv_socket->GetLocalAddress()));
 
     uint32 bandwidth = 64 * 1024;
@@ -657,14 +661,14 @@ class VirtualSocketServerTest : public testing::Test {
     ss_->set_delay_stddev(stddev);
     ss_->UpdateDelayDistribution();
 
-    AsyncSocket* send_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
-    AsyncSocket* recv_socket = ss_->CreateAsyncSocket(SOCK_DGRAM);
+    AsyncSocket* send_socket =
+        ss_->CreateAsyncSocket(initial_addr.family(), SOCK_DGRAM);
+    AsyncSocket* recv_socket =
+        ss_->CreateAsyncSocket(initial_addr.family(), SOCK_DGRAM);
     ASSERT_EQ(0, send_socket->Bind(initial_addr));
     ASSERT_EQ(0, recv_socket->Bind(initial_addr));
-    EXPECT_EQ(send_socket->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
-    EXPECT_EQ(recv_socket->GetLocalAddress().ipaddr().family(),
-              initial_addr.ipaddr().family());
+    EXPECT_EQ(send_socket->GetLocalAddress().family(), initial_addr.family());
+    EXPECT_EQ(recv_socket->GetLocalAddress().family(), initial_addr.family());
     ASSERT_EQ(0, send_socket->Connect(recv_socket->GetLocalAddress()));
 
     Thread* pthMain = Thread::Current();
@@ -706,7 +710,8 @@ class VirtualSocketServerTest : public testing::Test {
     const SocketAddress kEmptyAddr;
 
     // Client gets a IPv4 address
-    AsyncSocket* client = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* client = ss_->CreateAsyncSocket(client_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(client);
     EXPECT_EQ(client->GetState(), AsyncSocket::CS_CLOSED);
     EXPECT_EQ(client->GetLocalAddress(), kEmptyAddr);
@@ -714,7 +719,8 @@ class VirtualSocketServerTest : public testing::Test {
 
     // Server gets a non-mapped non-any IPv6 address.
     // IPv4 sockets should not be able to connect to this.
-    AsyncSocket* server = ss_->CreateAsyncSocket(SOCK_STREAM);
+    AsyncSocket* server = ss_->CreateAsyncSocket(server_addr.family(),
+                                                 SOCK_STREAM);
     sink.Monitor(server);
     server->Bind(server_addr);
     server->Listen(5);
@@ -914,13 +920,13 @@ TEST_F(VirtualSocketServerTest, CanConnectFromUnboundIPv6ToIPv4Any) {
 
 // Works, receiving socket sees whatever GetNextIP gave the client.
 TEST_F(VirtualSocketServerTest, CanConnectFromUnboundIPv4ToIPv6Any) {
-  CrossFamilyConnectionTest(SocketAddress(),
+  CrossFamilyConnectionTest(SocketAddress("0.0.0.0", 0),
                             SocketAddress("::", 5000),
                             true);
 }
 
 TEST_F(VirtualSocketServerTest, CanSendDatagramFromUnboundIPv4ToIPv6Any) {
-  CrossFamilyDatagramTest(SocketAddress(),
+  CrossFamilyDatagramTest(SocketAddress("0.0.0.0", 0),
                           SocketAddress("::", 5000),
                           true);
 }

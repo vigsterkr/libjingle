@@ -37,7 +37,8 @@ ProxyServer::ProxyServer(
     SocketFactory* int_factory, const SocketAddress& int_addr,
     SocketFactory* ext_factory, const SocketAddress& ext_ip)
     : ext_factory_(ext_factory), ext_ip_(ext_ip.ipaddr(), 0),  // strip off port
-      server_socket_(int_factory->CreateAsyncSocket(SOCK_STREAM)) {
+      server_socket_(int_factory->CreateAsyncSocket(int_addr.family(),
+                                                    SOCK_STREAM)) {
   server_socket_->Bind(int_addr);
   server_socket_->Listen(5);
   server_socket_->SignalReadEvent.connect(this, &ProxyServer::OnAcceptEvent);
@@ -54,7 +55,8 @@ void ProxyServer::OnAcceptEvent(AsyncSocket* socket) {
   ASSERT(socket == server_socket_.get());
   AsyncSocket* int_socket = socket->Accept(NULL);
   AsyncProxyServerSocket* wrapped_socket = WrapSocket(int_socket);
-  AsyncSocket* ext_socket = ext_factory_->CreateAsyncSocket(SOCK_STREAM);
+  AsyncSocket* ext_socket = ext_factory_->CreateAsyncSocket(ext_ip_.family(),
+                                                            SOCK_STREAM);
   ext_socket->Bind(ext_ip_);
   bindings_.push_back(new ProxyBinding(wrapped_socket, ext_socket));
 }

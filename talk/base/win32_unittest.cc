@@ -28,7 +28,9 @@
 #include <string>
 
 #include "talk/base/gunit.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/win32.h"
+#include "talk/base/winping.h"
 
 #ifndef WIN32
 #error Only for Windows
@@ -49,6 +51,19 @@ TEST_F(Win32Test, FileTimeToUInt64Test) {
 
   uint64 expected = 0xBAADF00DFEED3456;
   EXPECT_EQ(expected, ToUInt64(ft));
+}
+
+TEST_F(Win32Test, WinPingTest) {
+  WinPing ping;
+  ASSERT_TRUE(ping.IsValid());
+  WinPing::PingResult result = ping.Ping(IPAddress(INADDR_LOOPBACK), 20, 50, 1,
+                                         false);
+  ASSERT_EQ(WinPing::PING_SUCCESS, result);
+  if (HasIPv6Enabled()) {
+    WinPing::PingResult v6result = ping.Ping(IPAddress(in6addr_loopback), 20,
+                                             50, 1, false);
+    ASSERT_EQ(WinPing::PING_SUCCESS, v6result);
+  }
 }
 
 }  // namespace talk_base

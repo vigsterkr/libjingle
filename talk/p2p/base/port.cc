@@ -111,10 +111,11 @@ namespace cricket {
 
 static const char* const PROTO_NAMES[] = { "udp", "tcp", "ssltcp" };
 
-const float PREF_LOCAL_UDP = 1.0f;
-const float PREF_LOCAL_STUN = 0.9f;
-const float PREF_LOCAL_TCP = 0.8f;
-const float PREF_RELAY = 0.5f;
+// TODO: Use the priority values from RFC 5245.
+const uint32 PRIORITY_LOCAL_UDP = 2130706432U;  // pref = 1.0
+const uint32 PRIORITY_LOCAL_STUN = 1912602624U;  // pref = 0.9
+const uint32 PRIORITY_LOCAL_TCP = 1694498816U;  // pref = 0.8
+const uint32 PRIORITY_RELAY = 1056964608U;  // pref = 0.5
 
 const char* ProtoToString(ProtocolType proto) {
   return PROTO_NAMES[proto];
@@ -142,7 +143,7 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       min_port_(min_port),
       max_port_(max_port),
       generation_(0),
-      preference_(-1),
+      priority_(0),
       username_fragment_(username_fragment),
       password_(password),
       lifetime_(LT_PRESTART),
@@ -180,11 +181,12 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
                       const std::string& protocol,
                       bool final) {
   Candidate c;
-  c.set_name(name_);
+  c.set_id(talk_base::CreateRandomString(8));
+  c.set_component(component_);
   c.set_type(type_);
   c.set_protocol(protocol);
   c.set_address(address);
-  c.set_preference(preference_);
+  c.set_priority(priority_);
   c.set_username(username_fragment_);
   c.set_password(password_);
   c.set_network_name(network_->name());
@@ -211,15 +213,15 @@ void Port::OnReadPacket(
 
   // If this is an authenticated STUN request, then signal unknown address and
   // send back a proper binding response.
-  StunMessage* msg;
+  talk_base::scoped_ptr<StunMessage> msg;
   std::string remote_username;
-  if (!GetStunMessage(data, size, addr, &msg, &remote_username)) {
+  if (!GetStunMessage(data, size, addr, msg.accept(), &remote_username)) {
     LOG_J(LS_ERROR, this) << "Received non-STUN packet from unknown address ("
                           << addr.ToString() << ")";
-  } else if (!msg) {
+  } else if (!msg.get()) {
     // STUN message handled already
   } else if (msg->type() == STUN_BINDING_REQUEST) {
-    SignalUnknownAddress(this, addr, msg, remote_username, false);
+    SignalUnknownAddress(this, addr, msg.get(), remote_username, false);
   } else {
     // NOTE(tschmelcher): STUN_BINDING_RESPONSE is benign. It occurs if we
     // pruned a connection for this port while it had STUN requests in flight,
@@ -230,7 +232,6 @@ void Port::OnReadPacket(
                             << msg->type() << ") from unknown address ("
                             << addr.ToString() << ")";
     }
-    delete msg;
   }
 }
 
@@ -316,10 +317,8 @@ bool Port::GetStunMessage(const char* data, size_t size,
     if (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE) {
       if (const StunErrorCodeAttribute* error_code = stun_msg->GetErrorCode()) {
         LOG_J(LS_ERROR, this) << "Received STUN binding error:"
-                              << " class="
-                              << static_cast<int>(error_code->error_class())
-                              << " number="
-                              << static_cast<int>(error_code->number())
+                              << " class=" << error_code->error_class()
+                              << " number=" << error_code->number()
                               << " reason='" << error_code->reason() << "'"
                               << " from " << addr.ToString();
         // Return message to allow error-specific processing
@@ -338,6 +337,19 @@ bool Port::GetStunMessage(const char* data, size_t size,
 
   // Return the STUN message found.
   *out_msg = stun_msg.release();
+  return true;
+}
+
+bool Port::IsCompatibleAddress(const talk_base::SocketAddress& addr) {
+  int family = ip().family();
+  // We use single-stack sockets, so families must match.
+  if (addr.family() != family) {
+    return false;
+  }
+  // Link-local IPv6 ports can only connect to other link-local IPv6 ports.
+  if (family == AF_INET6 && (IPIsPrivate(ip()) != IPIsPrivate(addr.ipaddr()))) {
+    return false;
+  }
   return true;
 }
 
@@ -366,8 +378,7 @@ void Port::SendBindingResponse(StunMessage* request,
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
-  addr_attr->SetPort(addr.port());
-  addr_attr->SetIP(addr.ipaddr());
+  addr_attr->SetAddress(addr);
   response.AddAttribute(addr_attr);
 
   // Adding MESSAGE-INTEGRITY attribute to the response message.
@@ -438,7 +449,8 @@ void Port::OnMessage(talk_base::Message *pmsg) {
 
 std::string Port::ToString() const {
   std::stringstream ss;
-  ss << "Port[" << name_ << ":" << generation_ << ":" << type_
+  ss << "Port[" << content_name_ << ":" << component_
+     << ":" << generation_ << ":" << type_
      << ":" << network_->ToString() << "]";
   return ss.str();
 }
@@ -503,7 +515,9 @@ class ConnectionRequest : public StunRequest {
     request->AddAttribute(username_attr);
 
     // Adding Message Integrity to the STUN request message.
-    request->AddMessageIntegrity(connection_->remote_candidate().password());
+    if (connection_->port()->enable_message_integrity()) {
+      request->AddMessageIntegrity(connection_->remote_candidate().password());
+    }
   }
 
   virtual void OnResponse(StunMessage* response) {
@@ -787,10 +801,12 @@ std::string Connection::ToString() const {
   const Candidate& local = local_candidate();
   const Candidate& remote = remote_candidate();
   std::stringstream ss;
-  ss << "Conn[" << local.name() << ":" << local.generation()
+  ss << "Conn[" << local.id() << ":" << local.component()
+     << ":" << local.generation()
      << ":" << local.type() << ":" << local.protocol()
      << ":" << local.address().ToString()
-     << "->" << remote.name() << ":" << remote.generation()
+     << "->" << remote.id() << ":" << remote.component()
+     << ":" << remote.generation()
      << ":" << remote.type() << ":"
      << remote.protocol() << ":" << remote.address().ToString()
      << "|"

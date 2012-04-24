@@ -114,7 +114,7 @@ public:
 
   virtual bool ParseContent(SignalingProtocol protocol,
                             const buzz::XmlElement* elem,
-                            const ContentDescription** content,
+                            ContentDescription** content,
                             ParseError* error);
   virtual bool WriteContent(SignalingProtocol protocol,
                             const ContentDescription* content,

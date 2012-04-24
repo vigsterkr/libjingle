@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2008 Google Inc.
+ * Copyright 2011 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,31 +25,26 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_P2P_BASE_TESTSTUNSERVER_H_
-#define TALK_P2P_BASE_TESTSTUNSERVER_H_
+#include "talk/session/phone/cpuid.h"
 
-#include "talk/base/socketaddress.h"
-#include "talk/base/thread.h"
-#include "talk/p2p/base/stunserver.h"
+#ifdef HAVE_YUV
+#include "libyuv/cpu_id.h"
+#endif
 
 namespace cricket {
 
-// A test STUN server. Useful for unit tests.
-class TestStunServer {
- public:
-  TestStunServer(talk_base::Thread* thread,
-                 const talk_base::SocketAddress& addr)
-      : socket_(thread->socketserver()->CreateAsyncSocket(addr.family(),
-                                                          SOCK_DGRAM)),
-        udp_socket_(talk_base::AsyncUDPSocket::Create(socket_, addr)),
-        server_(udp_socket_) {
-  }
- private:
-  talk_base::AsyncSocket* socket_;
-  talk_base::AsyncUDPSocket* udp_socket_;
-  cricket::StunServer server_;
-};
+bool CpuInfo::TestCpuFlag(int flag) {
+#ifdef HAVE_YUV
+  return libyuv::TestCpuFlag(flag) ? true : false;
+#else
+  return false;
+#endif
+}
+
+void CpuInfo::MaskCpuFlagsForTest(int enable_flags) {
+#ifdef HAVE_YUV
+  libyuv::MaskCpuFlags(enable_flags);
+#endif
+}
 
 }  // namespace cricket
-
-#endif  // TALK_P2P_BASE_TESTSTUNSERVER_H_

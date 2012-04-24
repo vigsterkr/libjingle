@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011 Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,49 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_CPUID_H_
-#define TALK_BASE_CPUID_H_
+#ifndef TALK_BASE_GUNIT_PROD_H_
+#define TALK_BASE_GUNIT_PROD_H_
 
-#include <string>
-
-#include "talk/base/basictypes.h"
-#include "talk/base/criticalsection.h"
-
-namespace talk_base {
-
-#ifdef CPU_X86
-void cpuid(int cpu_info[4], int info_type);
+#if defined(ANDROID) || defined (GTEST_RELATIVE_PATH)
+#include "gtest/gtest_prod.h"
+#else
+#include "testing/base/gunit_prod.h"
 #endif
 
-class CpuInfo {
- public:
-  // These flags are only valid on x86 processors
-  static const int kCpuHasSSE2 = 1;
-  static const int kCpuHasSSSE3 = 2;
-
-  // SIMD support on ARM processors
-  static const int kCpuHasNEON = 4;
-
-  // Detect CPU has SSE2 etc.
-  static bool TestCpuFlag(int flag);
-
-  // Detect CPU vendor: "GenuineIntel" or "AuthenticAMD"
-  static std::string GetCpuVendor();
-
-  // For testing, allow CPU flags to be disabled.
-  static void MaskCpuFlagsForTest(int enable_flags);
-
- private:
-  // Global lock for the cpu initialization
-  static CriticalSection crit_;
-  static bool cpu_info_initialized_;
-  static int cpu_info_;
-
-  static void InitCpuFlags();
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(CpuInfo);
-};
-
-}  // namespace talk_base
-
-#endif  // TALK_BASE_CPUID_H_
+#endif  // TALK_BASE_GUNIT_PROD_H_

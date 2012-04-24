@@ -109,7 +109,7 @@ public:
   virtual XmppReturnStatus CreateMemberEnumerator(XmppChatroomMemberEnumerator** enumerator) = 0;
 
   //! Gets the subject of the chatroom
-  virtual const std::string& subject() = 0;
+  virtual const std::string subject() = 0;
 
   //! Returns the current state of the user with respect to the chatroom
   virtual XmppChatroomState state() = 0;
@@ -189,6 +189,10 @@ enum XmppChatroomEnteredStatus
   XMPP_CHATROOM_ENTERED_FAILURE_MAX_USERS          = 6,
   //! The room has been locked by an administrator
   XMPP_CHATROOM_ENTERED_FAILURE_ROOM_LOCKED        = 7,
+  //! Someone in the room has blocked you
+  XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BLOCKED     = 8,
+  //! You have blocked someone in the room
+  XMPP_CHATROOM_ENTERED_FAILURE_MEMBER_BLOCKING    = 9,
   //! Some other reason
   XMPP_CHATROOM_ENTERED_FAILURE_UNSPECIFIED        = 2000,
 };

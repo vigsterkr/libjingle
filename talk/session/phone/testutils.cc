@@ -178,7 +178,7 @@ bool RtpTestUtility::VerifyTestPacketsFromStream(
     // Check the RTP or RTCP packet.
     talk_base::ByteBuffer buf(reinterpret_cast<const char*>(&packet.data[0]),
                               packet.data.size());
-    if (packet.is_rtcp) {
+    if (packet.is_rtcp()) {
       // RTCP packet.
       RawRtcpPacket rtcp_packet;
       result &= rtcp_packet.ReadFromByteBuffer(&buf);

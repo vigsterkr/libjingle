@@ -103,12 +103,12 @@ class TestChannel : public sigslot::has_slots<> {
     conn_ = src_->CreateConnection(GetCandidate(dst_), Port::ORIGIN_MESSAGE);
   }
   void AcceptConnection() {
-    ASSERT_TRUE(remote_request_ != NULL);
+    ASSERT_TRUE(remote_request_.get() != NULL);
     Candidate c = GetCandidate(dst_);
     c.set_address(remote_address_);
     conn_ = src_->CreateConnection(c, Port::ORIGIN_MESSAGE);
-    src_->SendBindingResponse(remote_request_, remote_address_);
-    delete remote_request_;
+    src_->SendBindingResponse(remote_request_.get(), remote_address_);
+    remote_request_.reset();
   }
   void Ping() {
     conn_->Ping(0);
@@ -126,13 +126,23 @@ class TestChannel : public sigslot::has_slots<> {
                         StunMessage* msg, const std::string& rf,
                         bool /*port_muxed*/) {
     ASSERT_EQ(src_.get(), port);
-    if (!remote_address_.IsAny()) {
+    if (!remote_address_.IsNil()) {
       ASSERT_EQ(remote_address_, addr);
-      delete remote_request_;
     }
+    // MI attribute shouldn't be present in ping requests.
+    const cricket::StunByteStringAttribute* mi_attr =
+        msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY);
+    ASSERT_TRUE(mi_attr == NULL);
     remote_address_ = addr;
-    remote_request_ = msg;
+    CopyStunMessage(msg, remote_request_.accept());
     remote_frag_ = rf;
+  }
+
+  void CopyStunMessage(const StunMessage* src, StunMessage** dst) {
+    talk_base::ByteBuffer buf;
+    src->Write(&buf);
+    *dst = new StunMessage();
+    (*dst)->Read(&buf);
   }
 
   void OnDestroyed(Connection* conn) {
@@ -148,7 +158,7 @@ class TestChannel : public sigslot::has_slots<> {
   int address_count_;
   Connection* conn_;
   SocketAddress remote_address_;
-  StunMessage* remote_request_;
+  talk_base::scoped_ptr<StunMessage> remote_request_;
   std::string remote_frag_;
 };
 
@@ -267,7 +277,7 @@ class PortTest : public testing::Test {
                              ProtocolType int_proto, ProtocolType ext_proto) {
     RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
                                         addr.ipaddr(), 0, 0,
-                                        username_, password_, "");
+                                        username_, password_);
     SocketAddress addrs[] =
         { kRelayUdpIntAddr, kRelayTcpIntAddr, kRelaySslTcpIntAddr };
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));
@@ -296,6 +306,8 @@ class PortTest : public testing::Test {
       default:                  return "relay(?)";
     }
   }
+
+  void TestCrossFamilyPorts(int type);
 
   // this does all the work
   void TestConnectivity(const char* name1, Port* port1,
@@ -327,8 +339,8 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
                                 bool accept, bool same_addr1,
                                 bool same_addr2, bool possible) {
   LOG(LS_INFO) << "Test: " << name1 << " to " << name2 << ": ";
-  port1->set_name("src");
-  port2->set_name("dst");
+  port1->set_component(cricket::ICE_CANDIDATE_COMPONENT_DEFAULT);
+  port2->set_component(cricket::ICE_CANDIDATE_COMPONENT_DEFAULT);
 
   // Set up channels.
   TestChannel ch1(port1, port2);
@@ -347,12 +359,12 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
   ASSERT_TRUE(ch1.conn() != NULL);
   EXPECT_TRUE_WAIT(ch1.conn()->connected(), kTimeout);  // for TCP connect
   ch1.Ping();
-  WAIT(!ch2.remote_address().IsAny(), kTimeout);
+  WAIT(!ch2.remote_address().IsNil(), kTimeout);
 
   if (accept) {
     // We are able to send a ping from src to dst. This is the case when
     // sending to UDP ports and cone NATs.
-    EXPECT_TRUE(ch1.remote_address().IsAny());
+    EXPECT_TRUE(ch1.remote_address().IsNil());
     EXPECT_EQ(ch2.remote_fragment(), port1->username_fragment());
 
     // Ensure the ping came from the same address used for src.
@@ -369,8 +381,8 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
   } else {
     // We can't send a ping from src to dst, so flip it around. This will happen
     // when the destination NAT is addr/port restricted or symmetric.
-    EXPECT_TRUE(ch1.remote_address().IsAny());
-    EXPECT_TRUE(ch2.remote_address().IsAny());
+    EXPECT_TRUE(ch1.remote_address().IsNil());
+    EXPECT_TRUE(ch2.remote_address().IsNil());
 
     // Send a ping from dst to src. Again, this may or may not make it.
     ch2.CreateConnection();
@@ -393,15 +405,15 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
     } else if (!same_addr1 && possible) {
       // The new ping went to the candidate address, but that address was bad.
       // This will happen when the source NAT is symmetric.
-      EXPECT_TRUE(ch1.remote_address().IsAny());
-      EXPECT_TRUE(ch2.remote_address().IsAny());
+      EXPECT_TRUE(ch1.remote_address().IsNil());
+      EXPECT_TRUE(ch2.remote_address().IsNil());
 
       // However, since we have now sent a ping to the source IP, we should be
       // able to get a ping from it. This gives us the real source address.
       ch1.Ping();
-      EXPECT_TRUE_WAIT(!ch2.remote_address().IsAny(), kTimeout);
+      EXPECT_TRUE_WAIT(!ch2.remote_address().IsNil(), kTimeout);
       EXPECT_EQ(Connection::STATE_READ_TIMEOUT, ch2.conn()->read_state());
-      EXPECT_TRUE(ch1.remote_address().IsAny());
+      EXPECT_TRUE(ch1.remote_address().IsNil());
 
       // Pick up the actual address and establish the connection.
       ch2.AcceptConnection();
@@ -412,7 +424,7 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
     } else if (!same_addr2 && possible) {
       // The new ping came in, but from an unexpected address. This will happen
       // when the destination NAT is symmetric.
-      EXPECT_FALSE(ch1.remote_address().IsAny());
+      EXPECT_FALSE(ch1.remote_address().IsNil());
       EXPECT_EQ(Connection::STATE_READ_TIMEOUT, ch1.conn()->read_state());
 
       // Update our address and complete the connection.
@@ -422,12 +434,12 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
                      kTimeout);
     } else {  // (!possible)
       // There should be s no way for the pings to reach each other. Check it.
-      EXPECT_TRUE(ch1.remote_address().IsAny());
-      EXPECT_TRUE(ch2.remote_address().IsAny());
+      EXPECT_TRUE(ch1.remote_address().IsNil());
+      EXPECT_TRUE(ch2.remote_address().IsNil());
       ch1.Ping();
-      WAIT(!ch2.remote_address().IsAny(), kTimeout);
-      EXPECT_TRUE(ch1.remote_address().IsAny());
-      EXPECT_TRUE(ch2.remote_address().IsAny());
+      WAIT(!ch2.remote_address().IsNil(), kTimeout);
+      EXPECT_TRUE(ch1.remote_address().IsNil());
+      EXPECT_TRUE(ch2.remote_address().IsNil());
     }
   }
 
@@ -763,4 +775,62 @@ TEST_F(PortTest, TestDelayedBindingTcp) {
   socket->SignalAddressReady(socket, kLocalAddr2);
 
   EXPECT_EQ(1U, port->candidates().size());
+}
+
+void PortTest::TestCrossFamilyPorts(int type) {
+  FakePacketSocketFactory factory;
+  scoped_ptr<Port> ports[4];
+  SocketAddress addresses[4] = {SocketAddress("192.168.1.3", 0),
+                                SocketAddress("192.168.1.4", 0),
+                                SocketAddress("2001:db8::1", 0),
+                                SocketAddress("2001:db8::2", 0)};
+  for (int i = 0; i < 4; i++) {
+    FakeAsyncPacketSocket *socket = new FakeAsyncPacketSocket();
+    if (type == SOCK_DGRAM) {
+      factory.set_next_udp_socket(socket);
+      ports[i].reset(CreateUdpPort(addresses[i], &factory));
+    } else if (type == SOCK_STREAM) {
+      factory.set_next_server_tcp_socket(socket);
+      ports[i].reset(CreateTcpPort(addresses[i], &factory));
+    }
+    socket->set_state(AsyncPacketSocket::STATE_BINDING);
+    socket->SignalAddressReady(socket, addresses[i]);
+    ports[i]->PrepareAddress();
+  }
+
+  // IPv4 Port, connects to IPv6 candidate and then to IPv4 candidate.
+  if (type == SOCK_STREAM) {
+    FakeAsyncPacketSocket* clientsocket = new FakeAsyncPacketSocket();
+    factory.set_next_client_tcp_socket(clientsocket);
+  }
+  Connection* c = ports[0]->CreateConnection(GetCandidate(ports[2].get()),
+                                             Port::ORIGIN_MESSAGE);
+  EXPECT_TRUE(NULL == c);
+  EXPECT_EQ(0U, ports[0]->connections().size());
+  c = ports[0]->CreateConnection(GetCandidate(ports[1].get()),
+                                 Port::ORIGIN_MESSAGE);
+  EXPECT_FALSE(NULL == c);
+  EXPECT_EQ(1U, ports[0]->connections().size());
+
+  // IPv6 Port, connects to IPv4 candidate and to IPv6 candidate.
+  if (type == SOCK_STREAM) {
+    FakeAsyncPacketSocket* clientsocket = new FakeAsyncPacketSocket();
+    factory.set_next_client_tcp_socket(clientsocket);
+  }
+  c = ports[2]->CreateConnection(GetCandidate(ports[0].get()),
+                                 Port::ORIGIN_MESSAGE);
+  EXPECT_TRUE(NULL == c);
+  EXPECT_EQ(0U, ports[2]->connections().size());
+  c = ports[2]->CreateConnection(GetCandidate(ports[3].get()),
+                                 Port::ORIGIN_MESSAGE);
+  EXPECT_FALSE(NULL == c);
+  EXPECT_EQ(1U, ports[2]->connections().size());
+}
+
+TEST_F(PortTest, TestSkipCrossFamilyTcp) {
+  TestCrossFamilyPorts(SOCK_STREAM);
+}
+
+TEST_F(PortTest, TestSkipCrossFamilyUdp) {
+  TestCrossFamilyPorts(SOCK_DGRAM);
 }

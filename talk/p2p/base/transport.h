@@ -68,6 +68,7 @@ namespace cricket {
 
 struct ParseError;
 struct WriteError;
+class CandidateTranslator;
 class PortAllocator;
 class SessionManager;
 class Session;
@@ -83,12 +84,19 @@ typedef std::vector<Candidate> Candidates;
 // Create/Translate.
 class TransportParser {
  public:
+  // The incoming Translator value may be null, in which case
+  // ParseCandidates should return false if there are candidates to
+  // parse (indicating a failure to parse).  If the Translator is null
+  // and there are no candidates to parse, then return true,
+  // indicating a successful parse of 0 candidates.
   virtual bool ParseCandidates(SignalingProtocol protocol,
                                const buzz::XmlElement* elem,
+                               const CandidateTranslator* translator,
                                Candidates* candidates,
                                ParseError* error) = 0;
   virtual bool WriteCandidates(SignalingProtocol protocol,
                                const Candidates& candidates,
+                               const CandidateTranslator* translator,
                                XmlElements* candidate_elems,
                                WriteError* error) = 0;
 
@@ -137,16 +145,17 @@ class Transport : public talk_base::MessageHandler,
 
   // Create, destroy, and lookup the channels of this type by their names.
   TransportChannelImpl* CreateChannel(const std::string& name,
-                                      const std::string& content_type);
+                                      int component);
   // Note: GetChannel may lead to race conditions, since the mutex is not held
   // after the pointer is returned.
-  TransportChannelImpl* GetChannel(const std::string& name);
+  TransportChannelImpl* GetChannel(int component);
+  TransportChannelImpl* GetChannelByName(const std::string& channel_name);
   // Note: HasChannel does not lead to race conditions, unlike GetChannel.
-  bool HasChannel(const std::string& name) {
-    return (NULL != GetChannel(name));
+  bool HasChannel(int component) {
+    return (NULL != GetChannel(component));
   }
   bool HasChannels();
-  void DestroyChannel(const std::string& name);
+  void DestroyChannel(int component);
 
   // Tells all current and future channels to start connecting.  When the first
   // channel begins connecting, the following signal is raised.
@@ -181,7 +190,8 @@ class Transport : public talk_base::MessageHandler,
                                ParseError* error);
 
   // Signals when the best connection for a channel changes.
-  sigslot::signal3<Transport*, const std::string&,
+  sigslot::signal3<Transport*,
+                   int,  // component
                    const Candidate&> SignalRouteChange;
 
   // A transport message has generated an transport-specific error.  The
@@ -206,7 +216,8 @@ class Transport : public talk_base::MessageHandler,
   // These are called by Create/DestroyChannel above in order to create or
   // destroy the appropriate type of channel.
   virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& name, const std::string &content_type) = 0;
+      const std::string& channel_name,
+      int component) = 0;
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) = 0;
 
   // Informs the subclass that we received the signaling ready message.
@@ -240,7 +251,8 @@ class Transport : public talk_base::MessageHandler,
     int ref_;
   };
 
-  typedef std::map<std::string, ChannelMapEntry> ChannelMap;
+  // Candidate component => ChannelMapEntry
+  typedef std::map<int, ChannelMapEntry> ChannelMap;
 
   // Called when the state of a channel changes.
   void OnChannelReadableState(TransportChannel* channel);
@@ -265,17 +277,17 @@ class Transport : public talk_base::MessageHandler,
   // particular thread (s = signaling, w = worker).  The above methods post or
   // send a message to invoke this version.
   TransportChannelImpl* CreateChannel_w(const std::string& name,
-                                        const std::string& content_type);
-  void DestroyChannel_w(const std::string& name);
+                                        int component);
+  void DestroyChannel_w(int component);
   void ConnectChannels_w();
   void ResetChannels_w();
   void DestroyAllChannels_w();
   void OnRemoteCandidate_w(const Candidate& candidate);
   void OnChannelReadableState_s();
   void OnChannelWritableState_s();
-  void OnChannelRequestSignaling_s(const std::string& name);
+  void OnChannelRequestSignaling_s(int component);
   void OnConnecting_s();
-  void OnChannelRouteChange_s(const std::string& name,
+  void OnChannelRouteChange_s(const TransportChannel* channel,
                               const Candidate& remote_candidate);
 
   // Helper function that invokes the given function on every channel.

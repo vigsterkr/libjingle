@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -40,8 +40,7 @@ namespace buzz {
 
 // enum prase and persist helpers ----------------------------------------------
 static bool
-StringToPresenceShow(const std::string& input, XmppPresenceShow* show)
-{
+StringToPresenceShow(const std::string& input, XmppPresenceShow* show) {
   // If this becomes a perf issue we can use a hash or a map here
   if (STR_SHOW_AWAY == input)
     *show = XMPP_PRESENCE_AWAY;
@@ -60,27 +59,26 @@ StringToPresenceShow(const std::string& input, XmppPresenceShow* show)
 }
 
 static bool
-PresenceShowToString(XmppPresenceShow show, const std::string ** output)
-{
+PresenceShowToString(XmppPresenceShow show, const char** output) {
   switch(show) {
     case XMPP_PRESENCE_AWAY:
-      *output = &STR_SHOW_AWAY;
+      *output = STR_SHOW_AWAY;
       return true;
     case XMPP_PRESENCE_CHAT:
-      *output = &STR_SHOW_CHAT;
+      *output = STR_SHOW_CHAT;
       return true;
     case XMPP_PRESENCE_XA:
-      *output = &STR_SHOW_XA;
+      *output = STR_SHOW_XA;
       return true;
     case XMPP_PRESENCE_DND:
-      *output = &STR_SHOW_DND;
+      *output = STR_SHOW_DND;
       return true;
     case XMPP_PRESENCE_DEFAULT:
-      *output = &STR_EMPTY;
+      *output = STR_EMPTY;
       return true;
   }
 
-  *output = &STR_EMPTY;
+  *output = STR_EMPTY;
   return false;
 }
 
@@ -151,7 +149,7 @@ XmppPresenceImpl::XmppPresenceImpl() {
 const Jid
 XmppPresenceImpl::jid() const {
   if (!raw_xml_.get())
-    return JID_EMPTY;
+    return Jid();
 
   return Jid(raw_xml_->Attr(QN_FROM));
 }
@@ -188,12 +186,9 @@ XmppPresenceImpl::presence_show() const {
   if (!raw_xml_.get())
     return XMPP_PRESENCE_DEFAULT;
 
-  XmppPresenceShow show;
-
-  if (StringToPresenceShow(raw_xml_->TextNamed(QN_SHOW), &show))
-    return show;
-
-  return XMPP_PRESENCE_DEFAULT;
+  XmppPresenceShow show = XMPP_PRESENCE_DEFAULT;
+  StringToPresenceShow(raw_xml_->TextNamed(QN_SHOW), &show);
+  return show;
 }
 
 XmppReturnStatus
@@ -201,7 +196,7 @@ XmppPresenceImpl::set_presence_show(XmppPresenceShow show) {
   if (!raw_xml_.get())
     CreateRawXmlSkeleton();
 
-  const std::string* show_string;
+  const char* show_string;
 
   if(!PresenceShowToString(show, &show_string))
     return XMPP_RETURN_BADARGUMENT;
@@ -210,7 +205,7 @@ XmppPresenceImpl::set_presence_show(XmppPresenceShow show) {
 
   if (show!=XMPP_PRESENCE_DEFAULT) {
     raw_xml_->AddElement(new XmlElement(QN_SHOW));
-    raw_xml_->AddText(*show_string, 1);
+    raw_xml_->AddText(show_string, 1);
   }
 
   return XMPP_RETURN_OK;
@@ -252,7 +247,7 @@ XmppPresenceImpl::set_priority(int priority) {
   return XMPP_RETURN_OK;
 }
 
-const std::string&
+const std::string
 XmppPresenceImpl::status() const {
   if (!raw_xml_.get())
     return STR_EMPTY;
@@ -291,6 +286,41 @@ XmppPresenceImpl::set_status(const std::string& status) {
   }
 
   return XMPP_RETURN_OK;
+}
+
+XmppPresenceConnectionStatus
+XmppPresenceImpl::connection_status() const {
+  if (!raw_xml_.get())
+      return XMPP_CONNECTION_STATUS_UNKNOWN;
+
+  XmlElement* con = raw_xml_.get()->FirstNamed(QN_GOOGLE_PSTN_CONFERENCE_STATUS);
+  if (con) {
+    std::string status = con->Attr(QN_STATUS);
+    if (status == STR_PSTN_CONFERENCE_STATUS_CONNECTING)
+      return XMPP_CONNECTION_STATUS_CONNECTING;
+    else if (status == STR_PSTN_CONFERENCE_STATUS_CONNECTED)
+      return XMPP_CONNECTION_STATUS_CONNECTED;
+    else if (status == STR_PSTN_CONFERENCE_STATUS_HANGUP)
+        return XMPP_CONNECTION_STATUS_HANGUP;
+  }
+
+  return XMPP_CONNECTION_STATUS_UNKNOWN;
+}
+
+const std::string
+XmppPresenceImpl::google_user_id() const {
+  if (raw_xml_.get() == NULL)
+    return std::string();
+
+  XmlElement* muc_user_x = raw_xml_->FirstNamed(QN_MUC_USER_X);
+  if (muc_user_x) {
+    XmlElement* muc_user_item = muc_user_x->FirstNamed(QN_MUC_USER_ITEM);
+    if (muc_user_item) {
+      return muc_user_item->Attr(QN_GOOGLE_USER_ID);
+    }
+  }
+
+  return std::string();
 }
 
 const XmlElement*
@@ -365,7 +395,7 @@ XmppRosterContactImpl::set_jid(const Jid& jid)
   return XMPP_RETURN_OK;
 }
 
-const std::string&
+const std::string
 XmppRosterContactImpl::name() const {
   return raw_xml_->Attr(QN_NAME);
 }
@@ -419,7 +449,7 @@ XmppRosterContactImpl::GetGroupCount() const {
   return group_count_;
 }
 
-const std::string&
+const std::string
 XmppRosterContactImpl::GetGroup(size_t index) const {
   if (index >= GetGroupCount())
     return STR_EMPTY;

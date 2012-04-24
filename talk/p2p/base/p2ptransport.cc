@@ -69,6 +69,7 @@ void P2PTransport::OnTransportError(const buzz::XmlElement* error) {
 
 bool P2PTransportParser::ParseCandidates(SignalingProtocol protocol,
                                          const buzz::XmlElement* elem,
+                                         const CandidateTranslator* translator,
                                          Candidates* candidates,
                                          ParseError* error) {
   // TODO: Once we implement standard ICE-UDP, parse the
@@ -79,9 +80,14 @@ bool P2PTransportParser::ParseCandidates(SignalingProtocol protocol,
     // Only look at local part because it might be <session><candidate>
     //                                          or <tranport><candidate>.
     if (candidate_elem->Name().LocalPart() == LN_CANDIDATE) {
+      if (translator == NULL) {
+        return BadParse("No candidate name translator.", error);
+      }
+
       Candidate candidate;
-      if (!ParseCandidate(candidate_elem, &candidate, error))
+      if (!ParseCandidate(candidate_elem, translator, &candidate, error)) {
         return false;
+      }
       candidates->push_back(candidate);
     }
   }
@@ -89,13 +95,13 @@ bool P2PTransportParser::ParseCandidates(SignalingProtocol protocol,
 }
 
 bool P2PTransportParser::ParseCandidate(const buzz::XmlElement* elem,
+                                        const CandidateTranslator* translator,
                                         Candidate* candidate,
                                         ParseError* error) {
   if (!elem->HasAttr(buzz::QN_NAME) ||
       !elem->HasAttr(QN_ADDRESS) ||
       !elem->HasAttr(QN_PORT) ||
       !elem->HasAttr(QN_USERNAME) ||
-      !elem->HasAttr(QN_PREFERENCE) ||
       !elem->HasAttr(QN_PROTOCOL) ||
       !elem->HasAttr(QN_GENERATION)) {
     return BadParse("candidate missing required attribute", error);
@@ -105,10 +111,23 @@ bool P2PTransportParser::ParseCandidate(const buzz::XmlElement* elem,
   if (!ParseAddress(elem, QN_ADDRESS, QN_PORT, &address, error))
     return false;
 
-  candidate->set_name(elem->Attr(buzz::QN_NAME));
+  std::string channel_name = elem->Attr(buzz::QN_NAME);
+  int component = 0;
+  if (!translator->GetComponentFromChannelName(
+          channel_name, &component)) {
+    return BadParse(
+        "candidate has unknown channel name " + channel_name, error);
+  }
+
+  float preference = 0.0;
+  if (!GetXmlAttr(elem, QN_PREFERENCE, 0.0f, &preference)) {
+    return BadParse("candidate has unknown preference", error);
+  }
+
+  candidate->set_component(component);
   candidate->set_address(address);
   candidate->set_username(elem->Attr(QN_USERNAME));
-  candidate->set_preference_str(elem->Attr(QN_PREFERENCE));
+  candidate->set_preference(preference);
   candidate->set_protocol(elem->Attr(QN_PROTOCOL));
   candidate->set_generation_str(elem->Attr(QN_GENERATION));
   if (elem->HasAttr(QN_PASSWORD))
@@ -146,6 +165,7 @@ static const buzz::StaticQName& GetCandidateQName(SignalingProtocol protocol) {
 
 bool P2PTransportParser::WriteCandidates(SignalingProtocol protocol,
                                          const Candidates& candidates,
+                                         const CandidateTranslator* translator,
                                          XmlElements* candidate_elems,
                                          WriteError* error) {
   // TODO: Once we implement standard ICE-UDP, parse the
@@ -154,20 +174,29 @@ bool P2PTransportParser::WriteCandidates(SignalingProtocol protocol,
        iter != candidates.end(); ++iter) {
     buzz::XmlElement* cand_elem =
         new buzz::XmlElement(GetCandidateQName(protocol));
-    if (!WriteCandidate(*iter, cand_elem, error))
+    if (!WriteCandidate(*iter, translator, cand_elem, error)) {
       return false;
+    }
     candidate_elems->push_back(cand_elem);
   }
   return true;
 }
 
 bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
+                                        const CandidateTranslator* translator,
                                         buzz::XmlElement* elem,
                                         WriteError* error) {
-  elem->SetAttr(buzz::QN_NAME, candidate.name());
+  std::string channel_name;
+  if (!translator->GetChannelNameFromComponent(
+          candidate.component(), &channel_name)) {
+    return BadWrite("Cannot write candidate because of unknown component.",
+                    error);
+  }
+
+  elem->SetAttr(buzz::QN_NAME, channel_name);
   elem->SetAttr(QN_ADDRESS, candidate.address().ipaddr().ToString());
   elem->SetAttr(QN_PORT, candidate.address().PortAsString());
-  elem->SetAttr(QN_PREFERENCE, candidate.preference_str());
+  AddXmlAttr(elem, QN_PREFERENCE, candidate.preference());
   elem->SetAttr(QN_USERNAME, candidate.username());
   elem->SetAttr(QN_PROTOCOL, candidate.protocol());
   elem->SetAttr(QN_GENERATION, candidate.generation_str());
@@ -181,8 +210,8 @@ bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
 }
 
 TransportChannelImpl* P2PTransport::CreateTransportChannel(
-    const std::string& name, const std::string& content_type) {
-  return new P2PTransportChannel(name, content_type, this, port_allocator());
+    const std::string& name, int component) {
+  return new P2PTransportChannel(name, component, this, port_allocator());
 }
 
 void P2PTransport::DestroyTransportChannel(TransportChannelImpl* channel) {

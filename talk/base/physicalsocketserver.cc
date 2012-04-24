@@ -102,6 +102,7 @@ const uint16 PACKET_MAXIMUMS[] = {
 };
 
 const uint32 IP_HEADER_SIZE = 20;
+const uint32 IPV6_HEADER_SIZE = 40;
 const uint32 ICMP_HEADER_SIZE = 8;
 
 class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
@@ -144,7 +145,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   SocketAddress GetLocalAddress() const {
-    sockaddr_storage addr_storage;
+    sockaddr_storage addr_storage = {0};
     socklen_t addrlen = sizeof(addr_storage);
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     int result = ::getsockname(s_, addr, &addrlen);
@@ -159,7 +160,7 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   SocketAddress GetRemoteAddress() const {
-    sockaddr_storage addr_storage;
+    sockaddr_storage addr_storage = {0};
     socklen_t addrlen = sizeof(addr_storage);
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     int result = ::getpeername(s_, addr, &addrlen);
@@ -191,15 +192,11 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   int Connect(const SocketAddress& addr) {
     // TODO: Implicit creation is required to reconnect...
     // ...but should we make it more explicit?
-    // TODO: Move socket creation to after address resolution.
-    if ((s_ == INVALID_SOCKET) && !Create(AF_INET, SOCK_STREAM))
+    if (state_ != CS_CLOSED) {
+      SetError(EALREADY);
       return SOCKET_ERROR;
+    }
     if (addr.IsUnresolved()) {
-      if (state_ != CS_CLOSED) {
-        SetError(EALREADY);
-        return SOCKET_ERROR;
-      }
-
       LOG(LS_VERBOSE) << "Resolving addr in PhysicalSocket::Connect";
       resolver_ = new AsyncResolver();
       resolver_->set_address(addr);
@@ -213,6 +210,10 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
   }
 
   int DoConnect(const SocketAddress& connect_addr) {
+    if ((s_ == INVALID_SOCKET) &&
+        !Create(connect_addr.family(), SOCK_STREAM)) {
+      return SOCKET_ERROR;
+    }
     sockaddr_storage addr_storage;
     size_t len = connect_addr.ToSockAddrStorage(&addr_storage);
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
@@ -415,10 +416,16 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
       error_ = EINVAL; // can't think of a better error ID
       return -1;
     }
+    int header_size = ICMP_HEADER_SIZE;
+    if (addr.family() == AF_INET6) {
+      header_size += IPV6_HEADER_SIZE;
+    } else if (addr.family() == AF_INET) {
+      header_size += IP_HEADER_SIZE;
+    }
 
     for (int level = 0; PACKET_MAXIMUMS[level + 1] > 0; ++level) {
-      int32 size = PACKET_MAXIMUMS[level] - IP_HEADER_SIZE - ICMP_HEADER_SIZE;
-      WinPing::PingResult result = ping.Ping(addr.ip(), size, 0, 1, false);
+      int32 size = PACKET_MAXIMUMS[level] - header_size;
+      WinPing::PingResult result = ping.Ping(addr.ipaddr(), size, 0, 1, false);
       if (result == WinPing::PING_FAIL) {
         error_ = EINVAL; // can't think of a better error ID
         return -1;

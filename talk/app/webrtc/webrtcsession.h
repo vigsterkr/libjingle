@@ -122,6 +122,8 @@ class WebRtcSession : public cricket::BaseSession,
   virtual void OnTransportCandidatesReady(
       cricket::Transport* transport,
       const cricket::Candidates& candidates);
+  virtual void OnCandidatesAllocationDone();
+
   bool CreateChannels();  // Creates channels for voice and video.
   void EnableChannels();  // Enables sending of media.
   // Creates a JsepIceCandidate and adds it to the local session description
@@ -148,6 +150,8 @@ class WebRtcSession : public cricket::BaseSession,
   IceCandidateObserver * ice_observer_;
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
   talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
+  std::string session_id_;
+  uint64 session_version_;
 };
 
 }  // namespace webrtc

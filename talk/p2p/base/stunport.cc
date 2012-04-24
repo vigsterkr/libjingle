@@ -163,16 +163,20 @@ StunPort::~StunPort() {
 void StunPort::PrepareAddress() {
   // We will keep pinging the stun server to make sure our NAT pin-hole stays
   // open during the call.
+  // TODO: Support multiple stun servers, or make ResolveStunAddress find a
+  // server with the correct family, or something similar.
   if (server_addr_.IsUnresolved()) {
     ResolveStunAddress();
   } else {
-    requests_.Send(new StunPortBindingRequest(this, true, server_addr_));
+    if (server_addr_.family() == ip().family()) {
+      requests_.Send(new StunPortBindingRequest(this, true, server_addr_));
+    }
   }
 }
 
 void StunPort::PrepareSecondaryAddress() {
   // DNS resolution of the secondary address is not currently supported.
-  ASSERT(!server_addr2_.IsAny());
+  ASSERT(!server_addr2_.IsNil());
   requests_.Send(new StunPortBindingRequest(this, false, server_addr2_));
 }
 
@@ -180,6 +184,10 @@ Connection* StunPort::CreateConnection(const Candidate& address,
                                        CandidateOrigin origin) {
   if (address.protocol() != "udp")
     return NULL;
+
+  if (!IsCompatibleAddress(address.address())) {
+    return NULL;
+  }
 
   Connection* conn = new ProxyConnection(this, 0, address);
   AddConnection(conn);

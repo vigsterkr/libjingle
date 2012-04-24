@@ -1085,7 +1085,6 @@ static std::string AddEncryption(std::string stanza, std::string encryption) {
   return stanza;
 }
 
-
 int IntFromJingleCodecParameter(const buzz::XmlElement* parameter,
                                 const std::string& expected_name) {
   if (parameter) {

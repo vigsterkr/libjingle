@@ -281,6 +281,10 @@ bool IPIsPrivate(const IPAddress& ip) {
   return false;
 }
 
+bool IPIsUnspec(const IPAddress& ip) {
+  return ip.family() == AF_UNSPEC;
+}
+
 size_t HashIP(const IPAddress& ip) {
   switch (ip.family()) {
     case AF_INET: {

@@ -76,23 +76,23 @@ void TransportProxy::SetImplementation(TransportWrapper* impl) {
 }
 
 TransportChannel* TransportProxy::GetChannel(const std::string& name) {
-  return GetProxy(name);
+  return GetChannelProxyByName(name);
 }
 
 TransportChannel* TransportProxy::CreateChannel(
-    const std::string& name, const std::string& content_type) {
+    const std::string& name, int component) {
   ASSERT(GetChannel(name) == NULL);
-  ASSERT(!transport_->get()->HasChannel(name));
+  ASSERT(!transport_->get()->HasChannel(component));
 
   // We always create a proxy in case we need to change out the transport later.
   TransportChannelProxy* channel =
-      new TransportChannelProxy(name, content_type);
+      new TransportChannelProxy(name, component);
   channels_[name] = channel;
 
   if (state_ == STATE_NEGOTIATED) {
-    SetProxyImpl(name, channel);
+    SetChannelProxyImpl(name, channel);
   } else if (state_ == STATE_CONNECTING) {
-    GetOrCreateImpl(name, content_type);
+    GetOrCreateChannelProxyImpl(name, component);
   }
   return channel;
 }
@@ -100,6 +100,14 @@ TransportChannel* TransportProxy::CreateChannel(
 void TransportProxy::DestroyChannel(const std::string& name) {
   TransportChannel* channel = GetChannel(name);
   if (channel) {
+    // If the state of TransportProxy is not NEGOTIATED
+    // then TransportChannelProxy and its impl are not
+    // connected. Both must be connected before
+    // deletion.
+    if (state_ != STATE_NEGOTIATED) {
+      SetChannelProxyImpl(name, GetChannelProxyByName(name));
+    }
+
     channels_.erase(name);
     channel->SignalDestroyed(channel);
     delete channel;
@@ -111,7 +119,7 @@ void TransportProxy::SpeculativelyConnectChannels() {
     state_ = STATE_CONNECTING;
     for (ChannelMap::iterator iter = channels_.begin();
          iter != channels_.end(); ++iter) {
-      GetOrCreateImpl(iter->first, iter->second->content_type());
+      GetOrCreateChannelProxyImpl(iter->first, iter->second->component());
     }
     transport_->get()->ConnectChannels();
   }
@@ -122,7 +130,7 @@ void TransportProxy::CompleteNegotiation() {
     state_ = STATE_NEGOTIATED;
     for (ChannelMap::iterator iter = channels_.begin();
          iter != channels_.end(); ++iter) {
-      SetProxyImpl(iter->first, iter->second);
+      SetChannelProxyImpl(iter->first, iter->second);
     }
     transport_->get()->ConnectChannels();
   }
@@ -142,25 +150,59 @@ void TransportProxy::AddUnsentCandidates(const Candidates& candidates) {
   }
 }
 
+bool TransportProxy::GetChannelNameFromComponent(
+    int component, std::string* channel_name) const {
+  const TransportChannelProxy* channel = GetChannelProxy(component);
+  if (channel == NULL) {
+    return false;
+  }
 
-TransportChannelProxy* TransportProxy::GetProxy(const std::string& name) {
-  ChannelMap::iterator iter = channels_.find(name);
+  *channel_name = channel->name();
+  return true;
+}
+
+bool TransportProxy::GetComponentFromChannelName(
+    const std::string& channel_name, int* component) const {
+  const TransportChannelProxy* channel = GetChannelProxyByName(channel_name);
+  if (channel == NULL) {
+    return false;
+  }
+
+  *component = channel->component();
+  return true;
+}
+
+TransportChannelProxy* TransportProxy::GetChannelProxy(int component) const {
+  for (ChannelMap::const_iterator iter = channels_.begin();
+       iter != channels_.end();
+       ++iter) {
+    if (iter->second->component() == component) {
+      return iter->second;
+    }
+  }
+  return NULL;
+}
+
+TransportChannelProxy* TransportProxy::GetChannelProxyByName(
+    const std::string& name) const {
+  ChannelMap::const_iterator iter = channels_.find(name);
   return (iter != channels_.end()) ? iter->second : NULL;
 }
 
-TransportChannelImpl* TransportProxy::GetOrCreateImpl(
-    const std::string& name, const std::string& content_type) {
-  TransportChannelImpl* impl = transport_->get()->GetChannel(name);
+TransportChannelImpl* TransportProxy::GetOrCreateChannelProxyImpl(
+    const std::string& name, int component) {
+  TransportChannelImpl* impl = transport_->get()->GetChannel(component);
   if (impl == NULL) {
-    impl = transport_->get()->CreateChannel(name, content_type);
+    impl = transport_->get()->CreateChannel(name, component);
     impl->set_session_id(sid_);
   }
   return impl;
 }
 
-void TransportProxy::SetProxyImpl(
+void TransportProxy::SetChannelProxyImpl(
     const std::string& name, TransportChannelProxy* proxy) {
-  TransportChannelImpl* impl = GetOrCreateImpl(name, proxy->content_type());
+  TransportChannelImpl* impl =
+      GetOrCreateChannelProxyImpl(name, proxy->component());
   ASSERT(impl != NULL);
   proxy->SetImplementation(impl);
 }
@@ -173,7 +215,7 @@ void TransportProxy::SetupMux(TransportProxy* proxy) {
   // Copy the channels from proxy 1:1 onto us.
   for (ChannelMap::const_iterator iter = proxy->channels().begin();
        iter != proxy->channels().end(); ++iter, ++index) {
-    ReplaceImpl(iter->second, index);
+    ReplaceChannelProxyImpl(iter->second, index);
   }
   // Now replace our transport. Must happen afterwards because
   // it deletes all impls as a side effect.
@@ -184,8 +226,8 @@ void TransportProxy::SetupMux(TransportProxy* proxy) {
 // |target_channel| onto |channel|. The new implementation (actually
 // a ref-count-increased version of what's in |channel->impl| is
 // obtained by calling CreateChannel on |channel|'s Transport object.
-void TransportProxy::ReplaceImpl(TransportChannelProxy* channel,
-                                 size_t index) {
+void TransportProxy::ReplaceChannelProxyImpl(TransportChannelProxy* channel,
+                                             size_t index) {
   if (index < channels().size()) {
     ChannelMap::const_iterator iter = channels().begin();
     // map::iterator does not allow random access
@@ -196,8 +238,8 @@ void TransportProxy::ReplaceImpl(TransportChannelProxy* channel,
       // Reset the implementation on the target_channel
       target_channel->SetImplementation(
         // Increments ref count
-        channel->impl()->GetTransport()->CreateChannel(channel->name(),
-          channel->content_type()));
+          channel->impl()->GetTransport()->CreateChannel(
+            channel->name(), channel->component()));
     }
   } else {
     LOG(LS_WARNING) << "invalid TransportChannelProxy index to replace";
@@ -286,12 +328,13 @@ void BaseSession::set_allow_local_ips(bool allow) {
 }
 
 TransportChannel* BaseSession::CreateChannel(const std::string& content_name,
-                                             const std::string& channel_name) {
+                                             const std::string& channel_name,
+                                             int component) {
   // We create the proxy "on demand" here because we need to support
   // creating channels at any time, even before we send or receive
   // initiate messages, which is before we create the transports.
   TransportProxy* transproxy = GetOrCreateTransportProxy(content_name);
-  return transproxy->CreateChannel(channel_name, content_type_);
+  return transproxy->CreateChannel(channel_name, component);
 }
 
 TransportChannel* BaseSession::GetChannel(const std::string& content_name,
@@ -478,10 +521,8 @@ void BaseSession::OnTransportCandidatesAllocationDone(Transport* transport) {
   // Check all other TransportProxies got this signal.
   for (TransportMap::iterator iter = transports_.begin();
          iter != transports_.end(); ++iter) {
-    if (iter->second->impl() == transport) {
-      if (!iter->second->candidates_allocated())
-        return;
-    }
+    if (!iter->second->candidates_allocated())
+      return;
   }
   OnCandidatesAllocationDone();
 }
@@ -693,15 +734,9 @@ bool Session::OnRemoteCandidates(
          cand != tinfo->candidates.end(); ++cand) {
       if (!transproxy->impl()->VerifyCandidate(*cand, error))
         return false;
-
-      if (!transproxy->impl()->HasChannel(cand->name())) {
-        buzz::XmlElement* extra_info =
-            new buzz::XmlElement(QN_GINGLE_P2P_UNKNOWN_CHANNEL_NAME);
-        extra_info->AddAttr(buzz::QN_NAME, cand->name());
-        error->extra = extra_info;
-
-        return BadParse("channel named in candidate does not exist: " +
-                        cand->name() + " for content: "+ tinfo->content_name,
+      if (!transproxy->impl()->HasChannel(cand->component())) {
+        return BadParse("Candidate has unknown component: " + cand->ToString() +
+                        " for content: "+ tinfo->content_name,
                         error);
       }
     }
@@ -729,6 +764,20 @@ TransportParserMap Session::GetTransportParsers() {
   TransportParserMap parsers;
   parsers[transport_type()] = transport_parser_;
   return parsers;
+}
+
+CandidateTranslatorMap Session::GetCandidateTranslators() {
+  CandidateTranslatorMap translators;
+  // NOTE: This technique makes it impossible to parse G-ICE
+  // candidates in session-initiate messages because the channels
+  // aren't yet created at that point.  Since we don't use candidates
+  // in session-initiate messages, we should be OK.  Once we switch to
+  // ICE, this translation shouldn't be necessary.
+  for (TransportMap::const_iterator iter = transport_proxies().begin();
+       iter != transport_proxies().end(); ++iter) {
+    translators[iter->first] = iter->second;
+  }
+  return translators;
 }
 
 ContentParserMap Session::GetContentParsers() {
@@ -951,6 +1000,7 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
   SessionInitiate init;
   if (!ParseSessionInitiate(msg.protocol, msg.action_elem,
                             GetContentParsers(), GetTransportParsers(),
+                            GetCandidateTranslators(),
                             &init, error))
     return false;
 
@@ -980,6 +1030,7 @@ bool Session::OnAcceptMessage(const SessionMessage& msg, MessageError* error) {
   SessionAccept accept;
   if (!ParseSessionAccept(msg.protocol, msg.action_elem,
                           GetContentParsers(), GetTransportParsers(),
+                          GetCandidateTranslators(),
                           &accept, error)) {
     return false;
   }
@@ -1035,7 +1086,8 @@ bool Session::OnTransportInfoMessage(const SessionMessage& msg,
   TransportInfos tinfos;
   if (!ParseTransportInfos(msg.protocol, msg.action_elem,
                            initiator_description()->contents(),
-                           GetTransportParsers(), &tinfos, error))
+                           GetTransportParsers(), GetCandidateTranslators(),
+                           &tinfos, error))
     return false;
 
   if (!OnRemoteCandidates(tinfos, error))
@@ -1059,6 +1111,7 @@ bool Session::OnDescriptionInfoMessage(const SessionMessage& msg,
   DescriptionInfo description_info;
   if (!ParseDescriptionInfo(msg.protocol, msg.action_elem,
                             GetContentParsers(), GetTransportParsers(),
+                            GetCandidateTranslators(),
                             &description_info, error)) {
     return false;
   }
@@ -1180,11 +1233,9 @@ bool Session::SendInitiateMessage(const SessionDescription* sdesc,
 bool Session::WriteSessionAction(
     SignalingProtocol protocol, const SessionInitiate& init,
     XmlElements* elems, WriteError* error) {
-  ContentParserMap content_parsers = GetContentParsers();
-  TransportParserMap trans_parsers = GetTransportParsers();
-
   return WriteSessionInitiate(protocol, init.contents, init.transports,
-                              content_parsers, trans_parsers, init.groups,
+                              GetContentParsers(), GetTransportParsers(),
+                              GetCandidateTranslators(), init.groups,
                               elems, error);
 }
 
@@ -1195,7 +1246,8 @@ bool Session::SendAcceptMessage(const SessionDescription* sdesc,
                           sdesc->contents(),
                           GetEmptyTransportInfos(sdesc->contents()),
                           GetContentParsers(), GetTransportParsers(),
-                          sdesc->groups(), &elems, error)) {
+                          GetCandidateTranslators(), sdesc->groups(),
+                          &elems, error)) {
     return false;
   }
   return SendMessage(ACTION_SESSION_ACCEPT, elems, error);
@@ -1239,9 +1291,8 @@ bool Session::WriteSessionAction(SignalingProtocol protocol,
                                  XmlElements* elems, WriteError* error) {
   TransportInfos tinfos;
   tinfos.push_back(tinfo);
-  TransportParserMap parsers = GetTransportParsers();
-
-  return WriteTransportInfos(protocol, tinfos, parsers,
+  return WriteTransportInfos(protocol, tinfos,
+                             GetTransportParsers(), GetCandidateTranslators(),
                              elems, error);
 }
 
