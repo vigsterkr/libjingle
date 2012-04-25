@@ -52,7 +52,7 @@ class Candidate {
   const std::string & id() const { return id_; }
   void set_id(const std::string & id) { id_ = id; }
 
-  const int component() const { return component_; }
+  int component() const { return component_; }
   void set_component(int component) { component_ = component; }
 
   const std::string & protocol() const { return protocol_; }
@@ -104,7 +104,7 @@ class Candidate {
     ist >> generation_;
   }
 
-  const int foundation() const { return foundation_; }
+  int foundation() const { return foundation_; }
   void set_foundation(int foundation) { foundation_ = foundation; }
 
   const talk_base::SocketAddress & related_address() const {
