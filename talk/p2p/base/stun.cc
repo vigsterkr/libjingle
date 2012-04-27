@@ -481,6 +481,11 @@ bool StunAddressAttribute::Write(ByteBuffer* buf) const {
       buf->WriteBytes(reinterpret_cast<char*>(&v6addr), sizeof(v6addr));
       break;
     }
+    case STUN_ADDRESS_UNDEF:
+      // This case is handled explicitly above. It must be here anyway
+      // to avoid compiler warnings (particularly clang).
+      ASSERT(0);
+      break;
   }
   return true;
 }
