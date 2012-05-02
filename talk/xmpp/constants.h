@@ -161,6 +161,7 @@ extern const char NS_GOOGLE_AUTH[];
 extern const char NS_GOOGLE_AUTH_PROTOCOL[];
 extern const StaticQName QN_GOOGLE_AUTH_CLIENT_USES_FULL_BIND_RESULT;
 extern const StaticQName QN_GOOGLE_ALLOW_NON_GOOGLE_ID_XMPP_LOGIN;
+extern const StaticQName QN_GOOGLE_AUTH_SERVICE;
 
 extern const StaticQName QN_DIALBACK_RESULT;
 extern const StaticQName QN_DIALBACK_VERIFY;
@@ -518,6 +519,11 @@ extern const StaticQName QN_GOOGLE_MUC_VIDEO_PAUSE;
 extern const StaticQName QN_GOOGLE_MUC_RECORDING;
 extern const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK;
 extern const StaticQName QN_STATE_ATTR;
+
+extern const char AUTH_MECHANISM_GOOGLE_COOKIE[];
+extern const char AUTH_MECHANISM_GOOGLE_TOKEN[];
+extern const char AUTH_MECHANISM_OAUTH2[];
+extern const char AUTH_MECHANISM_PLAIN[];
 
 }  // namespace buzz
 

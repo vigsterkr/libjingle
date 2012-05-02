@@ -140,6 +140,7 @@ class WebRtcSession : public cricket::BaseSession,
       const SessionDescriptionInterface* remote_desc);
   // Uses |candidate| in the this session.
   bool UseCandidate(const IceCandidateInterface* candidate);
+  bool ReadyToEnableBundle() const;
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;

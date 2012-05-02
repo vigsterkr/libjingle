@@ -397,7 +397,7 @@ void P2PTransportChannel::OnSignalingReady() {
   if (waiting_for_signaling_) {
     waiting_for_signaling_ = false;
     AddAllocatorSession(allocator_->CreateSession(
-        session_id(), name(), component()));
+        SessionId(), name(), component(), ice_ufrag_, ice_pwd_));
   }
 }
 
@@ -409,6 +409,14 @@ void P2PTransportChannel::OnCandidate(const Candidate& candidate) {
 
   // Resort the connections list, which may have new elements.
   SortConnections();
+}
+
+void P2PTransportChannel::SetIceUfrag(const std::string& ice_ufrag) {
+  ice_ufrag_ = ice_ufrag;
+}
+
+void P2PTransportChannel::SetIcePwd(const std::string& ice_pwd) {
+  ice_pwd_ = ice_pwd;
 }
 
 // Creates connections from all of the ports that we care about to the given

@@ -73,6 +73,31 @@ static const SocketAddress kRelayTcpExtAddr("99.99.99.3", 5003);
 static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
 
+// This test message is copied from stun_unittest.
+static const unsigned char kRfc5769SampleResponse[] = {
+  0x01, 0x01, 0x00, 0x3c,  //     Response type and message length
+  0x21, 0x12, 0xa4, 0x42,  //     Magic cookie
+  0xb7, 0xe7, 0xa7, 0x01,  // }
+  0xbc, 0x34, 0xd6, 0x86,  // }  Transaction ID
+  0xfa, 0x87, 0xdf, 0xae,  // }
+  0x80, 0x22, 0x00, 0x0b,  //    SOFTWARE attribute header
+  0x74, 0x65, 0x73, 0x74,  // }
+  0x20, 0x76, 0x65, 0x63,  // }  UTF-8 server name
+  0x74, 0x6f, 0x72, 0x20,  // }
+  0x00, 0x20, 0x00, 0x08,  //    XOR-MAPPED-ADDRESS attribute header
+  0x00, 0x01, 0xa1, 0x47,  //    Address family (IPv4) and xor'd mapped port
+  0xe1, 0x12, 0xa6, 0x43,  //    Xor'd mapped IPv4 address
+  0x00, 0x08, 0x00, 0x14,  //    MESSAGE-INTEGRITY attribute header
+  0x2b, 0x91, 0xf5, 0x99,  // }
+  0xfd, 0x9e, 0x90, 0xc3,  // }
+  0x8c, 0x74, 0x89, 0xf9,  // }  HMAC-SHA1 fingerprint
+  0x2a, 0xf9, 0xba, 0x53,  // }
+  0xf0, 0x6b, 0xe7, 0xd7,  // }
+  0x80, 0x28, 0x00, 0x04,  //    FINGERPRINT attribute header
+  0xc0, 0x7d, 0x4c, 0x96   //    CRC32 fingerprint
+};
+
+
 static Candidate GetCandidate(Port* port) {
   assert(port->candidates().size() == 1);
   return port->candidates()[0];
@@ -81,6 +106,28 @@ static Candidate GetCandidate(Port* port) {
 static SocketAddress GetAddress(Port* port) {
   return GetCandidate(port).address();
 }
+
+class TestPort : public Port {
+ public:
+  TestPort(talk_base::Thread* thread, const std::string& type,
+           talk_base::PacketSocketFactory* factory, talk_base::Network* network,
+           const talk_base::IPAddress& ip, int min_port, int max_port,
+           const std::string& username_fragment, const std::string& password)
+      : Port(thread, type, factory, network, ip, min_port, max_port,
+             username_fragment, password)  {}
+  ~TestPort() {}
+
+  virtual void PrepareAddress() {}
+  virtual Connection* CreateConnection(const Candidate& remote_candidate,
+                                       CandidateOrigin origin) { return NULL; }
+  virtual int SendTo(
+      const void* data, size_t size, const talk_base::SocketAddress& addr,
+      bool payload) {return -1;}
+  virtual int SetOption(talk_base::Socket::Option opt, int value) { return -1; }
+  virtual int GetError() {return -1;}
+
+  using cricket::Port::GetStunMessage;
+};
 
 class TestChannel : public sigslot::has_slots<> {
  public:
@@ -132,7 +179,11 @@ class TestChannel : public sigslot::has_slots<> {
     // MI attribute shouldn't be present in ping requests.
     const cricket::StunByteStringAttribute* mi_attr =
         msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY);
-    ASSERT_TRUE(mi_attr == NULL);
+    if (src_->ice_protocol() == cricket::ICEPROTO_RFC5245) {
+      ASSERT_TRUE(mi_attr != NULL);
+    } else {
+      ASSERT_TRUE(mi_attr == NULL);
+    }
     remote_address_ = addr;
     CopyStunMessage(msg, remote_request_.accept());
     remote_frag_ = rf;
@@ -179,8 +230,9 @@ class PortTest : public testing::Test {
         relay_server_(main_, kRelayUdpIntAddr, kRelayUdpExtAddr,
                       kRelayTcpIntAddr, kRelayTcpExtAddr,
                       kRelaySslTcpIntAddr, kRelaySslTcpExtAddr),
-        username_(talk_base::CreateRandomString(16)),
-        password_(talk_base::CreateRandomString(22)) {
+        username_(talk_base::CreateRandomString(ICE_UFRAG_LENGTH)),
+        password_(talk_base::CreateRandomString(ICE_PWD_LENGTH)),
+        ice_protocol_(cricket::ICEPROTO_GOOGLE) {
     network_.AddIP(talk_base::IPAddress(INADDR_ANY));
   }
 
@@ -256,22 +308,31 @@ class PortTest : public testing::Test {
   }
   UDPPort* CreateUdpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
-    return UDPPort::Create(main_, socket_factory, &network_,
-                           addr.ipaddr(), 0, 0, username_, password_);
+    UDPPort* port =  UDPPort::Create(main_, socket_factory, &network_,
+                                     addr.ipaddr(), 0, 0, username_, password_);
+    port->set_ice_protocol(ice_protocol_);
+    return port;
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr) {
-    return CreateTcpPort(addr, &socket_factory_);
+    TCPPort* port = CreateTcpPort(addr, &socket_factory_);
+    port->set_ice_protocol(ice_protocol_);
+    return port;
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
-    return TCPPort::Create(main_, socket_factory, &network_,
-                           addr.ipaddr(), 0, 0, username_, password_, true);
+    TCPPort* port =  TCPPort::Create(main_, socket_factory, &network_,
+                                     addr.ipaddr(), 0, 0, username_, password_,
+                                     true);
+    port->set_ice_protocol(ice_protocol_);
+    return port;
   }
   StunPort* CreateStunPort(const SocketAddress& addr,
                            talk_base::PacketSocketFactory* factory) {
-    return StunPort::Create(main_, factory, &network_,
-                            addr.ipaddr(), 0, 0, username_, password_,
-                            kStunAddr);
+    StunPort* port =  StunPort::Create(main_, factory, &network_,
+                                       addr.ipaddr(), 0, 0,
+                                       username_, password_, kStunAddr);
+    port->set_ice_protocol(ice_protocol_);
+    return port;
   }
   RelayPort* CreateRelayPort(const SocketAddress& addr,
                              ProtocolType int_proto, ProtocolType ext_proto) {
@@ -283,6 +344,7 @@ class PortTest : public testing::Test {
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));
     // TODO: Add an external address for ext_proto, so that the
     // other side can connect to this port using a non-UDP protocol.
+    port->set_ice_protocol(ice_protocol_);
     return port;
   }
   talk_base::NATServer* CreateNatServer(const SocketAddress& addr,
@@ -315,6 +377,26 @@ class PortTest : public testing::Test {
                         bool accept, bool same_addr1,
                         bool same_addr2, bool possible);
 
+  void set_ice_protocol(cricket::IceProtocolType protocol) {
+    ice_protocol_ = protocol;
+  }
+
+  StunMessage* CreateStunMessage(int type) {
+    StunMessage* msg = new StunMessage();
+    msg->SetType(type);
+    msg->SetTransactionID(
+        talk_base::CreateRandomString(kStunTransactionIdLength));
+    return msg;
+  }
+  TestPort* CreateTestPort(const std::string& username,
+                           const std::string& password) {
+    return new TestPort(main_, "test", &socket_factory_, &network_,
+                        talk_base::SocketAddress().ipaddr(), 0, 0,
+                        username, password);
+  }
+
+
+
  private:
   talk_base::Thread* main_;
   talk_base::scoped_ptr<talk_base::PhysicalSocketServer> pss_;
@@ -332,6 +414,7 @@ class PortTest : public testing::Test {
   TestRelayServer relay_server_;
   std::string username_;
   std::string password_;
+  cricket::IceProtocolType ice_protocol_;
 };
 
 void PortTest::TestConnectivity(const char* name1, Port* port1,
@@ -777,6 +860,19 @@ TEST_F(PortTest, TestDelayedBindingTcp) {
   EXPECT_EQ(1U, port->candidates().size());
 }
 
+// This test case verifies standard ICE features in STUN messages. Currently it
+// verifies Message Integrity attribute in STUN messages and username in STUN
+// binding request will have colon (":") between remote and local username.
+TEST_F(PortTest, TestRfc5245Features) {
+  // TestLocalToLocal.
+  set_ice_protocol(cricket::ICEPROTO_RFC5245);
+  UDPPort* port1 = CreateUdpPort(kLocalAddr1);
+  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port1->ice_protocol());
+  UDPPort* port2 = CreateUdpPort(kLocalAddr2);
+  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port2->ice_protocol());
+  TestConnectivity("udp", port1, "udp", port2, true, true, true, true);
+}
+
 void PortTest::TestCrossFamilyPorts(int type) {
   FakePacketSocketFactory factory;
   scoped_ptr<Port> ports[4];
@@ -833,4 +929,143 @@ TEST_F(PortTest, TestSkipCrossFamilyTcp) {
 
 TEST_F(PortTest, TestSkipCrossFamilyUdp) {
   TestCrossFamilyPorts(SOCK_DGRAM);
+}
+
+TEST_F(PortTest, TestGetStunMessageNoUsername) {
+  talk_base::SocketAddress addr;
+  std::string username;
+  talk_base::scoped_ptr<StunMessage> stun_out_message;
+
+  talk_base::scoped_ptr<TestPort> port(CreateTestPort("username", "password"));
+  talk_base::scoped_ptr<StunMessage> test_message(
+      CreateStunMessage(STUN_BINDING_REQUEST));
+
+  talk_base::scoped_ptr<talk_base::ByteBuffer> buf(new talk_base::ByteBuffer());
+  test_message->Write(buf.get());
+
+  // No username attribute in the message. Since this is a request message,
+  // stun_out_message should be NULL.
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() == NULL);
+  ASSERT_TRUE(username.empty());
+  stun_out_message.reset();
+
+  // Testing no username case with response message. stun_out_message will not
+  // be null in this case.
+  buf.reset(new talk_base::ByteBuffer());
+  test_message->SetType(STUN_BINDING_RESPONSE);
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() != NULL);
+  ASSERT_TRUE(username.empty());
+  stun_out_message.reset();
+}
+
+// Verifies GetStunMessage method using incorrect usernames.
+TEST_F(PortTest, TestGetStunMessageIncorrectUsername) {
+  talk_base::SocketAddress addr;
+  std::string username;
+  talk_base::scoped_ptr<StunMessage> stun_out_message;
+  talk_base::scoped_ptr<talk_base::ByteBuffer> buf(new talk_base::ByteBuffer());
+
+  talk_base::scoped_ptr<TestPort> port(CreateTestPort("username", "password"));
+  talk_base::scoped_ptr<StunMessage> test_message(
+      CreateStunMessage(STUN_BINDING_REQUEST));
+
+  // ICE protocol is ICEPROTO_GOOGLE.
+  // Out username should be empty along with stun_out_message.
+  std::string username_attr_str = "localusernameremoteusername";
+  StunByteStringAttribute* username_attr =
+      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  username_attr->CopyBytes(username_attr_str.c_str(), username_attr_str.size());
+  test_message->AddAttribute(username_attr);
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() == NULL);
+  ASSERT_TRUE(username.empty());
+  stun_out_message.reset();
+
+  // ICE protocol is ICEPROTO_RFC5245.
+  // Out username should be empty along with stun_out_message.
+  buf.reset(new talk_base::ByteBuffer());
+  port->set_ice_protocol(ICEPROTO_RFC5245);
+  test_message->AddMessageIntegrity("password");
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() == NULL);
+  ASSERT_TRUE(username.empty());
+  stun_out_message.reset();
+
+  // ICE protocol is ICEPROTO_GOOGLE.
+  // Input username is shorter than port local username.
+  port->set_ice_protocol(ICEPROTO_GOOGLE);
+  test_message.reset(CreateStunMessage(STUN_BINDING_REQUEST));
+  std::string short_username = "user";
+  buf.reset(new talk_base::ByteBuffer());
+  username_attr =  StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  username_attr->CopyBytes(short_username.c_str(), short_username.size());
+  test_message->AddAttribute(username_attr);
+  test_message->AddMessageIntegrity("password");
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() == NULL);
+  ASSERT_TRUE(username.empty());
+  stun_out_message.reset();
+}
+
+TEST_F(PortTest, TestGetStunMessage) {
+  talk_base::SocketAddress addr;
+  std::string username;
+  talk_base::scoped_ptr<StunMessage> stun_out_message;
+  talk_base::scoped_ptr<talk_base::ByteBuffer> buf(new talk_base::ByteBuffer());
+  talk_base::scoped_ptr<TestPort> port(CreateTestPort("username", "password"));
+
+  // Valid username present in stun request.
+  port->set_ice_protocol(ICEPROTO_RFC5245);
+  talk_base::scoped_ptr<StunMessage> test_message(
+      CreateStunMessage(STUN_BINDING_REQUEST));
+  buf.reset(new talk_base::ByteBuffer());
+  StunByteStringAttribute* username_attr =
+      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  std::string username_attr_str = "username:remoteusername";
+  username_attr->CopyBytes(username_attr_str.c_str(), username_attr_str.size());
+  test_message->AddAttribute(username_attr);
+  test_message->AddMessageIntegrity("password");
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() != NULL);
+  ASSERT_EQ("remoteusername", username);
+  stun_out_message.reset();
+
+  // Passing username without colon to port which has ice protocol type
+  // set to ICEPROTO_RFC5245.
+  test_message.reset(CreateStunMessage(STUN_BINDING_REQUEST));
+  buf.reset(new talk_base::ByteBuffer());
+  username_attr =  StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+  // GICE style username.
+  username_attr_str = "usernameremoteusername";
+  username_attr->CopyBytes(username_attr_str.c_str(), username_attr_str.size());
+  test_message->AddAttribute(username_attr);
+  test_message->AddMessageIntegrity("password");
+  test_message->Write(buf.get());
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() == NULL);
+  stun_out_message.reset();
+
+  // Passing stun request message with MI to the port which supports
+  // ICEPROTO_GOOGLE. MI attribute should be ignored and GetStunMessage
+  // should return valid remote username and stun message.
+  port->set_ice_protocol(ICEPROTO_GOOGLE);
+  EXPECT_TRUE(port->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                   stun_out_message.accept(), &username));
+  ASSERT_TRUE(stun_out_message.get() != NULL);
+  ASSERT_EQ("remoteusername", username);
+  stun_out_message.reset();
 }

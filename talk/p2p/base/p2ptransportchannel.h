@@ -75,6 +75,8 @@ class P2PTransportChannel : public TransportChannelImpl,
 
   // From TransportChannelImpl:
   virtual Transport* GetTransport() { return transport_; }
+  virtual void SetIceUfrag(const std::string& ice_ufrag);
+  virtual void SetIcePwd(const std::string& ice_pwd);
   virtual void Connect();
   virtual void Reset();
   virtual void OnSignalingReady();
@@ -150,6 +152,8 @@ class P2PTransportChannel : public TransportChannelImpl,
   bool was_timed_out_;
   typedef std::map<talk_base::Socket::Option, int> OptionMap;
   OptionMap options_;
+  std::string ice_ufrag_;
+  std::string ice_pwd_;
 
   DISALLOW_EVIL_CONSTRUCTORS(P2PTransportChannel);
 };

@@ -155,7 +155,7 @@ uint16 SocketAddress::port() const {
   return port_;
 }
 
-std::string SocketAddress::IPAsString() const {
+std::string SocketAddress::HostAsURIString() const {
   // If the hostname was a literal IP string, it may need to have square
   // brackets added (for SocketAddress::ToString()).
   if (!literal_ && !hostname_.empty())
@@ -175,9 +175,7 @@ std::string SocketAddress::PortAsString() const {
 
 std::string SocketAddress::ToString() const {
   std::ostringstream ost;
-  ost << IPAsString();
-  ost << ":";
-  ost << port();
+  ost << *this;
   return ost.str();
 }
 
@@ -204,7 +202,7 @@ bool SocketAddress::FromString(const std::string& str) {
 }
 
 std::ostream& operator<<(std::ostream& os, const SocketAddress& addr) {
-  os << addr.IPAsString() << ":" << addr.port();
+  os << addr.HostAsURIString() << ":" << addr.port();
   return os;
 }
 

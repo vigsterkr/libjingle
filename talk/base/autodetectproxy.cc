@@ -61,7 +61,7 @@ void AutoDetectProxy::DoWork() {
     GetProxySettingsForUrl(agent_.c_str(), server_url_.c_str(), proxy_, true);
     LOG(LS_INFO) << "GetProxySettingsForUrl - stop";
   }
-  Url<char> url(proxy_.address.IPAsString());
+  Url<char> url(proxy_.address.HostAsURIString());
   if (url.valid()) {
     LOG(LS_WARNING) << "AutoDetectProxy removing http prefix on proxy host";
     proxy_.address.SetIP(url.host());

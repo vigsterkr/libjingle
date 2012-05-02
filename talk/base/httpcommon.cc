@@ -873,7 +873,8 @@ HttpAuthResult HttpAuthenticate(
 
 #if 0 // Requires funky windows versions
     DWORD len = MAX_SPN;
-    if (DsMakeSpn("HTTP", server.IPAsString().c_str(), NULL, server.port(),
+    if (DsMakeSpn("HTTP", server.HostAsURIString().c_str(), NULL,
+                  server.port(),
                   0, &len, spn) != ERROR_SUCCESS) {
       LOG_F(WARNING) << "(Negotiate) - DsMakeSpn failed";
       return HAR_IGNORE;

@@ -30,6 +30,7 @@
 #include <deque>
 #include <map>
 
+#include "talk/base/base64.h"
 #include "talk/base/basicpacketsocketfactory.h"
 #include "talk/base/common.h"
 #include "talk/base/gunit.h"
@@ -168,12 +169,23 @@ std::string GingleDescriptionXml(const std::string& content_type) {
 }
 
 std::string P2pCandidateXml(const std::string& name, int port_index) {
+  // Port will update the rtcp username by +1 on the last character. So we need
+  // to compensate here. See Port::username_fragment() for detail.
+  std::string username = GetUsername(port_index);
+  // TODO: Use the component id instead of the channel name to
+  // determinte if we need to covert the username here.
+  if (name == "rtcp" || name == "video_rtp" || name == "chanb") {
+    char next_ch = username[username.size() - 1];
+    ASSERT(username.size() > 0);
+    talk_base::Base64::GetNextBase64Char(next_ch, &next_ch);
+    username[username.size() - 1] = next_ch;
+  }
   return "<candidate"
       " name=\"" + name + "\""
       " address=\"127.0.0.1\""
       " port=\"" + GetPortString(port_index) + "\""
       " preference=\"1\""
-      " username=\"" + GetUsername(port_index) + "\""
+      " username=\"" + username + "\""
       " protocol=\"udp\""
       " generation=\"0\""
       " password=\"" + GetPassword(port_index) + "\""
@@ -590,8 +602,10 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
  public:
   TestPortAllocatorSession(const std::string& name,
                            int component,
+                           const std::string& ice_ufrag,
+                           const std::string& ice_pwd,
                            const int port_offset)
-      : PortAllocatorSession(name, component, 0),
+      : PortAllocatorSession(name, component, ice_ufrag, ice_pwd, 0),
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
@@ -661,10 +675,13 @@ class TestPortAllocator : public cricket::PortAllocator {
   TestPortAllocator() : port_offset_(0) {}
 
   virtual cricket::PortAllocatorSession*
-  CreateSession(const std::string &name,
-                int component) {
+  CreateSessionInternal(const std::string &name,
+                int component,
+                const std::string& ice_ufrag,
+                const std::string& ice_pwd) {
     port_offset_ += 2;
-    return new TestPortAllocatorSession(name, component, port_offset_ - 2);
+    return new TestPortAllocatorSession(name, component,
+                                        ice_ufrag, ice_pwd, port_offset_ - 2);
   }
 
   int port_offset_;
@@ -822,6 +839,7 @@ void PrintStanza(const std::string& message,
 
 class TestClient : public sigslot::has_slots<> {
  public:
+  // TODO: Add channel_component_a/b as inputs to the ctor.
   TestClient(cricket::PortAllocator* port_allocator,
              int* next_message_id,
              const std::string& local_name,
@@ -1439,9 +1457,9 @@ class SessionTest : public testing::Test {
     std::string content_name = "main";
     std::string content_type = "http://oink.splat/session";
     std::string content_name_a = content_name;
-    std::string channel_name_a = "rtcp";
+    std::string channel_name_a = "rtp";
     std::string content_name_b = content_name;
-    std::string channel_name_b = "rtp";
+    std::string channel_name_b = "rtcp";
     std::string initiate_xml = InitiateXml(
         initiator_protocol,
         content_name_a, content_type);
@@ -1478,8 +1496,8 @@ class SessionTest : public testing::Test {
     std::string gingle_content_type = cricket::NS_GINGLE_AUDIO;
     std::string content_name = cricket::CN_AUDIO;
     std::string content_type = cricket::NS_JINGLE_RTP;
-    std::string channel_name_a = "rtcp";
-    std::string channel_name_b = "rtp";
+    std::string channel_name_a = "rtp";
+    std::string channel_name_b = "rtcp";
     std::string initiate_xml = InitiateXml(
         initiator_protocol,
         gingle_content_type,
@@ -1521,7 +1539,7 @@ class SessionTest : public testing::Test {
     std::string content_type = cricket::NS_JINGLE_RTP;
     std::string gingle_content_type = cricket::NS_GINGLE_VIDEO;
     std::string content_name_a = cricket::CN_AUDIO;
-    std::string channel_name_a = "rtcp";
+    std::string channel_name_a = "rtp";
     std::string content_name_b = cricket::CN_VIDEO;
     std::string channel_name_b = "video_rtp";
 
@@ -1801,8 +1819,8 @@ class SessionTest : public testing::Test {
   void TestCandidatesInInitiateAndAccept(const std::string& test_name) {
     std::string content_name = "main";
     std::string content_type = "http://oink.splat/session";
-    std::string channel_name_a = "rtcp";
-    std::string channel_name_b = "rtp";
+    std::string channel_name_a = "rtp";
+    std::string channel_name_b = "rtcp";
     cricket::SignalingProtocol protocol = PROTOCOL_JINGLE;
 
     talk_base::scoped_ptr<cricket::PortAllocator> allocator(
@@ -2038,7 +2056,7 @@ class SessionTest : public testing::Test {
     std::string content_type = cricket::NS_JINGLE_RTP;
     std::string gingle_content_type = cricket::NS_GINGLE_VIDEO;
     std::string content_name_a = cricket::CN_AUDIO;
-    std::string channel_name_a = "rtcp";
+    std::string channel_name_a = "rtp";
     std::string content_name_b = cricket::CN_VIDEO;
     std::string channel_name_b = "video_rtp";
 

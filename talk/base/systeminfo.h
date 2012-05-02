@@ -56,6 +56,8 @@ class SystemInfo {
   int GetCpuFamily();
   int GetCpuModel();
   int GetCpuStepping();
+  // Return size of CPU cache in bytes.  Uses largest available cache (L3).
+  int GetCpuCacheSize();
   // Estimated speed of the CPUs, in MHz.
   int GetMaxCpuSpeed();
   int GetCurCpuSpeed();
@@ -79,6 +81,7 @@ class SystemInfo {
  private:
   int physical_cpus_;
   int logical_cpus_;
+  int cache_size_;
   Architecture cpu_arch_;
   std::string cpu_vendor_;
   int cpu_family_;

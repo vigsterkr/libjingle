@@ -271,6 +271,9 @@ bool PeerConnection::Initialize(bool use_roap,
 
   port_allocator_.reset(factory_->port_allocator_factory()->CreatePortAllocator(
       stun_config, turn_config));
+  // To handle both internal and externally created port allocator, we will
+  // enable BUNDLE here.
+  port_allocator_->set_flags(cricket::PORTALLOCATOR_ENABLE_BUNDLE);
 
   mediastream_signaling_.reset(new MediaStreamSignaling(
       factory_->signaling_thread(), this));

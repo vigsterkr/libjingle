@@ -82,6 +82,15 @@ static const SocketAddress kRelayTcpExtAddr("99.99.99.3", 5003);
 static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
 
+// Based on ICE_UFRAG_LENGTH
+static const char* kIceUfrag[4] = {"TESTICEUFRAG0000", "TESTICEUFRAG0001",
+                                    "TESTICEUFRAG0002", "TESTICEUFRAG0003"};
+// Based on ICE_PWD_LENGTH
+static const char* kIcePwd[4] = {"TESTICEPWD00000000000000",
+                                 "TESTICEPWD00000000000001",
+                                 "TESTICEPWD00000000000002",
+                                 "TESTICEPWD00000000000003"};
+
 // This test simulates 2 P2P endpoints that want to establish connectivity
 // with each other over various network topologies and conditions, which can be
 // specified in each individial test.
@@ -214,19 +223,25 @@ class P2PTransportChannelTestBase : public testing::Test,
 
   void CreateChannels(int num) {
     ep1_.cd1_.ch_.reset(CreateChannel(
-        0, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+        0, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+        kIceUfrag[0], kIcePwd[0]));
     ep2_.cd1_.ch_.reset(CreateChannel(
-        1, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+        1, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+        kIceUfrag[1], kIcePwd[1]));
     if (num == 2) {
       ep1_.cd2_.ch_.reset(CreateChannel(
-          0, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+          0, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+          kIceUfrag[2], kIcePwd[2]));
       ep2_.cd2_.ch_.reset(CreateChannel(
-          1, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT));
+          1, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+          kIceUfrag[3], kIcePwd[3]));
     }
   }
   cricket::P2PTransportChannel* CreateChannel(int endpoint,
                                               const std::string& name,
-                                              int component) {
+                                              int component,
+                                              const std::string& ice_ufrag,
+                                              const std::string& ice_pwd) {
     cricket::P2PTransportChannel* channel = new cricket::P2PTransportChannel(
         name, component, NULL, GetAllocator(endpoint));
     channel->SignalRequestSignaling.connect(
@@ -235,6 +250,8 @@ class P2PTransportChannelTestBase : public testing::Test,
         &P2PTransportChannelTestBase::OnCandidate);
     channel->SignalReadPacket.connect(
         this, &P2PTransportChannelTestBase::OnReadPacket);
+    channel->SetIceUfrag(ice_ufrag);
+    channel->SetIcePwd(ice_pwd);
     channel->Connect();
     return channel;
   }

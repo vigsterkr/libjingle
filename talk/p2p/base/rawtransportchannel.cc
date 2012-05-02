@@ -97,8 +97,11 @@ int RawTransportChannel::GetError() {
 
 void RawTransportChannel::Connect() {
   // Create an allocator that only returns stun and relay ports.
+  // Use empty string for ufrag and pwd here. There won't be any STUN or relay
+  // interactions when using RawTC.
+  // TODO: Change raw to only use local udp ports.
   allocator_session_ = allocator_->CreateSession(
-      session_id(), name(), component());
+      SessionId(), name(), component(), "", "");
 
   uint32 flags = PORTALLOCATOR_DISABLE_UDP | PORTALLOCATOR_DISABLE_TCP;
 

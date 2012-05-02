@@ -194,7 +194,9 @@ TransportChannelImpl* TransportProxy::GetOrCreateChannelProxyImpl(
   TransportChannelImpl* impl = transport_->get()->GetChannel(component);
   if (impl == NULL) {
     impl = transport_->get()->CreateChannel(name, component);
-    impl->set_session_id(sid_);
+    impl->SetSessionId(sid_);
+    impl->SetIceUfrag(ice_ufrag_);
+    impl->SetIcePwd(ice_pwd_);
   }
   return impl;
 }
@@ -220,6 +222,7 @@ void TransportProxy::SetupMux(TransportProxy* proxy) {
   // Now replace our transport. Must happen afterwards because
   // it deletes all impls as a side effect.
   transport_ = proxy->transport_;
+  set_candidates_allocated(proxy->candidates_allocated());
 }
 
 // Mux the channel at |this->channels_[index]| (also known as
@@ -298,7 +301,8 @@ BaseSession::BaseSession(talk_base::Thread* signaling_thread,
       transport_type_(NS_GINGLE_P2P),
       initiator_(initiator),
       local_description_(NULL),
-      remote_description_(NULL) {
+      remote_description_(NULL),
+      transport_muxed_(false) {
   ASSERT(signaling_thread->IsCurrent());
 }
 
@@ -475,9 +479,25 @@ bool BaseSession::ContentsGrouped() {
 
 bool BaseSession::MaybeEnableMuxingSupport() {
   bool ret = true;
+  if ((state_ == STATE_SENTINITIATE ||
+      state_ == STATE_RECEIVEDINITIATE) &&
+      ((local_description_ == NULL) ||
+      (remote_description_ == NULL))) {
+    return false;
+  }
+
   if (!ContentsGrouped()) {
-    LOG(LS_INFO) << "Contents are not grouped together cannot be muxed";
+    LOG(LS_INFO) << "BUNDLE group information is not negotiated through "
+                 << "signaling channel. Muxing cannot be done.";
   } else {
+    // Make sure proxies are in connect state, if not move it to connected
+    // state.
+    for (TransportMap::iterator iter = transports_.begin();
+           iter != transports_.end(); ++iter) {
+      if (!iter->second->negotiated())
+        iter->second->CompleteNegotiation();
+    }
+
     // Always use first content name from the group for muxing. Hence ordering
     // of content names in SDP should match to the order in group.
     const ContentGroup* muxed_content_group =
@@ -490,6 +510,9 @@ bool BaseSession::MaybeEnableMuxingSupport() {
       ASSERT(content != NULL);
       SetSelectedProxy(content->name, muxed_content_group);
     }
+    transport_muxed_ = true;
+    MaybeCandidatesAllocationDone();
+    LOG(LS_INFO) << "RTP BUNDLE is enabled.";
   }
   return ret;
 }
@@ -513,11 +536,18 @@ void BaseSession::SetSelectedProxy(const std::string& content_name,
 }
 
 void BaseSession::OnTransportCandidatesAllocationDone(Transport* transport) {
-  TransportProxy* transport_proxy = GetTransportProxy(transport);
-  if (transport_proxy) {
-    transport_proxy->set_candidates_allocated(true);
+  for (TransportMap::iterator iter = transports_.begin();
+       iter != transports_.end(); ++iter) {
+    TransportProxy* transproxy = iter->second;
+    if (transproxy->impl() == transport) {
+      transproxy->set_candidates_allocated(true);
+    }
   }
 
+  MaybeCandidatesAllocationDone();
+}
+
+void BaseSession::MaybeCandidatesAllocationDone() {
   // Check all other TransportProxies got this signal.
   for (TransportMap::iterator iter = transports_.begin();
          iter != transports_.end(); ++iter) {

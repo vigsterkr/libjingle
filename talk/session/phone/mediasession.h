@@ -82,6 +82,7 @@ struct MediaSessionOptions {
       has_data(false),
       is_muc(false),
       rtcp_mux_enabled(true),
+      bundle_enabled(false),
       video_bandwidth(kAutoBandwidth),
 
       data_bandwidth(kDataMaxBandwidth) {
@@ -100,6 +101,7 @@ struct MediaSessionOptions {
   bool has_data;
   bool is_muc;
   bool rtcp_mux_enabled;
+  bool bundle_enabled;
   // bps. -1 == auto.
   int video_bandwidth;
   int data_bandwidth;

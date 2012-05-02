@@ -33,12 +33,14 @@ namespace cricket {
 
 PortAllocatorSession::PortAllocatorSession(const std::string& channel_name,
                                            int component,
+                                           const std::string& ice_ufrag,
+                                           const std::string& ice_pwd,
                                            uint32 flags)
     : channel_name_(channel_name),
       component_(component),
       flags_(flags),
-      username_(talk_base::CreateRandomString(kUsernameLength)),
-      password_(talk_base::CreateRandomString(kPasswordLength)) {
+      username_(ice_ufrag),
+      password_(ice_pwd) {
 }
 
 PortAllocator::~PortAllocator() {
@@ -51,12 +53,14 @@ PortAllocator::~PortAllocator() {
 PortAllocatorSession* PortAllocator::CreateSession(
     const std::string& sid,
     const std::string& channel_name,
-    int component) {
+    int component,
+    const std::string& ice_ufrag,
+    const std::string& ice_pwd) {
   if (flags_ & PORTALLOCATOR_ENABLE_BUNDLE) {
     PortAllocatorSessionMuxer* muxer = GetSessionMuxer(sid);
     if (!muxer) {
-      PortAllocatorSession* session_impl = CreateSession(
-        channel_name, component);
+      PortAllocatorSession* session_impl = CreateSessionInternal(
+        channel_name, component, ice_ufrag, ice_pwd);
       // Create PortAllocatorSessionMuxer object for |session_impl|.
       muxer = new PortAllocatorSessionMuxer(session_impl);
       muxer->SignalDestroyed.connect(
@@ -65,12 +69,11 @@ PortAllocatorSession* PortAllocator::CreateSession(
       muxers_[sid] = muxer;
     }
     PortAllocatorSessionProxy* proxy =
-        new PortAllocatorSessionProxy(
-          channel_name, component, flags_);
+        new PortAllocatorSessionProxy(channel_name, component, flags_);
     muxer->RegisterSessionProxy(proxy);
     return proxy;
   }
-  return CreateSession(channel_name, component);
+  return CreateSessionInternal(channel_name, component, ice_ufrag, ice_pwd);
 }
 
 PortAllocatorSessionMuxer* PortAllocator::GetSessionMuxer(

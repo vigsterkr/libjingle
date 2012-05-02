@@ -56,6 +56,8 @@ MediaStreamSignaling::GetMediaSessionOptions(const MediaHints& hints) const {
   cricket::MediaSessionOptions options;
   options.has_video = hints.has_video();
   options.has_audio = hints.has_audio();
+  // Enable BUNDLE feature by default.
+  options.bundle_enabled = true;
   if (local_streams_ == NULL)
     return options;
 
@@ -76,7 +78,7 @@ MediaStreamSignaling::GetMediaSessionOptions(const MediaHints& hints) const {
 
     scoped_refptr<VideoTracks> video_tracks(stream->video_tracks());
     if (video_tracks->count() > 0) {
-          options.has_video = true;
+      options.has_video = true;
     }
     // For each video track in the stream, add it to the MediaSessionOptions.
     for (size_t j = 0; j <  video_tracks->count(); ++j) {

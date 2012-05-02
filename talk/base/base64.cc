@@ -15,6 +15,9 @@
 //*********************************************************************
 
 #include "talk/base/base64.h"
+
+#include <string.h>
+
 #include "talk/base/common.h"
 
 using std::string;
@@ -71,6 +74,18 @@ bool Base64::IsBase64Char(char ch) {
          (('a' <= ch) && (ch <= 'z')) ||
          (('0' <= ch) && (ch <= '9')) ||
          (ch == '+') || (ch == '/');
+}
+
+bool Base64::GetNextBase64Char(char ch, char* next_ch) {
+  if (next_ch == NULL) {
+    return false;
+  }
+  const char* p = strchr(Base64Table, ch);
+  if (!p)
+    return false;
+  ++p;
+  *next_ch = (*p) ? *p : Base64Table[0];
+  return true;
 }
 
 bool Base64::IsBase64Encoded(const std::string& str) {

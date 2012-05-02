@@ -244,9 +244,11 @@ int BasicPortAllocator::best_writable_phase() const {
   return best_writable_phase_;
 }
 
-PortAllocatorSession *BasicPortAllocator::CreateSession(
-    const std::string &name, int component) {
-  return new BasicPortAllocatorSession(this, name, component);
+PortAllocatorSession *BasicPortAllocator::CreateSessionInternal(
+    const std::string &name, int component,
+    const std::string& ice_ufrag, const std::string& ice_pwd) {
+  return new BasicPortAllocatorSession(this, name, component,
+                                       ice_ufrag, ice_pwd);
 }
 
 void BasicPortAllocator::AddWritablePhase(int phase) {
@@ -258,8 +260,11 @@ void BasicPortAllocator::AddWritablePhase(int phase) {
 BasicPortAllocatorSession::BasicPortAllocatorSession(
     BasicPortAllocator *allocator,
     const std::string &channel_name,
-    int component)
-    : PortAllocatorSession(channel_name, component, allocator->flags()),
+    int component,
+    const std::string& ice_ufrag,
+    const std::string& ice_pwd)
+    : PortAllocatorSession(channel_name, component,
+                           ice_ufrag, ice_pwd, allocator->flags()),
       allocator_(allocator), network_thread_(NULL),
       socket_factory_(allocator->socket_factory()), allocation_started_(false),
       network_manager_started_(false),

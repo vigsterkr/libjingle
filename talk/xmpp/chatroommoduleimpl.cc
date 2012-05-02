@@ -87,7 +87,8 @@ private:
 
   bool CheckEnterChatroomStateOk();
 
-  void FireEnteredStatus(XmppChatroomEnteredStatus status);
+  void FireEnteredStatus(const XmlElement* presence,
+                         XmppChatroomEnteredStatus status);
   void FireExitStatus(XmppChatroomExitedStatus status);
   void FireMessageReceived(const XmlElement& message);
   void FireMemberEntered(const XmppChatroomMember* entered_member);
@@ -391,9 +392,13 @@ StateTransitionDescription Transitions[] = {
 
 
 void
-XmppChatroomModuleImpl::FireEnteredStatus(XmppChatroomEnteredStatus status) {
-  if (chatroom_handler_)
-    chatroom_handler_->ChatroomEnteredStatus(this, status);
+XmppChatroomModuleImpl::FireEnteredStatus(const XmlElement* presence,
+                                          XmppChatroomEnteredStatus status) {
+  if (chatroom_handler_) {
+    talk_base::scoped_ptr<XmppPresence> xmpp_presence(XmppPresence::Create());
+    xmpp_presence->set_raw_xml(presence);
+    chatroom_handler_->ChatroomEnteredStatus(this, xmpp_presence.get(), status);
+  }
 }
 
 void
@@ -410,20 +415,14 @@ XmppChatroomModuleImpl::FireMessageReceived(const XmlElement& message) {
 
 void
 XmppChatroomModuleImpl::FireMemberEntered(const XmppChatroomMember* entered_member) {
-  // only fire if we're in the room
-  if (chatroom_state_ == XMPP_CHATROOM_STATE_IN_ROOM) {
-    if (chatroom_handler_)
-      chatroom_handler_->MemberEntered(this, entered_member);
-  }
+  if (chatroom_handler_)
+    chatroom_handler_->MemberEntered(this, entered_member);
 }
 
 void
 XmppChatroomModuleImpl::FireMemberExited(const XmppChatroomMember* exited_member) {
-  // only fire if we're in the room
-  if (chatroom_state_ == XMPP_CHATROOM_STATE_IN_ROOM) {
-    if (chatroom_handler_)
-      chatroom_handler_->MemberExited(this, exited_member);
-  }
+  if (chatroom_handler_)
+    chatroom_handler_->MemberExited(this, exited_member);
 }
 
 
@@ -523,10 +522,10 @@ XmppChatroomModuleImpl::ChangePresence(XmppChatroomState new_state,
 
   switch (transition_desc->transition_type) {
     case TRANSITION_TYPE_ENTER_SUCCESS:
-      FireEnteredStatus(XMPP_CHATROOM_ENTERED_SUCCESS);
+      FireEnteredStatus(presence, XMPP_CHATROOM_ENTERED_SUCCESS);
       break;
     case TRANSITION_TYPE_ENTER_FAILURE:
-      FireEnteredStatus(GetEnterFailureFromXml(presence));
+      FireEnteredStatus(presence, GetEnterFailureFromXml(presence));
       break;
     case TRANSITION_TYPE_EXIT_INVOLUNTARILY:
       FireExitStatus(GetExitFailureFromXml(presence));
@@ -561,6 +560,8 @@ XmppChatroomModuleImpl::GetEnterFailureFromXml(const XmlElement* presence) {
       case 405: status = XMPP_CHATROOM_ENTERED_FAILURE_MAX_USERS; break;
       case 407: status = XMPP_CHATROOM_ENTERED_FAILURE_NOT_A_MEMBER; break;
       case 409: status = XMPP_CHATROOM_ENTERED_FAILURE_NICKNAME_CONFLICT; break;
+      // http://xmpp.org/extensions/xep-0045.html#enter-maxusers
+      case 503: status = XMPP_CHATROOM_ENTERED_FAILURE_MAX_USERS; break;
     }
   }
   return status;

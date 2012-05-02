@@ -45,6 +45,14 @@ public:
 
   static bool IsBase64Char(char ch);
 
+  // Get the char next to the |ch| from the Base64Table.
+  // If the |ch| is the last one in the Base64Table then returns
+  // the first one from the table.
+  // Expects the |ch| be a base64 char.
+  // The result will be saved in |next_ch|.
+  // Returns true on success.
+  static bool GetNextBase64Char(char ch, char* next_ch);
+
   // Determines whether the given string consists entirely of valid base64
   // encoded characters.
   static bool IsBase64Encoded(const std::string& str);

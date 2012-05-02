@@ -158,11 +158,19 @@ bool WebRtcSession::StartIce(IceOptions /*options*/) {
   if (ice_started_) {
     return true;
   }
+
   // Try connecting all transport channels. This is necessary to generate
   // ICE candidates.
   SpeculativelyConnectAllTransportChannels();
 
   ice_started_ = true;
+
+  // If SDP is already negotiated, then it's the time to try enabling the
+  // BUNDLE option if both agents support the feature.
+  if (ReadyToEnableBundle() && !transport_muxed()) {
+    MaybeEnableMuxingSupport();
+  }
+
   if (!UseCandidatesInSessionDescription(remote_desc_.get())) {
     LOG(LS_WARNING) << "StartIce: Can't use candidates in remote session"
                     << " description";
@@ -254,11 +262,24 @@ bool WebRtcSession::SetLocalDescription(Action action,
     return false;
   }
 
+  if (!desc->description()->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
+    // Disabling the BUNDLE flag in PortAllocator.
+    // TODO - Implement to enable BUNDLE feature,
+    // if SetLocalDescription is called again with BUNDLE info in it.
+    port_allocator()->set_flags(port_allocator()->flags() &
+                                ~cricket::PORTALLOCATOR_ENABLE_BUNDLE);
+  }
+
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
 
   if (type == cricket::CA_ANSWER) {
     EnableChannels();
+
+    if (ReadyToEnableBundle() && !transport_muxed()) {
+      MaybeEnableMuxingSupport();
+    }
+
     SetState(STATE_SENTACCEPT);
   } else {
     SetState(STATE_SENTINITIATE);
@@ -293,6 +314,11 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   set_remote_description(desc->description()->Copy());
   if (type  == cricket::CA_ANSWER) {
     EnableChannels();
+
+    if (ReadyToEnableBundle() && !transport_muxed()) {
+      MaybeEnableMuxingSupport();
+    }
+
     SetState(STATE_RECEIVEDACCEPT);
   } else {
     SetState(STATE_RECEIVEDINITIATE);
@@ -570,6 +596,12 @@ bool WebRtcSession::UseCandidate(
   candidates.push_back(candidate->candidate());
   proxy->impl()->OnRemoteCandidates(candidates);
   return true;
+}
+
+bool WebRtcSession::ReadyToEnableBundle() const {
+  return ((BaseSession::local_description() != NULL)  &&
+          (BaseSession::remote_description() != NULL) &&
+          ice_started_);
 }
 
 }  // namespace webrtc

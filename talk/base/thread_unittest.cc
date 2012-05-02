@@ -257,8 +257,7 @@ TEST(ThreadTest, Wrap) {
 TEST(ThreadTest, Release) {
   scoped_ptr<Event> event(new Event(true, false));
   // Ensure the event is initialized.
-  bool inited = event->Reset();
-  EXPECT_TRUE(inited);
+  event->Reset();
 
   Thread* thread = new SignalWhenDestroyedThread(event.get());
   thread->Start();

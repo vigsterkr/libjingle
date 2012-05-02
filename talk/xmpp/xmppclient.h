@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _XMPPCLIENT_H_
-#define _XMPPCLIENT_H_
+#ifndef TALK_XMPP_XMPPCLIENT_H_
+#define TALK_XMPP_XMPPCLIENT_H_
 
 #include <string>
 #include "talk/base/basicdefs.h"
@@ -96,9 +96,10 @@ public:
   // that the user can use to unlock their account
   CaptchaChallenge GetCaptchaChallenge();
 
-  // When authentication is successful, this returns the service cookie
+  // When authentication is successful, this returns the service token
   // (if we used GAIA authentication)
-  std::string GetAuthCookie();
+  std::string GetAuthMechanism();
+  std::string GetAuthToken();
 
   XmppReturnStatus SendRaw(const std::string & text);
 
@@ -133,7 +134,7 @@ public:
   };
   int Process(int state) {
     switch (state) {
-      case STATE_PRE_XMPP_LOGIN: return ProcessCookieLogin();
+      case STATE_PRE_XMPP_LOGIN: return ProcessTokenLogin();
       case STATE_START_XMPP_LOGIN: return ProcessStartXmppLogin();
       default: return Task::Process(state);
     }
@@ -147,7 +148,7 @@ public:
     }
   }
 
-  int ProcessCookieLogin();
+  int ProcessTokenLogin();
   int ProcessStartXmppLogin();
   void EnsureClosed();
 
@@ -161,4 +162,4 @@ public:
 
 }
 
-#endif
+#endif  // TALK_XMPP_XMPPCLIENT_H_

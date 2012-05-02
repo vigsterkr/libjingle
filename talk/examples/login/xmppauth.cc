@@ -29,6 +29,7 @@
 
 #include <algorithm>
 
+#include "talk/xmpp/constants.h"
 #include "talk/xmpp/saslcookiemechanism.h"
 #include "talk/xmpp/saslplainmechanism.h"
 
@@ -38,49 +39,65 @@ XmppAuth::XmppAuth() : done_(false) {
 XmppAuth::~XmppAuth() {
 }
 
-void XmppAuth::StartPreXmppAuth(const buzz::Jid & jid,
-                                const talk_base::SocketAddress & server,
-                                const talk_base::CryptString & pass,
-                                const std::string & auth_cookie) {
+void XmppAuth::StartPreXmppAuth(const buzz::Jid& jid,
+                                const talk_base::SocketAddress& server,
+                                const talk_base::CryptString& pass,
+                                const std::string& auth_mechanism,
+                                const std::string& auth_token) {
   jid_ = jid;
   passwd_ = pass;
-  auth_cookie_ = auth_cookie;
+  auth_mechanism_ = auth_mechanism;
+  auth_token_ = auth_token;
   done_ = true;
 
   SignalAuthDone();
 }
 
+static bool contains(const std::vector<std::string>& strings,
+                     const std::string& string) {
+  return std::find(strings.begin(), strings.end(), string) != strings.end();
+}
+
 std::string XmppAuth::ChooseBestSaslMechanism(
-    const std::vector<std::string> & mechanisms,
+    const std::vector<std::string>& mechanisms,
     bool encrypted) {
-  std::vector<std::string>::const_iterator it;
+  // First try Oauth2.
+  if (GetAuthMechanism() == buzz::AUTH_MECHANISM_OAUTH2 &&
+      contains(mechanisms, buzz::AUTH_MECHANISM_OAUTH2)) {
+    return buzz::AUTH_MECHANISM_OAUTH2;
+  }
 
   // A token is the weakest auth - 15s, service-limited, so prefer it.
-  it = std::find(mechanisms.begin(), mechanisms.end(), "X-GOOGLE-TOKEN");
-  if (it != mechanisms.end() && !auth_cookie_.empty())
-    return "X-GOOGLE-TOKEN";
+  if (GetAuthMechanism() == buzz::AUTH_MECHANISM_GOOGLE_TOKEN &&
+      contains(mechanisms, buzz::AUTH_MECHANISM_GOOGLE_TOKEN)) {
+    return buzz::AUTH_MECHANISM_GOOGLE_TOKEN;
+  }
 
   // A cookie is the next weakest - 14 days.
-  it = std::find(mechanisms.begin(), mechanisms.end(), "X-GOOGLE-COOKIE");
-  if (it != mechanisms.end() && !auth_cookie_.empty())
-    return "X-GOOGLE-COOKIE";
+  if (GetAuthMechanism() == buzz::AUTH_MECHANISM_GOOGLE_COOKIE &&
+      contains(mechanisms, buzz::AUTH_MECHANISM_GOOGLE_COOKIE)) {
+    return buzz::AUTH_MECHANISM_GOOGLE_COOKIE;
+  }
 
   // As a last resort, use plain authentication.
-  it = std::find(mechanisms.begin(), mechanisms.end(), "PLAIN");
-  if (it != mechanisms.end())
-    return "PLAIN";
+  if (contains(mechanisms, buzz::AUTH_MECHANISM_PLAIN)) {
+    return buzz::AUTH_MECHANISM_PLAIN;
+  }
 
   // No good mechanism found
- return "";
+  return "";
 }
 
 buzz::SaslMechanism* XmppAuth::CreateSaslMechanism(
-    const std::string & mechanism) {
-  if (mechanism == "X-GOOGLE-TOKEN") {
-    return new buzz::SaslCookieMechanism(mechanism, jid_.Str(), auth_cookie_);
-  //} else if (mechanism == "X-GOOGLE-COOKIE") {
-  //  return new buzz::SaslCookieMechanism(mechanism, jid.Str(), sid_);
-  } else if (mechanism == "PLAIN") {
+    const std::string& mechanism) {
+  if (mechanism == buzz::AUTH_MECHANISM_OAUTH2) {
+    return new buzz::SaslCookieMechanism(
+        mechanism, jid_.Str(), auth_token_, "oauth2");
+  } else if (mechanism == buzz::AUTH_MECHANISM_GOOGLE_TOKEN) {
+    return new buzz::SaslCookieMechanism(mechanism, jid_.Str(), auth_token_);
+  // } else if (mechanism == buzz::AUTH_MECHANISM_GOOGLE_COOKIE) {
+  //   return new buzz::SaslCookieMechanism(mechanism, jid.Str(), sid_);
+  } else if (mechanism == buzz::AUTH_MECHANISM_PLAIN) {
     return new buzz::SaslPlainMechanism(jid_, passwd_);
   } else {
     return NULL;

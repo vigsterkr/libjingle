@@ -29,14 +29,16 @@
 #include <iostream>
 
 #include "talk/base/thread.h"
-#include "talk/xmpp/xmppclientsettings.h"
 #include "talk/examples/login/xmppthread.h"
+#include "talk/xmpp/constants.h"
+#include "talk/xmpp/xmppclientsettings.h"
 #include "talk/xmpp/xmppengine.h"
 
+
 int main(int argc, char **argv) {
-  std::cout << "Auth Cookie: ";
-  std::string auth_cookie;
-  std::getline(std::cin, auth_cookie);
+  std::cout << "OAuth Access Token: ";
+  std::string auth_token;
+  std::getline(std::cin, auth_token);
 
   std::cout << "User Name: ";
   std::string username;
@@ -50,7 +52,8 @@ int main(int argc, char **argv) {
   xcs.set_user(username.c_str());
   xcs.set_host("gmail.com");
   xcs.set_use_tls(buzz::TLS_DISABLED);
-  xcs.set_auth_cookie(auth_cookie.c_str());
+  xcs.set_auth_token(buzz::AUTH_MECHANISM_OAUTH2,
+                     auth_token.c_str());
   xcs.set_server(talk_base::SocketAddress("talk.google.com", 5222));
   thread.Login(xcs);
 
@@ -62,4 +65,3 @@ int main(int argc, char **argv) {
   }
   return 0;
 }
-

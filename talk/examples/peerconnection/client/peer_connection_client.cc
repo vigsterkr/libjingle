@@ -127,10 +127,10 @@ bool PeerConnectionClient::Connect(const std::string& server, int port,
   if (server_address_.IsUnresolved()) {
     int errcode = 0;
     hostent* h = talk_base::SafeGetHostByName(
-          server_address_.IPAsString().c_str(), &errcode);
+          server_address_.hostname().c_str(), &errcode);
     if (!h) {
       LOG(LS_ERROR) << "Failed to resolve host name: "
-                    << server_address_.IPAsString();
+                    << server_address_.hostname();
       return false;
     } else {
       server_address_.SetResolvedIP(

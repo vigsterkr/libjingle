@@ -125,11 +125,14 @@ HttpPortAllocatorSessionBase::HttpPortAllocatorSessionBase(
     HttpPortAllocatorBase* allocator,
     const std::string &channel_name,
     int component,
+    const std::string& ice_ufrag,
+    const std::string& ice_pwd,
     const std::vector<talk_base::SocketAddress>& stun_hosts,
     const std::vector<std::string>& relay_hosts,
     const std::string& relay_token,
     const std::string& user_agent)
-    : BasicPortAllocatorSession(allocator, channel_name, component),
+    : BasicPortAllocatorSession(allocator, channel_name, component,
+                                ice_ufrag, ice_pwd),
       relay_hosts_(relay_hosts), stun_hosts_(stun_hosts),
       relay_token_(relay_token), agent_(user_agent), attempts_(0) {
 }
@@ -234,11 +237,11 @@ HttpPortAllocator::HttpPortAllocator(
 }
 HttpPortAllocator::~HttpPortAllocator() {}
 
-PortAllocatorSession* HttpPortAllocator::CreateSession(
-    const std::string& name,
-    int component) {
+PortAllocatorSession* HttpPortAllocator::CreateSessionInternal(
+    const std::string& name, int component,
+    const std::string& ice_ufrag, const std::string& ice_pwd) {
   return new HttpPortAllocatorSession(this, name, component,
-                                      stun_hosts(),
+                                      ice_ufrag, ice_pwd, stun_hosts(),
                                       relay_hosts(), relay_token(),
                                       user_agent());
 }
@@ -249,12 +252,14 @@ HttpPortAllocatorSession::HttpPortAllocatorSession(
     HttpPortAllocator* allocator,
     const std::string& name,
     int component,
+    const std::string& ice_ufrag,
+    const std::string& ice_pwd,
     const std::vector<talk_base::SocketAddress>& stun_hosts,
     const std::vector<std::string>& relay_hosts,
     const std::string& relay,
     const std::string& agent)
     : HttpPortAllocatorSessionBase(allocator, name, component,
-                                   stun_hosts,
+                                   ice_ufrag, ice_pwd, stun_hosts,
                                    relay_hosts, relay, agent) {
 }
 

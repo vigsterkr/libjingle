@@ -226,6 +226,7 @@ public:
   //! XMPP_CHATROOM_SUCCESS represents success.
   //! Other status codes are for errors
   virtual void ChatroomEnteredStatus(XmppChatroomModule* room,
+                                     const XmppPresence* presence,
                                      XmppChatroomEnteredStatus status) = 0;
 
 
@@ -236,6 +237,7 @@ public:
                                     XmppChatroomExitedStatus status) = 0;
 
   //! Indicates a member entered the room.
+  //! It can be called before ChatroomEnteredStatus.
   virtual void MemberEntered(XmppChatroomModule* room,
                                   const XmppChatroomMember* entered_member) = 0;
 

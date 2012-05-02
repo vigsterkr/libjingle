@@ -83,6 +83,9 @@ public:
   //! The focus obfuscated GAIA id
   virtual const std::string google_user_id() const;
 
+  //! The nickname in the presence
+  virtual const std::string nickname() const;
+
   //! The raw xml of the presence update
   virtual const XmlElement* raw_xml() const;
 

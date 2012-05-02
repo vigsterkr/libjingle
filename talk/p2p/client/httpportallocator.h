@@ -61,9 +61,10 @@ class HttpPortAllocatorBase : public BasicPortAllocator {
 
   // CreateSession is defined in BasicPortAllocator but is
   // redefined here as pure virtual.
-  virtual PortAllocatorSession* CreateSession(
-      const std::string& channel_name,
-      int component) = 0;
+  virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& channel_name, int component,
+      const std::string& ice_ufrag,
+      const std::string& ice_pwd) = 0;
 
   void SetStunHosts(const std::vector<talk_base::SocketAddress>& hosts) {
     if (!hosts.empty()) {
@@ -108,6 +109,8 @@ class HttpPortAllocatorSessionBase : public BasicPortAllocatorSession {
       HttpPortAllocatorBase* allocator,
       const std::string& channel_name,
       int component,
+      const std::string& ice_ufrag,
+      const std::string& ice_pwd,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
       const std::vector<std::string>& relay_hosts,
       const std::string& relay,
@@ -153,8 +156,9 @@ class HttpPortAllocator : public HttpPortAllocatorBase {
                     talk_base::PacketSocketFactory* socket_factory,
                     const std::string& user_agent);
   virtual ~HttpPortAllocator();
-  virtual PortAllocatorSession* CreateSession(const std::string& channel_name,
-                                              int component);
+  virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& channel_name, int component,
+      const std::string& ice_ufrag, const std::string& ice_pwd);
 };
 
 class HttpPortAllocatorSession : public HttpPortAllocatorSessionBase {
@@ -163,6 +167,8 @@ class HttpPortAllocatorSession : public HttpPortAllocatorSessionBase {
       HttpPortAllocator* allocator,
       const std::string& channel_name,
       int component,
+      const std::string& ice_ufrag,
+      const std::string& ice_pwd,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
       const std::vector<std::string>& relay_hosts,
       const std::string& relay,

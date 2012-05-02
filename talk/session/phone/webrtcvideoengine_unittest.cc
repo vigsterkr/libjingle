@@ -106,7 +106,7 @@ class WebRtcVideoEngineTestFake : public testing::Test {
                     pixel.get(), size, 1, 1, 0, 0, 0)) {
       return false;
     }
-    return channel_->SendFrame(0, &frame);
+    return channel_->SendFrame(0u, &frame);
   }
   void VerifyVP8SendCodec(int channel_num,
                           unsigned int width,
@@ -368,7 +368,8 @@ TEST_F(WebRtcVideoEngineTestFake, KeyFrameRequestEnabled) {
             vie_.GetKeyFrameRequestMethod(channel_num));
 }
 
-// Test that remb is enabled on the default channel.
+// Test that remb receive and send is enabled for the default channel in a 1:1
+// call.
 TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
@@ -376,14 +377,14 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
-  EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->SetSend(true));
   EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
 }
 
-// Test that remb is enabled on a receive channel but it uses the default
-// channel for sending remb packets.
+// When in conference mode, test that remb is enabled on a receive channel but
+// not for the default channel and that it uses the default channel for sending
+// remb packets.
 TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
@@ -394,11 +395,12 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   int new_channel_num = vie_.GetLastChannel();
   EXPECT_NE(channel_num, new_channel_num);
 
-  EXPECT_TRUE(vie_.GetRembStatusReceive(channel_num));
+  EXPECT_FALSE(vie_.GetRembStatusReceive(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusReceive(new_channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(new_channel_num));
@@ -695,6 +697,34 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
   EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));
 }
 
+// Test that two different streams can have different formats.
+TEST_F(WebRtcVideoEngineTestFake, MultipleSendStreamsDifferentFormats) {
+  EXPECT_TRUE(SetupEngine());
+  for (unsigned int i = 0; i < sizeof(kSsrcs2)/sizeof(kSsrcs2[0]); ++i) {
+    EXPECT_TRUE(channel_->AddSendStream(
+        cricket::StreamParams::CreateLegacy(kSsrcs2[i])));
+  }
+  const int channel0 = vie_.GetChannelFromLocalSsrc(kSsrcs2[0]);
+  ASSERT_NE(-1, channel0);
+  const int channel1 = vie_.GetChannelFromLocalSsrc(kSsrcs2[1]);
+  ASSERT_NE(-1, channel1);
+  ASSERT_NE(channel0, channel1);
+  std::vector<cricket::VideoCodec> codecs;
+  codecs.push_back(kVP8Codec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  cricket::VideoFormat format(kVP8Codec.width / 2, kVP8Codec.height / 2,
+        cricket::VideoFormat::FpsToInterval(kVP8Codec.framerate / 2),
+        cricket::FOURCC_I420);
+  EXPECT_TRUE(channel_->SetSendStreamFormat(kSsrcs2[1], format));
+
+  VerifyVP8SendCodec(channel0, kVP8Codec.width, kVP8Codec.height, 0,
+                     kMaxBandwidthKbps, kMinBandwidthKbps, kStartBandwidthKbps,
+                     kVP8Codec.framerate);
+  VerifyVP8SendCodec(channel1, kVP8Codec.width / 2, kVP8Codec.height / 2, 0,
+                     kMaxBandwidthKbps, kMinBandwidthKbps, kStartBandwidthKbps,
+                     kVP8Codec.framerate / 2);
+}
+
 /////////////////////////
 // Tests with real ViE //
 /////////////////////////
@@ -931,6 +961,10 @@ TEST_F(WebRtcVideoMediaChannelTest, Mute) {
   Base::Mute();
 }
 
+TEST_F(WebRtcVideoMediaChannelTest, MultipleSendStreams) {
+  Base::MultipleSendStreams();
+}
+
 // TODO: Restore this test once we support sending 0 fps.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptDropAllFrames) {
   Base::AdaptDropAllFrames();
@@ -943,4 +977,14 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
 //TODO: Fix the flakey test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
   Base::SetSendStreamFormat();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, TwoStreamsSendAndReceive) {
+  Base::TwoStreamsSendAndReceive(cricket::VideoCodec(100, "VP8", 640, 400, 30,
+                                                     0));
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, TwoStreamsReUseFirstStream) {
+  Base::TwoStreamsReUseFirstStream(cricket::VideoCodec(100, "VP8", 640, 400, 30,
+                                                       0));
 }

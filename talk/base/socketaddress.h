@@ -118,10 +118,10 @@ class SocketAddress {
   int scope_id() const {return scope_id_; }
   void SetScopeID(int id) { scope_id_ = id; }
 
-  // Returns the IP address (or hostname) in printable form.
-  // TODO: Rename this so it is clear that IPv6 strings have "[" and "]"
-  // around the IP. Also, consider moving this to IPAddress.
-  std::string IPAsString() const;
+  // Returns the 'host' portion of the address (hostname or IP) in a form
+  // suitable for use in a URI. If both IP and hostname are present, hostname
+  // is preferred. IPv6 addresses are enclosed in square brackets ('[' and ']').
+  std::string HostAsURIString() const;
 
   // Returns the port as a string.
   std::string PortAsString() const;

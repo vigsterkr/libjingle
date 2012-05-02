@@ -470,22 +470,17 @@ bool StunAddressAttribute::Write(ByteBuffer* buf) const {
   buf->WriteUInt8(0);
   buf->WriteUInt8(address_family);
   buf->WriteUInt16(address_.port());
-  switch (address_family) {
-    case STUN_ADDRESS_IPV4: {
+  switch (address_.family()) {
+    case  AF_INET: {
       in_addr v4addr = address_.ipaddr().ipv4_address();
       buf->WriteBytes(reinterpret_cast<char*>(&v4addr), sizeof(v4addr));
       break;
     }
-    case STUN_ADDRESS_IPV6: {
+    case AF_INET6: {
       in6_addr v6addr = address_.ipaddr().ipv6_address();
       buf->WriteBytes(reinterpret_cast<char*>(&v6addr), sizeof(v6addr));
       break;
     }
-    case STUN_ADDRESS_UNDEF:
-      // This case is handled explicitly above. It must be here anyway
-      // to avoid compiler warnings (particularly clang).
-      ASSERT(0);
-      break;
   }
   return true;
 }

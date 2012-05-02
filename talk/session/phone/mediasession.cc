@@ -448,6 +448,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const SessionDescription* current_description) {
   scoped_ptr<SessionDescription> offer(new SessionDescription());
 
+  ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
 
@@ -469,6 +470,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
     audio->set_lang(lang_);
     offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio.release());
+    bundle_group.AddContentName(CN_AUDIO);
   }
 
   if (options.has_video) {
@@ -490,6 +492,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
 
     video->set_bandwidth(options.video_bandwidth);
     offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video.release());
+    bundle_group.AddContentName(CN_VIDEO);
+  }
+
+  if (options.bundle_enabled) {
+    offer->AddGroup(bundle_group);
   }
 
   if (options.has_data) {
@@ -524,6 +531,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   // XEP-0167, we retain the same payload ids from the offer in the answer.
   scoped_ptr<SessionDescription> accept(new SessionDescription());
 
+  const ContentGroup* received_bundle_group =
+      offer->GetGroupByName(GROUP_TYPE_BUNDLE);
+
+  ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
+
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
 
@@ -545,6 +557,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     }
     accept->AddContent(audio_content->name, audio_content->type,
                        audio_accept.release());
+    // Add to group info if this content name is part of the BUNDLE.
+    if (received_bundle_group &&
+        received_bundle_group->HasContentName(audio_content->name))
+      bundle_group.AddContentName(audio_content->name);
   } else {
     LOG(LS_INFO) << "Audio is not supported in answer";
   }
@@ -568,8 +584,16 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     video_accept->set_bandwidth(options.video_bandwidth);
     accept->AddContent(video_content->name, video_content->type,
                        video_accept.release());
+
+    if (received_bundle_group &&
+        received_bundle_group->HasContentName(video_content->name))
+      bundle_group.AddContentName(video_content->name);
   } else {
     LOG(LS_INFO) << "Video is not supported in answer";
+  }
+
+  if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE)) {
+    accept->AddGroup(bundle_group);
   }
 
   const ContentInfo* data_content = GetFirstDataContent(offer);

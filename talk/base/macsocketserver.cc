@@ -41,8 +41,7 @@ void MacBaseSocketServer::RegisterSocket(MacAsyncSocket* s) {
 }
 
 void MacBaseSocketServer::UnregisterSocket(MacAsyncSocket* s) {
-  size_t found = sockets_.erase(s);
-  ASSERT(found == 1);
+  VERIFY(1 == sockets_.erase(s));   // found 1
 }
 
 bool MacBaseSocketServer::SetPosixSignalHandler(int signum,

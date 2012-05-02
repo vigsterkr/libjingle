@@ -218,6 +218,7 @@ int main(int argc, char **argv) {
       "Disable or enable tls: disable, enable, require.");
   DEFINE_bool(allowplain, false, "Allow plain authentication");
   DEFINE_bool(testserver, false, "Use test server");
+  DEFINE_string(oauth, "", "OAuth2 access token.");
   DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
   DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
   DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
@@ -248,6 +249,7 @@ int main(int argc, char **argv) {
   bool test_server = FLAG_testserver;
   bool allow_plain = FLAG_allowplain;
   std::string tls = FLAG_tls;
+  std::string oauth_token = FLAG_oauth;
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
@@ -312,7 +314,7 @@ int main(int argc, char **argv) {
     Print("Invalid JID. JIDs should be in the form user@domain\n");
     return 1;
   }
-  if (pass.password().empty() && !test_server) {
+  if (pass.password().empty() && !test_server && oauth_token.empty()) {
     Console::SetEcho(false);
     Print("Password: ");
     std::cin >> pass.password();
@@ -344,6 +346,9 @@ int main(int argc, char **argv) {
     xcs.set_test_server_domain("google.com");
   }
   xcs.set_pass(talk_base::CryptString(pass));
+  if (!oauth_token.empty()) {
+    xcs.set_auth_token(buzz::AUTH_MECHANISM_OAUTH2, oauth_token);
+  }
 
   std::string host;
   int port;
@@ -407,7 +412,7 @@ int main(int argc, char **argv) {
     pump.client()->SignalLogOutput.connect(&debug_log_, &DebugLog::Output);
   }
 
-  pump.DoLogin(xcs, new XmppSocket(buzz::TLS_REQUIRED), NULL);
+  pump.DoLogin(xcs, new XmppSocket(buzz::TLS_REQUIRED), new XmppAuth());
   main_thread->Run();
   pump.DoDisconnect();
 

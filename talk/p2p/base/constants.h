@@ -168,6 +168,8 @@ extern const buzz::StaticQName QN_PRIORITY;
 extern const buzz::StaticQName QN_PROTOCOL;
 extern const char ICE_CANDIDATE_TYPE_PEER_STUN[];
 extern const char ICE_CANDIDATE_TYPE_SERVER_STUN[];
+extern const int ICE_UFRAG_LENGTH;
+extern const int ICE_PWD_LENGTH;
 extern const int ICE_CANDIDATE_COMPONENT_RTP;
 extern const int ICE_CANDIDATE_COMPONENT_RTCP;
 extern const int ICE_CANDIDATE_COMPONENT_DEFAULT;

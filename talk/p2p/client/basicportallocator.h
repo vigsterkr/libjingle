@@ -75,8 +75,10 @@ class BasicPortAllocator : public PortAllocator {
   // produced, this returns -1.
   int best_writable_phase() const;
 
-  virtual PortAllocatorSession* CreateSession(const std::string& channel_name,
-                                              int component);
+  virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& channel_name, int component,
+      const std::string& ice_ufrag,
+      const std::string& ice_pwd);
 
   // Called whenever a connection becomes writable with the argument being the
   // phase that the corresponding port was created in.
@@ -110,7 +112,9 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
  public:
   BasicPortAllocatorSession(BasicPortAllocator* allocator,
                             const std::string& channel_name,
-                            int component);
+                            int component,
+                            const std::string& ice_ufrag,
+                            const std::string& ice_pwd);
   ~BasicPortAllocatorSession();
 
   virtual BasicPortAllocator* allocator() { return allocator_; }

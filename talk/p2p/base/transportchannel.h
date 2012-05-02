@@ -73,10 +73,10 @@ class TransportChannel : public sigslot::has_slots<> {
   virtual ~TransportChannel() {}
 
   // Returns the session id of this channel.
-  const std::string& session_id() const { return session_id_; }
+  virtual const std::string& SessionId() const { return session_id_; }
   // Sets session id which created this transport channel.
   // This is called from TransportProxy::GetOrCreateImpl.
-  void set_session_id(const std::string& session_id) {
+  virtual void SetSessionId(const std::string& session_id) {
     session_id_ = session_id;
   }
   // Returns the name of this channel.

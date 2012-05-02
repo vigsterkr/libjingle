@@ -99,7 +99,9 @@ class TransportProxy : public CandidateTranslator {
         transport_(transport),
         state_(STATE_INIT),
         sent_candidates_(false),
-        candidates_allocated_(false) {}
+        candidates_allocated_(false),
+        ice_ufrag_(talk_base::CreateRandomString(ICE_UFRAG_LENGTH)),
+        ice_pwd_(talk_base::CreateRandomString(ICE_PWD_LENGTH)) {}
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
@@ -158,6 +160,8 @@ class TransportProxy : public CandidateTranslator {
   Candidates sent_candidates_;
   Candidates unsent_candidates_;
   bool candidates_allocated_;
+  std::string ice_ufrag_;
+  std::string ice_pwd_;
 };
 
 typedef std::map<std::string, TransportProxy*> TransportMap;
@@ -330,6 +334,8 @@ class BaseSession : public sigslot::has_slots<>,
   // This method will mux transport channels by content_name.
   // First content is used for muxing.
   bool MaybeEnableMuxingSupport();
+  void MaybeCandidatesAllocationDone();
+  bool transport_muxed() const { return transport_muxed_; }
 
   // Called when a transport requests signaling.
   virtual void OnTransportRequestSignaling(Transport* transport) {
@@ -407,6 +413,7 @@ class BaseSession : public sigslot::has_slots<>,
   // This is transport-specific but required so much by unit tests
   // that it's much easier to put it here.
   bool allow_local_ips_;
+  bool transport_muxed_;
   TransportMap transports_;
 };
 

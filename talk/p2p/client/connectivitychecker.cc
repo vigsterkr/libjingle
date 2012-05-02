@@ -48,10 +48,12 @@ class TestHttpPortAllocator : public HttpPortAllocator {
       HttpPortAllocator(network_manager, user_agent) {
     SetRelayToken(relay_token);
   }
-  PortAllocatorSession* CreateSession(
-      const std::string& channel_name,
-      int component) {
+  PortAllocatorSession* CreateSessionInternal(const std::string& channel_name,
+      int component,
+      const std::string& ice_ufrag,
+      const std::string& ice_pwd) {
     return new TestHttpPortAllocatorSession(this, channel_name, component,
+                                            ice_ufrag, ice_pwd,
                                             stun_hosts(), relay_hosts(),
                                             relay_token(), user_agent());
   }
@@ -408,10 +410,8 @@ void ConnectivityChecker::CreateRelayPorts(
 }
 
 void ConnectivityChecker::AllocatePorts() {
-  std::string username =
-      talk_base::CreateRandomString(PortAllocatorSession::kUsernameLength);
-  std::string password =
-      talk_base::CreateRandomString(PortAllocatorSession::kPasswordLength);
+  const std::string username = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
+  const std::string password = talk_base::CreateRandomString(ICE_PWD_LENGTH);
   PortConfiguration config(stun_address_);
   std::vector<talk_base::Network*> networks;
   network_manager_->GetNetworks(&networks);
@@ -465,8 +465,10 @@ void ConnectivityChecker::AllocateRelayPorts() {
   // Currently we are using the 'default' nic for http(s) requests.
   TestHttpPortAllocatorSession* allocator_session =
       reinterpret_cast<TestHttpPortAllocatorSession*>(
-          port_allocator_->CreateSession(
-              kSessionNameRtp, ICE_CANDIDATE_COMPONENT_RTP));
+          port_allocator_->CreateSessionInternal(
+              kSessionNameRtp, ICE_CANDIDATE_COMPONENT_RTP,
+              talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
+              talk_base::CreateRandomString(ICE_PWD_LENGTH)));
   allocator_session->set_proxy(port_allocator_->proxy());
   allocator_session->SignalConfigReady.connect(
       this, &ConnectivityChecker::OnConfigReady);

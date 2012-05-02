@@ -58,6 +58,11 @@ extern const uint32 PRIORITY_LOCAL_STUN;
 extern const uint32 PRIORITY_LOCAL_TCP;
 extern const uint32 PRIORITY_RELAY;
 
+enum IceProtocolType {
+  ICEPROTO_GOOGLE,  // Google version of ICE protocol.
+  ICEPROTO_RFC5245  // Standard RFC 5245 version of ICE>
+};
+
 enum ProtocolType {
   PROTO_UDP,
   PROTO_TCP,
@@ -121,11 +126,21 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   uint32 generation() { return generation_; }
   void set_generation(uint32 generation) { generation_ = generation; }
 
-  // In order to establish a connection to this Port (so that real data can be
-  // sent through), the other side must send us a STUN binding request that is
-  // authenticated with this username_fragment and password.
-  // PortAllocatorSession will provide these username_fragment and password.
-  const std::string& username_fragment() const { return username_fragment_; }
+  // ICE requires a single username/password per content/media line. So the
+  // |ice_username_fragment_| of the ports that belongs to the same content will
+  // be the same. However this causes a small complication with our relay
+  // server, which expects different username for RTP and RTCP.
+  //
+  // To resolve this problem, we implemented the username_fragment(),
+  // which returns a different username (calculated from
+  // |ice_username_fragment_|) for RTCP in the case of ICEPROTO_GOOGLE. And the
+  // username_fragment() simply returns |ice_username_fragment_| when running
+  // in ICEPROTO_RFC5245.
+  //
+  // As a result the ICEPROTO_GOOGLE will use different usernames for RTP and
+  // RTCP. And the ICEPROTO_RFC5245 will use same username for both RTP and
+  // RTCP.
+  const std::string username_fragment() const;
   const std::string& password() const { return password_; }
 
   // PrepareAddress will attempt to get an address for this port that other
@@ -221,10 +236,23 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   int min_port() { return min_port_; }
   int max_port() { return max_port_; }
 
-  void set_enable_message_integrity(bool enable) {
-    enable_message_integrity_ = enable;
+  // This method will set the flag which enables standard ICE/STUN procedures
+  // in STUN connectivity checks. Currently this method does
+  // 1. Add / Verify MI attribute in STUN binding requests.
+  // 2. Username attribute in STUN binding request will be RFRAF:LFRAG,
+  // as opposed to RFRAGLFRAG.
+  void set_ice_protocol(IceProtocolType protocol) {
+    ice_protocol_ = protocol;
   }
-  bool enable_message_integrity() { return enable_message_integrity_; }
+  IceProtocolType ice_protocol() const { return ice_protocol_; }
+
+  // This method will return local and remote username fragements from the
+  // stun username attribute if present.
+  bool ParseStunUsername(const StunMessage* stun_msg,
+                         std::string* local_username,
+                         std::string* remote_username) const;
+  void CreateStunUsername(const std::string& remote_username,
+                          std::string* stun_username_attr_str) const;
 
  protected:
   // Fills in the local address of the port.
@@ -271,13 +299,21 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   std::string content_name_;
   int component_;
   uint32 priority_;
-  std::string username_fragment_;
+  // In order to establish a connection to this Port (so that real data can be
+  // sent through), the other side must send us a STUN binding request that is
+  // authenticated with this username_fragment and password.
+  // PortAllocatorSession will provide these username_fragment and password.
+  //
+  // Note: we should always use username_fragment() instead of using
+  // |ice_username_fragment_| directly. For the details see the comment on
+  // username_fragment().
+  std::string ice_username_fragment_;
   std::string password_;
   std::vector<Candidate> candidates_;
   AddressMap connections_;
   enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
   bool enable_port_packets_;
-  bool enable_message_integrity_;
+  IceProtocolType ice_protocol_;
 
   // Information to use when going through a proxy.
   std::string user_agent_;

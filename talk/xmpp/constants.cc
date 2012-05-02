@@ -187,6 +187,8 @@ const StaticQName QN_GOOGLE_AUTH_CLIENT_USES_FULL_BIND_RESULT =
 const char NS_GOOGLE_AUTH_OLD[] = "google:auth";
 const StaticQName QN_GOOGLE_ALLOW_NON_GOOGLE_ID_XMPP_LOGIN =
     { NS_GOOGLE_AUTH_PROTOCOL, "allow-non-google-login" };
+const StaticQName QN_GOOGLE_AUTH_SERVICE =
+    { NS_GOOGLE_AUTH_PROTOCOL, "service" };
 
 const StaticQName QN_DIALBACK_RESULT = { NS_DIALBACK, "result" };
 const StaticQName QN_DIALBACK_VERIFY = { NS_DIALBACK, "verify" };
@@ -575,4 +577,9 @@ const StaticQName QN_GOOGLE_MUC_RECORDING =
 const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK = { NS_GOOGLE_MUC_MEDIA, "block" };
 const StaticQName QN_STATE_ATTR = { STR_EMPTY, "state" };
 
-}
+const char AUTH_MECHANISM_GOOGLE_COOKIE[] = "X-GOOGLE-COOKIE";
+const char AUTH_MECHANISM_GOOGLE_TOKEN[] = "X-GOOGLE-TOKEN";
+const char AUTH_MECHANISM_OAUTH2[] = "X-OAUTH2";
+const char AUTH_MECHANISM_PLAIN[] = "PLAIN";
+
+}  // namespace buzz

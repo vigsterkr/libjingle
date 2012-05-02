@@ -349,7 +349,7 @@ static bool GetDefaultDestination(const std::vector<Candidate>& candidates,
     }
     current_preference = preference;
     *port = it->address().PortAsString();
-    *ip = it->address().IPAsString();
+    *ip = it->address().ipaddr().ToString();
   }
   return true;
 }
@@ -810,7 +810,7 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
     os << kSdpDelimiterColon
        << it->foundation() << " " << it->component() << " "
        << it->protocol() << " " << it->priority() << " "
-       << it->address().IPAsString() << " "
+       << it->address().ipaddr().ToString() << " "
        << it->address().PortAsString() << " "
        << kAttributeCandidateTyp << " " << type << " "
        << kAttributeCandidateNetworkName << " " << it->network_name() << " "

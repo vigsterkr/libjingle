@@ -49,6 +49,12 @@ class TransportChannelImpl : public TransportChannel {
   // Returns the transport that created this channel.
   virtual Transport* GetTransport() = 0;
 
+  // SetIceUfrag and SetIcePwd only need to be implemented by the ICE
+  // transport channels. Non-ICE transport channels can just ignore.
+  // The ufrag and pwd should be set before the Connect() is called.
+  virtual void SetIceUfrag(const std::string& ice_ufrag) {}
+  virtual void SetIcePwd(const std::string& ice_pwd) {}
+
   // Begins the process of attempting to make a connection to the other client.
   virtual void Connect() = 0;
 
@@ -75,6 +81,7 @@ class TransportChannelImpl : public TransportChannel {
 
   // TransportChannel is forwarding this signal from PortAllocatorSession.
   sigslot::signal1<TransportChannelImpl*> SignalCandidatesAllocationDone;
+
  private:
   DISALLOW_EVIL_CONSTRUCTORS(TransportChannelImpl);
 };

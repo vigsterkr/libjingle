@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,41 +25,51 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_XMPP_SASLPLAINMECHANISM_H_
-#define TALK_XMPP_SASLPLAINMECHANISM_H_
+#include "talk/xmpp/mucroomdiscoverytask.h"
 
-#include "talk/base/cryptstring.h"
-#include "talk/xmpp/saslmechanism.h"
+#include "talk/xmpp/constants.h"
 
 namespace buzz {
 
-class SaslPlainMechanism : public SaslMechanism {
-
-public:
-  SaslPlainMechanism(const buzz::Jid user_jid, const talk_base::CryptString & password) :
-    user_jid_(user_jid), password_(password) {}
-
-  virtual std::string GetMechanismName() { return "PLAIN"; }
-
-  virtual XmlElement * StartSaslAuth() {
-    // send initial request
-    XmlElement * el = new XmlElement(QN_SASL_AUTH, true);
-    el->AddAttr(QN_MECHANISM, "PLAIN");
-
-    talk_base::FormatCryptString credential;
-    credential.Append("\0", 1);
-    credential.Append(user_jid_.node());
-    credential.Append("\0", 1);
-    credential.Append(&password_);
-    el->AddText(Base64EncodeFromArray(credential.GetData(), credential.GetLength()));
-    return el;
-  }
-
-private:
-  Jid user_jid_;
-  talk_base::CryptString password_;
-};
-
+MucRoomDiscoveryTask::MucRoomDiscoveryTask(
+    XmppTaskParentInterface* parent,
+    const Jid& room_jid)
+    : IqTask(parent, STR_GET, room_jid,
+             new buzz::XmlElement(buzz::QN_DISCO_INFO_QUERY)) {
 }
 
-#endif  // TALK_XMPP_SASLPLAINMECHANISM_H_
+void MucRoomDiscoveryTask::HandleResult(const XmlElement* stanza) {
+  const XmlElement* query = stanza->FirstNamed(QN_DISCO_INFO_QUERY);
+  if (query == NULL) {
+    SignalError(this, NULL);
+    return;
+  }
+
+  const XmlElement* identity = query->FirstNamed(QN_DISCO_IDENTITY);
+  if (identity == NULL || !identity->HasAttr(QN_NAME)) {
+    SignalError(this, NULL);
+    return;
+  }
+
+  const std::string name(identity->Attr(QN_NAME));
+
+  std::set<std::string> features;
+  for (const XmlElement* feature = query->FirstNamed(QN_DISCO_FEATURE);
+       feature != NULL; feature = feature->NextNamed(QN_DISCO_FEATURE)) {
+    features.insert(feature->Attr(QN_VAR));
+  }
+
+  std::map<std::string, std::string> extended_info;
+  const XmlElement* data_x = query->FirstNamed(QN_XDATA_X);
+  if (data_x != NULL) {
+    for (const XmlElement* field = data_x->FirstNamed(QN_XDATA_FIELD);
+         field != NULL; field = field->NextNamed(QN_XDATA_FIELD)) {
+      const std::string key(field->Attr(QN_VAR));
+      extended_info[key] = field->Attr(QN_XDATA_VALUE);
+    }
+  }
+
+  SignalResult(this, name, features, extended_info);
+}
+
+}  // namespace buzz

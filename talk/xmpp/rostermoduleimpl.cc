@@ -323,6 +323,19 @@ XmppPresenceImpl::google_user_id() const {
   return std::string();
 }
 
+const std::string
+XmppPresenceImpl::nickname() const {
+  if (raw_xml_.get() == NULL)
+    return std::string();
+
+  XmlElement* nickname = raw_xml_->FirstNamed(QN_NICKNAME);
+  if (nickname) {
+    return nickname->BodyText();
+  }
+
+  return std::string();
+}
+
 const XmlElement*
 XmppPresenceImpl::raw_xml() const {
   if (!raw_xml_.get())

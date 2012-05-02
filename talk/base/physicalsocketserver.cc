@@ -860,14 +860,8 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
   }
 
   virtual void OnEvent(uint32 ff, int err) {
-    if ((ff & DE_READ) != 0) {
-      enabled_events_ &= ~DE_READ;
-      SignalReadEvent(this);
-    }
-    if ((ff & DE_WRITE) != 0) {
-      enabled_events_ &= ~DE_WRITE;
-      SignalWriteEvent(this);
-    }
+    // Make sure we deliver connect/accept first. Otherwise, consumers may see
+    // something like a READ followed by a CONNECT, which would be odd.
     if ((ff & DE_CONNECT) != 0) {
       enabled_events_ &= ~DE_CONNECT;
       SignalConnectEvent(this);
@@ -875,6 +869,14 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
     if ((ff & DE_ACCEPT) != 0) {
       enabled_events_ &= ~DE_ACCEPT;
       SignalReadEvent(this);
+    }
+    if ((ff & DE_READ) != 0) {
+      enabled_events_ &= ~DE_READ;
+      SignalReadEvent(this);
+    }
+    if ((ff & DE_WRITE) != 0) {
+      enabled_events_ &= ~DE_WRITE;
+      SignalWriteEvent(this);
     }
     if ((ff & DE_CLOSE) != 0) {
       // The socket is now dead to us, so stop checking it.
@@ -1092,14 +1094,8 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
 
   virtual void OnEvent(uint32 ff, int err) {
     int cache_id = id_;
-    if ((ff & DE_READ) != 0) {
-      enabled_events_ &= ~DE_READ;
-      SignalReadEvent(this);
-    }
-    if (((ff & DE_WRITE) != 0) && (id_ == cache_id)) {
-      enabled_events_ &= ~DE_WRITE;
-      SignalWriteEvent(this);
-    }
+    // Make sure we deliver connect/accept first. Otherwise, consumers may see
+    // something like a READ followed by a CONNECT, which would be odd.
     if (((ff & DE_CONNECT) != 0) && (id_ == cache_id)) {
       if (ff != DE_CONNECT)
         LOG(LS_VERBOSE) << "Signalled with DE_CONNECT: " << ff;
@@ -1113,6 +1109,14 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
     if (((ff & DE_ACCEPT) != 0) && (id_ == cache_id)) {
       enabled_events_ &= ~DE_ACCEPT;
       SignalReadEvent(this);
+    }
+    if ((ff & DE_READ) != 0) {
+      enabled_events_ &= ~DE_READ;
+      SignalReadEvent(this);
+    }
+    if (((ff & DE_WRITE) != 0) && (id_ == cache_id)) {
+      enabled_events_ &= ~DE_WRITE;
+      SignalWriteEvent(this);
     }
     if (((ff & DE_CLOSE) != 0) && (id_ == cache_id)) {
       signal_close_ = true;

@@ -88,6 +88,7 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
       HttpPortAllocator* allocator,
       const std::string& channel_name,
       int component,
+      const std::string& ice_ufrag, const std::string& ice_pwd,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
       const std::vector<std::string>& relay_hosts,
       const std::string& relay_token,
@@ -95,6 +96,8 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
       : TestHttpPortAllocatorSession(allocator,
                                      channel_name,
                                      component,
+                                     ice_ufrag,
+                                     ice_pwd,
                                      stun_hosts,
                                      relay_hosts,
                                      relay_token,
@@ -120,7 +123,7 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
     ss << "username=" << kUserName << std::endl
        << "password=" << kPassword << std::endl
        << "magic_cookie=" << kMagicCookie << std::endl
-       << "relay.ip=" << kRelayAddr.IPAsString() << std::endl
+       << "relay.ip=" << kRelayAddr.ipaddr().ToString() << std::endl
        << "relay.udp_port=" << kRelayUdpPort << std::endl
        << "relay.tcp_port=" << kRelayTcpPort << std::endl
        << "relay.ssltcp_port=" << kRelaySsltcpPort << std::endl;
@@ -141,8 +144,8 @@ class FakeHttpPortAllocator : public HttpPortAllocator {
       : HttpPortAllocator(network_manager, user_agent) {
   }
 
-  virtual PortAllocatorSession* CreateSession(const std::string& name,
-                                              int component) {
+  virtual PortAllocatorSession* CreateSessionInternal(const std::string& name,
+      int component, const std::string& ice_ufrag, const std::string& ice_pwd) {
     std::vector<talk_base::SocketAddress> stun_hosts;
     stun_hosts.push_back(kStunAddr);
     std::vector<std::string> relay_hosts;
@@ -150,6 +153,8 @@ class FakeHttpPortAllocator : public HttpPortAllocator {
     return new FakeHttpPortAllocatorSession(this,
                                             kChannelName,
                                             component,
+                                            ice_ufrag,
+                                            ice_pwd,
                                             stun_hosts,
                                             relay_hosts,
                                             kRelayToken,

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2008, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,44 +25,32 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_EVENT_H__
-#define TALK_BASE_EVENT_H__
+#ifndef TALK_XMPP_MUCROOMDISCOVERYTASK_H_
+#define TALK_XMPP_MUCROOMDISCOVERYTASK_H_
 
-#if defined(WIN32)
-#include "talk/base/win32.h"  // NOLINT: consider this a system header.
-#elif defined(POSIX)
-#include <pthread.h>
-#else
-#error "Must define either WIN32 or POSIX."
-#endif
+#include <map>
+#include <string>
+#include "talk/xmpp/iqtask.h"
 
-#include "talk/base/basictypes.h"
-#include "talk/base/common.h"
+namespace buzz {
 
-namespace talk_base {
-
-class Event {
+// This task requests the feature capabilities of the room. It is based on
+// XEP-0030, and extended using XEP-0004.
+class MucRoomDiscoveryTask : public IqTask {
  public:
-  Event(bool manual_reset, bool initially_signaled);
-  ~Event();
+  MucRoomDiscoveryTask(XmppTaskParentInterface* parent,
+                       const Jid& room_jid);
 
-  void Set();
-  void Reset();
-  bool Wait(int cms);
+  // Signal (name, features, extended_info)
+  sigslot::signal4<MucRoomDiscoveryTask*,
+                   const std::string&,
+                   const std::set<std::string>&,
+                   const std::map<std::string, std::string>& > SignalResult;
 
- private:
-  bool is_manual_reset_;
-
-#if defined(WIN32)
-  bool is_initially_signaled_;
-  HANDLE event_handle_;
-#elif defined(POSIX)
-  bool event_status_;
-  pthread_mutex_t event_mutex_;
-  pthread_cond_t event_cond_;
-#endif
+ protected:
+  virtual void HandleResult(const XmlElement* stanza);
 };
 
-}  // namespace talk_base
+}  // namespace buzz
 
-#endif  // TALK_BASE_EVENT_H__
+#endif  // TALK_XMPP_MUCROOMDISCOVERYTASK_H_

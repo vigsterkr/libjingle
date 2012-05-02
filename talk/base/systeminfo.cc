@@ -58,13 +58,13 @@ typedef BOOL (WINAPI *LPFN_GLPI)(
     PSYSTEM_LOGICAL_PROCESSOR_INFORMATION,
     PDWORD);
 
-static int NumCores() {
+static void GetProcessorInformation(int &physical_cpus, int &cache_size) {
   // GetLogicalProcessorInformation() is available on Windows XP SP3 and beyond.
   LPFN_GLPI glpi = reinterpret_cast<LPFN_GLPI>(GetProcAddress(
       GetModuleHandle(L"kernel32"),
       "GetLogicalProcessorInformation"));
   if (NULL == glpi) {
-    return -1;
+    return;
   }
   // Determine buffer size, allocate and get processor information.
   // Size can change between calls (unlikely), so a loop is done.
@@ -75,24 +75,52 @@ static int NumCores() {
       infos.reset(new SYSTEM_LOGICAL_PROCESSOR_INFORMATION[
           return_length / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION)]);
     } else {
-      return -1;
+      return;
     }
   }
-  int processor_core_count = 0;
+  physical_cpus = 0;
+  cache_size = 0;
   for (size_t i = 0;
       i < return_length / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); ++i) {
     if (infos[i].Relationship == RelationProcessorCore) {
-      ++processor_core_count;
+      ++physical_cpus;
+    } else if (infos[i].Relationship == RelationCache) {
+      int next_cache_size = static_cast<int>(infos[i].Cache.Size);
+      if (next_cache_size >= cache_size) {
+        cache_size = next_cache_size;
+      }
     }
   }
-  return processor_core_count;
+  return;
+}
+#else
+// TODO: Use gcc 4.4 provided cpuid intrinsic
+// 32 bit fpic requires ebx be preserved
+#if (defined(__pic__) || defined(__APPLE__)) && defined(__i386__)
+static inline void __cpuid(int cpu_info[4], int info_type) {
+  __asm__ volatile (  // NOLINT
+    "mov %%ebx, %%edi\n"
+    "cpuid\n"
+    "xchg %%edi, %%ebx\n"
+    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type)
+  );  // NOLINT
+}
+#elif defined(__i386__) || defined(__x86_64__)
+static inline void __cpuid(int cpu_info[4], int info_type) {
+  __asm__ volatile (  // NOLINT
+    "cpuid\n"
+    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type)
+  );  // NOLINT
 }
 #endif
+#endif  // WIN32
 
 // Note(fbarchard):
 // Family and model are extended family and extended model.  8 bits each.
 SystemInfo::SystemInfo()
-    : physical_cpus_(1), logical_cpus_(1),
+    : physical_cpus_(1), logical_cpus_(1), cache_size_(0),
       cpu_family_(0), cpu_model_(0), cpu_stepping_(0),
       cpu_speed_(0), memory_(0) {
   // Initialize the basic information.
@@ -109,7 +137,7 @@ SystemInfo::SystemInfo()
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   logical_cpus_ = si.dwNumberOfProcessors;
-  physical_cpus_ = NumCores();
+  GetProcessorInformation(physical_cpus_, cache_size_);
   if (physical_cpus_ <= 0) {
     physical_cpus_ = logical_cpus_;
   }
@@ -125,6 +153,10 @@ SystemInfo::SystemInfo()
   length = sizeof(sysctl_value);
   if (!sysctlbyname("hw.logicalcpu_max", &sysctl_value, &length, NULL, 0)) {
     logical_cpus_ = static_cast<int>(sysctl_value);
+  }
+  length = sizeof(sysctl_value);
+  if (!sysctlbyname("hw.l3cachesize", &sysctl_value, &length, NULL, 0)) {
+    cache_size_ = static_cast<int>(sysctl_value) * 1024;
   }
   length = sizeof(sysctl_value);
   if (!sysctlbyname("machdep.cpu.family", &sysctl_value, &length, NULL, 0)) {
@@ -149,9 +181,10 @@ SystemInfo::SystemInfo()
     proc_info.GetSectionIntValue(0, "model", &cpu_model_);
     proc_info.GetSectionIntValue(0, "stepping", &cpu_stepping_);
     proc_info.GetSectionIntValue(0, "cpu MHz", &cpu_speed_);
+    proc_info.GetSectionIntValue(0, "cache size", &cache_size_);
+    cache_size_ *= 1024;
 #endif
   }
-
   // ProcCpuInfo reads cpu speed from "cpu MHz" under /proc/cpuinfo.
   // But that number is a moving target which can change on-the-fly according to
   // many factors including system workload.
@@ -161,6 +194,18 @@ SystemInfo::SystemInfo()
   int max_freq = talk_base::ReadCpuMaxFreq();
   if (max_freq > 0) {
     cpu_speed_ = max_freq;
+  }
+#endif
+// For L2 CacheSize see also
+// http://www.flounder.com/cpuid_explorer2.htm#CPUID(0x800000006)
+#ifdef CPU_X86
+  if (cache_size_ == 0) {
+    int cpu_info[4];
+    __cpuid(cpu_info, 0x80000000);  // query maximum extended cpuid function.
+    if (static_cast<uint32>(cpu_info[0]) >= 0x80000006) {
+      __cpuid(cpu_info, 0x80000006);
+      cache_size_ = (cpu_info[2] >> 16) * 1024;
+    }
   }
 #endif
 }
@@ -208,30 +253,6 @@ SystemInfo::Architecture SystemInfo::GetCpuArchitecture() {
   return cpu_arch_;
 }
 
-#ifndef WIN32
-// TODO: Use gcc 4.4 provided cpuid intrinsic
-// 32 bit fpic requires ebx be preserved
-#if (defined(__pic__) || defined(__APPLE__)) && defined(__i386__)
-static inline void __cpuid(int cpu_info[4], int info_type) {
-  __asm__ volatile (  // NOLINT
-    "mov %%ebx, %%edi\n"
-    "cpuid\n"
-    "xchg %%edi, %%ebx\n"
-    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
-    : "a"(info_type)
-  );  // NOLINT
-}
-#elif defined(__i386__) || defined(__x86_64__)
-static inline void __cpuid(int cpu_info[4], int info_type) {
-  __asm__ volatile (  // NOLINT
-    "cpuid\n"
-    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
-    : "a"(info_type)
-  );  // NOLINT
-}
-#endif
-#endif  // WIN32
-
 // Returns the vendor string from the cpu, e.g. "GenuineIntel", "AuthenticAMD".
 // See "Intel Processor Identification and the CPUID Instruction"
 // (Intel document number: 241618)
@@ -250,6 +271,10 @@ std::string SystemInfo::GetCpuVendor() {
 #endif
   }
   return cpu_vendor_;
+}
+
+int SystemInfo::GetCpuCacheSize() {
+  return cache_size_;
 }
 
 // Return the "family" of this CPU.

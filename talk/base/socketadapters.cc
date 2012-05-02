@@ -371,7 +371,7 @@ void AsyncHttpsProxySocket::SendRequest() {
   std::stringstream ss;
   ss << "CONNECT " << dest_.ToString() << " HTTP/1.0\r\n";
   ss << "User-Agent: " << agent_ << "\r\n";
-  ss << "Host: " << dest_.IPAsString() << "\r\n";
+  ss << "Host: " << dest_.HostAsURIString() << "\r\n";
   ss << "Content-Length: 0\r\n";
   ss << "Proxy-Connection: Keep-Alive\r\n";
   ss << headers_;
@@ -687,7 +687,7 @@ void AsyncSocksProxySocket::SendConnect() {
   request.WriteUInt8(1);              // CONNECT
   request.WriteUInt8(0);              // Reserved
   if (dest_.IsUnresolved()) {
-    std::string hostname = dest_.IPAsString();
+    std::string hostname = dest_.hostname();
     request.WriteUInt8(3);            // DOMAINNAME
     request.WriteUInt8(static_cast<uint8>(hostname.size()));
     request.WriteString(hostname);    // Destination Hostname

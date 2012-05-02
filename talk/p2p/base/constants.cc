@@ -159,6 +159,12 @@ const buzz::StaticQName QN_PRIORITY = { cricket::NS_EMPTY, "priority" };
 const buzz::StaticQName QN_PROTOCOL = { cricket::NS_EMPTY, "protocol" };
 const char ICE_CANDIDATE_TYPE_PEER_STUN[] = "prflx";
 const char ICE_CANDIDATE_TYPE_SERVER_STUN[] = "srflx";
+// Minimum ufrag length is 4 characters as per RFC5245. We chose 16 because
+// some internal systems expect username to be 16 bytes.
+const int ICE_UFRAG_LENGTH = 16;
+// Minimum password length of 22 characters as per RFC5245. We chose 24 because
+// some internal systems expect password to be multiple of 4.
+const int ICE_PWD_LENGTH = 24;
 // TODO: This is media-specific, so might belong
 // somewhere like session/phone/constants.h
 const int ICE_CANDIDATE_COMPONENT_RTP = 1;

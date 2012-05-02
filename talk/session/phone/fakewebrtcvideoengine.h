@@ -156,6 +156,17 @@ class FakeWebRtcVideoEngine
   bool IsInited() const { return inited_; }
 
   int GetLastChannel() const { return last_channel_; }
+  int GetChannelFromLocalSsrc(int local_ssrc) const {
+    // ssrcs_[0] is the default local ssrc.
+    for (std::map<int, Channel*>::const_iterator iter = channels_.begin();
+         iter != channels_.end(); ++iter) {
+      if (local_ssrc == iter->second->ssrcs_[0]) {
+        return iter->first;
+      }
+    }
+    return -1;
+  }
+
   int GetNumChannels() const { return channels_.size(); }
   bool IsChannel(int channel) const {
     return (channels_.find(channel) != channels_.end());

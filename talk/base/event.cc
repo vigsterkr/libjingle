@@ -43,113 +43,62 @@ namespace talk_base {
 
 Event::Event(bool manual_reset, bool initially_signaled)
     : is_manual_reset_(manual_reset),
-      is_initially_signaled_(initially_signaled),
-      event_handle_(NULL) {
-}
-
-bool Event::EnsureInitialized() {
-  if (event_handle_ == NULL) {
-    event_handle_ = ::CreateEvent(NULL,                 // Security attributes.
-                                  is_manual_reset_,
-                                  is_initially_signaled_,
-                                  NULL);                // Name.
-  }
-
-  return (event_handle_ != NULL);
+      is_initially_signaled_(initially_signaled) {
+  event_handle_ = ::CreateEvent(NULL,                 // Security attributes.
+                                is_manual_reset_,
+                                is_initially_signaled_,
+                                NULL);                // Name.
+  ASSERT(event_handle_ != NULL);
 }
 
 Event::~Event() {
-  if (event_handle_ != NULL) {
-    CloseHandle(event_handle_);
-    event_handle_ = NULL;
-  }
+  CloseHandle(event_handle_);
 }
 
-bool Event::Set() {
-  if (!EnsureInitialized())
-    return false;
-
+void Event::Set() {
   SetEvent(event_handle_);
-  return true;
 }
 
-bool Event::Reset() {
-  if (!EnsureInitialized())
-    return false;
-
+void Event::Reset() {
   ResetEvent(event_handle_);
-  return true;
 }
 
 bool Event::Wait(int cms) {
   DWORD ms = (cms == kForever)? INFINITE : cms;
-
-  if (!EnsureInitialized())
-    return false;
-  else
-    return (WaitForSingleObject(event_handle_, ms) == WAIT_OBJECT_0);
+  return (WaitForSingleObject(event_handle_, ms) == WAIT_OBJECT_0);
 }
 
 #elif defined(POSIX)
 
 Event::Event(bool manual_reset, bool initially_signaled)
     : is_manual_reset_(manual_reset),
-      event_status_(initially_signaled),
-      event_mutex_initialized_(false),
-      event_cond_initialized_(false) {
-}
-
-bool Event::EnsureInitialized() {
-  if (!event_mutex_initialized_) {
-    if (pthread_mutex_init(&event_mutex_, NULL) == 0)
-      event_mutex_initialized_ = true;
-  }
-
-  if (!event_cond_initialized_) {
-    if (pthread_cond_init(&event_cond_, NULL) == 0)
-      event_cond_initialized_ = true;
-  }
-
-  return (event_mutex_initialized_ && event_cond_initialized_);
+      event_status_(initially_signaled) {
+  int result;
+  result = pthread_mutex_init(&event_mutex_, NULL);
+  ASSERT(result == 0);
+  result = pthread_cond_init(&event_cond_, NULL);
+  ASSERT(result == 0);
 }
 
 Event::~Event() {
-  if (event_mutex_initialized_) {
-    pthread_mutex_destroy(&event_mutex_);
-    event_mutex_initialized_ = false;
-  }
-
-  if (event_cond_initialized_) {
-    pthread_cond_destroy(&event_cond_);
-    event_cond_initialized_ = false;
-  }
+  pthread_mutex_destroy(&event_mutex_);
+  pthread_cond_destroy(&event_cond_);
 }
 
-bool Event::Set() {
-  if (!EnsureInitialized())
-    return false;
-
+void Event::Set() {
   pthread_mutex_lock(&event_mutex_);
   event_status_ = true;
   pthread_cond_broadcast(&event_cond_);
   pthread_mutex_unlock(&event_mutex_);
-  return true;
 }
 
-bool Event::Reset() {
-  if (!EnsureInitialized())
-    return false;
-
+void Event::Reset() {
   pthread_mutex_lock(&event_mutex_);
   event_status_ = false;
   pthread_mutex_unlock(&event_mutex_);
-  return true;
 }
 
 bool Event::Wait(int cms) {
-  if (!EnsureInitialized())
-    return false;
-
   pthread_mutex_lock(&event_mutex_);
   int error = 0;
 

@@ -827,3 +827,23 @@ TEST_F(WebRtcSessionTest, VerifyAnswerFromCryptoOffer) {
   WebRtcSessionTest::Init();
   VerifyAnswerFromCryptoOffer();
 }
+
+TEST_F(WebRtcSessionTest, VerifyBundleFlagInPA) {
+  // This test verifies BUNDLE flag in PortAllocator, if BUNDLE information in
+  // local description is removed by the application, BUNDLE flag should be
+  // disabled in PortAllocator. By default BUNDLE is enabled in the WebRtc.
+  WebRtcSessionTest::Init();
+  allocator_.set_flags(cricket::PORTALLOCATOR_ENABLE_BUNDLE);
+  EXPECT_EQ(cricket::PORTALLOCATOR_ENABLE_BUNDLE, allocator_.flags());
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(MediaHints()));
+  cricket::SessionDescription* offer_copy =
+      offer->description()->Copy();
+  offer_copy->RemoveGroupByName(cricket::GROUP_TYPE_BUNDLE);
+  JsepSessionDescription* modified_offer =
+      new JsepSessionDescription();
+  modified_offer->Initialize(offer_copy, "1", "1");
+
+  session_->SetLocalDescription(JsepInterface::kOffer, modified_offer);
+  EXPECT_EQ(0U, allocator_.flags());
+}

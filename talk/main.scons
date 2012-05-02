@@ -365,14 +365,13 @@ mac_env = posix_env.Clone(
 # supported mac platforms (10.5+).
 mac_env.SetBits('use_static_openssl')
 
+# Generic mac environment common to all targets
 mac_env.Append(
   CPPDEFINES = [
     'OSX',
   ],
   CCFLAGS = [
-    '-m32',
     '-arch', 'i386',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
     '-fasm-blocks',
   ],
   LINKFLAGS = [
@@ -383,9 +382,6 @@ mac_env.Append(
     # TODO: consider only defining for libs that actually have objc.
     '-ObjC',
     '-arch', 'i386',
-    '-mmacosx-version-min=10.5',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
-    '-m32',
     '-dead_strip',
   ],
   FRAMEWORKS = [
@@ -402,23 +398,60 @@ mac_env.Append(
   ]
 )
 
+# add debug flags to environment
+def mac_debug_include(env):
+  env.Append(
+    CCFLAGS = [
+      '-O0',
+    ],
+    CPPDEFINES = [
+      'DEBUG=1',
+    ],
+  )
+  # Remove -g set by hammer, which is not what we want (we have set -g3 above).
+  env.FilterOut(CCFLAGS = ['-g'])
+
+# add 32/64 bit specific options to specified environment
+def mac_common_include_x86_32(env):
+  env.Append(
+    CCFLAGS = [
+      '-m32',
+      '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+    ],
+    LINKFLAGS = [
+      '-m32',
+      '-mmacosx-version-min=10.5',
+      '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
+    ],
+  )
+  envs.append(env)
+
+def mac_common_include_x86_64(env):
+  env.Append(
+    CCFLAGS = [
+      '-m64',
+      '-fPIC',
+      '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
+    ],
+    LINKFLAGS = [
+      '-m64',
+      '-mmacosx-version-min=10.6',
+      '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
+    ],
+    CPPDEFINES = [
+      'ARCH_CPU_64_BITS',
+    ],
+  )
+  env.SetBits('host_platform_64bit')
+  envs.append(env)
+
+# Create all environments
 mac_dbg_env = mac_env.Clone(
   BUILD_TYPE = 'dbg',
   BUILD_TYPE_DESCRIPTION = 'Mac debug build',
   BUILD_GROUPS = ['default', 'all'],
   tools = ['target_debug'],
 )
-mac_dbg_env.Append(
-  CCFLAGS = [
-    '-O0',
-  ],
-  CPPDEFINES = [
-    'DEBUG=1',
-  ],
-)
-# Remove -g set by hammer, which is not what we want (we have set -g3 above).
-mac_dbg_env.FilterOut(CCFLAGS = ['-g'])
-envs.append(mac_dbg_env)
 
 mac_opt_env = mac_env.Clone(
   BUILD_TYPE = 'opt',
@@ -426,56 +459,24 @@ mac_opt_env = mac_env.Clone(
   BUILD_GROUPS = ['all'],
   tools = ['target_optimized'],
 )
-mac_opt_env.Append(
-  CCFLAGS = [
-    # TODO: Figure out how hammer can compile without
-    # this flag, then remove.  Confirmed asserts are preprocessed
-    # out.  Maybe it's a different version of gcc?
-    '-Wno-unused-variable',
-  ],
-  # Hammer automatically specifies -Os for mac opt.
+
+mac_opt64_env = mac_opt_env.Clone(
+  BUILD_TYPE = 'opt64',
+  BUILD_TYPE_DESCRIPTION = 'Mac opt 64bit build',
+  BUILD_GROUPS = ['all'],
 )
-envs.append(mac_opt_env)
-
-
 mac_dbg64_env = mac_dbg_env.Clone(
   BUILD_TYPE = 'dbg64',
   BUILD_TYPE_DESCRIPTION = 'Mac debug 64bit build',
   BUILD_GROUPS = ['all'],
 )
 
-mac_dbg64_env.SetBits('host_platform_64bit')
-
-mac_dbg64_env.FilterOut(
-  CCFLAGS = [
-    '-m32',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
-  ],
-  LINKFLAGS = [
-    '-m32',
-    '-mmacosx-version-min=10.5',
-    '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
-  ],
-)
-
-
-mac_dbg64_env.Append(
-  CCFLAGS = [
-    '-m64',
-    '-fPIC',
-    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
-  ],
-  LINKFLAGS = [
-    '-m64',
-    '-mmacosx-version-min=10.6',
-    '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
-  ],
-  CPPDEFINES = [
-    'ARCH_CPU_64_BITS',
-  ],
-)
-
-envs.append(mac_dbg64_env)
+mac_debug_include(mac_dbg_env)
+mac_debug_include(mac_dbg64_env)
+mac_common_include_x86_32(mac_opt_env)
+mac_common_include_x86_32(mac_dbg_env)
+mac_common_include_x86_64(mac_opt64_env)
+mac_common_include_x86_64(mac_dbg64_env)
 
 #-------------------------------------------------------------------------------
 # L I N U X

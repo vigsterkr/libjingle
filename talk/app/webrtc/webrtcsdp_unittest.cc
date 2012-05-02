@@ -76,6 +76,12 @@ static const char kSdpFullString[] =
     "a=candidate:1 2 udp 2130706432 127.0.0.1 1235 typ host "
     "network_name eth0 username user_rtcp password password_rtcp "
     "generation 0\r\n"
+    "a=candidate:1 1 udp 2130706432 ::1 1238 typ host "
+    "network_name eth0 username user_rtp password password_rtp "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 2130706432 ::1 1239 typ host "
+    "network_name eth0 username user_rtcp password password_rtcp "
+    "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 74.125.127.126 2345 typ srflx "
     "network_name eth0 username user_rtp_stun password password_rtp_stun "
     "generation 0\r\n"
@@ -101,6 +107,12 @@ static const char kSdpFullString[] =
     "network_name eth0 username user_video_rtcp password password_video_rtcp "
     "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 127.0.0.1 1237 typ host "
+    "network_name eth0 username user_video_rtp password password_video_rtp "
+    "generation 0\r\n"
+    "a=candidate:1 2 udp 2130706432 ::1 1240 typ host "
+    "network_name eth0 username user_video_rtcp password password_video_rtcp "
+    "generation 0\r\n"
+    "a=candidate:1 1 udp 2130706432 ::1 1241 typ host "
     "network_name eth0 username user_video_rtp password password_video_rtp "
     "generation 0\r\n"
     "a=candidate:1 2 udp 2130706432 74.125.224.39 3456 typ relay "
@@ -254,7 +266,7 @@ class WebRtcSdpTest : public testing::Test {
     desc_.AddContent(kVideoContentName, cricket::NS_JINGLE_RTP,
                      video.release());
 
-    // host
+    // v4 host
     int port = 1234;
     talk_base::SocketAddress address("127.0.0.1", port++);
     cricket::Candidate candidate1(
@@ -281,16 +293,42 @@ class WebRtcSdpTest : public testing::Test {
         "user_video_rtp", "password_video_rtp", cricket::LOCAL_PORT_TYPE,
         kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
 
+    // v6 host
+    talk_base::SocketAddress v6_address("::1", port++);
+    cricket::Candidate candidate5(
+        "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
+        "udp", v6_address, kCandidatePriority,
+        "user_rtp", "password_rtp", cricket::LOCAL_PORT_TYPE,
+        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    v6_address.SetPort(port++);
+    cricket::Candidate candidate6(
+        "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
+        "udp", v6_address, kCandidatePriority,
+        "user_rtcp", "password_rtcp", cricket::LOCAL_PORT_TYPE,
+        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    v6_address.SetPort(port++);
+    cricket::Candidate candidate7(
+        "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
+        "udp", v6_address, kCandidatePriority,
+        "user_video_rtcp", "password_video_rtcp", cricket::LOCAL_PORT_TYPE,
+        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    v6_address.SetPort(port++);
+    cricket::Candidate candidate8(
+        "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
+        "udp", v6_address, kCandidatePriority,
+        "user_video_rtp", "password_video_rtp", cricket::LOCAL_PORT_TYPE,
+        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+
     // stun
     int port_stun = 2345;
     talk_base::SocketAddress address_stun("74.125.127.126", port_stun++);
-    cricket::Candidate candidate5
+    cricket::Candidate candidate9
         ("", cricket::ICE_CANDIDATE_COMPONENT_RTP,
          "udp", address_stun, kCandidatePriority,
         "user_rtp_stun", "password_rtp_stun", cricket::STUN_PORT_TYPE,
         kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
     address_stun.SetPort(port_stun++);
-    cricket::Candidate candidate6(
+    cricket::Candidate candidate10(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", address_stun, kCandidatePriority,
         "user_rtcp_stun", "password_rtcp_stun", cricket::STUN_PORT_TYPE,
@@ -299,14 +337,14 @@ class WebRtcSdpTest : public testing::Test {
     // relay
     int port_relay = 3456;
     talk_base::SocketAddress address_relay("74.125.224.39", port_relay++);
-    cricket::Candidate candidate7(
+    cricket::Candidate candidate11(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", address_relay, kCandidatePriority,
         "user_video_rtcp_relay", "password_video_rtcp",
         cricket::RELAY_PORT_TYPE, kCandidateNetworkName,
         kCandidateGeneration, kCandidateFoundation);
     address_relay.SetPort(port_relay++);
-    cricket::Candidate candidate8(
+    cricket::Candidate candidate12(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", address_relay, kCandidatePriority,
         "user_video_rtp_relay", "password_video_rtp",
@@ -318,12 +356,16 @@ class WebRtcSdpTest : public testing::Test {
     candidates_.push_back(candidate2);
     candidates_.push_back(candidate5);
     candidates_.push_back(candidate6);
+    candidates_.push_back(candidate9);
+    candidates_.push_back(candidate10);
 
     // video
     candidates_.push_back(candidate3);
     candidates_.push_back(candidate4);
     candidates_.push_back(candidate7);
     candidates_.push_back(candidate8);
+    candidates_.push_back(candidate11);
+    candidates_.push_back(candidate12);
 
     jcandidate_.reset(new JsepIceCandidate("1", candidate1));
 
@@ -333,7 +375,7 @@ class WebRtcSdpTest : public testing::Test {
     for (size_t i = 0; i< candidates_.size(); ++i) {
       // In this test, the audio m line index will be 0, and the video m line
       // will be 1.
-      bool is_video = (i > 3);
+      bool is_video = (i > 5);
       mline_index = is_video ? 1 : 0;
       JsepIceCandidate jice(talk_base::ToString<int>(mline_index),
                             candidates_.at(i));

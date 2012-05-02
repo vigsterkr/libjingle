@@ -36,6 +36,7 @@
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/p2p/base/sessiondescription.h"  // Needed to delete contents.
+#include "talk/p2p/base/transportinfo.h"
 #include "talk/xmllite/xmlelement.h"
 
 namespace cricket {
@@ -93,26 +94,6 @@ struct SessionMessage {
   // Mostly used for debugging.
   const buzz::XmlElement* stanza;
 };
-
-// A TransportInfo is NOT a transport-info message.  It is comparable
-// to a "ContentInfo". A transport-info message is basically just a
-// collection of TransportInfos.
-struct TransportInfo {
-  TransportInfo() {}
-
-  TransportInfo(const std::string& content_name,
-                const std::string& transport_type,
-                const Candidates& candidates)
-      : content_name(content_name),
-        transport_type(transport_type),
-        candidates(candidates) {}
-
-  std::string content_name;
-  std::string transport_type;  // xmlns of <transport>
-  Candidates candidates;
-};
-
-typedef std::vector<TransportInfo> TransportInfos;
 
 // TODO: Break up this class so we don't have to typedef it into
 // different classes.

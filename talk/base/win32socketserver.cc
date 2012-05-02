@@ -339,7 +339,7 @@ int Win32Socket::Connect(const SocketAddress& addr) {
     return DoConnect(addr);
   }
 
-  LOG_F(LS_INFO) << "async dns lookup (" << addr.IPAsString() << ")";
+  LOG_F(LS_INFO) << "async dns lookup (" << addr.hostname() << ")";
   DnsLookup * dns = new DnsLookup;
   if (!sink_) {
     // Explicitly create the sink ourselves here; we can't rely on SetAsync
@@ -348,7 +348,8 @@ int Win32Socket::Connect(const SocketAddress& addr) {
   }
   // TODO: Replace with IPv6 compatible lookup.
   dns->handle = WSAAsyncGetHostByName(sink_->handle(), WM_DNSNOTIFY,
-        addr.IPAsString().c_str(), dns->buffer, sizeof(dns->buffer));
+                                      addr.hostname().c_str(), dns->buffer,
+                                      sizeof(dns->buffer));
 
   if (!dns->handle) {
     LOG_F(LS_ERROR) << "WSAAsyncGetHostByName error: " << WSAGetLastError();

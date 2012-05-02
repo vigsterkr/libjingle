@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _XMPPAUTH_H_
-#define _XMPPAUTH_H_
+#ifndef TALK_EXAMPLES_LOGIN_XMPPAUTH_H_
+#define TALK_EXAMPLES_LOGIN_XMPPAUTH_H_
 
 #include <vector>
 
@@ -41,10 +41,13 @@ public:
   XmppAuth();
   virtual ~XmppAuth();
 
-  virtual void StartPreXmppAuth(const buzz::Jid & jid,
-                                const talk_base::SocketAddress & server,
-                                const talk_base::CryptString & pass,
-                                const std::string & auth_cookie);
+  // TODO: Just have one "secret" that is either pass or
+  // token?
+  virtual void StartPreXmppAuth(const buzz::Jid& jid,
+                                const talk_base::SocketAddress& server,
+                                const talk_base::CryptString& pass,
+                                const std::string& auth_mechanism,
+                                const std::string& auth_token);
 
   virtual bool IsAuthDone() const { return done_; }
   virtual bool IsAuthorized() const { return true; }
@@ -53,20 +56,22 @@ public:
   virtual buzz::CaptchaChallenge GetCaptchaChallenge() const {
       return buzz::CaptchaChallenge();
   }
-  virtual std::string GetAuthCookie() const { return auth_cookie_; }
+  virtual std::string GetAuthMechanism() const { return auth_mechanism_; }
+  virtual std::string GetAuthToken() const { return auth_token_; }
 
   virtual std::string ChooseBestSaslMechanism(
-      const std::vector<std::string> & mechanisms,
+      const std::vector<std::string>& mechanisms,
       bool encrypted);
 
   virtual buzz::SaslMechanism * CreateSaslMechanism(
-      const std::string & mechanism);
+      const std::string& mechanism);
 
 private:
   buzz::Jid jid_;
   talk_base::CryptString passwd_;
-  std::string auth_cookie_;
+  std::string auth_mechanism_;
+  std::string auth_token_;
   bool done_;
 };
 
-#endif
+#endif  // TALK_EXAMPLES_LOGIN_XMPPAUTH_H_

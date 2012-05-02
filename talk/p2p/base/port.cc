@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "talk/base/base64.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagedigest.h"
@@ -81,6 +82,27 @@ inline bool TooLongWithoutResponse(
     return false;
 
   return pings_since_last_response[0] + maximum_time < now;
+}
+
+// GICE(ICEPROTO_GOOGLE) requires different username for RTP and RTCP.
+// This function generates a different username by +1 on the last character of
+// the given username (|rtp_ufrag|).
+std::string GetRtcpUfragFromRtpUfrag(const std::string& rtp_ufrag) {
+  ASSERT(!rtp_ufrag.empty());
+  if (rtp_ufrag.empty()) {
+    return rtp_ufrag;
+  }
+  // Change the last character to the one next to it in the base64 table.
+  char new_last_char;
+  if (!talk_base::Base64::GetNextBase64Char(rtp_ufrag[rtp_ufrag.size() - 1],
+                                            &new_last_char)) {
+    // Should not be here.
+    ASSERT(false);
+  }
+  std::string rtcp_ufrag = rtp_ufrag;
+  rtcp_ufrag[rtcp_ufrag.size() - 1] = new_last_char;
+  ASSERT(rtcp_ufrag != rtp_ufrag);
+  return rtcp_ufrag;
 }
 
 // We will restrict RTT estimates (when used for determining state) to be
@@ -144,11 +166,11 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       max_port_(max_port),
       generation_(0),
       priority_(0),
-      username_fragment_(username_fragment),
+      ice_username_fragment_(username_fragment),
       password_(password),
       lifetime_(LT_PRESTART),
       enable_port_packets_(false),
-      enable_message_integrity_(false) {
+      ice_protocol_(ICEPROTO_GOOGLE) {
   ASSERT(factory_ != NULL);
   LOG_J(LS_INFO, this) << "Port created";
 }
@@ -187,7 +209,7 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_protocol(protocol);
   c.set_address(address);
   c.set_priority(priority_);
-  c.set_username(username_fragment_);
+  c.set_username(username_fragment());
   c.set_password(password_);
   c.set_network_name(network_->name());
   c.set_generation(generation_);
@@ -254,34 +276,26 @@ bool Port::GetStunMessage(const char* data, size_t size,
     return false;
   }
 
-  // The packet must include a username that either begins or ends with our
-  // fragment.  It should begin with our fragment if it is a request and it
-  // should end with our fragment if it is a response.
-  const StunByteStringAttribute* username_attr =
-      stun_msg->GetByteString(STUN_ATTR_USERNAME);
-
-  int remote_frag_len = (username_attr ? username_attr->length() : 0);
-  remote_frag_len -= static_cast<int>(username_fragment().size());
-
   if (stun_msg->type() == STUN_BINDING_REQUEST) {
-    if (remote_frag_len < 0) {
+    std::string local_ufrag;
+    std::string remote_ufrag;
+    ParseStunUsername(stun_msg.get(), &local_ufrag, &remote_ufrag);
+
+    if (local_ufrag.empty()) {
       // Username not present or corrupted, don't reply.
       LOG_J(LS_ERROR, this) << "Received STUN request without username from "
                             << addr.ToString();
       return true;
-    } else if (std::memcmp(username_attr->bytes(), username_fragment().c_str(),
-                           username_fragment().size()) != 0) {
+    } else if (std::memcmp(local_ufrag.c_str(), username_fragment().c_str(),
+                          username_fragment().size()) != 0) {
       LOG_J(LS_ERROR, this) << "Received STUN request with bad local username "
-                            << std::string(username_attr->bytes(),
-                                           username_attr->length())
-                            << " from "
-                            << addr.ToString();
+                            << local_ufrag << " from " << addr.ToString();
       SendBindingErrorResponse(stun_msg.get(), addr, STUN_ERROR_UNAUTHORIZED,
                                STUN_ERROR_REASON_UNAUTHORIZED);
       return true;
     }
 
-    if (enable_message_integrity_ &&
+    if (ice_protocol_ == ICEPROTO_RFC5245 &&
         !stun_msg->ValidateMessageIntegrity(data, size, password_)) {
       LOG_J(LS_ERROR, this) << "Message Integrity check failed for request, "
                             << " from "
@@ -290,30 +304,9 @@ bool Port::GetStunMessage(const char* data, size_t size,
                                STUN_ERROR_REASON_UNAUTHORIZED);
       return true;
     }
-
-    out_username->assign(username_attr->bytes() + username_fragment().size(),
-                         username_attr->bytes() + username_attr->length());
-  } else if ((stun_msg->type() == STUN_BINDING_RESPONSE)
-      || (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE)) {
-    if (remote_frag_len < 0) {
-      LOG_J(LS_ERROR, this) << "Received STUN response without username from "
-                            << addr.ToString();
-      // Do not send error response to a response
-      return true;
-    } else if (std::memcmp(username_attr->bytes() + remote_frag_len,
-                           username_fragment().c_str(),
-                           username_fragment().size()) != 0) {
-      LOG_J(LS_ERROR, this) << "Received STUN response with bad local username "
-                            << std::string(username_attr->bytes(),
-                                           username_attr->length())
-                            << " from "
-                            << addr.ToString();
-      // Do not send error response to a response
-      return true;
-    }
-    out_username->assign(username_attr->bytes(),
-                         username_attr->bytes() + remote_frag_len);
-
+    out_username->assign(remote_ufrag);
+  } else if ((stun_msg->type() == STUN_BINDING_RESPONSE) ||
+             (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE)) {
     if (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE) {
       if (const StunErrorCodeAttribute* error_code = stun_msg->GetErrorCode()) {
         LOG_J(LS_ERROR, this) << "Received STUN binding error:"
@@ -325,10 +318,11 @@ bool Port::GetStunMessage(const char* data, size_t size,
       } else {
         LOG_J(LS_ERROR, this) << "Received STUN binding error without a error "
                               << "code from " << addr.ToString();
-        // Drop corrupt message
         return true;
       }
     }
+    // NOTE: Username should not be used in verifying response messages.
+    out_username->clear();
   } else {
     LOG_J(LS_ERROR, this) << "Received STUN packet with invalid type ("
                           << stun_msg->type() << ") from " << addr.ToString();
@@ -353,6 +347,53 @@ bool Port::IsCompatibleAddress(const talk_base::SocketAddress& addr) {
   return true;
 }
 
+bool Port::ParseStunUsername(const StunMessage* stun_msg,
+                             std::string* local_ufrag,
+                             std::string* remote_ufrag) const {
+  // The packet must include a username that either begins or ends with our
+  // fragment.  It should begin with our fragment if it is a request and it
+  // should end with our fragment if it is a response.
+  local_ufrag->clear();
+  remote_ufrag->clear();
+  const StunByteStringAttribute* username_attr =
+        stun_msg->GetByteString(STUN_ATTR_USERNAME);
+  if (username_attr == NULL)
+    return false;
+
+  const std::string username_attr_str = username_attr->GetString();
+  if (ice_protocol_ == ICEPROTO_RFC5245) {
+    size_t colon_pos = username_attr_str.find(":");
+    if (colon_pos != std::string::npos) {  // RFRAG:LFRAG
+      *local_ufrag = username_attr_str.substr(0, colon_pos);
+      *remote_ufrag = username_attr_str.substr(
+          colon_pos + 1, username_attr_str.size());
+    } else {
+      return false;
+    }
+  } else if (ice_protocol_ == ICEPROTO_GOOGLE) {
+    int remote_frag_len = username_attr_str.size();
+    remote_frag_len -= static_cast<int>(username_fragment().size());
+    if (remote_frag_len < 0)
+      return false;
+
+    *local_ufrag = username_attr_str.substr(0, username_fragment().size());
+    *remote_ufrag = username_attr_str.substr(
+        username_fragment().size(), username_attr_str.size());
+  }
+  return true;
+}
+
+void Port::CreateStunUsername(const std::string& remote_username,
+                              std::string* stun_username_attr_str) const {
+  stun_username_attr_str->clear();
+  *stun_username_attr_str = remote_username;
+  if (ice_protocol_ == ICEPROTO_RFC5245) {
+    // Connectivity checks from L->R will have username RFRAG:LFRAG.
+    stun_username_attr_str->append(":");
+  }
+  stun_username_attr_str->append(username_fragment());
+}
+
 void Port::SendBindingResponse(StunMessage* request,
                                const talk_base::SocketAddress& addr) {
   ASSERT(request->type() == STUN_BINDING_REQUEST);
@@ -371,19 +412,24 @@ void Port::SendBindingResponse(StunMessage* request,
   response.SetType(STUN_BINDING_RESPONSE);
   response.SetTransactionID(request->transaction_id());
 
-  StunByteStringAttribute* username2_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-  username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
-  response.AddAttribute(username2_attr);
-
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
   addr_attr->SetAddress(addr);
   response.AddAttribute(addr_attr);
 
+  // As per RFC 5245, username attribute will not be present in response
+  // messages.
+  if (ice_protocol_ == ICEPROTO_GOOGLE) {
+    StunByteStringAttribute* username2_attr =
+        StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+    username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
+    response.AddAttribute(username2_attr);
+  }
+
   // Adding MESSAGE-INTEGRITY attribute to the response message.
-  if (enable_message_integrity_)
+  if (ice_protocol_ == ICEPROTO_RFC5245) {
     response.AddMessageIntegrity(password_);
+  }
 
   // Send the response message.
   talk_base::ByteBuffer buf;
@@ -421,10 +467,14 @@ void Port::SendBindingErrorResponse(StunMessage* request,
   response.SetType(STUN_BINDING_ERROR_RESPONSE);
   response.SetTransactionID(request->transaction_id());
 
-  StunByteStringAttribute* username2_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-  username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
-  response.AddAttribute(username2_attr);
+  // As per RFC 5245, username attribute will not be present in response
+  // messages.
+  if (ice_protocol_ == ICEPROTO_GOOGLE) {
+    StunByteStringAttribute* username2_attr =
+        StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
+    username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
+    response.AddAttribute(username2_attr);
+  }
 
   StunErrorCodeAttribute* error_attr = StunAttribute::CreateErrorCode();
   error_attr->SetErrorCode(error_code);
@@ -496,6 +546,16 @@ void Port::CheckTimeout() {
   }
 }
 
+const std::string Port::username_fragment() const {
+  if (ice_protocol_ == ICEPROTO_GOOGLE &&
+      component_ == ICE_CANDIDATE_COMPONENT_RTCP) {
+    // In GICE mode, we should adjust username fragment for rtcp component.
+    return GetRtcpUfragFromRtpUfrag(ice_username_fragment_);
+  } else {
+    return ice_username_fragment_;
+  }
+}
+
 // A ConnectionRequest is a simple STUN ping used to determine writability.
 class ConnectionRequest : public StunRequest {
  public:
@@ -509,13 +569,15 @@ class ConnectionRequest : public StunRequest {
     request->SetType(STUN_BINDING_REQUEST);
     StunByteStringAttribute* username_attr =
         StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-    std::string username = connection_->remote_candidate().username();
-    username.append(connection_->port()->username_fragment());
-    username_attr->CopyBytes(username.c_str(), username.size());
+    std::string username_attr_str;
+    connection_->port()->CreateStunUsername(
+        connection_->remote_candidate().username(), &username_attr_str);
+    username_attr->CopyBytes(
+        username_attr_str.c_str(), username_attr_str.size());
     request->AddAttribute(username_attr);
 
     // Adding Message Integrity to the STUN request message.
-    if (connection_->port()->enable_message_integrity()) {
+    if (connection_->port()->ice_protocol() == ICEPROTO_RFC5245) {
       request->AddMessageIntegrity(connection_->remote_candidate().password());
     }
   }
@@ -631,19 +693,14 @@ void Connection::OnReadPacket(const char* data, size_t size) {
     }
   } else if (!msg) {
     // The packet was STUN, but was already handled internally.
-  } else if (remote_username != remote_candidate_.username()) {
+  } else if ((msg->type() == STUN_BINDING_REQUEST) &&
+             (remote_username != remote_candidate_.username())) {
     // The packet had the right local username, but the remote username was
     // not the right one for the remote address.
-    if (msg->type() == STUN_BINDING_REQUEST) {
-      LOG_J(LS_ERROR, this) << "Received STUN request with bad remote username "
-                            << remote_username;
-      port_->SendBindingErrorResponse(msg, addr, STUN_ERROR_BAD_REQUEST,
-                                      STUN_ERROR_REASON_BAD_REQUEST);
-    } else if (msg->type() == STUN_BINDING_RESPONSE ||
-               msg->type() == STUN_BINDING_ERROR_RESPONSE) {
-      LOG_J(LS_ERROR, this) << "Received STUN response with bad remote username"
-                            " " << remote_username;
-    }
+    LOG_J(LS_ERROR, this) << "Received STUN request with bad remote username "
+                          << remote_username;
+    port_->SendBindingErrorResponse(msg, addr, STUN_ERROR_BAD_REQUEST,
+                                    STUN_ERROR_REASON_BAD_REQUEST);
     delete msg;
   } else {
     // The packet is STUN, with the right username.
@@ -666,7 +723,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
     // This doesn't just check, it makes callbacks if transaction
     // id's match
     case STUN_BINDING_RESPONSE:
-      if (!port_->enable_message_integrity() ||
+      if ((port_->ice_protocol() == ICEPROTO_GOOGLE) ||
           msg->ValidateMessageIntegrity(
               data, size, remote_candidate().password())) {
         requests_.CheckResponse(msg);

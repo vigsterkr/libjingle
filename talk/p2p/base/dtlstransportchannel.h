@@ -143,6 +143,12 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   virtual bool GetStats(ConnectionInfos* infos) {
     return channel_->GetStats(infos);
   }
+  virtual void SetSessionId(const std::string& session_id) {
+    channel_->SetSessionId(session_id);
+  }
+  virtual const std::string& SessionId() const {
+    return channel_->SessionId();
+  }
 
   // Set up the ciphers to use for DTLS-SRTP. If this method is not called
   // before DTLS starts, or |ciphers| is empty, SRTP keys won't be negotiated.
@@ -171,6 +177,12 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   // TransportChannelImpl calls.
   virtual Transport* GetTransport() {
     return transport_;
+  }
+  virtual void SetIceUfrag(const std::string& ice_ufrag) {
+    channel_->SetIceUfrag(ice_ufrag);
+  }
+  virtual void SetIcePwd(const std::string& ice_pwd) {
+    channel_->SetIcePwd(ice_pwd);
   }
   virtual void Connect() {
     channel_->Connect();

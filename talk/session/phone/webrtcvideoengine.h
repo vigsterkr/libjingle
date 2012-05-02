@@ -49,10 +49,7 @@ class ViEExternalCapture;
 }
 
 namespace cricket {
-struct CapturedFrame;
-class WebRtcVideoChannelInfo;
-struct Device;
-class WebRtcLocalStreamInfo;
+
 class VideoCapturer;
 class VideoFrame;
 class VideoProcessor;
@@ -60,11 +57,17 @@ class VideoRenderer;
 class ViETraceWrapper;
 class ViEWrapper;
 class VoiceMediaChannel;
-class WebRtcRenderAdapter;
-class WebRtcVideoMediaChannel;
-class WebRtcVoiceEngine;
 class WebRtcDecoderObserver;
 class WebRtcEncoderObserver;
+class WebRtcLocalStreamInfo;
+class WebRtcRenderAdapter;
+class WebRtcVideoChannelRecvInfo;
+class WebRtcVideoChannelSendInfo;
+class WebRtcVideoMediaChannel;
+class WebRtcVoiceEngine;
+
+struct CapturedFrame;
+struct Device;
 
 class WebRtcVideoEngine : public sigslot::has_slots<>,
                           public webrtc::ViEBaseObserver,
@@ -245,10 +248,12 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   uint32 send_ssrc() const { return 0; }
   bool GetRenderer(uint32 ssrc, VideoRenderer** renderer);
   bool SendFrame(uint32 ssrc, const VideoFrame* frame);
+  bool SendFrame(WebRtcVideoChannelSendInfo* channel_info,
+                 const VideoFrame* frame);
 
   // Thunk functions for use with HybridVideoEngine
   void OnLocalFrame(VideoCapturer* capturer, const VideoFrame* frame) {
-    SendFrame(0, frame);
+    SendFrame(0u, frame);
   }
   void OnLocalFrameFormat(VideoCapturer* capturer, const VideoFormat* format) {
   }
@@ -259,17 +264,30 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual int SendRTCPPacket(int channel, const void* data, int len);
 
  private:
-  typedef std::map<uint32, WebRtcVideoChannelInfo*> ChannelMap;
+  typedef std::map<uint32, WebRtcVideoChannelRecvInfo*> RecvChannelMap;
+  typedef std::map<uint32, WebRtcVideoChannelSendInfo*> SendChannelMap;
 
 
-  // Creates and initializes a WebRtc video channel.
-  bool ConfigureChannel(int channel_id);
-  bool ConfigureReceiving(int channel_id, uint32 remote_ssrc);
+  // Creates and initializes a ViE channel. When successful |channel_id| will
+  // contain the new channel's ID. If |receiving| is true |ssrc| is the
+  // remote ssrc. If |sending| is true the ssrc is local ssrc. If both
+  // |receiving| and |sending| is true the ssrc must be 0 and the channel will
+  // be created as a default channel. The ssrc must be different for receive
+  // channels and it must be different for send channels. If the same SSRC is
+  // being used for creating channel more than once, this function will fail
+  // returning false.
+  bool CreateChannel(uint32 ssrc_key, MediaDirection direction,
+                     int* channel_id);
+  bool ConfigureChannel(int channel_id, MediaDirection direction,
+                        uint32 ssrc_key);
+  bool ConfigureReceiving(int channel_id, uint32 remote_ssrc_key);
+  bool ConfigureSending(int channel_id, uint32 local_ssrc_key);
   bool SetNackFec(int channel_id, int red_payload_type, int fec_payload_type);
-  bool SetSendCodec(const webrtc::VideoCodec& codec,
-                    int min_bitrate,
-                    int start_bitrate,
-                    int max_bitrate);
+  bool SetSendCodec(const webrtc::VideoCodec& codec, int min_bitrate,
+                    int start_bitrate, int max_bitrate);
+  bool SetSendCodec(WebRtcVideoChannelSendInfo* send_channel,
+                    const webrtc::VideoCodec& codec, int min_bitrate,
+                    int start_bitrate, int max_bitrate);
   void LogSendCodecChange(const std::string& reason);
   bool DropFrame() const {
     return (send_codec_.get() == NULL ||
@@ -279,43 +297,73 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // |receive_codecs_| and start receive packets.
   bool SetReceiveCodecs(int channel_id);
   // Returns the channel number that receives the stream with SSRC |ssrc|.
-  int GetChannelNum(uint32 ssrc);
+  int GetRecvChannelNum(uint32 ssrc);
   // Given captured video frame size, checks if we need to reset vie send codec.
   // |reset| is set to whether resetting has happened on vie or not.
   // Returns false on error.
-  bool MaybeResetVieSendCodec(int new_width, int new_height, bool* reset);
-  // Call Webrtc function to start sending media on |vie_channel_|.
-  // Does not affect |sending_|.
+  bool MaybeResetVieSendCodec(int channel_id, int new_width, int new_height,
+                              bool* reset);
+  // Helper function for starting the sending of media on all channels or
+  // |channel_id|. Note that these two function do not change |sending_|.
   bool StartSend();
-  // Call Webrtc function to stop sending media on |vie_channel_|.
-  // Does not affect |sending_|.
+  bool StartSend(int channel_id);
+  // Helper function for stop the sending of media on all channels or
+  // |channel_id|. Note that these two function do not change |sending_|.
   bool StopSend();
+  bool StopSend(int channel_id);
+  bool SendIntraFrame(int channel_id);
+
   // Send with one local SSRC. Normal case.
   bool IsOneSsrcStream(const StreamParams& sp);
 
+  bool HasReadySendChannels();
+
+  // Send channel key returns the key corresponding to the provided local SSRC
+  // in |key|. The return value is true upon success.
+  // If the local ssrc correspond to that of the default channel the key is 0.
+  // For all other channels the returned key will be the same as the local ssrc.
+  bool GetSendChannelKey(uint32 local_ssrc, uint32* key);
+  WebRtcVideoChannelSendInfo* GetSendChannel(uint32 local_ssrc);
+  // Creates a new unique key that can be used for inserting a new send channel
+  // into |send_channels_|
+  bool CreateSendChannelKey(uint32 local_ssrc, uint32* key);
+
+  bool IsDefaultChannel(int channel_id) const {
+    return channel_id == vie_channel_;
+  }
+  uint32 GetDefaultChannelSsrc();
+
+  bool DeleteSendChannel(uint32 ssrc_key);
+
+  bool InConferenceMode() const { return (options_ & OPT_CONFERENCE) != 0; }
+
+
+  // Global state.
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
   int vie_channel_;
-  int vie_capture_;
-  webrtc::ViEExternalCapture* external_capture_;
-  bool render_started_;
-  bool muted_;  // Flag to tell if we need to mute video.
+  int options_;
 
-  // |send_params_| contains local stream parameters.
-  talk_base::scoped_ptr<StreamParams> send_params_;
+  // Global recv side state.
+  // Note the default channel (vie_channel_), i.e. the send channel
+  // corresponding to all the receive channels (this must be done for REMB to
+  // work properly), resides in both recv_channels_ and send_channels_ with the
+  // ssrc key 0.
+  RecvChannelMap recv_channels_;  // Contains all receive channels.
+  std::vector<webrtc::VideoCodec> receive_codecs_;
+  bool render_started_;
   uint32 first_receive_ssrc_;
+
+  // Global send side state.
+  SendChannelMap send_channels_;
+  talk_base::scoped_ptr<webrtc::VideoCodec> send_codec_;
+  int send_red_type_;
+  int send_fec_type_;
   int send_min_bitrate_;
   int send_start_bitrate_;
   int send_max_bitrate_;
-  talk_base::scoped_ptr<webrtc::VideoCodec> send_codec_;
   bool sending_;
-
-  std::vector<webrtc::VideoCodec> receive_codecs_;
-  talk_base::scoped_ptr<WebRtcEncoderObserver> encoder_observer_;
-  talk_base::scoped_ptr<WebRtcLocalStreamInfo> local_stream_info_;
-  int options_;
-
-  ChannelMap mux_channels_;  // Contains all receive channels.
+  bool muted_;  // Flag to tell if we need to mute video.
 };
 
 }  // namespace cricket

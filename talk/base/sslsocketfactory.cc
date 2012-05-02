@@ -59,7 +59,7 @@ class ProxySocketAdapter : public AsyncSocketAdapter {
       LOG_F(LS_ERROR) << "Empty address";
       return SOCKET_ERROR;
     }
-    Url<char> url("/", remote_.IPAsString(), remote_.port());
+    Url<char> url("/", remote_.HostAsURIString(), remote_.port());
     detect_ = new AutoDetectProxy(factory_->agent_);
     detect_->set_server_url(url.url());
     detect_->SignalWorkDone.connect(this,

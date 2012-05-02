@@ -1002,3 +1002,17 @@ TEST(Base64, DecodeTerminateOptions) {
   EXPECT_FALSE(DecodeTest("YWJ",       0, "ab",   Flags(STRICT, NO,  CHAR)));
   EXPECT_TRUE (DecodeTest("YWJ",       0, "ab",   Flags(STRICT, NO,  ANY)));
 }
+
+TEST(Base64, GetNextBase64Char) {
+  // The table looks like this:
+  // "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  char next_char;
+  EXPECT_TRUE(Base64::GetNextBase64Char('A', &next_char));
+  EXPECT_EQ('B', next_char);
+  EXPECT_TRUE(Base64::GetNextBase64Char('Z', &next_char));
+  EXPECT_EQ('a', next_char);
+  EXPECT_TRUE(Base64::GetNextBase64Char('/', &next_char));
+  EXPECT_EQ('A', next_char);
+  EXPECT_FALSE(Base64::GetNextBase64Char('&', &next_char));
+  EXPECT_FALSE(Base64::GetNextBase64Char('Z', NULL));
+}

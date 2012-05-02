@@ -50,6 +50,14 @@ TEST(SystemInfoTest, CpuVendorIntelAMD) {
                                       "AuthenticAMD"));
 }
 
+// Tests Cpu Cache Size
+TEST(SystemInfoTest, CpuCacheSize) {
+  talk_base::SystemInfo info;
+  LOG(LS_INFO) << "CpuCacheSize: " << info.GetCpuCacheSize();
+  EXPECT_GE(info.GetCpuCacheSize(), 8192);  // 8 KB min cache
+  EXPECT_LE(info.GetCpuCacheSize(), 1024 * 1024 * 1024);  // 1 GB max cache
+}
+
 #endif // CPU_X86
 
 // Tests MachineModel is set.
