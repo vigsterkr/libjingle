@@ -110,6 +110,7 @@ static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
 const WebRtcVoiceEngine::CodecPref WebRtcVoiceEngine::kCodecPrefs[] = {
   { "ISAC",   16000,  103 },
   { "ISAC",   32000,  104 },
+  { "CELT",   32000,  110 },
   { "speex",  16000,  107 },
   { "G722",   16000,  9 },
   { "ILBC",   8000,   102 },

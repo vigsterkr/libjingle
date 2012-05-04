@@ -775,7 +775,15 @@ class FakeWebRtcVoiceEngine
 
   WEBRTC_STUB(SetTypingDetectionStatus, (bool enable));
   WEBRTC_STUB(GetTypingDetectionStatus, (bool& enabled));
-
+  WEBRTC_STUB(TimeSinceLastTyping, (int& seconds));
+  WEBRTC_STUB(SetTypingDetectionParameters, (int timeWindow,
+                                             int costPerTyping,
+                                             int reportingThreshold,
+                                             int penaltyDecay));
+  WEBRTC_STUB(EnableHighPassFilter, (bool enable));
+  bool IsHighPassFilterEnabled() { return false; }
+  bool IsStereoChannelSwappingEnabled() { return false; }
+  void EnableStereoChannelSwapping(bool enable) { return; }
   // webrtc::VoEExternalMedia
   WEBRTC_FUNC(RegisterExternalMediaProcessing,
               (int channel, webrtc::ProcessingTypes type,

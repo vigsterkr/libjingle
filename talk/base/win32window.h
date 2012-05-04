@@ -49,8 +49,6 @@ class Win32Window {
               int x, int y, int cx, int cy);
   void Destroy();
 
-  // Call this first if you are running inside a DLL.
-  static void SetInstance(HINSTANCE instance);
   // Call this when your DLL unloads.
   static void Shutdown();
 

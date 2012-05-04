@@ -69,9 +69,6 @@ class StunRequestTest : public testing::Test,
     msg->SetType(type);
     if (req) {
       msg->SetTransactionID(req->transaction_id());
-    } else {
-      msg->SetTransactionID(
-          talk_base::CreateRandomString(kStunTransactionIdLength));
     }
     return msg;
   }
@@ -121,9 +118,9 @@ class StunRequestThunker : public StunRequest {
 // Test handling of a normal binding response.
 TEST_F(StunRequestTest, TestSuccess) {
   StunMessage* req = CreateStunMessage(STUN_BINDING_REQUEST, NULL);
-  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, req);
 
   manager_.Send(new StunRequestThunker(req, this));
+  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, req);
   EXPECT_TRUE(manager_.CheckResponse(res));
 
   EXPECT_TRUE(response_ == res);
@@ -136,9 +133,9 @@ TEST_F(StunRequestTest, TestSuccess) {
 // Test handling of an error binding response.
 TEST_F(StunRequestTest, TestError) {
   StunMessage* req = CreateStunMessage(STUN_BINDING_REQUEST, NULL);
-  StunMessage* res = CreateStunMessage(STUN_BINDING_ERROR_RESPONSE, req);
 
   manager_.Send(new StunRequestThunker(req, this));
+  StunMessage* res = CreateStunMessage(STUN_BINDING_ERROR_RESPONSE, req);
   EXPECT_TRUE(manager_.CheckResponse(res));
 
   EXPECT_TRUE(response_ == res);
@@ -151,9 +148,9 @@ TEST_F(StunRequestTest, TestError) {
 // Test handling of a binding response with the wrong transaction id.
 TEST_F(StunRequestTest, TestUnexpected) {
   StunMessage* req = CreateStunMessage(STUN_BINDING_REQUEST, NULL);
-  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, NULL);
 
   manager_.Send(new StunRequestThunker(req, this));
+  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, NULL);
   EXPECT_FALSE(manager_.CheckResponse(res));
 
   EXPECT_TRUE(response_ == NULL);
@@ -167,10 +164,10 @@ TEST_F(StunRequestTest, TestUnexpected) {
 // (sent at 7900 ms) can be properly replied to.
 TEST_F(StunRequestTest, TestBackoff) {
   StunMessage* req = CreateStunMessage(STUN_BINDING_REQUEST, NULL);
-  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, req);
 
   uint32 start = talk_base::Time();
   manager_.Send(new StunRequestThunker(req, this));
+  StunMessage* res = CreateStunMessage(STUN_BINDING_RESPONSE, req);
   for (int i = 0; i < 9; ++i) {
     while (request_count_ == i)
       talk_base::Thread::Current()->ProcessMessages(1);

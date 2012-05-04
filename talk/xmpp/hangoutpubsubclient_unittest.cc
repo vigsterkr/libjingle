@@ -18,6 +18,7 @@ class TestHangoutPubSubListener : public sigslot::has_slots<> {
   TestHangoutPubSubListener() :
       request_error_count(0),
       publish_audio_mute_error_count(0),
+      publish_video_mute_error_count(0),
       publish_video_pause_error_count(0),
       publish_presenter_error_count(0),
       publish_recording_error_count(0),
@@ -36,6 +37,13 @@ class TestHangoutPubSubListener : public sigslot::has_slots<> {
     last_audio_muted_nick = nick;
     last_was_audio_muted = was_muted;
     last_is_audio_muted = is_muted;
+  }
+
+  void OnVideoMuteStateChange(
+      const std::string& nick, bool was_muted, bool is_muted) {
+    last_video_muted_nick = nick;
+    last_was_video_muted = was_muted;
+    last_is_video_muted = is_muted;
   }
 
   void OnVideoPauseStateChange(
@@ -76,6 +84,12 @@ class TestHangoutPubSubListener : public sigslot::has_slots<> {
   void OnPublishAudioMuteError(const std::string& task_id,
                                const buzz::XmlElement* stanza) {
     ++publish_audio_mute_error_count;
+    error_task_id = task_id;
+  }
+
+  void OnPublishVideoMuteError(const std::string& task_id,
+                               const buzz::XmlElement* stanza) {
+    ++publish_video_mute_error_count;
     error_task_id = task_id;
   }
 
@@ -131,6 +145,9 @@ class TestHangoutPubSubListener : public sigslot::has_slots<> {
   std::string last_audio_muted_nick;
   bool last_is_audio_muted;
   bool last_was_audio_muted;
+  std::string last_video_muted_nick;
+  bool last_is_video_muted;
+  bool last_was_video_muted;
   std::string last_video_paused_nick;
   bool last_is_video_paused;
   bool last_was_video_paused;
@@ -146,6 +163,7 @@ class TestHangoutPubSubListener : public sigslot::has_slots<> {
   int request_error_count;
   std::string request_error_node;
   int publish_audio_mute_error_count;
+  int publish_video_mute_error_count;
   int publish_video_pause_error_count;
   int publish_presenter_error_count;
   int publish_recording_error_count;
@@ -171,6 +189,8 @@ class HangoutPubSubClientTest : public testing::Test {
         listener.get(), &TestHangoutPubSubListener::OnPresenterStateChange);
     client->SignalAudioMuteStateChange.connect(
         listener.get(), &TestHangoutPubSubListener::OnAudioMuteStateChange);
+    client->SignalVideoMuteStateChange.connect(
+        listener.get(), &TestHangoutPubSubListener::OnVideoMuteStateChange);
     client->SignalVideoPauseStateChange.connect(
         listener.get(), &TestHangoutPubSubListener::OnVideoPauseStateChange);
     client->SignalRecordingStateChange.connect(
@@ -183,6 +203,8 @@ class HangoutPubSubClientTest : public testing::Test {
         listener.get(), &TestHangoutPubSubListener::OnRequestError);
     client->SignalPublishAudioMuteError.connect(
         listener.get(), &TestHangoutPubSubListener::OnPublishAudioMuteError);
+    client->SignalPublishVideoMuteError.connect(
+        listener.get(), &TestHangoutPubSubListener::OnPublishVideoMuteError);
     client->SignalPublishVideoPauseError.connect(
         listener.get(), &TestHangoutPubSubListener::OnPublishVideoPauseError);
     client->SignalPublishPresenterError.connect(
@@ -269,6 +291,9 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
       "      <item id='audio-mute:muted-nick'>"
       "        <audio-mute nick='muted-nick' xmlns='google:muc#media'/>"
       "      </item>"
+      "      <item id='video-mute:video-muted-nick'>"
+      "        <video-mute nick='video-muted-nick' xmlns='google:muc#media'/>"
+      "      </item>"
       "      <item id='video-pause:video-paused-nick'>"
       "        <video-pause nick='video-paused-nick' xmlns='google:muc#media'/>"
       "      </item>"
@@ -283,6 +308,10 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
   EXPECT_EQ("muted-nick", listener->last_audio_muted_nick);
   EXPECT_FALSE(listener->last_was_audio_muted);
   EXPECT_TRUE(listener->last_is_audio_muted);
+
+  EXPECT_EQ("video-muted-nick", listener->last_video_muted_nick);
+  EXPECT_FALSE(listener->last_was_video_muted);
+  EXPECT_TRUE(listener->last_is_video_muted);
 
   EXPECT_EQ("video-paused-nick", listener->last_video_paused_nick);
   EXPECT_FALSE(listener->last_was_video_paused);
@@ -332,6 +361,7 @@ TEST_F(HangoutPubSubClientTest, TestRequest) {
       "    <items node='google:muc#media'>"
       "      <item id='audio-mute:muted-nick'>"
       "      </item>"
+      "      <retract id='video-mute:video-muted-nick'/>"
       "      <retract id='video-pause:video-paused-nick'/>"
       "      <retract id='recording:recording-nick'/>"
       "    </items>"

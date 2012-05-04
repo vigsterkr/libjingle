@@ -36,7 +36,7 @@ namespace talk_base {
 ///////////////////////////////////////////////////////////////////////////////
 
 static const wchar_t kWindowBaseClassName[] = L"WindowBaseClass";
-HINSTANCE Win32Window::instance_ = GetModuleHandle(NULL);
+HINSTANCE Win32Window::instance_ = NULL;
 ATOM Win32Window::window_class_ = 0;
 
 Win32Window::Win32Window() : wnd_(NULL) {
@@ -54,6 +54,14 @@ bool Win32Window::Create(HWND parent, const wchar_t* title, DWORD style,
   }
 
   if (!window_class_) {
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&Win32Window::WndProc),
+                           &instance_)) {
+      LOG_GLE(LS_ERROR) << "GetModuleHandleEx failed";
+      return false;
+    }
+
     // Class not registered, register it.
     WNDCLASSEX wcex;
     memset(&wcex, 0, sizeof(wcex));
@@ -74,10 +82,6 @@ bool Win32Window::Create(HWND parent, const wchar_t* title, DWORD style,
 
 void Win32Window::Destroy() {
   VERIFY(::DestroyWindow(wnd_) != FALSE);
-}
-
-void Win32Window::SetInstance(HINSTANCE instance) {
-  instance_ = instance;
 }
 
 void Win32Window::Shutdown() {

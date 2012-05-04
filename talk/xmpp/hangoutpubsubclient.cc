@@ -378,6 +378,17 @@ HangoutPubSubClient::HangoutPubSubClient(XmppTaskParentInterface* parent,
   audio_mute_state_client_->SignalPublishError.connect(
       this, &HangoutPubSubClient::OnAudioMutePublishError);
 
+  video_mute_state_client_.reset(new PubSubStateClient<bool>(
+      nick_, media_client_.get(), QN_GOOGLE_MUC_VIDEO_MUTE, false,
+      new PublishedNickKeySerializer(), new BoolStateSerializer()));
+  // Can't just repeat because we need to watch for remote mutes.
+  video_mute_state_client_->SignalStateChange.connect(
+      this, &HangoutPubSubClient::OnVideoMuteStateChange);
+  video_mute_state_client_->SignalPublishResult.connect(
+      this, &HangoutPubSubClient::OnVideoMutePublishResult);
+  video_mute_state_client_->SignalPublishError.connect(
+      this, &HangoutPubSubClient::OnVideoMutePublishError);
+
   video_pause_state_client_.reset(new PubSubStateClient<bool>(
       nick_, media_client_.get(), QN_GOOGLE_MUC_VIDEO_PAUSE, false,
       new PublishedNickKeySerializer(), new BoolStateSerializer()));
@@ -436,6 +447,11 @@ void HangoutPubSubClient::PublishPresenterState(
 void HangoutPubSubClient::PublishAudioMuteState(
     bool muted, std::string* task_id_out) {
   audio_mute_state_client_->Publish(nick_, muted, task_id_out);
+}
+
+void HangoutPubSubClient::PublishVideoMuteState(
+    bool muted, std::string* task_id_out) {
+  video_mute_state_client_->Publish(nick_, muted, task_id_out);
 }
 
 void HangoutPubSubClient::PublishVideoPauseState(
@@ -543,6 +559,23 @@ void HangoutPubSubClient::OnAudioMutePublishError(
   } else {
     SignalPublishAudioMuteError(task_id, stanza);
   }
+}
+
+void HangoutPubSubClient::OnVideoMuteStateChange(
+    const PubSubStateChange<bool>& change) {
+  SignalVideoMuteStateChange(
+      change.published_nick, change.old_state, change.new_state);
+}
+
+void HangoutPubSubClient::OnVideoMutePublishResult(
+    const std::string& task_id, const XmlElement* item) {
+  SignalPublishVideoMuteResult(task_id);
+}
+
+void HangoutPubSubClient::OnVideoMutePublishError(
+    const std::string& task_id, const XmlElement* item,
+    const XmlElement* stanza) {
+  SignalPublishVideoMuteError(task_id, stanza);
 }
 
 void HangoutPubSubClient::OnVideoPauseStateChange(

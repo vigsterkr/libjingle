@@ -88,7 +88,7 @@ public:
   StunRequestManager* manager() { return manager_; }
 
   // Returns the transaction ID of this request.
-  const std::string& id() { return id_; }
+  const std::string& id() { return msg_->transaction_id(); }
 
   // Returns the STUN type of the request message.
   int type();
@@ -115,7 +115,6 @@ protected:
 
 private:
   StunRequestManager* manager_;
-  std::string id_;
   StunMessage* msg_;
   uint32 tstamp_;
 

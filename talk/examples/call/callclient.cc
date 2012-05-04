@@ -100,6 +100,8 @@ const char* CALL_COMMANDS =
 "  hangup     Ends the call.\n"
 "  mute       Stops sending voice.\n"
 "  unmute     Re-starts sending voice.\n"
+"  vmute      Stops sending video.\n"
+"  vunmute    Re-starts sending video.\n"
 "  dtmf       Sends a DTMF tone.\n"
 "  quit       Quits the application.\n"
 "";
@@ -196,6 +198,16 @@ void CallClient::ParseLine(const std::string& line) {
       call_->Mute(false);
       if (InMuc()) {
         hangout_pubsub_client_->PublishAudioMuteState(false);
+      }
+    } else if (command == "vmute") {
+      call_->MuteVideo(true);
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishVideoMuteState(true);
+      }
+    } else if (command == "vunmute") {
+      call_->MuteVideo(false);
+      if (InMuc()) {
+        hangout_pubsub_client_->PublishVideoMuteState(false);
       }
     } else if (command == "screencast") {
       // TODO: Use a random ssrc

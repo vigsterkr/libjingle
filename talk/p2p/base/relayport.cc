@@ -533,39 +533,37 @@ int RelayEntry::SendTo(const void* data, size_t size,
 
   RelayMessage request;
   request.SetType(STUN_SEND_REQUEST);
-  request.SetTransactionID(
-      talk_base::CreateRandomString(kStunTransactionIdLength));
 
   StunByteStringAttribute* magic_cookie_attr =
       StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
   magic_cookie_attr->CopyBytes(TURN_MAGIC_COOKIE_VALUE,
                                sizeof(TURN_MAGIC_COOKIE_VALUE));
-  request.AddAttribute(magic_cookie_attr);
+  VERIFY(request.AddAttribute(magic_cookie_attr));
 
   StunByteStringAttribute* username_attr =
       StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(port_->username_fragment().c_str(),
                            port_->username_fragment().size());
-  request.AddAttribute(username_attr);
+  VERIFY(request.AddAttribute(username_attr));
 
   StunAddressAttribute* addr_attr =
       StunAttribute::CreateAddress(STUN_ATTR_DESTINATION_ADDRESS);
   addr_attr->SetIP(addr.ipaddr());
   addr_attr->SetPort(addr.port());
-  request.AddAttribute(addr_attr);
+  VERIFY(request.AddAttribute(addr_attr));
 
   // Attempt to lock
   if (ext_addr_ == addr) {
     StunUInt32Attribute* options_attr =
       StunAttribute::CreateUInt32(STUN_ATTR_OPTIONS);
     options_attr->SetValue(0x1);
-    request.AddAttribute(options_attr);
+    VERIFY(request.AddAttribute(options_attr));
   }
 
   StunByteStringAttribute* data_attr =
       StunAttribute::CreateByteString(STUN_ATTR_DATA);
   data_attr->CopyBytes(data, size);
-  request.AddAttribute(data_attr);
+  VERIFY(request.AddAttribute(data_attr));
 
   // TODO: compute the HMAC.
 
@@ -721,26 +719,22 @@ int RelayEntry::SendPacket(const void* data, size_t size) {
 }
 
 AllocateRequest::AllocateRequest(RelayEntry* entry,
-                                 RelayConnection* connection) :
-    entry_(entry), connection_(connection) {
+                                 RelayConnection* connection)
+    : StunRequest(new RelayMessage()),
+      entry_(entry),
+      connection_(connection) {
   start_time_ = talk_base::Time();
 }
 
 void AllocateRequest::Prepare(StunMessage* request) {
   request->SetType(STUN_ALLOCATE_REQUEST);
 
-  StunByteStringAttribute* magic_cookie_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_MAGIC_COOKIE);
-  magic_cookie_attr->CopyBytes(TURN_MAGIC_COOKIE_VALUE,
-                               sizeof(TURN_MAGIC_COOKIE_VALUE));
-  request->AddAttribute(magic_cookie_attr);
-
   StunByteStringAttribute* username_attr =
       StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
   username_attr->CopyBytes(
       entry_->port()->username_fragment().c_str(),
       entry_->port()->username_fragment().size());
-  request->AddAttribute(username_attr);
+  VERIFY(request->AddAttribute(username_attr));
 }
 
 int AllocateRequest::GetNextDelay() {

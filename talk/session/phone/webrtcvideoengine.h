@@ -268,6 +268,8 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   typedef std::map<uint32, WebRtcVideoChannelSendInfo*> SendChannelMap;
 
 
+  enum MediaDirection { MD_RECV, MD_SEND, MD_SENDRECV };
+
   // Creates and initializes a ViE channel. When successful |channel_id| will
   // contain the new channel's ID. If |receiving| is true |ssrc| is the
   // remote ssrc. If |sending| is true the ssrc is local ssrc. If both

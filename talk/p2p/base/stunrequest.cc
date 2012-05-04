@@ -131,15 +131,16 @@ bool StunRequestManager::CheckResponse(const char* data, size_t size) {
 
 StunRequest::StunRequest()
     : count_(0), timeout_(false), manager_(0),
-      id_(talk_base::CreateRandomString(kStunTransactionIdLength)),
-      msg_(new StunMessage()),
-      tstamp_(0) {
-  msg_->SetTransactionID(id_);
+      msg_(new StunMessage()), tstamp_(0) {
+  msg_->SetTransactionID(
+      talk_base::CreateRandomString(kStunTransactionIdLength));
 }
 
 StunRequest::StunRequest(StunMessage* request)
-  : count_(0), timeout_(false), manager_(0),
-    id_(request->transaction_id()), msg_(request) {
+    : count_(0), timeout_(false), manager_(0),
+      msg_(request), tstamp_(0) {
+  msg_->SetTransactionID(
+      talk_base::CreateRandomString(kStunTransactionIdLength));
 }
 
 StunRequest::~StunRequest() {
@@ -154,7 +155,6 @@ StunRequest::~StunRequest() {
 void StunRequest::Construct() {
   if (msg_->type() == 0) {
     Prepare(msg_);
-    ASSERT(msg_->transaction_id() == id_);
     ASSERT(msg_->type() != 0);
   }
 }

@@ -21,14 +21,15 @@
 
 static const cricket::AudioCodec kPcmuCodec(0, "PCMU", 8000, 64000, 1, 0);
 static const cricket::AudioCodec kIsacCodec(103, "ISAC", 16000, 32000, 1, 0);
+static const cricket::AudioCodec kCeltCodec(110, "CELT", 32000, 64000, 2, 0);
 static const cricket::AudioCodec kRedCodec(117, "red", 8000, 0, 1, 0);
 static const cricket::AudioCodec kCn8000Codec(13, "CN", 8000, 0, 1, 0);
 static const cricket::AudioCodec kCn16000Codec(105, "CN", 16000, 0, 1, 0);
 static const cricket::AudioCodec
     kTelephoneEventCodec(106, "telephone-event", 8000, 0, 1, 0);
 static const cricket::AudioCodec* const kAudioCodecs[] = {
-    &kPcmuCodec, &kIsacCodec, &kRedCodec, &kCn8000Codec, &kCn16000Codec,
-    &kTelephoneEventCodec,
+    &kPcmuCodec, &kIsacCodec, &kCeltCodec, &kRedCodec, &kCn8000Codec,
+    &kCn16000Codec, &kTelephoneEventCodec,
 };
 const char kRingbackTone[] = "RIFF____WAVE____ABCD1234";
 static uint32 kSsrc1 = 0x99;
@@ -336,6 +337,30 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   EXPECT_EQ(13, voe_.GetSendCNPayloadType(channel_num, false));
   EXPECT_EQ(105, voe_.GetSendCNPayloadType(channel_num, true));
   EXPECT_EQ(106, voe_.GetSendTelephoneEventPayloadType(channel_num));
+}
+
+// Test that we can apply CELT with stereo mode but fail with mono mode.
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCelt) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = voe_.GetLastChannel();
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kCeltCodec);
+  codecs.push_back(kPcmuCodec);
+  codecs[0].id = 96;
+  codecs[0].channels = 2;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  webrtc::CodecInst gcodec;
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(96, gcodec.pltype);
+  EXPECT_EQ(2, gcodec.channels);
+  EXPECT_STREQ("CELT", gcodec.plname);
+  // Doesn't support mono, expect it to fall back to the next codec in the list.
+  codecs[0].channels = 1;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(0, gcodec.pltype);
+  EXPECT_EQ(1, gcodec.channels);
+  EXPECT_STREQ("PCMU", gcodec.plname);
 }
 
 // Test that we handle various ways of specifying bitrate.
@@ -1338,6 +1363,10 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   cricket::WebRtcVoiceEngine engine;
   // Check codecs by name.
   EXPECT_TRUE(engine.FindCodec(
+      cricket::AudioCodec(96, "CELT", 32000, 0, 2, 0)));
+  EXPECT_FALSE(engine.FindCodec(
+      cricket::AudioCodec(96, "CELT", 32000, 0, 1, 0)));
+  EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "ISAC", 16000, 0, 1, 0)));
   EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "ISAC", 32000, 0, 1, 0)));
@@ -1385,7 +1414,7 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 5000, 0, 1, 0)));
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 0, 5000, 1, 0)));
   // Check that there aren't any extra codecs lying around.
-  EXPECT_EQ(13U, engine.codecs().size());
+  EXPECT_EQ(14U, engine.codecs().size());
   // Verify the payload id of common audio codecs, including CN, ISAC, and G722.
   for (std::vector<cricket::AudioCodec>::const_iterator it =
       engine.codecs().begin(); it != engine.codecs().end(); ++it) {

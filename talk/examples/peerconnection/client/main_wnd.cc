@@ -257,7 +257,6 @@ void MainWnd::OnPaint() {
       ::FillRect(dc_mem, &logical_rect, brush);
       ::DeleteObject(brush);
 
-      int max_unit = (std::max)(width, height);
       int x = (logical_area.x / 2) - (width / 2);
       int y = (logical_area.y / 2) - (height / 2);
 

@@ -230,9 +230,8 @@ SChannelAdapter::ContinueSSL() {
 int
 SChannelAdapter::ProcessContext(long int status, _SecBufferDesc* sbd_in,
                                 _SecBufferDesc* sbd_out) {
-  if (!(status == SEC_E_OK)
-      || (status != SEC_I_CONTINUE_NEEDED)
-      || (status != SEC_E_INCOMPLETE_MESSAGE)) {
+  if (status != SEC_E_OK && status != SEC_I_CONTINUE_NEEDED &&
+      status != SEC_E_INCOMPLETE_MESSAGE) {
     LOG(LS_ERROR)
       << "InitializeSecurityContext error: "
       << ErrorName(status, SECURITY_ERRORS);
