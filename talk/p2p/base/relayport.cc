@@ -768,7 +768,7 @@ void AllocateRequest::OnErrorResponse(StunMessage* response) {
     LOG(INFO) << "Bad allocate response error code";
   } else {
     LOG(INFO) << "Allocate error response:"
-              << " code=" << static_cast<int>(attr->error_code())
+              << " code=" << attr->code()
               << " reason='" << attr->reason() << "'";
   }
 

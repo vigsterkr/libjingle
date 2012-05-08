@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_BYTEORDER_H__
-#define TALK_BASE_BYTEORDER_H__
+#ifndef TALK_BASE_BYTEORDER_H_
+#define TALK_BASE_BYTEORDER_H_
 
 #ifdef POSIX
 #include <arpa/inet.h>
@@ -41,28 +41,29 @@
 namespace talk_base {
 
 // Reading and writing of little and big-endian numbers from memory
-// TODO: Add HostEndian #defines (HE)
-// TODO: Consider NetworkEndian as synonym for BigEndian, for clarity in use.
-// TODO: Consider creating optimized versions, such as direct read/writes of
+// TODO: Optimized versions, with direct read/writes of
 // integers in host-endian format, when the platform supports it.
 
 inline void Set8(void* memory, size_t offset, uint8 v) {
   static_cast<uint8*>(memory)[offset] = v;
 }
+
 inline uint8 Get8(const void* memory, size_t offset) {
   return static_cast<const uint8*>(memory)[offset];
 }
 
 inline void SetBE16(void* memory, uint16 v) {
-  Set8(memory, 0, static_cast<uint8>(v >>  8));
-  Set8(memory, 1, static_cast<uint8>(v >>  0));
+  Set8(memory, 0, static_cast<uint8>(v >> 8));
+  Set8(memory, 1, static_cast<uint8>(v >> 0));
 }
+
 inline void SetBE32(void* memory, uint32 v) {
   Set8(memory, 0, static_cast<uint8>(v >> 24));
   Set8(memory, 1, static_cast<uint8>(v >> 16));
-  Set8(memory, 2, static_cast<uint8>(v >>  8));
-  Set8(memory, 3, static_cast<uint8>(v >>  0));
+  Set8(memory, 2, static_cast<uint8>(v >> 8));
+  Set8(memory, 3, static_cast<uint8>(v >> 0));
 }
+
 inline void SetBE64(void* memory, uint64 v) {
   Set8(memory, 0, static_cast<uint8>(v >> 56));
   Set8(memory, 1, static_cast<uint8>(v >> 48));
@@ -70,75 +71,83 @@ inline void SetBE64(void* memory, uint64 v) {
   Set8(memory, 3, static_cast<uint8>(v >> 32));
   Set8(memory, 4, static_cast<uint8>(v >> 24));
   Set8(memory, 5, static_cast<uint8>(v >> 16));
-  Set8(memory, 6, static_cast<uint8>(v >>  8));
-  Set8(memory, 7, static_cast<uint8>(v >>  0));
+  Set8(memory, 6, static_cast<uint8>(v >> 8));
+  Set8(memory, 7, static_cast<uint8>(v >> 0));
 }
+
 inline uint16 GetBE16(const void* memory) {
-  return (static_cast<uint16>(Get8(memory, 0)) << 8)
-       | (static_cast<uint16>(Get8(memory, 1)) << 0);
+  return (static_cast<uint16>(Get8(memory, 0)) << 8) |
+      (static_cast<uint16>(Get8(memory, 1)) << 0);
 }
+
 inline uint32 GetBE32(const void* memory) {
-  return (static_cast<uint32>(Get8(memory, 0)) << 24)
-       | (static_cast<uint32>(Get8(memory, 1)) << 16)
-       | (static_cast<uint32>(Get8(memory, 2)) <<  8)
-       | (static_cast<uint32>(Get8(memory, 3)) <<  0);
+  return (static_cast<uint32>(Get8(memory, 0)) << 24) |
+      (static_cast<uint32>(Get8(memory, 1)) << 16) |
+      (static_cast<uint32>(Get8(memory, 2)) << 8) |
+      (static_cast<uint32>(Get8(memory, 3)) << 0);
 }
+
 inline uint64 GetBE64(const void* memory) {
-  return (static_cast<uint64>(Get8(memory, 0)) << 56)
-       | (static_cast<uint64>(Get8(memory, 1)) << 48)
-       | (static_cast<uint64>(Get8(memory, 2)) << 40)
-       | (static_cast<uint64>(Get8(memory, 3)) << 32)
-       | (static_cast<uint64>(Get8(memory, 4)) << 24)
-       | (static_cast<uint64>(Get8(memory, 5)) << 16)
-       | (static_cast<uint64>(Get8(memory, 6)) <<  8)
-       | (static_cast<uint64>(Get8(memory, 7)) <<  0);
+  return (static_cast<uint64>(Get8(memory, 0)) << 56) |
+      (static_cast<uint64>(Get8(memory, 1)) << 48) |
+      (static_cast<uint64>(Get8(memory, 2)) << 40) |
+      (static_cast<uint64>(Get8(memory, 3)) << 32) |
+      (static_cast<uint64>(Get8(memory, 4)) << 24) |
+      (static_cast<uint64>(Get8(memory, 5)) << 16) |
+      (static_cast<uint64>(Get8(memory, 6)) << 8) |
+      (static_cast<uint64>(Get8(memory, 7)) << 0);
 }
 
 inline void SetLE16(void* memory, uint16 v) {
-  Set8(memory, 1, static_cast<uint8>(v >>  8));
-  Set8(memory, 0, static_cast<uint8>(v >>  0));
+  Set8(memory, 0, static_cast<uint8>(v >> 0));
+  Set8(memory, 1, static_cast<uint8>(v >> 8));
 }
+
 inline void SetLE32(void* memory, uint32 v) {
-  Set8(memory, 3, static_cast<uint8>(v >> 24));
+  Set8(memory, 0, static_cast<uint8>(v >> 0));
+  Set8(memory, 1, static_cast<uint8>(v >> 8));
   Set8(memory, 2, static_cast<uint8>(v >> 16));
-  Set8(memory, 1, static_cast<uint8>(v >>  8));
-  Set8(memory, 0, static_cast<uint8>(v >>  0));
+  Set8(memory, 3, static_cast<uint8>(v >> 24));
 }
+
 inline void SetLE64(void* memory, uint64 v) {
-  Set8(memory, 7, static_cast<uint8>(v >> 56));
-  Set8(memory, 6, static_cast<uint8>(v >> 48));
-  Set8(memory, 5, static_cast<uint8>(v >> 40));
-  Set8(memory, 4, static_cast<uint8>(v >> 32));
-  Set8(memory, 3, static_cast<uint8>(v >> 24));
+  Set8(memory, 0, static_cast<uint8>(v >> 0));
+  Set8(memory, 1, static_cast<uint8>(v >> 8));
   Set8(memory, 2, static_cast<uint8>(v >> 16));
-  Set8(memory, 1, static_cast<uint8>(v >>  8));
-  Set8(memory, 0, static_cast<uint8>(v >>  0));
+  Set8(memory, 3, static_cast<uint8>(v >> 24));
+  Set8(memory, 4, static_cast<uint8>(v >> 32));
+  Set8(memory, 5, static_cast<uint8>(v >> 40));
+  Set8(memory, 6, static_cast<uint8>(v >> 48));
+  Set8(memory, 7, static_cast<uint8>(v >> 56));
 }
+
 inline uint16 GetLE16(const void* memory) {
-  return (static_cast<uint16>(Get8(memory, 1)) << 8)
-       | (static_cast<uint16>(Get8(memory, 0)) << 0);
+  return (static_cast<uint16>(Get8(memory, 0)) << 0) |
+      (static_cast<uint16>(Get8(memory, 1)) << 8);
 }
+
 inline uint32 GetLE32(const void* memory) {
-  return (static_cast<uint32>(Get8(memory, 3)) << 24)
-       | (static_cast<uint32>(Get8(memory, 2)) << 16)
-       | (static_cast<uint32>(Get8(memory, 1)) <<  8)
-       | (static_cast<uint32>(Get8(memory, 0)) <<  0);
+  return (static_cast<uint32>(Get8(memory, 0)) << 0) |
+      (static_cast<uint32>(Get8(memory, 1)) << 8) |
+      (static_cast<uint32>(Get8(memory, 2)) << 16) |
+      (static_cast<uint32>(Get8(memory, 3)) << 24);
 }
+
 inline uint64 GetLE64(const void* memory) {
-  return (static_cast<uint64>(Get8(memory, 7)) << 56)
-       | (static_cast<uint64>(Get8(memory, 6)) << 48)
-       | (static_cast<uint64>(Get8(memory, 5)) << 40)
-       | (static_cast<uint64>(Get8(memory, 4)) << 32)
-       | (static_cast<uint64>(Get8(memory, 3)) << 24)
-       | (static_cast<uint64>(Get8(memory, 2)) << 16)
-       | (static_cast<uint64>(Get8(memory, 1)) <<  8)
-       | (static_cast<uint64>(Get8(memory, 0)) <<  0);
+  return (static_cast<uint64>(Get8(memory, 0)) << 0) |
+      (static_cast<uint64>(Get8(memory, 1)) << 8) |
+      (static_cast<uint64>(Get8(memory, 2)) << 16) |
+      (static_cast<uint64>(Get8(memory, 3)) << 24) |
+      (static_cast<uint64>(Get8(memory, 4)) << 32) |
+      (static_cast<uint64>(Get8(memory, 5)) << 40) |
+      (static_cast<uint64>(Get8(memory, 6)) << 48) |
+      (static_cast<uint64>(Get8(memory, 7)) << 56);
 }
 
 // Check if the current host is big endian.
 inline bool IsHostBigEndian() {
   static const int number = 1;
-  return (0 == *reinterpret_cast<const char*>(&number));
+  return 0 == *reinterpret_cast<const char*>(&number);
 }
 
 inline uint16 HostToNetwork16(uint16 n) {
@@ -188,4 +197,4 @@ inline uint64 NetworkToHost64(uint64 n) {
 
 }  // namespace talk_base
 
-#endif  // TALK_BASE_BYTEORDER_H__
+#endif  // TALK_BASE_BYTEORDER_H_

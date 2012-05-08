@@ -91,8 +91,7 @@ void StunServer::SendErrorResponse(
   err_msg.SetTransactionID(msg.transaction_id());
 
   StunErrorCodeAttribute* err_code = StunAttribute::CreateErrorCode();
-  err_code->SetErrorClass(error_code / 100);
-  err_code->SetNumber(error_code % 100);
+  err_code->SetCode(error_code);
   err_code->SetReason(error_desc);
   err_msg.AddAttribute(err_code);
 

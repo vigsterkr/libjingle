@@ -396,7 +396,7 @@ StunAddressAttribute* StunAttribute::CreateAddress(uint16 type) {
 }
 
 StunXorAddressAttribute* StunAttribute::CreateXorAddress(uint16 type) {
-  return new StunXorAddressAttribute(type, 0);
+  return new StunXorAddressAttribute(type, 0, NULL);
 }
 
 StunUInt64Attribute* StunAttribute::CreateUInt64(uint16 type) {
@@ -420,8 +420,15 @@ StunUInt16ListAttribute* StunAttribute::CreateUnknownAttributes() {
   return new StunUInt16ListAttribute(STUN_ATTR_UNKNOWN_ATTRIBUTES, 0);
 }
 
+StunAddressAttribute::StunAddressAttribute(uint16 type,
+   const talk_base::SocketAddress& addr)
+   : StunAttribute(type, 0) {
+  SetAddress(addr);
+}
+
 StunAddressAttribute::StunAddressAttribute(uint16 type, uint16 length)
-    : StunAttribute(type, length) {}
+    : StunAttribute(type, length) {
+}
 
 bool StunAddressAttribute::Read(ByteBuffer* buf) {
   uint8 dummy;
@@ -471,7 +478,7 @@ bool StunAddressAttribute::Write(ByteBuffer* buf) const {
   buf->WriteUInt8(address_family);
   buf->WriteUInt16(address_.port());
   switch (address_.family()) {
-    case  AF_INET: {
+    case AF_INET: {
       in_addr v4addr = address_.ipaddr().ipv4_address();
       buf->WriteBytes(reinterpret_cast<char*>(&v4addr), sizeof(v4addr));
       break;
@@ -485,8 +492,10 @@ bool StunAddressAttribute::Write(ByteBuffer* buf) const {
   return true;
 }
 
-StunXorAddressAttribute::StunXorAddressAttribute(uint16 type, uint16 length)
-    : StunAddressAttribute(type, length), owner_(NULL) {}
+StunXorAddressAttribute::StunXorAddressAttribute(uint16 type,
+    const talk_base::SocketAddress& addr)
+    : StunAddressAttribute(type, addr), owner_(NULL) {
+}
 
 StunXorAddressAttribute::StunXorAddressAttribute(uint16 type,
                                                  uint16 length,
@@ -566,6 +575,10 @@ bool StunXorAddressAttribute::Write(ByteBuffer* buf) const {
   return true;
 }
 
+StunUInt32Attribute::StunUInt32Attribute(uint16 type, uint32 value)
+    : StunAttribute(type, SIZE), bits_(value) {
+}
+
 StunUInt32Attribute::StunUInt32Attribute(uint16 type)
     : StunAttribute(type, SIZE), bits_(0) {
 }
@@ -592,6 +605,10 @@ bool StunUInt32Attribute::Write(ByteBuffer* buf) const {
   return true;
 }
 
+StunUInt64Attribute::StunUInt64Attribute(uint16 type, uint64 value)
+    : StunAttribute(type, SIZE), bits_(value) {
+}
+
 StunUInt64Attribute::StunUInt64Attribute(uint16 type)
     : StunAttribute(type, SIZE), bits_(0) {
 }
@@ -605,6 +622,23 @@ bool StunUInt64Attribute::Read(ByteBuffer* buf) {
 bool StunUInt64Attribute::Write(ByteBuffer* buf) const {
   buf->WriteUInt64(bits_);
   return true;
+}
+
+StunByteStringAttribute::StunByteStringAttribute(uint16 type)
+    : StunAttribute(type, 0), bytes_(NULL) {
+}
+
+StunByteStringAttribute::StunByteStringAttribute(uint16 type,
+                                                 const std::string& str)
+    : StunAttribute(type, 0), bytes_(NULL) {
+  CopyBytes(str.c_str(), str.size());
+}
+
+StunByteStringAttribute::StunByteStringAttribute(uint16 type,
+                                                 const void* bytes,
+                                                 size_t length)
+    : StunAttribute(type, 0), bytes_(NULL) {
+  CopyBytes(bytes, length);
 }
 
 StunByteStringAttribute::StunByteStringAttribute(uint16 type, uint16 length)
@@ -659,6 +693,13 @@ void StunByteStringAttribute::SetBytes(char* bytes, size_t length) {
   SetLength(length);
 }
 
+StunErrorCodeAttribute::StunErrorCodeAttribute(uint16 type, int code,
+                                               const std::string& reason)
+    : StunAttribute(type, 0) {
+  SetCode(code);
+  SetReason(reason);
+}
+
 StunErrorCodeAttribute::StunErrorCodeAttribute(uint16 type, uint16 length)
     : StunAttribute(type, length), class_(0), number_(0) {
 }
@@ -666,12 +707,13 @@ StunErrorCodeAttribute::StunErrorCodeAttribute(uint16 type, uint16 length)
 StunErrorCodeAttribute::~StunErrorCodeAttribute() {
 }
 
-void StunErrorCodeAttribute::SetErrorCode(uint32 code) {
-  // TODO: This serializes the error code incorrectly. However, old
-  // clients depend on it. Resolve this by adding a new API to write out the
-  // error code properly, to be used when talking to ICE-aware clients.
-  class_ = (uint8)((code >> 8) & 0x7);
-  number_ = (uint8)(code & 0xff);
+int StunErrorCodeAttribute::code() const {
+  return class_ * 100 + number_;
+}
+
+void StunErrorCodeAttribute::SetCode(int code) {
+  class_ = static_cast<uint8>(code / 100);
+  number_ = static_cast<uint8>(code % 100);
 }
 
 void StunErrorCodeAttribute::SetReason(const std::string& reason) {
@@ -698,7 +740,7 @@ bool StunErrorCodeAttribute::Read(ByteBuffer* buf) {
 }
 
 bool StunErrorCodeAttribute::Write(ByteBuffer* buf) const {
-  buf->WriteUInt32(error_code());
+  buf->WriteUInt32(class_ << 8 | number_);
   buf->WriteString(reason_);
   WritePadding(buf);
   return true;

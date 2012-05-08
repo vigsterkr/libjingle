@@ -53,20 +53,73 @@ TEST(RtcpMuxFilterTest, DemuxRtcpReceiver) {
   // After received offer, demux should not be enabled
   filter.SetOffer(true, cricket::CS_REMOTE);
   EXPECT_FALSE(filter.DemuxRtcp(data, len));
-  // We accept, demux is now enabled.
+  // We accept, demux is now enabled
   filter.SetAnswer(true, cricket::CS_LOCAL);
+  EXPECT_TRUE(filter.DemuxRtcp(data, len));
+}
+
+TEST(RtcpMuxFilterTest, DemuxRtcpSenderProvisionalAnswer) {
+  cricket::RtcpMuxFilter filter;
+  const char data[] = { 0, 73, 0, 0 };
+  const int len = 4;
+
+  filter.SetOffer(true, cricket::CS_REMOTE);
+  // Received provisional answer without mux enabled.
+  filter.SetProvisionalAnswer(false, cricket::CS_LOCAL);
+  EXPECT_FALSE(filter.DemuxRtcp(data, len));
+  // Received provisional answer with mux enabled.
+  filter.SetProvisionalAnswer(true, cricket::CS_LOCAL);
+  EXPECT_TRUE(filter.DemuxRtcp(data, len));
+  // Remote accepted, demux should be enabled.
+  filter.SetAnswer(true, cricket::CS_LOCAL);
+  EXPECT_TRUE(filter.DemuxRtcp(data, len));
+}
+
+TEST(RtcpMuxFilterTest, DemuxRtcpReceiverProvisionalAnswer) {
+  cricket::RtcpMuxFilter filter;
+  const char data[] = { 0, 73, 0, 0 };
+  const int len = 4;
+
+  filter.SetOffer(true, cricket::CS_LOCAL);
+  // Received provisional answer without mux enabled.
+  filter.SetProvisionalAnswer(false, cricket::CS_REMOTE);
+  // After sent offer, demux should be enabled until we have received a
+  // final answer.
+  EXPECT_TRUE(filter.DemuxRtcp(data, len));
+  // Received provisional answer with mux enabled.
+  filter.SetProvisionalAnswer(true, cricket::CS_REMOTE);
+  EXPECT_TRUE(filter.DemuxRtcp(data, len));
+  // Remote accepted, demux should be enabled.
+  filter.SetAnswer(true, cricket::CS_REMOTE);
   EXPECT_TRUE(filter.DemuxRtcp(data, len));
 }
 
 TEST(RtcpMuxFilterTest, IsActiveSender) {
   cricket::RtcpMuxFilter filter;
-  // Init state - not active.
+  // Init state - not active
   EXPECT_FALSE(filter.IsActive());
-  // After sent offer, demux should not be active
+  // After sent offer, demux should not be active.
   filter.SetOffer(true, cricket::CS_LOCAL);
   EXPECT_FALSE(filter.IsActive());
-  // Remote accepted, filter is now active
+  // Remote accepted, filter is now active.
   filter.SetAnswer(true, cricket::CS_REMOTE);
+  EXPECT_TRUE(filter.IsActive());
+}
+
+// Test that we can receive provisional answer and final answer.
+TEST(RtcpMuxFilterTest, ReceivePrAnswer) {
+  cricket::RtcpMuxFilter filter;
+  filter.SetOffer(true, cricket::CS_LOCAL);
+  // Received provisional answer with mux enabled.
+  EXPECT_TRUE(filter.SetProvisionalAnswer(true, cricket::CS_REMOTE));
+  // We are now active since both sender and receiver support mux.
+  EXPECT_TRUE(filter.IsActive());
+  // Received provisional answer with mux disabled.
+  EXPECT_TRUE(filter.SetProvisionalAnswer(false, cricket::CS_REMOTE));
+  // We are now inactive since the receiver doesn't support mux.
+  EXPECT_FALSE(filter.IsActive());
+  // Received final answer with mux enabled.
+  EXPECT_TRUE(filter.SetAnswer(true, cricket::CS_REMOTE));
   EXPECT_TRUE(filter.IsActive());
 }
 
@@ -79,6 +132,21 @@ TEST(RtcpMuxFilterTest, IsActiveReceiver) {
   EXPECT_FALSE(filter.IsActive());
   // We accept, filter is now active
   filter.SetAnswer(true, cricket::CS_LOCAL);
+  EXPECT_TRUE(filter.IsActive());
+}
+
+// Test that we can send provisional answer and final answer.
+TEST(RtcpMuxFilterTest, SendPrAnswer) {
+  cricket::RtcpMuxFilter filter;
+  filter.SetOffer(true, cricket::CS_REMOTE);
+  // Send provisional answer with mux enabled.
+  EXPECT_TRUE(filter.SetProvisionalAnswer(true, cricket::CS_LOCAL));
+  EXPECT_TRUE(filter.IsActive());
+  // Received provisional answer with mux disabled.
+  EXPECT_TRUE(filter.SetProvisionalAnswer(false, cricket::CS_LOCAL));
+  EXPECT_FALSE(filter.IsActive());
+  // Send final answer with mux enabled.
+  EXPECT_TRUE(filter.SetAnswer(true, cricket::CS_LOCAL));
   EXPECT_TRUE(filter.IsActive());
 }
 
@@ -99,6 +167,22 @@ TEST(RtcpMuxFilterTest, EnableFilterDuringUpdate) {
   EXPECT_FALSE(filter.SetOffer(false, cricket::CS_REMOTE));
   EXPECT_FALSE(filter.SetAnswer(false, cricket::CS_LOCAL));
   EXPECT_TRUE(filter.IsActive());
+}
+
+// Test that SetOffer can be called twice.
+TEST(RtcpMuxFilterTest, SetOfferTwice) {
+  cricket::RtcpMuxFilter filter;
+
+  EXPECT_TRUE(filter.SetOffer(true, cricket::CS_REMOTE));
+  EXPECT_TRUE(filter.SetOffer(true, cricket::CS_REMOTE));
+  EXPECT_TRUE(filter.SetAnswer(true, cricket::CS_LOCAL));
+  EXPECT_TRUE(filter.IsActive());
+
+  cricket::RtcpMuxFilter filter2;
+  EXPECT_TRUE(filter2.SetOffer(false, cricket::CS_LOCAL));
+  EXPECT_TRUE(filter2.SetOffer(false, cricket::CS_LOCAL));
+  EXPECT_TRUE(filter2.SetAnswer(false, cricket::CS_REMOTE));
+  EXPECT_FALSE(filter2.IsActive());
 }
 
 // Test that the filter can be enabled twice.

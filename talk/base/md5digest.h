@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2012, Google Inc.
+ * Copyright 2012 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -44,15 +44,13 @@ class Md5Digest : public MessageDigest {
     return kSize;
   }
   virtual void Update(const void* buf, size_t len) {
-    MD5Update(&ctx_,
-              static_cast<const md5byte*>(buf),
-              static_cast<unsigned int>(len));
+    MD5Update(&ctx_, static_cast<const uint8*>(buf), len);
   }
   virtual size_t Finish(void* buf, size_t len) {
     if (len < kSize) {
       return 0;
     }
-    MD5Final(static_cast<unsigned char*>(buf), &ctx_);
+    MD5Final(&ctx_, static_cast<uint8*>(buf));
     MD5Init(&ctx_);  // Reset for next use.
     return kSize;
   }

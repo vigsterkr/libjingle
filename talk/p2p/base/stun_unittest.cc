@@ -483,6 +483,7 @@ const char kTestUserName2[] = "abc";
 const char kTestErrorReason[] = "Unauthorized";
 const int kTestErrorClass = 4;
 const int kTestErrorNumber = 1;
+const int kTestErrorCode = 401;
 
 const int kTestMessagePort1 = 59977;
 const int kTestMessagePort2 = 47233;
@@ -625,7 +626,7 @@ TEST_F(StunTest, SetIPv6XorAddressAttributeOwner) {
 
   // Owner with a different transaction ID.
   msg2.SetTransactionID("ABCDABCDABCD");
-  StunXorAddressAttribute addr2(STUN_ATTR_XOR_MAPPED_ADDRESS, 20);
+  StunXorAddressAttribute addr2(STUN_ATTR_XOR_MAPPED_ADDRESS, 20, NULL);
   addr2.SetIP(addr->ipaddr());
   addr2.SetPort(addr->port());
   addr2.SetOwner(&msg2);
@@ -673,7 +674,7 @@ TEST_F(StunTest, SetIPv4XorAddressAttributeOwner) {
 
   // Owner with a different transaction ID.
   msg2.SetTransactionID("ABCDABCDABCD");
-  StunXorAddressAttribute addr2(STUN_ATTR_XOR_MAPPED_ADDRESS, 20);
+  StunXorAddressAttribute addr2(STUN_ATTR_XOR_MAPPED_ADDRESS, 20, NULL);
   addr2.SetIP(addr->ipaddr());
   addr2.SetPort(addr->port());
   addr2.SetOwner(&msg2);
@@ -907,13 +908,10 @@ TEST_F(StunTest, ReadErrorCodeAttribute) {
   CheckStunTransactionID(msg, kTestTransactionId1, kStunTransactionIdLength);
   const StunErrorCodeAttribute* errorcode = msg.GetErrorCode();
   ASSERT_TRUE(errorcode != NULL);
-  EXPECT_EQ(kTestErrorClass, errorcode->error_class());
+  EXPECT_EQ(kTestErrorClass, errorcode->eclass());
   EXPECT_EQ(kTestErrorNumber, errorcode->number());
   EXPECT_EQ(kTestErrorReason, errorcode->reason());
-  // TODO: Fix error_code() and figure out a workaround for its current
-  // users.
-  //EXPECT_EQ(kTestErrorClass * 100 + kTestErrorNumber,
-  //          static_cast<int>(errorcode->error_code()));
+  EXPECT_EQ(kTestErrorCode, errorcode->code());
 }
 
 TEST_F(StunTest, ReadMessageWithAUInt16ListAttribute) {
@@ -938,6 +936,28 @@ TEST_F(StunTest, ReadMessageWithAnUnknownAttribute) {
       msg.GetByteString(STUN_ATTR_USERNAME);
   ASSERT_TRUE(username != NULL);
   EXPECT_EQ(kTestUserName2, username->GetString());
+}
+
+TEST_F(StunTest, WriteMessageWithAnErrorCodeAttribute) {
+  StunMessage msg;
+  size_t size = sizeof(kStunMessageWithErrorAttribute);
+
+  msg.SetType(STUN_BINDING_ERROR_RESPONSE);
+  msg.SetTransactionID(
+      std::string(reinterpret_cast<const char*>(kTestTransactionId1),
+                  kStunTransactionIdLength));
+  CheckStunTransactionID(msg, kTestTransactionId1, kStunTransactionIdLength);
+  StunErrorCodeAttribute* errorcode = StunAttribute::CreateErrorCode();
+  errorcode->SetCode(kTestErrorCode);
+  errorcode->SetReason(kTestErrorReason);
+  EXPECT_TRUE(msg.AddAttribute(errorcode));
+  CheckStunHeader(msg, STUN_BINDING_ERROR_RESPONSE, (size - 20));
+
+  talk_base::ByteBuffer out;
+  EXPECT_TRUE(msg.Write(&out));
+  ASSERT_EQ(size, out.Length());
+  // No padding.
+  ASSERT_EQ(0, std::memcmp(out.Data(), kStunMessageWithErrorAttribute, size));
 }
 
 TEST_F(StunTest, WriteMessageWithAUInt16ListAttribute) {

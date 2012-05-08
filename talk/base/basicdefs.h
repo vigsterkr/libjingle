@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,13 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_BASICDEFS_H__
-#define TALK_BASE_BASICDEFS_H__
+#ifndef TALK_BASE_BASICDEFS_H_
+#define TALK_BASE_BASICDEFS_H_
 
 #if HAVE_CONFIG_H
-#include "config.h"
+#include "config.h"  // NOLINT
 #endif
 
-#define ARRAY_SIZE(x) (static_cast<int>((sizeof(x)/sizeof(x[0]))))
+#define ARRAY_SIZE(x) (static_cast<int>(sizeof(x) / sizeof(x[0])))
 
-#endif // TAKL_BASE_BASICDEFS_H__
+#endif  // TALK_BASE_BASICDEFS_H_

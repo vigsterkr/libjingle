@@ -134,7 +134,7 @@ class SessionDescription {
 // indicates a jingle update message which contains a subset of a full
 // session description
 enum ContentAction {
-  CA_OFFER, CA_ANSWER, CA_UPDATE
+  CA_OFFER, CA_PRANSWER, CA_ANSWER, CA_UPDATE
 };
 
 // Indicates whether a ContentDescription was sent by the local client

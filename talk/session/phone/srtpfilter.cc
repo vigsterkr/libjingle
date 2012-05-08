@@ -111,39 +111,22 @@ bool SrtpFilter::IsActive() const {
 
 bool SrtpFilter::SetOffer(const std::vector<CryptoParams>& offer_params,
                           ContentSource source) {
-  if (state_ != ST_INIT && state_ != ST_ACTIVE) {
-    LOG(LS_ERROR) << "Wrong state to update SRTP offer";
-    return false;
+  if (!ExpectOffer(source)) {
+     LOG(LS_ERROR) << "Wrong state to update SRTP offer";
+     return false;
   }
   return StoreParams(offer_params, source);
 }
 
 bool SrtpFilter::SetAnswer(const std::vector<CryptoParams>& answer_params,
                            ContentSource source) {
-  bool ret = false;
-  if ((state_ == ST_SENTOFFER && source == CS_REMOTE) ||
-      (state_ == ST_RECEIVEDOFFER && source == CS_LOCAL) ||
-      (state_ == ST_SENTUPDATEDOFFER && source == CS_REMOTE) ||
-      (state_ == ST_RECEIVEDUPDATEDOFFER && source == CS_LOCAL)) {
-    // If the answer requests crypto, finalize the parameters and apply them.
-    // Otherwise, complete the negotiation of a unencrypted session.
-    if (!answer_params.empty()) {
-      CryptoParams selected_params;
-      ret = NegotiateParams(answer_params, &selected_params);
-      if (ret) {
-        if (state_ == ST_SENTOFFER || state_ == ST_SENTUPDATEDOFFER) {
-          ret = ApplyParams(selected_params, answer_params[0]);
-        } else {  // ST_RECEIVEDOFFER || ST_RECEIVEDUPDATEDOFFER
-          ret = ApplyParams(answer_params[0], selected_params);
-        }
-      }
-    } else {
-      ret = ResetParams();
-    }
-  } else {
-    LOG(LS_ERROR) << "Invalid state for SRTP answer";
-  }
-  return ret;
+  return DoSetAnswer(answer_params, source, true);
+}
+
+bool SrtpFilter::SetProvisionalAnswer(
+    const std::vector<CryptoParams>& answer_params,
+    ContentSource source) {
+  return DoSetAnswer(answer_params, source, false);
 }
 
 bool SrtpFilter::SetRtpParams(const std::string& send_cs,
@@ -260,14 +243,77 @@ void SrtpFilter::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
   }
 }
 
+bool SrtpFilter::ExpectOffer(ContentSource source) {
+  return ((state_ == ST_INIT) ||
+          (state_ == ST_ACTIVE) ||
+          (state_  == ST_SENTOFFER && source == CS_LOCAL) ||
+          (state_  == ST_SENTUPDATEDOFFER && source == CS_LOCAL) ||
+          (state_ == ST_RECEIVEDOFFER && source == CS_REMOTE) ||
+          (state_ == ST_RECEIVEDUPDATEDOFFER && source == CS_REMOTE));
+}
+
 bool SrtpFilter::StoreParams(const std::vector<CryptoParams>& params,
                              ContentSource source) {
   offer_params_ = params;
   if (state_ == ST_INIT) {
     state_ = (source == CS_LOCAL) ? ST_SENTOFFER : ST_RECEIVEDOFFER;
-  } else {  // ST_ACTIVE
+  } else {  // state >= ST_ACTIVE
     state_ =
         (source == CS_LOCAL) ? ST_SENTUPDATEDOFFER : ST_RECEIVEDUPDATEDOFFER;
+  }
+  return true;
+}
+
+bool SrtpFilter::ExpectAnswer(ContentSource source) {
+  return ((state_ == ST_SENTOFFER && source == CS_REMOTE) ||
+          (state_ == ST_RECEIVEDOFFER && source == CS_LOCAL) ||
+          (state_ == ST_SENTUPDATEDOFFER && source == CS_REMOTE) ||
+          (state_ == ST_RECEIVEDUPDATEDOFFER && source == CS_LOCAL) ||
+          (state_ == ST_SENTPRANSWER_NO_CRYPTO && source == CS_LOCAL) ||
+          (state_ == ST_SENTPRANSWER && source == CS_LOCAL) ||
+          (state_ == ST_RECEIVEDPRANSWER_NO_CRYPTO && source == CS_REMOTE) ||
+          (state_ == ST_RECEIVEDPRANSWER && source == CS_REMOTE));
+}
+
+bool SrtpFilter::DoSetAnswer(const std::vector<CryptoParams>& answer_params,
+                             ContentSource source,
+                             bool final) {
+  if (!ExpectAnswer(source)) {
+    LOG(LS_ERROR) << "Invalid state for SRTP answer";
+    return false;
+  }
+
+  // If the answer doesn't requests crypto complete the negotiation of an
+  // unencrypted session.
+  // Otherwise, finalize the parameters and apply them.
+  if (answer_params.empty()) {
+    if (final) {
+      return ResetParams();
+    } else {
+      // Need to wait for the final answer to decide if
+      // we should go to Active state.
+      state_ = (source == CS_LOCAL) ? ST_SENTPRANSWER_NO_CRYPTO :
+                                      ST_RECEIVEDPRANSWER_NO_CRYPTO;
+      return true;
+    }
+  }
+  CryptoParams selected_params;
+  if (!NegotiateParams(answer_params, &selected_params))
+    return false;
+  const CryptoParams& send_params =
+      (source == CS_REMOTE) ? selected_params : answer_params[0];
+  const CryptoParams& recv_params =
+      (source == CS_REMOTE) ? answer_params[0] : selected_params;
+  if (!ApplyParams(send_params, recv_params)) {
+    return false;
+  }
+
+  if (final) {
+    offer_params_.clear();
+    state_ = ST_ACTIVE;
+  } else {
+    state_ =
+        (source == CS_LOCAL) ? ST_SENTPRANSWER : ST_RECEIVEDPRANSWER;
   }
   return true;
 }
@@ -324,8 +370,6 @@ bool SrtpFilter::ApplyParams(const CryptoParams& send_params,
                                   recv_key, sizeof(recv_key)));
   }
   if (ret) {
-    offer_params_.clear();
-    state_ = ST_ACTIVE;
     LOG(LS_INFO) << "SRTP activated with negotiated parameters:"
                  << " send cipher_suite " << send_params.cipher_suite
                  << " recv cipher_suite " << recv_params.cipher_suite;

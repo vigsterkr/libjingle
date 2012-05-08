@@ -59,18 +59,6 @@ static const char kDefaultVideoCodecName[] = "VP8";
 static const int kDefaultVideoCodecWidth = 640;
 static const int kDefaultVideoCodecHeight = 480;
 
-static cricket::ContentAction GetContentAction(JsepInterface::Action action) {
-  switch (action) {
-    case JsepInterface::kOffer:
-      return cricket::CA_OFFER;
-    case JsepInterface::kAnswer:
-      return cricket::CA_ANSWER;
-    default:
-      ASSERT(!"Not supported action");
-  };
-  return cricket::CA_OFFER;
-}
-
 static void CopyCandidatesFromSessionDescription(
     const SessionDescriptionInterface* source_desc,
     SessionDescriptionInterface* dest_desc) {
@@ -240,14 +228,9 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
 
 bool WebRtcSession::SetLocalDescription(Action action,
                                         SessionDescriptionInterface* desc) {
-  cricket::ContentAction type = GetContentAction(action);
-  if ((type == cricket::CA_ANSWER &&
-       state() != STATE_RECEIVEDINITIATE) ||
-      (type == cricket::CA_OFFER &&
-               (state() == STATE_RECEIVEDINITIATE ||
-                state() == STATE_SENTINITIATE))) {
+  if (!ExpectSetLocalDescription(action)) {
     LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
-                  << "action: " << type << " state: " << state();
+                  << "action: " << action << " state: " << state();
     return false;
   }
   if (!desc || !desc->description()) {
@@ -273,30 +256,32 @@ bool WebRtcSession::SetLocalDescription(Action action,
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
 
-  if (type == cricket::CA_ANSWER) {
-    EnableChannels();
+  switch (action) {
+    case kOffer:
+      SetState(STATE_SENTINITIATE);
+      break;
+    case kAnswer:
+      EnableChannels();
 
     if (ReadyToEnableBundle() && !transport_muxed()) {
       MaybeEnableMuxingSupport();
     }
 
-    SetState(STATE_SENTACCEPT);
-  } else {
-    SetState(STATE_SENTINITIATE);
+      SetState(STATE_SENTACCEPT);
+      break;
+    case kPrAnswer:
+      EnableChannels();
+      SetState(STATE_SENTPRACCEPT);
+      break;
   }
-  return true;
+  return error() == cricket::BaseSession::ERROR_NONE;
 }
 
 bool WebRtcSession::SetRemoteDescription(Action action,
                                          SessionDescriptionInterface* desc) {
-  cricket::ContentAction type = GetContentAction(action);
-  if ((type == cricket::CA_ANSWER &&
-       state() != STATE_SENTINITIATE) ||
-      (type == cricket::CA_OFFER &&
-               (state() == STATE_RECEIVEDINITIATE ||
-                state() == STATE_SENTINITIATE))) {
+  if (!ExpectSetRemoteDescription(action)) {
     LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
-                  << "action: " << type << " state: " << state();
+                  << "action: " << action << " state: " << state();
     return false;
   }
   if (!desc || !desc->description()) {
@@ -312,17 +297,25 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   }
 
   set_remote_description(desc->description()->Copy());
-  if (type  == cricket::CA_ANSWER) {
-    EnableChannels();
+  switch (action) {
+    case kOffer:
+      SetState(STATE_RECEIVEDINITIATE);
+      break;
+    case kAnswer:
+      EnableChannels();
 
     if (ReadyToEnableBundle() && !transport_muxed()) {
       MaybeEnableMuxingSupport();
     }
 
-    SetState(STATE_RECEIVEDACCEPT);
-  } else {
-    SetState(STATE_RECEIVEDINITIATE);
+      SetState(STATE_RECEIVEDACCEPT);
+      break;
+    case kPrAnswer:
+      EnableChannels();
+      SetState(STATE_RECEIVEDPRACCEPT);
+      break;
   }
+
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
 
@@ -335,7 +328,7 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   // We retain all received candidates.
   CopyCandidatesFromSessionDescription(remote_desc_.get(), desc);
   remote_desc_.reset(desc);
-  return true;
+  return error() == cricket::BaseSession::ERROR_NONE;
 }
 
 bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
@@ -458,6 +451,36 @@ void WebRtcSession::OnTransportCandidatesReady(
     return;
   }
   ProcessNewLocalCandidate(proxy->content_name(), candidates);
+}
+
+bool WebRtcSession::ExpectSetLocalDescription(Action action) {
+  return ((action == kOffer && state() == STATE_INIT) ||
+          // update local offer
+          (action == kOffer && state() == STATE_SENTINITIATE) ||
+          // update the current ongoing session.
+          (action == kOffer && state() == STATE_RECEIVEDACCEPT) ||
+          (action == kOffer && state() == STATE_SENTACCEPT) ||
+          (action == kOffer && state() == STATE_INPROGRESS) ||
+          // accept remote offer
+          (action == kAnswer && state() == STATE_RECEIVEDINITIATE) ||
+          (action == kAnswer && state() == STATE_SENTPRACCEPT) ||
+          (action == kPrAnswer && state() == STATE_RECEIVEDINITIATE) ||
+          (action == kPrAnswer && state() == STATE_SENTPRACCEPT));
+}
+
+bool WebRtcSession::ExpectSetRemoteDescription(Action action) {
+  return ((action == kOffer && state() == STATE_INIT) ||
+          // update remote offer
+          (action == kOffer && state() == STATE_RECEIVEDINITIATE) ||
+          // update the current ongoing session
+          (action == kOffer && state() == STATE_RECEIVEDACCEPT) ||
+          (action == kOffer && state() == STATE_SENTACCEPT) ||
+          (action == kOffer && state() == STATE_INPROGRESS) ||
+          // accept local offer
+          (action == kAnswer && state() == STATE_SENTINITIATE) ||
+          (action == kAnswer && state() == STATE_RECEIVEDPRACCEPT) ||
+          (action == kPrAnswer && state() == STATE_SENTINITIATE) ||
+          (action == kPrAnswer && state() == STATE_RECEIVEDPRACCEPT));
 }
 
 void WebRtcSession::OnCandidatesAllocationDone() {

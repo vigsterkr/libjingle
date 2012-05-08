@@ -233,6 +233,45 @@ static bool ValidPacket(bool rtcp, const talk_base::Buffer* packet) {
       packet->length() <= kMaxRtpPacketLen);
 }
 
+
+// Returns true if the |state| requires a action on the current local
+// content description. |action| will contain the necessary action.
+static bool LocalStateChanged(BaseSession::State state,
+                              ContentAction* action) {
+  switch (state) {
+    case Session::STATE_SENTINITIATE:
+      *action = CA_OFFER;
+      return true;
+    case Session::STATE_SENTPRACCEPT:
+      *action = CA_PRANSWER;
+      return true;
+    case Session::STATE_SENTACCEPT:
+      *action = CA_ANSWER;
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Returns true if the |state| requires a action on the current remote content
+// description. |action| will contain the necessary action.
+static bool RemoteStateChanged(BaseSession::State state,
+                               ContentAction* action) {
+  switch (state) {
+    case Session::STATE_RECEIVEDINITIATE:
+      *action = CA_OFFER;
+      return true;
+    case Session::STATE_RECEIVEDPRACCEPT:
+      *action = CA_PRANSWER;
+      return true;
+    case Session::STATE_RECEIVEDACCEPT:
+      *action = CA_ANSWER;
+      return true;
+    default:
+      return false;
+  }
+}
+
 BaseChannel::BaseChannel(talk_base::Thread* thread,
                          MediaEngineInterface* media_engine,
                          MediaChannel* media_channel, BaseSession* session,
@@ -570,40 +609,24 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
   }
 }
 
+
 void BaseChannel::OnSessionState(BaseSession* session,
                                  BaseSession::State state) {
   const MediaContentDescription* content = NULL;
-  switch (state) {
-    case Session::STATE_SENTINITIATE:
-      content = GetFirstContent(session->local_description());
-      if (content && !SetLocalContent(content, CA_OFFER)) {
-        LOG(LS_ERROR) << "Failure in SetLocalContent with CA_OFFER";
-        session->SetError(BaseSession::ERROR_CONTENT);
-      }
-      break;
-    case Session::STATE_SENTACCEPT:
-      content = GetFirstContent(session->local_description());
-      if (content && !SetLocalContent(content, CA_ANSWER)) {
-        LOG(LS_ERROR) << "Failure in SetLocalContent with CA_ANSWER";
-        session->SetError(BaseSession::ERROR_CONTENT);
-      }
-      break;
-    case Session::STATE_RECEIVEDINITIATE:
-      content = GetFirstContent(session->remote_description());
-      if (content && !SetRemoteContent(content, CA_OFFER)) {
-        LOG(LS_ERROR) << "Failure in SetRemoteContent with CA_OFFER";
-        session->SetError(BaseSession::ERROR_CONTENT);
-      }
-      break;
-    case Session::STATE_RECEIVEDACCEPT:
-      content = GetFirstContent(session->remote_description());
-      if (content && !SetRemoteContent(content, CA_ANSWER)) {
-        LOG(LS_ERROR) << "Failure in SetRemoteContent with CA_ANSWER";
-        session->SetError(BaseSession::ERROR_CONTENT);
-      }
-      break;
-    default:
-      break;
+  ContentAction action;
+  if (LocalStateChanged(state, &action)) {
+    content = GetFirstContent(session->local_description());
+    if (content && !SetLocalContent(content, action)) {
+      LOG(LS_ERROR) << "Failure in SetLocalContent with action " << action;
+      session->SetError(BaseSession::ERROR_CONTENT);
+    }
+  }
+  if (RemoteStateChanged(state, &action)) {
+    content = GetFirstContent(session->remote_description());
+    if (content && !SetRemoteContent(content, action)) {
+      LOG(LS_ERROR) << "Failure in SetRemoteContent with  action " << action;
+      session->SetError(BaseSession::ERROR_CONTENT);
+    }
   }
 }
 
@@ -684,37 +707,60 @@ bool BaseChannel::SetMaxSendBandwidth_w(int max_bandwidth) {
 
 bool BaseChannel::SetSrtp_w(const std::vector<CryptoParams>& cryptos,
                             ContentAction action, ContentSource src) {
-  bool ret;
-  if (action == CA_OFFER) {
-    ret = srtp_filter_.SetOffer(cryptos, src);
-  } else if (action == CA_ANSWER) {
-    ret = srtp_filter_.SetAnswer(cryptos, src);
-  } else {
-    // CA_UPDATE, no crypto params.
-    ret = true;
+  bool ret = false;
+  switch (action) {
+    case CA_OFFER:
+      ret = srtp_filter_.SetOffer(cryptos, src);
+      break;
+    case CA_PRANSWER:
+      ret = srtp_filter_.SetProvisionalAnswer(cryptos, src);
+      break;
+    case CA_ANSWER:
+      ret = srtp_filter_.SetAnswer(cryptos, src);
+      break;
+    case CA_UPDATE:
+      // no crypto params.
+      ret = true;
+      break;
+    default:
+      break;
   }
   return ret;
 }
 
 bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
                                ContentSource src) {
-  bool ret;
-  if (action == CA_OFFER) {
-    ret = rtcp_mux_filter_.SetOffer(enable, src);
-  } else if (action == CA_ANSWER) {
-    ret = rtcp_mux_filter_.SetAnswer(enable, src);
-    if (ret && rtcp_mux_filter_.IsActive()) {
-      // We activated RTCP mux, close down the RTCP transport.
-      set_rtcp_transport_channel(NULL);
-      // If the RTP transport is already writable, then so are we.
-      if (transport_channel_->writable()) {
-        ChannelWritable_w();
+  bool ret = false;
+  switch (action) {
+    case CA_OFFER:
+      ret = rtcp_mux_filter_.SetOffer(enable, src);
+      break;
+    case CA_PRANSWER:
+      ret = rtcp_mux_filter_.SetProvisionalAnswer(enable, src);
+      break;
+    case CA_ANSWER:
+      ret = rtcp_mux_filter_.SetAnswer(enable, src);
+      if (ret && rtcp_mux_filter_.IsActive()) {
+        // We activated RTCP mux, close down the RTCP transport.
+        set_rtcp_transport_channel(NULL);
       }
-    }
-  } else {
-    // CA_UPDATE, no RTCP mux info.
-    ret = true;
+      break;
+    case CA_UPDATE:
+      // No RTCP mux info.
+      ret = true;
+    default:
+      break;
   }
+  // |rtcp_mux_filter_| can be active if |action| is CA_PRANSWER or
+  // CA_ANSWER, but we only want to tear down the RTCP transport channel if we
+  // received a final answer.
+  if (ret && rtcp_mux_filter_.IsActive()) {
+    // If the RTP transport is already writable, then so are we.
+    if (transport_channel_->writable()) {
+      ChannelWritable_w();
+    }
+  }
+
   return ret;
 }
 
@@ -738,7 +784,8 @@ bool BaseChannel::RemoveRecvStream_w(uint32 ssrc) {
 
 bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
                                        ContentAction action) {
-  if (!VERIFY(action == CA_OFFER || action == CA_ANSWER || action == CA_UPDATE))
+  if (!VERIFY(action == CA_OFFER || action == CA_ANSWER ||
+              action == CA_PRANSWER || action == CA_UPDATE))
     return false;
 
   // If this is an update, streams only contain streams that have changed.
@@ -803,6 +850,10 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
 bool BaseChannel::UpdateRemoteStreams_w(
     const std::vector<StreamParams>& streams,
     ContentAction action) {
+  if (!VERIFY(action == CA_OFFER || action == CA_ANSWER ||
+              action == CA_PRANSWER || action == CA_UPDATE))
+    return false;
+
   // If this is an update, streams only contain streams that have changed.
   if (action == CA_UPDATE) {
     for (StreamParamsVec::const_iterator it = streams.begin();

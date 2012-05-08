@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2009, Google Inc.
+ * Copyright 2009 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,9 +30,7 @@
 #include "talk/base/systeminfo.h"
 
 #ifdef CPU_X86
-
 // CPUID-based tests only work on X86
-
 // Tests CPUID instruction for Vendor identification.
 TEST(SystemInfoTest, CpuVendorNonEmpty) {
   talk_base::SystemInfo info;
@@ -57,14 +55,32 @@ TEST(SystemInfoTest, CpuCacheSize) {
   EXPECT_GE(info.GetCpuCacheSize(), 8192);  // 8 KB min cache
   EXPECT_LE(info.GetCpuCacheSize(), 1024 * 1024 * 1024);  // 1 GB max cache
 }
-
 #endif // CPU_X86
 
-// Tests MachineModel is set.
-TEST(SystemInfoTest, MachineModelNonEmpty) {
+// Tests MachineModel is set.  On Mac test machine model is known.
+TEST(SystemInfoTest, MachineModelKnown) {
   talk_base::SystemInfo info;
-  LOG(LS_INFO) << "MachineModel: " << info.GetMachineModel();
   EXPECT_FALSE(info.GetMachineModel().empty());
+  const char *machine_model = info.GetMachineModel().c_str();
+  LOG(LS_INFO) << "MachineModel: " << machine_model;
+  bool known = true;
+#if defined(OSX)
+  // Full list as of May 2012.  Update when new OSX based models are added.
+  known = talk_base::string_match(machine_model, "MacBookPro*") ||
+          talk_base::string_match(machine_model, "MacBookAir*") ||
+          talk_base::string_match(machine_model, "MacBook*") ||
+          talk_base::string_match(machine_model, "MacPro*") ||
+          talk_base::string_match(machine_model, "Macmini*") ||
+          talk_base::string_match(machine_model, "iMac*") ||
+          talk_base::string_match(machine_model, "Xserve*");
+#elif !defined(IOS)
+  // All other machines return Not available.
+  known = talk_base::string_match(info.GetMachineModel().c_str(),
+                                  "Not available");
+#endif
+  if (!known) {
+    LOG(LS_WARNING) << "Machine Model Unknown: " << machine_model;
+  }
 }
 
 // Tests maximum cpu clockrate.

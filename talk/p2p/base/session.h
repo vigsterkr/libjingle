@@ -180,7 +180,9 @@ class BaseSession : public sigslot::has_slots<>,
     STATE_INIT = 0,
     STATE_SENTINITIATE,       // sent initiate, waiting for Accept or Reject
     STATE_RECEIVEDINITIATE,   // received an initiate. Call Accept or Reject
+    STATE_SENTPRACCEPT,       // sent provisional Accept
     STATE_SENTACCEPT,         // sent accept. begin connecting transport
+    STATE_RECEIVEDPRACCEPT,   // received provisional Accept, waiting for Accept
     STATE_RECEIVEDACCEPT,     // received accept. begin connecting transport
     STATE_SENTMODIFY,         // sent modify, waiting for Accept or Reject
     STATE_RECEIVEDMODIFY,     // received modify, call Accept or Reject

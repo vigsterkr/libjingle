@@ -709,11 +709,12 @@ TEST_F(P2PTransportChannelTest, SlowSignaling) {
   // this will instead cause all the callee's connections to be discarded.
   SetSignalingDelay(1, 1000);
   CreateChannels(1);
+  const cricket::Connection* best_connection = NULL;
   // Wait until the callee's connections are created.
-  WAIT(ep2_ch1()->best_connection() != NULL, 1000);
+  WAIT((best_connection = ep2_ch1()->best_connection()) != NULL, 1000);
   // Wait to see if they get culled; they shouldn't.
-  WAIT(ep2_ch1()->best_connection() == NULL, 1000);
-  EXPECT_TRUE(ep2_ch1()->best_connection() != NULL);
+  WAIT(ep2_ch1()->best_connection() != best_connection, 1000);
+  EXPECT_TRUE(ep2_ch1()->best_connection() == best_connection);
   DestroyChannels();
 }
 

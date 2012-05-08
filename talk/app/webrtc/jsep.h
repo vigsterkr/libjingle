@@ -136,8 +136,11 @@ class IceCandidateObserver {
 // Interface for implementing Jsep. PeerConnection implements these functions.
 class JsepInterface {
  public:
+  // Indicates the type of SessionDescription in a call to SetLocalDescription
+  // and SetRemoteDescription.
   enum Action {
     kOffer,
+    kPrAnswer,
     kAnswer,
   };
 

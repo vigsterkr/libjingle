@@ -40,28 +40,38 @@
 // General Utilities
 //////////////////////////////////////////////////////////////////////
 
+// Note: UNUSED is also defined in basictypes.h
 #ifndef UNUSED
-#define UNUSED(x) Unused(static_cast<const void *>(&x))
-#define UNUSED2(x,y) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y))
-#define UNUSED3(x,y,z) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z))
-#define UNUSED4(x,y,z,a) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z)); Unused(static_cast<const void *>(&a))
-#define UNUSED5(x,y,z,a,b) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z)); Unused(static_cast<const void *>(&a)); Unused(static_cast<const void *>(&b))
-inline void Unused(const void *) { }
-#endif // UNUSED
+#define UNUSED(x) Unused(static_cast<const void*>(&x))
+#define UNUSED2(x, y) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y))
+#define UNUSED3(x, y, z) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z))
+#define UNUSED4(x, y, z, a) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z)); \
+    Unused(static_cast<const void*>(&a))
+#define UNUSED5(x, y, z, a, b) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z)); \
+    Unused(static_cast<const void*>(&a)); \
+    Unused(static_cast<const void*>(&b))
+inline void Unused(const void*) {}
+#endif  // UNUSED
 
 #ifndef WIN32
-#define strnicmp(x,y,n) strncasecmp(x,y,n)
-#define stricmp(x,y) strcasecmp(x,y)
+#define strnicmp(x, y, n) strncasecmp(x, y, n)
+#define stricmp(x, y) strcasecmp(x, y)
 
 // TODO: Remove this. std::max should be used everywhere in the code.
 // NOMINMAX must be defined where we include <windows.h>.
-#define stdmax(x,y) std::max(x,y)
+#define stdmax(x, y) std::max(x, y)
 #else
-#define stdmax(x,y) talk_base::_max(x,y)
+#define stdmax(x, y) talk_base::_max(x, y)
 #endif
 
-
-#define ARRAY_SIZE(x) (static_cast<int>((sizeof(x)/sizeof(x[0]))))
+#define ARRAY_SIZE(x) (static_cast<int>(sizeof(x) / sizeof(x[0])))
 
 /////////////////////////////////////////////////////////////////////////////
 // Assertions
@@ -79,11 +89,11 @@ namespace talk_base {
 void Break();
 
 // LogAssert writes information about an assertion to the log
-void LogAssert(const char * function, const char * file, int line,
-               const char * expression);
+void LogAssert(const char* function, const char* file, int line,
+               const char* expression);
 
-inline bool Assert(bool result, const char * function, const char * file,
-                   int line, const char * expression) {
+inline bool Assert(bool result, const char* function, const char* file,
+                   int line, const char* expression) {
   if (!result) {
     LogAssert(function, file, line, expression);
     Break();
@@ -99,14 +109,15 @@ inline bool Assert(bool result, const char * function, const char * file,
 #endif
 
 #ifndef ASSERT
-#define ASSERT(x) (void)talk_base::Assert((x),__FUNCTION__,__FILE__,__LINE__,#x)
+#define ASSERT(x) \
+    (void)talk_base::Assert((x), __FUNCTION__, __FILE__, __LINE__, #x)
 #endif
 
 #ifndef VERIFY
-#define VERIFY(x) talk_base::Assert((x),__FUNCTION__,__FILE__,__LINE__,#x)
+#define VERIFY(x) talk_base::Assert((x), __FUNCTION__, __FILE__, __LINE__, #x)
 #endif
 
-#else // !ENABLE_DEBUG
+#else  // !ENABLE_DEBUG
 
 namespace talk_base {
 
@@ -122,7 +133,7 @@ inline bool ImplicitCastToBool(bool result) { return result; }
 #define VERIFY(x) talk_base::ImplicitCastToBool(x)
 #endif
 
-#endif // !ENABLE_DEBUG
+#endif  // !ENABLE_DEBUG
 
 #define COMPILE_TIME_ASSERT(expr)       char CTA_UNIQUE_NAME[expr]
 #define CTA_UNIQUE_NAME                 CTA_MAKE_NAME(__LINE__)
@@ -138,4 +149,4 @@ inline bool ImplicitCastToBool(bool result) { return result; }
 #define FORCE_INLINE
 #endif
 
-#endif // TALK_BASE_COMMON_H_
+#endif  // TALK_BASE_COMMON_H_

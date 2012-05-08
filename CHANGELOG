@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.18 - May 7, 2012
+  - JSEP PRANSWER support in WebRtc
+  - Bug fixes.
+
 0.6.17 - Mar 19, 2012
   - Implemented ROAP on top of JSEP.
   - Added a new signal after PortAllocatorSesison discoves all candidates for

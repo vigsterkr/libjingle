@@ -212,7 +212,7 @@ TEST_F(RelayServerTest, TestAllocateNoUsername) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
+  EXPECT_EQ(4, err->eclass());
   EXPECT_EQ(32, err->number());
   EXPECT_EQ("Missing Username", err->reason());
 }
@@ -232,7 +232,7 @@ TEST_F(RelayServerTest, TestBindingRequest) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(6, err->error_class());
+  EXPECT_EQ(6, err->eclass());
   EXPECT_EQ(0, err->number());
   EXPECT_EQ("Operation Not Supported", err->reason());
 }
@@ -358,7 +358,7 @@ TEST_F(RelayServerTest, TestSendRequestMissingUsername) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
+  EXPECT_EQ(4, err->eclass());
   EXPECT_EQ(32, err->number());
   EXPECT_EQ("Missing Username", err->reason());
 }
@@ -382,7 +382,7 @@ TEST_F(RelayServerTest, TestSendRequestBadUsername) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
+  EXPECT_EQ(4, err->eclass());
   EXPECT_EQ(30, err->number());
   EXPECT_EQ("Stale Credentials", err->reason());
 }
@@ -407,7 +407,7 @@ TEST_F(RelayServerTest, TestSendRequestNoDestinationAddress) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
+  EXPECT_EQ(4, err->eclass());
   EXPECT_EQ(0, err->number());
   EXPECT_EQ("Bad Request", err->reason());
 }
@@ -432,7 +432,7 @@ TEST_F(RelayServerTest, TestSendRequestNoData) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(4, err->error_class());
+  EXPECT_EQ(4, err->eclass());
   EXPECT_EQ(00, err->number());
   EXPECT_EQ("Bad Request", err->reason());
 }
@@ -456,7 +456,7 @@ TEST_F(RelayServerTest, TestSendRequestWrongType) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(6, err->error_class());
+  EXPECT_EQ(6, err->eclass());
   EXPECT_EQ(0, err->number());
   EXPECT_EQ("Operation Not Supported", err->reason());
 }
@@ -529,7 +529,7 @@ TEST_F(RelayServerTest, TestExpiration) {
 
   const StunErrorCodeAttribute* err = res->GetErrorCode();
   ASSERT_TRUE(err != NULL);
-  EXPECT_EQ(6, err->error_class());
+  EXPECT_EQ(6, err->eclass());
   EXPECT_EQ(0, err->number());
   EXPECT_EQ("Operation Not Supported", err->reason());
 

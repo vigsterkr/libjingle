@@ -301,7 +301,7 @@ void P2PTransportChannel::OnCandidatesAllocationDone(
 
 // Handle stun packets
 void P2PTransportChannel::OnUnknownAddress(
-    Port *port, const talk_base::SocketAddress &address, StunMessage *stun_msg,
+    Port *port, const talk_base::SocketAddress &address, IceMessage *stun_msg,
     const std::string &remote_username, bool port_muxed) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 

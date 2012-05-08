@@ -95,6 +95,10 @@ class SrtpFilter {
   // if crypto is not desired. This must be called before SetAnswer.
   bool SetOffer(const std::vector<CryptoParams>& offer_params,
                 ContentSource source);
+  // Same as SetAnwer. But multiple calls are allowed to SetProvisionalAnswer
+  // after a call to SetOffer.
+  bool SetProvisionalAnswer(const std::vector<CryptoParams>& answer_params,
+                            ContentSource source);
   // Indicates which crypto algorithms and keys were contained in the answer.
   // answer_params should contain the negotiated parameters, which may be none,
   // if crypto was not desired or could not be negotiated (and not required).
@@ -129,8 +133,13 @@ class SrtpFilter {
   sigslot::repeater3<uint32, Mode, Error> SignalSrtpError;
 
  protected:
+  bool ExpectOffer(ContentSource source);
   bool StoreParams(const std::vector<CryptoParams>& params,
                    ContentSource source);
+  bool ExpectAnswer(ContentSource source);
+  bool DoSetAnswer(const std::vector<CryptoParams>& answer_params,
+                     ContentSource source,
+                     bool final);
   void CreateSrtpSessions();
   bool NegotiateParams(const std::vector<CryptoParams>& answer_params,
                        CryptoParams* selected_params);
@@ -144,13 +153,24 @@ class SrtpFilter {
     ST_INIT,           // SRTP filter unused.
     ST_SENTOFFER,      // Offer with SRTP parameters sent.
     ST_RECEIVEDOFFER,  // Offer with SRTP parameters received.
+    ST_SENTPRANSWER_NO_CRYPTO,  // Sent provisional answer without crypto.
+    // Received provisional answer without crypto.
+    ST_RECEIVEDPRANSWER_NO_CRYPTO,
     ST_ACTIVE,         // Offer and answer set.
     // SRTP filter is active but new parameters are offered.
     // When the answer is set, the state transitions to ST_ACTIVE or ST_INIT.
     ST_SENTUPDATEDOFFER,
     // SRTP filter is active but new parameters are received.
     // When the answer is set, the state transitions back to ST_ACTIVE.
-    ST_RECEIVEDUPDATEDOFFER
+    ST_RECEIVEDUPDATEDOFFER,
+    // SRTP filter is active but the sent answer is only provisional.
+    // When the final answer is set, the state transitions to ST_ACTIVE or
+    // ST_INIT.
+    ST_SENTPRANSWER,
+    // SRTP filter is active but the received answer is only provisional.
+    // When the final answer is set, the state transitions to ST_ACTIVE or
+    // ST_INIT.
+    ST_RECEIVEDPRANSWER
   };
   State state_;
   uint32 signal_silent_time_in_ms_;

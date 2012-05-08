@@ -124,7 +124,7 @@ class P2PTransportChannel : public TransportChannelImpl,
                          const std::vector<Candidate>& candidates);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
   void OnUnknownAddress(Port *port, const talk_base::SocketAddress &addr,
-                        StunMessage *stun_msg,
+                        IceMessage *stun_msg,
                         const std::string &remote_username, bool port_muxed);
   void OnPortDestroyed(Port* port);
 

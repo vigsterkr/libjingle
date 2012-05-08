@@ -251,6 +251,7 @@ class StunAddressAttribute : public StunAttribute {
   static const uint16 SIZE_UNDEF = 0;
   static const uint16 SIZE_IP4 = 8;
   static const uint16 SIZE_IP6 = 20;
+  StunAddressAttribute(uint16 type, const talk_base::SocketAddress& addr);
   StunAddressAttribute(uint16 type, uint16 length);
 
   virtual StunAttributeValueType value_type() const {
@@ -309,7 +310,7 @@ class StunAddressAttribute : public StunAttribute {
 // transaction ID of the message.
 class StunXorAddressAttribute : public StunAddressAttribute {
  public:
-  StunXorAddressAttribute(uint16 type, uint16 length);
+  StunXorAddressAttribute(uint16 type, const talk_base::SocketAddress& addr);
   StunXorAddressAttribute(uint16 type, uint16 length,
                           StunMessage* owner);
 
@@ -331,6 +332,7 @@ class StunXorAddressAttribute : public StunAddressAttribute {
 class StunUInt32Attribute : public StunAttribute {
  public:
   static const uint16 SIZE = 4;
+  StunUInt32Attribute(uint16 type, uint32 value);
   explicit StunUInt32Attribute(uint16 type);
 
   virtual StunAttributeValueType value_type() const {
@@ -353,6 +355,7 @@ class StunUInt32Attribute : public StunAttribute {
 class StunUInt64Attribute : public StunAttribute {
  public:
   static const uint16 SIZE = 8;
+  StunUInt64Attribute(uint16 type, uint64 value);
   explicit StunUInt64Attribute(uint16 type);
 
   virtual StunAttributeValueType value_type() const {
@@ -372,6 +375,9 @@ class StunUInt64Attribute : public StunAttribute {
 // Implements STUN attributes that record an arbitrary byte string.
 class StunByteStringAttribute : public StunAttribute {
  public:
+  explicit StunByteStringAttribute(uint16 type);
+  StunByteStringAttribute(uint16 type, const std::string& str);
+  StunByteStringAttribute(uint16 type, const void* bytes, size_t length);
   StunByteStringAttribute(uint16 type, uint16 length);
   ~StunByteStringAttribute();
 
@@ -401,6 +407,7 @@ class StunByteStringAttribute : public StunAttribute {
 class StunErrorCodeAttribute : public StunAttribute {
  public:
   static const uint16 MIN_SIZE = 4;
+  StunErrorCodeAttribute(uint16 type, int code, const std::string& reason);
   StunErrorCodeAttribute(uint16 type, uint16 length);
   ~StunErrorCodeAttribute();
 
@@ -408,15 +415,15 @@ class StunErrorCodeAttribute : public StunAttribute {
     return STUN_VALUE_ERROR_CODE;
   }
 
-  // TODO: This is wrong, but we can't change it without breaking
-  // P2PTransportChannel. Figure out a migration plan.
-  uint32 error_code() const { return (class_ << 8) | number_; }
-  int error_class() const { return class_; }
+  // The combined error and class, e.g. 0x400.
+  int code() const;
+  void SetCode(int code);
+
+  // The individual error components.
+  int eclass() const { return class_; }
   int number() const { return number_; }
   const std::string& reason() const { return reason_; }
-
-  void SetErrorCode(uint32 code);
-  void SetErrorClass(uint8 eclass) { class_ = eclass; }
+  void SetClass(uint8 eclass) { class_ = eclass; }
   void SetNumber(uint8 number) { number_ = number; }
   void SetReason(const std::string& reason);
 

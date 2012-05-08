@@ -46,6 +46,7 @@
 #include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/mediasession.h"
 
+using cricket::BaseSession;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
 using webrtc::IceCandidateColletion;
@@ -338,6 +339,20 @@ class WebRtcSessionTest : public testing::Test {
     EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
     EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
   }
+
+  void SetLocalDescription(JsepInterface::Action action,
+                      SessionDescriptionInterface* desc,
+                      BaseSession::State expected_state) {
+    EXPECT_TRUE(session_->SetLocalDescription(action, desc));
+    EXPECT_EQ(expected_state, session_->state());
+  }
+  void SetRemoteDescription(JsepInterface::Action action,
+                            SessionDescriptionInterface* desc,
+                            BaseSession::State expected_state) {
+    EXPECT_TRUE(session_->SetRemoteDescription(action, desc));
+    EXPECT_EQ(expected_state, session_->state());
+  }
+
   void CreateCryptoOfferAndNonCryptoAnswer(SessionDescriptionInterface** offer,
       JsepSessionDescription** nocrypto_answer) {
     mediastream_signaling_.UseOptionsWithStream2();
@@ -586,18 +601,24 @@ TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
 TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
+  // SetLocalDescription take ownership of offer.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+
+  // SetLocalDescription take ownership of offer.
+  SessionDescriptionInterface* offer2 = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer2));
 }
 
 TEST_F(WebRtcSessionTest, TestSetRemoteOfferTwice) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
+  // SetLocalDescription take ownership of offer.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+
+  SessionDescriptionInterface* offer2 = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer2));
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteOffer) {
@@ -614,6 +635,54 @@ TEST_F(WebRtcSessionTest, TestSetRemoteAndLocalOffer) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+}
+
+TEST_F(WebRtcSessionTest, TestSetLocalPrAnswer) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsReceiveOnly();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  SessionDescriptionInterface* pranswer = session_->CreateAnswer(MediaHints(),
+                                                                 offer);
+  SetRemoteDescription(JsepInterface::kOffer, offer,
+                       BaseSession::STATE_RECEIVEDINITIATE);
+  SetLocalDescription(JsepInterface::kPrAnswer, pranswer,
+                      BaseSession::STATE_SENTPRACCEPT);
+
+  mediastream_signaling_.UseOptionsWithStream1();
+  SessionDescriptionInterface* pranswer2 = session_->CreateAnswer(MediaHints(),
+                                                                  offer);
+  SetLocalDescription(JsepInterface::kPrAnswer, pranswer2,
+                      BaseSession::STATE_SENTPRACCEPT);
+
+  mediastream_signaling_.UseOptionsWithStream2();
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  SetLocalDescription(JsepInterface::kAnswer, answer,
+                      BaseSession::STATE_SENTACCEPT);
+}
+
+TEST_F(WebRtcSessionTest, TestSetRemotePrAnswer) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsReceiveOnly();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  SessionDescriptionInterface* pranswer = session_->CreateAnswer(MediaHints(),
+                                                                 offer);
+  SetLocalDescription(JsepInterface::kOffer, offer,
+                      BaseSession::STATE_SENTINITIATE);
+  SetRemoteDescription(JsepInterface::kPrAnswer, pranswer,
+                       BaseSession::STATE_RECEIVEDPRACCEPT);
+
+  mediastream_signaling_.UseOptionsWithStream1();
+  SessionDescriptionInterface* pranswer2 = session_->CreateAnswer(MediaHints(),
+                                                                  offer);
+  SetRemoteDescription(JsepInterface::kPrAnswer, pranswer2,
+                       BaseSession::STATE_RECEIVEDPRACCEPT);
+
+  mediastream_signaling_.UseOptionsWithStream2();
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  SetRemoteDescription(JsepInterface::kAnswer, answer,
+                       BaseSession::STATE_RECEIVEDACCEPT);
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalAnswerWithoutOffer) {

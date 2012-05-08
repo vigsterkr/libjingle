@@ -68,7 +68,7 @@ int PortProxy::GetError() {
 void PortProxy::OnUnknownAddress(
     Port *port,
     const talk_base::SocketAddress &addr,
-    StunMessage *stun_msg,
+    IceMessage *stun_msg,
     const std::string &remote_username,
     bool port_muxed) {
   ASSERT(port == impl_);

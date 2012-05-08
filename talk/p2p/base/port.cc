@@ -164,8 +164,9 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       ip_(ip),
       min_port_(min_port),
       max_port_(max_port),
-      generation_(0),
+      component_(ICE_CANDIDATE_COMPONENT_DEFAULT),
       priority_(0),
+      generation_(0),
       ice_username_fragment_(username_fragment),
       password_(password),
       lifetime_(LT_PRESTART),
@@ -235,7 +236,7 @@ void Port::OnReadPacket(
 
   // If this is an authenticated STUN request, then signal unknown address and
   // send back a proper binding response.
-  talk_base::scoped_ptr<StunMessage> msg;
+  talk_base::scoped_ptr<IceMessage> msg;
   std::string remote_username;
   if (!GetStunMessage(data, size, addr, msg.accept(), &remote_username)) {
     LOG_J(LS_ERROR, this) << "Received non-STUN packet from unknown address ("
@@ -259,7 +260,7 @@ void Port::OnReadPacket(
 
 bool Port::GetStunMessage(const char* data, size_t size,
                           const talk_base::SocketAddress& addr,
-                          StunMessage** out_msg, std::string* out_username) {
+                          IceMessage** out_msg, std::string* out_username) {
   // NOTE: This could clearly be optimized to avoid allocating any memory.
   //       However, at the data rates we'll be looking at on the client side,
   //       this probably isn't worth worrying about.
@@ -270,7 +271,7 @@ bool Port::GetStunMessage(const char* data, size_t size,
 
   // Parse the request message.  If the packet is not a complete and correct
   // STUN message, then ignore it.
-  talk_base::scoped_ptr<StunMessage> stun_msg(new StunMessage());
+  talk_base::scoped_ptr<IceMessage> stun_msg(new IceMessage());
   talk_base::ByteBuffer buf(data, size);
   if (!stun_msg->Read(&buf) || (buf.Length() > 0)) {
     return false;
@@ -310,7 +311,7 @@ bool Port::GetStunMessage(const char* data, size_t size,
     if (stun_msg->type() == STUN_BINDING_ERROR_RESPONSE) {
       if (const StunErrorCodeAttribute* error_code = stun_msg->GetErrorCode()) {
         LOG_J(LS_ERROR, this) << "Received STUN binding error:"
-                              << " class=" << error_code->error_class()
+                              << " class=" << error_code->eclass()
                               << " number=" << error_code->number()
                               << " reason='" << error_code->reason() << "'"
                               << " from " << addr.ToString();
@@ -412,22 +413,16 @@ void Port::SendBindingResponse(StunMessage* request,
   response.SetType(STUN_BINDING_RESPONSE);
   response.SetTransactionID(request->transaction_id());
 
-  StunAddressAttribute* addr_attr =
-      StunAttribute::CreateAddress(STUN_ATTR_MAPPED_ADDRESS);
-  addr_attr->SetAddress(addr);
-  response.AddAttribute(addr_attr);
-
-  // As per RFC 5245, username attribute will not be present in response
-  // messages.
+  // Only GICE messages have USERNAME and MAPPED-ADDRESS in the response.
+  // ICE messages use XOR-MAPPED-ADDRESS, and add MESSAGE-INTEGRITY.
   if (ice_protocol_ == ICEPROTO_GOOGLE) {
-    StunByteStringAttribute* username2_attr =
-        StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-    username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
-    response.AddAttribute(username2_attr);
-  }
-
-  // Adding MESSAGE-INTEGRITY attribute to the response message.
-  if (ice_protocol_ == ICEPROTO_RFC5245) {
+    response.AddAttribute(
+        new StunAddressAttribute(STUN_ATTR_MAPPED_ADDRESS, addr));
+    response.AddAttribute(new StunByteStringAttribute(
+        STUN_ATTR_USERNAME, username_attr->GetString()));
+  } else if (ice_protocol_ == ICEPROTO_RFC5245) {
+    response.AddAttribute(
+        new StunXorAddressAttribute(STUN_ATTR_XOR_MAPPED_ADDRESS, addr));
     response.AddMessageIntegrity(password_);
   }
 
@@ -470,14 +465,19 @@ void Port::SendBindingErrorResponse(StunMessage* request,
   // As per RFC 5245, username attribute will not be present in response
   // messages.
   if (ice_protocol_ == ICEPROTO_GOOGLE) {
-    StunByteStringAttribute* username2_attr =
-        StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-    username2_attr->CopyBytes(username_attr->bytes(), username_attr->length());
-    response.AddAttribute(username2_attr);
+    response.AddAttribute(new StunByteStringAttribute(
+        STUN_ATTR_USERNAME, username_attr->GetString()));
   }
 
+  // When doing GICE, we need to write out the error code incorrectly to
+  // maintain backwards compatiblility.
   StunErrorCodeAttribute* error_attr = StunAttribute::CreateErrorCode();
-  error_attr->SetErrorCode(error_code);
+  if (ice_protocol_ == ICEPROTO_RFC5245) {
+    error_attr->SetCode(error_code);
+  } else if (ice_protocol_ == ICEPROTO_GOOGLE) {
+    error_attr->SetClass(error_code / 256);
+    error_attr->SetNumber(error_code % 256);
+  }
   error_attr->SetReason(reason);
   response.AddAttribute(error_attr);
 
@@ -559,7 +559,9 @@ const std::string Port::username_fragment() const {
 // A ConnectionRequest is a simple STUN ping used to determine writability.
 class ConnectionRequest : public StunRequest {
  public:
-  explicit ConnectionRequest(Connection* connection) : connection_(connection) {
+  explicit ConnectionRequest(Connection* connection)
+      : StunRequest(new IceMessage()),
+        connection_(connection) {
   }
 
   virtual ~ConnectionRequest() {
@@ -567,17 +569,25 @@ class ConnectionRequest : public StunRequest {
 
   virtual void Prepare(StunMessage* request) {
     request->SetType(STUN_BINDING_REQUEST);
-    StunByteStringAttribute* username_attr =
-        StunAttribute::CreateByteString(STUN_ATTR_USERNAME);
-    std::string username_attr_str;
+    std::string username;
     connection_->port()->CreateStunUsername(
-        connection_->remote_candidate().username(), &username_attr_str);
-    username_attr->CopyBytes(
-        username_attr_str.c_str(), username_attr_str.size());
-    request->AddAttribute(username_attr);
+        connection_->remote_candidate().username(), &username);
+    request->AddAttribute(
+        new StunByteStringAttribute(STUN_ATTR_USERNAME, username));
 
     // Adding Message Integrity to the STUN request message.
     if (connection_->port()->ice_protocol() == ICEPROTO_RFC5245) {
+      // Adding PRIORITY Attribute.
+      // Changing the type preference to Peer Reflexive and local preference
+      // and component id information is unchanged from the original priority.
+      // priority = (2^24)*(type preference) +
+      //           (2^8)*(local preference) +
+      //           (2^0)*(256 - component ID)
+      uint32 prflx_priority = ICE_TYPE_PREFERENCE_PRFLX << 24 |
+          (connection_->local_candidate().priority() & 0x00FFFFFF);
+      request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_PRIORITY, prflx_priority));
+
+      // Adding Message Integrity attribute.
       request->AddMessageIntegrity(connection_->remote_candidate().password());
     }
   }
@@ -666,7 +676,7 @@ void Connection::OnSendStunPacket(const void* data, size_t size,
 }
 
 void Connection::OnReadPacket(const char* data, size_t size) {
-  StunMessage* msg;
+  IceMessage* msg;
   std::string remote_username;
   const talk_base::SocketAddress& addr(remote_candidate_.address());
   if (!port_->GetStunMessage(data, size, addr, &msg, &remote_username)) {
@@ -706,37 +716,36 @@ void Connection::OnReadPacket(const char* data, size_t size) {
     // The packet is STUN, with the right username.
     // If this is a STUN request, then update the readable bit and respond.
     // If this is a STUN response, then update the writable bit.
-
     switch (msg->type()) {
-    case STUN_BINDING_REQUEST:
-      // Incoming, validated stun request from remote peer.
-      // This call will also set the connection readable.
+      case STUN_BINDING_REQUEST:
+        // Incoming, validated stun request from remote peer.
+        // This call will also set the connection readable.
 
-      port_->SendBindingResponse(msg, addr);
+        port_->SendBindingResponse(msg, addr);
 
-      // If timed out sending writability checks, start up again
-      if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
-        set_write_state(STATE_WRITE_CONNECT);
-      break;
+        // If timed out sending writability checks, start up again
+        if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
+          set_write_state(STATE_WRITE_CONNECT);
+        break;
 
-    // Response from remote peer. Does it match request sent?
-    // This doesn't just check, it makes callbacks if transaction
-    // id's match
-    case STUN_BINDING_RESPONSE:
-      if ((port_->ice_protocol() == ICEPROTO_GOOGLE) ||
-          msg->ValidateMessageIntegrity(
-              data, size, remote_candidate().password())) {
+      // Response from remote peer. Does it match request sent?
+      // This doesn't just check, it makes callbacks if transaction
+      // id's match
+      case STUN_BINDING_RESPONSE:
+        if ((port_->ice_protocol() == ICEPROTO_GOOGLE) ||
+            msg->ValidateMessageIntegrity(
+                data, size, remote_candidate().password())) {
+          requests_.CheckResponse(msg);
+        }
+        // Otherwise silently discard the response message.
+        break;
+      case STUN_BINDING_ERROR_RESPONSE:
         requests_.CheckResponse(msg);
-      }
-      // Otherwise silently discard the response message.
-      break;
-    case STUN_BINDING_ERROR_RESPONSE:
-      requests_.CheckResponse(msg);
-      break;
+        break;
 
-    default:
-      ASSERT(false);
-      break;
+      default:
+        ASSERT(false);
+        break;
     }
 
     // Done with the message; delete
@@ -907,13 +916,21 @@ void Connection::OnConnectionRequestResponse(ConnectionRequest* request,
 
 void Connection::OnConnectionRequestErrorResponse(ConnectionRequest* request,
                                                   StunMessage* response) {
-  const StunErrorCodeAttribute* error = response->GetErrorCode();
-  uint32 error_code = error ?
-      error->error_code() : static_cast<uint32>(STUN_ERROR_GLOBAL_FAILURE);
+  const StunErrorCodeAttribute* error_attr = response->GetErrorCode();
+  int error_code = STUN_ERROR_GLOBAL_FAILURE;
+  if (error_attr) {
+    if (port_->ice_protocol_ == ICEPROTO_GOOGLE) {
+      // When doing GICE, the error code is written out incorrectly, so we need
+      // to unmunge it here.
+      error_code = error_attr->eclass() * 256 + error_attr->number();
+    } else {
+      error_code = error_attr->code();
+    }
+  }
 
-  if ((error_code == STUN_ERROR_UNKNOWN_ATTRIBUTE)
-      || (error_code == STUN_ERROR_SERVER_ERROR)
-      || (error_code == STUN_ERROR_UNAUTHORIZED)) {
+  if (error_code == STUN_ERROR_UNKNOWN_ATTRIBUTE ||
+      error_code == STUN_ERROR_SERVER_ERROR ||
+      error_code == STUN_ERROR_UNAUTHORIZED) {
     // Recoverable error, retry
   } else if (error_code == STUN_ERROR_STALE_CREDENTIALS) {
     // Race failure, retry

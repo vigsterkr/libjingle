@@ -180,9 +180,45 @@ TEST_F(SrtpFilterTest, TestBadSetup) {
   EXPECT_FALSE(f1_.SetAnswer(answer, CS_LOCAL));
   EXPECT_FALSE(f1_.SetAnswer(answer, CS_REMOTE));
   EXPECT_TRUE(f1_.SetOffer(offer, CS_LOCAL));
-  EXPECT_FALSE(f1_.SetOffer(answer, CS_REMOTE));
   EXPECT_FALSE(f1_.SetAnswer(answer, CS_LOCAL));
   EXPECT_FALSE(f1_.IsActive());
+}
+
+// Test that we can set offer multiple times from the same source.
+TEST_F(SrtpFilterTest, TestGoodSetupMultipleOffers) {
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams1), CS_LOCAL));
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+  EXPECT_TRUE(f1_.SetAnswer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams1), CS_LOCAL));
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+  EXPECT_TRUE(f1_.SetAnswer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams1), CS_REMOTE));
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_TRUE(f2_.SetAnswer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+  EXPECT_TRUE(f2_.IsActive());
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams1), CS_REMOTE));
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_TRUE(f2_.SetAnswer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+}
+// Test that we can't set offer multiple times from different sources.
+TEST_F(SrtpFilterTest, TestBadSetupMultipleOffers) {
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams1), CS_LOCAL));
+  EXPECT_FALSE(f1_.SetOffer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_TRUE(f1_.SetAnswer(MakeVector(kTestCryptoParams1), CS_REMOTE));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f1_.SetOffer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+  EXPECT_FALSE(f1_.SetOffer(MakeVector(kTestCryptoParams1), CS_REMOTE));
+  EXPECT_TRUE(f1_.SetAnswer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_FALSE(f2_.SetOffer(MakeVector(kTestCryptoParams1), CS_LOCAL));
+  EXPECT_TRUE(f2_.SetAnswer(MakeVector(kTestCryptoParams2), CS_LOCAL));
+  EXPECT_TRUE(f2_.IsActive());
+  EXPECT_TRUE(f2_.SetOffer(MakeVector(kTestCryptoParams2), CS_REMOTE));
+  EXPECT_FALSE(f2_.SetOffer(MakeVector(kTestCryptoParams1), CS_LOCAL));
+  EXPECT_TRUE(f2_.SetAnswer(MakeVector(kTestCryptoParams2), CS_LOCAL));
 }
 
 // Test that we fail if we have params in the answer when none were offered.
@@ -337,6 +373,53 @@ TEST_F(SrtpFilterTest, TestChangeParameters) {
   EXPECT_TRUE(f1_.SetAnswer(answer, CS_REMOTE));
 
   TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_32, CS_AES_CM_128_HMAC_SHA1_32);
+}
+
+// Test that we can send and receive provisional answers with crypto enabled.
+// Also test that we can change the crypto.
+TEST_F(SrtpFilterTest, TestProvisionalAnswer) {
+  std::vector<CryptoParams> offer(MakeVector(kTestCryptoParams1));
+  offer.push_back(kTestCryptoParams1);
+  offer[1].tag = 2;
+  offer[1].cipher_suite = CS_AES_CM_128_HMAC_SHA1_32;
+  std::vector<CryptoParams> answer(MakeVector(kTestCryptoParams2));
+
+  EXPECT_TRUE(f1_.SetOffer(offer, CS_LOCAL));
+  EXPECT_TRUE(f2_.SetOffer(offer, CS_REMOTE));
+  EXPECT_TRUE(f2_.SetProvisionalAnswer(answer, CS_LOCAL));
+  EXPECT_TRUE(f1_.SetProvisionalAnswer(answer, CS_REMOTE));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f2_.IsActive());
+  TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_80, CS_AES_CM_128_HMAC_SHA1_80);
+
+  answer[0].key_params = kTestKeyParams4;
+  answer[0].tag = 2;
+  answer[0].cipher_suite = CS_AES_CM_128_HMAC_SHA1_32;
+  EXPECT_TRUE(f2_.SetAnswer(answer, CS_LOCAL));
+  EXPECT_TRUE(f1_.SetAnswer(answer, CS_REMOTE));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f2_.IsActive());
+  TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_32, CS_AES_CM_128_HMAC_SHA1_32);
+}
+
+// Test that a provisional answer doesn't need to contain a crypto.
+TEST_F(SrtpFilterTest, TestProvisionalAnswerWithoutCrypto) {
+  std::vector<CryptoParams> offer(MakeVector(kTestCryptoParams1));
+  std::vector<CryptoParams> answer;
+
+  EXPECT_TRUE(f1_.SetOffer(offer, CS_LOCAL));
+  EXPECT_TRUE(f2_.SetOffer(offer, CS_REMOTE));
+  EXPECT_TRUE(f2_.SetProvisionalAnswer(answer, CS_LOCAL));
+  EXPECT_TRUE(f1_.SetProvisionalAnswer(answer, CS_REMOTE));
+  EXPECT_FALSE(f1_.IsActive());
+  EXPECT_FALSE(f2_.IsActive());
+
+  answer.push_back(kTestCryptoParams2);
+  EXPECT_TRUE(f2_.SetAnswer(answer, CS_LOCAL));
+  EXPECT_TRUE(f1_.SetAnswer(answer, CS_REMOTE));
+  EXPECT_TRUE(f1_.IsActive());
+  EXPECT_TRUE(f2_.IsActive());
+  TestProtectUnprotect(CS_AES_CM_128_HMAC_SHA1_80, CS_AES_CM_128_HMAC_SHA1_80);
 }
 
 // Test that we can disable encryption.

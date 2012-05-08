@@ -169,17 +169,29 @@ void PortAllocatorSessionProxy::set_impl(
 
 void PortAllocatorSessionProxy::GetInitialPorts() {
   ASSERT(impl_ != NULL);
-  impl_->GetInitialPorts();
+  // Since all proxies share a common PortAllocatorSession, this check will
+  // prohibit sending multiple STUN ping messages to the stun server, which
+  // is a problem on Chrome. GetInitialPorts() and StartGetAllPorts() called
+  // from the worker thread and are called together from TransportChannel,
+  // checking for IsGettingAllPorts() for GetInitialPorts() will not be a
+  // problem.
+  if (!impl_->IsGettingAllPorts()) {
+    impl_->GetInitialPorts();
+  }
 }
 
 void PortAllocatorSessionProxy::StartGetAllPorts() {
   ASSERT(impl_ != NULL);
-  impl_->StartGetAllPorts();
+  if (!impl_->IsGettingAllPorts()) {
+    impl_->StartGetAllPorts();
+  }
 }
 
 void PortAllocatorSessionProxy::StopGetAllPorts() {
   ASSERT(impl_ != NULL);
-  impl_->StopGetAllPorts();
+  if (impl_->IsGettingAllPorts()) {
+    impl_->StopGetAllPorts();
+  }
 }
 
 bool PortAllocatorSessionProxy::IsGettingAllPorts() {

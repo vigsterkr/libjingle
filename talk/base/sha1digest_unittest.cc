@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2012, Google Inc.
+ * Copyright 2012 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -77,10 +77,23 @@ TEST(Sha1DigestTest, TestReuse) {
 
 TEST(Sha1DigestTest, TestBufferTooSmall) {
   Sha1Digest sha1;
-  std::string input = "abc";
+  std::string input = "abcdefghijklmnopqrstuvwxyz";
   char output[Sha1Digest::kSize - 1];
   sha1.Update(input.c_str(), input.size());
   EXPECT_EQ(0U, sha1.Finish(output, sizeof(output)));
+}
+
+TEST(Sha1DigestTest, TestBufferConst) {
+  Sha1Digest sha1;
+  const int kLongSize = 1000000;
+  std::string input(kLongSize, '\0');
+  for (int i = 0; i < kLongSize; ++i) {
+    input[i] = static_cast<char>(i);
+  }
+  sha1.Update(input.c_str(), input.size());
+  for (int i = 0; i < kLongSize; ++i) {
+    EXPECT_EQ(static_cast<char>(i), input[i]);
+  }
 }
 
 }  // namespace talk_base

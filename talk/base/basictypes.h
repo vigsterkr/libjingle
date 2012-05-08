@@ -35,7 +35,7 @@
 #endif
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "config.h"  // NOLINT
 #endif
 
 #include "talk/base/constructormagic.h"
@@ -65,8 +65,8 @@ typedef int64_t int64;
 #endif
 #define INT64_F "l"
 #elif defined(__LP64__)
-typedef unsigned long uint64;
-typedef long int64;
+typedef unsigned long uint64;  // NOLINT
+typedef long int64;  // NOLINT
 #ifndef INT64_C
 #define INT64_C(x) x ## L
 #endif
@@ -75,8 +75,8 @@ typedef long int64;
 #endif
 #define INT64_F "l"
 #else  // __LP64__
-typedef unsigned long long uint64;
-typedef long long int64;
+typedef unsigned long long uint64;  // NOLINT
+typedef long long int64;  // NOLINT
 #ifndef INT64_C
 #define INT64_C(x) x ## LL
 #endif
@@ -88,8 +88,8 @@ typedef long long int64;
 #endif  // COMPILER_MSVC
 typedef unsigned int uint32;
 typedef int int32;
-typedef unsigned short uint16;
-typedef short int16;
+typedef unsigned short uint16;  // NOLINT
+typedef short int16;  // NOLINT
 typedef unsigned char uint8;
 typedef signed char int8;
 #endif  // INT_TYPES_DEFINED
@@ -98,6 +98,22 @@ typedef signed char int8;
 #if defined(__x86_64__) || defined(_M_X64) || \
     defined(__i386__) || defined(_M_IX86)
 #define CPU_X86 1
+#endif
+
+#if !defined(ARCH_CPU_BIG_ENDIAN) && !defined(ARCH_CPU_LITTLE_ENDIAN)
+// gcc provides __BYTE_ORDER macros
+#if defined(CPU_X86) || (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
+    __BYTE_ORDER == __LITTLE_ENDIAN)
+#define ARCH_CPU_LITTLE_ENDIAN
+#elif defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && \
+    __BYTE_ORDER == __BIG_ENDIAN
+#define ARCH_CPU_BIG_ENDIAN
+#else
+#error ARCH_CPU_BIG_ENDIAN or ARCH_CPU_LITTLE_ENDIAN should be defined.
+#endif
+#endif
+#if defined(ARCH_CPU_BIG_ENDIAN) && defined(ARCH_CPU_LITTLE_ENDIAN)
+#error ARCH_CPU_BIG_ENDIAN and ARCH_CPU_LITTLE_ENDIAN both defined.
 #endif
 
 #ifdef WIN32
@@ -120,19 +136,30 @@ namespace talk_base {
   ((t)-1)) & ~((t)-1))))
 #define IS_ALIGNED(p, a) (!((uintptr_t)(p) & ((a) - 1)))
 
+// Note: UNUSED is also defined in common.h
 #ifndef UNUSED
-#define UNUSED(x) Unused(static_cast<const void *>(&x))
-#define UNUSED2(x,y) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y))
-#define UNUSED3(x,y,z) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z))
-#define UNUSED4(x,y,z,a) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z)); Unused(static_cast<const void *>(&a))
-#define UNUSED5(x,y,z,a,b) Unused(static_cast<const void *>(&x)); Unused(static_cast<const void *>(&y)); Unused(static_cast<const void *>(&z)); Unused(static_cast<const void *>(&a)); Unused(static_cast<const void *>(&b))
-inline void Unused(const void *) { }
-#endif // UNUSED
+#define UNUSED(x) Unused(static_cast<const void*>(&x))
+#define UNUSED2(x, y) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y))
+#define UNUSED3(x, y, z) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z))
+#define UNUSED4(x, y, z, a) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z)); \
+    Unused(static_cast<const void*>(&a))
+#define UNUSED5(x, y, z, a, b) Unused(static_cast<const void*>(&x)); \
+    Unused(static_cast<const void*>(&y)); \
+    Unused(static_cast<const void*>(&z)); \
+    Unused(static_cast<const void*>(&a)); \
+    Unused(static_cast<const void*>(&b))
+inline void Unused(const void*) {}
+#endif  // UNUSED
 
 // Use these to declare and define a static local variable (static T;) so that
 // it is leaked so that its destructors are not called at exit.
 #define LIBJINGLE_DEFINE_STATIC_LOCAL(type, name, arguments) \
   static type& name = *new type arguments
 
-#endif // __cplusplus
-#endif // TALK_BASE_BASICTYPES_H_
+#endif  // __cplusplus
+#endif  // TALK_BASE_BASICTYPES_H_

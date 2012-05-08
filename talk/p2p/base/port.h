@@ -70,6 +70,13 @@ enum ProtocolType {
   PROTO_LAST = PROTO_SSLTCP
 };
 
+enum IcePriorityValue {
+  ICE_TYPE_PREFERENCE_RELAY = 0,
+  ICE_TYPE_PREFERENCE_SRFLX = 100,
+  ICE_TYPE_PREFERENCE_PRFLX = 110,
+  ICE_TYPE_PREFERENCE_HOST = 126
+};
+
 const char* ProtoToString(ProtocolType proto);
 bool StringToProto(const char* value, ProtocolType* proto);
 
@@ -181,7 +188,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Indicates that we received a successful STUN binding request from an
   // address that doesn't correspond to any current connection.  To turn this
   // into a real connection, call CreateConnection.
-  sigslot::signal5<Port*, const talk_base::SocketAddress&, StunMessage*,
+  sigslot::signal5<Port*, const talk_base::SocketAddress&, IceMessage*,
                    const std::string&, bool> SignalUnknownAddress;
 
   // Sends a response message (normal or error) to the given request.  One of
@@ -276,7 +283,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // remote_username contains the remote fragment of the STUN username.
   bool GetStunMessage(const char* data, size_t size,
                       const talk_base::SocketAddress& addr,
-                      StunMessage** out_msg, std::string* out_username);
+                      IceMessage** out_msg, std::string* out_username);
 
   // Checks if the address in addr is compatible with the port's ip.
   bool IsCompatibleAddress(const talk_base::SocketAddress& addr);
@@ -295,10 +302,10 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   talk_base::IPAddress ip_;
   int min_port_;
   int max_port_;
-  uint32 generation_;
   std::string content_name_;
   int component_;
   uint32 priority_;
+  uint32 generation_;
   // In order to establish a connection to this Port (so that real data can be
   // sent through), the other side must send us a STUN binding request that is
   // authenticated with this username_fragment and password.

@@ -87,7 +87,7 @@ class StunPortBindingRequest : public StunRequest {
       LOG(LS_ERROR) << "Bad allocate response error code";
     } else {
       LOG(LS_ERROR) << "Binding error response:"
-                 << " class=" << attr->error_class()
+                 << " class=" << attr->eclass()
                  << " number=" << attr->number()
                  << " reason='" << attr->reason() << "'";
     }

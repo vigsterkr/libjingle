@@ -124,6 +124,10 @@ class WebRtcSession : public cricket::BaseSession,
       const cricket::Candidates& candidates);
   virtual void OnCandidatesAllocationDone();
 
+  // Check if a call to SetLocalDescription is acceptable with |action|.
+  bool ExpectSetLocalDescription(Action action);
+  // Check if a call to SetRemoteDescription is acceptable with |action|.
+  bool ExpectSetRemoteDescription(Action action);
   bool CreateChannels();  // Creates channels for voice and video.
   void EnableChannels();  // Enables sending of media.
   // Creates a JsepIceCandidate and adds it to the local session description
@@ -138,7 +142,7 @@ class WebRtcSession : public cricket::BaseSession,
   // Uses all remote candidates in |remote_desc| in this session.
   bool UseCandidatesInSessionDescription(
       const SessionDescriptionInterface* remote_desc);
-  // Uses |candidate| in the this session.
+  // Uses |candidate| in this session.
   bool UseCandidate(const IceCandidateInterface* candidate);
   bool ReadyToEnableBundle() const;
 

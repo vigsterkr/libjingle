@@ -44,6 +44,9 @@ class RtcpMuxFilter {
   // Specifies whether the offer indicates the use of RTCP mux.
   bool SetOffer(bool offer_enable, ContentSource src);
 
+  // Specifies whether the provisional answer indicates the use of RTCP mux.
+  bool SetProvisionalAnswer(bool answer_enable, ContentSource src);
+
   // Specifies whether the answer indicates the use of RTCP mux.
   bool SetAnswer(bool answer_enable, ContentSource src);
 
@@ -51,7 +54,29 @@ class RtcpMuxFilter {
   bool DemuxRtcp(const char* data, int len);
 
  private:
-  enum State { ST_INIT, ST_SENTOFFER, ST_RECEIVEDOFFER, ST_ACTIVE };
+  bool ExpectOffer(bool offer_enable, ContentSource source);
+  bool ExpectAnswer(ContentSource source);
+  enum State {
+    // RTCP mux filter unused.
+    ST_INIT,
+    // Offer with RTCP mux enabled received.
+    // RTCP mux filter is not active.
+    ST_RECEIVEDOFFER,
+    // Offer with RTCP mux enabled sent.
+    // RTCP mux filter can demux incoming packets but is not active.
+    ST_SENTOFFER,
+    // RTCP mux filter is active but the sent answer is only provisional.
+    // When the final answer is set, the state transitions to ST_ACTIVE or
+    // ST_INIT.
+    ST_SENTPRANSWER,
+    // RTCP mux filter is active but the received answer is only provisional.
+    // When the final answer is set, the state transitions to ST_ACTIVE or
+    // ST_INIT.
+    ST_RECEIVEDPRANSWER,
+    // Offer and answer set, RTCP mux enabled. It is not possible to de-activate
+    // the filter.
+    ST_ACTIVE
+  };
   State state_;
   bool offer_enable_;
 };

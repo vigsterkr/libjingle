@@ -163,7 +163,9 @@ class RtpHelper : public Base {
   bool HasRecvStream(uint32 ssrc) const {
     return GetStreamBySsrc(receive_streams_, ssrc, NULL);
   }
-
+  bool HasSendStream(uint32 ssrc) const {
+    return GetStreamBySsrc(send_streams_, ssrc, NULL);
+  }
   // TODO: This is to support legacy unit test that only check one
   // sending stream.
   const uint32 send_ssrc() {

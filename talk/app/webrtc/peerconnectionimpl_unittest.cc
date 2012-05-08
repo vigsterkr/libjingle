@@ -33,6 +33,7 @@
 #include "talk/app/webrtc/peerconnectionimpl.h"
 #include "talk/app/webrtc/roapmessages.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/gunit.h"
 
@@ -55,6 +56,7 @@ using talk_base::scoped_ptr;
 using talk_base::scoped_refptr;
 using webrtc::FakePortAllocatorFactory;
 using webrtc::IceCandidateInterface;
+using webrtc::LocalAudioTrackInterface;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::LocalVideoTrackInterface;
 using webrtc::MediaStreamInterface;
@@ -72,12 +74,28 @@ static std::string CreateShutdownMessage() {
   return shutdown.Serialize();
 }
 
+// Remove all but the first crypto from |sdp|. Only "a=crypto:0" is accepted in
+// an answer.
+static void RemoveAllButFirstCrypto(std::string* sdp) {
+  const char kCrypto[] = "a=crypto:";
+  const char kReplaceCrypto[] = "a=xcrypto:";
+  const char kKeepCrypto[] = "a=xcrypto:0";
+  const char kGoodCrypto[] = "a=crypto:0";
+
+  talk_base::replace_substrs(kCrypto, strlen(kCrypto), kReplaceCrypto,
+                             strlen(kReplaceCrypto), sdp);
+  talk_base::replace_substrs(kKeepCrypto, strlen(kKeepCrypto),
+                             kGoodCrypto, strlen(kGoodCrypto), sdp);
+}
+
 // Create a ROAP answer message.
 // The session description in the answer is set to the same as in the offer.
 static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
   webrtc::RoapOffer offer(msg);
   EXPECT_TRUE(offer.Parse());
   std::string answer_sdp = offer.SessionDescription();
+  RemoveAllButFirstCrypto(&answer_sdp);
+
   webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
                             offer.session_token(), offer.response_token(),
                             offer.seq(), answer_sdp);
@@ -258,6 +276,18 @@ class PeerConnectionImplTest : public testing::Test {
     pc_->CommitStreamChanges();
   }
 
+  void AddVoiceStream(const std::string& label) {
+    // Create a local stream.
+    scoped_refptr<LocalMediaStreamInterface> stream(
+        pc_factory_->CreateLocalMediaStream(label));
+    scoped_refptr<LocalAudioTrackInterface> audio_track(
+        pc_factory_->CreateLocalAudioTrack(label, NULL));
+    stream->AddTrack(audio_track.get());
+    pc_->AddStream(stream);
+    pc_->CommitStreamChanges();
+  }
+
+
   void WaitForRoapOffer() {
     EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpWaiting, observer_.sdp_state_,
                    kTimeout);
@@ -311,7 +341,7 @@ TEST_F(PeerConnectionImplTest, RoapUpdateStream) {
   WAIT(PeerConnectionInterface::kActive ==  observer_.state_, kTimeout);
   WAIT(PeerConnectionInterface::kSdpIdle == observer_.sdp_state_, kTimeout);
 
-  AddStream(kStreamLabel2);
+  AddVoiceStream(kStreamLabel2);
   WaitForRoapOffer();
   ASSERT_EQ(2u, pc_->local_streams()->count());
   EXPECT_EQ(kStreamLabel2, pc_->local_streams()->at(1)->label());
@@ -324,7 +354,8 @@ TEST_F(PeerConnectionImplTest, RoapUpdateStream) {
   // check if OnAddStream have been called.
   EXPECT_EQ(kStreamLabel2, observer_.GetLastAddedStreamLabel());
   ASSERT_EQ(2u, pc_->remote_streams()->count());
-  EXPECT_EQ(kStreamLabel2, pc_->remote_streams()->at(1)->label());
+  EXPECT_EQ(kStreamLabel2, pc_->remote_streams()->at(0)->label());
+  EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(1)->label());
 
   pc_->RemoveStream(static_cast<LocalMediaStreamInterface*>(
       pc_->local_streams()->at(1)));
