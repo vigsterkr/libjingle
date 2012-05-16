@@ -63,11 +63,11 @@ class JsepIceCandidate : public IceCandidateInterface {
   DISALLOW_COPY_AND_ASSIGN(JsepIceCandidate);
 };
 
-// Implementation of IceCandidateColletion.
+// Implementation of IceCandidateCollection.
 // This implementation stores JsepIceCandidates.
-class JsepCandidateColletion : public IceCandidateColletion {
+class JsepCandidateCollection : public IceCandidateCollection {
  public:
-  ~JsepCandidateColletion();
+  ~JsepCandidateCollection();
   virtual size_t count() const {
     return candidates_.size();
   }

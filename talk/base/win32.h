@@ -33,6 +33,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+
+// Make sure we don't get min/max macros
+#define NOMINMAX
 #include <winsock2.h>
 #include <windows.h>
 

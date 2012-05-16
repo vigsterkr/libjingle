@@ -76,7 +76,7 @@ class BasicPortAllocator : public PortAllocator {
   int best_writable_phase() const;
 
   virtual PortAllocatorSession* CreateSessionInternal(
-      const std::string& channel_name, int component,
+      int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd);
 
@@ -111,7 +111,6 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
                                   public talk_base::MessageHandler {
  public:
   BasicPortAllocatorSession(BasicPortAllocator* allocator,
-                            const std::string& channel_name,
                             int component,
                             const std::string& ice_ufrag,
                             const std::string& ice_pwd);

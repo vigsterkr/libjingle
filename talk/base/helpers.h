@@ -59,6 +59,9 @@ bool CreateRandomString(size_t length, const std::string& table,
 // Generates a random id.
 uint32 CreateRandomId();
 
+// Generates a 64 bit random id.
+uint64 CreateRandomId64();
+
 // Generates a random id > 0.
 uint32 CreateRandomNonZeroId();
 

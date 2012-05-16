@@ -139,7 +139,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.
-  sigslot::signal2<uint32, VideoFrame*> SignalMediaFrame;
+  // See videoprocessor.h for param reference.
+  sigslot::signal3<uint32, VideoFrame*, bool*> SignalMediaFrame;
 
  private:
   typedef std::vector<WebRtcVideoMediaChannel*> VideoChannels;
@@ -219,10 +220,8 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool RemoveRecvStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool GetStats(VideoMediaInfo* info);
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
-    return false;
-  }
-  virtual bool RemoveScreencast(uint32 ssrc) {
+  virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer) {
+    // TODO: implement.
     return false;
   }
   virtual bool SendIntraFrame();

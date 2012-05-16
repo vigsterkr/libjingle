@@ -209,9 +209,8 @@ bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
   return true;
 }
 
-TransportChannelImpl* P2PTransport::CreateTransportChannel(
-    const std::string& name, int component) {
-  return new P2PTransportChannel(name, component, this, port_allocator());
+TransportChannelImpl* P2PTransport::CreateTransportChannel(int component) {
+  return new P2PTransportChannel(component, this, port_allocator());
 }
 
 void P2PTransport::DestroyTransportChannel(TransportChannelImpl* channel) {

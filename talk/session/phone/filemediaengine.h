@@ -173,6 +173,10 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual bool SetSend(SendFlags flag);
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) { return true; }
   virtual int GetOutputLevel() { return 0; }
+  virtual int GetTimeSinceLastTyping() { return -1; }
+  virtual void SetTypingDetectionParameters(int time_window,
+    int cost_per_typing, int reporting_threshold, int penalty_decay) {}
+
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right) {
     return false;
   }
@@ -236,10 +240,9 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) {
     return true;
   }
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
-    return true;
+  virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer) {
+    return false;
   }
-  virtual bool RemoveScreencast(uint32 ssrc) { return true; }
   virtual bool GetStats(VideoMediaInfo* info) { return true; }
   virtual bool SendIntraFrame() { return false; }
   virtual bool RequestIntraFrame() { return false; }

@@ -94,6 +94,7 @@ enum StunErrorCode {
   STUN_ERROR_UNKNOWN_ATTRIBUTE    = 420,
   STUN_ERROR_STALE_CREDENTIALS    = 430,
   STUN_ERROR_STALE_NONCE          = 438,
+  STUN_ERROR_ROLE_CONFLICT        = 487,
   STUN_ERROR_SERVER_ERROR         = 500,
   STUN_ERROR_GLOBAL_FAILURE       = 600
 };
@@ -101,8 +102,10 @@ enum StunErrorCode {
 // Strings for the error codes above.
 extern const char STUN_ERROR_REASON_BAD_REQUEST[];
 extern const char STUN_ERROR_REASON_UNAUTHORIZED[];
+extern const char STUN_ERROR_REASON_UNKNOWN_ATTRIBUTE[];
 extern const char STUN_ERROR_REASON_STALE_CREDENTIALS[];
 extern const char STUN_ERROR_REASON_SERVER_ERROR[];
+extern const char STUN_ERROR_REASON_ROLE_CONFLICT[];
 
 // STUN Attribute header length.
 const size_t kStunAttributeHeaderSize = 4;
@@ -156,6 +159,7 @@ class StunMessage {
   // Gets the desired attribute value, or NULL if no such attribute type exists.
   const StunAddressAttribute* GetAddress(int type) const;
   const StunUInt32Attribute* GetUInt32(int type) const;
+  const StunUInt64Attribute* GetUInt64(int type) const;
   const StunByteStringAttribute* GetByteString(int type) const;
 
   // Gets these specific attribute values.
@@ -174,6 +178,12 @@ class StunMessage {
                                        const std::string& password);
   // Adds a MESSAGE-INTEGRITY attribute that is valid for the current message.
   bool AddMessageIntegrity(const std::string& password);
+
+  // Verifies that a given buffer is STUN by checking for a correct FINGERPRINT.
+  static bool ValidateFingerprint(const char* data, size_t size);
+
+  // Adds a FINGERPRINT attribute that is valid for the current message.
+  bool AddFingerprint();
 
   // Parses the STUN packet in the given buffer and records it here. The
   // return value indicates whether this was successful.

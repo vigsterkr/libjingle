@@ -72,24 +72,12 @@ void VideoCapturer::SetSupportedFormats(
   *(supported_formats_.get()) = formats;
 }
 
-bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& desired,
+bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
                                          VideoFormat* best_format) {
   if (!supported_formats_.get()) {
     return false;
   }
-
-  VideoFormat format = desired;
-  // If the application requests 16x9 and the camera does not support 16x9 HD
-  // or the application requests 16x10, change the request to 4x3. Otherwise,
-  // keep the request.
-  if (format.width * 9 == format.height * 16 &&
-      !Includes16x9HD(*supported_formats_.get())) {
-    format.height = format.width * 3 / 4;
-  } else if (format.width * 10 == format.height * 16) {
-    format.height = format.width * 3 / 4;
-  }
-  LOG(LS_INFO) << " Capture Desired " << desired.ToString()
-               << " Capture Requested " << format.ToString();
+  LOG(LS_INFO) << " Capture Requested " << format.ToString();
   int64 best_distance = kMaxDistance;
   std::vector<VideoFormat>::const_iterator best = supported_formats_->end();
   std::vector<VideoFormat>::const_iterator i;
@@ -159,28 +147,6 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
   // Check resolution and fps.
   int desired_width = desired.width;
   int desired_height = desired.height;
-#ifdef OSX
-  // QVGA on OSX is not well supported.  For 16x10, if 320x240 is used, it has
-  // 15x11 pixel aspect ratio on logitech B910/C260 and others.  ComputeCrop
-  // in mediaengine does not crop, so we keep 320x240, which magiccam on Mac
-  // can not display.  Some other viewers can display 320x240, but do not
-  // support pixel aspect ratio and appear distorted.
-  // This code below bumps the preferred resolution to VGA, maintaining aspect
-  // ratio. ie 320x200 -> 640x400.  VGA on logitech and most cameras is 1x1
-  // pixel aspect ratio.  The camera will capture 640x480, ComputeCrop will
-  // crop to 640x400, and the adapter will scale down to QVGA due to JUP view
-  // request.
-  static const int kMinWidth = 640;
-  if (desired_width > 0 && desired_width < kMinWidth) {
-    int new_desired_height = desired_height * kMinWidth / desired_width;
-    LOG(LS_VERBOSE) << " Changed desired from "
-                    << desired_width << "x" << desired_height
-                    << " To "
-                    << kMinWidth << "x" << new_desired_height;
-    desired_width = kMinWidth;
-    desired_height = new_desired_height;
-  }
-#endif
   int64 delta_w = supported.width - desired_width;
   int64 supported_fps = VideoFormat::IntervalToFps(supported.interval);
   int64 delta_fps = supported_fps -
@@ -221,16 +187,6 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
       (delta_fps << 8) | delta_fourcc;
 
   return distance;
-}
-
-bool VideoCapturer::Includes16x9HD(const std::vector<VideoFormat>& formats) {
-  std::vector<VideoFormat>::const_iterator i;
-  for (i = formats.begin(); i != formats.end(); ++i) {
-    if ((i->height >= 720) && (i->width * 9 == i->height * 16)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 }  // namespace cricket

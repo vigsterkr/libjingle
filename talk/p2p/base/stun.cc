@@ -31,6 +31,7 @@
 
 #include "talk/base/byteorder.h"
 #include "talk/base/common.h"
+#include "talk/base/crc32.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagedigest.h"
 #include "talk/base/scoped_ptr.h"
@@ -44,9 +45,11 @@ const char STUN_ERROR_REASON_BAD_REQUEST[] = "BAD REQUEST";
 const char STUN_ERROR_REASON_UNAUTHORIZED[] = "UNAUTHORIZED";
 const char STUN_ERROR_REASON_STALE_CREDENTIALS[] = "STALE CREDENTIALS";
 const char STUN_ERROR_REASON_SERVER_ERROR[] = "SERVER ERROR";
+const char STUN_ERROR_REASON_ROLE_CONFLICT[] = "ROLE CONFLICT";
 
 const char TURN_MAGIC_COOKIE_VALUE[] = { '\x72', '\xC6', '\x4B', '\xC6' };
 const char EMPTY_TRANSACTION_ID[] = "0000000000000000";
+const uint32 STUN_FINGERPRINT_XOR_VALUE = 0x5354554E;
 
 // StunMessage
 
@@ -115,6 +118,10 @@ const StunUInt32Attribute* StunMessage::GetUInt32(int type) const {
   return static_cast<const StunUInt32Attribute*>(GetAttribute(type));
 }
 
+const StunUInt64Attribute* StunMessage::GetUInt64(int type) const {
+  return static_cast<const StunUInt64Attribute*>(GetAttribute(type));
+}
+
 const StunByteStringAttribute* StunMessage::GetByteString(int type) const {
   return static_cast<const StunByteStringAttribute*>(GetAttribute(type));
 }
@@ -129,36 +136,45 @@ const StunUInt16ListAttribute* StunMessage::GetUnknownAttributes() const {
       GetAttribute(STUN_ATTR_UNKNOWN_ATTRIBUTES));
 }
 
+// Verifies a STUN message has a valid MESSAGE-INTEGRITY attribute, using the
+// procedure outlined in RFC 5389, section 15.4.
 bool StunMessage::ValidateMessageIntegrity(const char* data, size_t size,
                                            const std::string& password) {
   // Verifying the size of the message.
   if ((size % 4) != 0) {
     return false;
   }
+
   // Getting the message length from the STUN header.
   uint16 msg_length = talk_base::GetBE16(&data[2]);
   if (size != (msg_length + kStunHeaderSize)) {
     return false;
   }
+
   // Finding Message Integrity attribute in stun message.
   size_t current_pos = kStunHeaderSize;
   bool has_message_integrity_attr = false;
   while (current_pos < size) {
     uint16 attr_type, attr_length;
-    // Getting attribute type.
+    // Getting attribute type and length.
     attr_type = talk_base::GetBE16(&data[current_pos]);
+    attr_length = talk_base::GetBE16(&data[current_pos + sizeof(attr_type)]);
+
+    // If M-I, sanity check it, and break out.
     if (attr_type == STUN_ATTR_MESSAGE_INTEGRITY) {
+      if (attr_length != kStunMessageIntegritySize ||
+          current_pos + attr_length > size) {
+        return false;
+      }
       has_message_integrity_attr = true;
       break;
     }
-    current_pos += sizeof(attr_type);
 
-    // Getting attribute length.
-    attr_length = talk_base::GetBE16(&data[current_pos]);
+    // Otherwise, skip to the next attribute.
+    current_pos += sizeof(attr_type) + sizeof(attr_length) + attr_length;
     if ((attr_length % 4) != 0) {
-      attr_length += (4 - (attr_length % 4));
+      current_pos += (4 - (attr_length % 4));
     }
-    current_pos += sizeof(attr_length) + attr_length;
   }
 
   if (!has_message_integrity_attr) {
@@ -200,13 +216,12 @@ bool StunMessage::ValidateMessageIntegrity(const char* data, size_t size,
 }
 
 bool StunMessage::AddMessageIntegrity(const std::string& password) {
+  // Add the attribute with a dummy value. Since this is a known attribute, it
+  // can't fail.
   StunByteStringAttribute* msg_integrity_attr =
-      StunAttribute::CreateByteString(STUN_ATTR_MESSAGE_INTEGRITY);
-
-  std::string dummy_content(kStunMessageIntegritySize, '0');
-  msg_integrity_attr->CopyBytes(dummy_content.c_str(), dummy_content.size());
-  if (!AddAttribute(msg_integrity_attr))
-    return false;
+      new StunByteStringAttribute(STUN_ATTR_MESSAGE_INTEGRITY,
+          std::string(kStunMessageIntegritySize, '0'));
+  VERIFY(AddAttribute(msg_integrity_attr));
 
   // Calculate the HMAC for the message.
   talk_base::ByteBuffer buf;
@@ -214,7 +229,7 @@ bool StunMessage::AddMessageIntegrity(const std::string& password) {
     return false;
 
   int msg_len_for_hmac = buf.Length() -
-      kStunAttributeHeaderSize - kStunMessageIntegritySize;
+      kStunAttributeHeaderSize - msg_integrity_attr->length();
   char hmac[kStunMessageIntegritySize];
   size_t ret = talk_base::ComputeHmac(talk_base::DIGEST_SHA_1,
                                       password.c_str(), password.size(),
@@ -227,8 +242,59 @@ bool StunMessage::AddMessageIntegrity(const std::string& password) {
     return false;
   }
 
-  // Insert correct HMAC into attribute.
+  // Insert correct HMAC into the attribute.
   msg_integrity_attr->CopyBytes(hmac, sizeof(hmac));
+  return true;
+}
+
+// Verifies a message is in fact a STUN message, by performing the checks
+// outlined in RFC 5389, section 7.3, including the FINGERPRINT check detailed
+// in section 15.5.
+bool StunMessage::ValidateFingerprint(const char* data, size_t size) {
+  // Check the message length.
+  size_t fingerprint_attr_size =
+      kStunAttributeHeaderSize + StunUInt32Attribute::SIZE;
+  if (size % 4 != 0 || size < kStunHeaderSize + fingerprint_attr_size)
+    return false;
+
+  // Skip the rest if the magic cookie isn't present.
+  const char* magic_cookie =
+      data + kStunTransactionIdOffset - kStunMagicCookieLength;
+  if (talk_base::GetBE32(magic_cookie) != kStunMagicCookie)
+    return false;
+
+  // Check the fingerprint type and length.
+  const char* fingerprint_attr_data = data + size - fingerprint_attr_size;
+  if (talk_base::GetBE16(fingerprint_attr_data) != STUN_ATTR_FINGERPRINT ||
+      talk_base::GetBE16(fingerprint_attr_data + sizeof(uint16)) !=
+          StunUInt32Attribute::SIZE)
+    return false;
+
+  // Check the fingerprint value.
+  uint32 fingerprint =
+      talk_base::GetBE32(fingerprint_attr_data + kStunAttributeHeaderSize);
+  return ((fingerprint ^ STUN_FINGERPRINT_XOR_VALUE) ==
+      talk_base::ComputeCrc32(data, size - fingerprint_attr_size));
+}
+
+bool StunMessage::AddFingerprint() {
+  // Add the attribute with a dummy value. Since this is a known attribute,
+  // it can't fail.
+  StunUInt32Attribute* fingerprint_attr =
+     new StunUInt32Attribute(STUN_ATTR_FINGERPRINT, 0);
+  VERIFY(AddAttribute(fingerprint_attr));
+
+  // Calculate the CRC-32 for the message and insert it.
+  talk_base::ByteBuffer buf;
+  if (!Write(&buf))
+    return false;
+
+  int msg_len_for_crc32 = buf.Length() -
+      kStunAttributeHeaderSize - fingerprint_attr->length();
+  uint32 c = talk_base::ComputeCrc32(buf.Data(), msg_len_for_crc32);
+
+  // Insert the correct CRC-32, XORed with a constant, into the attribute.
+  fingerprint_attr->SetValue(c ^ STUN_FINGERPRINT_XOR_VALUE);
   return true;
 }
 

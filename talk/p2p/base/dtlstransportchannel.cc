@@ -94,7 +94,7 @@ void StreamInterfaceChannel::OnEvent(talk_base::StreamInterface* stream,
 DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
                                            Transport* transport,
                                            TransportChannelImpl* channel)
-    : TransportChannelImpl(channel->name(), channel->component()),
+    : TransportChannelImpl(channel->component()),
       transport_(transport),
       worker_thread_(talk_base::Thread::Current()),
       channel_(channel),
@@ -380,4 +380,3 @@ void DtlsTransportChannelWrapper::OnRouteChange(
 }
 
 }  // namespace cricket
-

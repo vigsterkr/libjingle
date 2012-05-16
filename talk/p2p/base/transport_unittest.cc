@@ -89,7 +89,7 @@ class FakeCandidateTranslator : public cricket::CandidateTranslator {
 };
 
 TEST_F(TransportTest, TestDestroyAllClearsPosts) {
-  EXPECT_TRUE(transport_->CreateChannel("test", 0) != NULL);
+  EXPECT_TRUE(transport_->CreateChannel(1) != NULL);
 
   transport_->ConnectChannels();
   transport_->DestroyAllChannels();
@@ -99,7 +99,7 @@ TEST_F(TransportTest, TestDestroyAllClearsPosts) {
 }
 
 TEST_F(TransportTest, TestConnectChannelsDoesSignal) {
-  EXPECT_TRUE(transport_->CreateChannel("test", 0) != NULL);
+  EXPECT_TRUE(transport_->CreateChannel(1) != NULL);
   transport_->ConnectChannels();
   EXPECT_FALSE(connecting_signalled_);
 
@@ -225,7 +225,6 @@ TEST_F(TransportTest, TestRawTransportWriteAndParseCandidate) {
   cricket::RawTransport parser(talk_base::Thread::Current(),
                                talk_base::Thread::Current(), NULL);
   FakeCandidateTranslator translator;
-  parser.CreateChannel(cricket::NS_GINGLE_RAW, 1);
   EXPECT_TRUE(parser.WriteCandidates(cricket::PROTOCOL_GINGLE, candidates,
                                      &translator,
                                      &elems, &write_error));

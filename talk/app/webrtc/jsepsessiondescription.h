@@ -65,7 +65,7 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   }
   virtual bool AddCandidate(const IceCandidateInterface* candidate);
   virtual size_t number_of_mediasections() const;
-  virtual const IceCandidateColletion* candidates(
+  virtual const IceCandidateCollection* candidates(
       size_t mediasection_index) const;
   virtual bool ToString(std::string* out) const;
 
@@ -73,7 +73,7 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
   std::string session_id_;
   std::string session_version_;
-  std::vector<JsepCandidateColletion> candidate_collection_;
+  std::vector<JsepCandidateCollection> candidate_collection_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);
 };

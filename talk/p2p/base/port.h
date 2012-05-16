@@ -42,6 +42,7 @@
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/stun.h"
 #include "talk/p2p/base/stunrequest.h"
+#include "talk/p2p/base/transport.h"
 
 namespace talk_base {
 class AsyncPacketSocket;
@@ -57,11 +58,6 @@ extern const uint32 PRIORITY_LOCAL_UDP;
 extern const uint32 PRIORITY_LOCAL_STUN;
 extern const uint32 PRIORITY_LOCAL_TCP;
 extern const uint32 PRIORITY_RELAY;
-
-enum IceProtocolType {
-  ICEPROTO_GOOGLE,  // Google version of ICE protocol.
-  ICEPROTO_RFC5245  // Standard RFC 5245 version of ICE>
-};
 
 enum ProtocolType {
   PROTO_UDP,
@@ -122,6 +118,13 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // priorty.)
   uint32 priority() const { return priority_; }
   void set_priority(uint32 priority) { priority_ = priority; }
+
+  // Methods to set/get ICE role and tiebreaker values.
+  void set_role(TransportRole role) { role_ = role; }
+  TransportRole role() { return role_; }
+
+  void set_tiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  uint64 tiebreaker() { return tiebreaker_; }
 
   // Identifies the port type.
   const std::string& type() const { return type_; }
@@ -248,9 +251,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // 1. Add / Verify MI attribute in STUN binding requests.
   // 2. Username attribute in STUN binding request will be RFRAF:LFRAG,
   // as opposed to RFRAGLFRAG.
-  void set_ice_protocol(IceProtocolType protocol) {
-    ice_protocol_ = protocol;
-  }
+  void set_ice_protocol(IceProtocolType protocol) {ice_protocol_ = protocol; }
   IceProtocolType ice_protocol() const { return ice_protocol_; }
 
   // This method will return local and remote username fragements from the
@@ -260,6 +261,10 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
                          std::string* remote_username) const;
   void CreateStunUsername(const std::string& remote_username,
                           std::string* stun_username_attr_str) const;
+
+  bool MaybeIceRoleConflict(
+      const talk_base::SocketAddress& addr, IceMessage* stun_msg);
+  sigslot::signal0<> SignalRoleConflict;
 
  protected:
   // Fills in the local address of the port.
@@ -321,6 +326,8 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   enum Lifetime { LT_PRESTART, LT_PRETIMEOUT, LT_POSTTIMEOUT } lifetime_;
   bool enable_port_packets_;
   IceProtocolType ice_protocol_;
+  TransportRole role_;
+  uint64 tiebreaker_;
 
   // Information to use when going through a proxy.
   std::string user_agent_;
@@ -419,6 +426,16 @@ class Connection : public talk_base::MessageHandler,
   bool reported() const { return reported_; }
   void set_reported(bool reported) { reported_ = reported;}
 
+  // This flag will be set if this connection is the chosen one for media
+  // transmission. This connection will send STUN ping with USE-CANDIDATE
+  // attribute.
+  sigslot::signal1<Connection*> SignalUseCandidate;
+  // TODO - Change names below two methods to suit RFC 5245 spec.
+  void set_nominated(bool nominated) { nominated_ = nominated; }
+  bool nominated() const { return nominated_; }
+  // Invoked when Connection receives STUN error response with 487 code.
+  void HandleRoleConflictFromPeer();
+
  protected:
   // Constructs a new connection to the given remote port.
   Connection(Port* port, size_t index, const Candidate& candidate);
@@ -463,6 +480,7 @@ class Connection : public talk_base::MessageHandler,
 
  private:
   bool reported_;
+  bool nominated_;
 
   friend class Port;
   friend class ConnectionRequest;

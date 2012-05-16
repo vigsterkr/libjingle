@@ -69,11 +69,9 @@ void RoapSignaling::OnIceComplete() {
   if (received_pre_offer_) {
     received_pre_offer_ = false;
     SendAnswer();
-  } else if (!queued_local_streams_.empty()) {
+  } else {
     // Else CreateOffer have been called.
     SendOffer(provider_->local_description());
-  } else {
-    ChangeState(kIdle);
   }
 }
 
@@ -131,12 +129,6 @@ void RoapSignaling::ProcessSignalingMessage(
         return;
       }
 
-      // Pop the first item of queued StreamCollections containing local
-      // MediaStreams that just have been negotiated.
-      scoped_refptr<StreamCollectionInterface> streams(
-          queued_local_streams_.front());
-      queued_local_streams_.pop_front();
-
       // If this is an answer to an initial offer SetLocalDescription have
       // already been called.
       if (local_desc_.get()) {
@@ -185,7 +177,7 @@ void RoapSignaling::ProcessSignalingMessage(
           kDoubleConflict));
 
       // Recreate the offer with new sequence values etc.
-      InitializeSendingOffer();
+      SendOffer(local_desc_.get());
       break;
     }
     case RoapSession::kError: {
@@ -235,6 +227,7 @@ void RoapSignaling::InitializeSendingOffer() {
 
   scoped_refptr<StreamCollectionInterface> local_streams(
       queued_local_streams_.front());
+  queued_local_streams_.pop_front();
 
   stream_signaling_->SetLocalStreams(local_streams);
   local_desc_.reset(provider_->CreateOffer(MediaHints()));
@@ -294,6 +287,7 @@ void RoapSignaling::InitializeSendingAnswer(
 
   if (start_ice) {
     if (!provider_->StartIce(JsepInterface::kUseAll)) {
+      LOG(LS_WARNING) << "InitializeSendingAnswer - StartIce failed.";
       SignalNewPeerConnectionMessage(
           roap_session_.CreateErrorMessage(kRefused));
       return;
@@ -335,8 +329,11 @@ bool RoapSignaling::ProcessRemoteDescription(const std::string& sdp,
   // the parsed ROAP message to the |provider_|.
   SessionDescriptionInterface* desc = CreateSessionDescription(sdp);
   bool ret = provider_->SetRemoteDescription(action, desc);
-  if (!ret)
+  if (!ret) {
+    LOG(LS_WARNING)
+        << "ProcessRemoteDescription - SetRemoteDescription failed.";
     SignalNewPeerConnectionMessage(roap_session_.CreateErrorMessage(kRefused));
+  }
   return ret;
 }
 

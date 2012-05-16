@@ -95,6 +95,9 @@ extern const char STR_OUTGOINGVOICEMAIL[];
 
 extern const char STR_UNAVAILABLE[];
 
+extern const char NS_PING[];
+extern const StaticQName QN_PING;
+
 extern const char NS_MUC_UNIQUE[];
 extern const StaticQName QN_MUC_UNIQUE_QUERY;
 extern const StaticQName QN_HANGOUT_ID;

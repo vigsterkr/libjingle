@@ -82,9 +82,9 @@ IceCandidateInterface* CreateIceCandidate(const std::string& label,
 // This class represents a collection of candidates for a specific m-line.
 // This class is used in SessionDescriptionInterface to represent all known
 // candidates for a certain m-line.
-class IceCandidateColletion {
+class IceCandidateCollection {
  public:
-  virtual ~IceCandidateColletion() {}
+  virtual ~IceCandidateCollection() {}
   virtual size_t count() const = 0;
   // Returns true if an equivalent |candidate| exist in the collection.
   virtual bool HasCandidate(const IceCandidateInterface* candidate) const = 0;
@@ -110,7 +110,7 @@ class SessionDescriptionInterface {
   // Returns the number of m- lines in the session description.
   virtual size_t number_of_mediasections() const = 0;
   // Returns a collection of all candidates that belong to a certain m-line
-  virtual const IceCandidateColletion* candidates(
+  virtual const IceCandidateCollection* candidates(
       size_t mediasection_index) const = 0;
   // Serializes the description to SDP.
   virtual bool ToString(std::string* out) const = 0;

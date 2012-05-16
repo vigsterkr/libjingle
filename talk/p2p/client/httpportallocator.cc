@@ -123,7 +123,6 @@ HttpPortAllocatorBase::~HttpPortAllocatorBase() {
 
 HttpPortAllocatorSessionBase::HttpPortAllocatorSessionBase(
     HttpPortAllocatorBase* allocator,
-    const std::string &channel_name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd,
@@ -131,7 +130,7 @@ HttpPortAllocatorSessionBase::HttpPortAllocatorSessionBase(
     const std::vector<std::string>& relay_hosts,
     const std::string& relay_token,
     const std::string& user_agent)
-    : BasicPortAllocatorSession(allocator, channel_name, component,
+    : BasicPortAllocatorSession(allocator, component,
                                 ice_ufrag, ice_pwd),
       relay_hosts_(relay_hosts), stun_hosts_(stun_hosts),
       relay_token_(relay_token), agent_(user_agent), attempts_(0) {
@@ -238,9 +237,9 @@ HttpPortAllocator::HttpPortAllocator(
 HttpPortAllocator::~HttpPortAllocator() {}
 
 PortAllocatorSession* HttpPortAllocator::CreateSessionInternal(
-    const std::string& name, int component,
+    int component,
     const std::string& ice_ufrag, const std::string& ice_pwd) {
-  return new HttpPortAllocatorSession(this, name, component,
+  return new HttpPortAllocatorSession(this, component,
                                       ice_ufrag, ice_pwd, stun_hosts(),
                                       relay_hosts(), relay_token(),
                                       user_agent());
@@ -250,7 +249,6 @@ PortAllocatorSession* HttpPortAllocator::CreateSessionInternal(
 
 HttpPortAllocatorSession::HttpPortAllocatorSession(
     HttpPortAllocator* allocator,
-    const std::string& name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd,
@@ -258,7 +256,7 @@ HttpPortAllocatorSession::HttpPortAllocatorSession(
     const std::vector<std::string>& relay_hosts,
     const std::string& relay,
     const std::string& agent)
-    : HttpPortAllocatorSessionBase(allocator, name, component,
+    : HttpPortAllocatorSessionBase(allocator, component,
                                    ice_ufrag, ice_pwd, stun_hosts,
                                    relay_hosts, relay, agent) {
 }
@@ -284,10 +282,7 @@ void HttpPortAllocatorSession::SendSessionRequest(const std::string& host,
   request->request().verb = talk_base::HV_GET;
   request->request().path = GetSessionRequestUrl();
   request->request().addHeader("X-Talk-Google-Relay-Auth", relay_token(), true);
-  request->request().addHeader("X-Google-Relay-Auth", relay_token(), true);
-  // This does not appear to be used by any of the relay servers any more.
-  // request->request().addHeader("X-Session-Type", session_type(), true);
-  request->request().addHeader("X-Stream-Type", channel_name(), true);
+  request->request().addHeader("X-Stream-Type", "video_rtp", true);
   request->set_host(host);
   request->set_port(port);
   request->Start();

@@ -75,12 +75,9 @@ class DtlsTestClient : public sigslot::has_slots<> {
   }
   void SetupChannels(int count) {
     for (int i = 0; i < count; ++i) {
-      char name[20];
-      talk_base::sprintfn(name, sizeof(name), "channel-%d", i);
-
       cricket::DtlsTransportChannelWrapper* channel =
           static_cast<cricket::DtlsTransportChannelWrapper*>(
-              transport_->CreateChannel(name, i));
+              transport_->CreateChannel(i));
       ASSERT_TRUE(channel != NULL);
       channel->SignalWritableState.connect(this,
         &DtlsTestClient::OnTransportChannelWritableState);
@@ -194,7 +191,7 @@ class DtlsTestClient : public sigslot::has_slots<> {
 
   // Transport channel callbacks
   void OnTransportChannelWritableState(cricket::TransportChannel* channel) {
-    LOG(LS_INFO) << name_ << ": Channel '" << channel->name()
+    LOG(LS_INFO) << name_ << ": Channel '" << channel->component()
                  << "' is writable";
   }
 

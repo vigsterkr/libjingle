@@ -40,24 +40,37 @@
 #include "talk/p2p/base/udpport.h"
 #include "talk/session/phone/mediasession.h"
 
-typedef std::vector<cricket::Candidate> Candidates;
 using cricket::AudioCodec;
 using cricket::AudioContentDescription;
+using cricket::Candidate;
 using cricket::ContentInfo;
 using cricket::CryptoParams;
 using cricket::ContentGroup;
+using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
+using cricket::ICE_CANDIDATE_COMPONENT_RTP;
+using cricket::LOCAL_PORT_TYPE;
+using cricket::NS_GINGLE_P2P;
+using cricket::NS_JINGLE_RTP;
+using cricket::RELAY_PORT_TYPE;
 using cricket::SessionDescription;
 using cricket::StreamParams;
+using cricket::STUN_PORT_TYPE;
+using cricket::TransportInfo;
 using cricket::VideoCodec;
 using cricket::VideoContentDescription;
-using webrtc::IceCandidateColletion;
+using webrtc::IceCandidateCollection;
 using webrtc::IceCandidateInterface;
 using webrtc::JsepIceCandidate;
 using webrtc::JsepSessionDescription;
 using webrtc::SessionDescriptionInterface;
 
+typedef std::vector<Candidate> Candidates;
+
 static const uint32 kCandidatePriority = 2130706432U;  // pref = 1.0
-static const char kCandidateNetworkName[] = "eth0";
+static const char kCandidateUfragVoice[] = "ufrag_voice";
+static const char kCandidatePwdVoice[] = "pwd_voice";
+static const char kCandidateUfragVideo[] = "ufrag_video";
+static const char kCandidatePwdVideo[] = "pwd_video";
 static const uint32 kCandidateGeneration = 0;
 static const uint32 kCandidateFoundation = 1;
 
@@ -69,25 +82,22 @@ static const char kSdpFullString[] =
     "t=0 0\r\n"
     "m=audio 2345 RTP/SAVPF 103 104\r\n"
     "c=IN IP4 74.125.127.126\r\n"
-    "a=rtcp:2346 IN IP4 74.125.127.126\r\n"
-    "a=candidate:1 1 udp 2130706432 127.0.0.1 1234 typ host "
-    "network_name eth0 username user_rtp password password_rtp "
+    "a=rtcp:2347 IN IP4 74.125.127.126\r\n"
+    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host "
     "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 127.0.0.1 1235 typ host "
-    "network_name eth0 username user_rtcp password password_rtcp "
+    "a=candidate:1 2 udp 2130706432 192.168.1.5 1235 typ host "
     "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 ::1 1238 typ host "
-    "network_name eth0 username user_rtp password password_rtp "
     "generation 0\r\n"
     "a=candidate:1 2 udp 2130706432 ::1 1239 typ host "
-    "network_name eth0 username user_rtcp password password_rtcp "
     "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 74.125.127.126 2345 typ srflx "
-    "network_name eth0 username user_rtp_stun password password_rtp_stun "
+    "raddr 192.168.1.5 rport 2346 "
     "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 74.125.127.126 2346 typ srflx "
-    "network_name eth0 username user_rtcp_stun password password_rtcp_stun "
+    "a=candidate:1 2 udp 2130706432 74.125.127.126 2347 typ srflx "
+    "raddr 192.168.1.5 rport 2348 "
     "generation 0\r\n"
+    "a=ice-ufrag:ufrag_voice\r\na=ice-pwd:pwd_voice\r\n"
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
@@ -103,24 +113,19 @@ static const char kSdpFullString[] =
     "m=video 3457 RTP/SAVPF 120\r\n"
     "c=IN IP4 74.125.224.39\r\n"
     "a=rtcp:3456 IN IP4 74.125.224.39\r\n"
-    "a=candidate:1 2 udp 2130706432 127.0.0.1 1236 typ host "
-    "network_name eth0 username user_video_rtcp password password_video_rtcp "
+    "a=candidate:1 2 udp 2130706432 192.168.1.5 1236 typ host "
     "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 127.0.0.1 1237 typ host "
-    "network_name eth0 username user_video_rtp password password_video_rtp "
+    "a=candidate:1 1 udp 2130706432 192.168.1.5 1237 typ host "
     "generation 0\r\n"
     "a=candidate:1 2 udp 2130706432 ::1 1240 typ host "
-    "network_name eth0 username user_video_rtcp password password_video_rtcp "
     "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 ::1 1241 typ host "
-    "network_name eth0 username user_video_rtp password password_video_rtp "
     "generation 0\r\n"
     "a=candidate:1 2 udp 2130706432 74.125.224.39 3456 typ relay "
-    "network_name eth0 username user_video_rtcp_relay password "
-    "password_video_rtcp generation 0\r\n"
+    "generation 0\r\n"
     "a=candidate:1 1 udp 2130706432 74.125.224.39 3457 typ relay "
-    "network_name eth0 username user_video_rtp_relay password "
-    "password_video_rtp generation 0\r\n"
+    "generation 0\r\n"
+    "a=ice-ufrag:ufrag_video\r\na=ice-pwd:pwd_video\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
@@ -142,6 +147,7 @@ static const char kSdpString[] =
     "s=\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/SAVPF 103 104\r\n"
+    "a=ice-ufrag:ufrag_voice\r\na=ice-pwd:pwd_voice\r\n"
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
@@ -155,6 +161,7 @@ static const char kSdpString[] =
     "a=ssrc:4 mslabel:local_stream_2\r\n"
     "a=ssrc:4 label:local_audio_2\r\n"
     "m=video 1 RTP/SAVPF 120\r\n"
+    "a=ice-ufrag:ufrag_video\r\na=ice-pwd:pwd_video\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
@@ -171,8 +178,8 @@ static const char kSdpString[] =
 
 // One candidate reference string.
 static const char kSdpOneCandidate[] =
-    "a=candidate:1 1 udp 2130706432 127.0.0.1 1234 typ host network_name"
-    " eth0 username user_rtp password password_rtp generation 0\r\n";
+    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host "
+    "generation 0\r\n";
 
 // Session id and version
 static const char kSessionId[] = "18446744069414584320";
@@ -236,7 +243,7 @@ class WebRtcSdpTest : public testing::Test {
         "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32", ""));
     audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 0, 0));
     audio->AddCodec(AudioCodec(104, "ISAC", 32000, 0, 0, 0));
-    desc_.AddContent(kAudioContentName, cricket::NS_JINGLE_RTP,
+    desc_.AddContent(kAudioContentName, NS_JINGLE_RTP,
                      audio.release());
 
     // VideoContentDescription
@@ -263,35 +270,39 @@ class WebRtcSdpTest : public testing::Test {
     video->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_80",
         "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32", ""));
     video->AddCodec(VideoCodec(120, "VP8", 640, 480, 30, 0));
-    desc_.AddContent(kVideoContentName, cricket::NS_JINGLE_RTP,
+    desc_.AddContent(kVideoContentName, NS_JINGLE_RTP,
                      video.release());
+
+    // TransportInfo
+    EXPECT_TRUE(desc_.AddTransportInfo(TransportInfo(kAudioContentName,
+        NS_GINGLE_P2P, kCandidateUfragVoice, kCandidatePwdVoice,
+        Candidates())));
+    EXPECT_TRUE(desc_.AddTransportInfo(TransportInfo(kVideoContentName,
+        NS_GINGLE_P2P, kCandidateUfragVideo, kCandidatePwdVideo,
+        Candidates())));
 
     // v4 host
     int port = 1234;
-    talk_base::SocketAddress address("127.0.0.1", port++);
-    cricket::Candidate candidate1(
-        "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
-        "udp", address, kCandidatePriority,
-        "user_rtp", "password_rtp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    talk_base::SocketAddress address("192.168.1.5", port++);
+    Candidate candidate1(
+        "", ICE_CANDIDATE_COMPONENT_RTP, "udp", address, kCandidatePriority,
+        "", "", LOCAL_PORT_TYPE,
+        "", kCandidateGeneration, kCandidateFoundation);
     address.SetPort(port++);
-    cricket::Candidate candidate2(
-        "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
-        "udp", address, kCandidatePriority,
-        "user_rtcp", "password_rtcp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    Candidate candidate2(
+        "", ICE_CANDIDATE_COMPONENT_RTCP, "udp", address, kCandidatePriority,
+        "", "", LOCAL_PORT_TYPE,
+        "", kCandidateGeneration, kCandidateFoundation);
     address.SetPort(port++);
-    cricket::Candidate candidate3(
-        "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
-        "udp", address, kCandidatePriority,
-        "user_video_rtcp", "password_video_rtcp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    Candidate candidate3(
+        "", ICE_CANDIDATE_COMPONENT_RTCP, "udp", address, kCandidatePriority,
+        "", "", LOCAL_PORT_TYPE,
+        "", kCandidateGeneration, kCandidateFoundation);
     address.SetPort(port++);
-    cricket::Candidate candidate4(
-        "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
-        "udp", address, kCandidatePriority,
-        "user_video_rtp", "password_video_rtp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+    Candidate candidate4(
+        "", ICE_CANDIDATE_COMPONENT_RTP, "udp", address, kCandidatePriority,
+        "", "", LOCAL_PORT_TYPE,
+        "", kCandidateGeneration, kCandidateFoundation);
 
     // v6 host
     talk_base::SocketAddress v6_address("::1", port++);
@@ -299,40 +310,45 @@ class WebRtcSdpTest : public testing::Test {
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
         "user_rtp", "password_rtp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate6(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
         "user_rtcp", "password_rtcp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate7(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
         "user_video_rtcp", "password_video_rtcp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate8(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
         "user_video_rtp", "password_video_rtp", cricket::LOCAL_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation);
 
     // stun
     int port_stun = 2345;
     talk_base::SocketAddress address_stun("74.125.127.126", port_stun++);
+    talk_base::SocketAddress rel_address_stun("192.168.1.5", port_stun++);
     cricket::Candidate candidate9
         ("", cricket::ICE_CANDIDATE_COMPONENT_RTP,
          "udp", address_stun, kCandidatePriority,
-        "user_rtp_stun", "password_rtp_stun", cricket::STUN_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+         "", "", STUN_PORT_TYPE,
+         "", kCandidateGeneration, kCandidateFoundation);
+    candidate9.set_related_address(rel_address_stun);
+
     address_stun.SetPort(port_stun++);
+    rel_address_stun.SetPort(port_stun++);
     cricket::Candidate candidate10(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", address_stun, kCandidatePriority,
-        "user_rtcp_stun", "password_rtcp_stun", cricket::STUN_PORT_TYPE,
-        kCandidateNetworkName, kCandidateGeneration, kCandidateFoundation);
+        "", "", STUN_PORT_TYPE,
+        "", kCandidateGeneration, kCandidateFoundation);
+    candidate10.set_related_address(rel_address_stun);
 
     // relay
     int port_relay = 3456;
@@ -340,15 +356,15 @@ class WebRtcSdpTest : public testing::Test {
     cricket::Candidate candidate11(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", address_relay, kCandidatePriority,
-        "user_video_rtcp_relay", "password_video_rtcp",
-        cricket::RELAY_PORT_TYPE, kCandidateNetworkName,
+        "", "",
+        cricket::RELAY_PORT_TYPE, "",
         kCandidateGeneration, kCandidateFoundation);
     address_relay.SetPort(port_relay++);
     cricket::Candidate candidate12(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", address_relay, kCandidatePriority,
-        "user_video_rtp_relay", "password_video_rtp",
-        cricket::RELAY_PORT_TYPE, kCandidateNetworkName,
+        "", "",
+        RELAY_PORT_TYPE, "",
         kCandidateGeneration, kCandidateFoundation);
 
     // voice
@@ -479,6 +495,25 @@ class WebRtcSdpTest : public testing::Test {
       }
     }
 
+    // transport info
+    const cricket::TransportInfos transports1 = desc1.transport_infos();
+    const cricket::TransportInfos transports2 = desc2.transport_infos();
+    EXPECT_EQ(transports1.size(), transports2.size());
+    if (transports1.size() != transports2.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < transports1.size(); ++i) {
+      const cricket::TransportInfo transport1 = transports1.at(i);
+      const cricket::TransportInfo transport2 = transports2.at(i);
+      EXPECT_EQ(transport1.content_name, transport2.content_name);
+      EXPECT_EQ(transport1.transport_type, transport2.transport_type);
+      EXPECT_EQ(transport1.ice_ufrag, transport2.ice_ufrag);
+      EXPECT_EQ(transport1.ice_pwd, transport2.ice_pwd);
+      EXPECT_EQ(transport1.dtls_digest_alg, transport2.dtls_digest_alg);
+      EXPECT_EQ(transport1.dtls_fingerprint, transport2.dtls_fingerprint);
+      EXPECT_TRUE(CompareCandidates(transport1.candidates,
+                                    transport2.candidates));
+    }
     return true;
   }
 
@@ -487,8 +522,8 @@ class WebRtcSdpTest : public testing::Test {
     if (cs1.size() != cs2.size())
       return false;
     for (size_t i = 0; i< cs1.size(); ++i) {
-      const cricket::Candidate c1 = cs1.at(i);
-      const cricket::Candidate c2 = cs2.at(i);
+      const Candidate c1 = cs1.at(i);
+      const Candidate c2 = cs2.at(i);
       EXPECT_TRUE(c1.IsEquivalent(c2));
     }
     return true;
@@ -504,8 +539,8 @@ class WebRtcSdpTest : public testing::Test {
     if (desc1.number_of_mediasections() != desc2.number_of_mediasections())
       return false;
     for (size_t i = 0; i < desc1.number_of_mediasections(); ++i) {
-      const IceCandidateColletion* cc1 = desc1.candidates(i);
-      const IceCandidateColletion* cc2 = desc2.candidates(i);
+      const IceCandidateCollection* cc1 = desc1.candidates(i);
+      const IceCandidateCollection* cc2 = desc2.candidates(i);
       if (cc1->count() != cc2->count())
         return false;
       for (size_t j = 0; j < cc1->count(); ++j) {
@@ -524,6 +559,51 @@ class WebRtcSdpTest : public testing::Test {
     talk_base::replace_substrs(search, strlen(search), replace,
         strlen(replace), &sdp);
     return webrtc::SdpDeserialize(sdp, &desc);
+  }
+
+  // Disable the ice-ufrag and ice-pwd in given |sdp| message by replacing
+  // them with invalid keywords so that the parser will just ignore them.
+  bool RemoveCandidateUfragPwd(std::string* sdp) {
+    const char ice_ufrag[] = "a=ice-ufrag";
+    const char ice_ufragx[] = "a=xice-ufrag";
+    const char ice_pwd[] = "a=ice-pwd";
+    const char ice_pwdx[] = "a=xice-pwd";
+    talk_base::replace_substrs(ice_ufrag, strlen(ice_ufrag),
+        ice_ufragx, strlen(ice_ufragx), sdp);
+    talk_base::replace_substrs(ice_pwd, strlen(ice_pwd),
+        ice_pwdx, strlen(ice_pwdx), sdp);
+    return true;
+  }
+
+  // Update the candidates in |jdesc| to use the given |ufrag| and |pwd|.
+  bool UpdateCandidateUfragPwd(JsepSessionDescription* jdesc, int mline_index,
+      const std::string& ufrag, const std::string& pwd) {
+    std::string content_name;
+    if (mline_index == 0) {
+      content_name = kAudioContentName;
+    } else if (mline_index == 1) {
+      content_name = kVideoContentName;
+    } else {
+      ASSERT(false);
+    }
+    TransportInfo transport_info(content_name, NS_GINGLE_P2P,
+        ufrag, pwd, Candidates());
+    SessionDescription* desc =
+        const_cast<SessionDescription*>(jdesc->description());
+    desc->RemoveTransportInfoByName(content_name);
+    EXPECT_TRUE(desc->AddTransportInfo(transport_info));
+    for (size_t i = 0; i < jdesc_.number_of_mediasections(); ++i) {
+      const IceCandidateCollection* cc = jdesc_.candidates(i);
+      for (size_t j = 0; j < cc->count(); ++j) {
+        if (cc->at(j)->label() == talk_base::ToString<int>(mline_index)) {
+          const_cast<Candidate&>(cc->at(j)->candidate()).set_username(
+              ufrag);
+          const_cast<Candidate&>(cc->at(j)->candidate()).set_password(
+              pwd);
+        }
+      }
+    }
+    return true;
   }
 
  protected:
@@ -575,7 +655,7 @@ TEST_F(WebRtcSdpTest, SerializeCandidates) {
   EXPECT_EQ(std::string(kSdpOneCandidate), message);
 }
 
-TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescription) {
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescription) {
   JsepSessionDescription jdesc;
   // Deserialize
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &jdesc));
@@ -583,7 +663,7 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescription) {
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc));
 }
 
-TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithoutCandidates) {
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
   JsepSessionDescription jdesc_no_candidates;
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
@@ -593,7 +673,7 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithoutCandidates) {
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_no_candidates, new_jdesc));
 }
 
-TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithBundle) {
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
   JsepSessionDescription jdesc_with_bundle;
   std::string sdp_with_bundle = kSdpFullString;
   InjectAfter("t=0 0\r\n",
@@ -608,6 +688,30 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithBundle) {
                                 jdesc_.session_id(),
                                 jdesc_.session_version()));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_bundle));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithUfragPwd) {
+  // Remove the original ice-ufrag and ice-pwd
+  JsepSessionDescription jdesc_with_ufrag_pwd;
+  std::string sdp_with_ufrag_pwd = kSdpFullString;
+  EXPECT_TRUE(RemoveCandidateUfragPwd(&sdp_with_ufrag_pwd));
+  // Add session level ufrag and pwd
+  InjectAfter("t=0 0\r\n",
+      "a=ice-pwd:session+level+icepwd\r\n"
+      "a=ice-ufrag:session+level+iceufrag\r\n",
+      &sdp_with_ufrag_pwd);
+  // Add media level ufrag and pwd for audio
+  InjectAfter("a=mid:audio_content_name\r\n",
+      "a=ice-pwd:media+level+icepwd\r\na=ice-ufrag:media+level+iceufrag\r\n",
+      &sdp_with_ufrag_pwd);
+  // Update the candidate ufrag and pwd to the expected ones.
+  EXPECT_TRUE(UpdateCandidateUfragPwd(&jdesc_, 0,
+      "media+level+iceufrag", "media+level+icepwd"));
+  EXPECT_TRUE(UpdateCandidateUfragPwd(&jdesc_, 1,
+      "session+level+iceufrag", "session+level+icepwd"));
+  EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_ufrag_pwd,
+                                     &jdesc_with_ufrag_pwd));
+  EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_ufrag_pwd));
 }
 
 TEST_F(WebRtcSdpTest, SdpDeserializeCandidate) {

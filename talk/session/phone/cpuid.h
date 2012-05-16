@@ -50,9 +50,13 @@ class CpuInfo {
 
   // For testing, allow CPU flags to be disabled.
   static void MaskCpuFlagsForTest(int enable_flags);
+
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(CpuInfo);
 };
+
+// Detect an Intel Core I5 or better such as 4th generation Macbook Air.
+bool IsCoreIOrBetter();
 
 }  // namespace cricket
 

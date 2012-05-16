@@ -104,6 +104,22 @@ class CoordinatedVideoAdapter
   // When the video is decreased, set the waiting time for CPU adaptation to
   // decrease video again.
   void set_cpu_downgrade_wait_time(uint32 ms) { cpu_downgrade_wait_time_ = ms; }
+  // CPU system load high threshold for reducing resolution.  e.g. 0.90f
+  void set_high_system_threshold(float high_system_threshold) {
+    high_system_threshold_ = high_system_threshold;
+  }
+  float high_system_threshold() const { return high_system_threshold_; }
+  // CPU system load low threshold for increasing resolution.  e.g. 0.70f
+  void set_low_system_threshold(float low_system_threshold) {
+    low_system_threshold_ = low_system_threshold;
+  }
+  float low_system_threshold() const { return low_system_threshold_; }
+  // CPU process load medium threshold for reducing resolution.  e.g. 0.40f
+  void set_medium_process_threshold(float medium_process_threshold) {
+    medium_process_threshold_ = medium_process_threshold;
+  }
+  float medium_process_threshold() const { return medium_process_threshold_; }
+
   // Handle the format request from the server via Jingle update message.
   void OnOutputFormatRequest(const VideoFormat& format);
   // Handle the resolution request from the encoder due to bandwidth changes.
@@ -128,6 +144,11 @@ class CoordinatedVideoAdapter
   bool view_adaptation_;  // True if view adaptation is enabled.
   int cpu_downgrade_count_;
   int cpu_downgrade_wait_time_;
+  // cpu system load thresholds relative to max cpus.
+  float high_system_threshold_;  // 0.90f;
+  float low_system_threshold_;  // 0.70f;
+  // cpu process load thresholds relative to current cpus.
+  float medium_process_threshold_;  // 0.40f;
   // Video formats that the server view requests, the CPU wants, and the encoder
   // wants respectively. The adapted output format is the minimum of these.
   int view_desired_num_pixels_;

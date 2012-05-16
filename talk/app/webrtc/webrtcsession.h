@@ -119,8 +119,8 @@ class WebRtcSession : public cricket::BaseSession,
   virtual void OnTransportRequestSignaling(cricket::Transport* transport);
   virtual void OnTransportConnecting(cricket::Transport* transport);
   virtual void OnTransportWritable(cricket::Transport* transport);
-  virtual void OnTransportCandidatesReady(
-      cricket::Transport* transport,
+  virtual void OnTransportProxyCandidatesReady(
+      cricket::TransportProxy* proxy,
       const cricket::Candidates& candidates);
   virtual void OnCandidatesAllocationDone();
 

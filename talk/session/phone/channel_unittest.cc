@@ -29,20 +29,26 @@
 #include "talk/base/logging.h"
 #include "talk/base/pathutils.h"
 #include "talk/base/signalthread.h"
+#include "talk/base/window.h"
 #include "talk/p2p/base/fakesession.h"
 #include "talk/session/phone/channel.h"
 #include "talk/session/phone/fakemediaengine.h"
 #include "talk/session/phone/fakertp.h"
+#include "talk/session/phone/fakevideocapturer.h"
 #include "talk/session/phone/mediamessages.h"
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/mediarecorder.h"
 #include "talk/session/phone/rtpdump.h"
+#include "talk/session/phone/screencastid.h"
+#include "talk/session/phone/testutils.h"
 
 using cricket::CA_OFFER;
 using cricket::CA_PRANSWER;
 using cricket::CA_ANSWER;
 using cricket::CA_UPDATE;
+using cricket::ScreencastId;
 using cricket::StreamParams;
+using talk_base::WindowId;
 
 static const cricket::AudioCodec kPcmuCodec(0, "PCMU", 64000, 8000, 1, 0);
 static const cricket::AudioCodec kPcmaCodec(8, "PCMA", 64000, 8000, 1, 0);
@@ -67,6 +73,38 @@ class Traits {
   typedef ContentT Content;
   typedef CodecT Codec;
   typedef MediaInfoT MediaInfo;
+};
+
+class FakeScreenCaptureFactory
+    : public cricket::VideoChannel::ScreenCapturerFactory,
+      public sigslot::has_slots<> {
+ public:
+  FakeScreenCaptureFactory() : window_capturer_(NULL) {}
+
+  virtual cricket::VideoCapturer* CreateScreenCapturer(
+      const ScreencastId& window) {
+    if (window_capturer_ != NULL) {
+      // Class is only designed to handle one fake screencapturer.
+      ADD_FAILURE();
+      return NULL;
+    }
+    window_capturer_ = new cricket::FakeVideoCapturer;
+    window_capturer_->SignalDestroyed.connect(
+        this,
+        &FakeScreenCaptureFactory::OnWindowCapturerDestroyed);
+    return window_capturer_;
+  }
+
+  cricket::FakeVideoCapturer* window_capturer() { return window_capturer_; }
+
+ private:
+  void OnWindowCapturerDestroyed(cricket::FakeVideoCapturer* capturer) {
+    if (capturer == window_capturer_) {
+      window_capturer_ = NULL;
+    }
+  }
+
+  cricket::FakeVideoCapturer* window_capturer_;
 };
 
 class VoiceTraits : public Traits<cricket::VoiceChannel,
@@ -1846,23 +1884,6 @@ TEST_F(VoiceChannelTest, TestKeyboardMute) {
   talk_base::Thread::Current()->ProcessMessages(0);
   EXPECT_EQ(e, error_);
   EXPECT_FALSE(media_channel1_->muted());
-
-  // But it does when enabled
-  channel1_->set_mute_on_type(true, 200);
-  media_channel1_->TriggerError(0, e);
-  error_ = cricket::VoiceMediaChannel::ERROR_NONE;
-  EXPECT_TRUE_WAIT(error_ == e, 100);
-  EXPECT_TRUE(media_channel1_->muted());
-  EXPECT_TRUE_WAIT(!media_channel1_->muted(), 250);  // And resets.
-
-  // Muting manually preemts auto-unmute
-  media_channel1_->TriggerError(0, e);
-  error_ = cricket::VoiceMediaChannel::ERROR_NONE;
-  EXPECT_TRUE_WAIT(error_ == e, 100);
-  EXPECT_TRUE(media_channel1_->muted());
-  EXPECT_TRUE(channel1_->Mute(true));
-  talk_base::Thread::Current()->ProcessMessages(250);
-  EXPECT_TRUE(media_channel1_->muted());
 }
 
 // Test that PressDTMF properly forwards to the media channel.
@@ -2057,6 +2078,30 @@ TEST_F(VideoChannelTest, TestSetRemoteContentUpdate) {
 
 TEST_F(VideoChannelTest, TestStreams) {
   Base::TestStreams();
+}
+
+TEST_F(VideoChannelTest, TestScreencastEvents) {
+  const int kTimeoutMs = 500;
+  TestInit();
+  FakeScreenCaptureFactory* screencapture_factory =
+      new FakeScreenCaptureFactory();
+  channel1_->SetScreenCaptureFactory(screencapture_factory);
+  cricket::ScreencastEventCatcher catcher;
+  channel1_->SignalScreencastWindowEvent.connect(
+      &catcher,
+      &cricket::ScreencastEventCatcher::OnEvent);
+  EXPECT_TRUE(channel1_->AddScreencast(0, ScreencastId(WindowId(0)), 5));
+  ASSERT_TRUE(screencapture_factory->window_capturer() != NULL);
+  screencapture_factory->window_capturer()->SignalCaptureEvent(
+      screencapture_factory->window_capturer(), cricket::CE_PAUSED);
+  EXPECT_EQ_WAIT(talk_base::WE_MINIMIZE, catcher.event(), kTimeoutMs);
+  screencapture_factory->window_capturer()->SignalCaptureEvent(
+      screencapture_factory->window_capturer(), cricket::CE_RESUMED);
+  EXPECT_EQ_WAIT(talk_base::WE_RESTORE, catcher.event(), kTimeoutMs);
+  screencapture_factory->window_capturer()->SignalCaptureEvent(
+      screencapture_factory->window_capturer(), cricket::CE_STOPPED);
+  EXPECT_EQ_WAIT(talk_base::WE_CLOSE, catcher.event(), kTimeoutMs);
+  EXPECT_TRUE(channel1_->RemoveScreencast(0));
 }
 
 TEST_F(VideoChannelTest, TestUpdateStreamsInLocalContent) {

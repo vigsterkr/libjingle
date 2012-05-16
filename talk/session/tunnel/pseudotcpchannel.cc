@@ -168,7 +168,7 @@ StreamInterface* PseudoTcpChannel::GetStream() {
 }
 
 void PseudoTcpChannel::OnChannelDestroyed(TransportChannel* channel) {
-  LOG_F(LS_INFO) << "(" << channel->name() << ")";
+  LOG_F(LS_INFO) << "(" << channel->component() << ")";
   ASSERT(signal_thread_->IsCurrent());
   CritScope lock(&cs_);
   ASSERT(channel == channel_);
@@ -479,7 +479,7 @@ void PseudoTcpChannel::OnMessage(Message* pmsg) {
     LOG_F(LS_INFO) << "(MSG_SI_DESTROYCHANNEL)";
     ASSERT(session_ != NULL);
     ASSERT(channel_ != NULL);
-    session_->DestroyChannel(content_name_, channel_->name());
+    session_->DestroyChannel(content_name_, channel_->component());
 
   } else if (pmsg->message_id == MSG_SI_DESTROY) {
 

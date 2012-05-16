@@ -31,7 +31,9 @@
 #include <string>
 #include <vector>
 
+#include "talk/base/helpers.h"
 #include "talk/p2p/base/candidate.h"
+#include "talk/p2p/base/constants.h"
 
 namespace cricket {
 
@@ -50,8 +52,23 @@ struct TransportInfo {
         transport_type(transport_type),
         candidates(candidates) {}
 
+  TransportInfo(const std::string& content_name,
+                const std::string& transport_type,
+                const std::string& ice_ufrag,
+                const std::string& ice_pwd,
+                const Candidates& candidates)
+      : content_name(content_name),
+        transport_type(transport_type),
+        ice_ufrag(ice_ufrag),
+        ice_pwd(ice_pwd),
+        candidates(candidates) {}
+
   std::string content_name;
   std::string transport_type;  // xmlns of <transport>
+  std::string ice_ufrag;
+  std::string ice_pwd;
+  std::string dtls_digest_alg;
+  std::string dtls_fingerprint;
   Candidates candidates;
 };
 

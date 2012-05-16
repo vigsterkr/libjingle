@@ -51,12 +51,11 @@ const uint32 MSG_DESTROY_UNUSED_PORTS = 1;
 
 namespace cricket {
 
-RawTransportChannel::RawTransportChannel(const std::string &channel_name,
-                                         int component,
+RawTransportChannel::RawTransportChannel(int component,
                                          RawTransport* transport,
                                          talk_base::Thread *worker_thread,
                                          PortAllocator *allocator)
-  : TransportChannelImpl(channel_name, component),
+  : TransportChannelImpl(component),
     raw_transport_(transport),
     allocator_(allocator),
     allocator_session_(NULL),
@@ -101,7 +100,7 @@ void RawTransportChannel::Connect() {
   // interactions when using RawTC.
   // TODO: Change raw to only use local udp ports.
   allocator_session_ = allocator_->CreateSession(
-      SessionId(), name(), component(), "", "");
+      SessionId(), component(), "", "");
 
   uint32 flags = PORTALLOCATOR_DISABLE_UDP | PORTALLOCATOR_DISABLE_TCP;
 

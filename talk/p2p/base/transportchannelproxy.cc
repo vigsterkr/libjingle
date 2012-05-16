@@ -34,7 +34,8 @@ namespace cricket {
 
 TransportChannelProxy::TransportChannelProxy(const std::string& name,
                                              int component)
-    : TransportChannel(name, component),
+    : TransportChannel(component),
+      name_(name),
       impl_(NULL) {
 }
 

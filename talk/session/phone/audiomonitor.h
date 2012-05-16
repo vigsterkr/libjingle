@@ -2,31 +2,31 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _CRICKET_PHONE_AUDIOMONITOR_H_
-#define _CRICKET_PHONE_AUDIOMONITOR_H_
+#ifndef TALK_SESSION_PHONE_AUDIOMONITOR_H_
+#define TALK_SESSION_PHONE_AUDIOMONITOR_H_
 
 #include "talk/base/thread.h"
 #include "talk/base/sigslot.h"
@@ -44,9 +44,9 @@ struct AudioInfo {
   StreamList active_streams; // ssrcs contributing to output_level
 };
 
-class AudioMonitor : public talk_base::MessageHandler, 
+class AudioMonitor : public talk_base::MessageHandler,
     public sigslot::has_slots<> {
-public:
+ public:
   AudioMonitor(VoiceChannel* voice_channel, talk_base::Thread *monitor_thread);
   ~AudioMonitor();
 
@@ -58,7 +58,7 @@ public:
 
   sigslot::signal2<AudioMonitor*, const AudioInfo&> SignalUpdate;
 
-protected:
+ protected:
   void OnMessage(talk_base::Message *message);
   void PollVoiceChannel();
 
@@ -72,4 +72,4 @@ protected:
 
 }
 
-#endif // _CRICKET_PHONE_AUDIOMONITOR_H_
+#endif  // TALK_SESSION_PHONE_AUDIOMONITOR_H_

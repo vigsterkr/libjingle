@@ -86,7 +86,6 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
  public:
   FakeHttpPortAllocatorSession(
       HttpPortAllocator* allocator,
-      const std::string& channel_name,
       int component,
       const std::string& ice_ufrag, const std::string& ice_pwd,
       const std::vector<talk_base::SocketAddress>& stun_hosts,
@@ -94,7 +93,6 @@ class FakeHttpPortAllocatorSession : public TestHttpPortAllocatorSession {
       const std::string& relay_token,
       const std::string& agent)
       : TestHttpPortAllocatorSession(allocator,
-                                     channel_name,
                                      component,
                                      ice_ufrag,
                                      ice_pwd,
@@ -144,14 +142,13 @@ class FakeHttpPortAllocator : public HttpPortAllocator {
       : HttpPortAllocator(network_manager, user_agent) {
   }
 
-  virtual PortAllocatorSession* CreateSessionInternal(const std::string& name,
+  virtual PortAllocatorSession* CreateSessionInternal(
       int component, const std::string& ice_ufrag, const std::string& ice_pwd) {
     std::vector<talk_base::SocketAddress> stun_hosts;
     stun_hosts.push_back(kStunAddr);
     std::vector<std::string> relay_hosts;
     relay_hosts.push_back(kRelayHost);
     return new FakeHttpPortAllocatorSession(this,
-                                            kChannelName,
                                             component,
                                             ice_ufrag,
                                             ice_pwd,

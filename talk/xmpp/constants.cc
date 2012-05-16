@@ -101,6 +101,9 @@ const char STR_OUTGOINGVOICEMAIL[] = "outgoingvoicemail";
 
 const char STR_UNAVAILABLE[] = "unavailable";
 
+const char NS_PING[] = "urn:xmpp:ping";
+const StaticQName QN_PING = { NS_PING, "ping" };
+
 const char NS_MUC_UNIQUE[] = "http://jabber.org/protocol/muc#unique";
 const StaticQName QN_MUC_UNIQUE_QUERY = { NS_MUC_UNIQUE, "unique" };
 const StaticQName QN_HANGOUT_ID = { STR_EMPTY, "hangout-id" };

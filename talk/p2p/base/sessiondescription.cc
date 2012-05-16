@@ -140,6 +140,36 @@ bool SessionDescription::RemoveContentByName(const std::string& name) {
   return false;
 }
 
+bool SessionDescription::AddTransportInfo(const TransportInfo& transport_info) {
+  if (GetTransportInfoByName(transport_info.content_name) != NULL) {
+    return false;
+  }
+  transport_infos_.push_back(transport_info);
+  return true;
+}
+
+bool SessionDescription::RemoveTransportInfoByName(const std::string& name) {
+  for (TransportInfos::iterator transport_info = transport_infos_.begin();
+       transport_info != transport_infos_.end(); ++transport_info) {
+    if (transport_info->content_name == name) {
+      transport_infos_.erase(transport_info);
+      return true;
+    }
+  }
+  return false;
+}
+
+const TransportInfo* SessionDescription::GetTransportInfoByName(
+    const std::string& name) const {
+  for (TransportInfos::const_iterator iter = transport_infos_.begin();
+       iter != transport_infos_.end(); ++iter) {
+    if (iter->content_name == name) {
+      return &(*iter);
+    }
+  }
+  return NULL;
+}
+
 void SessionDescription::RemoveGroupByName(const std::string& name) {
   for (ContentGroups::iterator iter = content_groups_.begin();
        iter != content_groups_.end(); ++iter) {

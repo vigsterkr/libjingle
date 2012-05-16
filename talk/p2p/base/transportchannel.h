@@ -67,8 +67,8 @@ enum PacketFlags {
 // between the two sides of a session.
 class TransportChannel : public sigslot::has_slots<> {
  public:
-  TransportChannel(const std::string& name, int component)
-      : name_(name), component_(component),
+  explicit TransportChannel(int component)
+      : component_(component),
         readable_(false), writable_(false) {}
   virtual ~TransportChannel() {}
 
@@ -79,8 +79,6 @@ class TransportChannel : public sigslot::has_slots<> {
   virtual void SetSessionId(const std::string& session_id) {
     session_id_ = session_id;
   }
-  // Returns the name of this channel.
-  const std::string& name() const { return name_; }
   int component() const { return component_; }
 
   // Returns the readable and states of this channel.  Each time one of these
@@ -146,7 +144,6 @@ class TransportChannel : public sigslot::has_slots<> {
 
  private:
   std::string session_id_;
-  std::string name_;
   int component_;
   bool readable_;
   bool writable_;

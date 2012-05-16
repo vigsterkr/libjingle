@@ -68,7 +68,7 @@ static void GetProcessorInformation(int &physical_cpus, int &cache_size) {
   }
   // Determine buffer size, allocate and get processor information.
   // Size can change between calls (unlikely), so a loop is done.
-  DWORD return_length = 0u;
+  DWORD return_length = 0;
   scoped_array<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> infos;
   while (!glpi(infos.get(), &return_length)) {
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
@@ -80,7 +80,7 @@ static void GetProcessorInformation(int &physical_cpus, int &cache_size) {
   }
   physical_cpus = 0;
   cache_size = 0;
-  for (size_t i = 0u;
+  for (size_t i = 0;
       i < return_length / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); ++i) {
     if (infos[i].Relationship == RelationProcessorCore) {
       ++physical_cpus;
@@ -261,7 +261,7 @@ std::string SystemInfo::GetCpuVendor() {
 #ifdef CPU_X86
     int cpu_info[4];
     __cpuid(cpu_info, 0);
-    cpu_info[0] = cpu_info[1];  // Re-order output.
+    cpu_info[0] = cpu_info[1];  // Reorder output
     cpu_info[1] = cpu_info[3];
     cpu_info[2] = cpu_info[2];
     cpu_info[3] = 0;

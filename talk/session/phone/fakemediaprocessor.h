@@ -39,7 +39,9 @@ class FakeMediaProcessor : public VoiceProcessor, public VideoProcessor {
  public:
   FakeMediaProcessor()
       : voice_frame_count_(0),
-        video_frame_count_(0) {
+        video_frame_count_(0),
+        drop_frames_(false),
+        dropped_frame_count_(0) {
   }
   virtual ~FakeMediaProcessor() {}
 
@@ -48,9 +50,12 @@ class FakeMediaProcessor : public VoiceProcessor, public VideoProcessor {
                        AudioFrame* frame) {
     ++voice_frame_count_;
   }
-  virtual void OnFrame(uint32 ssrc,
-                       VideoFrame* frame_ptr) {
+  virtual void OnFrame(uint32 ssrc, VideoFrame* frame_ptr, bool* drop_frame) {
     ++video_frame_count_;
+    if (drop_frames_) {
+      *drop_frame = true;
+      ++dropped_frame_count_;
+    }
   }
   virtual void OnVoiceMute(uint32 ssrc, bool muted) {}
   virtual void OnVideoMute(uint32 ssrc, bool muted) {}
@@ -58,10 +63,15 @@ class FakeMediaProcessor : public VoiceProcessor, public VideoProcessor {
   int voice_frame_count() const { return voice_frame_count_; }
   int video_frame_count() const { return video_frame_count_; }
 
+  void set_drop_frames(bool b) { drop_frames_ = b; }
+  int dropped_frame_count() const { return dropped_frame_count_; }
+
  private:
   // TODO: make is a map so that we can multiple ssrcs
-  int  voice_frame_count_;
-  int  video_frame_count_;
+  int voice_frame_count_;
+  int video_frame_count_;
+  bool drop_frames_;
+  int dropped_frame_count_;
 };
 
 }  // namespace cricket

@@ -600,12 +600,11 @@ std::string RedirectXml(SignalingProtocol protocol,
 // TODO: Break out and join with fakeportallocator.h
 class TestPortAllocatorSession : public cricket::PortAllocatorSession {
  public:
-  TestPortAllocatorSession(const std::string& name,
-                           int component,
+  TestPortAllocatorSession(int component,
                            const std::string& ice_ufrag,
                            const std::string& ice_pwd,
                            const int port_offset)
-      : PortAllocatorSession(name, component, ice_ufrag, ice_pwd, 0),
+      : PortAllocatorSession(component, ice_ufrag, ice_pwd, 0),
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
@@ -675,12 +674,12 @@ class TestPortAllocator : public cricket::PortAllocator {
   TestPortAllocator() : port_offset_(0) {}
 
   virtual cricket::PortAllocatorSession*
-  CreateSessionInternal(const std::string &name,
+  CreateSessionInternal(
                 int component,
                 const std::string& ice_ufrag,
                 const std::string& ice_pwd) {
     port_offset_ += 2;
-    return new TestPortAllocatorSession(name, component,
+    return new TestPortAllocatorSession(component,
                                         ice_ufrag, ice_pwd, port_offset_ - 2);
   }
 
@@ -967,17 +966,17 @@ class TestClient : public sigslot::has_slots<> {
   }
 
   bool HasChannel(const std::string& content_name,
-                  const std::string& channel_name) const {
+                  int component) const {
     ASSERT(session != NULL);
     const cricket::TransportChannel* channel =
-        session->GetChannel(content_name, channel_name);
-    return channel != NULL && (channel_name == channel->name());
+        session->GetChannel(content_name, component);
+    return channel != NULL && (component == channel->component());
   }
 
   cricket::TransportChannel* GetChannel(const std::string& content_name,
-                                        const std::string& channel_name) const {
+                                        int component) const {
     ASSERT(session != NULL);
-    return session->GetChannel(content_name, channel_name);
+    return session->GetChannel(content_name, component);
   }
 
   void OnSessionCreate(cricket::Session* created_session, bool initiate) {
@@ -1186,9 +1185,9 @@ class SessionTest : public testing::Test {
               initiator->session_state());
 
     EXPECT_TRUE(initiator->HasTransport(content_name_a));
-    EXPECT_TRUE(initiator->HasChannel(content_name_a, channel_name_a));
+    EXPECT_TRUE(initiator->HasChannel(content_name_a, 1));
     EXPECT_TRUE(initiator->HasTransport(content_name_b));
-    EXPECT_TRUE(initiator->HasChannel(content_name_b, channel_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name_b, 2));
 
     // Initiate and expect initiate message sent.
     cricket::SessionDescription* offer = NewTestSessionDescription(
@@ -1229,9 +1228,9 @@ class SessionTest : public testing::Test {
               responder->session_state());
 
     EXPECT_TRUE(responder->HasTransport(content_name_a));
-    EXPECT_TRUE(responder->HasChannel(content_name_a, channel_name_a));
+    EXPECT_TRUE(responder->HasChannel(content_name_a, 1));
     EXPECT_TRUE(responder->HasTransport(content_name_b));
-    EXPECT_TRUE(responder->HasChannel(content_name_b, channel_name_b));
+    EXPECT_TRUE(responder->HasChannel(content_name_b, 2));
 
     // Expect transport-info message from initiator.
     // But don't send candidates until initiate ack is received.
@@ -1622,8 +1621,8 @@ class SessionTest : public testing::Test {
     EXPECT_EQ(cricket::BaseSession::STATE_INIT,
               initiator->session_state());
 
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_a));
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 1));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 2));
 
     // Initiate and expect initiate message sent.
     cricket::SessionDescription* offer = NewTestSessionDescription(
@@ -1704,8 +1703,8 @@ class SessionTest : public testing::Test {
     EXPECT_EQ(cricket::BaseSession::STATE_INIT,
               initiator->session_state());
 
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_a));
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 1));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 2));
 
     // Initiate and expect initiate message sent.
     cricket::SessionDescription* offer = NewTestSessionDescription(
@@ -1759,8 +1758,8 @@ class SessionTest : public testing::Test {
     EXPECT_EQ(cricket::BaseSession::STATE_RECEIVEDINITIATE,
               responder->session_state());
 
-    EXPECT_TRUE(responder->HasChannel(content_name, channel_name_a));
-    EXPECT_TRUE(responder->HasChannel(content_name, channel_name_b));
+    EXPECT_TRUE(responder->HasChannel(content_name, 1));
+    EXPECT_TRUE(responder->HasChannel(content_name, 2));
 
     // Deliver transport-info and expect ack.
     responder->DeliverStanza(
@@ -1844,9 +1843,9 @@ class SessionTest : public testing::Test {
     // Create Session and check channels and state.
     initiator->CreateSession();
     EXPECT_TRUE(initiator->HasTransport(content_name));
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_a));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 1));
     EXPECT_TRUE(initiator->HasTransport(content_name));
-    EXPECT_TRUE(initiator->HasChannel(content_name, channel_name_b));
+    EXPECT_TRUE(initiator->HasChannel(content_name, 2));
 
     // Initiate and expect initiate message sent.
     cricket::SessionDescription* offer = NewTestSessionDescription(
@@ -1882,9 +1881,9 @@ class SessionTest : public testing::Test {
               responder->session_state());
 
     EXPECT_TRUE(responder->HasTransport(content_name));
-    EXPECT_TRUE(responder->HasChannel(content_name, channel_name_a));
+    EXPECT_TRUE(responder->HasChannel(content_name, 1));
     EXPECT_TRUE(responder->HasTransport(content_name));
-    EXPECT_TRUE(responder->HasChannel(content_name, channel_name_b));
+    EXPECT_TRUE(responder->HasChannel(content_name, 2));
 
     // Expect transport-info message from initiator.
     // But don't send candidates until initiate ack is received.

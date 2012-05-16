@@ -38,12 +38,17 @@
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/phone/mediasession.h"
 
-using webrtc::IceCandidateColletion;
+using webrtc::IceCandidateCollection;
 using webrtc::IceCandidateInterface;
 using webrtc::JsepIceCandidate;
 using webrtc::JsepSessionDescription;
 using webrtc::SessionDescriptionInterface;
 using talk_base::scoped_ptr;
+
+static const char kCandidateUfragVoice[] = "ufrag_voice";
+static const char kCandidatePwdVoice[] = "pwd_voice";
+static const char kCandidateUfragVideo[] = "ufrag_video";
+static const char kCandidatePwdVideo[] = "pwd_video";
 
 // This creates a session description with both audio and video media contents.
 // In SDP this is described by two m lines, one audio and one video.
@@ -64,6 +69,15 @@ static cricket::SessionDescription* CreateCricketSessionDescription() {
   video->AddCodec(cricket::VideoCodec(120, "VP8", 640, 480, 30, 0));
   desc->AddContent(cricket::CN_VIDEO, cricket::NS_JINGLE_RTP,
                    video.release());
+
+  EXPECT_TRUE(desc->AddTransportInfo(
+      cricket::TransportInfo(cricket::CN_AUDIO, cricket::NS_GINGLE_P2P,
+                             kCandidateUfragVoice, kCandidatePwdVoice,
+                             cricket::Candidates())));
+  EXPECT_TRUE(desc->AddTransportInfo(
+      cricket::TransportInfo(cricket::CN_VIDEO, cricket::NS_GINGLE_P2P,
+                             kCandidateUfragVideo, kCandidatePwdVideo,
+                             cricket::Candidates())));
   return desc;
 }
 
@@ -112,11 +126,13 @@ TEST_F(JsepSessionDescriptionTest, CheckSessionDescription) {
 TEST_F(JsepSessionDescriptionTest, AddCandidate) {
   JsepIceCandidate jsep_candidate("0", candidate_);
   EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
-  const IceCandidateColletion* ice_candidates = jsep_desc_->candidates(0);
+  const IceCandidateCollection* ice_candidates = jsep_desc_->candidates(0);
   ASSERT_TRUE(ice_candidates != NULL);
   EXPECT_EQ(1u, ice_candidates->count());
   const IceCandidateInterface* ice_candidate = ice_candidates->at(0);
   ASSERT_TRUE(ice_candidate != NULL);
+  candidate_.set_username(kCandidateUfragVoice);
+  candidate_.set_password(kCandidatePwdVoice);
   EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
 
   EXPECT_EQ(0u, jsep_desc_->candidates(1)->count());

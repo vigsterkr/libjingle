@@ -38,6 +38,7 @@
 #include "talk/p2p/base/sessionclient.h"
 #include "talk/p2p/base/transport.h"
 #include "talk/p2p/base/transportchannelproxy.h"
+#include "talk/p2p/base/transportinfo.h"
 
 #include "talk/p2p/base/constants.h"
 
@@ -71,44 +72,40 @@ std::string TransportProxy::type() const {
   return transport_->get()->type();
 }
 
-void TransportProxy::SetImplementation(TransportWrapper* impl) {
-  transport_ = impl;
-}
-
-TransportChannel* TransportProxy::GetChannel(const std::string& name) {
-  return GetChannelProxyByName(name);
+TransportChannel* TransportProxy::GetChannel(int component) {
+  return GetChannelProxy(component);
 }
 
 TransportChannel* TransportProxy::CreateChannel(
     const std::string& name, int component) {
-  ASSERT(GetChannel(name) == NULL);
+  ASSERT(GetChannel(component) == NULL);
   ASSERT(!transport_->get()->HasChannel(component));
 
   // We always create a proxy in case we need to change out the transport later.
   TransportChannelProxy* channel =
       new TransportChannelProxy(name, component);
-  channels_[name] = channel;
+  channels_[component] = channel;
 
   if (state_ == STATE_NEGOTIATED) {
-    SetChannelProxyImpl(name, channel);
+    SetChannelProxyImpl(component, channel);
   } else if (state_ == STATE_CONNECTING) {
-    GetOrCreateChannelProxyImpl(name, component);
+    GetOrCreateChannelProxyImpl(component);
   }
   return channel;
 }
 
-void TransportProxy::DestroyChannel(const std::string& name) {
-  TransportChannel* channel = GetChannel(name);
+void TransportProxy::DestroyChannel(int component) {
+  TransportChannel* channel = GetChannel(component);
   if (channel) {
     // If the state of TransportProxy is not NEGOTIATED
     // then TransportChannelProxy and its impl are not
     // connected. Both must be connected before
     // deletion.
     if (state_ != STATE_NEGOTIATED) {
-      SetChannelProxyImpl(name, GetChannelProxyByName(name));
+      SetChannelProxyImpl(component, GetChannelProxy(component));
     }
 
-    channels_.erase(name);
+    channels_.erase(component);
     channel->SignalDestroyed(channel);
     delete channel;
   }
@@ -119,7 +116,7 @@ void TransportProxy::SpeculativelyConnectChannels() {
     state_ = STATE_CONNECTING;
     for (ChannelMap::iterator iter = channels_.begin();
          iter != channels_.end(); ++iter) {
-      GetOrCreateChannelProxyImpl(iter->first, iter->second->component());
+      GetOrCreateChannelProxyImpl(iter->first);
     }
     transport_->get()->ConnectChannels();
   }
@@ -173,38 +170,35 @@ bool TransportProxy::GetComponentFromChannelName(
 }
 
 TransportChannelProxy* TransportProxy::GetChannelProxy(int component) const {
+  ChannelMap::const_iterator iter = channels_.find(component);
+  return (iter != channels_.end()) ? iter->second : NULL;
+}
+
+TransportChannelProxy* TransportProxy::GetChannelProxyByName(
+    const std::string& name) const {
   for (ChannelMap::const_iterator iter = channels_.begin();
        iter != channels_.end();
        ++iter) {
-    if (iter->second->component() == component) {
+    if (iter->second->name() == name) {
       return iter->second;
     }
   }
   return NULL;
 }
 
-TransportChannelProxy* TransportProxy::GetChannelProxyByName(
-    const std::string& name) const {
-  ChannelMap::const_iterator iter = channels_.find(name);
-  return (iter != channels_.end()) ? iter->second : NULL;
-}
-
 TransportChannelImpl* TransportProxy::GetOrCreateChannelProxyImpl(
-    const std::string& name, int component) {
+    int component) {
   TransportChannelImpl* impl = transport_->get()->GetChannel(component);
   if (impl == NULL) {
-    impl = transport_->get()->CreateChannel(name, component);
+    impl = transport_->get()->CreateChannel(component);
     impl->SetSessionId(sid_);
-    impl->SetIceUfrag(ice_ufrag_);
-    impl->SetIcePwd(ice_pwd_);
   }
   return impl;
 }
 
 void TransportProxy::SetChannelProxyImpl(
-    const std::string& name, TransportChannelProxy* proxy) {
-  TransportChannelImpl* impl =
-      GetOrCreateChannelProxyImpl(name, proxy->component());
+    int component, TransportChannelProxy* proxy) {
+  TransportChannelImpl* impl = GetOrCreateChannelProxyImpl(component);
   ASSERT(impl != NULL);
   proxy->SetImplementation(impl);
 }
@@ -222,6 +216,8 @@ void TransportProxy::SetupMux(TransportProxy* proxy) {
   // Now replace our transport. Must happen afterwards because
   // it deletes all impls as a side effect.
   transport_ = proxy->transport_;
+  transport_->get()->SignalCandidatesReady.connect(
+      this, &TransportProxy::OnTransportCandidatesReady);
   set_candidates_allocated(proxy->candidates_allocated());
 }
 
@@ -241,8 +237,7 @@ void TransportProxy::ReplaceChannelProxyImpl(TransportChannelProxy* channel,
       // Reset the implementation on the target_channel
       target_channel->SetImplementation(
         // Increments ref count
-          channel->impl()->GetTransport()->CreateChannel(
-            channel->name(), channel->component()));
+          channel->impl()->GetTransport()->CreateChannel(channel->component()));
     }
   } else {
     LOG(LS_WARNING) << "invalid TransportChannelProxy index to replace";
@@ -302,7 +297,9 @@ BaseSession::BaseSession(talk_base::Thread* signaling_thread,
       initiator_(initiator),
       local_description_(NULL),
       remote_description_(NULL),
-      transport_muxed_(false) {
+      transport_muxed_(false),
+      ice_tiebreaker_(talk_base::CreateRandomId64()),
+      role_switch_(false) {
   ASSERT(signaling_thread->IsCurrent());
 }
 
@@ -342,19 +339,19 @@ TransportChannel* BaseSession::CreateChannel(const std::string& content_name,
 }
 
 TransportChannel* BaseSession::GetChannel(const std::string& content_name,
-                                          const std::string& channel_name) {
+                                          int component) {
   TransportProxy* transproxy = GetTransportProxy(content_name);
   if (transproxy == NULL)
     return NULL;
   else
-    return transproxy->GetChannel(channel_name);
+    return transproxy->GetChannel(component);
 }
 
 void BaseSession::DestroyChannel(const std::string& content_name,
-                                 const std::string& channel_name) {
+                                 int component) {
   TransportProxy* transproxy = GetTransportProxy(content_name);
   ASSERT(transproxy != NULL);
-  transproxy->DestroyChannel(channel_name);
+  transproxy->DestroyChannel(component);
 }
 
 TransportProxy* BaseSession::GetOrCreateTransportProxy(
@@ -365,23 +362,33 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
 
   Transport* transport = CreateTransport();
   transport->set_allow_local_ips(allow_local_ips_);
+  transport->SetRole(initiator_ ? ROLE_CONTROLLING : ROLE_CONTROLLED);
+  transport->SetTiebreaker(ice_tiebreaker_);
+  // TODO: Connect all the Transport signals to TransportProxy
+  // then to the BaseSession.
   transport->SignalConnecting.connect(
       this, &BaseSession::OnTransportConnecting);
   transport->SignalWritableState.connect(
       this, &BaseSession::OnTransportWritable);
   transport->SignalRequestSignaling.connect(
       this, &BaseSession::OnTransportRequestSignaling);
-  transport->SignalCandidatesReady.connect(
-      this, &BaseSession::OnTransportCandidatesReady);
   transport->SignalTransportError.connect(
       this, &BaseSession::OnTransportSendError);
   transport->SignalRouteChange.connect(
       this, &BaseSession::OnTransportRouteChange);
   transport->SignalCandidatesAllocationDone.connect(
       this, &BaseSession::OnTransportCandidatesAllocationDone);
+  transport->SignalRoleConflict.connect(
+      this, &BaseSession::OnRoleConflict);
 
   transproxy = new TransportProxy(sid_, content_name,
                                   new TransportWrapper(transport));
+  TransportInfo info;
+  if (GetLocalTransportInfo(content_name, &info)) {
+    transproxy->SetLocalTransportInfo(info);
+  }
+  transproxy->SignalCandidatesReady.connect(
+      this, &BaseSession::OnTransportProxyCandidatesReady);
   transports_[content_name] = transproxy;
 
   return transproxy;
@@ -557,12 +564,41 @@ void BaseSession::MaybeCandidatesAllocationDone() {
   OnCandidatesAllocationDone();
 }
 
+void BaseSession::OnRoleConflict() {
+  if (role_switch_) {
+    LOG(LS_WARNING) << "Repeat of role conflict signal from Transport.";
+    return;
+  }
+
+  role_switch_ = true;
+  for (TransportMap::iterator iter = transports_.begin();
+         iter != transports_.end(); ++iter) {
+    // Role will be reverse of initial role setting.
+    TransportRole role = initiator_ ? ROLE_CONTROLLED : ROLE_CONTROLLING;
+    iter->second->impl()->SetRole(role);
+  }
+}
+
 void BaseSession::LogState(State old_state, State new_state) {
   LOG(LS_INFO) << "Session:" << id()
                << " Old state:" << StateToString(old_state)
                << " New state:" << StateToString(new_state)
                << " Type:" << content_type()
                << " Transport:" << transport_type();
+}
+
+bool BaseSession::GetLocalTransportInfo(const std::string& content_name,
+                                        TransportInfo* info) {
+  if (!local_description_ || !info) {
+    return false;
+  }
+  const TransportInfo* transport_info =
+      local_description_->GetTransportInfoByName(content_name);
+  if (!transport_info) {
+    return false;
+  }
+  *info = *transport_info;
+  return true;
 }
 
 void BaseSession::OnMessage(talk_base::Message *pmsg) {
@@ -848,23 +884,22 @@ void Session::OnTransportWritable(Transport* transport) {
   }
 }
 
-void Session::OnTransportCandidatesReady(Transport* transport,
-                                         const Candidates& candidates) {
+void Session::OnTransportProxyCandidatesReady(TransportProxy* proxy,
+                                              const Candidates& candidates) {
   ASSERT(signaling_thread()->IsCurrent());
-  TransportProxy* transproxy = GetTransportProxy(transport);
-  if (transproxy != NULL) {
+  if (proxy != NULL) {
     if (initiator() && !initiate_acked_) {
       // TODO: This is to work around server re-ordering
       // messages.  We send the candidates once the session-initiate
       // is acked.  Once we have fixed the server to guarantee message
       // order, we can remove this case.
-      transproxy->AddUnsentCandidates(candidates);
+      proxy->AddUnsentCandidates(candidates);
     } else {
-      if (!transproxy->negotiated()) {
-        transproxy->AddSentCandidates(candidates);
+      if (!proxy->negotiated()) {
+        proxy->AddSentCandidates(candidates);
       }
       SessionError error;
-      if (!SendTransportInfoMessage(transproxy, candidates, &error)) {
+      if (!SendTransportInfoMessage(proxy, candidates, &error)) {
         LOG(LS_ERROR) << "Could not send transport info message: "
                       << error.text;
         return;

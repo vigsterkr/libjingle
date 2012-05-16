@@ -117,9 +117,8 @@ bool RawTransport::ParseRawAddress(const buzz::XmlElement* elem,
   return true;
 }
 
-TransportChannelImpl* RawTransport::CreateTransportChannel(
-    const std::string& name, int component) {
-  return new RawTransportChannel(name, component, this,
+TransportChannelImpl* RawTransport::CreateTransportChannel(int component) {
+  return new RawTransportChannel(component, this,
                                  worker_thread(),
                                  port_allocator());
 }

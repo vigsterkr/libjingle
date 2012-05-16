@@ -56,8 +56,7 @@ class PortAllocatorSession;
 class RawTransportChannel : public TransportChannelImpl,
     public talk_base::MessageHandler {
  public:
-  RawTransportChannel(const std::string &name,
-                      int component,
+  RawTransportChannel(int component,
                       RawTransport* transport,
                       talk_base::Thread *worker_thread,
                       PortAllocator *allocator);

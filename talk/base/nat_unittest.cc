@@ -32,6 +32,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/natserver.h"
 #include "talk/base/natsocketfactory.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/network.h"
 #include "talk/base/physicalsocketserver.h"
 #include "talk/base/testclient.h"
@@ -182,8 +183,9 @@ void TestFilters(
            NAT_SYMMETRIC, true, true);
 }
 
-TEST(NatTest, TestPhysical) {
+void TestPhysicalInternal(const SocketAddress& int_addr) {
   BasicNetworkManager network_manager;
+  network_manager.set_ipv6_enabled(true);
   network_manager.StartUpdating();
   // Process pending messages so the network list is updated.
   Thread::Current()->ProcessMessages(0);
@@ -195,17 +197,30 @@ TEST(NatTest, TestPhysical) {
     return;
   }
 
-  SocketAddress int_addr("127.0.0.1", 0);
-  std::string ext_ip1 = "127.0.0.1";
-  std::string ext_ip2 = networks[0]->ip().ToString();
+  SocketAddress ext_addr1(int_addr);
+  SocketAddress ext_addr2;
+  // Find an available IP with matching family. Link-local IPv6 addresses break
+  // this test, so filter out 'private' IPs.
+  for (std::vector<Network*>::iterator it = networks.begin();
+      it != networks.end(); ++it) {
+    const IPAddress& ip = (*it)->ip();
+    if (ip.family() == int_addr.family() && !IPIsPrivate(ip)) {
+      ext_addr2.SetIP(ip);
+      break;
+    }
+  }
+  if (ext_addr2.IsNil()) {
+    LOG(LS_WARNING) << "No available IP of same family as " << int_addr;
+    return;
+  }
 
-  LOG(LS_INFO) << "selected ip " << ext_ip2;
+  LOG(LS_INFO) << "selected ip " << ext_addr2.ipaddr();
 
   SocketAddress ext_addrs[4] = {
-      SocketAddress(ext_ip1, 0),
-      SocketAddress(ext_ip2, 0),
-      SocketAddress(ext_ip1, 0),
-      SocketAddress(ext_ip2, 0)
+      SocketAddress(ext_addr1),
+      SocketAddress(ext_addr2),
+      SocketAddress(ext_addr1),
+      SocketAddress(ext_addr2)
   };
 
   PhysicalSocketServer* int_pss = new PhysicalSocketServer();
@@ -213,6 +228,18 @@ TEST(NatTest, TestPhysical) {
 
   TestBindings(int_pss, int_addr, ext_pss, ext_addrs);
   TestFilters(int_pss, int_addr, ext_pss, ext_addrs);
+}
+
+TEST(NatTest, TestPhysicalIPv4) {
+  TestPhysicalInternal(SocketAddress("127.0.0.1", 0));
+}
+
+TEST(NatTest, TestPhysicalIPv6) {
+  if (HasIPv6Enabled()) {
+    TestPhysicalInternal(SocketAddress("::1", 0));
+  } else {
+    LOG(LS_WARNING) << "No IPv6, skipping";
+  }
 }
 
 class TestVirtualSocketServer : public VirtualSocketServer {
@@ -223,20 +250,17 @@ class TestVirtualSocketServer : public VirtualSocketServer {
   IPAddress GetNextIP(int af) { return VirtualSocketServer::GetNextIP(af); }
 };
 
-TEST(NatTest, TestVirtual) {
+void TestVirtualInternal(int family) {
   TestVirtualSocketServer* int_vss = new TestVirtualSocketServer(
       new PhysicalSocketServer());
   TestVirtualSocketServer* ext_vss = new TestVirtualSocketServer(
       new PhysicalSocketServer());
 
-  // TODO: IPv6ize this test when the NAT stuff is v6ed.
-  // int_addr needs an explicit family defined, ext_addrs will get
-  // theirs from it.
-  SocketAddress int_addr(IPAddress(INADDR_ANY), 0);
+  SocketAddress int_addr;
   SocketAddress ext_addrs[4];
-  int_addr.SetIP(int_vss->GetNextIP(int_addr.ipaddr().family()));
-  ext_addrs[0].SetIP(ext_vss->GetNextIP(int_addr.ipaddr().family()));
-  ext_addrs[1].SetIP(ext_vss->GetNextIP(int_addr.ipaddr().family()));
+  int_addr.SetIP(int_vss->GetNextIP(family));
+  ext_addrs[0].SetIP(ext_vss->GetNextIP(int_addr.family()));
+  ext_addrs[1].SetIP(ext_vss->GetNextIP(int_addr.family()));
   ext_addrs[2].SetIP(ext_addrs[0].ipaddr());
   ext_addrs[3].SetIP(ext_addrs[1].ipaddr());
 
@@ -244,6 +268,17 @@ TEST(NatTest, TestVirtual) {
   TestFilters(int_vss, int_addr, ext_vss, ext_addrs);
 }
 
+TEST(NatTest, TestVirtualIPv4) {
+  TestVirtualInternal(AF_INET);
+}
+
+TEST(NatTest, TestVirtualIPv6) {
+  if (HasIPv6Enabled()) {
+    TestVirtualInternal(AF_INET6);
+  } else {
+    LOG(LS_WARNING) << "No IPv6, skipping";
+  }
+}
 
 // TODO: Finish this test
 class NatTcpTest : public testing::Test, public sigslot::has_slots<> {

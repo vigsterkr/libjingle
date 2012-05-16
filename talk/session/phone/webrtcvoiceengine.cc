@@ -451,9 +451,8 @@ SoundclipMedia *WebRtcVoiceEngine::CreateSoundclip() {
 
 // TODO: Add a comprehensive unittests for SetOptions().
 bool WebRtcVoiceEngine::SetOptions(int options) {
-  // NS and typing detection are always on, if supported.
-  bool aec = (options & MediaEngineInterface::ECHO_CANCELLATION) ? true : false;
-  bool agc = (options & MediaEngineInterface::AUTO_GAIN_CONTROL) ? true : false;
+  bool aec = (options & MediaEngineInterface::ECHO_CANCELLATION) != 0;
+  bool agc = (options & MediaEngineInterface::AUTO_GAIN_CONTROL) != 0;
 #if !defined(IOS) && !defined(ANDROID)
   if (voe_wrapper_->processing()->SetEcStatus(aec) == -1) {
     LOG_RTCERR1(SetEcStatus, aec);
@@ -471,15 +470,19 @@ bool WebRtcVoiceEngine::SetOptions(int options) {
     return false;
   }
 
-  if (voe_wrapper_->processing()->SetNsStatus(true) == -1) {
-    LOG_RTCERR1(SetNsStatus, true);
+  bool ns = (options & MediaEngineInterface::NOISE_SUPPRESSION) != 0;
+  if (voe_wrapper_->processing()->SetNsStatus(ns) == -1) {
+    LOG_RTCERR1(SetNsStatus, ns);
     return false;
   }
 
+
+  // Typing detection warning is always on.
   if (voe_wrapper_->processing()->SetTypingDetectionStatus(true) == -1) {
     // In case of error, log the info and continue
     LOG_RTCERR1(SetTypingDetectionStatus, true);
   }
+
 #else
   if (voe_wrapper_->processing()->SetEcStatus(aec, kEcAecm) == -1) {
     LOG_RTCERR2(SetEcStatus, aec, kEcAecm);
@@ -1390,7 +1393,11 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
         if (engine()->voe()->codec()->SetSendCNPayloadType(voe_channel(),
             it->id, cn_freq) == -1) {
           LOG_RTCERR3(SetSendCNPayloadType, voe_channel(), it->id, cn_freq);
-          return false;
+          // Not returning false because the SetSendCNPayloadType will fail if
+          // the channel is already sending.
+          // This can happen if the remote description is applied twice, for
+          // example in the case of ROAP on top of JSEP, where both side will
+          // send the offer.
         }
       }
       // Only turn on VAD if we have a CN payload type that matches the
@@ -1836,6 +1843,28 @@ int WebRtcVoiceMediaChannel::GetOutputLevel() {
   return highest;
 }
 
+int WebRtcVoiceMediaChannel::GetTimeSinceLastTyping() {
+  int ret;
+  if (engine()->voe()->processing()->TimeSinceLastTyping(ret) == -1) {
+    // In case of error, log the info and continue
+    LOG_RTCERR0(TimeSinceLastTyping);
+    ret = -1;
+  } else {
+    ret *= 1000;  // We return ms, webrtc returns seconds.
+  }
+  return ret;
+}
+
+void WebRtcVoiceMediaChannel::SetTypingDetectionParameters(int time_window,
+    int cost_per_typing, int reporting_threshold, int penalty_decay) {
+  if (engine()->voe()->processing()->SetTypingDetectionParameters(
+          time_window, cost_per_typing,
+          reporting_threshold, penalty_decay) == -1) {
+    // In case of error, log the info and continue
+    LOG_RTCERR4(SetTypingDetectionParameters, time_window,
+                cost_per_typing, reporting_threshold, penalty_decay);
+  }
+}
 
 bool WebRtcVoiceMediaChannel::SetOutputScaling(
     uint32 ssrc, double left, double right) {

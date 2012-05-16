@@ -1008,43 +1008,29 @@ TEST_F(StunTest, FailToReadRtcpPacket) {
 
 // Check our STUN message validation code against the RFC5769 test messages.
 TEST_F(StunTest, ValidateMessageIntegrity) {
-  StunMessage msg1;
-  talk_base::ByteBuffer buf(reinterpret_cast<const char*>(
-      kRfc5769SampleRequest), sizeof(kRfc5769SampleRequest));
-  EXPECT_TRUE(msg1.Read(&buf));
-  EXPECT_TRUE(msg1.ValidateMessageIntegrity(
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleRequest),
       sizeof(kRfc5769SampleRequest),
       kRfc5769SampleMsgPassword));
-  EXPECT_FALSE(msg1.ValidateMessageIntegrity(
+  EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleRequest),
       sizeof(kRfc5769SampleRequest),
       "InvalidPassword"));
 
-  StunMessage msg2;
-  talk_base::ByteBuffer buf2(
-      reinterpret_cast<const char*>(kRfc5769SampleResponse),
-      sizeof(kRfc5769SampleResponse));
-  EXPECT_TRUE(msg2.Read(&buf2));
-  EXPECT_TRUE(msg2.ValidateMessageIntegrity(
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleResponse),
       sizeof(kRfc5769SampleResponse),
       kRfc5769SampleMsgPassword));
-  EXPECT_FALSE(msg2.ValidateMessageIntegrity(
+  EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleResponse),
       sizeof(kRfc5769SampleResponse),
       "InvalidPassword"));
 
-  StunMessage msg3;
-  talk_base::ByteBuffer buf3(
-      reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
-      sizeof(kRfc5769SampleIPv6Response));
-  EXPECT_TRUE(msg3.Read(&buf3));
-  EXPECT_TRUE(msg3.ValidateMessageIntegrity(
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
       sizeof(kRfc5769SampleIPv6Response),
       kRfc5769SampleMsgPassword));
-  EXPECT_FALSE(msg3.ValidateMessageIntegrity(
+  EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
       sizeof(kRfc5769SampleIPv6Response),
       "InvalidPassword"));
@@ -1053,16 +1039,26 @@ TEST_F(StunTest, ValidateMessageIntegrity) {
       reinterpret_cast<const char*>(kStunMessageWithZeroLength),
       sizeof(kStunMessageWithZeroLength),
       kRfc5769SampleMsgPassword));
-
   EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kStunMessageWithExcessLength),
       sizeof(kStunMessageWithExcessLength),
       kRfc5769SampleMsgPassword));
-
   EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kStunMessageWithSmallLength),
       sizeof(kStunMessageWithSmallLength),
       kRfc5769SampleMsgPassword));
+
+  // Test that munging a single bit anywhere in the message causes the
+  // message-integrity check to fail, unless it is after the M-I attribute.
+  char buf[sizeof(kRfc5769SampleRequest)];
+  memcpy(buf, kRfc5769SampleRequest, sizeof(kRfc5769SampleRequest));
+  for (size_t i = 0; i < sizeof(buf); ++i) {
+    buf[i] ^= 0x01;
+    if (i > 0)
+      buf[i - 1] ^= 0x01;
+    EXPECT_EQ(i >= sizeof(buf) - 8, StunMessage::ValidateMessageIntegrity(
+        buf, sizeof(buf), kRfc5769SampleMsgPassword));
+  }
 }
 
 // Validate that we generate correct MESSAGE-INTEGRITY attributes.
@@ -1083,7 +1079,7 @@ TEST_F(StunTest, AddMessageIntegrity) {
 
   talk_base::ByteBuffer buf1;
   EXPECT_TRUE(msg.Write(&buf1));
-  EXPECT_TRUE(msg.ValidateMessageIntegrity(
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
         reinterpret_cast<const char*>(buf1.Data()), buf1.Length(),
         kRfc5769SampleMsgPassword));
 
@@ -1101,9 +1097,60 @@ TEST_F(StunTest, AddMessageIntegrity) {
 
   talk_base::ByteBuffer buf3;
   EXPECT_TRUE(msg2.Write(&buf3));
-  EXPECT_TRUE(msg2.ValidateMessageIntegrity(
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
         reinterpret_cast<const char*>(buf3.Data()), buf3.Length(),
         kRfc5769SampleMsgPassword));
+}
+
+// Check our STUN message validation code against the RFC5769 test messages.
+TEST_F(StunTest, ValidateFingerprint) {
+  EXPECT_TRUE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kRfc5769SampleRequest),
+      sizeof(kRfc5769SampleRequest)));
+  EXPECT_TRUE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kRfc5769SampleResponse),
+      sizeof(kRfc5769SampleResponse)));
+  EXPECT_TRUE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
+      sizeof(kRfc5769SampleIPv6Response)));
+
+  EXPECT_FALSE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kStunMessageWithZeroLength),
+      sizeof(kStunMessageWithZeroLength)));
+  EXPECT_FALSE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kStunMessageWithExcessLength),
+      sizeof(kStunMessageWithExcessLength)));
+  EXPECT_FALSE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(kStunMessageWithSmallLength),
+      sizeof(kStunMessageWithSmallLength)));
+
+  // Test that munging a single bit anywhere in the message causes the
+  // fingerprint check to fail.
+  char buf[sizeof(kRfc5769SampleRequest)];
+  memcpy(buf, kRfc5769SampleRequest, sizeof(kRfc5769SampleRequest));
+  for (size_t i = 0; i < sizeof(buf); ++i) {
+    buf[i] ^= 0x01;
+    if (i > 0)
+      buf[i - 1] ^= 0x01;
+    EXPECT_FALSE(StunMessage::ValidateFingerprint(buf, sizeof(buf)));
+  }
+  // Put them all back to normal and the check should pass again.
+  buf[sizeof(buf) - 1] ^= 0x01;
+  EXPECT_TRUE(StunMessage::ValidateFingerprint(buf, sizeof(buf)));
+}
+
+TEST_F(StunTest, AddFingerprint) {
+  IceMessage msg;
+  talk_base::ByteBuffer buf(
+      reinterpret_cast<const char*>(kRfc5769SampleRequestWithoutMI),
+      sizeof(kRfc5769SampleRequestWithoutMI));
+  EXPECT_TRUE(msg.Read(&buf));
+  EXPECT_TRUE(msg.AddFingerprint());
+
+  talk_base::ByteBuffer buf1;
+  EXPECT_TRUE(msg.Write(&buf1));
+  EXPECT_TRUE(StunMessage::ValidateFingerprint(
+      reinterpret_cast<const char*>(buf1.Data()), buf1.Length()));
 }
 
 // Sample "GTURN" relay message.

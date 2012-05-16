@@ -37,6 +37,8 @@
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
+#include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/phone/fakevideorenderer.h"
 #include "talk/session/phone/videorenderer.h"
 
@@ -152,6 +154,54 @@ class PeerConnectionTestClientBase
       return false;
     } else {
       EXPECT_LT(number_of_frames, fake_video_capture_module_->sent_frames());
+    }
+    return true;
+  }
+
+  // Verify we got local candidates for each m line.
+  bool VerifyLocalCandidates() {
+    const cricket::SessionDescription* desc =
+        peer_connection_->local_description()->description();
+    std::string selected_content_name;
+    int selected_candidates_index = -1;
+    const cricket::ContentGroup* bundle_group =
+        desc->GetGroupByName(cricket::GROUP_TYPE_BUNDLE);
+    if (bundle_group) {
+      selected_content_name = *bundle_group->FirstContentName();
+    }
+    size_t number_of_mediasections =
+        peer_connection_->local_description()->number_of_mediasections();
+    for (size_t i = 0; i < number_of_mediasections; ++i) {
+      const webrtc::IceCandidateCollection* candidates =
+          peer_connection_->local_description()->candidates(i);
+      if (!candidates) {
+        return false;
+      }
+      EXPECT_LT(0u, candidates->count());
+      if (bundle_group && (desc->contents())[i].name == selected_content_name) {
+        selected_candidates_index = i;
+      }
+    }
+    if (bundle_group) {
+      const webrtc::IceCandidateCollection* selected_candidates =
+          peer_connection_->local_description()->candidates(
+              selected_candidates_index);
+      for (size_t i = 0; i < number_of_mediasections; ++i) {
+        if (desc->contents()[i].name != selected_content_name &&
+            bundle_group->HasContentName(desc->contents()[i].name)) {
+          const webrtc::IceCandidateCollection* candidates =
+              peer_connection_->local_description()->candidates(i);
+          // The candidates in |candidates| should be the same as the candidates
+          // in |selected_candidates|.
+          EXPECT_EQ(selected_candidates->count(), candidates->count());
+          // This is assuming the order of the candidates are the same. But for
+          // testing, this should be fine.
+          for (size_t j = 0; j < candidates->count(); ++j) {
+            EXPECT_TRUE(selected_candidates->at(j)->candidate().IsEquivalent(
+                candidates->at(j)->candidate()));
+          }
+        }
+      }
     }
     return true;
   }
@@ -462,6 +512,10 @@ class P2PTestConductor : public testing::Test {
     return initiating_client_->VideoFramesReceivedCheck(frames_received) &&
         receiving_client_->VideoFramesReceivedCheck(frames_received);
   }
+  bool VerifyLocalCandidates() {
+    return initiating_client_->VerifyLocalCandidates() &&
+        receiving_client_->VerifyLocalCandidates();
+  }
   ~P2PTestConductor() {
     if (initiating_client_.get() != NULL) {
       initiating_client_->set_signaling_message_receiver(NULL);
@@ -514,6 +568,7 @@ class P2PTestConductor : public testing::Test {
     const int kEndFrameCount = 10;
     const int kMaxWaitForFramesMs = 5000;
     EXPECT_TRUE_WAIT(FramesNotPending(kEndFrameCount), kMaxWaitForFramesMs);
+    EXPECT_TRUE(VerifyLocalCandidates());
     EXPECT_TRUE(StopSession());
   }
 

@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "talk/base/constructormagic.h"
+#include "talk/p2p/base/transportinfo.h"
 
 namespace cricket {
 
@@ -109,8 +110,20 @@ class SessionDescription {
                   const std::string& type,
                   ContentDescription* description);
   bool RemoveContentByName(const std::string& name);
+  // Adds the TransportInfo.
+  // Returns false if the TransportInfo with the same content name is already
+  // exist.
+  bool AddTransportInfo(const TransportInfo& transport_info);
+  bool RemoveTransportInfoByName(const std::string& name);
+  const TransportInfo* GetTransportInfoByName(
+      const std::string& name) const;
   const ContentInfos& contents() const { return contents_; }
   const ContentGroups& groups() const { return content_groups_; }
+  void set_transport_infos(const TransportInfos& transport_infos) {
+    transport_infos_ = transport_infos;
+  }
+  TransportInfos& transport_infos() { return transport_infos_; }
+  const TransportInfos& transport_infos() const { return transport_infos_; }
 
   ~SessionDescription() {
     for (ContentInfos::iterator content = contents_.begin();
@@ -127,6 +140,7 @@ class SessionDescription {
  private:
   ContentInfos contents_;
   ContentGroups content_groups_;
+  TransportInfos transport_infos_;
 };
 
 // Indicates whether a ContentDescription was an offer or an answer, as

@@ -65,10 +65,23 @@ class MediaEngineInterface {
   // Bitmask flags for options that may be supported by the media engine
   // implementation
   enum AudioOptions {
-    ECHO_CANCELLATION = 1 << 0,
-    AUTO_GAIN_CONTROL = 1 << 1,
-    NOISE_SUPPRESSION = 1 << 2,
-    DEFAULT_AUDIO_OPTIONS = ECHO_CANCELLATION | AUTO_GAIN_CONTROL
+    // Audio processing that attempts to filter away the output signal from
+    // later inbound pickup.
+    ECHO_CANCELLATION         = 1 << 0,
+    // Audio processing to adjust the sensitivity of the local mic dynamically.
+    AUTO_GAIN_CONTROL         = 1 << 1,
+    // Audio processing to filter out background noise.
+    NOISE_SUPPRESSION         = 1 << 2,
+    // Audio processing to remove background noise of lower frequencies.
+    HIGHPASS_FILTER           = 1 << 3,
+    // A switch to swap which captured signal is left and right in stereo mode.
+    STEREO_FLIPPING           = 1 << 4,
+    // Controls delegation echo cancellation to use the OS' facility.
+    SYSTEM_AEC_MODE           = 1 << 5,
+
+    ALL_AUDIO_OPTIONS         = (1 << 6) - 1,
+    DEFAULT_AUDIO_OPTIONS     = ECHO_CANCELLATION | AUTO_GAIN_CONTROL |
+                                NOISE_SUPPRESSION | HIGHPASS_FILTER,
   };
   enum VideoOptions {
   };

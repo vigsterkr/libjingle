@@ -31,13 +31,11 @@
 
 namespace cricket {
 
-PortAllocatorSession::PortAllocatorSession(const std::string& channel_name,
-                                           int component,
+PortAllocatorSession::PortAllocatorSession(int component,
                                            const std::string& ice_ufrag,
                                            const std::string& ice_pwd,
                                            uint32 flags)
-    : channel_name_(channel_name),
-      component_(component),
+    : component_(component),
       flags_(flags),
       username_(ice_ufrag),
       password_(ice_pwd) {
@@ -52,7 +50,6 @@ PortAllocator::~PortAllocator() {
 
 PortAllocatorSession* PortAllocator::CreateSession(
     const std::string& sid,
-    const std::string& channel_name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd) {
@@ -60,7 +57,7 @@ PortAllocatorSession* PortAllocator::CreateSession(
     PortAllocatorSessionMuxer* muxer = GetSessionMuxer(sid);
     if (!muxer) {
       PortAllocatorSession* session_impl = CreateSessionInternal(
-        channel_name, component, ice_ufrag, ice_pwd);
+        component, ice_ufrag, ice_pwd);
       // Create PortAllocatorSessionMuxer object for |session_impl|.
       muxer = new PortAllocatorSessionMuxer(session_impl);
       muxer->SignalDestroyed.connect(
@@ -69,11 +66,11 @@ PortAllocatorSession* PortAllocator::CreateSession(
       muxers_[sid] = muxer;
     }
     PortAllocatorSessionProxy* proxy =
-        new PortAllocatorSessionProxy(channel_name, component, flags_);
+        new PortAllocatorSessionProxy(component, flags_);
     muxer->RegisterSessionProxy(proxy);
     return proxy;
   }
-  return CreateSessionInternal(channel_name, component, ice_ufrag, ice_pwd);
+  return CreateSessionInternal(component, ice_ufrag, ice_pwd);
 }
 
 PortAllocatorSessionMuxer* PortAllocator::GetSessionMuxer(

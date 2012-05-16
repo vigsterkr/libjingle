@@ -278,6 +278,10 @@ uint32 CreateRandomId() {
   return id;
 }
 
+uint64 CreateRandomId64() {
+  return static_cast<uint64> (CreateRandomId()) << 32 | CreateRandomId();
+}
+
 uint32 CreateRandomNonZeroId() {
   uint32 id;
   do {

@@ -310,6 +310,9 @@ class WebRtcVoiceMediaChannel
   virtual bool RemoveRecvStream(uint32 ssrc);
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives);
   virtual int GetOutputLevel();
+  virtual int GetTimeSinceLastTyping();
+  virtual void SetTypingDetectionParameters(int time_window,
+    int cost_per_typing, int reporting_threshold, int penalty_decay);
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right);
   virtual bool GetOutputScaling(uint32 ssrc, double* left, double* right);
 

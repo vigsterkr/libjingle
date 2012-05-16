@@ -30,6 +30,7 @@
 
 #include "talk/base/gunit.h"
 #include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/transportinfo.h"
 #include "talk/session/phone/codec.h"
 #include "talk/session/phone/mediasession.h"
 #include "talk/session/phone/srtpfilter.h"
@@ -46,6 +47,8 @@
   ASSERT_EQ(0U, cd->cryptos().size());
 #endif
 
+typedef std::vector<cricket::Candidate> Candidates;
+
 using cricket::MediaSessionDescriptionFactory;
 using cricket::MediaSessionOptions;
 using cricket::MediaType;
@@ -53,6 +56,7 @@ using cricket::SessionDescription;
 using cricket::SsrcGroup;
 using cricket::StreamParams;
 using cricket::StreamParamsVec;
+using cricket::TransportInfo;
 using cricket::ContentInfo;
 using cricket::CryptoParamsVec;
 using cricket::AudioContentDescription;
@@ -185,6 +189,69 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
           c1[i].session_params != c2[i].session_params)
         return false;
     return true;
+  }
+
+  void TestTransportInfo(bool offer, const MediaSessionOptions& options,
+                         bool has_current_desc) {
+    const std::string current_audio_ufrag = "current_audio_ufrag";
+    const std::string current_audio_pwd = "current_audio_pwd";
+    const std::string current_video_ufrag = "current_video_ufrag";
+    const std::string current_video_pwd = "current_video_pwd";
+    talk_base::scoped_ptr<SessionDescription> current_desc;
+    talk_base::scoped_ptr<SessionDescription> desc;
+    if (has_current_desc) {
+      current_desc.reset(new SessionDescription());
+      EXPECT_TRUE(current_desc->AddTransportInfo(
+                      TransportInfo("audio", "", current_audio_ufrag,
+                                    current_audio_pwd, Candidates())));
+      EXPECT_TRUE(current_desc->AddTransportInfo(
+                      TransportInfo("video", "", current_video_ufrag,
+                                    current_video_pwd, Candidates())));
+    }
+    if (offer) {
+      desc.reset(f1_.CreateOffer(options, current_desc.get()));
+    } else {
+      talk_base::scoped_ptr<SessionDescription> offer;
+      offer.reset(f1_.CreateOffer(options, NULL));
+      desc.reset(f1_.CreateAnswer(offer.get(), options, current_desc.get()));
+    }
+    ASSERT_TRUE(desc.get() != NULL);
+    const TransportInfo* ti_audio = desc->GetTransportInfoByName("audio");
+    if (options.has_audio) {
+      EXPECT_TRUE(ti_audio != NULL);
+      if (has_current_desc) {
+        EXPECT_EQ(current_audio_ufrag, ti_audio->ice_ufrag);
+        EXPECT_EQ(current_audio_pwd, ti_audio->ice_pwd);
+      } else {
+        EXPECT_EQ(static_cast<size_t>(cricket::ICE_UFRAG_LENGTH),
+                  ti_audio->ice_ufrag.size());
+        EXPECT_EQ(static_cast<size_t>(cricket::ICE_PWD_LENGTH),
+                  ti_audio->ice_pwd.size());
+      }
+    } else {
+      EXPECT_TRUE(ti_audio == NULL);
+    }
+
+    const TransportInfo* ti_video = desc->GetTransportInfoByName("video");
+    if (options.has_video) {
+      EXPECT_TRUE(ti_video != NULL);
+      if (options.bundle_enabled) {
+        EXPECT_EQ(ti_audio->ice_ufrag, ti_video->ice_ufrag);
+        EXPECT_EQ(ti_audio->ice_pwd, ti_video->ice_pwd);
+      } else {
+        if (has_current_desc) {
+          EXPECT_EQ(current_video_ufrag, ti_video->ice_ufrag);
+          EXPECT_EQ(current_video_pwd, ti_video->ice_pwd);
+        } else {
+          EXPECT_EQ(static_cast<size_t>(cricket::ICE_UFRAG_LENGTH),
+                    ti_video->ice_ufrag.size());
+          EXPECT_EQ(static_cast<size_t>(cricket::ICE_PWD_LENGTH),
+                    ti_video->ice_pwd.size());
+        }
+      }
+    } else {
+      EXPECT_TRUE(ti_video == NULL);
+    }
   }
 
  protected:
@@ -875,4 +942,95 @@ TEST(MediaSessionDescription, CopySessionDescription) {
       static_cast<const VideoContentDescription*>(vc->description);
   EXPECT_EQ(vcd->codecs(), vcd_copy->codecs());
   EXPECT_EQ(2u, vcd->first_ssrc());
+}
+
+// The below TestTransportInfoXXX tests create different offers/answers, and
+// ensure the TransportInfo in the SessionDescription matches what we expect.
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferAudio) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  TestTransportInfo(true, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferAudioCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  TestTransportInfo(true, options, true);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferAudioVideo) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  TestTransportInfo(true, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest,
+    TestTransportInfoOfferAudioVideoCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  TestTransportInfo(true, options, true);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferBundle) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  options.bundle_enabled = true;
+  TestTransportInfo(true, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest,
+    TestTransportInfoOfferBundleCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  options.bundle_enabled = true;
+  TestTransportInfo(true, options, true);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerAudio) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  TestTransportInfo(false, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest,
+    TestTransportInfoAnswerAudioCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  TestTransportInfo(false, options, true);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerAudioVideo) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  TestTransportInfo(false, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest,
+    TestTransportInfoAnswerAudioVideoCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  TestTransportInfo(false, options, true);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerBundle) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  options.bundle_enabled = true;
+  TestTransportInfo(false, options, false);
+}
+
+TEST_F(MediaSessionDescriptionFactoryTest,
+    TestTransportInfoAnswerBundleCurrent) {
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  options.bundle_enabled = true;
+  TestTransportInfo(false, options, true);
 }

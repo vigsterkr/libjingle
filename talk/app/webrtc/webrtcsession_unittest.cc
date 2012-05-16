@@ -49,7 +49,7 @@
 using cricket::BaseSession;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
-using webrtc::IceCandidateColletion;
+using webrtc::IceCandidateCollection;
 using webrtc::JsepInterface;
 using webrtc::JsepSessionDescription;
 using webrtc::JsepIceCandidate;
@@ -239,10 +239,10 @@ class WebRtcSessionTest : public testing::Test {
   }
 
   void CheckTransportChannels() {
-    EXPECT_TRUE(session_->GetChannel(cricket::CN_AUDIO, "rtp") != NULL);
-    EXPECT_TRUE(session_->GetChannel(cricket::CN_AUDIO, "rtcp") != NULL);
-    EXPECT_TRUE(session_->GetChannel(cricket::CN_VIDEO, "video_rtp") != NULL);
-    EXPECT_TRUE(session_->GetChannel(cricket::CN_VIDEO, "video_rtcp") != NULL);
+    EXPECT_TRUE(session_->GetChannel(cricket::CN_AUDIO, 1) != NULL);
+    EXPECT_TRUE(session_->GetChannel(cricket::CN_AUDIO, 2) != NULL);
+    EXPECT_TRUE(session_->GetChannel(cricket::CN_VIDEO, 1) != NULL);
+    EXPECT_TRUE(session_->GetChannel(cricket::CN_VIDEO, 2) != NULL);
   }
 
   void VerifyCryptoParams(const cricket::SessionDescription* sdp,
@@ -737,7 +737,7 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
       session_->remote_description();
   ASSERT_TRUE(remote_desc != NULL);
   ASSERT_EQ(2u, remote_desc->number_of_mediasections());
-  const IceCandidateColletion* candidates =
+  const IceCandidateCollection* candidates =
       remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(1u, candidates->count());
   EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
@@ -747,7 +747,6 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   // candidates.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   cricket::Candidate candidate2;
-  candidate1.set_component(1);
   JsepIceCandidate ice_candidate2(kMediaContentLabel0, candidate2);
   EXPECT_TRUE(offer->AddCandidate(&ice_candidate2));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
@@ -758,8 +757,15 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   candidates = remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(2u, candidates->count());
   EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+  // Username and password have be updated with the TransportInfo of the
+  // SessionDescription, won't be equal to the original one.
+  candidate2.set_username(candidates->at(0)->candidate().username());
+  candidate2.set_password(candidates->at(0)->candidate().password());
   EXPECT_TRUE(candidate2.IsEquivalent(candidates->at(0)->candidate()));
   EXPECT_EQ(kMediaContentLabel0, candidates->at(1)->label());
+  // No need to verify the username and password.
+  candidate1.set_username(candidates->at(1)->candidate().username());
+  candidate1.set_password(candidates->at(1)->candidate().password());
   EXPECT_TRUE(candidate1.IsEquivalent(candidates->at(1)->candidate()));
 
   // Test that the candidate is ignored if we can add the same candidate again.
@@ -774,7 +780,7 @@ TEST_F(WebRtcSessionTest, TestLocalCandidatesAddedToSessionDescription) {
   SetRemoteAndLocalSessionDescription();
 
   const SessionDescriptionInterface* local_desc = session_->local_description();
-  const IceCandidateColletion* candidates =
+  const IceCandidateCollection* candidates =
       local_desc->candidates(kMediaContentIndex0);
   ASSERT_TRUE(candidates != NULL);
   EXPECT_EQ(0u, candidates->count());
@@ -820,7 +826,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
       session_->remote_description();
   ASSERT_TRUE(remote_desc != NULL);
   ASSERT_EQ(2u, remote_desc->number_of_mediasections());
-  const IceCandidateColletion* candidates =
+  const IceCandidateCollection* candidates =
       remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(1u, candidates->count());
   EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());

@@ -56,9 +56,8 @@ class FakeTransportChannel : public TransportChannelImpl,
                              public talk_base::MessageHandler {
  public:
   explicit FakeTransportChannel(Transport* transport,
-                                const std::string& name,
                                 int component)
-      : TransportChannelImpl(name, component),
+      : TransportChannelImpl(component),
         transport_(transport),
         dest_(NULL),
         state_(STATE_INIT),
@@ -180,13 +179,12 @@ class FakeTransport : public Transport {
   }
 
  protected:
-  virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& name, int component) {
+  virtual TransportChannelImpl* CreateTransportChannel(int component) {
     if (channels_.find(component) != channels_.end()) {
       return NULL;
     }
     FakeTransportChannel* channel =
-        new FakeTransportChannel(this, name, component);
+        new FakeTransportChannel(this, component);
     channel->SetAsync(async_);
     SetChannelDestination(component, channel);
     channels_[component] = channel;

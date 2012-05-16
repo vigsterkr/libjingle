@@ -45,8 +45,7 @@ class P2PTransport : public Transport {
 
  protected:
   // Creates and destroys P2PTransportChannel.
-  virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& name, int component);
+  virtual TransportChannelImpl* CreateTransportChannel(int component);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
 
   friend class P2PTransportChannel;

@@ -74,15 +74,10 @@ TEST(VideoCapturerTest, TestResolutionMatch) {
 
   desired.width = 360;
   desired.height = 250;
-  // Ask for a little higher than QVGA. Get QVGA.  On OSX gets VGA
+  // Ask for a little higher than QVGA. Get QVGA.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 480;
@@ -95,28 +90,18 @@ TEST(VideoCapturerTest, TestResolutionMatch) {
 
   desired.width = 320;
   desired.height = 240;
-  // Ask for QVGA. Get QVGA.  On OSX get VGA
+  // Ask for QVGA. Get QVGA.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 160;
   desired.height = 120;
-  // Ask for lower than QVGA. Get QVGA, which is the lowest.  OSX gets VGA
+  // Ask for lower than QVGA. Get QVGA, which is the lowest.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 }
 
@@ -147,15 +132,10 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 
   desired.width = 360;
   desired.height = 250;
-  // Ask for a litter higher than QVGA. Get QVGA.  OSX gets VGA
+  // Ask for a litter higher than QVGA. Get QVGA.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 480;
@@ -168,28 +148,18 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 
   desired.width = 320;
   desired.height = 240;
-  // Ask for QVGA. Get QVGA.  OSX gets VGA
+  // Ask for QVGA. Get QVGA.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 160;
   desired.height = 120;
   // Ask for lower than QVGA. Get QVGA, which is the lowest.
   EXPECT_TRUE(capturer.GetBestCaptureFormat(desired, &best));
-#ifdef OSX
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
-#else
   EXPECT_EQ(320, best.width);
   EXPECT_EQ(240, best.height);
-#endif
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 1280;
@@ -210,7 +180,6 @@ TEST(VideoCapturerTest, TestHDResolutionMatch) {
 }
 
 // Some cameras support 320x240 and 320x640. Verify we choose 320x240.
-// On OSX we choose VGA
 TEST(VideoCapturerTest, TestStrangeFormats) {
   FakeVideoCapturer capturer;
   std::vector<cricket::VideoFormat> supported_formats;
@@ -269,13 +238,8 @@ TEST(VideoCapturerTest, TestPoorFpsFormats) {
   cricket::VideoFormat best;
   for (size_t i = 0; i < required_formats.size(); ++i) {
     EXPECT_TRUE(capturer.GetBestCaptureFormat(required_formats[i], &best));
-#ifdef OSX
-    EXPECT_EQ(640, best.width);
-    EXPECT_EQ(480, best.height);
-#else
     EXPECT_EQ(required_formats[i].width, best.width);
     EXPECT_EQ(required_formats[i].height, best.height);
-#endif
   }
 
   // Increase framerate of 320x240.  Expect low fps VGA avoided.
@@ -409,11 +373,11 @@ TEST(VideoCapturerTest, TestRequest16x10_9) {
 
   std::vector<cricket::VideoFormat> required_formats = supported_formats;
   cricket::VideoFormat best;
-  // Expect 4x3 for 4x3, 16x10, and 16x9 requests.
+  // Expect 4x3, 16x10, and 16x9 requests are respected.
   for (size_t i = 0; i < required_formats.size(); ++i) {
     EXPECT_TRUE(capturer.GetBestCaptureFormat(required_formats[i], &best));
-    EXPECT_EQ(640, best.width);
-    EXPECT_EQ(480, best.height);
+    EXPECT_EQ(required_formats[i].width, best.width);
+    EXPECT_EQ(required_formats[i].height, best.height);
   }
 
   // We do not support 16x9 HD, expect 4x3 for 4x3, 16x10, and 16x9 requests.
@@ -428,15 +392,14 @@ TEST(VideoCapturerTest, TestRequest16x10_9) {
       cricket::VideoFormat::FpsToInterval(30), cricket::FOURCC_I420));
   capturer.ResetSupportedFormats(supported_formats);
 
-  // Expect 4x3 for 4x3, 16x10, and 16x9 requests.
+  // Expect 4x3, 16x10, and 16x9 requests are respected.
   for (size_t i = 0; i < required_formats.size(); ++i) {
     EXPECT_TRUE(capturer.GetBestCaptureFormat(required_formats[i], &best));
-    EXPECT_EQ(640, best.width);
-    EXPECT_EQ(480, best.height);
+    EXPECT_EQ(required_formats[i].width, best.width);
+    EXPECT_EQ(required_formats[i].height, best.height);
   }
 
-  // We support 16x9HD, expect 4x3 for 4x3 and 16x10 requests and expect 16x9
-  // for 16x9 request.
+  // We support 16x9HD, Expect 4x3, 16x10, and 16x9 requests are respected.
   supported_formats.clear();
   supported_formats.push_back(cricket::VideoFormat(1280, 720,
       cricket::VideoFormat::FpsToInterval(30), cricket::FOURCC_I420));
@@ -451,8 +414,8 @@ TEST(VideoCapturerTest, TestRequest16x10_9) {
   // Expect 4x3 for 4x3 and 16x10 requests.
   for (size_t i = 0; i < required_formats.size() - 1; ++i) {
     EXPECT_TRUE(capturer.GetBestCaptureFormat(required_formats[i], &best));
-    EXPECT_EQ(640, best.width);
-    EXPECT_EQ(480, best.height);
+    EXPECT_EQ(required_formats[i].width, best.width);
+    EXPECT_EQ(required_formats[i].height, best.height);
   }
 
   // Expect 16x9 for 16x9 request.

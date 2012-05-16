@@ -672,9 +672,14 @@ void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
   // The clients that subscribe will obtain meta info from the frame.
   // When this trigger is switched over to capturer, need to pass in the real
   // ssrc.
+  bool drop_frame = false;
   {
     talk_base::CritScope cs(&signal_media_critical_);
-    SignalMediaFrame(kDummyVideoSsrc, &i420_frame);
+    SignalMediaFrame(kDummyVideoSsrc, &i420_frame, &drop_frame);
+  }
+  if (drop_frame) {
+    LOG(LS_VERBOSE) << "Media Effects dropped a frame.";
+    return;
   }
 
   // Send I420 frame to the local renderer.

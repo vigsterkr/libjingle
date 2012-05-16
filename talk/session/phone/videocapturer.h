@@ -186,12 +186,6 @@ class VideoCapturer {
   void SetSupportedFormats(const std::vector<VideoFormat>& formats);
 
  private:
-  // Check if the specified formats include a format with height no less than
-  // 720 and aspect ratio 16x9. In such a case, if we open the camera in 4x3 and
-  // crop to 16x9, the camera or driver may crop from 16x9 to 4x3 and then our
-  // code crop again from 4x3 to 16x9, which is not good.
-  static bool Includes16x9HD(const std::vector<VideoFormat>& formats);
-
   // Get the distance between the desired format and the supported format.
   // Return the max distance if they mismatch. See the implementation for
   // details.

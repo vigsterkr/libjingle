@@ -37,6 +37,12 @@
 #include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/rtputils.h"
+#include "talk/session/phone/typingmonitor.h"
+
+#ifdef HAVE_LMI
+#include "talk/session/phone/lmidesktopcapturer.h"
+#include "talk/session/phone/lmiwindowcapturer.h"
+#endif
 
 namespace cricket {
 
@@ -45,8 +51,8 @@ enum {
   MSG_DISABLE = 2,
   MSG_MUTE = 3,
   MSG_UNMUTE = 4,
-  MSG_SETREMOTECONTENT = 5,
-  MSG_SETLOCALCONTENT = 6,
+  MSG_SETREMOTECONTENT = 6,
+  MSG_SETLOCALCONTENT = 7,
   MSG_EARLYMEDIATIMEOUT = 8,
   MSG_PRESSDTMF = 9,
   MSG_SETRENDERER = 10,
@@ -57,7 +63,6 @@ enum {
   MSG_SETMAXSENDBANDWIDTH = 15,
   MSG_ADDSCREENCAST = 16,
   MSG_REMOVESCREENCAST = 17,
-  // Removed MSG_SETRTCPCNAME = 18. It is no longer used.
   MSG_SENDINTRAFRAME = 19,
   MSG_REQUESTINTRAFRAME = 20,
   MSG_SCREENCASTWINDOWEVENT = 21,
@@ -68,8 +73,26 @@ enum {
   MSG_SCALEVOLUME = 26,
   MSG_HANDLEVIEWREQUEST = 27,
   MSG_SENDDATA = 28,
-  MSG_DATARECEIVED = 29
+  MSG_DATARECEIVED = 29,
+  MSG_SETCAPTURER = 30,
+  MSG_ISSCREENCASTING = 32,
+  MSG_SCREENCASTFPS = 33,
+  MSG_SETSCREENCASTFACTORY = 34
 };
+
+// TODO: use the device manager for creation of screen capturers when
+// the cl enabling it has landed.
+class NullScreenCapturerFactory : public VideoChannel::ScreenCapturerFactory {
+ public:
+  VideoCapturer* CreateScreenCapturer(const ScreencastId& window) {
+    return NULL;
+  }
+};
+
+
+VideoChannel::ScreenCapturerFactory* CreateScreenCapturerFactory() {
+  return new NullScreenCapturerFactory();
+}
 
 struct SetContentData : public talk_base::MessageData {
   SetContentData(const MediaContentDescription* content, ContentAction action)
@@ -148,11 +171,13 @@ struct ScreencastMessageData : public talk_base::MessageData {
   ScreencastMessageData(uint32 s, const ScreencastId& id, int f)
       : ssrc(s),
         window_id(id),
-        fps(f) {
+        fps(f),
+        result(false) {
   }
   uint32 ssrc;
   ScreencastId window_id;
   int fps;
+  bool result;
 };
 
 struct ScreencastEventMessageData : public talk_base::MessageData {
@@ -220,6 +245,40 @@ struct StreamMessageData : public talk_base::MessageData {
 struct ChannelOptionsMessageData : public talk_base::MessageData {
   explicit ChannelOptionsMessageData(int in_options) : options(in_options) {}
   int options;
+};
+
+struct SetCapturerMessageData : public talk_base::MessageData {
+  SetCapturerMessageData(uint32 s, VideoCapturer* c)
+      : ssrc(s),
+        capturer(c),
+        result(false) {
+  }
+  uint32 ssrc;
+  VideoCapturer* capturer;
+  bool result;
+};
+
+struct IsScreencastingMessageData : public talk_base::MessageData {
+  IsScreencastingMessageData()
+      : result(false) {
+  }
+  bool result;
+};
+
+struct ScreencastFpsMessageData : public talk_base::MessageData {
+  explicit ScreencastFpsMessageData(uint32 s)
+      : ssrc(s), result(0) {
+  }
+  uint32 ssrc;
+  int result;
+};
+
+struct SetScreenCaptureFactoryMessageData : public talk_base::MessageData {
+  explicit SetScreenCaptureFactoryMessageData(
+      VideoChannel::ScreenCapturerFactory* f)
+      : screencapture_factory(f) {
+  }
+  VideoChannel::ScreenCapturerFactory* screencapture_factory;
 };
 
 static const char* PacketType(bool rtcp) {
@@ -305,7 +364,7 @@ BaseChannel::~BaseChannel() {
   delete media_channel_;
   set_rtcp_transport_channel(NULL);
   if (transport_channel_ != NULL)
-    session_->DestroyChannel(content_name_, transport_channel_->name());
+    session_->DestroyChannel(content_name_, transport_channel_->component());
   LOG(LS_INFO) << "Destroyed channel";
 }
 
@@ -339,7 +398,6 @@ bool BaseChannel::Enable(bool enable) {
 
 // Can be called from thread other than worker thread
 bool BaseChannel::Mute(bool mute) {
-  Clear(MSG_UNMUTE);  // Clear any penging auto-unmutes.
   Send(mute ? MSG_MUTE : MSG_UNMUTE);
   return true;
 }
@@ -395,7 +453,8 @@ void BaseChannel::StopConnectionMonitor() {
 void BaseChannel::set_rtcp_transport_channel(TransportChannel* channel) {
   if (rtcp_transport_channel_ != channel) {
     if (rtcp_transport_channel_) {
-      session_->DestroyChannel(content_name_, rtcp_transport_channel_->name());
+      session_->DestroyChannel(
+          content_name_, rtcp_transport_channel_->component());
     }
     rtcp_transport_channel_ = channel;
     if (rtcp_transport_channel_) {
@@ -682,7 +741,7 @@ void BaseChannel::ChannelWritable_w() {
   if (writable_)
     return;
   LOG(LS_INFO) << "Channel socket writable ("
-               << transport_channel_->name().c_str() << ")"
+               << transport_channel_->component() << ")"
                << (was_ever_writable_ ? "" : " for the first time");
   was_ever_writable_ = true;
   writable_ = true;
@@ -695,7 +754,7 @@ void BaseChannel::ChannelNotWritable_w() {
     return;
 
   LOG(LS_INFO) << "Channel socket not writable ("
-               << transport_channel_->name().c_str() << ")";
+               << transport_channel_->component() << ")";
   writable_ = false;
   ChangeState();
 }
@@ -955,7 +1014,6 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_DISABLE:
       DisableMedia_w();
       break;
-
     case MSG_MUTE:
       MuteMedia_w();
       break;
@@ -1035,9 +1093,7 @@ VoiceChannel::VoiceChannel(talk_base::Thread* thread,
                            bool rtcp)
     : BaseChannel(thread, media_engine, media_channel, session, content_name,
                   rtcp),
-      received_media_(false),
-      mute_on_type_(false),
-      mute_on_type_timeout_(kTypingBlackoutPeriod) {
+      received_media_(false) {
 }
 
 VoiceChannel::~VoiceChannel() {
@@ -1133,6 +1189,18 @@ void VoiceChannel::StopAudioMonitor() {
 
 bool VoiceChannel::IsAudioMonitorRunning() const {
   return (audio_monitor_.get() != NULL);
+}
+
+void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
+  // Don't allow resetting parameters on the fly.
+  if (!typing_monitor_.get())
+    typing_monitor_.reset(new TypingMonitor(this, worker_thread(), settings));
+}
+
+void VoiceChannel::MuteMedia_w() {
+  BaseChannel::MuteMedia_w();
+  if (typing_monitor_.get())
+    typing_monitor_->OnChannelMuted();
 }
 
 int VoiceChannel::GetInputLevel_w() {
@@ -1356,11 +1424,6 @@ void VoiceChannel::OnAudioMonitorUpdate(AudioMonitor* monitor,
 
 void VoiceChannel::OnVoiceChannelError(
     uint32 ssrc, VoiceMediaChannel::Error err) {
-  if (err == VoiceMediaChannel::ERROR_REC_TYPING_NOISE_DETECTED &&
-      mute_on_type_ && !muted()) {
-    Mute(true);
-    PostDelayed(mute_on_type_timeout_, MSG_UNMUTE, NULL);
-  }
   VoiceChannelErrorMessageData* data = new VoiceChannelErrorMessageData(
       ssrc, err);
   signaling_thread()->Post(this, MSG_CHANNEL_ERROR, data);
@@ -1398,7 +1461,9 @@ VideoChannel::VideoChannel(talk_base::Thread* thread,
                            VoiceChannel* voice_channel)
     : BaseChannel(thread, media_engine, media_channel, session, content_name,
                   rtcp),
-      voice_channel_(voice_channel), renderer_(NULL) {
+      voice_channel_(voice_channel),
+      renderer_(NULL),
+      screencapture_factory_(CreateScreenCapturerFactory()) {
 }
 
 bool VideoChannel::Init() {
@@ -1409,8 +1474,6 @@ bool VideoChannel::Init() {
           rtcp_channel)) {
     return false;
   }
-  media_channel()->SignalScreencastWindowEvent.connect(
-      this, &VideoChannel::OnScreencastWindowEvent);
   media_channel()->SignalMediaError.connect(
       this, &VideoChannel::OnVideoChannelError);
   srtp_filter()->SignalSrtpError.connect(
@@ -1426,6 +1489,17 @@ void VoiceChannel::SendLastMediaError() {
 }
 
 VideoChannel::~VideoChannel() {
+  std::vector<uint32> screencast_ssrcs;
+  ScreencastMap::iterator iter;
+  while (!screencast_capturers_.empty()) {
+    if (!RemoveScreencast(screencast_capturers_.begin()->first)) {
+      LOG(LS_ERROR) << "Unable to delete screencast with ssrc "
+                    << screencast_capturers_.begin()->first;
+      ASSERT(false);
+      break;
+    }
+  }
+
   StopMediaMonitor();
   // this can't be done in the base class, since it calls a virtual
   DisableMedia_w();
@@ -1446,13 +1520,31 @@ bool VideoChannel::ApplyViewRequest(const ViewRequest& request) {
 bool VideoChannel::AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) {
   ScreencastMessageData data(ssrc, id, fps);
   Send(MSG_ADDSCREENCAST, &data);
-  return true;
+  return data.result;
+}
+
+bool VideoChannel::SetCapturer(uint32 ssrc, VideoCapturer* capturer) {
+  SetCapturerMessageData data(ssrc, capturer);
+  Send(MSG_SETCAPTURER, &data);
+  return data.result;
 }
 
 bool VideoChannel::RemoveScreencast(uint32 ssrc) {
   ScreencastMessageData data(ssrc, ScreencastId(), 0);
   Send(MSG_REMOVESCREENCAST, &data);
-  return true;
+  return data.result;
+}
+
+bool VideoChannel::IsScreencasting() {
+  IsScreencastingMessageData data;
+  Send(MSG_ISSCREENCASTING, &data);
+  return data.result;
+}
+
+int VideoChannel::ScreencastFps(uint32 ssrc) {
+  ScreencastFpsMessageData data(ssrc);
+  Send(MSG_SCREENCASTFPS, &data);
+  return data.result;
 }
 
 bool VideoChannel::SendIntraFrame() {
@@ -1463,6 +1555,12 @@ bool VideoChannel::SendIntraFrame() {
 bool VideoChannel::RequestIntraFrame() {
   Send(MSG_REQUESTINTRAFRAME);
   return true;
+}
+
+void VideoChannel::SetScreenCaptureFactory(
+    ScreenCapturerFactory* screencapture_factory) {
+  SetScreenCaptureFactoryMessageData data(screencapture_factory);
+  Send(MSG_SETSCREENCASTFACTORY, &data);
 }
 
 void VideoChannel::ChangeState() {
@@ -1622,13 +1720,67 @@ void VideoChannel::SetRenderer_w(uint32 ssrc, VideoRenderer* renderer) {
   media_channel()->SetRenderer(ssrc, renderer);
 }
 
-void VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id,
+bool VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id,
                                    int fps) {
-  media_channel()->AddScreencast(ssrc, id, fps);
+  if (screencast_capturers_.find(ssrc) != screencast_capturers_.end()) {
+    return false;
+  }
+  VideoCapturer* screen_capturer =
+      screencapture_factory_->CreateScreenCapturer(id);
+  if (!screen_capturer) {
+    return false;
+  }
+  screen_capturer->SignalCaptureEvent.connect(this,
+                                              &VideoChannel::OnCaptureEvent);
+  VideoFormat format;  // default format
+  format.interval = VideoFormat::FpsToInterval(fps);
+  if (screen_capturer->Start(format) != CR_SUCCESS ||
+      !SetCapturer_w(ssrc, screen_capturer)) {
+    delete screen_capturer;
+    return false;
+  }
+  screencast_capturers_[ssrc] = screen_capturer;
+  return true;
 }
 
-void VideoChannel::RemoveScreencast_w(uint32 ssrc) {
-  media_channel()->RemoveScreencast(ssrc);
+bool VideoChannel::SetCapturer_w(uint32 ssrc, VideoCapturer* capturer) {
+  return media_channel()->SetCapturer(ssrc, capturer);
+}
+
+bool VideoChannel::RemoveScreencast_w(uint32 ssrc) {
+  ScreencastMap::iterator iter = screencast_capturers_.find(ssrc);
+  if (iter  == screencast_capturers_.end()) {
+    return false;
+  }
+  if (!SetCapturer_w(ssrc, NULL)) {
+    return false;
+  }
+  iter->second->SignalCaptureEvent.disconnect(this);
+  screencast_capturers_.erase(iter);
+  return true;
+}
+
+bool VideoChannel::IsScreencasting_w() const {
+  return !screencast_capturers_.empty();
+}
+
+int VideoChannel::ScreencastFps_w(uint32 ssrc) const {
+  ScreencastMap::const_iterator iter = screencast_capturers_.find(ssrc);
+  if (iter == screencast_capturers_.end()) {
+    return 0;
+  }
+  VideoCapturer* capturer = iter->second;
+  const VideoFormat* video_format = capturer->GetCaptureFormat();
+  return VideoFormat::IntervalToFps(video_format->interval);
+}
+
+void VideoChannel::SetScreenCaptureFactory_w(
+    ScreenCapturerFactory* screencapture_factory) {
+  if (screencapture_factory == NULL) {
+    screencapture_factory_.reset(CreateScreenCapturerFactory());
+  } else {
+    screencapture_factory_.reset(screencapture_factory);
+  }
 }
 
 void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
@@ -1646,15 +1798,21 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       break;
     }
     case MSG_ADDSCREENCAST: {
-      const ScreencastMessageData* data =
+      ScreencastMessageData* data =
           static_cast<ScreencastMessageData*>(pmsg->pdata);
-      AddScreencast_w(data->ssrc, data->window_id, data->fps);
+      data->result = AddScreencast_w(data->ssrc, data->window_id, data->fps);
+      break;
+    }
+    case MSG_SETCAPTURER: {
+      SetCapturerMessageData* data =
+          static_cast<SetCapturerMessageData*>(pmsg->pdata);
+      data->result = SetCapturer_w(data->ssrc, data->capturer);
       break;
     }
     case MSG_REMOVESCREENCAST: {
-      const ScreencastMessageData* data =
+      ScreencastMessageData* data =
           static_cast<ScreencastMessageData*>(pmsg->pdata);
-      RemoveScreencast_w(data->ssrc);
+      data->result = RemoveScreencast_w(data->ssrc);
       break;
     }
     case MSG_SCREENCASTWINDOWEVENT: {
@@ -1662,6 +1820,18 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
           static_cast<ScreencastEventMessageData*>(pmsg->pdata);
       OnScreencastWindowEvent_s(data->ssrc, data->event);
       delete data;
+      break;
+    }
+    case  MSG_ISSCREENCASTING: {
+      IsScreencastingMessageData* data =
+          static_cast<IsScreencastingMessageData*>(pmsg->pdata);
+      data->result = IsScreencasting_w();
+      break;
+    }
+    case MSG_SCREENCASTFPS: {
+      ScreencastFpsMessageData* data =
+          static_cast<ScreencastFpsMessageData*>(pmsg->pdata);
+      data->result = ScreencastFps_w(data->ssrc);
       break;
     }
     case MSG_SENDINTRAFRAME: {
@@ -1691,6 +1861,12 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       data->result = ApplyViewRequest_w(data->request);
       break;
     }
+    case MSG_SETSCREENCASTFACTORY: {
+      SetScreenCaptureFactoryMessageData* data =
+          static_cast<SetScreenCaptureFactoryMessageData*>(pmsg->pdata);
+      SetScreenCaptureFactory_w(data->screencapture_factory);
+      break;
+    }
     default:
       BaseChannel::OnMessage(pmsg);
       break;
@@ -1715,6 +1891,41 @@ void VideoChannel::OnScreencastWindowEvent(uint32 ssrc,
   ScreencastEventMessageData* pdata =
       new ScreencastEventMessageData(ssrc, event);
   signaling_thread()->Post(this, MSG_SCREENCASTWINDOWEVENT, pdata);
+}
+
+void VideoChannel::OnCaptureEvent(VideoCapturer* capturer, CaptureEvent ev) {
+  // Map capturer events to window events. In the future we may want to simply
+  // pass these events up directly.
+  talk_base::WindowEvent we;
+  if (ev == CE_STOPPED) {
+    we = talk_base::WE_CLOSE;
+  } else if (ev == CE_PAUSED) {
+    we = talk_base::WE_MINIMIZE;
+  } else if (ev == CE_RESUMED) {
+    we = talk_base::WE_RESTORE;
+  } else {
+    return;
+  }
+
+  uint32 ssrc = 0;
+  if (!GetLocalSsrc(capturer, &ssrc)) {
+    return;
+  }
+  ScreencastEventMessageData* pdata =
+      new ScreencastEventMessageData(ssrc, we);
+  signaling_thread()->Post(this, MSG_SCREENCASTWINDOWEVENT, pdata);
+}
+
+bool VideoChannel::GetLocalSsrc(const VideoCapturer* capturer, uint32* ssrc) {
+  *ssrc = 0;
+  for (ScreencastMap::iterator iter = screencast_capturers_.begin();
+       iter != screencast_capturers_.end(); ++iter) {
+    if (iter->second == capturer) {
+      *ssrc = iter->first;
+      return true;
+    }
+  }
+  return false;
 }
 
 void VideoChannel::OnVideoChannelError(uint32 ssrc,

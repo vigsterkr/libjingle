@@ -57,8 +57,7 @@ class RawTransport : public Transport, public TransportParser {
 
  protected:
   // Creates and destroys raw channels.
-  virtual TransportChannelImpl* CreateTransportChannel(
-     const std::string& name, int component);
+  virtual TransportChannelImpl* CreateTransportChannel(int component);
   virtual void DestroyTransportChannel(TransportChannelImpl* channel);
 
  private:

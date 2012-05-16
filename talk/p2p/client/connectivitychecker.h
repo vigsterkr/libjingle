@@ -114,7 +114,7 @@ class NicMap : public std::map<NicId, NicInfo, NicIdComparator> {
 class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
  public:
   TestHttpPortAllocatorSession(
-      HttpPortAllocator* allocator, const std::string &name,
+      HttpPortAllocator* allocator,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd,
@@ -123,7 +123,7 @@ class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
       const std::string& relay_token,
       const std::string& user_agent)
       : HttpPortAllocatorSession(
-          allocator, name, component, ice_ufrag, ice_pwd, stun_hosts,
+          allocator, component, ice_ufrag, ice_pwd, stun_hosts,
           relay_hosts, relay_token, user_agent) {
   }
   void set_proxy(const talk_base::ProxyInfo& proxy) {

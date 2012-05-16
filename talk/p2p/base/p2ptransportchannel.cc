@@ -156,11 +156,10 @@ bool ShouldSwitch(cricket::Connection* a_conn, cricket::Connection* b_conn) {
 
 namespace cricket {
 
-P2PTransportChannel::P2PTransportChannel(const std::string &name,
-                                         int component,
+P2PTransportChannel::P2PTransportChannel(int component,
                                          P2PTransport* transport,
                                          PortAllocator *allocator) :
-    TransportChannelImpl(name, component),
+    TransportChannelImpl(component),
     transport_(transport),
     allocator_(allocator),
     worker_thread_(talk_base::Thread::Current()),
@@ -170,7 +169,10 @@ P2PTransportChannel::P2PTransportChannel(const std::string &name,
     best_connection_(NULL),
     sort_dirty_(false),
     was_writable_(false),
-    was_timed_out_(true) {
+    was_timed_out_(true),
+    protocol_type_(ICEPROTO_GOOGLE),
+    role_(ROLE_UNKNOWN),
+    tiebreaker_(0) {
 }
 
 P2PTransportChannel::~P2PTransportChannel() {
@@ -200,10 +202,33 @@ void P2PTransportChannel::AddAllocatorSession(PortAllocatorSession* session) {
   session->StartGetAllPorts();
 }
 
+void P2PTransportChannel::SetRole(TransportRole role) {
+  role_ = role;
+  for (std::vector<Port *>::iterator it = ports_.begin();
+       it != ports_.end(); ++it) {
+    (*it)->set_role(role_);
+  }
+  // TODO - Recompute the priorites for the connections.
+}
+
+void P2PTransportChannel::SetIceUfrag(const std::string& ice_ufrag) {
+  ice_ufrag_ = ice_ufrag;
+}
+
+void P2PTransportChannel::SetIcePwd(const std::string& ice_pwd) {
+  ice_pwd_ = ice_pwd;
+}
+
 // Go into the state of processing candidates, and running in general
 void P2PTransportChannel::Connect() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-
+  if (ice_ufrag_.empty() || ice_pwd_.empty()) {
+    // TODO: Fix all the cases that reach here and return error.
+    LOG(LS_WARNING) << "P2PTransportChannel::Connect: The ice_ufrag_ and the "
+                    << "ice_pwd_ were not set. Will generate one.";
+    ice_ufrag_ = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
+    ice_pwd_ = talk_base::CreateRandomString(ICE_PWD_LENGTH);
+  }
   // Kick off an allocator session
   Allocate();
 
@@ -267,10 +292,15 @@ void P2PTransportChannel::OnPortReady(PortAllocatorSession *session,
   // The session will handle this, and send an initiate/accept/modify message
   // if one is pending.
 
+  port->set_ice_protocol(protocol_type_);
+  port->set_role(role_);
+  port->set_tiebreaker(tiebreaker_);
   ports_.push_back(port);
   port->SignalUnknownAddress.connect(
       this, &P2PTransportChannel::OnUnknownAddress);
   port->SignalDestroyed.connect(this, &P2PTransportChannel::OnPortDestroyed);
+  port->SignalRoleConflict.connect(
+      this, &P2PTransportChannel::OnRoleConflict);
 
   // Attempt to create a connection from this new port to all of the remote
   // candidates that we were given so far.
@@ -301,7 +331,7 @@ void P2PTransportChannel::OnCandidatesAllocationDone(
 
 // Handle stun packets
 void P2PTransportChannel::OnUnknownAddress(
-    Port *port, const talk_base::SocketAddress &address, IceMessage *stun_msg,
+    Port* port, const talk_base::SocketAddress& address, IceMessage* stun_msg,
     const std::string &remote_username, bool port_muxed) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 
@@ -391,13 +421,18 @@ void P2PTransportChannel::OnUnknownAddress(
   }
 }
 
+void P2PTransportChannel::OnRoleConflict() {
+  SignalRoleConflict(this);  // STUN ping will be sent when SetRole is called
+                             // from Transport.
+}
+
 // When the signalling channel is ready, we can really kick off the allocator
 void P2PTransportChannel::OnSignalingReady() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   if (waiting_for_signaling_) {
     waiting_for_signaling_ = false;
     AddAllocatorSession(allocator_->CreateSession(
-        SessionId(), name(), component(), ice_ufrag_, ice_pwd_));
+        SessionId(), component(), ice_ufrag_, ice_pwd_));
   }
 }
 
@@ -409,14 +444,6 @@ void P2PTransportChannel::OnCandidate(const Candidate& candidate) {
 
   // Resort the connections list, which may have new elements.
   SortConnections();
-}
-
-void P2PTransportChannel::SetIceUfrag(const std::string& ice_ufrag) {
-  ice_ufrag_ = ice_ufrag;
-}
-
-void P2PTransportChannel::SetIcePwd(const std::string& ice_pwd) {
-  ice_pwd_ = ice_pwd;
 }
 
 // Creates connections from all of the ports that we care about to the given
@@ -750,6 +777,7 @@ void P2PTransportChannel::SwitchBestConnectionTo(Connection* conn) {
     LOG_J(LS_INFO, this) << "New best connection: "
                          << best_connection_->ToString();
     SignalRouteChange(this, best_connection_->remote_candidate());
+    NominateBestConnection();
   } else {
     LOG_J(LS_INFO, this) << "No best connection";
   }
@@ -849,6 +877,23 @@ Connection* P2PTransportChannel::GetBestConnectionOnNetwork(
   }
 
   return NULL;
+}
+
+void P2PTransportChannel::NominateBestConnection() {
+  // If we have best possible connection, which may not be in writable state
+  // yet, that means we can cease connection checks and time to send stun ping
+  // with USE-CANDIDATE.
+  // As per RFC 5245 we should't do any further connection checks,
+  // but libjingle may send new connection requests if candidates are still
+  // trickling down from the remote. Final candidate pair should be decided on
+  // the priority, but until we have priorities for candidates we will stick
+  // with best_connection.
+  if ((best_connection_ != NULL) &&
+      (best_connection_->port()->ice_protocol() == ICEPROTO_RFC5245) &&
+      (role_ == ROLE_CONTROLLING)) {
+    best_connection_->set_nominated(true);
+    best_connection_->Ping(talk_base::Time());
+  }
 }
 
 // Handle any queued up requests

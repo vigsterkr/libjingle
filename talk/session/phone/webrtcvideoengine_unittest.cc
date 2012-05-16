@@ -821,20 +821,43 @@ TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
 }
 
 TEST_F(WebRtcVideoEngineTest, TestRegisterVideoProcessor) {
-  cricket::FakeMediaProcessor vp;
-  EXPECT_TRUE(engine_.Init());
-
-  EXPECT_TRUE(engine_.RegisterProcessor(&vp));
-  engine_.TriggerMediaFrame(0, NULL);
-  EXPECT_EQ(1, vp.video_frame_count());
-
-  EXPECT_TRUE(engine_.UnregisterProcessor(&vp));
-  engine_.TriggerMediaFrame(0, NULL);
-  EXPECT_EQ(1, vp.video_frame_count());
-
-  engine_.Terminate();
+  Base::RegisterVideoProcessor();
 }
-
+TEST_F(WebRtcVideoMediaChannelTest, TestVideoProcessor_DropFrames) {
+  // Connect a video processor.
+  cricket::FakeMediaProcessor vp;
+  vp.set_drop_frames(false);
+  EXPECT_TRUE(engine_.RegisterProcessor(&vp));
+  EXPECT_EQ(0, vp.dropped_frame_count());
+  // Send the first frame with default codec.
+  int packets = NumRtpPackets();
+  cricket::VideoCodec codec(DefaultCodec());
+  EXPECT_TRUE(SetOneCodec(codec));
+  EXPECT_TRUE(SetSend(true));
+  EXPECT_TRUE(channel_->SetRender(true));
+  EXPECT_EQ(0, renderer_.num_rendered_frames());
+  EXPECT_TRUE(WaitAndSendFrame(30));
+  EXPECT_FRAME_WAIT(1, codec.width, codec.height, kTimeout);
+  // Verify frame was sent.
+  EXPECT_TRUE_WAIT(NumRtpPackets() > packets, kTimeout);
+  packets = NumRtpPackets();
+  EXPECT_EQ(0, vp.dropped_frame_count());
+  // Send another frame and expect it to be sent.
+  EXPECT_TRUE(WaitAndSendFrame(30));
+  EXPECT_FRAME_WAIT(2, codec.width, codec.height, kTimeout);
+  EXPECT_TRUE_WAIT(NumRtpPackets() > packets, kTimeout);
+  packets = NumRtpPackets();
+  EXPECT_EQ(0, vp.dropped_frame_count());
+  // Attempt to send a frame and expect it to be dropped.
+  vp.set_drop_frames(true);
+  EXPECT_TRUE(WaitAndSendFrame(30));
+  DrainOutgoingPackets();
+  EXPECT_FRAME_WAIT(2, codec.width, codec.height, kTimeout);
+  EXPECT_EQ(packets, NumRtpPackets());
+  EXPECT_EQ(1, vp.dropped_frame_count());
+  // Disconnect video processor.
+  EXPECT_TRUE(engine_.UnregisterProcessor(&vp));
+}
 TEST_F(WebRtcVideoMediaChannelTest, SetRecvCodecs) {
   std::vector<cricket::VideoCodec> codecs;
   codecs.push_back(kVP8Codec);
@@ -974,7 +997,7 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
   Base::AdaptFramerate();
 }
 
-//TODO: Fix the flakey test.
+// TODO: Fix the flakey test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
   Base::SetSendStreamFormat();
 }

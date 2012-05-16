@@ -67,14 +67,18 @@ class RemoteCandidate : public Candidate {
 class P2PTransportChannel : public TransportChannelImpl,
                             public talk_base::MessageHandler {
  public:
-  P2PTransportChannel(const std::string &name,
-                      int component,
+  P2PTransportChannel(int component,
                       P2PTransport* transport,
                       PortAllocator *allocator);
   virtual ~P2PTransportChannel();
 
   // From TransportChannelImpl:
   virtual Transport* GetTransport() { return transport_; }
+  virtual void SetRole(TransportRole role);
+  virtual void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  virtual void SetIceProtocolType(IceProtocolType type) {
+    protocol_type_ = type;
+  }
   virtual void SetIceUfrag(const std::string& ice_ufrag);
   virtual void SetIcePwd(const std::string& ice_pwd);
   virtual void Connect();
@@ -123,14 +127,18 @@ class P2PTransportChannel : public TransportChannelImpl,
   void OnCandidatesReady(PortAllocatorSession *session,
                          const std::vector<Candidate>& candidates);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
-  void OnUnknownAddress(Port *port, const talk_base::SocketAddress &addr,
-                        IceMessage *stun_msg,
+  void OnUnknownAddress(Port* port, const talk_base::SocketAddress& addr,
+                        IceMessage* stun_msg,
                         const std::string &remote_username, bool port_muxed);
   void OnPortDestroyed(Port* port);
 
   void OnConnectionStateChange(Connection *connection);
   void OnReadPacket(Connection *connection, const char *data, size_t len);
   void OnConnectionDestroyed(Connection *connection);
+  bool MaybeIceRoleConflict(Port* port, const talk_base::SocketAddress& addr,
+                            IceMessage* stun_msg);
+  void NominateBestConnection();
+  void OnRoleConflict();
 
   virtual void OnMessage(talk_base::Message *pmsg);
   void OnSort();
@@ -154,6 +162,9 @@ class P2PTransportChannel : public TransportChannelImpl,
   OptionMap options_;
   std::string ice_ufrag_;
   std::string ice_pwd_;
+  IceProtocolType protocol_type_;
+  TransportRole role_;
+  uint64 tiebreaker_;
 
   DISALLOW_EVIL_CONSTRUCTORS(P2PTransportChannel);
 };

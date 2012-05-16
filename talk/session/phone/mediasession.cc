@@ -279,6 +279,59 @@ static bool AddStreamParams(
   return true;
 }
 
+// Gets the TransportInfo of the given |content_name| from the
+// |current_description|. If doesn't exist, returns a new one.
+static void GetOrCreateTransportInfo(const std::string& content_name,
+    const SessionDescription* current_description, TransportInfo* info) {
+  const TransportInfo* transport_info = NULL;
+  if (current_description) {
+    transport_info = current_description->GetTransportInfoByName(content_name);
+  }
+  if (transport_info) {
+    *info = *transport_info;
+  } else {
+    *info = TransportInfo(content_name, NS_GINGLE_P2P,
+                          talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
+                          talk_base::CreateRandomString(ICE_PWD_LENGTH),
+                          Candidates());
+  }
+}
+
+// Updates the transport infos of the |description| according to the given
+// |bundle_group|. The transport infos of the content names within the
+// |bundle_group| should be updated to use the ufrag and pwd of the first
+// content within the |bundle_group|.
+static bool UpdateTransportInfoForBundle(const ContentGroup& bundle_group,
+                                         SessionDescription* description) {
+  if (!description) {
+    return false;
+  }
+
+  if (!bundle_group.FirstContentName()) {
+    return false;
+  }
+
+  const std::string selected_content_name = *bundle_group.FirstContentName();
+  const TransportInfo* selected_transport_info =
+      description->GetTransportInfoByName(selected_content_name);
+  if (!selected_transport_info) {
+    return false;
+  }
+  const std::string selected_ufrag = selected_transport_info->ice_ufrag;
+  const std::string selected_pwd = selected_transport_info->ice_pwd;
+
+  for (TransportInfos::iterator iter =
+           description->transport_infos().begin();
+       iter != description->transport_infos().end(); ++iter) {
+    if (bundle_group.HasContentName(iter->content_name) &&
+        iter->content_name != selected_content_name) {
+      iter->ice_ufrag = selected_ufrag;
+      iter->ice_pwd = selected_pwd;
+    }
+  }
+  return true;
+}
+
 // Create a media content to be offered in a session-initiate,
 // according to the given options.rtcp_mux, options.is_muc,
 // options.streams, codecs, crypto, and streams.  If we don't
@@ -471,6 +524,14 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     audio->set_lang(lang_);
     offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio.release());
     bundle_group.AddContentName(CN_AUDIO);
+    TransportInfo info;
+    GetOrCreateTransportInfo(CN_AUDIO, current_description, &info);
+    if (!offer->AddTransportInfo(info)) {
+      LOG(LS_ERROR)
+          << "CreateOffer Failed to AddTransportInfo with content name:"
+          << CN_AUDIO;
+      return NULL;
+    }
   }
 
   if (options.has_video) {
@@ -493,10 +554,21 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     video->set_bandwidth(options.video_bandwidth);
     offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video.release());
     bundle_group.AddContentName(CN_VIDEO);
+    TransportInfo info;
+    GetOrCreateTransportInfo(CN_VIDEO, current_description, &info);
+    if (!offer->AddTransportInfo(info)){
+      LOG(LS_ERROR)
+          << "CreateOffer Failed to AddTransportInfo with content name:"
+          << CN_VIDEO;
+      return NULL;
+    }
   }
 
   if (options.bundle_enabled) {
     offer->AddGroup(bundle_group);
+    if (!UpdateTransportInfoForBundle(bundle_group, offer.get())) {
+      return NULL;
+    }
   }
 
   if (options.has_data) {
@@ -561,6 +633,14 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     if (received_bundle_group &&
         received_bundle_group->HasContentName(audio_content->name))
       bundle_group.AddContentName(audio_content->name);
+
+    TransportInfo info;
+    GetOrCreateTransportInfo(audio_content->name, current_description, &info);
+    if (!accept->AddTransportInfo(info)) {
+      LOG(LS_ERROR)
+          << "CreateAnswer Failed to AddTransportInfo with content name:"
+          << audio_content->name;
+    }
   } else {
     LOG(LS_INFO) << "Audio is not supported in answer";
   }
@@ -588,12 +668,23 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     if (received_bundle_group &&
         received_bundle_group->HasContentName(video_content->name))
       bundle_group.AddContentName(video_content->name);
+
+    TransportInfo info;
+    GetOrCreateTransportInfo(video_content->name, current_description, &info);
+    if (!accept->AddTransportInfo(info)) {
+      LOG(LS_ERROR)
+          << "CreateAnswer Failed to AddTransportInfo with content name:"
+          << video_content->name;
+    }
   } else {
     LOG(LS_INFO) << "Video is not supported in answer";
   }
 
   if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE)) {
     accept->AddGroup(bundle_group);
+    if (!UpdateTransportInfoForBundle(bundle_group, accept.get())) {
+      return NULL;
+    }
   }
 
   const ContentInfo* data_content = GetFirstDataContent(offer);

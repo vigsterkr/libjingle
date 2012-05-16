@@ -76,8 +76,18 @@ bool JsepSessionDescription::AddCandidate(
   if (candidate_collection_[mediasection_index].HasCandidate(candidate)) {
     return true;  // Silently ignore this candidate if we already have it.
   }
+  const std::string content_name =
+      description_->contents()[mediasection_index].name;
+  const cricket::TransportInfo* transport_info =
+      description_->GetTransportInfoByName(content_name);
+  if (!transport_info) {
+    return false;
+  }
+  cricket::Candidate updated_candidate = candidate->candidate();
+  updated_candidate.set_username(transport_info->ice_ufrag);
+  updated_candidate.set_password(transport_info->ice_pwd);
   candidate_collection_[mediasection_index].add(
-       new JsepIceCandidate(candidate->label(), candidate->candidate()));
+       new JsepIceCandidate(candidate->label(), updated_candidate));
   return true;
 }
 
@@ -87,7 +97,7 @@ size_t JsepSessionDescription::number_of_mediasections() const {
   return description_->contents().size();
 }
 
-const IceCandidateColletion* JsepSessionDescription::candidates(
+const IceCandidateCollection* JsepSessionDescription::candidates(
     size_t mediasection_index) const {
   return &candidate_collection_[mediasection_index];
 }

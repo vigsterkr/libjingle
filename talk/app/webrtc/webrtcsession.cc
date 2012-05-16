@@ -65,8 +65,9 @@ static void CopyCandidatesFromSessionDescription(
   if (!source_desc)
     return;
   for (size_t m = 0; m < source_desc->number_of_mediasections(); ++m) {
-    const IceCandidateColletion* source_candidates = source_desc->candidates(m);
-    const IceCandidateColletion* desc_candidates = dest_desc->candidates(m);
+    const IceCandidateCollection* source_candidates =
+        source_desc->candidates(m);
+    const IceCandidateCollection* desc_candidates = dest_desc->candidates(m);
     for  (size_t n = 0; n < source_candidates->count(); ++n) {
       const IceCandidateInterface* new_candidate = source_candidates->at(n);
       if (!desc_candidates->HasCandidate(new_candidate))
@@ -304,9 +305,9 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     case kAnswer:
       EnableChannels();
 
-    if (ReadyToEnableBundle() && !transport_muxed()) {
-      MaybeEnableMuxingSupport();
-    }
+      if (ReadyToEnableBundle() && !transport_muxed()) {
+        MaybeEnableMuxingSupport();
+      }
 
       SetState(STATE_RECEIVEDACCEPT);
       break;
@@ -349,7 +350,9 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   }
 
   if (ice_started_) {  // Use this candidate now if we have started ice.
-    return UseCandidate(candidate);
+    // We can't use |candidate| directly, because the ice-ufrag and ice-pwd
+    // are only avaiable in the |remote_desc_|.
+    return UseCandidatesInSessionDescription(remote_desc_.get());
   }
   return true;
 }
@@ -441,15 +444,9 @@ void WebRtcSession::OnTransportWritable(cricket::Transport* transport) {
   }
 }
 
-void WebRtcSession::OnTransportCandidatesReady(
-    cricket::Transport* transport, const cricket::Candidates& candidates) {
+void WebRtcSession::OnTransportProxyCandidatesReady(
+    cricket::TransportProxy* proxy, const cricket::Candidates& candidates) {
   ASSERT(signaling_thread()->IsCurrent());
-
-  cricket::TransportProxy* proxy = GetTransportProxy(transport);
-  if (!VERIFY(proxy != NULL)) {
-    LOG(LS_ERROR) << "No Proxy found";
-    return;
-  }
   ProcessNewLocalCandidate(proxy->content_name(), candidates);
 }
 
@@ -567,7 +564,7 @@ bool WebRtcSession::UseCandidatesInSessionDescription(
     return true;
   bool ret = true;
   for (size_t m = 0; m < remote_desc->number_of_mediasections(); ++m) {
-    const IceCandidateColletion* candidates = remote_desc->candidates(m);
+    const IceCandidateCollection* candidates = remote_desc->candidates(m);
     for  (size_t n = 0; n < candidates->count(); ++n) {
       ret = UseCandidate(candidates->at(n));
       if (!ret)

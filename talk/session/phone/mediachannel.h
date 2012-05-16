@@ -51,6 +51,7 @@ namespace cricket {
 struct RtpHeader;
 class ScreencastId;
 struct VideoFormat;
+class VideoCapturer;
 class VideoRenderer;
 
 const int kMinRtpHeaderExtensionId = 1;
@@ -408,6 +409,11 @@ class VoiceMediaChannel : public MediaChannel {
   virtual bool GetActiveStreams(AudioInfo::StreamList* actives) = 0;
   // Get the current energy level of the stream sent to the speaker.
   virtual int GetOutputLevel() = 0;
+  // Get the time in milliseconds since last recorded keystroke, or negative.
+  virtual int GetTimeSinceLastTyping() = 0;
+  // Temporarily exposed field for tuning typing detect options.
+  virtual void SetTypingDetectionParameters(int time_window,
+    int cost_per_typing, int reporting_threshold, int penalty_decay) = 0;
   // Set left and right scale for speaker output volume of the specified ssrc.
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right) = 0;
   // Get left and right scale for speaker output volume of the specified ssrc.
@@ -463,8 +469,9 @@ class VideoMediaChannel : public MediaChannel {
   // Sets the renderer object to be used for the specified stream.
   // If SSRC is 0, the renderer is used for the 'default' stream.
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer) = 0;
-  virtual bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps) = 0;
-  virtual bool RemoveScreencast(uint32 ssrc) = 0;
+  // If |ssrc| is 0, replace the default capturer (engine capturer) with
+  // |capturer|. If |ssrc| is non zero create a new stream with |ssrc| as SSRC.
+  virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer) = 0;
   // Gets quality stats for the channel.
   virtual bool GetStats(VideoMediaInfo* info) = 0;
 
@@ -474,7 +481,6 @@ class VideoMediaChannel : public MediaChannel {
   virtual bool RequestIntraFrame() = 0;
 
   // Signals events from the currently active window.
-  sigslot::signal2<uint32, talk_base::WindowEvent> SignalScreencastWindowEvent;
   sigslot::signal2<uint32, Error> SignalMediaError;
 
  protected:

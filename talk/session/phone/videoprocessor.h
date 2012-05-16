@@ -38,10 +38,13 @@ class VideoProcessor : public sigslot::has_slots<> {
   virtual ~VideoProcessor() {}
   // Contents of frame may be manipulated by the processor.
   // The processed data is expected to be the same size as the
-  // original data
-  virtual void OnFrame(uint32 ssrc, VideoFrame* frame) = 0;
+  // original data. VideoProcessors may be chained together and may decide
+  // that the current frame should be dropped. If *drop_frame is true,
+  // the current processor should skip processing. If the current processor
+  // decides it cannot process the current frame in a timely manner, it may set
+  // *drop_frame = true and the frame will be dropped.
+  virtual void OnFrame(uint32 ssrc, VideoFrame* frame, bool* drop_frame) = 0;
 };
 
 }  // namespace cricket
 #endif  // TALK_SESSION_PHONE_VIDEOPROCESSOR_H_
-

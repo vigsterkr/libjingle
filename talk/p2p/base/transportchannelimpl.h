@@ -29,13 +29,13 @@
 #define TALK_P2P_BASE_TRANSPORTCHANNELIMPL_H_
 
 #include <string>
+#include "talk/p2p/base/transport.h"
 #include "talk/p2p/base/transportchannel.h"
 
 namespace buzz { class XmlElement; }
 
 namespace cricket {
 
-class Transport;
 class Candidate;
 
 // Base class for real implementations of TransportChannel.  This includes some
@@ -43,12 +43,17 @@ class Candidate;
 // client.
 class TransportChannelImpl : public TransportChannel {
  public:
-  TransportChannelImpl(const std::string& name, int component)
-      : TransportChannel(name, component) {}
+  explicit TransportChannelImpl(int component)
+    : TransportChannel(component) {}
 
   // Returns the transport that created this channel.
   virtual Transport* GetTransport() = 0;
 
+  // For ICE channels.
+  virtual void SetRole(TransportRole role) {}
+  virtual void SetTiebreaker(uint64 tiebreaker) {}
+  // To toggle G-ICE/ICE.
+  virtual void SetIceProtocolType(IceProtocolType type) {}
   // SetIceUfrag and SetIcePwd only need to be implemented by the ICE
   // transport channels. Non-ICE transport channels can just ignore.
   // The ufrag and pwd should be set before the Connect() is called.
@@ -81,6 +86,10 @@ class TransportChannelImpl : public TransportChannel {
 
   // TransportChannel is forwarding this signal from PortAllocatorSession.
   sigslot::signal1<TransportChannelImpl*> SignalCandidatesAllocationDone;
+
+  // Invoked when there is conflict in the ICE role between local and remote
+  // agents.
+  sigslot::signal1<TransportChannelImpl*> SignalRoleConflict;
 
  private:
   DISALLOW_EVIL_CONSTRUCTORS(TransportChannelImpl);

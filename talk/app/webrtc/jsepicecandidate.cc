@@ -67,14 +67,14 @@ bool JsepIceCandidate::ToString(std::string* out) const {
   return !out->empty();
 }
 
-JsepCandidateColletion::~JsepCandidateColletion() {
+JsepCandidateCollection::~JsepCandidateCollection() {
   for (std::vector<JsepIceCandidate*>::iterator it = candidates_.begin();
        it != candidates_.end(); ++it) {
     delete *it;
   }
 }
 
-bool JsepCandidateColletion::HasCandidate(
+bool JsepCandidateCollection::HasCandidate(
     const IceCandidateInterface* candidate) const {
   bool ret = false;
   for (std::vector<JsepIceCandidate*>::const_iterator it = candidates_.begin();

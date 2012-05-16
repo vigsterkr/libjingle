@@ -99,17 +99,17 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
     return allocator_->SetPortRange(min_port, max_port);
   }
 
-  bool CreateSession(const std::string& name, int component) {
-    session_.reset(CreateSession("session", name, component));
+  bool CreateSession(int component) {
+    session_.reset(CreateSession("session", component));
     if (!session_.get())
       return false;
     return true;
   }
 
   cricket::PortAllocatorSession* CreateSession(
-      const std::string& sid, const std::string& name, int component) {
+      const std::string& sid, int component) {
     cricket::PortAllocatorSession* session =
-        allocator_->CreateSession(sid, name, component, kIceUfrag0, kIcePwd0);
+        allocator_->CreateSession(sid, component, kIceUfrag0, kIcePwd0);
     session->SignalPortReady.connect(this,
             &PortAllocatorTest::OnPortReady);
     session->SignalCandidatesReady.connect(this,
@@ -174,13 +174,13 @@ TEST_F(PortAllocatorTest, TestBasic) {
   EXPECT_EQ(kRelayUdpIntAddr, allocator().relay_address_udp());
   EXPECT_EQ(kRelayTcpIntAddr, allocator().relay_address_tcp());
   EXPECT_EQ(kRelaySslTcpIntAddr, allocator().relay_address_ssl());
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
 }
 
 // Tests that we can get the local and STUN addresses successfully.
 TEST_F(PortAllocatorTest, TestGetInitialPorts) {
   AddInterface(kClientAddr);
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
   EXPECT_PRED5(CheckCandidate, candidates_[0],
@@ -193,7 +193,7 @@ TEST_F(PortAllocatorTest, TestGetInitialPorts) {
 // Tests that we can get all the desired addresses successfully.
 TEST_F(PortAllocatorTest, TestGetAllPorts) {
   AddInterface(kClientAddr);
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
@@ -229,7 +229,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsPortRange) {
   EXPECT_TRUE(SetPortRange(0, 0));
   // Check that a valid port range succeeds.
   EXPECT_TRUE(SetPortRange(kMinPort, kMaxPort));
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
@@ -254,7 +254,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsPortRange) {
 
 // Test that we don't crash or malfunction if we have no network adapters.
 TEST_F(PortAllocatorTest, TestGetAllPortsNoAdapters) {
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   talk_base::Thread::Current()->ProcessMessages(100);
@@ -267,7 +267,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsNoAdapters) {
 // are disabled.
 TEST_F(PortAllocatorTest, TestDisableAllPorts) {
   AddInterface(kClientAddr);
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->set_flags(cricket::PORTALLOCATOR_DISABLE_UDP |
                       cricket::PORTALLOCATOR_DISABLE_STUN |
                       cricket::PORTALLOCATOR_DISABLE_RELAY |
@@ -283,7 +283,7 @@ TEST_F(PortAllocatorTest, TestDisableAllPorts) {
 TEST_F(PortAllocatorTest, TestGetAllPortsNoUdpSockets) {
   AddInterface(kClientAddr);
   fss_->set_udp_sockets_enabled(false);
-  EXPECT_TRUE(CreateSession("rtp", 1));
+  EXPECT_TRUE(CreateSession(1));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   ASSERT_EQ_WAIT(2U, candidates_.size(), 2000);
@@ -312,7 +312,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsNoUdpSocketsNoTcpListen) {
   AddInterface(kClientAddr);
   fss_->set_udp_sockets_enabled(false);
   fss_->set_tcp_listen_enabled(false);
-  EXPECT_TRUE(CreateSession("rtp", 1));
+  EXPECT_TRUE(CreateSession(1));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   ASSERT_EQ_WAIT(2U, candidates_.size(), 3000);
@@ -339,7 +339,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsNoSockets) {
   AddInterface(kClientAddr);
   fss_->set_tcp_sockets_enabled(false);
   fss_->set_udp_sockets_enabled(false);
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   WAIT(candidates_.size() > 0, 2000);
@@ -352,7 +352,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsNoSockets) {
 TEST_F(PortAllocatorTest, TestGetAllPortsNoUdpAllowed) {
   fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr);
   AddInterface(kClientAddr);
-  EXPECT_TRUE(CreateSession("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   EXPECT_EQ_WAIT(1U, candidates_.size(), 1000);
@@ -380,7 +380,7 @@ TEST_F(PortAllocatorTest, TestGetAllPortsNoUdpAllowed) {
 // Test to verify ICE restart process.
 TEST_F(PortAllocatorTest, TestGetAllPortsRestarts) {
   AddInterface(kClientAddr);
-  EXPECT_TRUE(CreateSession("rtp", 1));
+  EXPECT_TRUE(CreateSession(1));
   session_->GetInitialPorts();
   session_->StartGetAllPorts();
   EXPECT_EQ_WAIT(2U, candidates_.size(), 1000);
@@ -399,9 +399,9 @@ TEST_F(PortAllocatorTest, TestBasicMuxFeatures) {
   allocator().set_flags(cricket::PORTALLOCATOR_ENABLE_BUNDLE);
   // Session ID - session1.
   talk_base::scoped_ptr<cricket::PortAllocatorSession> session1(
-      CreateSession("session1", "rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+      CreateSession("session1", cricket::ICE_CANDIDATE_COMPONENT_RTP));
   talk_base::scoped_ptr<cricket::PortAllocatorSession> session2(
-      CreateSession("session1", "rtcp", cricket::ICE_CANDIDATE_COMPONENT_RTCP));
+      CreateSession("session1", cricket::ICE_CANDIDATE_COMPONENT_RTCP));
   // We know that PortAllocator is creating a proxy session when bundle flag
   // is enabled, it's safe to type cast session objects.
   cricket::PortAllocatorSessionProxy* proxy1 =
@@ -428,7 +428,7 @@ TEST_F(PortAllocatorTest, TestBasicMuxFeatures) {
       cricket::ICE_CANDIDATE_COMPONENT_RTCP, "stun", "udp", kClientAddr);
   talk_base::scoped_ptr<cricket::PortAllocatorSession> session3(
       CreateSession(
-          "session1", "video_rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+          "session1", cricket::ICE_CANDIDATE_COMPONENT_RTP));
   // ListenToEvents(session3.get());
   session3->GetInitialPorts();
   // Already allocated candidates and ports will be sent to the newly
@@ -440,7 +440,7 @@ TEST_F(PortAllocatorTest, TestBasicMuxFeatures) {
   // Session ID - session2.
   talk_base::scoped_ptr<cricket::PortAllocatorSession> session4(
         CreateSession(
-            "session2", "video_rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP));
+            "session2", cricket::ICE_CANDIDATE_COMPONENT_RTP));
   cricket::PortAllocatorSessionProxy* proxy4 =
         static_cast<cricket::PortAllocatorSessionProxy*>(session4.get());
   EXPECT_NE(proxy4->impl(), proxy1->impl());
@@ -480,7 +480,7 @@ TEST(HttpPortAllocatorTest, TestSessionRequestUrl) {
   cricket::HttpPortAllocator alloc(&network_manager, "unit test agent");
   talk_base::scoped_ptr<cricket::HttpPortAllocatorSessionBase> session(
       static_cast<cricket::HttpPortAllocatorSession*>(
-          alloc.CreateSessionInternal("channel", 0, kIceUfrag0, kIcePwd0)));
+          alloc.CreateSessionInternal(0, kIceUfrag0, kIcePwd0)));
   std::string url = session->GetSessionRequestUrl();
   std::vector<std::string> parts;
   talk_base::split(url, '?', &parts);

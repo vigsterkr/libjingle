@@ -91,6 +91,9 @@ static const char* kIcePwd[4] = {"TESTICEPWD00000000000000",
                                  "TESTICEPWD00000000000002",
                                  "TESTICEPWD00000000000003"};
 
+static const int kTiebreaker1 = 11111;
+static const int kTiebreaker2 = 22222;
+
 // This test simulates 2 P2P endpoints that want to establish connectivity
 // with each other over various network topologies and conditions, which can be
 // specified in each individial test.
@@ -125,6 +128,8 @@ class P2PTransportChannelTestBase : public testing::Test,
                        ss_.get(), kSocksProxyAddrs[0]),
         socks_server2_(ss_.get(), kSocksProxyAddrs[1],
                        ss_.get(), kSocksProxyAddrs[1]) {
+    ep1_.role_ = cricket::ROLE_CONTROLLING;
+    ep2_.role_ = cricket::ROLE_CONTROLLED;
     ep1_.allocator_.reset(new cricket::BasicPortAllocator(
         &ep1_.network_manager_, kStunAddr, kRelayUdpIntAddr,
         kRelayTcpIntAddr, kRelaySslTcpIntAddr));
@@ -187,7 +192,8 @@ class P2PTransportChannelTestBase : public testing::Test,
   };
 
   struct Endpoint {
-    Endpoint() : signaling_delay_(0) {}
+    Endpoint() : signaling_delay_(0), tiebreaker_(0),
+        role_conflict_(false), protocol_type_(cricket::ICEPROTO_GOOGLE) {}
     bool HasChannel(cricket::TransportChannel* ch) {
       return (ch == cd1_.ch_.get() || ch == cd2_.ch_.get());
     }
@@ -199,11 +205,27 @@ class P2PTransportChannelTestBase : public testing::Test,
         return &cd2_;
     }
     void SetSignalingDelay(int delay) { signaling_delay_ = delay; }
+
+    void SetRole(cricket::TransportRole role) { role_ = role; }
+    cricket::TransportRole role() { return role_; }
+    void SetIceProtocolType(cricket::IceProtocolType type) {
+      protocol_type_ = type;
+    }
+    cricket::IceProtocolType protocol_type() { return protocol_type_; }
+    void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+    uint64 GetTiebreaker() { return tiebreaker_; }
+    void OnRoleConflict(bool role_conflict) { role_conflict_ = role_conflict; }
+    bool role_conflict() { return role_conflict_; }
+
     talk_base::FakeNetworkManager network_manager_;
     talk_base::scoped_ptr<cricket::PortAllocator> allocator_;
     ChannelData cd1_;
     ChannelData cd2_;
     int signaling_delay_;
+    cricket::TransportRole role_;
+    uint64 tiebreaker_;
+    bool role_conflict_;
+    cricket::IceProtocolType protocol_type_;
   };
 
   struct CandidateData : public talk_base::MessageData {
@@ -223,35 +245,39 @@ class P2PTransportChannelTestBase : public testing::Test,
 
   void CreateChannels(int num) {
     ep1_.cd1_.ch_.reset(CreateChannel(
-        0, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+        0, cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
         kIceUfrag[0], kIcePwd[0]));
     ep2_.cd1_.ch_.reset(CreateChannel(
-        1, "a", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+        1, cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
         kIceUfrag[1], kIcePwd[1]));
     if (num == 2) {
       ep1_.cd2_.ch_.reset(CreateChannel(
-          0, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+          0, cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
           kIceUfrag[2], kIcePwd[2]));
       ep2_.cd2_.ch_.reset(CreateChannel(
-          1, "b", cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
+          1, cricket::ICE_CANDIDATE_COMPONENT_DEFAULT,
           kIceUfrag[3], kIcePwd[3]));
     }
   }
   cricket::P2PTransportChannel* CreateChannel(int endpoint,
-                                              const std::string& name,
                                               int component,
                                               const std::string& ice_ufrag,
                                               const std::string& ice_pwd) {
     cricket::P2PTransportChannel* channel = new cricket::P2PTransportChannel(
-        name, component, NULL, GetAllocator(endpoint));
+        component, NULL, GetAllocator(endpoint));
     channel->SignalRequestSignaling.connect(
         this, &P2PTransportChannelTestBase::OnChannelRequestSignaling);
     channel->SignalCandidateReady.connect(this,
         &P2PTransportChannelTestBase::OnCandidate);
     channel->SignalReadPacket.connect(
         this, &P2PTransportChannelTestBase::OnReadPacket);
+    channel->SignalRoleConflict.connect(
+        this, &P2PTransportChannelTestBase::OnRoleConflict);
+    channel->SetIceProtocolType(GetEndpoint(endpoint)->protocol_type());
     channel->SetIceUfrag(ice_ufrag);
     channel->SetIcePwd(ice_pwd);
+    channel->SetRole(GetEndpoint(endpoint)->role());
+    channel->SetTiebreaker(GetEndpoint(endpoint)->GetTiebreaker());
     channel->Connect();
     return channel;
   }
@@ -312,6 +338,18 @@ class P2PTransportChannelTestBase : public testing::Test,
   }
   void SetSignalingDelay(int endpoint, int delay) {
     GetEndpoint(endpoint)->SetSignalingDelay(delay);
+  }
+  void SetIceProtocol(int endpoint, cricket::IceProtocolType type) {
+    GetEndpoint(endpoint)->SetIceProtocolType(type);
+  }
+  void SetIceRole(int endpoint, cricket::TransportRole role) {
+    GetEndpoint(endpoint)->SetRole(role);
+  }
+  void SetTiebreaker(int endpoint, uint64 tiebreaker) {
+    GetEndpoint(endpoint)->SetTiebreaker(tiebreaker);
+  }
+  bool GetRoleConflict(int endpoint) {
+    return GetEndpoint(endpoint)->role_conflict();
   }
 
   void Test(const Result& expected) {
@@ -420,8 +458,8 @@ class P2PTransportChannelTestBase : public testing::Test,
         static_cast<CandidateData*>(msg->pdata));
     cricket::P2PTransportChannel* rch = GetRemoteChannel(data->channel);
     const cricket::Candidate& c = data->candidate;
-    LOG(LS_INFO) << "Candidate(" << data->channel->name() << "->"
-                 << rch->name() << "): " << c.type() << ", " << c.protocol()
+    LOG(LS_INFO) << "Candidate(" << data->channel->component() << "->"
+                 << rch->component() << "): " << c.type() << ", " << c.protocol()
                  << ", " << c.address().ToString() << ", " << c.username()
                  << ", " << c.generation();
     rch->OnCandidate(c);
@@ -430,6 +468,13 @@ class P2PTransportChannelTestBase : public testing::Test,
                     size_t len, int flags) {
     std::list<std::string>& packets = GetPacketList(channel);
     packets.push_front(std::string(data, len));
+  }
+  void OnRoleConflict(cricket::TransportChannelImpl* channel) {
+    GetEndpoint(channel)->OnRoleConflict(true);
+    cricket::TransportRole new_role =
+        GetEndpoint(channel)->role() == cricket::ROLE_CONTROLLING ?
+            cricket::ROLE_CONTROLLED : cricket::ROLE_CONTROLLING;
+    channel->SetRole(new_role);
   }
   int SendData(cricket::TransportChannel* channel,
                const char* data, size_t len) {
@@ -929,3 +974,32 @@ TEST_F(P2PTransportChannelTest, TestBundleAllocatorToNonBundleAllocator) {
   TestSendRecv(2);
   DestroyChannels();
 }
+
+TEST_F(P2PTransportChannelTest, TestIceRoleConflict) {
+  AddAddress(0, kPublicAddrs[0]);
+  AddAddress(1, kPublicAddrs[1]);
+
+  SetIceProtocol(0, cricket::ICEPROTO_RFC5245);
+  SetTiebreaker(0, kTiebreaker1);  // Default EP1 is in controlling state.
+  SetIceProtocol(1, cricket::ICEPROTO_RFC5245);
+  SetIceRole(1, cricket::ROLE_CONTROLLING);
+  SetTiebreaker(1, kTiebreaker2);
+
+  // Creating channels with both channels role set to CONTROLLING.
+  CreateChannels(1);
+  // Since both the channels initiated with controlling state and channel2
+  // has higher tiebreaker value, channel1 should receive SignalRoleConflict.
+  EXPECT_TRUE_WAIT(GetRoleConflict(0), 1000);
+
+  EXPECT_TRUE_WAIT(ep1_ch1()->readable() &&
+                   ep1_ch1()->writable() &&
+                   ep2_ch1()->readable() &&
+                   ep2_ch1()->writable(),
+                   1000);
+
+  EXPECT_TRUE(ep1_ch1()->best_connection() &&
+              ep2_ch1()->best_connection());
+
+  TestSendRecv(1);
+}
+

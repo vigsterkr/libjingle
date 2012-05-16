@@ -48,6 +48,7 @@
 
 namespace cricket {
 
+class BaseSession;
 class P2PTransportChannel;
 class Transport;
 class TransportChannel;
@@ -84,11 +85,10 @@ struct SessionError : WriteError {
 // session had one ChannelMap and transport.  Now, with multiple
 // transports per session, we need multiple ChannelMaps as well.
 
-// TODO: Change this from channel name => proxy to channel
-// component => proxy.
-typedef std::map<std::string, TransportChannelProxy*> ChannelMap;
+typedef std::map<int, TransportChannelProxy*> ChannelMap;
 
-class TransportProxy : public CandidateTranslator {
+class TransportProxy : public sigslot::has_slots<>,
+                       public CandidateTranslator {
  public:
   TransportProxy(
       const std::string& sid,
@@ -99,24 +99,24 @@ class TransportProxy : public CandidateTranslator {
         transport_(transport),
         state_(STATE_INIT),
         sent_candidates_(false),
-        candidates_allocated_(false),
-        ice_ufrag_(talk_base::CreateRandomString(ICE_UFRAG_LENGTH)),
-        ice_pwd_(talk_base::CreateRandomString(ICE_PWD_LENGTH)) {}
+        candidates_allocated_(false) {
+    transport_->get()->SignalCandidatesReady.connect(
+        this, &TransportProxy::OnTransportCandidatesReady);
+  }
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
   Transport* impl() const { return transport_->get(); }
 
-  void SetImplementation(TransportWrapper* impl);
   std::string type() const;
   bool negotiated() const { return state_ == STATE_NEGOTIATED; }
   const Candidates& sent_candidates() const { return sent_candidates_; }
   const Candidates& unsent_candidates() const { return unsent_candidates_; }
 
-  TransportChannel* GetChannel(const std::string& name);
+  TransportChannel* GetChannel(int component);
   TransportChannel* CreateChannel(const std::string& channel_name,
                                   int component);
-  void DestroyChannel(const std::string& name);
+  void DestroyChannel(int component);
   void AddSentCandidates(const Candidates& candidates);
   void AddUnsentCandidates(const Candidates& candidates);
   void ClearSentCandidates() { sent_candidates_.clear(); }
@@ -129,12 +129,25 @@ class TransportProxy : public CandidateTranslator {
     candidates_allocated_ = allocated;
   }
   bool candidates_allocated() { return candidates_allocated_; }
+  void SetLocalTransportInfo(const TransportInfo& info) {
+    transport_->get()->SetLocalTransportInfo(info);
+  }
 
   // As CandidateTranslator
   virtual bool GetChannelNameFromComponent(
       int component, std::string* channel_name) const;
   virtual bool GetComponentFromChannelName(
       const std::string& channel_name, int* component) const;
+
+  // Called when a transport signals that it has new candidates.
+  void OnTransportCandidatesReady(cricket::Transport* transport,
+                                  const Candidates& candidates) {
+    SignalCandidatesReady(this, candidates);
+  }
+
+  // Handles sending of ready candidates and receiving of remote candidates.
+  sigslot::signal2<TransportProxy*,
+                   const std::vector<Candidate>&> SignalCandidatesReady;
 
  private:
   enum TransportState {
@@ -147,9 +160,8 @@ class TransportProxy : public CandidateTranslator {
   TransportChannelProxy* GetChannelProxyByName(const std::string& name) const;
   void ReplaceChannelProxyImpl(TransportChannelProxy* channel_proxy,
                                size_t index);
-  TransportChannelImpl* GetOrCreateChannelProxyImpl(const std::string& name,
-                                                    int component);
-  void SetChannelProxyImpl(const std::string& name,
+  TransportChannelImpl* GetOrCreateChannelProxyImpl(int component);
+  void SetChannelProxyImpl(int component,
                            TransportChannelProxy* proxy);
 
   std::string sid_;
@@ -160,8 +172,6 @@ class TransportProxy : public CandidateTranslator {
   Candidates sent_candidates_;
   Candidates unsent_candidates_;
   bool candidates_allocated_;
-  std::string ice_ufrag_;
-  std::string ice_pwd_;
 };
 
 typedef std::map<std::string, TransportProxy*> TransportMap;
@@ -250,6 +260,14 @@ class BaseSession : public sigslot::has_slots<>,
       delete local_description_;
       local_description_ = sdesc;
     }
+    // Update the TransportInfo to all the TransportProxy.
+    for (TransportMap::iterator iter = transports_.begin();
+         iter != transports_.end(); ++iter) {
+      TransportInfo info;
+      if (GetLocalTransportInfo(iter->second->content_name(), &info)) {
+        iter->second->SetLocalTransportInfo(info);
+      }
+    }
     return true;
   }
 
@@ -309,14 +327,14 @@ class BaseSession : public sigslot::has_slots<>,
 
   // Returns the channel with the given names.
   virtual TransportChannel* GetChannel(const std::string& content_name,
-                                       const std::string& channel_name);
+                                       int component);
 
   // Destroys the channel with the given names.
   // This will usually be called from the worker thread, but that
   // shouldn't be an issue since the main thread will be blocked in
   // Send when doing so.
   virtual void DestroyChannel(const std::string& content_name,
-                              const std::string& channel_name);
+                              int component);
 
  protected:
   const TransportMap& transport_proxies() const { return transports_; }
@@ -356,8 +374,8 @@ class BaseSession : public sigslot::has_slots<>,
   }
 
   // Called when a transport signals that it has new candidates.
-  virtual void OnTransportCandidatesReady(Transport* transport,
-                                          const Candidates& candidates) {
+  virtual void OnTransportProxyCandidatesReady(TransportProxy* proxy,
+                                               const Candidates& candidates) {
   }
 
   // Called when a transport signals that it found an error in an incoming
@@ -384,6 +402,10 @@ class BaseSession : public sigslot::has_slots<>,
   virtual void OnCandidatesAllocationDone() {
   }
 
+  // Handles the ice role change callback from Transport. This must be
+  // propagated to all the transports.
+  virtual void OnRoleConflict();
+
   // Handles messages posted to us.
   virtual void OnMessage(talk_base::Message *pmsg);
 
@@ -403,6 +425,12 @@ class BaseSession : public sigslot::has_slots<>,
   // Log session state.
   void LogState(State old_state, State new_state);
 
+  // Returns true and the TransportInfo of the given |content_name|
+  // from |local_description_|.
+  // Returns false if it's not available.
+  bool GetLocalTransportInfo(const std::string& content_name,
+                             TransportInfo* info);
+
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;
   PortAllocator* port_allocator_;
@@ -416,6 +444,10 @@ class BaseSession : public sigslot::has_slots<>,
   // that it's much easier to put it here.
   bool allow_local_ips_;
   bool transport_muxed_;
+  uint64 ice_tiebreaker_;
+  // This flag will be set to true after the first role switch. This flag
+  // will enable us to stop any role switch during the call.
+  bool role_switch_;
   TransportMap transports_;
 };
 
@@ -512,8 +544,8 @@ class Session : public BaseSession {
   virtual void OnTransportRequestSignaling(Transport* transport);
   virtual void OnTransportConnecting(Transport* transport);
   virtual void OnTransportWritable(Transport* transport);
-  virtual void OnTransportCandidatesReady(Transport* transport,
-                                          const Candidates& candidates);
+  virtual void OnTransportProxyCandidatesReady(TransportProxy* proxy,
+                                               const Candidates& candidates);
   virtual void OnTransportSendError(Transport* transport,
                                     const buzz::XmlElement* stanza,
                                     const buzz::QName& name,

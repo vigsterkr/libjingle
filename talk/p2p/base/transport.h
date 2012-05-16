@@ -54,6 +54,7 @@
 #include "talk/base/sigslot.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/transportinfo.h"
 
 namespace talk_base {
 class Thread;
@@ -112,6 +113,17 @@ class TransportParser {
   virtual ~TransportParser() {}
 };
 
+enum IceProtocolType {
+  ICEPROTO_GOOGLE,  // Google version of ICE protocol.
+  ICEPROTO_RFC5245  // Standard RFC 5245 version of ICE>
+};
+
+enum TransportRole {
+  ROLE_CONTROLLING = 0,
+  ROLE_CONTROLLED,
+  ROLE_UNKNOWN
+};
+
 class Transport : public talk_base::MessageHandler,
                   public sigslot::has_slots<> {
  public:
@@ -143,19 +155,29 @@ class Transport : public talk_base::MessageHandler,
   // Returns whether the client has requested the channels to connect.
   bool connect_requested() const { return connect_requested_; }
 
-  // Create, destroy, and lookup the channels of this type by their names.
-  TransportChannelImpl* CreateChannel(const std::string& name,
-                                      int component);
+  void SetRole(TransportRole role);
+  TransportRole role() const { return role_; }
+
+  void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  uint64 tiebreaker() { return tiebreaker_; }
+
+  // Create, destroy, and lookup the channels of this type by their components.
+  TransportChannelImpl* CreateChannel(int component);
   // Note: GetChannel may lead to race conditions, since the mutex is not held
   // after the pointer is returned.
   TransportChannelImpl* GetChannel(int component);
-  TransportChannelImpl* GetChannelByName(const std::string& channel_name);
   // Note: HasChannel does not lead to race conditions, unlike GetChannel.
   bool HasChannel(int component) {
     return (NULL != GetChannel(component));
   }
   bool HasChannels();
   void DestroyChannel(int component);
+
+  // Set the TransportInfo to be used by the TransportChannel. This should be
+  // called before ConnectChannels().
+  void SetLocalTransportInfo(const TransportInfo& info) {
+    local_transport_info_ = info;
+  }
 
   // Tells all current and future channels to start connecting.  When the first
   // channel begins connecting, the following signal is raised.
@@ -211,13 +233,13 @@ class Transport : public talk_base::MessageHandler,
   // IPs (e.g. 127.*) to be used as addresses for P2P.
   bool allow_local_ips() const { return allow_local_ips_; }
   void set_allow_local_ips(bool value) { allow_local_ips_ = value; }
+  // Forwards the signal from TransportChannel to BaseSession.
+  sigslot::signal0<> SignalRoleConflict;
 
  protected:
   // These are called by Create/DestroyChannel above in order to create or
   // destroy the appropriate type of channel.
-  virtual TransportChannelImpl* CreateTransportChannel(
-      const std::string& channel_name,
-      int component) = 0;
+  virtual TransportChannelImpl* CreateTransportChannel(int component) = 0;
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) = 0;
 
   // Informs the subclass that we received the signaling ready message.
@@ -269,6 +291,8 @@ class Transport : public talk_base::MessageHandler,
   void OnChannelRouteChange(TransportChannel* channel,
                             const Candidate& remote_candidate);
   void OnChannelCandidatesAllocationDone(TransportChannelImpl* channel);
+  // Called when there is ICE role change.
+  void OnRoleConflict(TransportChannelImpl* channel);
 
   // Dispatches messages to the appropriate handler (below).
   void OnMessage(talk_base::Message* msg);
@@ -276,8 +300,7 @@ class Transport : public talk_base::MessageHandler,
   // These are versions of the above methods that are called only on a
   // particular thread (s = signaling, w = worker).  The above methods post or
   // send a message to invoke this version.
-  TransportChannelImpl* CreateChannel_w(const std::string& name,
-                                        int component);
+  TransportChannelImpl* CreateChannel_w(int component);
   void DestroyChannel_w(int component);
   void ConnectChannels_w();
   void ResetChannels_w();
@@ -290,6 +313,7 @@ class Transport : public talk_base::MessageHandler,
   void OnChannelRouteChange_s(const TransportChannel* channel,
                               const Candidate& remote_candidate);
 
+
   // Helper function that invokes the given function on every channel.
   typedef void (TransportChannelImpl::* TransportChannelFunc)();
   void CallChannels_w(TransportChannelFunc func);
@@ -299,6 +323,8 @@ class Transport : public talk_base::MessageHandler,
 
   void OnChannelCandidateReady_s();
 
+  void SetRole_w();
+
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;
   std::string type_;
@@ -307,6 +333,8 @@ class Transport : public talk_base::MessageHandler,
   bool readable_;
   bool writable_;
   bool connect_requested_;
+  TransportRole role_;
+  uint64 tiebreaker_;
 
   ChannelMap channels_;
   // Buffers the ready_candidates so that SignalCanidatesReady can
@@ -315,6 +343,7 @@ class Transport : public talk_base::MessageHandler,
   // Protects changes to channels and messages
   talk_base::CriticalSection crit_;
   bool allow_local_ips_;
+  TransportInfo local_transport_info_;
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);
 };

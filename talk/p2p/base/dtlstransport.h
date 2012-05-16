@@ -47,10 +47,9 @@ class DtlsTransport : public Base {
     Base::DestroyAllChannels();
   }
 
-  virtual DtlsTransportChannelWrapper* CreateTransportChannel(
-      const std::string& name, int component) {
+  virtual DtlsTransportChannelWrapper* CreateTransportChannel(int component) {
     return new DtlsTransportChannelWrapper(this,
-        Base::CreateTransportChannel(name, component));
+        Base::CreateTransportChannel(component));
   }
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) {
     // Kind of ugly, but this lets us do the exact inverse of the create.

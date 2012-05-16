@@ -47,11 +47,14 @@
 #include "talk/session/phone/ssrcmuxfilter.h"
 #include "talk/session/phone/streamparams.h"
 #include "talk/session/phone/srtpfilter.h"
+#include "talk/session/phone/videocapturer.h"
 
 namespace cricket {
 
-class MediaContentDescription;
 struct CryptoParams;
+class MediaContentDescription;
+struct TypingMonitorOptions;
+class TypingMonitor;
 struct ViewRequest;
 
 enum SinkType {
@@ -84,6 +87,7 @@ class BaseChannel
   }
   bool enabled() const { return enabled_; }
   bool secure() const { return srtp_filter_.IsActive(); }
+  bool muted() const { return muted_; }
 
   // Channel control
   bool SetLocalContent(const MediaContentDescription* content,
@@ -195,15 +199,14 @@ class BaseChannel
   bool has_remote_content() const { return has_remote_content_; }
   void set_has_local_content(bool has) { has_local_content_ = has; }
   void set_has_remote_content(bool has) { has_remote_content_ = has; }
-  bool muted() const { return muted_; }
   talk_base::Thread* signaling_thread() { return session_->signaling_thread(); }
   SrtpFilter* srtp_filter() { return &srtp_filter_; }
   bool rtcp() const { return rtcp_; }
 
-  void Send(uint32 id, talk_base::MessageData *pdata = NULL);
-  void Post(uint32 id, talk_base::MessageData *pdata = NULL);
+  void Send(uint32 id, talk_base::MessageData* pdata = NULL);
+  void Post(uint32 id, talk_base::MessageData* pdata = NULL);
   void PostDelayed(int cmsDelay, uint32 id = 0,
-                   talk_base::MessageData *pdata = NULL);
+                   talk_base::MessageData* pdata = NULL);
   void Clear(uint32 id = talk_base::MQID_ANY,
              talk_base::MessageList* removed = NULL);
   void FlushRtcpMessages();
@@ -228,7 +231,7 @@ class BaseChannel
 
   void EnableMedia_w();
   void DisableMedia_w();
-  void MuteMedia_w();
+  virtual void MuteMedia_w();
   void UnmuteMedia_w();
   void ChannelWritable_w();
   void ChannelNotWritable_w();
@@ -263,11 +266,11 @@ class BaseChannel
   bool SetMaxSendBandwidth_w(int max_bandwidth);
 
   // From MessageHandler
-  virtual void OnMessage(talk_base::Message *pmsg);
+  virtual void OnMessage(talk_base::Message* pmsg);
 
   // Handled in derived classes
-  virtual void OnConnectionMonitorUpdate(SocketMonitor *monitor,
-      const std::vector<ConnectionInfo> &infos) = 0;
+  virtual void OnConnectionMonitorUpdate(SocketMonitor* monitor,
+      const std::vector<ConnectionInfo>& infos) = 0;
 
  private:
   sigslot::signal3<const void*, size_t, bool> SignalSendPacketPreCrypto;
@@ -277,17 +280,17 @@ class BaseChannel
   talk_base::CriticalSection signal_send_packet_cs_;
   talk_base::CriticalSection signal_recv_packet_cs_;
 
-  talk_base::Thread *worker_thread_;
-  MediaEngineInterface *media_engine_;
-  BaseSession *session_;
-  MediaChannel *media_channel_;
+  talk_base::Thread* worker_thread_;
+  MediaEngineInterface* media_engine_;
+  BaseSession* session_;
+  MediaChannel* media_channel_;
   std::vector<StreamParams> local_streams_;
   std::vector<StreamParams> remote_streams_;
 
   std::string content_name_;
   bool rtcp_;
-  TransportChannel *transport_channel_;
-  TransportChannel *rtcp_transport_channel_;
+  TransportChannel* transport_channel_;
+  TransportChannel* rtcp_transport_channel_;
   SrtpFilter srtp_filter_;
   RtcpMuxFilter rtcp_mux_filter_;
   SsrcMuxFilter ssrc_filter_;
@@ -304,8 +307,8 @@ class BaseChannel
 // and input/output level monitoring.
 class VoiceChannel : public BaseChannel {
  public:
-  VoiceChannel(talk_base::Thread *thread, MediaEngineInterface *media_engine,
-               VoiceMediaChannel *channel, BaseSession *session,
+  VoiceChannel(talk_base::Thread* thread, MediaEngineInterface* media_engine,
+               VoiceMediaChannel* channel, BaseSession* session,
                const std::string& content_name, bool rtcp);
   ~VoiceChannel();
   bool Init();
@@ -325,13 +328,10 @@ class VoiceChannel : public BaseChannel {
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
   bool PressDTMF(int digit, bool playout);
   bool SetOutputScaling(uint32 ssrc, double left, double right);
-  void set_mute_on_type(bool enable, int timeout) {
-    mute_on_type_ = enable;
-    mute_on_type_timeout_ = talk_base::_max(0, timeout);
-  }
+
 
   // Monitoring functions
-  sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo> &>
+  sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo>&>
       SignalConnectionMonitor;
 
   void StartMediaMonitor(int cms);
@@ -343,6 +343,9 @@ class VoiceChannel : public BaseChannel {
   bool IsAudioMonitorRunning() const;
   sigslot::signal2<VoiceChannel*, const AudioInfo&> SignalAudioMonitor;
 
+  void StartTypingMonitor(const TypingMonitorOptions& settings);
+
+  virtual void MuteMedia_w();
   int GetInputLevel_w();
   int GetOutputLevel_w();
   void GetActiveStreams_w(AudioInfo::StreamList* actives);
@@ -352,12 +355,10 @@ class VoiceChannel : public BaseChannel {
   sigslot::signal3<VoiceChannel*, uint32, VoiceMediaChannel::Error>
       SignalMediaError;
 
-  static const int kTypingBlackoutPeriod = 1500;
-
  private:
   // overrides from BaseChannel
   virtual void OnChannelRead(TransportChannel* channel,
-                             const char *data, size_t len, int flags);
+                             const char* data, size_t len, int flags);
   virtual void ChangeState();
   virtual const MediaContentDescription* GetFirstContent(
       const SessionDescription* sdesc);
@@ -372,12 +373,12 @@ class VoiceChannel : public BaseChannel {
   bool PressDTMF_w(int digit, bool playout);
   bool SetOutputScaling_w(uint32 ssrc, double left, double right);
 
-  virtual void OnMessage(talk_base::Message *pmsg);
+  virtual void OnMessage(talk_base::Message* pmsg);
   virtual void OnConnectionMonitorUpdate(
-      SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
+      SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(
-      VoiceMediaChannel *media_channel, const VoiceMediaInfo& info);
-  void OnAudioMonitorUpdate(AudioMonitor *monitor, const AudioInfo& info);
+      VoiceMediaChannel* media_channel, const VoiceMediaInfo& info);
+  void OnAudioMonitorUpdate(AudioMonitor* monitor, const AudioInfo& info);
   void OnVoiceChannelError(uint32 ssrc, VoiceMediaChannel::Error error);
   void SendLastMediaError();
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
@@ -386,32 +387,36 @@ class VoiceChannel : public BaseChannel {
   bool received_media_;
   talk_base::scoped_ptr<VoiceMediaMonitor> media_monitor_;
   talk_base::scoped_ptr<AudioMonitor> audio_monitor_;
-  bool mute_on_type_;
-  int  mute_on_type_timeout_;
+  talk_base::scoped_ptr<TypingMonitor> typing_monitor_;
 };
 
 // VideoChannel is a specialization for video.
 class VideoChannel : public BaseChannel {
  public:
-  VideoChannel(talk_base::Thread *thread, MediaEngineInterface *media_engine,
-               VideoMediaChannel *channel, BaseSession *session,
+  // Make screen capturer virtual so that it can be overriden in testing.
+  // E.g. used to test that window events are triggered correctly.
+  class ScreenCapturerFactory {
+   public:
+    virtual VideoCapturer* CreateScreenCapturer(const ScreencastId& window) = 0;
+  };
+
+  VideoChannel(talk_base::Thread* thread, MediaEngineInterface* media_engine,
+               VideoMediaChannel* channel, BaseSession* session,
                const std::string& content_name, bool rtcp,
-               VoiceChannel *voice_channel);
+               VoiceChannel* voice_channel);
   ~VideoChannel();
   bool Init();
-
-  // downcasts a MediaChannel
-  virtual VideoMediaChannel* media_channel() const {
-    return static_cast<VideoMediaChannel*>(BaseChannel::media_channel());
-  }
 
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   bool ApplyViewRequest(const ViewRequest& request);
 
   bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps);
+  bool SetCapturer(uint32 ssrc, VideoCapturer* capturer);
   bool RemoveScreencast(uint32 ssrc);
+  bool IsScreencasting();
+  int ScreencastFps(uint32 ssrc);
 
-  sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo> &>
+  sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo>&>
       SignalConnectionMonitor;
 
   void StartMediaMonitor(int cms);
@@ -424,7 +429,17 @@ class VideoChannel : public BaseChannel {
   sigslot::signal3<VideoChannel*, uint32, VideoMediaChannel::Error>
       SignalMediaError;
 
+  void SetScreenCaptureFactory(
+      ScreenCapturerFactory* screencapture_factory);
+ protected:
+  // downcasts a MediaChannel
+  virtual VideoMediaChannel* media_channel() const {
+    return static_cast<VideoMediaChannel*>(BaseChannel::media_channel());
+  }
+
  private:
+  typedef std::map<uint32, VideoCapturer*> ScreencastMap;
+
   // overrides from BaseChannel
   virtual void ChangeState();
   virtual const MediaContentDescription* GetFirstContent(
@@ -444,31 +459,42 @@ class VideoChannel : public BaseChannel {
   bool ApplyViewRequest_w(const ViewRequest& request);
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
-  void AddScreencast_w(uint32 ssrc, const ScreencastId& id, int fps);
-  void RemoveScreencast_w(uint32 ssrc);
+  bool AddScreencast_w(uint32 ssrc, const ScreencastId& id, int fps);
+  bool SetCapturer_w(uint32 ssrc, VideoCapturer* capturer);
+  bool RemoveScreencast_w(uint32 ssrc);
+  void RemoveCapturer_w(uint32 ssrc);
   void OnScreencastWindowEvent_s(uint32 ssrc, talk_base::WindowEvent we);
+  bool IsScreencasting_w() const;
+  int ScreencastFps_w(uint32 ssrc) const;
+  void SetScreenCaptureFactory_w(
+      ScreenCapturerFactory* screencapture_factory);
 
-  virtual void OnMessage(talk_base::Message *pmsg);
+  virtual void OnMessage(talk_base::Message* pmsg);
   virtual void OnConnectionMonitorUpdate(
-      SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
+      SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(
-      VideoMediaChannel *media_channel, const VideoMediaInfo& info);
+      VideoMediaChannel* media_channel, const VideoMediaInfo& info);
   virtual void OnScreencastWindowEvent(uint32 ssrc,
                                        talk_base::WindowEvent event);
+  virtual void OnCaptureEvent(VideoCapturer* capturer, CaptureEvent ev);
+  bool GetLocalSsrc(const VideoCapturer* capturer, uint32* ssrc);
+
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
 
-  VoiceChannel *voice_channel_;
-  VideoRenderer *renderer_;
+  VoiceChannel* voice_channel_;
+  VideoRenderer* renderer_;
+  talk_base::scoped_ptr<ScreenCapturerFactory> screencapture_factory_;
+  ScreencastMap screencast_capturers_;
   talk_base::scoped_ptr<VideoMediaMonitor> media_monitor_;
 };
 
 // DataChannel is a specialization for data.
 class DataChannel : public BaseChannel {
  public:
-  DataChannel(talk_base::Thread *thread,
+  DataChannel(talk_base::Thread* thread,
               DataMediaChannel* media_channel,
-              BaseSession *session,
+              BaseSession* session,
               const std::string& content_name,
               bool rtcp);
   ~DataChannel();
@@ -486,7 +512,7 @@ class DataChannel : public BaseChannel {
   void StopMediaMonitor();
 
   sigslot::signal2<DataChannel*, const DataMediaInfo&> SignalMediaMonitor;
-  sigslot::signal2<DataChannel*, const std::vector<ConnectionInfo> &>
+  sigslot::signal2<DataChannel*, const std::vector<ConnectionInfo>&>
       SignalConnectionMonitor;
   sigslot::signal3<DataChannel*, uint32, DataMediaChannel::Error>
       SignalMediaError;
@@ -528,11 +554,11 @@ class DataChannel : public BaseChannel {
                                   ContentAction action);
   virtual void ChangeState();
 
-  virtual void OnMessage(talk_base::Message *pmsg);
+  virtual void OnMessage(talk_base::Message* pmsg);
   virtual void OnConnectionMonitorUpdate(
-      SocketMonitor *monitor, const std::vector<ConnectionInfo> &infos);
+      SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(
-      DataMediaChannel *media_channel, const DataMediaInfo& info);
+      DataMediaChannel* media_channel, const DataMediaInfo& info);
   void OnDataReceived(
       const ReceiveDataParams& params, const char* data, size_t len);
   void OnDataChannelError(uint32 ssrc, DataMediaChannel::Error error);

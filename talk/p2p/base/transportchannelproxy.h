@@ -47,6 +47,7 @@ class TransportChannelProxy : public TransportChannel {
                         int component);
   virtual ~TransportChannelProxy();
 
+  const std::string& name() const { return name_; }
   TransportChannelImpl* impl() { return impl_; }
 
   // Sets the implementation to which we will proxy.
@@ -68,6 +69,7 @@ class TransportChannelProxy : public TransportChannel {
                     int flags);
   void OnRouteChange(TransportChannel* channel, const Candidate& candidate);
 
+  std::string name_;
   typedef std::pair<talk_base::Socket::Option, int> OptionPair;
   typedef std::vector<OptionPair> OptionList;
   TransportChannelImpl* impl_;
