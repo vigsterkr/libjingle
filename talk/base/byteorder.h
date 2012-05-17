@@ -28,14 +28,6 @@
 #ifndef TALK_BASE_BYTEORDER_H_
 #define TALK_BASE_BYTEORDER_H_
 
-#ifdef POSIX
-#include <arpa/inet.h>
-#endif
-
-#ifdef WIN32
-#include <stdlib.h>
-#endif
-
 #include "talk/base/basictypes.h"
 
 namespace talk_base {
@@ -151,48 +143,33 @@ inline bool IsHostBigEndian() {
 }
 
 inline uint16 HostToNetwork16(uint16 n) {
-#ifdef WIN32
-  // This and below _byteswap_* are to remove the dependency to ws2_32.dll
-  // especially for chrome, where we don't load the ws2_32.dll in the render
-  // process. This is correct only on little-endian machines.
-  return _byteswap_ushort(n);
-#else
-  return htons(n);
-#endif
+  uint16 result;
+  SetBE16(&result, n);
+  return result;
 }
 
 inline uint32 HostToNetwork32(uint32 n) {
-#ifdef WIN32
-  return _byteswap_ulong(n);
-#else
-  return htonl(n);
-#endif
+  uint32 result;
+  SetBE32(&result, n);
+  return result;
 }
 
 inline uint64 HostToNetwork64(uint64 n) {
-  // If the host is little endian, GetBE64 converts n to big network endian.
-  return IsHostBigEndian() ? n : GetBE64(&n);
+  uint64 result;
+  SetBE64(&result, n);
+  return result;
 }
 
 inline uint16 NetworkToHost16(uint16 n) {
-#ifdef WIN32
-  return _byteswap_ushort(n);
-#else
-  return ntohs(n);
-#endif
+  return GetBE16(&n);
 }
 
 inline uint32 NetworkToHost32(uint32 n) {
-#ifdef WIN32
-  return _byteswap_ulong(n);
-#else
-  return ntohl(n);
-#endif
+  return GetBE32(&n);
 }
 
 inline uint64 NetworkToHost64(uint64 n) {
-  // If the host is little endian, GetBE64 converts n to little endian.
-  return IsHostBigEndian() ? n : GetBE64(&n);
+  return GetBE64(&n);
 }
 
 }  // namespace talk_base
