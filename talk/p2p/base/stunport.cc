@@ -149,6 +149,7 @@ bool StunPort::Init() {
     LOG_J(LS_WARNING, this) << "UDP socket creation failed";
     return false;
   }
+  socket_->SignalAddressReady.connect(this, &StunPort::OnAddressReady);
   socket_->SignalReadPacket.connect(this, &StunPort::OnReadPacket);
   return true;
 }
@@ -161,13 +162,15 @@ StunPort::~StunPort() {
 }
 
 void StunPort::PrepareAddress() {
+  ASSERT(requests_.empty());
+
   // We will keep pinging the stun server to make sure our NAT pin-hole stays
   // open during the call.
   // TODO: Support multiple stun servers, or make ResolveStunAddress find a
   // server with the correct family, or something similar.
   if (server_addr_.IsUnresolved()) {
     ResolveStunAddress();
-  } else {
+  } else if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND) {
     if (server_addr_.family() == ip().family()) {
       requests_.Send(new StunPortBindingRequest(this, true, server_addr_));
     }
@@ -211,6 +214,11 @@ int StunPort::SetOption(talk_base::Socket::Option opt, int value) {
 
 int StunPort::GetError() {
   return error_;
+}
+
+void StunPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
+                              const talk_base::SocketAddress& address) {
+  PrepareAddress();
 }
 
 void StunPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,

@@ -61,6 +61,8 @@ public:
   bool CheckResponse(StunMessage* msg);
   bool CheckResponse(const char* data, size_t size);
 
+  bool empty() { return requests_.empty(); }
+
   // Raised when there are bytes to be sent.
   sigslot::signal3<const void*, size_t, StunRequest*> SignalSendPacket;
 
