@@ -25,13 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_STREAMCOLLECTIONIMPL_H_
-#define TALK_APP_WEBRTC_STREAMCOLLECTIONIMPL_H_
+#ifndef TALK_APP_WEBRTC_STREAMCOLLECTION_H_
+#define TALK_APP_WEBRTC_STREAMCOLLECTION_H_
 
 #include <string>
 #include <vector>
 
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 
 namespace webrtc {
 
@@ -100,4 +100,4 @@ class StreamCollection : public StreamCollectionInterface {
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_STREAMCOLLECTIONIMPL_H_
+#endif  // TALK_APP_WEBRTC_STREAMCOLLECTION_H_
