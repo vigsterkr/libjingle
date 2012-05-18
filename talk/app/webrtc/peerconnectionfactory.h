@@ -24,13 +24,13 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef TALK_APP_WEBRTC_PEERCONNECTIONFACTORYIMPL_H_
-#define TALK_APP_WEBRTC_PEERCONNECTIONFACTORYIMPL_H_
+#ifndef TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_
+#define TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_
 
 #include <string>
 
 #include "talk/base/scoped_ptr.h"
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/base/thread.h"
 #include "talk/session/phone/channelmanager.h"
@@ -95,4 +95,4 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_PEERCONNECTIONFACTORYIMPL_H_
+#endif  // TALK_APP_WEBRTC_PEERCONNECTIONFACTORY_H_

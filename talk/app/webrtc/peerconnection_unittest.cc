@@ -31,7 +31,7 @@
 
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
 #include "talk/app/webrtc/test/fakevideocapturemodule.h"
 #include "talk/base/gunit.h"

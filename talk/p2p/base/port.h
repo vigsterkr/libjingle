@@ -300,6 +300,10 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Checks if this port is useless, and hence, should be destroyed.
   void CheckTimeout();
 
+  // Called when a new address is added, to figure out its candidate's priority.
+  int ComputeCandidatePriority(const talk_base::SocketAddress& address,
+                               int type_preference) const;
+
   talk_base::Thread* thread_;
   talk_base::PacketSocketFactory* factory_;
   std::string type_;

@@ -25,11 +25,11 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/peerconnectionfactoryimpl.h"
+#include "talk/app/webrtc/peerconnectionfactory.h"
 
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
-#include "talk/app/webrtc/peerconnectionimpl.h"
+#include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/portallocatorfactory.h"
 #include "talk/session/phone/dummydevicemanager.h"
 #include "talk/session/phone/webrtcmediaengine.h"

@@ -29,8 +29,7 @@
 
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/app/webrtc/mediastream.h"
-#include "talk/app/webrtc/peerconnection.h"
-#include "talk/app/webrtc/peerconnectionimpl.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/roapmessages.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
@@ -185,7 +184,7 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   scoped_refptr<MediaStreamInterface> last_removed_stream_;
 };
 
-class PeerConnectionImplTest : public testing::Test {
+class PeerConnectionInterfaceTest : public testing::Test {
  protected:
   virtual void SetUp() {
     port_allocator_factory_ = FakePortAllocatorFactory::Create();
@@ -303,17 +302,18 @@ class PeerConnectionImplTest : public testing::Test {
   MockPeerConnectionObserver observer_;
 };
 
-TEST_F(PeerConnectionImplTest, CreatePeerConnectionWithInvalidConfiguration) {
+TEST_F(PeerConnectionInterfaceTest,
+       CreatePeerConnectionWithInvalidConfiguration) {
   CreatePeerConnectionWithInvalidConfiguration();
   AddStream(kStreamLabel1);
 }
 
-TEST_F(PeerConnectionImplTest,
+TEST_F(PeerConnectionInterfaceTest,
        CreatePeerConnectionWithDifferentConfigurations) {
   CreatePeerConnectionWithDifferentConfigurations();
 }
 
-TEST_F(PeerConnectionImplTest, RoapAddStream) {
+TEST_F(PeerConnectionInterfaceTest, RoapAddStream) {
   CreateRoapPeerConnection();
   AddStream(kStreamLabel1);
   WaitForRoapOffer();
@@ -333,7 +333,7 @@ TEST_F(PeerConnectionImplTest, RoapAddStream) {
   EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(0)->label());
 }
 
-TEST_F(PeerConnectionImplTest, RoapUpdateStream) {
+TEST_F(PeerConnectionInterfaceTest, RoapUpdateStream) {
   CreateRoapPeerConnection();
   AddStream(kStreamLabel1);
   WaitForRoapOffer();
@@ -368,7 +368,7 @@ TEST_F(PeerConnectionImplTest, RoapUpdateStream) {
   EXPECT_EQ(1u, pc_->local_streams()->count());
 }
 
-TEST_F(PeerConnectionImplTest, RoapSendClose) {
+TEST_F(PeerConnectionInterfaceTest, RoapSendClose) {
   CreateRoapPeerConnection();
   pc_->Close();
   EXPECT_EQ(RoapMessageBase::kShutdown, observer_.last_message_.type());
@@ -377,7 +377,7 @@ TEST_F(PeerConnectionImplTest, RoapSendClose) {
   EXPECT_EQ_WAIT(PeerConnectionInterface::kClosed, observer_.state_, kTimeout);
 }
 
-TEST_F(PeerConnectionImplTest, RoapReceiveClose) {
+TEST_F(PeerConnectionInterfaceTest, RoapReceiveClose) {
   CreateRoapPeerConnection();
   pc_->ProcessSignalingMessage(CreateShutdownMessage());
   EXPECT_EQ_WAIT(RoapMessageBase::kOk, observer_.last_message_.type(),
@@ -385,7 +385,7 @@ TEST_F(PeerConnectionImplTest, RoapReceiveClose) {
   EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
 }
 
-TEST_F(PeerConnectionImplTest, RoapReceiveCloseWhileExpectingAnswer) {
+TEST_F(PeerConnectionInterfaceTest, RoapReceiveCloseWhileExpectingAnswer) {
   CreateRoapPeerConnection();
   AddStream(kStreamLabel1);
   WaitForRoapOffer();
@@ -397,7 +397,7 @@ TEST_F(PeerConnectionImplTest, RoapReceiveCloseWhileExpectingAnswer) {
   EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
 }
 
-TEST_F(PeerConnectionImplTest, RemoveStream) {
+TEST_F(PeerConnectionInterfaceTest, RemoveStream) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
   EXPECT_EQ(1u, pc_->local_streams()->count());
@@ -406,7 +406,7 @@ TEST_F(PeerConnectionImplTest, RemoveStream) {
   EXPECT_EQ(0u, pc_->local_streams()->count());
 }
 
-TEST_F(PeerConnectionImplTest, Jsep_InitiateCall) {
+TEST_F(PeerConnectionInterfaceTest, Jsep_InitiateCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
@@ -428,7 +428,7 @@ TEST_F(PeerConnectionImplTest, Jsep_InitiateCall) {
   EXPECT_EQ_WAIT(kStreamLabel1, observer_.GetLastAddedStreamLabel(), kTimeout);
 }
 
-TEST_F(PeerConnectionImplTest, Jsep_ReceiveCall) {
+TEST_F(PeerConnectionInterfaceTest, Jsep_ReceiveCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
@@ -450,7 +450,7 @@ TEST_F(PeerConnectionImplTest, Jsep_ReceiveCall) {
 }
 
 // Test that candidates are generated and that we can parse our own candidates.
-TEST_F(PeerConnectionImplTest, Jsep_IceCandidates) {
+TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
   CreatePeerConnection();
   EXPECT_FALSE(pc_->StartIce(PeerConnectionInterface::kUseAll));
 

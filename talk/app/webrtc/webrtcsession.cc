@@ -31,7 +31,7 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"

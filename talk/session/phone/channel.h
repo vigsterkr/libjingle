@@ -398,6 +398,7 @@ class VideoChannel : public BaseChannel {
   class ScreenCapturerFactory {
    public:
     virtual VideoCapturer* CreateScreenCapturer(const ScreencastId& window) = 0;
+    virtual ~ScreenCapturerFactory() {}
   };
 
   VideoChannel(talk_base::Thread* thread, MediaEngineInterface* media_engine,

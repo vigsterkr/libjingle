@@ -26,7 +26,7 @@
 #include <string>
 
 #include "talk/app/webrtc/mediastream.h"
-#include "talk/app/webrtc/peerconnectionfactoryimpl.h"
+#include "talk/app/webrtc/peerconnectionfactory.h"
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"

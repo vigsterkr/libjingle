@@ -29,8 +29,8 @@
 #define TALK_APP_WEBRTC_AUDIOTRACK_H_
 
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/mediatrackimpl.h"
-#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/app/webrtc/mediastreamtrack.h"
+#include "talk/app/webrtc/notifier.h"
 #include "talk/base/scoped_ref_ptr.h"
 
 #ifdef WEBRTC_RELATIVE_PATH

@@ -74,10 +74,12 @@ static const SocketAddress kRelayTcpIntAddr("99.99.99.2", 5002);
 static const SocketAddress kRelayTcpExtAddr("99.99.99.3", 5003);
 static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
+// TODO: Update these when RFC5245 is completely supported.
+// Magic value of 30 is from RFC3484, for IPv4 addresses.
 static const uint32 kDefaultHostPriority = ICE_TYPE_PREFERENCE_HOST << 24 |
-    65535 << 8 | ICE_CANDIDATE_COMPONENT_DEFAULT;
+             30 << 8 | (256 - ICE_CANDIDATE_COMPONENT_DEFAULT);
 static const uint32 kDefaultPrflxPriority = ICE_TYPE_PREFERENCE_PRFLX << 24 |
-    65535 << 8 | ICE_CANDIDATE_COMPONENT_DEFAULT;
+             30 << 8 | (256 - ICE_CANDIDATE_COMPONENT_DEFAULT);
 static const int STUN_ERROR_BAD_REQUEST_AS_GICE =
     STUN_ERROR_BAD_REQUEST / 256 * 100 + STUN_ERROR_BAD_REQUEST % 256;
 static const int STUN_ERROR_UNAUTHORIZED_AS_GICE =
@@ -144,6 +146,12 @@ class TestPort : public Port {
   virtual void PrepareAddress() {
     AddAddress(talk_base::SocketAddress(ip(), min_port()), "udp", true);
   }
+
+  // Exposed for testing candidate building.
+  void AddCandidateAddress(const talk_base::SocketAddress& addr) {
+    AddAddress(addr, "udp", false);
+  }
+
   virtual Connection* CreateConnection(const Candidate& remote_candidate,
                                        CandidateOrigin origin) {
     Connection* conn = new ProxyConnection(this, 0, remote_candidate);
@@ -1576,3 +1584,38 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadFingerprint) {
   EXPECT_EQ(0, port->last_stun_error_code());
 }
 
+TEST_F(PortTest, TestComputeCandidatePriority) {
+  talk_base::scoped_ptr<TestPort> port(
+      CreateTestPort(kLocalAddr1, "name", "pass"));
+  port->set_priority((90 << 24));
+  port->set_component(177);
+  port->AddCandidateAddress(SocketAddress("192.168.1.4", 1234));
+  port->AddCandidateAddress(SocketAddress("2001:db8::1234", 1234));
+  port->AddCandidateAddress(SocketAddress("fc12:3456::1234", 1234));
+  port->AddCandidateAddress(SocketAddress("::ffff:192.168.1.4", 1234));
+  port->AddCandidateAddress(SocketAddress("::192.168.1.4", 1234));
+  port->AddCandidateAddress(SocketAddress("2002::1234:5678", 1234));
+  port->AddCandidateAddress(SocketAddress("2001::1234:5678", 1234));
+  port->AddCandidateAddress(SocketAddress("fecf::1234:5678", 1234));
+  port->AddCandidateAddress(SocketAddress("3ffe::1234:5678", 1234));
+  // These should all be:
+  // (90 << 24) | ([rfc3484 pref value] << 8) | (256 - 177)
+  uint32 expected_priority_v4 = 1509957199U;
+  uint32 expected_priority_v6 = 1509959759U;
+  uint32 expected_priority_ula = 1509962319U;
+  uint32 expected_priority_v4mapped = expected_priority_v4;
+  uint32 expected_priority_v4compat = 1509949775U;
+  uint32 expected_priority_6to4 = 1509954639U;
+  uint32 expected_priority_teredo = 1509952079U;
+  uint32 expected_priority_sitelocal = 1509949775U;
+  uint32 expected_priority_6bone = 1509949775U;
+  ASSERT_EQ(expected_priority_v4, port->candidates()[0].priority());
+  ASSERT_EQ(expected_priority_v6, port->candidates()[1].priority());
+  ASSERT_EQ(expected_priority_ula, port->candidates()[2].priority());
+  ASSERT_EQ(expected_priority_v4mapped, port->candidates()[3].priority());
+  ASSERT_EQ(expected_priority_v4compat, port->candidates()[4].priority());
+  ASSERT_EQ(expected_priority_6to4, port->candidates()[5].priority());
+  ASSERT_EQ(expected_priority_teredo, port->candidates()[6].priority());
+  ASSERT_EQ(expected_priority_sitelocal, port->candidates()[7].priority());
+  ASSERT_EQ(expected_priority_6bone, port->candidates()[8].priority());
+}

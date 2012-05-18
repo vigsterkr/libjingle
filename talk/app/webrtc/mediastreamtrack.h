@@ -25,13 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_MEDIATRACKIMPL_H_
-#define TALK_APP_WEBRTC_MEDIATRACKIMPL_H_
+#ifndef TALK_APP_WEBRTC_MEDIASTREAMTRACK_H_
+#define TALK_APP_WEBRTC_MEDIASTREAMTRACK_H_
 
 #include <string>
 
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/app/webrtc/notifier.h"
 
 namespace webrtc {
 
@@ -78,4 +78,4 @@ class MediaStreamTrack : public Notifier<T> {
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_MEDIATRACKIMPL_H_
+#endif  // TALK_APP_WEBRTC_MEDIASTREAMTRACK_H_

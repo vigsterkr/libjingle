@@ -35,7 +35,10 @@
 #endif
 
 // Make sure we don't get min/max macros
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+
 #include <winsock2.h>
 #include <windows.h>
 

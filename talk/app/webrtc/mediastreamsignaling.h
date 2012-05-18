@@ -30,8 +30,8 @@
 
 #include <string>
 
-#include "talk/app/webrtc/peerconnection.h"
-#include "talk/app/webrtc/streamcollectionimpl.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
+#include "talk/app/webrtc/streamcollection.h"
 #include "talk/base/scoped_ref_ptr.h"
 #include "talk/session/phone/mediasession.h"
 

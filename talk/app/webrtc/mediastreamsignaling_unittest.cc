@@ -31,7 +31,7 @@
 #include "talk/app/webrtc/audiotrack.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
-#include "talk/app/webrtc/streamcollectionimpl.h"
+#include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"

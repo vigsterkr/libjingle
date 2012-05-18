@@ -25,12 +25,12 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/app/webrtc/peerconnectionimpl.h"
+#include "talk/app/webrtc/peerconnection.h"
 
 #include <vector>
 
 #include "talk/app/webrtc/mediastreamhandler.h"
-#include "talk/app/webrtc/streamcollectionimpl.h"
+#include "talk/app/webrtc/streamcollection.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
 #include "talk/session/phone/channelmanager.h"

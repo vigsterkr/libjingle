@@ -29,7 +29,7 @@
 
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/mediastreamhandler.h"
-#include "talk/app/webrtc/streamcollectionimpl.h"
+#include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/thread.h"
 #include "talk/base/gunit.h"

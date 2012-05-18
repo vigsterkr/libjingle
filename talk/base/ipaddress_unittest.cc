@@ -779,4 +779,104 @@ TEST(IPAddressTest, TestTruncateIP) {
   EXPECT_PRED3(CheckTruncateIP, "1111:2222:3333:4444:5555:6666:7777:8888", 0,
                "::");
 }
+
+TEST(IPAddressTest, TestCategorizeIPv6) {
+  // Test determining if an IPAddress is 6Bone/6To4/Teredo/etc.
+  // IPv4 address, should be none of these (not even v4compat/v4mapped).
+  IPAddress v4_addr(kIPv4PublicAddr);
+  EXPECT_FALSE(IPIs6Bone(v4_addr));
+  EXPECT_FALSE(IPIs6To4(v4_addr));
+  EXPECT_FALSE(IPIsSiteLocal(v4_addr));
+  EXPECT_FALSE(IPIsTeredo(v4_addr));
+  EXPECT_FALSE(IPIsULA(v4_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(v4_addr));
+  EXPECT_FALSE(IPIsV4Mapped(v4_addr));
+  // Linklocal (fe80::/16) adddress; should be none of these.
+  IPAddress linklocal_addr(kIPv6LinkLocalAddr);
+  EXPECT_FALSE(IPIs6Bone(linklocal_addr));
+  EXPECT_FALSE(IPIs6To4(linklocal_addr));
+  EXPECT_FALSE(IPIsSiteLocal(linklocal_addr));
+  EXPECT_FALSE(IPIsTeredo(linklocal_addr));
+  EXPECT_FALSE(IPIsULA(linklocal_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(linklocal_addr));
+  EXPECT_FALSE(IPIsV4Mapped(linklocal_addr));
+  // 'Normal' IPv6 address, should also be none of these.
+  IPAddress normal_addr(kIPv6PublicAddr);
+  EXPECT_FALSE(IPIs6Bone(normal_addr));
+  EXPECT_FALSE(IPIs6To4(normal_addr));
+  EXPECT_FALSE(IPIsSiteLocal(normal_addr));
+  EXPECT_FALSE(IPIsTeredo(normal_addr));
+  EXPECT_FALSE(IPIsULA(normal_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(normal_addr));
+  EXPECT_FALSE(IPIsV4Mapped(normal_addr));
+  // IPv4 mapped address (::ffff:123.123.123.123)
+  IPAddress v4mapped_addr(kIPv4MappedPublicAddr);
+  EXPECT_TRUE(IPIsV4Mapped(v4mapped_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(v4mapped_addr));
+  EXPECT_FALSE(IPIs6Bone(v4mapped_addr));
+  EXPECT_FALSE(IPIs6To4(v4mapped_addr));
+  EXPECT_FALSE(IPIsSiteLocal(v4mapped_addr));
+  EXPECT_FALSE(IPIsTeredo(v4mapped_addr));
+  EXPECT_FALSE(IPIsULA(v4mapped_addr));
+  // IPv4 compatibility address (::123.123.123.123)
+  IPAddress v4compat_addr;
+  IPFromString("::192.168.7.1", &v4compat_addr);
+  EXPECT_TRUE(IPIsV4Compatibility(v4compat_addr));
+  EXPECT_FALSE(IPIs6Bone(v4compat_addr));
+  EXPECT_FALSE(IPIs6To4(v4compat_addr));
+  EXPECT_FALSE(IPIsSiteLocal(v4compat_addr));
+  EXPECT_FALSE(IPIsTeredo(v4compat_addr));
+  EXPECT_FALSE(IPIsULA(v4compat_addr));
+  EXPECT_FALSE(IPIsV4Mapped(v4compat_addr));
+  // 6Bone address (3FFE::/16)
+  IPAddress sixbone_addr;
+  IPFromString("3FFE:123:456::789:123", &sixbone_addr);
+  EXPECT_TRUE(IPIs6Bone(sixbone_addr));
+  EXPECT_FALSE(IPIs6To4(sixbone_addr));
+  EXPECT_FALSE(IPIsSiteLocal(sixbone_addr));
+  EXPECT_FALSE(IPIsTeredo(sixbone_addr));
+  EXPECT_FALSE(IPIsULA(sixbone_addr));
+  EXPECT_FALSE(IPIsV4Mapped(sixbone_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(sixbone_addr));
+  // Unique Local Address (FC::/7)
+  IPAddress ula_addr;
+  IPFromString("FC00:123:456::789:123", &ula_addr);
+  EXPECT_TRUE(IPIsULA(ula_addr));
+  EXPECT_FALSE(IPIs6Bone(ula_addr));
+  EXPECT_FALSE(IPIs6To4(ula_addr));
+  EXPECT_FALSE(IPIsSiteLocal(ula_addr));
+  EXPECT_FALSE(IPIsTeredo(ula_addr));
+  EXPECT_FALSE(IPIsV4Mapped(ula_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(ula_addr));
+  // 6To4 Address (2002::/16)
+  IPAddress sixtofour_addr;
+  IPFromString("2002:123:456::789:123", &sixtofour_addr);
+  EXPECT_TRUE(IPIs6To4(sixtofour_addr));
+  EXPECT_FALSE(IPIs6Bone(sixtofour_addr));
+  EXPECT_FALSE(IPIsSiteLocal(sixtofour_addr));
+  EXPECT_FALSE(IPIsTeredo(sixtofour_addr));
+  EXPECT_FALSE(IPIsULA(sixtofour_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(sixtofour_addr));
+  EXPECT_FALSE(IPIsV4Mapped(sixtofour_addr));
+  // Site Local address (FEC0::/10)
+  IPAddress sitelocal_addr;
+  IPFromString("FEC0:123:456::789:123", &sitelocal_addr);
+  EXPECT_TRUE(IPIsSiteLocal(sitelocal_addr));
+  EXPECT_FALSE(IPIs6Bone(sitelocal_addr));
+  EXPECT_FALSE(IPIs6To4(sitelocal_addr));
+  EXPECT_FALSE(IPIsTeredo(sitelocal_addr));
+  EXPECT_FALSE(IPIsULA(sitelocal_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(sitelocal_addr));
+  EXPECT_FALSE(IPIsV4Mapped(sitelocal_addr));
+  // Teredo Address (2001:0000::/32)
+  IPAddress teredo_addr;
+  IPFromString("2001:0000:123:456::789:123", &teredo_addr);
+  EXPECT_TRUE(IPIsTeredo(teredo_addr));
+  EXPECT_FALSE(IPIsSiteLocal(teredo_addr));
+  EXPECT_FALSE(IPIs6Bone(teredo_addr));
+  EXPECT_FALSE(IPIs6To4(teredo_addr));
+  EXPECT_FALSE(IPIsULA(teredo_addr));
+  EXPECT_FALSE(IPIsV4Compatibility(teredo_addr));
+  EXPECT_FALSE(IPIsV4Mapped(teredo_addr));
+}
 }  // namespace talk_base

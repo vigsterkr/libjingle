@@ -33,7 +33,7 @@
 #ifndef TALK_APP_WEBRTC_PORTALLOCATORFACTORY_H_
 #define TALK_APP_WEBRTC_PORTALLOCATORFACTORY_H_
 
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/base/scoped_ptr.h"
 
 namespace cricket {

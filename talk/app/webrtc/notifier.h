@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_NOTIFIERIMPL_H_
-#define TALK_APP_WEBRTC_NOTIFIERIMPL_H_
+#ifndef TALK_APP_WEBRTC_NOTIFIER_H_
+#define TALK_APP_WEBRTC_NOTIFIER_H_
 
 #include <list>
 
@@ -70,4 +70,4 @@ class Notifier : public T {
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_NOTIFIERIMPL_H_
+#endif  // TALK_APP_WEBRTC_NOTIFIER_H_

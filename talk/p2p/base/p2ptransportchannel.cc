@@ -72,8 +72,6 @@ cricket::Port::CandidateOrigin GetOrigin(cricket::Port* port,
 int CompareConnectionCandidates(cricket::Connection* a,
                                 cricket::Connection* b) {
   // Combine local and remote preferences
-  ASSERT(a->local_candidate().priority() == a->port()->priority());
-  ASSERT(b->local_candidate().priority() == b->port()->priority());
   double a_pref = a->local_candidate().preference()
                 * a->remote_candidate().preference();
   double b_pref = b->local_candidate().preference()

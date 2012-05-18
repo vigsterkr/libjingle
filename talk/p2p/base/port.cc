@@ -202,6 +202,13 @@ Connection* Port::GetConnection(const talk_base::SocketAddress& remote_addr) {
     return NULL;
 }
 
+int Port::ComputeCandidatePriority(const talk_base::SocketAddress& address,
+                                   int type_preference) const {
+  int addr_preference = IPAddressPrecedence(address.ipaddr());
+  int p = (type_preference << 24) | (addr_preference << 8) | (256 - component_);
+  return p;
+}
+
 void Port::AddAddress(const talk_base::SocketAddress& address,
                       const std::string& protocol,
                       bool final) {
@@ -211,7 +218,7 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_type(type_);
   c.set_protocol(protocol);
   c.set_address(address);
-  c.set_priority(priority_);
+  c.set_priority(ComputeCandidatePriority(address, priority_ >> 24));
   c.set_username(username_fragment());
   c.set_password(password_);
   c.set_network_name(network_->name());

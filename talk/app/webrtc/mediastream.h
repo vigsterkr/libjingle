@@ -34,7 +34,7 @@
 #include <vector>
 
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/notifierimpl.h"
+#include "talk/app/webrtc/notifier.h"
 
 namespace webrtc {
 class AudioTrack;

@@ -31,7 +31,7 @@
 #ifndef TALK_APP_WEBRTC_FAKEPORTALLOCATORFACTORY_H_
 #define TALK_APP_WEBRTC_FAKEPORTALLOCATORFACTORY_H_
 
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/p2p/client/fakeportallocator.h"
 
 namespace webrtc {
