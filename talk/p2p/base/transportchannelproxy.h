@@ -29,6 +29,7 @@
 #define TALK_P2P_BASE_TRANSPORTCHANNELPROXY_H_
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "talk/p2p/base/transportchannel.h"
@@ -59,6 +60,15 @@ class TransportChannelProxy : public TransportChannel {
   virtual int SetOption(talk_base::Socket::Option opt, int value);
   virtual int GetError();
   virtual bool GetStats(ConnectionInfos* infos);
+  virtual bool IsDtlsActive() const;
+  virtual bool SetSrtpCiphers(const std::vector<std::string>& ciphers);
+  virtual bool GetSrtpCipher(std::string* cipher);
+  virtual bool ExportKeyingMaterial(const std::string& label,
+                            const uint8* context,
+                            size_t context_len,
+                            bool use_context,
+                            uint8* result,
+                            size_t result_len);
 
  private:
   // Catch signals from the implementation channel.  These just forward to the
@@ -74,6 +84,7 @@ class TransportChannelProxy : public TransportChannel {
   typedef std::vector<OptionPair> OptionList;
   TransportChannelImpl* impl_;
   OptionList pending_options_;
+  std::vector<std::string> pending_srtp_ciphers_;
 
   DISALLOW_EVIL_CONSTRUCTORS(TransportChannelProxy);
 };

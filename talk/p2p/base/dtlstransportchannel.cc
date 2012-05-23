@@ -99,7 +99,9 @@ DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
       worker_thread_(talk_base::Thread::Current()),
       channel_(channel),
       downward_(NULL),
-      dtls_started_(false) {
+      dtls_state_(STATE_NONE),
+      local_identity_(NULL),
+      dtls_role_(talk_base::SSL_CLIENT) {
   channel_->SignalReadableState.connect(this,
       &DtlsTransportChannelWrapper::OnReadableState);
   channel_->SignalWritableState.connect(this,
@@ -119,18 +121,78 @@ DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
 DtlsTransportChannelWrapper::~DtlsTransportChannelWrapper() {
 }
 
-bool DtlsTransportChannelWrapper::SetupDtls(talk_base::SSLIdentity* identity,
-                                            talk_base::SSLRole role,
-                                            const std::string& digest_alg,
-                                            const unsigned char* digest,
-                                            std::size_t digest_len) {
-  if (dtls_.get()) {
-    LOG(LS_WARNING) << "DTLS is already set up";
+void DtlsTransportChannelWrapper::Reset() {
+  channel_->Reset();
+  set_writable(false);
+  set_readable(false);
+
+  // Re-call SetupDtls()
+  if (!SetupDtls()) {
+    LOG(LS_ERROR) << "Error re-initializing DTLS";
+    dtls_state_ = STATE_CLOSED;
+    return;
+  }
+
+  dtls_state_ = STATE_ACCEPTED;
+}
+
+bool DtlsTransportChannelWrapper::SetLocalIdentity(talk_base::SSLIdentity*
+                                                   identity) {
+  // TODO(ekr@rtfm.com): Forbid this if Connect() has been called.
+  if (dtls_state_ != STATE_NONE) {
+    LOG(LS_ERROR) << "Can't set DTLS local identity in this state";
+    return false;
+  }
+
+  local_identity_ = identity;
+  dtls_state_ = STATE_OFFERED;
+
+  return true;
+}
+
+void DtlsTransportChannelWrapper::SetRole(TransportRole role) {
+  // TODO(ekr@rtfm.com): Forbid this if Connect() has been called.
+  ASSERT(dtls_state_ == STATE_OFFERED);
+
+  dtls_role_ = role == ROLE_CONTROLLING ? talk_base::SSL_CLIENT :
+      talk_base::SSL_SERVER;
+
+  channel_->SetRole(role);
+}
+
+bool DtlsTransportChannelWrapper::SetRemoteFingerprint(const std::string&
+                                                       digest_alg,
+                                                       const uint8* digest,
+                                                       size_t digest_len) {
+  if (dtls_state_ != STATE_OFFERED) {
+    LOG(LS_ERROR) << "Can't set DTLS remote settings in this state";
+    return false;
+  }
+
+  if (digest_alg.empty()) {
+    LOG(LS_INFO) << "Other side didn't offer DTLS";
+    dtls_state_ = STATE_NONE;
+
     return true;
   }
 
+  // At this point we know we are doing DTLS
+  remote_fingerprint_value_.SetData(digest, digest_len);
+  remote_fingerprint_algorithm_ = digest_alg;
+
+  if (!SetupDtls()) {
+    dtls_state_ = STATE_CLOSED;
+    return false;
+  }
+
+  dtls_state_ = STATE_ACCEPTED;
+  return true;
+}
+
+bool DtlsTransportChannelWrapper::SetupDtls() {
   StreamInterfaceChannel* downward =
       new StreamInterfaceChannel(worker_thread_, channel_);
+
   dtls_.reset(talk_base::SSLStreamAdapter::Create(downward));
   if (!dtls_.get()) {
     LOG(LS_ERROR) << "Failed to create DTLS adapter";
@@ -140,11 +202,14 @@ bool DtlsTransportChannelWrapper::SetupDtls(talk_base::SSLIdentity* identity,
 
   downward_ = downward;
 
-  dtls_->SetIdentity(identity->GetReference());
+  dtls_->SetIdentity(local_identity_->GetReference());
   dtls_->SetMode(talk_base::SSL_MODE_DTLS);
-  dtls_->SetServerRole(role);
+  dtls_->SetServerRole(dtls_role_);
   dtls_->SignalEvent.connect(this, &DtlsTransportChannelWrapper::OnDtlsEvent);
-  if (!dtls_->SetPeerCertificateDigest(digest_alg, digest, digest_len)) {
+  if (!dtls_->SetPeerCertificateDigest(
+          remote_fingerprint_algorithm_,
+          reinterpret_cast<unsigned char *>(remote_fingerprint_value_.data()),
+          remote_fingerprint_value_.length())) {
     LOG(LS_ERROR) << "Couldn't set DTLS certificate digest";
     return false;
   }
@@ -157,38 +222,68 @@ bool DtlsTransportChannelWrapper::SetupDtls(talk_base::SSLIdentity* identity,
     }
   }
 
-  // If we're already writable, start handshaking.
-  if (!MaybeStartDtls()) {
-    return false;
-  }
-
   LOG(LS_INFO) << "DTLS setup complete";
   return true;
 }
 
+bool DtlsTransportChannelWrapper::SetSrtpCiphers(const std::vector<std::string>&
+                                                 ciphers) {
+  if (dtls_state_ != STATE_OFFERED && dtls_state_ != STATE_ACCEPTED) {
+    return false;
+  }
+
+  srtp_ciphers_ = ciphers;
+  return true;
+}
+
+bool DtlsTransportChannelWrapper::GetSrtpCipher(std::string* cipher) {
+  if (dtls_state_ != STATE_OPEN) {
+    return false;
+  }
+
+  return dtls_->GetDtlsSrtpCipher(cipher);
+}
+
+
 // Called from upper layers to send a media packet.
 int DtlsTransportChannelWrapper::SendPacket(const char* data, size_t size,
                                             int flags) {
-  // Fail if we're doing DTLS but it's not live yet.
-  if (dtls_.get() && dtls_->GetState() != talk_base::SS_OPEN)
-    return -1;
-
-  // If we've been asked to do DTLS bypass for a SRTP packet, let's double-check
-  // that this really is a SRTP packet.
-  if (flags & PF_SRTP_BYPASS) {
-    ASSERT(!srtp_ciphers_.empty());
-    if (!IsRtpPacket(data, size)) {
-      return false;
-    }
-  }
-
-  // Send using DTLS, if it's available, and we're not doing bypass.
   int result;
-  if (!dtls_.get() || (flags & PF_SRTP_BYPASS)) {
-    result = channel_->SendPacket(data, size);
-  } else {
-    result = (dtls_->WriteAll(data, size, NULL, NULL) ==
-        talk_base::SR_SUCCESS) ? static_cast<int>(size) : -1;
+
+  switch (dtls_state_) {
+    case STATE_OFFERED:
+      // We don't know if we are doing DTLS yet, so we can't send a packet.
+      // TODO(ekr@rtfm.com): assert here?
+      result = -1;
+      break;
+
+    case STATE_ACCEPTED:
+      // Can't send data until the connection is active
+      result = -1;
+      break;
+
+      // Fall through
+    case STATE_OPEN:
+      if (flags & PF_SRTP_BYPASS) {
+        ASSERT(!srtp_ciphers_.empty());
+        if (!IsRtpPacket(data, size)) {
+          result = false;
+          break;
+        }
+
+        result = channel_->SendPacket(data, size);
+      } else {
+        result = (dtls_->WriteAll(data, size, NULL, NULL) ==
+          talk_base::SR_SUCCESS) ? static_cast<int>(size) : -1;
+      }
+      break;
+    /* Not doing DTLS */
+    case STATE_NONE:
+      result = channel_->SendPacket(data, size);
+      break;
+
+    case STATE_CLOSED:  // Can't send anything when we're closed.
+      return -1;
   }
 
   return result;
@@ -210,7 +305,7 @@ void DtlsTransportChannelWrapper::OnReadableState(TransportChannel* channel) {
   LOG(LS_VERBOSE)
       << "DTLSTransportChannelWrapper: channel readable state changed";
 
-  if (!dtls_.get() || (dtls_->GetState() == talk_base::SS_OPEN)) {
+  if (dtls_state_ == STATE_NONE || dtls_state_ == STATE_OPEN) {
     set_readable(channel_->readable());
     // Note: SignalReadableState fired by set_readable.
   }
@@ -222,20 +317,30 @@ void DtlsTransportChannelWrapper::OnWritableState(TransportChannel* channel) {
   LOG(LS_VERBOSE)
       << "DTLSTransportChannelWrapper: channel writable state changed";
 
-  if (dtls_.get()) {
-    if (!dtls_started_) {
+  switch (dtls_state_) {
+    case STATE_NONE:
+    case STATE_OPEN:
+      set_writable(channel_->writable());
+      // Note: SignalWritableState fired by set_writable.
+      break;
+
+    case STATE_OFFERED:
+      // Do nothing
+      break;
+
+    case STATE_ACCEPTED:
       if (!MaybeStartDtls()) {
         ASSERT(false);  // This should never happen.
       }
-    } else {
-      if (dtls_->GetState() == talk_base::SS_OPEN) {
-        set_writable(channel_->writable());
-        // Note: SignalWritableState fired by set_writable.
-      }
-    }
-  } else {
-    set_writable(channel_->writable());
-    // Note: SignalWritableState fired by set_writable.
+      break;
+
+    case STATE_STARTED:
+      // Do nothing
+      break;
+
+    case STATE_CLOSED:
+      // Should not happen. Do nothing
+      break;
   }
 }
 
@@ -244,44 +349,55 @@ void DtlsTransportChannelWrapper::OnReadPacket(TransportChannel* channel,
                                                int flags) {
   ASSERT(talk_base::Thread::Current() == worker_thread_);
   ASSERT(channel == channel_);
-  ASSERT(flags == 0);  // Shouldn't be doing double DTLS
+  ASSERT(flags == 0);
 
-  if (dtls_started_) {
-    // We should only get DTLS or SRTP packets; STUN's already been demuxed.
-    if (IsDtlsPacket(data, size)) {
-      // This looks like a DTLS packet.
-      if (!HandleDtlsPacket(data, size)) {
-        LOG(LS_ERROR) << "Failed to handle DTLS packet";
-        return;
-      }
-    } else {
-      // Not a DTLS packet; our handshake should be complete by now.
-      if (dtls_->GetState() != talk_base::SS_OPEN) {
-        LOG(LS_ERROR) << "Received non-DTLS packet before DTLS complete";
-        return;
-      }
-      // And it had better be a SRTP packet.
-      if (!IsRtpPacket(data, size)) {
-        LOG(LS_ERROR) << "Received unexpected non-DTLS packet";
-        return;
-      }
+  switch (dtls_state_) {
+    case STATE_NONE:
+      // We are not doing DTLS
+      SignalReadPacket(this, data, size, 0);
+      break;
 
-      // Sanity check.
-      ASSERT(!srtp_ciphers_.empty());
+    case STATE_OFFERED:
+      // Currently drop the packet, but we might in future
+      // decide to take this as evidence that the other
+      // side is ready to do DTLS and start the handshake
+      // on our end
+      LOG(LS_WARNING) << "Received packet before DTLS started";
+      break;
 
-      // Signal this upwards as a bypass packet.
-      SignalReadPacket(this, data, size, PF_SRTP_BYPASS);
-    }
-  } else if (!dtls_.get()) {
-    // This is the fallback case, where we never tried to establish DTLS.
-    SignalReadPacket(this, data, size, 0);
-  } else {
-    // TODO: Decide if this is the right thing to do.
-    // This might happen if the other side goes writable and sends its client
-    // hello before we go writable; we'll ignore it and it will retransmit.
-    // If we accepted it, we'd fail sending our server hello. However, if we
-    // end up piggybacking DTLS info on STUN, this could all change.
-    LOG(LS_WARNING) << "Received packet before DTLS started";
+    case STATE_ACCEPTED:
+    case STATE_STARTED:
+    case STATE_OPEN:
+      // We should only get DTLS or SRTP packets; STUN's already been demuxed.
+      // Is this potentially a DTLS packet?
+      if (IsDtlsPacket(data, size)) {
+        if (!HandleDtlsPacket(data, size)) {
+          LOG(LS_ERROR) << "Failed to handle DTLS packet";
+          return;
+        }
+      } else {
+        // Not a DTLS packet; our handshake should be complete by now.
+        if (dtls_state_ != STATE_OPEN) {
+          LOG(LS_ERROR) << "Received non-DTLS packet before DTLS complete";
+          return;
+        }
+
+        // And it had better be a SRTP packet.
+        if (!IsRtpPacket(data, size)) {
+          LOG(LS_ERROR) << "Received unexpected non-DTLS packet";
+          return;
+        }
+
+        // Sanity check.
+        ASSERT(!srtp_ciphers_.empty());
+
+        // Signal this upwards as a bypass packet.
+        SignalReadPacket(this, data, size, PF_SRTP_BYPASS);
+      }
+      break;
+    case STATE_CLOSED:
+      // This shouldn't be happening. Drop the packet
+      break;
   }
 }
 
@@ -295,6 +411,8 @@ void DtlsTransportChannelWrapper::OnDtlsEvent(talk_base::StreamInterface* dtls,
     if (dtls_->GetState() == talk_base::SS_OPEN) {
       // The check for OPEN shouldn't be necessary but let's make
       // sure we don't accidentally frob the state if it's closed.
+      dtls_state_ = STATE_OPEN;
+
       set_readable(true);
       set_writable(true);
     }
@@ -316,6 +434,7 @@ void DtlsTransportChannelWrapper::OnDtlsEvent(talk_base::StreamInterface* dtls,
 
     set_readable(false);
     set_writable(false);
+    dtls_state_ = STATE_CLOSED;
   }
 }
 
@@ -323,10 +442,12 @@ bool DtlsTransportChannelWrapper::MaybeStartDtls() {
   if (channel_->writable()) {
     if (dtls_->StartSSLWithPeer()) {
       LOG(LS_ERROR) << "Couldn't start DTLS handshake";
+      dtls_state_ = STATE_CLOSED;
       return false;
     }
     LOG(LS_INFO) << "DtlsTransportChannelWrapper: Started DTLS handshake";
-    dtls_started_ = true;
+
+    dtls_state_ = STATE_STARTED;
   }
   return true;
 }

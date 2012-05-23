@@ -29,9 +29,13 @@
 #define TALK_P2P_BASE_TRANSPORTCHANNEL_H_
 
 #include <string>
+#include <vector>
+
 #include "talk/base/basictypes.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/socket.h"
+#include "talk/base/sslidentity.h"
+#include "talk/base/sslstreamadapter.h"
 #include "talk/p2p/base/candidate.h"
 
 namespace cricket {
@@ -91,7 +95,7 @@ class TransportChannel : public sigslot::has_slots<> {
 
   // Attempts to send the given packet.  The return value is < 0 on failure.
   // TODO: Remove the default argument once channel code is updated.
-  virtual int SendPacket(const char *data, size_t len, int flags = 0) = 0;
+  virtual int SendPacket(const char* data, size_t len, int flags = 0) = 0;
 
   // Sets a socket option on this channel.  Note that not all options are
   // supported by all transport types.
@@ -105,17 +109,28 @@ class TransportChannel : public sigslot::has_slots<> {
     return false;
   }
 
-  // Set up the ciphers to use for DTLS-SRTP.
-  bool SetSrtpCiphers(const std::vector<std::string>& ciphers) {
+  // Is DTLS active?
+  virtual bool IsDtlsActive() const {
     return false;
   }
+
+  // Set up the ciphers to use for DTLS-SRTP.
+  virtual bool SetSrtpCiphers(const std::vector<std::string>& ciphers) {
+    return false;
+  }
+
+  // Find out which DTLS-SRTP cipher was negotiated
+  virtual bool GetSrtpCipher(std::string* cipher) {
+    return false;
+  }
+
   // Allows key material to be extracted for external encryption.
-  bool ExportKeyingMaterial(const std::string& label,
-                            const uint8* context,
-                            size_t context_len,
-                            bool use_context,
-                            uint8* result,
-                            size_t result_len) {
+  virtual bool ExportKeyingMaterial(const std::string& label,
+      const uint8* context,
+      size_t context_len,
+      bool use_context,
+      uint8* result,
+      size_t result_len) {
     return false;
   }
 

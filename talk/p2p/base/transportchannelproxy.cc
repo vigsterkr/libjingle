@@ -62,6 +62,9 @@ void TransportChannelProxy::SetImplementation(TransportChannelImpl* impl) {
        ++it) {
     impl_->SetOption(it->first, it->second);
   }
+  if (!pending_srtp_ciphers_.empty()) {
+    impl_->SetSrtpCiphers(pending_srtp_ciphers_);
+  }
   pending_options_.clear();
 }
 
@@ -93,6 +96,44 @@ bool TransportChannelProxy::GetStats(ConnectionInfos* infos) {
     return false;
   }
   return impl_->GetStats(infos);
+}
+
+bool TransportChannelProxy::IsDtlsActive() const {
+  if (!impl_) {
+    return false;
+  }
+  return impl_->IsDtlsActive();
+}
+
+bool TransportChannelProxy::SetSrtpCiphers(const std::vector<std::string>&
+                                           ciphers) {
+  pending_srtp_ciphers_ = ciphers;  // Cache so we can send later, but always
+                            // set so it stays consistent.
+  if (impl_) {
+    return impl_->SetSrtpCiphers(ciphers);
+  }
+
+  return true;
+}
+
+bool TransportChannelProxy::GetSrtpCipher(std::string* cipher) {
+  if (!impl_) {
+    return false;
+  }
+  return impl_->GetSrtpCipher(cipher);
+}
+
+bool TransportChannelProxy::ExportKeyingMaterial(const std::string& label,
+                                                 const uint8* context,
+                                                 size_t context_len,
+                                                 bool use_context,
+                                                 uint8* result,
+                                                 size_t result_len) {
+  if (!impl_) {
+    return false;
+  }
+  return impl_->ExportKeyingMaterial(label, context, context_len, use_context,
+                                     result, result_len);
 }
 
 void TransportChannelProxy::OnReadableState(TransportChannel* channel) {

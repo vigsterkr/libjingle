@@ -84,6 +84,19 @@ class TransportChannelImpl : public TransportChannel {
                    const Candidate&> SignalCandidateReady;
   virtual void OnCandidate(const Candidate& candidate) = 0;
 
+  // DTLS methods
+  // Set DTLS local identity.
+  virtual bool SetLocalIdentity(talk_base::SSLIdentity* identity) {
+    return false;
+  }
+
+  // Set DTLS Remote fingerprint. Must be after local identity set.
+  virtual bool SetRemoteFingerprint(const std::string& digest_alg,
+                            const uint8* digest,
+                            size_t digest_len) {
+    return false;
+  }
+
   // TransportChannel is forwarding this signal from PortAllocatorSession.
   sigslot::signal1<TransportChannelImpl*> SignalCandidatesAllocationDone;
 

@@ -64,7 +64,9 @@ class DtlsTestClient : public sigslot::has_slots<> {
       worker_thread_(worker_thread),
       transport_(new cricket::DtlsTransport<cricket::FakeTransport>(
           signaling_thread_, worker_thread, NULL)),
-      packet_size_(0) {
+      packet_size_(0),
+      use_dtls_srtp_(false),
+      negotiated_dtls_(false) {
     transport_->SetAsync(true);
     transport_->SignalWritableState.connect(this,
         &DtlsTestClient::OnTransportWritableState);
@@ -91,27 +93,43 @@ class DtlsTestClient : public sigslot::has_slots<> {
     }
   }
   void SetupSrtp() {
-    for (std::vector<cricket::DtlsTransportChannelWrapper*>::iterator it
-           = channels_.begin(); it != channels_.end(); ++it) {
-      std::vector<std::string> ciphers;
-      ciphers.push_back(AES_CM_128_HMAC_SHA1_80);
-      ASSERT_TRUE((*it)->SetSrtpCiphers(ciphers));
-    }
+    ASSERT(identity_.get());
+
+    use_dtls_srtp_ = true;
   }
-  void SetupDtls(bool client, DtlsTestClient* peer) {
-    ASSERT_TRUE(identity_.get() != NULL);
-    ASSERT_TRUE(peer->identity_.get() != NULL);
+  void SetupDtls() {
+    identity_.reset(talk_base::SSLIdentity::Generate(name_));
+  }
+
+  void NegotiateDtls(bool client, DtlsTestClient* peer) {
+    if (identity_.get() == NULL)
+      return;
+
+    std::string digest_alg;
     unsigned char digest[20];
     size_t digest_len;
-    ASSERT_TRUE(peer->identity_->certificate().ComputeDigest(
-        talk_base::DIGEST_SHA_1, digest, sizeof(digest), &digest_len));
+
+    if (peer->identity_.get()) {
+        ASSERT_TRUE(peer->identity_->certificate().ComputeDigest(
+            talk_base::DIGEST_SHA_1, digest, 20, &digest_len));
+        digest_alg = talk_base::DIGEST_SHA_1;
+        negotiated_dtls_ = true;
+    }
 
     for (std::vector<cricket::DtlsTransportChannelWrapper*>::iterator it
            = channels_.begin(); it != channels_.end(); ++it) {
-      ASSERT_TRUE((*it)->SetupDtls(
-          identity_.get(),
-          client ? talk_base::SSL_CLIENT : talk_base::SSL_SERVER,
-          talk_base::DIGEST_SHA_1, digest, digest_len));
+      ASSERT_TRUE((*it)->SetLocalIdentity(identity_.get()));
+      (*it)->SetRole(client ? cricket::ROLE_CONTROLLING :
+                     cricket::ROLE_CONTROLLED);
+
+      if (use_dtls_srtp_) {
+        std::vector<std::string> ciphers;
+        ciphers.push_back(AES_CM_128_HMAC_SHA1_80);
+
+        ASSERT_TRUE((*it)->SetSrtpCiphers(ciphers));
+      }
+
+      ASSERT_TRUE((*it)->SetRemoteFingerprint(digest_alg, digest, digest_len));
     }
   }
 
@@ -122,6 +140,22 @@ class DtlsTestClient : public sigslot::has_slots<> {
   }
 
   bool writable() const { return transport_->writable(); }
+
+  void CheckSrtp(const std::string& expected_cipher) {
+    for (std::vector<cricket::DtlsTransportChannelWrapper*>::iterator it =
+           channels_.begin(); it != channels_.end(); ++it) {
+      std::string cipher;
+
+      bool rv = (*it)->GetSrtpCipher(&cipher);
+      if (negotiated_dtls_ && !expected_cipher.empty()) {
+        ASSERT_TRUE(rv);
+
+        ASSERT_EQ(cipher, expected_cipher);
+      } else {
+        ASSERT_FALSE(rv);
+      }
+    }
+  }
 
   void SendPackets(size_t channel, size_t size, size_t count, bool srtp) {
     ASSERT(channel < channels_.size());
@@ -212,9 +246,10 @@ class DtlsTestClient : public sigslot::has_slots<> {
                                         const char* data, size_t size,
                                         int flags) {
     // Flags shouldn't be set on the underlying TransportChannel packets.
-    ASSERT_TRUE(flags == 0);
+    ASSERT_EQ(0, flags);
+
     // Check that non-handshake packets are DTLS data or SRTP bypass.
-    if (identity_.get() && !(data[0] >= 20 && data[0] <= 22)) {
+    if (negotiated_dtls_ && !(data[0] >= 20 && data[0] <= 22)) {
       ASSERT_TRUE(data[0] == 23 || IsRtpLeadByte(data[0]));
       if (data[0] == 23) {
         ASSERT_TRUE(VerifyEncryptedPacket(data, size));
@@ -233,6 +268,8 @@ class DtlsTestClient : public sigslot::has_slots<> {
   std::vector<cricket::DtlsTransportChannelWrapper*> channels_;
   size_t packet_size_;
   std::set<int> received_;
+  bool use_dtls_srtp_;
+  bool negotiated_dtls_;
 };
 
 
@@ -255,27 +292,35 @@ class DtlsTransportChannelTest : public testing::Test {
   void SetChannelCount(size_t channel_ct) {
     channel_ct_ = channel_ct;
   }
-  void PrepareDtls() {
-    client1_.CreateIdentity();
-    client2_.CreateIdentity();
-    use_dtls_ = true;
+  void PrepareDtls(bool c1, bool c2) {
+    if (c1) {
+      client1_.CreateIdentity();
+    }
+    if (c2) {
+      client2_.CreateIdentity();
+    }
+    if (c1 && c2)
+      use_dtls_ = true;
   }
-  void PrepareDtlsSrtp() {
-    PrepareDtls();
-    use_dtls_srtp_ = true;
+  void PrepareDtlsSrtp(bool c1, bool c2) {
+    if (!use_dtls_)
+      return;
+
+    if (c1)
+      client1_.SetupSrtp();
+    if (c2)
+      client2_.SetupSrtp();
+
+    if (c1 && c2)
+      use_dtls_srtp_ = true;
   }
 
   bool Connect() {
     client1_.SetupChannels(channel_ct_);
     client2_.SetupChannels(channel_ct_);
-    if (use_dtls_) {
-      if (use_dtls_srtp_) {
-        client1_.SetupSrtp();
-        client2_.SetupSrtp();
-      }
-      client2_.SetupDtls(false, &client1_);
-      client1_.SetupDtls(true, &client2_);
-    }
+    client2_.NegotiateDtls(false, &client1_);
+    client1_.NegotiateDtls(true, &client2_);
+
     bool rv = client1_.Connect(&client2_);
     EXPECT_TRUE(rv);
     if (!rv)
@@ -286,6 +331,14 @@ class DtlsTransportChannelTest : public testing::Test {
     if (!client2_.writable())
       return false;
 
+    if (use_dtls_srtp_) {
+      client1_.CheckSrtp(AES_CM_128_HMAC_SHA1_80);
+      client2_.CheckSrtp(AES_CM_128_HMAC_SHA1_80);
+    } else {
+      client1_.CheckSrtp("");
+      client2_.CheckSrtp("");
+    }
+
     return true;
   }
 
@@ -293,7 +346,7 @@ class DtlsTransportChannelTest : public testing::Test {
     LOG(LS_INFO) << "Expect packets, size=" << size;
     client2_.ExpectPackets(channel, size);
     client1_.SendPackets(channel, size, count, srtp);
-    EXPECT_EQ_WAIT(count, client2_.NumPacketsReceived(), 2000);
+    EXPECT_EQ_WAIT(count, client2_.NumPacketsReceived(), 10000);
   }
 
  protected:
@@ -335,7 +388,7 @@ TEST_F(DtlsTransportChannelTest, TestTransferSrtpTwoChannels) {
 // Connect with DTLS, and transfer some data.
 TEST_F(DtlsTransportChannelTest, TestTransferDtls) {
   MAYBE_SKIP_TEST(HaveDtls);
-  PrepareDtls();
+  PrepareDtls(true, true);
   ASSERT_TRUE(Connect());
   TestTransfer(0, 1000, 100, false);
 }
@@ -344,25 +397,58 @@ TEST_F(DtlsTransportChannelTest, TestTransferDtls) {
 TEST_F(DtlsTransportChannelTest, TestTransferDtlsTwoChannels) {
   MAYBE_SKIP_TEST(HaveDtls);
   SetChannelCount(2);
-  PrepareDtls();
+  PrepareDtls(true, true);
   ASSERT_TRUE(Connect());
   TestTransfer(0, 1000, 100, false);
   TestTransfer(1, 1000, 100, false);
 }
 
+// Connect with A doing DTLS and B not, and transfer some data.
+TEST_F(DtlsTransportChannelTest, TestTransferDtlsRejected) {
+  PrepareDtls(true, false);
+  ASSERT_TRUE(Connect());
+  TestTransfer(0, 1000, 100, false);
+}
+
+// Connect with B doing DTLS and A not, and transfer some data.
+TEST_F(DtlsTransportChannelTest, TestTransferDtlsNotOffered) {
+  PrepareDtls(false, true);
+  ASSERT_TRUE(Connect());
+  TestTransfer(0, 1000, 100, false);
+}
+
 // Connect with DTLS, negotiate DTLS-SRTP, and transfer SRTP using bypass.
 TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtp) {
   MAYBE_SKIP_TEST(HaveDtlsSrtp);
-  PrepareDtlsSrtp();
+  PrepareDtls(true, true);
+  PrepareDtlsSrtp(true, true);
   ASSERT_TRUE(Connect());
   TestTransfer(0, 1000, 100, true);
+}
+
+
+// Connect with DTLS. A does DTLS-SRTP but B does not.
+TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtpRejected) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  PrepareDtls(true, true);
+  PrepareDtlsSrtp(true, false);
+  ASSERT_TRUE(Connect());
+}
+
+// Connect with DTLS. B does DTLS-SRTP but A does not.
+TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtpNotOffered) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  PrepareDtls(true, true);
+  PrepareDtlsSrtp(false, true);
+  ASSERT_TRUE(Connect());
 }
 
 // Create two channels with DTLS, negotiate DTLS-SRTP, and transfer bypass SRTP.
 TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtpTwoChannels) {
   MAYBE_SKIP_TEST(HaveDtlsSrtp);
   SetChannelCount(2);
-  PrepareDtlsSrtp();
+  PrepareDtls(true, true);
+  PrepareDtlsSrtp(true, true);
   ASSERT_TRUE(Connect());
   TestTransfer(0, 1000, 100, true);
   TestTransfer(1, 1000, 100, true);
@@ -371,7 +457,8 @@ TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtpTwoChannels) {
 // Create a single channel with DTLS, and send normal data and SRTP data on it.
 TEST_F(DtlsTransportChannelTest, TestTransferDtlsSrtpDemux) {
   MAYBE_SKIP_TEST(HaveDtlsSrtp);
-  PrepareDtlsSrtp();
+  PrepareDtls(true, true);
+  PrepareDtlsSrtp(true, true);
   ASSERT_TRUE(Connect());
   TestTransfer(0, 1000, 100, false);
   TestTransfer(0, 1000, 100, true);
