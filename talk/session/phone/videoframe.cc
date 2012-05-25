@@ -173,9 +173,9 @@ bool VideoFrame::Validate(uint32 fourcc, int w, int h,
   // Scan pages to ensure they are there
   // TODO: Remove or place with a faster function such as checksum.
   for (int i = 0; i < static_cast<int>(sample_size) - 4095; i += 4096) {
-    const_cast<volatile const uint8*>(sample)[i];
+    uint8 unused = const_cast<volatile const uint8*>(sample)[i];
   }
-  const_cast<volatile const uint8*>(sample)[sample_size - 1];
+  uint8 unused = const_cast<volatile const uint8*>(sample)[sample_size - 1];
 
   return true;
 }
