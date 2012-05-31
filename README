@@ -70,9 +70,16 @@ Libjingle needs to be downloaded and patched
   * First, install Libjingle.  Since this README lives within Libjingle,
     this step is normally already done.
     Libjingle home page is here http://code.google.com/p/libjingle/
-    For example, on Windows, download
-    http://libjingle.googlecode.com/files/libjingle-0.5.2.zip
-    unzip to C:\src\
+    Libjingle can be downloaded with the following commands.
+    
+    svn checkout http://libjingle.googlecode.com/svn/trunk/ libjingle-read-only
+      OR 
+    gclient config --name trunk http://libjingle.googlecode.com/svn/trunk/
+    gclient sync --force
+
+    For gclient, you need to have depot tools installed. Depot tools can be
+    installed from
+    https://sites.google.com/a/chromium.org/dev/developers/how-tos/depottools
 
   * Second, Libjingle depends on two open-source projects, expat and srtp.
     Download expat from http://sourceforge.net/projects/expat/ to
@@ -84,9 +91,9 @@ Libjingle needs to be downloaded and patched
     talk/libjingle.scons correspondingly.
     For example, on Windows, download expat
     http://sourceforge.net/projects/expat/files/expat/2.0.1/expat-2.0.1.tar.gz
-    Unzip to C:\src\libjingle-0.5.2\talk\third_party
+    Unzip to C:\src\libjingle\talk\third_party
     Download srtp from http://srtp.cvs.sourceforge.net/srtp and untar to
-    C:\src\libjingle-0.5.2\talk\third_party\srtp
+    C:\src\libjingle\talk\third_party\srtp
 
   * Third, on Windows, copy config.h
     copy talk\third_party\srtp\config.hw talk\third_party\srtp\crypto\include\config.h
