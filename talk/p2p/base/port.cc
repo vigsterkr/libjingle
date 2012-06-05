@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "talk/base/base64.h"
+#include "talk/base/crc32.h"
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagedigest.h"
@@ -209,7 +210,22 @@ int Port::ComputeCandidatePriority(const talk_base::SocketAddress& address,
   return p;
 }
 
+// Foundation:  An arbitrary string that is the same for two candidates
+//   that have the same type, base IP address, protocol (UDP, TCP,
+//   etc.), and STUN or TURN server.  If any of these are different,
+//   then the foundation will be different.  Two candidate pairs with
+//   the same foundation pairs are likely to have similar network
+//   characteristics.  Foundations are used in the frozen algorithm.
+uint32 Port::ComputeFoundation(
+    const std::string& protocol,
+    const talk_base::SocketAddress& base_address) const {
+  std::ostringstream ost;
+  ost << type_ << base_address.ipaddr().ToString() << protocol;
+  return talk_base::ComputeCrc32(ost.str());
+}
+
 void Port::AddAddress(const talk_base::SocketAddress& address,
+                      const talk_base::SocketAddress& base_address,
                       const std::string& protocol,
                       bool final) {
   Candidate c;
@@ -223,10 +239,18 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_password(password_);
   c.set_network_name(network_->name());
   c.set_generation(generation_);
+  c.set_related_address(related_address_);
+  c.set_foundation(ComputeFoundation(protocol, base_address));
   candidates_.push_back(c);
 
-  if (final)
+  if (final) {
+    // Set related address if it's already not set. This can happen in relay
+    // scenario where related address will be set later.
+    for (size_t i = 0; i < candidates_.size(); ++i) {
+      candidates_[i].set_related_address(related_address_);
+    }
     SignalAddressReady(this);
+  }
 }
 
 void Port::AddConnection(Connection* conn) {

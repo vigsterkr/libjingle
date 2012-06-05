@@ -29,6 +29,7 @@
 
 #include <set>
 #include "talk/base/common.h"
+#include "talk/base/crc32.h"
 #include "talk/base/logging.h"
 #include "talk/p2p/base/common.h"
 #include "talk/p2p/base/relayport.h"  // For RELAY_PORT_TYPE.
@@ -396,7 +397,7 @@ void P2PTransportChannel::OnUnknownAddress(
     new_remote_candidate = Candidate(
         id, component(), ProtoToString(protocol),
         address, PRIORITY_LOCAL_STUN, remote_username, remote_password, type,
-        port->network()->name(), 0U, 0U);
+        port->network()->name(), 0U, talk_base::ComputeCrc32(id));
   }
 
   // Check for connectivity to this address. Create connections

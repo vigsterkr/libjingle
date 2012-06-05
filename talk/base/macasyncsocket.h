@@ -13,12 +13,13 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include "talk/base/asyncsocket.h"
+#include "talk/base/nethelpers.h"
 
 namespace talk_base {
 
 class MacBaseSocketServer;
 
-class MacAsyncSocket : public AsyncSocket {
+class MacAsyncSocket : public AsyncSocket, public sigslot::has_slots<> {
  public:
   MacAsyncSocket(MacBaseSocketServer* ss, int family);
   virtual ~MacAsyncSocket();
@@ -49,6 +50,10 @@ class MacAsyncSocket : public AsyncSocket {
   void EnableCallbacks();
   void DisableCallbacks();
 
+ protected:
+  void OnResolveResult(SignalThread* thread);
+  int DoConnect(const SocketAddress& addr);
+
  private:
   // Creates an async socket from an existing bsd socket
   MacAsyncSocket(MacBaseSocketServer* ss, int family, int native_socket);
@@ -76,6 +81,7 @@ class MacAsyncSocket : public AsyncSocket {
   bool disabled_;
   int error_;
   ConnState state_;
+  AsyncResolver* resolver_;
 
   DISALLOW_EVIL_CONSTRUCTORS(MacAsyncSocket);
 };

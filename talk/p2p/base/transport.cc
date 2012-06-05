@@ -85,9 +85,7 @@ Transport::Transport(talk_base::Thread* signaling_thread,
   : signaling_thread_(signaling_thread),
     worker_thread_(worker_thread), type_(type), allocator_(allocator),
     destroyed_(false), readable_(false), writable_(false),
-    connect_requested_(false), role_(ROLE_UNKNOWN), tiebreaker_(0),
-    allow_local_ips_(false) {
-}
+    connect_requested_(false), role_(ROLE_UNKNOWN), tiebreaker_(0) {}
 
 Transport::~Transport() {
   ASSERT(signaling_thread_->IsCurrent());
@@ -111,16 +109,24 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
   talk_base::CritScope cs(&crit_);
 
   // Create the entry if it does not exist
+  bool impl_exists = false;
   if (channels_.find(component) == channels_.end()) {
     impl = CreateTransportChannel(component);
     channels_[component] = ChannelMapEntry(impl);
   } else {
     impl = channels_[component].get();
+    impl_exists = true;
   }
 
   // Increase the ref count
   channels_[component].AddRef();
   destroyed_ = false;
+
+  if (impl_exists) {
+    // If this is an existing channel, we should just return it without
+    // connecting to all the signal again.
+    return impl;
+  }
 
   impl->SetRole(role_);
   impl->SetTiebreaker(tiebreaker_);
@@ -297,9 +303,6 @@ void Transport::CallChannels_w(TransportChannelFunc func) {
 }
 
 bool Transport::VerifyCandidate(const Candidate& cand, ParseError* error) {
-  if (cand.address().IsLocalIP() && !allow_local_ips_)
-    return BadParse("candidate has local IP address", error);
-
   // No address zero.
   if (cand.address().IsNil() || cand.address().IsAny()) {
     return BadParse("candidate has address of zero", error);

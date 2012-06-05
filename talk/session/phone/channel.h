@@ -42,6 +42,7 @@
 #include "talk/session/phone/mediachannel.h"
 #include "talk/session/phone/mediaengine.h"
 #include "talk/session/phone/mediamonitor.h"
+#include "talk/session/phone/mediasession.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/screencastid.h"
 #include "talk/session/phone/ssrcmuxfilter.h"
@@ -189,16 +190,23 @@ class BaseChannel
     return remote_streams_;
   }
 
+  // Used for latency measurements.
+  sigslot::signal1<BaseChannel*> SignalFirstPacketReceived;
+
  protected:
   MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
   void set_rtcp_transport_channel(TransportChannel* transport);
   bool writable() const { return writable_; }
   bool was_ever_writable() const { return was_ever_writable_; }
-  bool has_local_content() const { return has_local_content_; }
-  bool has_remote_content() const { return has_remote_content_; }
-  void set_has_local_content(bool has) { has_local_content_ = has; }
-  void set_has_remote_content(bool has) { has_remote_content_ = has; }
+  void set_local_content_direction(MediaContentDirection direction) {
+    local_content_direction_ = direction;
+  }
+  void set_remote_content_direction(MediaContentDirection direction) {
+    remote_content_direction_ = direction;
+  }
+  bool IsReadyToReceive() const;
+  bool IsReadyToSend() const;
   talk_base::Thread* signaling_thread() { return session_->signaling_thread(); }
   SrtpFilter* srtp_filter() { return &srtp_filter_; }
   bool rtcp() const { return rtcp_; }
@@ -298,9 +306,10 @@ class BaseChannel
   bool enabled_;
   bool writable_;
   bool was_ever_writable_;
-  bool has_local_content_;
-  bool has_remote_content_;
+  MediaContentDirection local_content_direction_;
+  MediaContentDirection remote_content_direction_;
   bool muted_;
+  bool has_received_packet_;
 };
 
 // VoiceChannel is a specialization that adds support for early media, DTMF,

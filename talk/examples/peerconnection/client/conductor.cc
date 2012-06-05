@@ -209,21 +209,20 @@ void Conductor::OnMessageSent(int err) {
   main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, NULL);
 }
 
+void Conductor::OnServerConnectionFailure() {
+    main_wnd_->MessageBox("Error", ("Failed to connect to " + server_).c_str(),
+                          true);
+}
+
 //
 // MainWndCallback implementation.
 //
 
-bool Conductor::StartLogin(const std::string& server, int port) {
+void Conductor::StartLogin(const std::string& server, int port) {
   if (client_->is_connected())
-    return false;
-
-  if (!client_->Connect(server, port, GetPeerName())) {
-    main_wnd_->MessageBox("Error", ("Failed to connect to " + server).c_str(),
-                          true);
-    return false;
-  }
-
-  return true;
+    return;
+  server_ = server;
+  client_->Connect(server, port, GetPeerName());
 }
 
 void Conductor::DisconnectFromServer() {

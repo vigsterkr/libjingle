@@ -482,14 +482,6 @@ class JsepTestClient
 template <typename SignalingClass>
 class P2PTestConductor : public testing::Test {
  public:
-  // Return true if session no longer is pending. I.e. if the session is active
-  // or failed.
-  bool ActivationNotPending() {
-    if (!IsInitialized()) {
-      return true;
-    }
-    return SessionActive();
-  }
   bool SessionActive() {
     return initiating_client_->SessionActive() &&
         receiving_client_->SessionActive();
@@ -562,8 +554,10 @@ class P2PTestConductor : public testing::Test {
     ASSERT_TRUE(CreateTestClients());
     EXPECT_TRUE(StartSession());
     const int kMaxWaitForActivationMs = 5000;
-    EXPECT_TRUE_WAIT(ActivationNotPending(), kMaxWaitForActivationMs);
-    EXPECT_TRUE(SessionActive());
+    // Assert true is used here since next tests are guaranteed to fail and
+    // would eat up 5 seconds.
+    ASSERT_TRUE(IsInitialized());
+    ASSERT_TRUE_WAIT(SessionActive(), kMaxWaitForActivationMs);
 
     const int kEndFrameCount = 10;
     const int kMaxWaitForFramesMs = 5000;

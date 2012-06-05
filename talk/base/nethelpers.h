@@ -50,26 +50,21 @@ class AsyncResolver : public SignalThread {
   AsyncResolver();
 
   const SocketAddress& address() const { return addr_; }
+  const std::vector<IPAddress>& addresses() const { return addresses_; }
   void set_address(const SocketAddress& addr) { addr_ = addr; }
   int error() const { return error_; }
   void set_error(int error) { error_ = error; }
 
+
  protected:
-  ~AsyncResolver();
   virtual void DoWork();
   virtual void OnWorkDone();
 
  private:
   SocketAddress addr_;
-  hostent* result_;
+  std::vector<IPAddress> addresses_;
   int error_;
 };
-
-// SafeGetHostByName functions allocate and return their result, instead of
-// using a static variable like the normal gethostbyname.
-// FreeHostEnt frees the memory allocated by SafeGetHostByName.
-hostent* SafeGetHostByName(const char* hostname, int* herrno);
-void FreeHostEnt(hostent* host);
 
 // talk_base namespaced wrappers for inet_ntop and inet_pton so we can avoid
 // the windows-native versions of these.

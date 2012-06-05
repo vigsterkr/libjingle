@@ -39,16 +39,19 @@ namespace cricket {
 
 class Candidate {
  public:
+  // TODO: Match the ordering and param list as per RFC 5245
+  // candidate-attribute syntax. http://tools.ietf.org/html/rfc5245#section-15.1
   Candidate() : component_(0), priority_(0), generation_(0), foundation_(0) {}
   Candidate(const std::string& id, int component, const std::string& protocol,
             const talk_base::SocketAddress& address, uint32 priority,
             const std::string& username, const std::string& password,
             const std::string& type, const std::string& network_name,
-            uint32 generation, int foundation)
+            uint32 generation, uint32 foundation)
       : id_(id), component_(component), protocol_(protocol), address_(address),
         priority_(priority), username_(username), password_(password),
         type_(type), network_name_(network_name), generation_(generation),
         foundation_(foundation) {}
+
   const std::string & id() const { return id_; }
   void set_id(const std::string & id) { id_ = id; }
 
@@ -104,8 +107,13 @@ class Candidate {
     ist >> generation_;
   }
 
-  int foundation() const { return foundation_; }
-  void set_foundation(int foundation) { foundation_ = foundation; }
+  uint32 foundation() const {
+    return foundation_;
+  }
+
+  void set_foundation(uint32 foundation) {
+    foundation_ = foundation;
+  }
 
   const talk_base::SocketAddress & related_address() const {
     return related_address_;
@@ -152,7 +160,7 @@ class Candidate {
   std::string type_;
   std::string network_name_;
   uint32 generation_;
-  int foundation_;
+  uint32 foundation_;
   talk_base::SocketAddress related_address_;
 };
 

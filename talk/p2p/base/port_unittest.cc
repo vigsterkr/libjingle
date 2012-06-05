@@ -26,6 +26,7 @@
  */
 
 #include "talk/base/basicpacketsocketfactory.h"
+#include "talk/base/crc32.h"
 #include "talk/base/gunit.h"
 #include "talk/base/helpers.h"
 #include "talk/base/host.h"
@@ -38,6 +39,7 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/virtualsocketserver.h"
+#include "talk/p2p/base/portproxy.h"
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/tcpport.h"
@@ -144,12 +146,13 @@ class TestPort : public Port {
   }
 
   virtual void PrepareAddress() {
-    AddAddress(talk_base::SocketAddress(ip(), min_port()), "udp", true);
+    talk_base::SocketAddress addr(ip(), min_port());
+    AddAddress(addr, addr, "udp", true);
   }
 
   // Exposed for testing candidate building.
   void AddCandidateAddress(const talk_base::SocketAddress& addr) {
-    AddAddress(addr, "udp", false);
+    AddAddress(addr, addr, "udp", false);
   }
 
   virtual Connection* CreateConnection(const Candidate& remote_candidate,
@@ -400,12 +403,16 @@ class PortTest : public testing::Test {
   }
   RelayPort* CreateRelayPort(const SocketAddress& addr,
                              ProtocolType int_proto, ProtocolType ext_proto) {
-    RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
-                                        addr.ipaddr(), 0, 0,
-                                        username_, password_);
+    RelayPort* port = CreateRelayPort(addr);
     SocketAddress addrs[] =
         { kRelayUdpIntAddr, kRelayTcpIntAddr, kRelaySslTcpIntAddr };
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));
+    return port;
+  }
+  RelayPort* CreateRelayPort(const SocketAddress& addr) {
+    RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
+                                        addr.ipaddr(), 0, 0,
+                                        username_, password_);
     // TODO: Add an external address for ext_proto, so that the
     // other side can connect to this port using a non-UDP protocol.
     port->set_ice_protocol(ice_protocol_);
@@ -1618,4 +1625,70 @@ TEST_F(PortTest, TestComputeCandidatePriority) {
   ASSERT_EQ(expected_priority_teredo, port->candidates()[6].priority());
   ASSERT_EQ(expected_priority_sitelocal, port->candidates()[7].priority());
   ASSERT_EQ(expected_priority_6bone, port->candidates()[8].priority());
+}
+
+TEST_F(PortTest, TestPortProxyProperties) {
+  talk_base::scoped_ptr<TestPort> port(
+      CreateTestPort(kLocalAddr1, "name", "pass"));
+  port->set_priority(126);
+
+  // Create a proxy port.
+  talk_base::scoped_ptr<PortProxy> proxy(new PortProxy(port->thread(),
+      port->type(), port->socket_factory(), port->network(),
+      port->ip(), port->min_port(), port->max_port(), "name", "pass"));
+  proxy->set_impl(port.get());
+  EXPECT_EQ(port->priority(), proxy->priority());
+  EXPECT_EQ(port->network(), proxy->network());
+}
+
+TEST_F(PortTest, TestRelatedAddressAndFoundation) {
+  talk_base::scoped_ptr<UDPPort> udpport(CreateUdpPort(kLocalAddr1));
+  udpport->PrepareAddress();
+  // For UDPPort, related address will be empty.
+  EXPECT_TRUE(udpport->candidates()[0].related_address().IsNil());
+  talk_base::scoped_ptr<UDPPort> udpport1(CreateUdpPort(kLocalAddr1));
+  udpport1->PrepareAddress();
+  // Compare foundation of candidates from both ports.
+  // TODO: Update this check with a STUN port which has the same
+  // base of UDP Port. This will happen once we have a common socket for all
+  // ports.
+  EXPECT_EQ(udpport->candidates()[0].foundation(),
+            udpport1->candidates()[0].foundation());
+  talk_base::scoped_ptr<TestPort> testport(
+      CreateTestPort(kLocalAddr1, "name", "pass"));
+  // Test port is behaving like a stun port, where candidate address is
+  // will have a different related address.
+  testport->set_related_address(kLocalAddr2);
+  testport->PrepareAddress();
+  // Foundation of udpport and testport must be different as their types are
+  // different, even though the same base address kLocalAddr1.
+  EXPECT_NE(udpport->candidates()[0].foundation(),
+            testport->candidates()[0].foundation());
+  EXPECT_EQ_WAIT(testport->candidates()[0].related_address().ipaddr(),
+                 kLocalAddr2.ipaddr(), kTimeout);
+  talk_base::scoped_ptr<RelayPort> relayport(CreateRelayPort(kLocalAddr2));
+  relayport->AddExternalAddress(ProtocolAddress(kRelayUdpIntAddr, PROTO_UDP));
+  relayport->AddExternalAddress(ProtocolAddress(kRelayTcpIntAddr, PROTO_TCP));
+  relayport->AddExternalAddress(
+      ProtocolAddress(kRelaySslTcpIntAddr, PROTO_SSLTCP));
+  relayport->set_related_address(kLocalAddr1);
+  relayport->AddExternalAddress(ProtocolAddress(kLocalAddr1, PROTO_UDP), true);
+  EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
+                 relayport->candidates()[0].related_address().ipaddr(),
+                 kTimeout);
+  EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
+                 relayport->candidates()[1].related_address().ipaddr(),
+                 kTimeout);
+  EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
+                 relayport->candidates()[2].related_address().ipaddr(),
+                 kTimeout);
+  EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
+                 relayport->candidates()[3].related_address().ipaddr(),
+                 kTimeout);
+  // Relay candidate base will be the candidate itself. Hence all candidates
+  // belonging to relay candidates will have different foundation.
+  EXPECT_NE(relayport->candidates()[0].foundation(),
+            relayport->candidates()[1].foundation());
+  EXPECT_NE(relayport->candidates()[2].foundation(),
+            relayport->candidates()[3].foundation());
 }

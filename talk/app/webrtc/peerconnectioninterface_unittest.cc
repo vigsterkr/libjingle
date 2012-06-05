@@ -28,6 +28,7 @@
 #include <string>
 
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
+#include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/roapmessages.h"
@@ -35,6 +36,7 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/gunit.h"
+#include "talk/session/phone/mediasession.h"
 
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
@@ -73,27 +75,14 @@ static std::string CreateShutdownMessage() {
   return shutdown.Serialize();
 }
 
-// Remove all but the first crypto from |sdp|. Only "a=crypto:0" is accepted in
-// an answer.
-static void RemoveAllButFirstCrypto(std::string* sdp) {
-  const char kCrypto[] = "a=crypto:";
-  const char kReplaceCrypto[] = "a=xcrypto:";
-  const char kKeepCrypto[] = "a=xcrypto:0";
-  const char kGoodCrypto[] = "a=crypto:0";
-
-  talk_base::replace_substrs(kCrypto, strlen(kCrypto), kReplaceCrypto,
-                             strlen(kReplaceCrypto), sdp);
-  talk_base::replace_substrs(kKeepCrypto, strlen(kKeepCrypto),
-                             kGoodCrypto, strlen(kGoodCrypto), sdp);
-}
-
 // Create a ROAP answer message.
 // The session description in the answer is set to the same as in the offer.
 static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
   webrtc::RoapOffer offer(msg);
   EXPECT_TRUE(offer.Parse());
   std::string answer_sdp = offer.SessionDescription();
-  RemoveAllButFirstCrypto(&answer_sdp);
+  // We should keep only one crypto in answer, but with BUNDLE enabled there
+  // will be only one in the offer already.
 
   webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
                             offer.session_token(), offer.response_token(),
@@ -106,6 +95,21 @@ static std::string CreateOkMessage(const RoapMessageBase& msg) {
   webrtc::RoapOk ok(msg.offer_session_id(), "dummy_session",
                     msg.session_token(), msg.response_token(), msg.seq());
   return ok.Serialize();
+}
+
+// Gets the first ssrc of given content type from the ContentInfo.
+static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
+  if (!content_info || !ssrc) {
+    return false;
+  }
+  const cricket::MediaContentDescription* media_desc =
+      static_cast<const cricket::MediaContentDescription*> (
+          content_info->description);
+  if (!media_desc || media_desc->streams().empty()) {
+    return false;
+  }
+  *ssrc = media_desc->streams().begin()->first_ssrc();
+  return true;
 }
 
 class MockPeerConnectionObserver : public PeerConnectionObserver {
@@ -286,6 +290,22 @@ class PeerConnectionInterfaceTest : public testing::Test {
     pc_->CommitStreamChanges();
   }
 
+  void AddAudioVideoStream(const std::string& stream_label,
+                           const std::string& audio_track_label,
+                           const std::string& video_track_label) {
+    // Create a local stream.
+    scoped_refptr<LocalMediaStreamInterface> stream(
+        pc_factory_->CreateLocalMediaStream(stream_label));
+    scoped_refptr<LocalAudioTrackInterface> audio_track(
+        pc_factory_->CreateLocalAudioTrack(audio_track_label, NULL));
+    stream->AddTrack(audio_track.get());
+    scoped_refptr<LocalVideoTrackInterface> video_track(
+        pc_factory_->CreateLocalVideoTrack(video_track_label, NULL));
+    stream->AddTrack(video_track.get());
+    pc_->RemoveStream(stream_label);
+    pc_->AddStream(stream);
+    pc_->CommitStreamChanges();
+  }
 
   void WaitForRoapOffer() {
     EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpWaiting, observer_.sdp_state_,
@@ -294,7 +314,6 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_EQ_WAIT(RoapMessageBase::kOffer, observer_.last_message_.type(),
                    kTimeout);
   }
-
 
   scoped_refptr<FakePortAllocatorFactory> port_allocator_factory_;
   scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
@@ -470,4 +489,53 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
                                         answer));
 
   EXPECT_TRUE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
+}
+
+// Test that the CreateOffer and CreatAnswer will fail if the track labels are
+// not unique.
+TEST_F(PeerConnectionInterfaceTest, Jsep_CreateOfferAnswerWithInvalidStream) {
+  CreatePeerConnection();
+  // Create a regular offer for the CreateAnswer test later.
+  scoped_ptr<SessionDescriptionInterface> offer(
+      pc_->CreateOffer(webrtc::MediaHints()));
+  EXPECT_TRUE(offer.get() != NULL);
+
+  // Create a local stream with audio&video tracks having same label.
+  AddAudioVideoStream(kStreamLabel1, "track_label", "track_label");
+
+  // Test CreateOffer
+  EXPECT_EQ(NULL, pc_->CreateOffer(webrtc::MediaHints()));
+
+  // Test CreateAnswer
+  EXPECT_EQ(NULL, pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
+}
+
+// Test that we will get different SSRCs for each tracks in the offer and answer
+// we created.
+TEST_F(PeerConnectionInterfaceTest, Jsep_SsrcInOfferAnswer) {
+  CreatePeerConnection();
+  // Create a local stream with audio&video tracks having different labels.
+  AddAudioVideoStream(kStreamLabel1, "audio_label", "video_label");
+
+  // Test CreateOffer
+  scoped_ptr<SessionDescriptionInterface> offer(
+      pc_->CreateOffer(webrtc::MediaHints()));
+  int audio_ssrc = 0;
+  int video_ssrc = 0;
+  EXPECT_TRUE(GetFirstSsrc(GetFirstAudioContent(offer->description()),
+                           &audio_ssrc));
+  EXPECT_TRUE(GetFirstSsrc(GetFirstVideoContent(offer->description()),
+                           &video_ssrc));
+  EXPECT_NE(audio_ssrc, video_ssrc);
+
+  // Test CreateAnswer
+  scoped_ptr<SessionDescriptionInterface> answer(
+      pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
+  audio_ssrc = 0;
+  video_ssrc = 0;
+  EXPECT_TRUE(GetFirstSsrc(GetFirstAudioContent(answer->description()),
+                           &audio_ssrc));
+  EXPECT_TRUE(GetFirstSsrc(GetFirstVideoContent(answer->description()),
+                           &video_ssrc));
+  EXPECT_NE(audio_ssrc, video_ssrc);
 }

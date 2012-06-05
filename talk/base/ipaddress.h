@@ -118,8 +118,7 @@ class IPAddress {
   } u_;
 };
 
-bool IPFromHostEnt(hostent* hostEnt, IPAddress* out);
-bool IPFromHostEnt(hostent* hostEnt, int idx, IPAddress* out);
+bool IPFromAddrInfo(struct addrinfo* info, IPAddress* out);
 bool IPFromString(const std::string& str, IPAddress* out);
 bool IPIsAny(const IPAddress& ip);
 bool IPIsLoopback(const IPAddress& ip);

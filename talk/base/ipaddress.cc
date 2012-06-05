@@ -188,34 +188,17 @@ in_addr ExtractMappedAddress(const in6_addr& in6) {
   return ipv4;
 }
 
-bool IPFromHostEnt(hostent* host_ent, IPAddress* out) {
-  return IPFromHostEnt(host_ent, 0, out);
-}
-
-bool IPFromHostEnt(hostent* host_ent, int idx, IPAddress* out) {
-  if (!out || (idx < 0)) {
+bool IPFromAddrInfo(struct addrinfo* info, IPAddress* out) {
+  if (!info || !info->ai_addr) {
     return false;
   }
-  char** requested_address = host_ent->h_addr_list;
-  // Find the idx-th element (while checking for null, which terminates the
-  // list of addresses).
-  while (*requested_address && idx) {
-    idx--;
-    requested_address++;
-  }
-  if (!(*requested_address)) {
-    return false;
-  }
-
-  if (host_ent->h_addrtype == AF_INET) {
-    in_addr ip;
-    ip.s_addr = *reinterpret_cast<uint32*>(*requested_address);
-    *out = IPAddress(ip);
+  if (info->ai_addr->sa_family == AF_INET) {
+    sockaddr_in* addr = reinterpret_cast<sockaddr_in*>(info->ai_addr);
+    *out = IPAddress(addr->sin_addr);
     return true;
-  } else if (host_ent->h_addrtype == AF_INET6) {
-    in6_addr ip;
-    ::memcpy(&ip.s6_addr, *requested_address, host_ent->h_length);
-    *out = IPAddress(ip);
+  } else if (info->ai_addr->sa_family == AF_INET6) {
+    sockaddr_in6* addr = reinterpret_cast<sockaddr_in6*>(info->ai_addr);
+    *out = IPAddress(addr->sin6_addr);
     return true;
   }
   return false;

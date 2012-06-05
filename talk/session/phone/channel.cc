@@ -34,7 +34,6 @@
 #include "talk/p2p/base/transportchannel.h"
 #include "talk/session/phone/channelmanager.h"
 #include "talk/session/phone/mediamessages.h"
-#include "talk/session/phone/mediasessionclient.h"
 #include "talk/session/phone/rtcpmuxfilter.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/typingmonitor.h"
@@ -77,7 +76,8 @@ enum {
   MSG_SETCAPTURER = 30,
   MSG_ISSCREENCASTING = 32,
   MSG_SCREENCASTFPS = 33,
-  MSG_SETSCREENCASTFACTORY = 34
+  MSG_SETSCREENCASTFACTORY = 34,
+  MSG_FIRSTPACKETRECEIVED = 35
 };
 
 // TODO: use the device manager for creation of screen capturers when
@@ -331,6 +331,14 @@ static bool RemoteStateChanged(BaseSession::State state,
   }
 }
 
+static bool IsReceiveContentDirection(MediaContentDirection direction) {
+  return direction == MD_SENDRECV || direction == MD_RECVONLY;
+}
+
+static bool IsSendContentDirection(MediaContentDirection direction) {
+  return direction == MD_SENDRECV || direction == MD_SENDONLY;
+}
+
 BaseChannel::BaseChannel(talk_base::Thread* thread,
                          MediaEngineInterface* media_engine,
                          MediaChannel* media_channel, BaseSession* session,
@@ -346,9 +354,10 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       enabled_(false),
       writable_(false),
       was_ever_writable_(false),
-      has_local_content_(false),
-      has_remote_content_(false),
-      muted_(false) {
+      local_content_direction_(MD_INACTIVE),
+      remote_content_direction_(MD_INACTIVE),
+      muted_(false),
+      has_received_packet_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   LOG(LS_INFO) << "Created channel for " << content_name;
 }
@@ -464,6 +473,20 @@ void BaseChannel::set_rtcp_transport_channel(TransportChannel* channel) {
           this, &BaseChannel::OnChannelRead);
     }
   }
+}
+
+bool BaseChannel::IsReadyToReceive() const {
+  // Receive data if we are enabled and have local content,
+  return enabled() && IsReceiveContentDirection(local_content_direction_);
+}
+
+bool BaseChannel::IsReadyToSend() const {
+  // Send outgoing data if we are enabled, have local and remote content,
+  // and we have had some form of connectivity.
+  return enabled() &&
+         IsReceiveContentDirection(remote_content_direction_) &&
+         IsSendContentDirection(local_content_direction_) &&
+         was_ever_writable();
 }
 
 bool BaseChannel::SendPacket(talk_base::Buffer* packet) {
@@ -601,6 +624,11 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
 }
 
 void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
+  if (!has_received_packet_) {
+    has_received_packet_ = true;
+    signaling_thread()->Post(this, MSG_FIRSTPACKETRECEIVED);
+  }
+
   // Protect ourselvs against crazy data.
   if (!ValidPacket(rtcp, packet)) {
     LOG(LS_ERROR) << "Dropping incoming " << content_name_ << " "
@@ -988,6 +1016,7 @@ bool BaseChannel::SetBaseLocalContent_w(const MediaContentDescription* content,
     ret &= media_channel()->SetRecvRtpHeaderExtensions(
         content->rtp_header_extensions());
   }
+  set_local_content_direction(content->direction());
   return ret;
 }
 
@@ -1003,6 +1032,7 @@ bool BaseChannel::SetBaseRemoteContent_w(const MediaContentDescription* content,
     ret &= media_channel()->SetSendRtpHeaderExtensions(
         content->rtp_header_extensions());
   }
+  set_remote_content_direction(content->direction());
   return ret;
 }
 
@@ -1051,6 +1081,10 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
       PacketMessageData* data = static_cast<PacketMessageData*>(pmsg->pdata);
       SendPacket(pmsg->message_id == MSG_RTCPPACKET, &data->packet);
       delete data;  // because it is Posted
+      break;
+    }
+    case MSG_FIRSTPACKETRECEIVED: {
+      SignalFirstPacketReceived(this);
       break;
     }
   }
@@ -1229,14 +1263,14 @@ void VoiceChannel::OnChannelRead(TransportChannel* channel,
 void VoiceChannel::ChangeState() {
   // Render incoming data if we're the active call, and we have the local
   // content. We receive data on the default channel and multiplexed streams.
-  bool recv = enabled() && has_local_content();
+  bool recv = IsReadyToReceive();
   if (!media_channel()->SetPlayout(recv)) {
     SendLastMediaError();
   }
 
   // Send outgoing data if we're the active call, we have the remote content,
   // and we have had some form of connectivity.
-  bool send = enabled() && has_remote_content() && was_ever_writable();
+  bool send = IsReadyToSend();
   SendFlags send_flag = send ? SEND_MICROPHONE : SEND_NOTHING;
   if (!media_channel()->SetSend(send_flag)) {
     LOG(LS_ERROR) << "Failed to SetSend " << send_flag << " on voice channel";
@@ -1275,7 +1309,6 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start receiving.
   if (ret) {
-    set_has_local_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set local voice description";
@@ -1322,7 +1355,6 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start sending.
   if (ret) {
-    set_has_remote_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set remote voice description";
@@ -1566,7 +1598,7 @@ void VideoChannel::SetScreenCaptureFactory(
 void VideoChannel::ChangeState() {
   // Render incoming data if we're the active call, and we have the local
   // content. We receive data on the default channel and multiplexed streams.
-  bool recv = enabled() && has_local_content();
+  bool recv = IsReadyToReceive();
   if (!media_channel()->SetRender(recv)) {
     LOG(LS_ERROR) << "Failed to SetRender on video channel";
     // TODO: Report error back to server.
@@ -1574,7 +1606,7 @@ void VideoChannel::ChangeState() {
 
   // Send outgoing data if we're the active call, we have the remote content,
   // and we have had some form of connectivity.
-  bool send = enabled() && has_remote_content() && was_ever_writable();
+  bool send = IsReadyToSend();
   if (!media_channel()->SetSend(send)) {
     LOG(LS_ERROR) << "Failed to SetSend on video channel";
     // TODO: Report error back to server.
@@ -1625,7 +1657,6 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start receiving.
   if (ret) {
-    set_has_local_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set local video description";
@@ -1671,7 +1702,6 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start sending.
   if (ret) {
-    set_has_remote_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set remote video description";
@@ -1865,7 +1895,6 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       SetScreenCaptureFactoryMessageData* data =
           static_cast<SetScreenCaptureFactoryMessageData*>(pmsg->pdata);
       SetScreenCaptureFactory_w(data->screencapture_factory);
-      break;
     }
     default:
       BaseChannel::OnMessage(pmsg);
@@ -2027,7 +2056,6 @@ bool DataChannel::SetLocalContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start receiving.
   if (ret) {
-    set_has_local_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set local data description";
@@ -2069,7 +2097,6 @@ bool DataChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   // If everything worked, see if we can start sending.
   if (ret) {
-    set_has_remote_content(true);
     ChangeState();
   } else {
     LOG(LS_WARNING) << "Failed to set remote data description";
@@ -2080,14 +2107,14 @@ bool DataChannel::SetRemoteContent_w(const MediaContentDescription* content,
 void DataChannel::ChangeState() {
   // Render incoming data if we're the active call, and we have the local
   // content. We receive data on the default channel and multiplexed streams.
-  bool recv = enabled() && has_local_content();
+  bool recv = IsReadyToReceive();
   if (!media_channel()->SetReceive(recv)) {
     LOG(LS_ERROR) << "Failed to SetReceive on data channel";
   }
 
   // Send outgoing data if we're the active call, we have the remote content,
   // and we have had some form of connectivity.
-  bool send = enabled() && has_remote_content() && was_ever_writable();
+  bool send = IsReadyToSend();
   if (!media_channel()->SetSend(send)) {
     LOG(LS_ERROR) << "Failed to SetSend on data channel";
   }

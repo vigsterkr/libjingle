@@ -288,8 +288,6 @@ class BaseSession : public sigslot::has_slots<>,
     }
   }
 
-  void set_allow_local_ips(bool allow);
-
   // Returns the current state of the session.  See the enum above for details.
   // Each time the state changes, we will fire this signal.
   State state() const { return state_; }
@@ -372,6 +370,8 @@ class BaseSession : public sigslot::has_slots<>,
   // time.  If this does not occur, we signal an error.
   virtual void OnTransportWritable(Transport* transport) {
   }
+  virtual void OnTransportReadable(Transport* transport) {
+  }
 
   // Called when a transport signals that it has new candidates.
   virtual void OnTransportProxyCandidatesReady(TransportProxy* proxy,
@@ -440,9 +440,6 @@ class BaseSession : public sigslot::has_slots<>,
   bool initiator_;
   const SessionDescription* local_description_;
   SessionDescription* remote_description_;
-  // This is transport-specific but required so much by unit tests
-  // that it's much easier to put it here.
-  bool allow_local_ips_;
   bool transport_muxed_;
   uint64 ice_tiebreaker_;
   // This flag will be set to true after the first role switch. This flag

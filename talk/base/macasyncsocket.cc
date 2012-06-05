@@ -31,7 +31,8 @@ MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int family)
       current_callbacks_(0),
       disabled_(false),
       error_(0),
-      state_(CS_CLOSED) {
+      state_(CS_CLOSED),
+      resolver_(NULL) {
   Initialize(family);
 }
 
@@ -82,24 +83,51 @@ int MacAsyncSocket::Bind(const SocketAddress& address) {
   return err;
 }
 
-// Connect to a remote address.
-int MacAsyncSocket::Connect(const SocketAddress& address) {
-  SocketAddress addr2(address);
-  if (addr2.IsUnresolved()) {
-    LOG(LS_VERBOSE) << "Resolving addr in MacAsyncSocket::Connect";
-    // TODO: Convert to using AsyncResolver
-    if (!addr2.ResolveIP(false, &error_)) {
-      return SOCKET_ERROR;
-    }
+void MacAsyncSocket::OnResolveResult(SignalThread* thread) {
+  if (thread != resolver_) {
+    return;
   }
+  int error = resolver_->error();
+  if (error == 0) {
+    error = DoConnect(resolver_->address());
+  } else {
+    Close();
+  }
+  if (error) {
+    error_ = error;
+    SignalCloseEvent(this, error_);
+  }
+}
+
+// Connect to a remote address.
+int MacAsyncSocket::Connect(const SocketAddress& addr) {
+  // TODO: Consolidate all the connect->resolve->doconnect implementations.
+  if (state_ != CS_CLOSED) {
+    SetError(EALREADY);
+    return SOCKET_ERROR;
+  }
+  if (addr.IsUnresolved()) {
+    LOG(LS_VERBOSE) << "Resolving addr in MacAsyncSocket::Connect";
+    resolver_ = new AsyncResolver();
+    resolver_->set_address(addr);
+    resolver_->SignalWorkDone.connect(this,
+                                      &MacAsyncSocket::OnResolveResult);
+    resolver_->Start();
+    state_ = CS_CONNECTING;
+    return 0;
+  }
+  return DoConnect(addr);
+}
+
+int MacAsyncSocket::DoConnect(const SocketAddress& addr) {
   if (!valid()) {
-    Initialize(addr2.family());
+    Initialize(addr.family());
     if (!valid())
       return SOCKET_ERROR;
   }
 
   sockaddr_storage saddr;
-  size_t len = addr2.ToSockAddrStorage(&saddr);
+  size_t len = addr.ToSockAddrStorage(&saddr);
   int result = ::connect(native_socket_, reinterpret_cast<sockaddr*>(&saddr),
                          len);
 
@@ -233,6 +261,11 @@ int MacAsyncSocket::Close() {
     socket_ = NULL;
   }
 
+  if (resolver_) {
+    resolver_->Destroy(false);
+    resolver_ = NULL;
+  }
+
   native_socket_ = INVALID_SOCKET;  // invalidates the socket
   error_ = 0;
   state_ = CS_CLOSED;
@@ -289,7 +322,8 @@ MacAsyncSocket::MacAsyncSocket(MacBaseSocketServer* ss, int family,
       current_callbacks_(0),
       disabled_(false),
       error_(0),
-      state_(CS_CLOSED) {
+      state_(CS_CLOSED),
+      resolver_(NULL) {
   Initialize(family);
 }
 

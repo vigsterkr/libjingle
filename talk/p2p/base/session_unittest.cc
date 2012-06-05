@@ -984,7 +984,6 @@ class TestClient : public sigslot::has_slots<> {
 
     session = created_session;
     session->set_current_protocol(start_protocol);
-    session->set_allow_local_ips(true);
     session->SignalState.connect(this, &TestClient::OnSessionState);
     session->SignalError.connect(this, &TestClient::OnSessionError);
     session->SignalRemoteDescriptionUpdate.connect(

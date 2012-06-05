@@ -53,10 +53,6 @@
 
 namespace talk_base {
 
-// Address family constants for STUN (see RFC 5389).
-static const int kStunFamilyIPv4 = 1;
-static const int kStunFamilyIPv6 = 2;
-
 SocketAddress::SocketAddress() {
   Clear();
 }
@@ -215,56 +211,12 @@ bool SocketAddress::IsLoopbackIP() const {
                                0 == strcmp(hostname_.c_str(), "localhost"));
 }
 
-bool SocketAddress::IsLocalIP() const {
-  if (IsLoopbackIP())
-    return true;
-
-  std::vector<IPAddress> ips;
-  if (IPIsUnspec(ip_)) {
-    if (!hostname_.empty()
-        && (0 == stricmp(hostname_.c_str(), GetHostname().c_str()))) {
-      return true;
-    }
-  } else if (GetLocalIPs(&ips)) {
-    for (size_t i = 0; i < ips.size(); ++i) {
-      if (ips[i] == ip_) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 bool SocketAddress::IsPrivateIP() const {
   return IPIsPrivate(ip_);
 }
 
 bool SocketAddress::IsUnresolvedIP() const {
   return IPIsUnspec(ip_) && !literal_ && !hostname_.empty();
-}
-
-bool SocketAddress::ResolveIP(bool force, int* error) {
-  if (hostname_.empty()) {
-    // nothing to resolve
-  } else if (!force && !IsUnresolvedIP()) {
-    // already resolved
-  } else {
-    LOG_F(LS_VERBOSE) << "(" << hostname_ << ")";
-    int errcode = 0;
-    if (hostent* pHost = SafeGetHostByName(hostname_.c_str(), &errcode)) {
-      if (IPFromHostEnt(pHost, &ip_)) {
-        LOG_F(LS_VERBOSE) << "(" << hostname_ << ") resolved to: "
-                          << ip_.ToString();
-      }
-      FreeHostEnt(pHost);
-    } else {
-      LOG_F(LS_ERROR) << "(" << hostname_ << ") err: " << errcode;
-    }
-    if (error) {
-      *error = errcode;
-    }
-  }
-  return (!IPIsUnspec(ip_));
 }
 
 bool SocketAddress::operator==(const SocketAddress& addr) const {
@@ -398,38 +350,6 @@ uint32 SocketAddress::StringToIP(const std::string& hostname) {
   uint32 ip = 0;
   StringToIP(hostname, &ip);
   return ip;
-}
-
-std::string SocketAddress::GetHostname() {
-  char hostname[256];
-  if (gethostname(hostname, ARRAY_SIZE(hostname)) == 0)
-    return hostname;
-  return "";
-}
-
-bool SocketAddress::GetLocalIPs(std::vector<IPAddress>* ips) {
-  if (!ips) {
-    return false;
-  }
-  ips->clear();
-
-  const std::string hostname = SocketAddress::GetHostname();
-  if (hostname.empty())
-    return false;
-
-  int errcode;
-  if (hostent* pHost = SafeGetHostByName(hostname.c_str(), &errcode)) {
-    for (int i = 0; pHost->h_addr_list[i]; ++i) {
-      IPAddress ip;
-      if (IPFromHostEnt(pHost, i, &ip)) {
-        ips->push_back(ip);
-      }
-    }
-    FreeHostEnt(pHost);
-    return !ips->empty();
-  }
-  LOG(LS_ERROR) << "gethostbyname err: " << errcode;
-  return false;
 }
 
 bool SocketAddressFromSockAddrStorage(const sockaddr_storage& addr,

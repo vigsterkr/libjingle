@@ -254,29 +254,6 @@ TEST(SocketAddressTest, TestToFromSockAddrStorage) {
   EXPECT_FALSE(SocketAddressFromSockAddrStorage(addr_storage, NULL));
 }
 
-TEST(SocketAddressTest, TestGoodResolve) {
-  SocketAddress addr("localhost", 5678);
-  int error;
-  EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_TRUE(addr.ResolveIP(false, &error));
-  EXPECT_EQ(0, error);
-  EXPECT_FALSE(addr.IsUnresolvedIP());
-  EXPECT_TRUE(addr.IsLoopbackIP());
-  EXPECT_EQ(IPAddress(INADDR_LOOPBACK), addr.ipaddr());
-  EXPECT_EQ(5678, addr.port());
-  EXPECT_EQ("localhost", addr.hostname());
-  EXPECT_EQ("localhost:5678", addr.ToString());
-}
-
-TEST(SocketAddressTest, TestBadResolve) {
-  SocketAddress addr("address.bad", 5678);
-  int error;
-  EXPECT_TRUE(addr.IsUnresolvedIP());
-  EXPECT_FALSE(addr.ResolveIP(false, &error));
-  EXPECT_NE(0, error);
-  EXPECT_TRUE(addr.IsUnresolvedIP());
-}
-
 bool AreEqual(const SocketAddress& addr1,
               const SocketAddress& addr2) {
   return addr1 == addr2 && addr2 == addr1 &&

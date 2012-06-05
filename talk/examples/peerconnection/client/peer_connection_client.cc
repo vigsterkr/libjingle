@@ -62,6 +62,7 @@ talk_base::AsyncSocket* CreateClientSocket(int family) {
 
 PeerConnectionClient::PeerConnectionClient()
   : callback_(NULL),
+    resolver_(NULL),
     state_(NOT_CONNECTED),
     my_id_(-1) {
 }
@@ -104,7 +105,7 @@ void PeerConnectionClient::RegisterObserver(
   callback_ = callback;
 }
 
-bool PeerConnectionClient::Connect(const std::string& server, int port,
+void PeerConnectionClient::Connect(const std::string& server, int port,
                                    const std::string& client_name) {
   ASSERT(!server.empty());
   ASSERT(!client_name.empty());
@@ -112,46 +113,61 @@ bool PeerConnectionClient::Connect(const std::string& server, int port,
   if (state_ != NOT_CONNECTED) {
     LOG(WARNING)
         << "The client must not be connected before you can call Connect()";
-    return false;
+    callback_->OnServerConnectionFailure();
+    return;
   }
 
-  if (server.empty() || client_name.empty())
-    return false;
+  if (server.empty() || client_name.empty()) {
+    callback_->OnServerConnectionFailure();
+    return;
+  }
 
   if (port <= 0)
     port = kDefaultServerPort;
 
   server_address_.SetIP(server);
   server_address_.SetPort(port);
+  client_name_ = client_name;
 
   if (server_address_.IsUnresolved()) {
-    int errcode = 0;
-    hostent* h = talk_base::SafeGetHostByName(
-          server_address_.hostname().c_str(), &errcode);
-    if (!h) {
-      LOG(LS_ERROR) << "Failed to resolve host name: "
-                    << server_address_.hostname();
-      return false;
-    } else {
-      server_address_.SetResolvedIP(
-          ntohl(*reinterpret_cast<uint32*>(h->h_addr_list[0])));
-      talk_base::FreeHostEnt(h);
-    }
+    state_ = RESOLVING;
+    resolver_ = new talk_base::AsyncResolver();
+    resolver_->SignalWorkDone.connect(this,
+                                      &PeerConnectionClient::OnResolveResult);
+    resolver_->set_address(server_address_);
+    resolver_->Start();
+  } else {
+    DoConnect();
   }
+}
 
+void PeerConnectionClient::OnResolveResult(talk_base::SignalThread *t) {
+  if (resolver_->error() != 0) {
+    callback_->OnServerConnectionFailure();
+    resolver_->Destroy(false);
+    resolver_ = NULL;
+    state_ = NOT_CONNECTED;
+  } else {
+    server_address_ = resolver_->address();
+    DoConnect();
+  }
+}
+
+void PeerConnectionClient::DoConnect() {
   control_socket_.reset(CreateClientSocket(server_address_.ipaddr().family()));
   hanging_get_.reset(CreateClientSocket(server_address_.ipaddr().family()));
   InitSocketSignals();
   char buffer[1024];
   sprintfn(buffer, sizeof(buffer),
-           "GET /sign_in?%s HTTP/1.0\r\n\r\n", client_name.c_str());
+           "GET /sign_in?%s HTTP/1.0\r\n\r\n", client_name_.c_str());
   onconnect_data_ = buffer;
 
   bool ret = ConnectControlSocket();
   if (ret)
     state_ = SIGNING_IN;
-
-  return ret;
+  if (!ret) {
+    callback_->OnServerConnectionFailure();
+  }
 }
 
 bool PeerConnectionClient::SendToPeer(int peer_id, const std::string& message) {
@@ -216,6 +232,10 @@ void PeerConnectionClient::Close() {
   hanging_get_->Close();
   onconnect_data_.clear();
   peers_.clear();
+  if (resolver_ != NULL) {
+    resolver_->Destroy(false);
+    resolver_ = NULL;
+  }
   my_id_ = -1;
   state_ = NOT_CONNECTED;
 }

@@ -93,6 +93,16 @@ class PortAllocatorSessionProxy : public PortAllocatorSession {
   virtual void StopGetAllPorts();
   virtual bool IsGettingAllPorts();
 
+  virtual void set_generation(uint32 generation) {
+    ASSERT(impl_ != NULL);
+    impl_->set_generation(generation);
+  }
+
+  virtual uint32 generation() {
+    ASSERT(impl_ != NULL);
+    return impl_->generation();
+  }
+
  private:
   void OnPortReady(PortAllocatorSession* session, Port* port);
   void OnCandidatesReady(PortAllocatorSession* session,

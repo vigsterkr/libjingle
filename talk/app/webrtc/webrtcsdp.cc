@@ -104,6 +104,10 @@ static const char kAttributeRtpmap[] = "rtpmap";
 static const char kAttributeRtcp[] = "rtcp";
 static const char kAttributeIceUfrag[] = "ice-ufrag";
 static const char kAttributeIcePwd[] = "ice-pwd";
+static const char kAttributeSendOnly[] ="sendonly";
+static const char kAttributeRecvOnly[] ="recvonly";
+static const char kAttributeSendRecv[] ="sendrecv";
+static const char kAttributeInactive[] ="inactive";
 
 // Candidate
 static const char kCandidateHost[] = "host";
@@ -137,6 +141,8 @@ static const char kMediaTypeAudio[] = "audio";
 static const char kMediaPortPlaceholder = 1;
 static const char kMediaProtocolAvpf[] = "RTP/AVPF";
 static const char kMediaProtocolSavpf[] = "RTP/SAVPF";
+static const char kDefaultAddress[] = "0.0.0.0";
+static const char kDefaultPort[] = "1";
 
 // Default Video resolution.
 // TODO: Implement negotiation of video resolution.
@@ -360,6 +366,8 @@ static int GetCandidatePreferenceFromType(const std::string& type) {
 // pass it down via SessionDescription.
 static bool GetDefaultDestination(const std::vector<Candidate>& candidates,
     int component_id, std::string* port, std::string* ip) {
+  *port = kDefaultPort;
+  *ip = kDefaultAddress;
   int current_preference = kPreferenceUnknown;
   for (std::vector<Candidate>::const_iterator it = candidates.begin();
        it != candidates.end(); ++it) {
@@ -449,7 +457,7 @@ static void GetCandidatesByMindex(const SessionDescriptionInterface& desci,
 std::string SdpSerialize(const JsepSessionDescription& jdesc) {
   std::string sdp = SdpSerializeSessionDescription(jdesc);
 
-  std::string sdp_with_candiates;
+  std::string sdp_with_candidates;
   size_t pos = 0;
   std::string line;
   int mline_index = -1;
@@ -458,24 +466,19 @@ std::string SdpSerialize(const JsepSessionDescription& jdesc) {
       ++mline_index;
       std::vector<Candidate> candidates;
       GetCandidatesByMindex(jdesc, mline_index, &candidates);
-      if (candidates.size() > 0) {
-        // Media line may append other lines inside the
-        // UpdateMediaDefaultDestination call, so add the kLineBreak here first.
-        line.append(kLineBreak);
-        UpdateMediaDefaultDestination(candidates, &line);
-        sdp_with_candiates.append(line);
-        // Build the a=candidate lines.
-        BuildCandidate(candidates, &sdp_with_candiates);
-      } else {
-        // Copy old line to new sdp without change.
-        AddLine(line, &sdp_with_candiates);
-      }
+      // Media line may append other lines inside the
+      // UpdateMediaDefaultDestination call, so add the kLineBreak here first.
+      line.append(kLineBreak);
+      UpdateMediaDefaultDestination(candidates, &line);
+      sdp_with_candidates.append(line);
+      // Build the a=candidate lines.
+      BuildCandidate(candidates, &sdp_with_candidates);
     } else {
       // Copy old line to new sdp without change.
-      AddLine(line, &sdp_with_candiates);
+      AddLine(line, &sdp_with_candidates);
     }
   }
-  sdp = sdp_with_candiates;
+  sdp = sdp_with_candidates;
 
   return sdp;
 }
@@ -771,6 +774,25 @@ void BuildMediaDescription(const ContentInfo* content_info,
     os << kSdpDelimiterColon << transport_info->ice_pwd;
     AddLine(os.str(), message);
   }
+
+  // RFC 3264
+  // a=sendrecv || a=sendonly || a=sendrecv || a=inactive
+  switch (media_desc->direction()) {
+    case cricket::MD_INACTIVE:
+      InitAttrLine(kAttributeInactive, &os);
+      break;
+    case cricket::MD_SENDONLY:
+      InitAttrLine(kAttributeSendOnly, &os);
+      break;
+    case cricket::MD_RECVONLY:
+      InitAttrLine(kAttributeRecvOnly, &os);
+      break;
+    case cricket::MD_SENDRECV:
+    default:
+      InitAttrLine(kAttributeSendRecv, &os);
+      break;
+  }
+  AddLine(os.str(), message);
 
   // RFC 3388
   // mid-attribute      = "a=mid:" identification-tag
@@ -1197,6 +1219,14 @@ bool ParseContent(const std::string& message,
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
+    } else if (HasAttribute(line, kAttributeSendOnly)) {
+      media_desc->set_direction(cricket::MD_SENDONLY);
+    } else if (HasAttribute(line, kAttributeRecvOnly)) {
+      media_desc->set_direction(cricket::MD_RECVONLY);
+    } else if (HasAttribute(line, kAttributeInactive)) {
+      media_desc->set_direction(cricket::MD_INACTIVE);
+    } else if (HasAttribute(line, kAttributeSendRecv)) {
+      media_desc->set_direction(cricket::MD_SENDRECV);
     } else {
       // Only parse lines that we are interested of.
       LOG(LS_INFO) << "Ignored line: " << line;

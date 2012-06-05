@@ -1026,18 +1026,22 @@ bool WebRtcVoiceEngine::SetConferenceMode(bool enable) {
 #endif
 
   LOG(LS_INFO) << (enable ? "Enabling" : "Disabling")
-               << " Conference Mode noise reduction";
+               << " Conference Mode audio processing";
 
-  // We always configure noise suppression on, so just toggle the mode.
-  const webrtc::NsModes ns_mode = enable ? webrtc::kNsConference
-                                         : webrtc::kNsDefault;
-  if (voe_wrapper_->processing()->SetNsStatus(true, ns_mode) == -1) {
-    LOG_RTCERR2(SetNsStatus, true, ns_mode);
+  // Both noise suppression and echo cancellation are user-options, so preserve
+  // the enable state and just toggle the mode.
+  bool ns;
+  webrtc::NsModes ns_mode;
+  if (voe_wrapper_->processing()->GetNsStatus(ns, ns_mode) == -1) {
+    LOG_RTCERR0(GetNsStatus);
+    return false;
+  }
+  ns_mode = enable ? webrtc::kNsConference : webrtc::kNsDefault;
+  if (voe_wrapper_->processing()->SetNsStatus(ns, ns_mode) == -1) {
+    LOG_RTCERR2(SetNsStatus, ns, ns_mode);
     return false;
   }
 
-  // Echo-cancellation is a user-option, so preserve the enable state and
-  // just toggle the mode.
   bool aec;
   webrtc::EcModes ec_mode;
   if (voe_wrapper_->processing()->GetEcStatus(aec, ec_mode) == -1) {

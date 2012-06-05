@@ -82,8 +82,8 @@ class PortAllocatorSession : public sigslot::has_slots<> {
                    const std::vector<Candidate>&> SignalCandidatesReady;
   sigslot::signal1<PortAllocatorSession*> SignalCandidatesAllocationDone;
 
-  uint32 generation() { return generation_; }
-  void set_generation(uint32 generation) { generation_ = generation; }
+  virtual uint32 generation() { return generation_; }
+  virtual void set_generation(uint32 generation) { generation_ = generation; }
   sigslot::signal1<PortAllocatorSession*> SignalDestroyed;
 
  protected:

@@ -88,6 +88,7 @@ TEST(SystemInfoTest, CpuMaxCpuSpeed) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "MaxCpuSpeed: " << info.GetMaxCpuSpeed();
   EXPECT_GT(info.GetMaxCpuSpeed(), 0);
+  EXPECT_LT(info.GetMaxCpuSpeed(), 100000);  // 100 Ghz
 }
 
 // Tests current cpu clockrate.
@@ -95,6 +96,7 @@ TEST(SystemInfoTest, CpuCurCpuSpeed) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "MaxCurSpeed: " << info.GetCurCpuSpeed();
   EXPECT_GT(info.GetCurCpuSpeed(), 0);
+  EXPECT_LT(info.GetMaxCpuSpeed(), 100000);
 }
 
 // Tests physical memory size.

@@ -93,7 +93,7 @@ class DtlsTestClient : public sigslot::has_slots<> {
     }
   }
   void SetupSrtp() {
-    ASSERT(identity_.get());
+    ASSERT(identity_.get() != NULL);
 
     use_dtls_srtp_ = true;
   }
@@ -107,7 +107,7 @@ class DtlsTestClient : public sigslot::has_slots<> {
 
     std::string digest_alg;
     unsigned char digest[20];
-    size_t digest_len;
+    size_t digest_len = 0;
 
     if (peer->identity_.get()) {
         ASSERT_TRUE(peer->identity_->certificate().ComputeDigest(

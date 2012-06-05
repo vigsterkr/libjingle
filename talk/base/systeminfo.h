@@ -58,7 +58,7 @@ class SystemInfo {
   int GetCpuStepping();
   // Return size of CPU cache in bytes.  Uses largest available cache (L3).
   int GetCpuCacheSize();
-  // Estimated speed of the CPUs, in MHz.
+  // Estimated speed of the CPUs, in MHz.  e.g. 2400 for 2.4 GHz
   int GetMaxCpuSpeed();
   int GetCurCpuSpeed();
   // Total amount of physical memory, in bytes.

@@ -849,6 +849,56 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_TRUE(media_channel1_->sending());
   }
 
+  // Test that changing the MediaContentDirection in the local and remote
+  // session description start playout and sending at the right time.
+  void TestMediaContentDirection() {
+    CreateChannels(0, 0);
+    typename T::Content content1;
+    CreateContent(0, kPcmuCodec, kH264Codec, &content1);
+    typename T::Content content2;
+    CreateContent(0, kPcmuCodec, kH264Codec, &content2);
+    // Set |content2| to be InActive.
+    content2.set_direction(cricket::MD_INACTIVE);
+
+    EXPECT_TRUE(channel1_->Enable(true));
+    EXPECT_TRUE(channel2_->Enable(true));
+    EXPECT_FALSE(media_channel1_->playout());
+    EXPECT_FALSE(media_channel1_->sending());
+    EXPECT_FALSE(media_channel2_->playout());
+    EXPECT_FALSE(media_channel2_->sending());
+
+    EXPECT_TRUE(channel1_->SetLocalContent(&content1, CA_OFFER));
+    EXPECT_TRUE(channel2_->SetRemoteContent(&content1, CA_OFFER));
+    EXPECT_TRUE(channel2_->SetLocalContent(&content2, CA_PRANSWER));
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content2, CA_PRANSWER));
+    session1_.Connect(&session2_);
+
+    EXPECT_TRUE(media_channel1_->playout());
+    EXPECT_FALSE(media_channel1_->sending());  // remote InActive
+    EXPECT_FALSE(media_channel2_->playout());  // local InActive
+    EXPECT_FALSE(media_channel2_->sending());  // local InActive
+
+    // Update |content2| to be RecvOnly.
+    content2.set_direction(cricket::MD_RECVONLY);
+    EXPECT_TRUE(channel2_->SetLocalContent(&content2, CA_PRANSWER));
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content2, CA_PRANSWER));
+
+    EXPECT_TRUE(media_channel1_->playout());
+    EXPECT_TRUE(media_channel1_->sending());
+    EXPECT_TRUE(media_channel2_->playout());  // local RecvOnly
+    EXPECT_FALSE(media_channel2_->sending());  // local RecvOnly
+
+    // Update |content2| to be SendRecv.
+    content2.set_direction(cricket::MD_SENDRECV);
+    EXPECT_TRUE(channel2_->SetLocalContent(&content2, CA_ANSWER));
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content2, CA_ANSWER));
+
+    EXPECT_TRUE(media_channel1_->playout());
+    EXPECT_TRUE(media_channel1_->sending());
+    EXPECT_TRUE(media_channel2_->playout());
+    EXPECT_TRUE(media_channel2_->sending());
+  }
+
   // Test setting up a call.
   void TestCallSetup() {
     CreateChannels(0, 0);
@@ -1788,6 +1838,10 @@ TEST_F(VoiceChannelTest, TestPlayoutAndSendingStates) {
   Base::TestPlayoutAndSendingStates();
 }
 
+TEST_F(VoiceChannelTest, TestMediaContentDirection) {
+  Base::TestMediaContentDirection();
+}
+
 TEST_F(VoiceChannelTest, TestCallSetup) {
   Base::TestCallSetup();
 }
@@ -2120,6 +2174,10 @@ TEST_F(VideoChannelTest, TestPlayoutAndSendingStates) {
   Base::TestPlayoutAndSendingStates();
 }
 
+TEST_F(VideoChannelTest, TestMediaContentDirection) {
+  Base::TestMediaContentDirection();
+}
+
 TEST_F(VideoChannelTest, TestCallSetup) {
   Base::TestCallSetup();
 }
@@ -2381,6 +2439,10 @@ TEST_F(DataChannelTest, TestChangeStreamParamsInContent) {
 
 TEST_F(DataChannelTest, TestPlayoutAndSendingStates) {
   Base::TestPlayoutAndSendingStates();
+}
+
+TEST_F(DataChannelTest, TestMediaContentDirection) {
+  Base::TestMediaContentDirection();
 }
 
 TEST_F(DataChannelTest, TestCallSetup) {

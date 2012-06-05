@@ -116,7 +116,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // A value in [0,2**32-1] that indicates the priority for this port
   // versus other ports on this client.  (Larger indicates more
   // priorty.)
-  uint32 priority() const { return priority_; }
+  virtual uint32 priority() const { return priority_; }
   void set_priority(uint32 priority) { priority_ = priority; }
 
   // Methods to set/get ICE role and tiebreaker values.
@@ -126,11 +126,19 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void set_tiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
   uint64 tiebreaker() { return tiebreaker_; }
 
+  void set_related_address(const talk_base::SocketAddress& address) {
+    related_address_ = address;
+  }
+
+  const talk_base::SocketAddress& related_address() const {
+    return related_address_;
+  }
+
   // Identifies the port type.
   const std::string& type() const { return type_; }
 
   // Identifies network that this port was allocated on.
-  talk_base::Network* network() { return network_; }
+  virtual talk_base::Network* network() { return network_; }
 
   // Identifies the generation that this port was created in.
   uint32 generation() { return generation_; }
@@ -269,6 +277,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
  protected:
   // Fills in the local address of the port.
   void AddAddress(const talk_base::SocketAddress& address,
+                  const talk_base::SocketAddress& base_address,
                   const std::string& protocol, bool final);
 
   // Adds the given connection to the list.  (Deleting removes them.)
@@ -303,6 +312,8 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Called when a new address is added, to figure out its candidate's priority.
   int ComputeCandidatePriority(const talk_base::SocketAddress& address,
                                int type_preference) const;
+  uint32 ComputeFoundation(const std::string& protocol,
+                           const talk_base::SocketAddress& base_address) const;
 
   talk_base::Thread* thread_;
   talk_base::PacketSocketFactory* factory_;
@@ -315,6 +326,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   int component_;
   uint32 priority_;
   uint32 generation_;
+  talk_base::SocketAddress related_address_;
   // In order to establish a connection to this Port (so that real data can be
   // sent through), the other side must send us a STUN binding request that is
   // authenticated with this username_fragment and password.

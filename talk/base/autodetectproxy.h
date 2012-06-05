@@ -41,6 +41,7 @@ namespace talk_base {
 // AutoDetectProxy
 ///////////////////////////////////////////////////////////////////////////////
 
+class AsyncResolver;
 class AsyncSocket;
 
 class AutoDetectProxy : public SignalThread {
@@ -77,11 +78,14 @@ class AutoDetectProxy : public SignalThread {
   void OnConnectEvent(AsyncSocket * socket);
   void OnReadEvent(AsyncSocket * socket);
   void OnCloseEvent(AsyncSocket * socket, int error);
+  void OnResolveResult(SignalThread* thread);
+  void DoConnect();
 
  private:
   std::string agent_;
   std::string server_url_;
   ProxyInfo proxy_;
+  AsyncResolver* resolver_;
   AsyncSocket* socket_;
   int next_;
 

@@ -50,7 +50,8 @@ class AutoDetectProxyTest : public testing::Test, public sigslot::has_slots<> {
               const std::string &path,
               const std::string &host,
               uint16 port,
-              bool secure) {
+              bool secure,
+              bool startnow) {
     auto_detect_proxy_ = new AutoDetectProxy(user_agent);
     EXPECT_TRUE(auto_detect_proxy_ != NULL);
     if (!auto_detect_proxy_) {
@@ -62,13 +63,36 @@ class AutoDetectProxyTest : public testing::Test, public sigslot::has_slots<> {
     auto_detect_proxy_->SignalWorkDone.connect(
         this,
         &AutoDetectProxyTest::OnWorkDone);
-    auto_detect_proxy_->Start();
+    if (startnow) {
+      auto_detect_proxy_->Start();
+    }
     return true;
   }
 
   bool Run(int timeout_ms) {
     EXPECT_TRUE_WAIT(done_, timeout_ms);
     return done_;
+  }
+
+  void SetProxy(const SocketAddress& proxy) {
+    auto_detect_proxy_->set_proxy(proxy);
+  }
+
+  void Start() {
+    auto_detect_proxy_->Start();
+  }
+
+  void TestCopesWithProxy(const SocketAddress& proxy) {
+    // Tests that at least autodetect doesn't crash for a given proxy address.
+    ASSERT_TRUE(Create(kUserAgent,
+                       kPath,
+                       kHost,
+                       kPort,
+                       kSecure,
+                       false));
+    SetProxy(proxy);
+    Start();
+    ASSERT_TRUE(Run(kTimeoutMs));
   }
 
  private:
@@ -85,6 +109,22 @@ class AutoDetectProxyTest : public testing::Test, public sigslot::has_slots<> {
   bool done_;
 };
 
+TEST_F(AutoDetectProxyTest, TestDetectUnresolvedProxy) {
+  TestCopesWithProxy(talk_base::SocketAddress("localhost", 9999));
+}
+
+TEST_F(AutoDetectProxyTest, TestDetectUnresolvableProxy) {
+  TestCopesWithProxy(talk_base::SocketAddress("invalid", 9999));
+}
+
+TEST_F(AutoDetectProxyTest, TestDetectIPv6Proxy) {
+  TestCopesWithProxy(talk_base::SocketAddress("::1", 9999));
+}
+
+TEST_F(AutoDetectProxyTest, TestDetectIPv4Proxy) {
+  TestCopesWithProxy(talk_base::SocketAddress("127.0.0.1", 9999));
+}
+
 // Test that proxy detection completes successfully. (Does not actually verify
 // the correct detection result since we don't know what proxy to expect on an
 // arbitrary machine.)
@@ -93,7 +133,8 @@ TEST_F(AutoDetectProxyTest, TestProxyDetection) {
                      kPath,
                      kHost,
                      kPort,
-                     kSecure));
+                     kSecure,
+                     true));
   ASSERT_TRUE(Run(kTimeoutMs));
 }
 

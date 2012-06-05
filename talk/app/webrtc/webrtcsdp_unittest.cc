@@ -98,6 +98,7 @@ static const char kSdpFullString[] =
     "raddr 192.168.1.5 rport 2348 "
     "generation 0\r\n"
     "a=ice-ufrag:ufrag_voice\r\na=ice-pwd:pwd_voice\r\n"
+    "a=sendrecv\r\n"
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
@@ -126,6 +127,7 @@ static const char kSdpFullString[] =
     "a=candidate:1 1 udp 2130706432 74.125.224.39 3457 typ relay "
     "generation 0\r\n"
     "a=ice-ufrag:ufrag_video\r\na=ice-pwd:pwd_video\r\n"
+    "a=sendrecv\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
@@ -147,7 +149,10 @@ static const char kSdpString[] =
     "s=\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/SAVPF 103 104\r\n"
+    "c=IN IP4 0.0.0.0\r\n"
+    "a=rtcp:1 IN IP4 0.0.0.0\r\n"
     "a=ice-ufrag:ufrag_voice\r\na=ice-pwd:pwd_voice\r\n"
+    "a=sendrecv\r\n"
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
@@ -161,7 +166,10 @@ static const char kSdpString[] =
     "a=ssrc:4 mslabel:local_stream_2\r\n"
     "a=ssrc:4 label:local_audio_2\r\n"
     "m=video 1 RTP/SAVPF 120\r\n"
+    "c=IN IP4 0.0.0.0\r\n"
+    "a=rtcp:1 IN IP4 0.0.0.0\r\n"
     "a=ice-ufrag:ufrag_video\r\na=ice-pwd:pwd_video\r\n"
+    "a=sendrecv\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
@@ -210,12 +218,47 @@ static const uint32 kVideoTrack3Ssrc = 5;
 // Helper functions
 
 // Add some extra |newlines| to the |message| after |line|.
-void InjectAfter(const std::string& line,
-                 const std::string& newlines,
-                 std::string* message) {
+static void InjectAfter(const std::string& line,
+                        const std::string& newlines,
+                        std::string* message) {
   const std::string tmp = line + newlines;
   talk_base::replace_substrs(line.c_str(), line.length(),
                              tmp.c_str(), tmp.length(), message);
+}
+
+static void Replace(const std::string& line,
+                    const std::string& newlines,
+                    std::string* message) {
+  talk_base::replace_substrs(line.c_str(), line.length(),
+                             newlines.c_str(), newlines.length(), message);
+}
+
+static bool ReplaceAndTryToParse(const char* search, const char* replace) {
+  JsepSessionDescription desc;
+  std::string sdp = kSdpFullString;
+  Replace(search, replace, &sdp);
+  return webrtc::SdpDeserialize(sdp, &desc);
+}
+
+static void ReplaceDirection(cricket::MediaContentDirection direction,
+                             std::string* message) {
+  std::string new_direction;
+  switch (direction) {
+    case cricket::MD_INACTIVE:
+      new_direction = "a=inactive";
+      break;
+    case cricket::MD_SENDONLY:
+      new_direction = "a=sendonly";
+      break;
+    case cricket::MD_RECVONLY:
+      new_direction = "a=recvonly";
+      break;
+    case cricket::MD_SENDRECV:
+    default:
+      new_direction = "a=sendrecv";
+      break;
+  }
+  Replace("a=sendrecv", new_direction, message);
 }
 
 // WebRtcSdpTest
@@ -226,6 +269,7 @@ class WebRtcSdpTest : public testing::Test {
     // AudioContentDescription
     talk_base::scoped_ptr<AudioContentDescription> audio(
         new AudioContentDescription());
+    audio_desc_ = audio.get();
     audio->set_rtcp_mux(true);
     StreamParams audio_stream1;
     audio_stream1.name = kAudioTrackLabel1;
@@ -249,6 +293,7 @@ class WebRtcSdpTest : public testing::Test {
     // VideoContentDescription
     talk_base::scoped_ptr<VideoContentDescription> video(
         new VideoContentDescription());
+    video_desc_ = video.get();
     StreamParams video_stream1;
     video_stream1.name = kVideoTrackLabel1;
     video_stream1.cname = kStream1Cname;
@@ -423,6 +468,10 @@ class WebRtcSdpTest : public testing::Test {
     EXPECT_EQ(ac1->type, ac2->type);
     EXPECT_EQ(vc1->type, vc2->type);
 
+    // content direction
+    EXPECT_EQ(acd1->direction(), acd2->direction());
+    EXPECT_EQ(vcd1->direction(), vcd2->direction());
+
     // rtcp_mux
     EXPECT_EQ(acd1->rtcp_mux(), acd2->rtcp_mux());
     EXPECT_EQ(vcd1->rtcp_mux(), vcd2->rtcp_mux());
@@ -553,14 +602,6 @@ class WebRtcSdpTest : public testing::Test {
     return true;
   }
 
-  bool ReplaceAndTryToParse(const char* search, const char* replace) {
-    JsepSessionDescription desc;
-    std::string sdp = kSdpFullString;
-    talk_base::replace_substrs(search, strlen(search), replace,
-        strlen(replace), &sdp);
-    return webrtc::SdpDeserialize(sdp, &desc);
-  }
-
   // Disable the ice-ufrag and ice-pwd in given |sdp| message by replacing
   // them with invalid keywords so that the parser will just ignore them.
   bool RemoveCandidateUfragPwd(std::string* sdp) {
@@ -606,8 +647,45 @@ class WebRtcSdpTest : public testing::Test {
     return true;
   }
 
+  bool TestSerializeDirection(cricket::MediaContentDirection direction) {
+    audio_desc_->set_direction(direction);
+    video_desc_->set_direction(direction);
+    std::string new_sdp = kSdpFullString;
+    ReplaceDirection(direction, &new_sdp);
+
+    if (!jdesc_.Initialize(desc_.Copy(),
+                           jdesc_.session_id(),
+                           jdesc_.session_version())) {
+      return false;
+    }
+    std::string message = webrtc::SdpSerialize(jdesc_);
+    EXPECT_EQ(new_sdp, message);
+    return true;
+  }
+
+  bool TestDeserializeDirection(cricket::MediaContentDirection direction) {
+    std::string new_sdp = kSdpFullString;
+    ReplaceDirection(direction, &new_sdp);
+    JsepSessionDescription new_jdesc;
+
+    EXPECT_TRUE(webrtc::SdpDeserialize(new_sdp,
+                                       &new_jdesc));
+
+    audio_desc_->set_direction(direction);
+    video_desc_->set_direction(direction);
+    if (!jdesc_.Initialize(desc_.Copy(),
+                           jdesc_.session_id(),
+                           jdesc_.session_version())) {
+      return false;
+    }
+    EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, new_jdesc));
+    return true;
+  }
+
  protected:
   SessionDescription desc_;
+  AudioContentDescription* audio_desc_;
+  VideoContentDescription* video_desc_;
   Candidates candidates_;
   talk_base::scoped_ptr<IceCandidateInterface> jcandidate_;
   JsepSessionDescription jdesc_;
@@ -647,6 +725,18 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBundle) {
               "a=group:BUNDLE audio_content_name video_content_name\r\n",
               &sdp_with_bundle);
   EXPECT_EQ(sdp_with_bundle, message);
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithRecvOnlyContent) {
+  EXPECT_TRUE(TestSerializeDirection(cricket::MD_RECVONLY));
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithSendOnlyContent) {
+  EXPECT_TRUE(TestSerializeDirection(cricket::MD_SENDONLY));
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithInactiveContent) {
+  EXPECT_TRUE(TestSerializeDirection(cricket::MD_INACTIVE));
 }
 
 TEST_F(WebRtcSdpTest, SerializeCandidates) {
@@ -712,6 +802,18 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithUfragPwd) {
   EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_ufrag_pwd,
                                      &jdesc_with_ufrag_pwd));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_ufrag_pwd));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRecvOnlyContent) {
+  EXPECT_TRUE(TestDeserializeDirection(cricket::MD_RECVONLY));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithSendOnlyContent) {
+  EXPECT_TRUE(TestDeserializeDirection(cricket::MD_SENDONLY));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithInactiveContent) {
+  EXPECT_TRUE(TestDeserializeDirection(cricket::MD_INACTIVE));
 }
 
 TEST_F(WebRtcSdpTest, SdpDeserializeCandidate) {

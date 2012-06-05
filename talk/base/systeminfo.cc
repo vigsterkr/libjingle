@@ -133,7 +133,7 @@ SystemInfo::SystemInfo()
 #error "Unknown architecture."
 #endif
 
-#ifdef WIN32
+#if defined(WIN32)
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   logical_cpus_ = si.dwNumberOfProcessors;
@@ -191,9 +191,10 @@ SystemInfo::SystemInfo()
   // See /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors.
   // The one in /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq is more
   // accurate. We use it as our cpu speed when it is available.
+  // cpuinfo_max_freq is measured in KHz and requires conversion to MHz.
   int max_freq = talk_base::ReadCpuMaxFreq();
   if (max_freq > 0) {
-    cpu_speed_ = max_freq;
+    cpu_speed_ = max_freq / 1000;
   }
 #endif
 // For L2 CacheSize see also
@@ -298,8 +299,7 @@ int SystemInfo::GetMaxCpuSpeed() {
   if (cpu_speed_) {
     return cpu_speed_;
   }
-
-#ifdef WIN32
+#if defined(WIN32)
   HKEY key;
   static const WCHAR keyName[] =
       L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0";

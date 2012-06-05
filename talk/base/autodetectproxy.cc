@@ -28,6 +28,7 @@
 #include "talk/base/autodetectproxy.h"
 #include "talk/base/httpcommon.h"
 #include "talk/base/httpcommon-inl.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/proxydetect.h"
 
 namespace talk_base {
@@ -48,10 +49,13 @@ static void SaveStringToStack(char *dst,
 }
 
 AutoDetectProxy::AutoDetectProxy(const std::string& user_agent)
-    : agent_(user_agent), socket_(NULL), next_(0) {
+    : agent_(user_agent), resolver_(NULL), socket_(NULL), next_(0) {
 }
 
 AutoDetectProxy::~AutoDetectProxy() {
+  if (resolver_) {
+    resolver_->Destroy(false);
+  }
 }
 
 void AutoDetectProxy::DoWork() {
@@ -135,6 +139,25 @@ void AutoDetectProxy::OnMessage(Message *msg) {
   }
 }
 
+void AutoDetectProxy::OnResolveResult(SignalThread* thread) {
+  if (thread != resolver_) {
+    return;
+  }
+  int error = resolver_->error();
+  if (error == 0) {
+    LOG(LS_VERBOSE) << "Resolved " << proxy_.address << " to "
+                    << resolver_->address();
+    proxy_.address = resolver_->address();
+    DoConnect();
+  } else {
+    LOG(LS_INFO) << "Failed to resolve " << resolver_->address();
+    resolver_->Destroy(false);
+    resolver_ = NULL;
+    proxy_.address = SocketAddress();
+    Thread::Current()->Post(this, MSG_TIMEOUT);
+  }
+}
+
 void AutoDetectProxy::Next() {
   if (TEST_ORDER[next_] >= PROXY_UNKNOWN) {
     Complete(PROXY_UNKNOWN);
@@ -150,22 +173,46 @@ void AutoDetectProxy::Next() {
     Thread::Current()->Dispose(socket_);
     socket_ = NULL;
   }
+  int timeout = 2000;
+  if (proxy_.address.IsUnresolvedIP()) {
+    // Launch an asyncresolver. This thread will spin waiting for it.
+    timeout += 2000;
+    if (!resolver_) {
+      resolver_ = new AsyncResolver();
+    }
+    resolver_->set_address(proxy_.address);
+    resolver_->SignalWorkDone.connect(this,
+                                      &AutoDetectProxy::OnResolveResult);
+    resolver_->Start();
+  } else {
+    DoConnect();
+  }
+  Thread::Current()->PostDelayed(timeout, this, MSG_TIMEOUT);
+}
 
+void AutoDetectProxy::DoConnect() {
+  if (resolver_) {
+    resolver_->Destroy(false);
+    resolver_ = NULL;
+  }
   socket_ =
       Thread::Current()->socketserver()->CreateAsyncSocket(
           proxy_.address.family(), SOCK_STREAM);
+  if (!socket_) {
+    LOG(LS_VERBOSE) << "Unable to create socket for " << proxy_.address;
+    return;
+  }
   socket_->SignalConnectEvent.connect(this, &AutoDetectProxy::OnConnectEvent);
   socket_->SignalReadEvent.connect(this, &AutoDetectProxy::OnReadEvent);
   socket_->SignalCloseEvent.connect(this, &AutoDetectProxy::OnCloseEvent);
   socket_->Connect(proxy_.address);
-
-  // Timeout after 2 seconds
-  Thread::Current()->PostDelayed(2000, this, MSG_TIMEOUT);
 }
 
 void AutoDetectProxy::Complete(ProxyType type) {
   Thread::Current()->Clear(this, MSG_TIMEOUT);
-  socket_->Close();
+  if (socket_) {
+    socket_->Close();
+  }
 
   proxy_.type = type;
   LoggingSeverity sev = (proxy_.type == PROXY_UNKNOWN) ? LS_ERROR : LS_INFO;

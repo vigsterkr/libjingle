@@ -152,7 +152,7 @@ bool DtlsTransportChannelWrapper::SetLocalIdentity(talk_base::SSLIdentity*
 
 void DtlsTransportChannelWrapper::SetRole(TransportRole role) {
   // TODO(ekr@rtfm.com): Forbid this if Connect() has been called.
-  ASSERT(dtls_state_ == STATE_OFFERED);
+  ASSERT(dtls_state_ < STATE_ACCEPTED);
 
   dtls_role_ = role == ROLE_CONTROLLING ? talk_base::SSL_CLIENT :
       talk_base::SSL_SERVER;
@@ -248,7 +248,7 @@ bool DtlsTransportChannelWrapper::GetSrtpCipher(std::string* cipher) {
 // Called from upper layers to send a media packet.
 int DtlsTransportChannelWrapper::SendPacket(const char* data, size_t size,
                                             int flags) {
-  int result;
+  int result = -1;
 
   switch (dtls_state_) {
     case STATE_OFFERED:

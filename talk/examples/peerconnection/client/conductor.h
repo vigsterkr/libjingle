@@ -108,11 +108,13 @@ class Conductor
 
   virtual void OnMessageSent(int err);
 
+  virtual void OnServerConnectionFailure();
+
   //
   // MainWndCallback implementation.
   //
 
-  virtual bool StartLogin(const std::string& server, int port);
+  virtual void StartLogin(const std::string& server, int port);
 
   virtual void DisconnectFromServer();
 
@@ -132,6 +134,7 @@ class Conductor
   std::deque<std::string*> pending_messages_;
   std::map<std::string, talk_base::scoped_refptr<webrtc::MediaStreamInterface> >
       active_streams_;
+  std::string server_;
 };
 
 #endif  // PEERCONNECTION_SAMPLES_CLIENT_CONDUCTOR_H_

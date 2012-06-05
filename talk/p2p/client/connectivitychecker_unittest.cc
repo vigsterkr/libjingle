@@ -75,7 +75,7 @@ class FakeStunPort : public StunPort {
 
   // Just set external address and signal that we are done.
   virtual void PrepareAddress() {
-    AddAddress(kExternalAddr, "udp", true);
+    AddAddress(kExternalAddr, kExternalAddr, "udp", true);
     SignalAddressReady(this);
   }
 };

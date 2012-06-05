@@ -69,7 +69,7 @@ class StunPortBindingRequest : public StunRequest {
       LOG(LS_ERROR) << "Binding address has bad family";
     } else {
       talk_base::SocketAddress addr(addr_attr->ipaddr(), addr_attr->port());
-      port_->AddAddress(addr, "udp", true);
+      port_->AddAddress(addr, port_->socket_->GetLocalAddress(), "udp", true);
     }
 
     // We will do a keep-alive regardless of whether this request suceeds.

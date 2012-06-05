@@ -116,19 +116,6 @@ static const std::string kIPv6BrokenString13 =
 static const std::string kIPv6BrokenString14 =
     "0x2401:fa00:4:1000:be30:5bff:fee5:c3";
 
-bool IPFromHostEntWorks(const std::string& name, int expected_family,
-                        IPAddress expected_addr) {
-  struct hostent* ent = gethostbyname(name.c_str());
-  if (ent) {
-    IPAddress addr;
-    if (!IPFromHostEnt(ent, &addr)) {
-      return false;
-    }
-    return addr == expected_addr;
-  }
-  return true;
-}
-
 bool AreEqual(const IPAddress& addr,
               const IPAddress& addr2) {
   if ((IPIsAny(addr) != IPIsAny(addr2)) ||
@@ -306,38 +293,6 @@ TEST(IPAddressTest, TestUint32Ctor) {
   EXPECT_FALSE(IPIsPrivate(addr));
   EXPECT_EQ(kIPv4AddrSize, addr.Size());
   EXPECT_EQ(kIPv4PublicAddrString, addr.ToString());
-}
-
-TEST(IPAddressTest, TestHostEntCtor) {
-  IPAddress addr(INADDR_LOOPBACK);
-  EXPECT_PRED3(IPFromHostEntWorks, "localhost", AF_INET, addr);
-
-  addr = IPAddress(kIPv6AllNodes);
-  EXPECT_PRED3(IPFromHostEntWorks, "ip6-allnodes", AF_INET6, addr);
-
-  //  gethostbyname works for literal addresses too
-  addr = IPAddress(INADDR_ANY);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv4AnyAddrString, AF_INET, addr);
-  addr = IPAddress(kIPv4RFC1918Addr);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv4RFC1918AddrString, AF_INET, addr);
-  addr = IPAddress(kIPv4PublicAddr);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv4PublicAddrString, AF_INET, addr);
-
-  addr = IPAddress(in6addr_any);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv6AnyAddrString, AF_INET6, addr);
-  addr = IPAddress(in6addr_loopback);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv6LoopbackAddrString, AF_INET6, addr);
-  addr = IPAddress(kIPv6LinkLocalAddr);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv6LinkLocalAddrString, AF_INET6, addr);
-  addr = IPAddress(kIPv6PublicAddr);
-  EXPECT_PRED3(IPFromHostEntWorks,
-               kIPv6PublicAddrString, AF_INET6, addr);
 }
 
 TEST(IPAddressTest, TestCopyCtor) {
@@ -566,6 +521,36 @@ TEST(IPAddressTest, TestFromString) {
   EXPECT_PRED1(BrokenIPStringFails, kIPv6BrokenString12);
   EXPECT_PRED1(BrokenIPStringFails, kIPv6BrokenString13);
   EXPECT_PRED1(BrokenIPStringFails, kIPv6BrokenString14);
+}
+
+TEST(IPAddressTest, TestIPFromAddrInfo) {
+  struct sockaddr_in expected4;
+  struct sockaddr_in6 expected6;
+  struct addrinfo test_info;
+  struct addrinfo next_info;
+  memset(&next_info, 'A', sizeof(next_info));
+  test_info.ai_next = &next_info;
+  // Check that we can get an IPv4 address out.
+  test_info.ai_addr = reinterpret_cast<struct sockaddr*>(&expected4);
+  expected4.sin_addr.s_addr = HostToNetwork32(kIPv4PublicAddr);
+  expected4.sin_family = AF_INET;
+  IPAddress expected(kIPv4PublicAddr);
+  IPAddress addr;
+  EXPECT_TRUE(IPFromAddrInfo(&test_info, &addr));
+  EXPECT_EQ(expected, addr);
+  // Check that we can get an IPv6 address out.
+  expected6.sin6_addr = kIPv6PublicAddr;
+  expected6.sin6_family = AF_INET6;
+  expected = IPAddress(kIPv6PublicAddr);
+  test_info.ai_addr = reinterpret_cast<struct sockaddr*>(&expected6);
+  EXPECT_TRUE(IPFromAddrInfo(&test_info, &addr));
+  EXPECT_EQ(expected, addr);
+  // Check that unspec fails.
+  expected6.sin6_family = AF_UNSPEC;
+  EXPECT_FALSE(IPFromAddrInfo(&test_info, &addr));
+  // Check a zeroed out addrinfo doesn't crash us.
+  memset(&next_info, 0, sizeof(next_info));
+  EXPECT_FALSE(IPFromAddrInfo(&next_info, &addr));
 }
 
 TEST(IPAddressTest, TestIsPrivate) {

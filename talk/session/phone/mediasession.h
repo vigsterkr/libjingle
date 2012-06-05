@@ -73,6 +73,13 @@ enum MediaType {
   MEDIA_TYPE_DATA
 };
 
+enum MediaContentDirection {
+  MD_INACTIVE,
+  MD_SENDONLY,
+  MD_RECVONLY,
+  MD_SENDRECV
+};
+
 // Options to control how session descriptions are generated.
 const int kAutoBandwidth = -1;
 struct MediaSessionOptions {
@@ -131,11 +138,16 @@ class MediaContentDescription : public ContentDescription {
         rtp_header_extensions_set_(false),
         multistream_(false),
         conference_mode_(false),
-        partial_(false) {
+        partial_(false),
+        direction_(MD_SENDRECV) {
   }
 
   virtual MediaType type() const = 0;
   virtual bool has_codecs() const = 0;
+  MediaContentDirection direction() const { return direction_; }
+  void set_direction(MediaContentDirection direction) {
+    direction_ = direction;
+  }
 
   bool rtcp_mux() const { return rtcp_mux_; }
   void set_rtcp_mux(bool mux) { rtcp_mux_ = mux; }
@@ -146,6 +158,9 @@ class MediaContentDescription : public ContentDescription {
   const std::vector<CryptoParams>& cryptos() const { return cryptos_; }
   void AddCrypto(const CryptoParams& params) {
     cryptos_.push_back(params);
+  }
+  void set_cryptos(const std::vector<CryptoParams>& cryptos) {
+    cryptos_ = cryptos;
   }
   bool crypto_required() const { return crypto_required_; }
   void set_crypto_required(bool crypto) {
@@ -228,6 +243,7 @@ class MediaContentDescription : public ContentDescription {
   StreamParamsVec streams_;
   bool conference_mode_;
   bool partial_;
+  MediaContentDirection direction_;
 };
 
 template <class C>

@@ -28,6 +28,14 @@
 #ifndef TALK_BASE_BYTEORDER_H_
 #define TALK_BASE_BYTEORDER_H_
 
+#ifdef POSIX
+#include <arpa/inet.h>
+#endif
+
+#ifdef WIN32
+#include <stdlib.h>
+#endif
+
 #include "talk/base/basictypes.h"
 
 namespace talk_base {

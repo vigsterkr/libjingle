@@ -64,7 +64,8 @@ UDPPort::~UDPPort() {
 
 void UDPPort::PrepareAddress() {
   if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND)
-    AddAddress(socket_->GetLocalAddress(), "udp", true);
+    AddAddress(socket_->GetLocalAddress(), socket_->GetLocalAddress(),
+               "udp", true);
 }
 
 Connection* UDPPort::CreateConnection(const Candidate& address,
@@ -102,7 +103,7 @@ int UDPPort::GetError() {
 
 void UDPPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
                              const talk_base::SocketAddress& address) {
-  AddAddress(address, "udp", true);
+  AddAddress(address, address, "udp", true);
 }
 
 void UDPPort::OnReadPacket(

@@ -30,6 +30,10 @@
 
 #include "talk/p2p/base/port.h"
 
+namespace talk_base {
+class Network;
+}
+
 namespace cricket {
 
 class PortProxy : public Port {
@@ -59,18 +63,31 @@ class PortProxy : public Port {
 
   virtual void SendBindingResponse(StunMessage* request,
                            const talk_base::SocketAddress& addr) {
+    ASSERT(impl_ != NULL);
     impl_->SendBindingResponse(request, addr);
   }
 
   virtual Connection* GetConnection(
       const talk_base::SocketAddress& remote_addr) {
+    ASSERT(impl_ != NULL);
     return impl_->GetConnection(remote_addr);
   }
 
   virtual void SendBindingErrorResponse(
         StunMessage* request, const talk_base::SocketAddress& addr,
         int error_code, const std::string& reason) {
+    ASSERT(impl_ != NULL);
     impl_->SendBindingErrorResponse(request, addr, error_code, reason);
+  }
+
+  virtual uint32 priority() const {
+    ASSERT(impl_ != NULL);
+    return impl_->priority();
+  }
+
+  virtual talk_base::Network* network() {
+    ASSERT(impl_ != NULL);
+    return impl_->network();
   }
 
  private:

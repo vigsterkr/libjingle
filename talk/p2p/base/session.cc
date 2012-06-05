@@ -320,14 +320,6 @@ BaseSession::~BaseSession() {
   delete local_description_;
 }
 
-void BaseSession::set_allow_local_ips(bool allow) {
-  allow_local_ips_ = allow;
-  for (TransportMap::iterator iter = transports_.begin();
-       iter != transports_.end(); ++iter) {
-    iter->second->impl()->set_allow_local_ips(allow);
-  }
-}
-
 TransportChannel* BaseSession::CreateChannel(const std::string& content_name,
                                              const std::string& channel_name,
                                              int component) {
@@ -361,7 +353,6 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
     return transproxy;
 
   Transport* transport = CreateTransport();
-  transport->set_allow_local_ips(allow_local_ips_);
   transport->SetRole(initiator_ ? ROLE_CONTROLLING : ROLE_CONTROLLED);
   transport->SetTiebreaker(ice_tiebreaker_);
   // TODO: Connect all the Transport signals to TransportProxy

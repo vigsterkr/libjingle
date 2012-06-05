@@ -216,7 +216,7 @@ void RelayPort::AddServerAddress(const ProtocolAddress& addr) {
   }
 }
 
-void RelayPort::AddExternalAddress(const ProtocolAddress& addr) {
+void RelayPort::AddExternalAddress(const ProtocolAddress& addr, bool final) {
   std::string proto_name = ProtoToString(addr.proto);
   for (std::vector<Candidate>::const_iterator it = candidates().begin();
        it != candidates().end(); ++it) {
@@ -226,13 +226,12 @@ void RelayPort::AddExternalAddress(const ProtocolAddress& addr) {
       return;
     }
   }
-  AddAddress(addr.address, proto_name, false);
+  AddAddress(addr.address, addr.address, proto_name, final);
 }
 
 void RelayPort::SetReady() {
   if (!ready_) {
     ready_ = true;
-    SignalAddressReady(this);
   }
 }
 
@@ -513,7 +512,8 @@ void RelayEntry::OnConnect(const talk_base::SocketAddress& mapped_addr,
             << " @ " << mapped_addr.ToString();
   connected_ = true;
 
-  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto));
+  port_->set_related_address(mapped_addr);
+  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto), true);
   port_->SetReady();
 }
 

@@ -30,7 +30,7 @@
 #else  // ARCH_CPU_BIG_ENDIAN
 static void ByteReverse(uint32* buf, int len) {
   for (int i = 0; i < len; ++i) {
-    buf[i] = GetLE32(&buf[i]);
+    buf[i] = talk_base::GetLE32(&buf[i]);
   }
 }
 #endif
@@ -216,4 +216,3 @@ void MD5Transform(uint32 buf[4], const uint32 in[16]) {
   buf[2] += c;
   buf[3] += d;
 }
-

@@ -945,16 +945,6 @@ void PortConfiguration::AddRelay(const PortList& ports, int priority_modifier) {
   relays.push_back(relay);
 }
 
-bool PortConfiguration::ResolveStunAddress() {
-  int err = 0;
-  if (!stun_address.ResolveIP(true, &err)) {
-    LOG(LS_ERROR) << "Unable to resolve STUN host "
-                  << stun_address.hostname() << ".  Error " << err;
-    return false;
-  }
-  return true;
-}
-
 bool PortConfiguration::SupportsProtocol(
     const PortConfiguration::RelayServer& relay, ProtocolType type) {
   PortConfiguration::PortList::const_iterator relay_port;

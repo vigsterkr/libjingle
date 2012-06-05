@@ -201,8 +201,6 @@ struct PortConfiguration : public talk_base::MessageData {
   // Adds another relay server, with the given ports and modifier, to the list.
   void AddRelay(const PortList& ports, int priority_modifier);
 
-  bool ResolveStunAddress();
-
   // Determines whether the given relay server supports the given protocol.
   static bool SupportsProtocol(const PortConfiguration::RelayServer& relay,
                                ProtocolType type);

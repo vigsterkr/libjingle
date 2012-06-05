@@ -79,7 +79,6 @@ static const int kMediaContentIndex1 = 1;
 
 static const int kIceCandidatesTimeout = 10000;
 
-
 class MockCandidateObserver : public webrtc::IceCandidateObserver {
  public:
   MockCandidateObserver()
@@ -119,11 +118,7 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
   }
   virtual ~WebRtcSessionForTest() {}
 
-  using webrtc::WebRtcSession::CreateOffer;
-  using webrtc::WebRtcSession::CreateAnswer;
-  using webrtc::WebRtcSession::SetLocalDescription;
-  using webrtc::WebRtcSession::SetRemoteDescription;
-  using webrtc::WebRtcSession::ProcessIceMessage;
+  using cricket::BaseSession::GetTransportProxy;
 };
 
 class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
@@ -142,15 +137,17 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
     return options_;
   }
 
-  void UseOptionsWithStream1() {
+  void UseOptionsWithStream1(bool bundle = false) {
     cricket::MediaSessionOptions options;
+    options.bundle_enabled = bundle;
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack1, kStream1);
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack1, kStream1);
     options_ = options;
   }
 
-  void UseOptionsWithStream2() {
+  void UseOptionsWithStream2(bool bundle = false) {
     cricket::MediaSessionOptions options;
+    options.bundle_enabled = bundle;
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack2, kStream2);
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack2, kStream2);
     options_ = options;
@@ -168,6 +165,20 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
   void UseOptionsReceiveOnly() {
     cricket::MediaSessionOptions options;
     options.has_video = true;
+    options_ = options;
+  }
+
+  void UseOptionsAudioOnly() {
+    cricket::MediaSessionOptions options;
+    options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack2, kStream2);
+    options.has_video = false;
+    options_ = options;
+  }
+
+  void UseOptionsVideoOnly() {
+    cricket::MediaSessionOptions options;
+    options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack2, kStream2);
+    options.has_audio = false;
     options_ = options;
   }
 
@@ -219,9 +230,6 @@ class WebRtcSessionTest : public testing::Test {
 
     EXPECT_TRUE(session_->Initialize());
     mediastream_signaling_.UseOptionsReceiveOnly();
-
-    video_channel_ = media_engine->GetVideoChannel(0);
-    voice_channel_ = media_engine->GetVoiceChannel(0);
   }
 
   // Creates a local offer and applies it. Starts ice.
@@ -386,6 +394,51 @@ class WebRtcSessionTest : public testing::Test {
     }
     return offer;
   }
+  void TestSessionCandidatesWithBundleRtcpMux(bool bundle, bool rtcp_mux) {
+    AddInterface(kClientAddr1);
+    WebRtcSessionTest::Init();
+    mediastream_signaling_.UseOptionsWithStream1(bundle);
+    SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+    mediastream_signaling_.UseOptionsWithStream2(bundle);
+    SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                                 offer);
+    size_t expected_candidate_num = 2;
+    if (!rtcp_mux) {
+      // If rtcp_mux is enabled we should expect 4 candidates - host and srflex
+      // for rtp and rtcp.
+      expected_candidate_num = 4;
+      // Disable rtcp-mux from the answer
+      std::string sdp;
+      EXPECT_TRUE(answer->ToString(&sdp));
+      const std::string kRtcpMux = "a=rtcp-mux";
+      const std::string kXRtcpMux = "a=xrtcp-mux";
+      talk_base::replace_substrs(kRtcpMux.c_str(), kRtcpMux.length(),
+                                 kXRtcpMux.c_str(), kXRtcpMux.length(),
+                                 &sdp);
+      JsepSessionDescription* new_answer = new JsepSessionDescription();
+      EXPECT_TRUE(new_answer->Initialize(sdp));
+      delete answer;
+      answer = new_answer;
+    }
+    // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
+    // and answer.
+    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+    // SetRemoteDescription to enable rtcp mux.
+    EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+    EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
+    EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+    EXPECT_EQ(expected_candidate_num, observer_.mline_0_candidates_.size());
+    EXPECT_EQ(expected_candidate_num, observer_.mline_1_candidates_.size());
+    for (size_t i = 0; i < observer_.mline_0_candidates_.size(); ++i) {
+      cricket::Candidate c0 = observer_.mline_0_candidates_[i];
+      cricket::Candidate c1 = observer_.mline_1_candidates_[i];
+      if (bundle) {
+        EXPECT_TRUE(c0.IsEquivalent(c1));
+      } else {
+        EXPECT_FALSE(c0.IsEquivalent(c1));
+      }
+    }
+  }
 
   cricket::FakeMediaEngine* media_engine;
   cricket::FakeDeviceManager* device_manager;
@@ -407,17 +460,24 @@ class WebRtcSessionTest : public testing::Test {
 
 TEST_F(WebRtcSessionTest, TestInitialize) {
   WebRtcSessionTest::Init();
-  EXPECT_TRUE(ChannelsExist());
-  CheckTransportChannels();
 }
 
 TEST_F(WebRtcSessionTest, TestSessionCandidates) {
-  AddInterface(kClientAddr1);
-  WebRtcSessionTest::Init();
-  WebRtcSessionTest::InitiateCall();
-  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
-  EXPECT_EQ(4u, observer_.mline_0_candidates_.size());
-  EXPECT_EQ(4u, observer_.mline_1_candidates_.size());
+  TestSessionCandidatesWithBundleRtcpMux(false, false);
+}
+
+// Below test cases (TestSessionCandidatesWith*) verify the candidates gathered
+// with rtcp-mux and/or bundle.
+TEST_F(WebRtcSessionTest, TestSessionCandidatesWithRtcpMux) {
+  TestSessionCandidatesWithBundleRtcpMux(false, true);
+}
+
+TEST_F(WebRtcSessionTest, TestSessionCandidatesWithBundle) {
+  TestSessionCandidatesWithBundleRtcpMux(true, false);
+}
+
+TEST_F(WebRtcSessionTest, TestSessionCandidatesWithBundleRtcpMux) {
+  TestSessionCandidatesWithBundleRtcpMux(true, true);
 }
 
 TEST_F(WebRtcSessionTest, TestMultihomeCandidataes) {
@@ -458,6 +518,9 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
   // and answer.
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+
+  video_channel_ = media_engine->GetVideoChannel(0);
+  voice_channel_ = media_engine->GetVoiceChannel(0);
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack2 == video_channel_->recv_streams()[0].name);
@@ -511,6 +574,9 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
 
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+
+  video_channel_ = media_engine->GetVideoChannel(0);
+  voice_channel_ = media_engine->GetVoiceChannel(0);
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack2 == video_channel_->recv_streams()[0].name);
@@ -868,6 +934,130 @@ TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteDescriptionWithCandidates) {
 
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+}
+
+// Verifies TransportProxy and media channels are created with content names
+// present in the SessionDescription.
+TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+    session_->CreateOffer(MediaHints()));
+
+  // CreateOffer creates session description with the content names "audio" and
+  // "video". Goal is to modify these content names and verify transport channel
+  // proxy in the BaseSession, as proxies are created with the content names
+  // present in SDP.
+  std::string sdp;
+  EXPECT_TRUE(offer->ToString(&sdp));
+  const std::string kAudioMid = "a=mid:audio";
+  const std::string kAudioMidReplaceStr = "a=mid:audio_content_name";
+  const std::string kVideoMid = "a=mid:video";
+  const std::string kVideoMidReplaceStr = "a=mid:video_content_name";
+
+  // Replacing |audio| with |audio_content_name|.
+  talk_base::replace_substrs(kAudioMid.c_str(), kAudioMid.length(),
+                             kAudioMidReplaceStr.c_str(),
+                             kAudioMidReplaceStr.length(),
+                             &sdp);
+  // Replacing |video| with |video_content_name|.
+  talk_base::replace_substrs(kVideoMid.c_str(), kVideoMid.length(),
+                             kVideoMidReplaceStr.c_str(),
+                             kVideoMidReplaceStr.length(),
+                             &sdp);
+
+  JsepSessionDescription* modified_offer = new JsepSessionDescription();
+  EXPECT_TRUE(modified_offer->Initialize(sdp));
+
+  EXPECT_TRUE(session_->SetLocalDescription(
+      JsepInterface::kOffer, modified_offer));
+  EXPECT_TRUE(session_->GetTransportProxy("audio_content_name") != NULL);
+  EXPECT_TRUE(session_->GetTransportProxy("video_content_name") != NULL);
+  mediastream_signaling_.UseOptionsWithStream1();
+  SessionDescriptionInterface* answer =
+      session_->CreateAnswer(MediaHints(true, true), modified_offer);
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
+  // and answer.
+  ASSERT_TRUE((video_channel_ = media_engine->GetVideoChannel(0)) != NULL);
+  ASSERT_TRUE((voice_channel_ = media_engine->GetVoiceChannel(0)) != NULL);
+}
+
+// This test verifies the call setup when remote answer with audio only and
+// later updates with video.
+TEST_F(WebRtcSessionTest, TestAVOfferWithAudioOnlyAnswer) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+
+  mediastream_signaling_.UseOptionsAudioOnly();
+  SessionDescriptionInterface* answer =
+      session_->CreateAnswer(MediaHints(true, false), offer);
+  // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
+  // and answer.
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+
+  video_channel_ = media_engine->GetVideoChannel(0);
+  voice_channel_ = media_engine->GetVoiceChannel(0);
+
+  ASSERT_TRUE(video_channel_ == NULL);
+
+  ASSERT_EQ(1u, voice_channel_->recv_streams().size());
+  EXPECT_EQ(kAudioTrack2, voice_channel_->recv_streams()[0].name);
+  ASSERT_EQ(1u, voice_channel_->send_streams().size());
+  EXPECT_EQ(kAudioTrack1, voice_channel_->send_streams()[0].name);
+
+  // Update the session descriptions, with Audio and Video.
+  mediastream_signaling_.UseOptionsWithStream2();
+  SetRemoteAndLocalSessionDescription();
+
+  video_channel_ = media_engine->GetVideoChannel(0);
+  ASSERT_TRUE(video_channel_ != NULL);
+
+  ASSERT_EQ(1u, video_channel_->recv_streams().size());
+  ASSERT_EQ(1u, video_channel_->send_streams().size());
+  EXPECT_EQ(kVideoTrack2, video_channel_->recv_streams()[0].name);
+  EXPECT_EQ(kVideoTrack2, video_channel_->send_streams()[0].name);
+}
+
+// This test verifies the call setup when remote answer with video only and
+// later updates with audio.
+TEST_F(WebRtcSessionTest, TestAVOfferWithVideoOnlyAnswer) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+
+  mediastream_signaling_.UseOptionsVideoOnly();
+  SessionDescriptionInterface* answer =
+     session_->CreateAnswer(MediaHints(false, true), offer);
+  // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
+  // and answer.
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+
+  video_channel_ = media_engine->GetVideoChannel(0);
+  voice_channel_ = media_engine->GetVoiceChannel(0);
+
+  ASSERT_TRUE(voice_channel_ == NULL);
+
+  ASSERT_EQ(1u, video_channel_->recv_streams().size());
+  EXPECT_EQ(kVideoTrack2, video_channel_->recv_streams()[0].name);
+
+  ASSERT_EQ(1u, video_channel_->send_streams().size());
+  EXPECT_EQ(kVideoTrack1, video_channel_->send_streams()[0].name);
+
+  // Update the session descriptions, with Audio and Video.
+  mediastream_signaling_.UseOptionsWithStream2();
+  SetRemoteAndLocalSessionDescription();
+
+  voice_channel_ = media_engine->GetVoiceChannel(0);
+  ASSERT_TRUE(voice_channel_ != NULL);
+
+  ASSERT_EQ(1u, voice_channel_->recv_streams().size());
+  ASSERT_EQ(1u, voice_channel_->send_streams().size());
+  EXPECT_EQ(kAudioTrack2, voice_channel_->recv_streams()[0].name);
+  EXPECT_EQ(kAudioTrack2, voice_channel_->send_streams()[0].name);
 }
 
 

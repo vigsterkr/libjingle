@@ -875,6 +875,16 @@ TEST_F(WebRtcVoiceEngineTestFake, SetDevicesWithInitiallyBadDevices) {
 // and start sending/playing out on it.
 TEST_F(WebRtcVoiceEngineTestFake, ConferenceSendAndPlayout) {
   EXPECT_TRUE(SetupEngine());
+
+  bool enabled;
+  webrtc::EcModes ec_mode;
+  webrtc::NsModes ns_mode;
+  EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
+  // Enable state (false) should be unchanged by conference mode.
+  EXPECT_EQ(0, voe_.SetEcStatus(false, ec_mode));
+  EXPECT_EQ(0, voe_.SetNsStatus(false, ns_mode));
+
   int channel_num = voe_.GetLastChannel();
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
   std::vector<cricket::AudioCodec> codecs;
@@ -883,22 +893,29 @@ TEST_F(WebRtcVoiceEngineTestFake, ConferenceSendAndPlayout) {
   EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
   EXPECT_TRUE(voe_.GetSend(channel_num));
 
-  bool enabled;
-  webrtc::EcModes ec_mode;
-  webrtc::NsModes ns_mode;
   EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_FALSE(enabled);
 #ifdef CHROMEOS
   EXPECT_EQ(webrtc::kEcDefault, ec_mode);
 #else
   EXPECT_EQ(webrtc::kEcConference, ec_mode);
 #endif
   EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
-  EXPECT_TRUE(enabled);
+  EXPECT_FALSE(enabled);
 #ifdef CHROMEOS
   EXPECT_EQ(webrtc::kNsDefault, ns_mode);
 #else
   EXPECT_EQ(webrtc::kNsConference, ns_mode);
 #endif
+
+  // Enable state (true) should be unchanged.
+  EXPECT_EQ(0, voe_.SetEcStatus(true, ec_mode));
+  EXPECT_EQ(0, voe_.SetNsStatus(true, ns_mode));
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_TRUE(enabled);
+  EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
+  EXPECT_TRUE(enabled);
 
   EXPECT_TRUE(channel_->SetPlayout(true));
   EXPECT_TRUE(voe_.GetPlayout(channel_num));

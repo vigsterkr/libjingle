@@ -27,6 +27,8 @@
 
 #include "talk/app/webrtc/webrtcsession.h"
 
+#include <algorithm>
+
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
@@ -41,6 +43,9 @@
 #include "talk/session/phone/videocapturer.h"
 
 using cricket::MediaContentDescription;
+
+typedef cricket::MediaSessionOptions::Stream Stream;
+typedef cricket::MediaSessionOptions::Streams Streams;
 
 namespace webrtc {
 
@@ -92,6 +97,23 @@ static bool HasCrypto(const cricket::SessionDescription* desc) {
   return true;
 }
 
+static bool CompareStream(const Stream& stream1, const Stream& stream2) {
+  return (stream1.name < stream2.name);
+}
+
+static bool SameName(const Stream& stream1, const Stream& stream2) {
+  return (stream1.name == stream2.name);
+}
+
+// Checks if each Stream within the |streams| has unique name.
+static bool ValidStreams(const Streams& streams) {
+  Streams sorted_streams = streams;
+  std::sort(sorted_streams.begin(), sorted_streams.end(), CompareStream);
+  Streams::iterator it =
+      std::adjacent_find(sorted_streams.begin(), sorted_streams.end(), SameName);
+  return (it == sorted_streams.end());
+}
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
@@ -133,7 +155,7 @@ bool WebRtcSession::Initialize() {
   channel_manager_->SetDefaultVideoEncoderConfig(
       cricket::VideoEncoderConfig(default_codec));
 
-  return CreateChannels();
+  return true;
 }
 
 bool WebRtcSession::StartIce(IceOptions /*options*/) {
@@ -176,6 +198,10 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
     const MediaHints& hints) {
   cricket::MediaSessionOptions options =
       mediastream_signaling_->GetMediaSessionOptions(hints);
+  if (!ValidStreams(options.streams)) {
+    LOG(LS_ERROR) << "CreateOffer called with invalid media streams.";
+    return NULL;
+  }
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateOffer(options,
                                         BaseSession::local_description()));
@@ -205,6 +231,10 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     const SessionDescriptionInterface* offer) {
   cricket::MediaSessionOptions options =
       mediastream_signaling_->GetMediaSessionOptions(hints);
+  if (!ValidStreams(options.streams)) {
+    LOG(LS_ERROR) << "CreateAnswer called with invalid media streams.";
+    return NULL;
+  }
   cricket::SessionDescription* desc(
       session_desc_factory_.CreateAnswer(offer->description(), options,
                                          BaseSession::local_description()));
@@ -254,6 +284,10 @@ bool WebRtcSession::SetLocalDescription(Action action,
                                 ~cricket::PORTALLOCATOR_ENABLE_BUNDLE);
   }
 
+  if (!CreateChannels(desc->description())) {
+    return false;
+  }
+
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
 
@@ -262,12 +296,12 @@ bool WebRtcSession::SetLocalDescription(Action action,
       SetState(STATE_SENTINITIATE);
       break;
     case kAnswer:
+      // Remove TransportProxies which are not present in the final answer.
+      RemoveUnusedChannelsAndTransports(desc->description());
+      if (ReadyToEnableBundle() && !transport_muxed()) {
+        MaybeEnableMuxingSupport();
+      }
       EnableChannels();
-
-    if (ReadyToEnableBundle() && !transport_muxed()) {
-      MaybeEnableMuxingSupport();
-    }
-
       SetState(STATE_SENTACCEPT);
       break;
     case kPrAnswer:
@@ -297,18 +331,23 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     return false;
   }
 
+  if (!CreateChannels(desc->description())) {
+    return false;
+  }
+
   set_remote_description(desc->description()->Copy());
   switch (action) {
     case kOffer:
       SetState(STATE_RECEIVEDINITIATE);
       break;
     case kAnswer:
-      EnableChannels();
-
+      // Remove TransportProxies which are not present in the final answer.
+      RemoveUnusedChannelsAndTransports(desc->description());
       if (ReadyToEnableBundle() && !transport_muxed()) {
         MaybeEnableMuxingSupport();
       }
 
+      EnableChannels();
       SetState(STATE_RECEIVEDACCEPT);
       break;
     case kPrAnswer:
@@ -399,11 +438,16 @@ void WebRtcSession::SetLocalRenderer(const std::string& name,
 void WebRtcSession::SetRemoteRenderer(const std::string& name,
                                       cricket::VideoRenderer* renderer) {
   ASSERT(signaling_thread()->IsCurrent());
+  if (!video_channel_.get()) {
+    LOG(LS_INFO) << "VideoChannel doesn't exist.";
+    return;
+  }
 
   const cricket::ContentInfo* video_info =
       cricket::GetFirstVideoContent(BaseSession::remote_description());
   if (!video_info) {
     LOG(LS_ERROR) << "Video not received in this call";
+    return;
   }
 
   const cricket::MediaContentDescription* video_content =
@@ -487,19 +531,26 @@ void WebRtcSession::OnCandidatesAllocationDone() {
   }
 }
 
-bool WebRtcSession::CreateChannels() {
-  voice_channel_.reset(channel_manager_->CreateVoiceChannel(
-      this, cricket::CN_AUDIO, true));
-  if (!voice_channel_.get()) {
-    LOG(LS_ERROR) << "Failed to create voice channel";
-    return false;
+bool WebRtcSession::CreateChannels(const cricket::SessionDescription* desc) {
+  const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
+  const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
+
+  if (voice && !voice_channel_.get()) {
+    voice_channel_.reset(channel_manager_->CreateVoiceChannel(
+        this, voice->name, true));
+    if (!voice_channel_.get()) {
+      LOG(LS_ERROR) << "Failed to create voice channel";
+      return false;
+    }
   }
 
-  video_channel_.reset(channel_manager_->CreateVideoChannel(
-      this, cricket::CN_VIDEO, true, voice_channel_.get()));
-  if (!video_channel_.get()) {
-    LOG(LS_ERROR) << "Failed to create video channel";
-    return false;
+  if (video && !video_channel_.get()) {
+    video_channel_.reset(channel_manager_->CreateVideoChannel(
+        this, video->name, true, voice_channel_.get()));
+    if (!video_channel_.get()) {
+      LOG(LS_ERROR) << "Failed to create video channel";
+      return false;
+    }
   }
 
   // TransportProxies and TransportChannels will be created when
@@ -509,10 +560,10 @@ bool WebRtcSession::CreateChannels() {
 
 // Enabling voice and video channel.
 void WebRtcSession::EnableChannels() {
-  if (!voice_channel_->enabled())
+  if (voice_channel_.get() && !voice_channel_->enabled())
     voice_channel_->Enable(true);
 
-  if (!video_channel_->enabled())
+  if (video_channel_.get() && !video_channel_->enabled())
     video_channel_->Enable(true);
 }
 
@@ -590,20 +641,13 @@ bool WebRtcSession::UseCandidate(
   cricket::ContentInfo content =
       BaseSession::remote_description()->contents()[mediacontent_index];
 
-  std::string local_content_name;
-  if (cricket::IsAudioContent(&content)) {
-    local_content_name = cricket::CN_AUDIO;
-  } else if (cricket::IsVideoContent(&content)) {
-    local_content_name = cricket::CN_VIDEO;
-  }
-
   // TODO: Justins comment:This is bad encapsulation, suggest we add a
   // helper to BaseSession to allow us to
   // pass in candidates without touching the transport proxies.
-  cricket::TransportProxy* proxy = GetTransportProxy(local_content_name);
+  cricket::TransportProxy* proxy = GetTransportProxy(content.name);
   if (!proxy) {
     LOG(LS_ERROR) << "No TransportProxy exists with name "
-                  << local_content_name;
+                  << content.name;
     return false;
   }
   // CompleteNegotiation will set actual impl's in Proxy.
@@ -616,6 +660,25 @@ bool WebRtcSession::UseCandidate(
   candidates.push_back(candidate->candidate());
   proxy->impl()->OnRemoteCandidates(candidates);
   return true;
+}
+
+void WebRtcSession::RemoveUnusedChannelsAndTransports(
+    const cricket::SessionDescription* answer) {
+  if (!answer) {
+    return;
+  }
+
+  const cricket::ContentInfo* video_info =
+      cricket::GetFirstVideoContent(answer);
+  if (!video_info) {
+    channel_manager_->DestroyVideoChannel(video_channel_.release());
+  }
+
+  const cricket::ContentInfo* voice_info =
+      cricket::GetFirstAudioContent(answer);
+  if (!voice_info) {
+    channel_manager_->DestroyVoiceChannel(voice_channel_.release());
+  }
 }
 
 bool WebRtcSession::ReadyToEnableBundle() const {

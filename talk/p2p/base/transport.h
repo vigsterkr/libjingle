@@ -229,10 +229,6 @@ class Transport : public talk_base::MessageHandler,
                    const buzz::XmlElement*>
       SignalTransportError;
 
-  // (For testing purposes only.)  This indicates whether we will allow local
-  // IPs (e.g. 127.*) to be used as addresses for P2P.
-  bool allow_local_ips() const { return allow_local_ips_; }
-  void set_allow_local_ips(bool value) { allow_local_ips_ = value; }
   // Forwards the signal from TransportChannel to BaseSession.
   sigslot::signal0<> SignalRoleConflict;
 
@@ -342,7 +338,6 @@ class Transport : public talk_base::MessageHandler,
   std::vector<Candidate> ready_candidates_;
   // Protects changes to channels and messages
   talk_base::CriticalSection crit_;
-  bool allow_local_ips_;
   TransportInfo local_transport_info_;
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);

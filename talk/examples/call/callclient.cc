@@ -485,7 +485,6 @@ void CallClient::OnRequestSignaling() {
 }
 
 void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
-  session->set_allow_local_ips(allow_local_ips_);
   session->set_current_protocol(initial_protocol_);
 }
 
