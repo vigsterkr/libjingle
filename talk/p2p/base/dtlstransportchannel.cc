@@ -257,12 +257,12 @@ int DtlsTransportChannelWrapper::SendPacket(const char* data, size_t size,
       result = -1;
       break;
 
+    case STATE_STARTED:
     case STATE_ACCEPTED:
       // Can't send data until the connection is active
       result = -1;
       break;
 
-      // Fall through
     case STATE_OPEN:
       if (flags & PF_SRTP_BYPASS) {
         ASSERT(!srtp_ciphers_.empty());
