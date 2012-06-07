@@ -104,7 +104,7 @@ static const char kSdpFullString[] =
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
     "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
-    "a=rtpmap:104 ISAC/32000\r\n"
+    "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
     "a=ssrc:1 label:local_audio_1\r\n"
@@ -158,7 +158,7 @@ static const char kSdpString[] =
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
     "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
-    "a=rtpmap:104 ISAC/32000\r\n"
+    "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
     "a=ssrc:1 label:local_audio_1\r\n"
@@ -285,8 +285,8 @@ class WebRtcSdpTest : public testing::Test {
     audio->AddStream(audio_stream2);
     audio->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_32",
         "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32", ""));
-    audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 0, 0));
-    audio->AddCodec(AudioCodec(104, "ISAC", 32000, 0, 0, 0));
+    audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 1, 0));
+    audio->AddCodec(AudioCodec(104, "CELT", 32000, 0, 2, 0));
     desc_.AddContent(kAudioContentName, NS_JINGLE_RTP,
                      audio.release());
 
@@ -504,7 +504,7 @@ class WebRtcSdpTest : public testing::Test {
     for (size_t i = 0; i< acd1->codecs().size(); ++i) {
       const AudioCodec c1 = acd1->codecs().at(i);
       const AudioCodec c2 = acd2->codecs().at(i);
-      EXPECT_TRUE(c1.Matches(c2));
+      EXPECT_TRUE(c2.Matches(c1));
     }
     for (size_t i = 0; i< vcd1->codecs().size(); ++i) {
       const VideoCodec c1 = vcd1->codecs().at(i);

@@ -86,6 +86,9 @@ class MediaEngineInterface {
   enum VideoOptions {
   };
 
+  // Default value to be used for SetAudioDelayOffset().
+  static const int kDefaultAudioDelayOffset;
+
   virtual ~MediaEngineInterface() {}
 
   // Initialization
@@ -112,6 +115,9 @@ class MediaEngineInterface {
   virtual bool SetAudioOptions(int options) = 0;
   // Sets global video options. "options" are from VideoOptions, above.
   virtual bool SetVideoOptions(int options) = 0;
+  // Sets the value used by the echo canceller to offset delay values obtained
+  // from the OS.
+  virtual bool SetAudioDelayOffset(int offset) = 0;
   // Sets the default (maximum) codec/resolution and encoder option to capture
   // and encode video.
   virtual bool SetDefaultVideoEncoderConfig(const VideoEncoderConfig& config)
@@ -211,6 +217,9 @@ class CompositeMediaEngine : public MediaEngineInterface {
   }
   virtual bool SetVideoOptions(int o) {
     return video_.SetOptions(o);
+  }
+  virtual bool SetAudioDelayOffset(int offset) {
+    return voice_.SetDelayOffset(offset);
   }
   virtual bool SetDefaultVideoEncoderConfig(const VideoEncoderConfig& config) {
     return video_.SetDefaultEncoderConfig(config);

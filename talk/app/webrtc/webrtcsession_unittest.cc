@@ -942,7 +942,7 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsWithStream1();
   talk_base::scoped_ptr<SessionDescriptionInterface> offer(
-    session_->CreateOffer(MediaHints()));
+      session_->CreateOffer(MediaHints()));
 
   // CreateOffer creates session description with the content names "audio" and
   // "video". Goal is to modify these content names and verify transport channel

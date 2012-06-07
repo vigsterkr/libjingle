@@ -92,11 +92,12 @@ struct CreationParams : public talk_base::MessageData {
 };
 
 struct AudioOptions : public talk_base::MessageData {
-  AudioOptions(int o, const Device* in, const Device* out)
-      : options(o), in_device(in), out_device(out) {}
+  AudioOptions(int o, const Device* in, const Device* out, int delay)
+      : options(o), in_device(in), out_device(out), delay_offset(delay) {}
   int options;
   const Device* in_device;
   const Device* out_device;
+  int delay_offset;
   bool result;
 };
 
@@ -202,6 +203,7 @@ void ChannelManager::Construct(MediaEngineInterface* me,
   audio_in_device_ = DeviceManagerInterface::kDefaultDeviceName;
   audio_out_device_ = DeviceManagerInterface::kDefaultDeviceName;
   audio_options_ = MediaEngineInterface::DEFAULT_AUDIO_OPTIONS;
+  audio_delay_offset_ = MediaEngineInterface::kDefaultAudioDelayOffset;
   audio_output_volume_ = kNotSetOutputVolume;
   local_renderer_ = NULL;
   capturing_ = false;
@@ -291,11 +293,12 @@ bool ChannelManager::Init() {
       }
 
       if (!SetAudioOptions(audio_in_device_, audio_out_device_,
-                           audio_options_)) {
+                           audio_options_, audio_delay_offset_)) {
         LOG(LS_WARNING) << "Failed to SetAudioOptions with"
                         << " microphone: " << audio_in_device_
                         << " speaker: " << audio_out_device_
-                        << " options: " << audio_options_;
+                        << " options: " << audio_options_
+                        << " delay: " << audio_delay_offset_;
       }
 
       // If audio_output_volume_ has been set via SetOutputVolume(), set the
@@ -535,14 +538,23 @@ void ChannelManager::DestroySoundclip_w(Soundclip* soundclip) {
 
 bool ChannelManager::GetAudioOptions(std::string* in_name,
                                      std::string* out_name, int* opts) {
-  *in_name = audio_in_device_;
-  *out_name = audio_out_device_;
-  *opts = audio_options_;
+  if (in_name)
+    *in_name = audio_in_device_;
+  if (out_name)
+    *out_name = audio_out_device_;
+  if (opts)
+    *opts = audio_options_;
   return true;
 }
 
 bool ChannelManager::SetAudioOptions(const std::string& in_name,
                                      const std::string& out_name, int opts) {
+  return SetAudioOptions(in_name, out_name, opts, audio_delay_offset_);
+}
+
+bool ChannelManager::SetAudioOptions(const std::string& in_name,
+                                     const std::string& out_name, int opts,
+                                     int delay_offset) {
   // Get device ids from DeviceManager.
   Device in_dev, out_dev;
   if (!device_manager_->GetAudioInputDevice(in_name, &in_dev)) {
@@ -557,7 +569,7 @@ bool ChannelManager::SetAudioOptions(const std::string& in_name,
   // If we're initialized, pass the settings to the media engine.
   bool ret = true;
   if (initialized_) {
-    AudioOptions options(opts, &in_dev, &out_dev);
+    AudioOptions options(opts, &in_dev, &out_dev, delay_offset);
     ret = (Send(MSG_SETAUDIOOPTIONS, &options) && options.result);
   }
 
@@ -566,17 +578,22 @@ bool ChannelManager::SetAudioOptions(const std::string& in_name,
     audio_options_ = opts;
     audio_in_device_ = in_name;
     audio_out_device_ = out_name;
+    audio_delay_offset_ = delay_offset;
   }
   return ret;
 }
 
-bool ChannelManager::SetAudioOptions_w(int opts, const Device* in_dev,
-    const Device* out_dev) {
+bool ChannelManager::SetAudioOptions_w(int opts, int delay_offset,
+    const Device* in_dev, const Device* out_dev) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   ASSERT(initialized_);
 
   // Set audio options
   bool ret = media_engine_->SetAudioOptions(opts);
+
+  if (ret) {
+    ret = media_engine_->SetAudioDelayOffset(delay_offset);
+  }
 
   // Set the audio devices
   if (ret) {
@@ -946,7 +963,7 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
     }
     case MSG_SETAUDIOOPTIONS: {
       AudioOptions* p = static_cast<AudioOptions*>(data);
-      p->result = SetAudioOptions_w(p->options,
+      p->result = SetAudioOptions_w(p->options, p->delay_offset,
                                     p->in_device, p->out_device);
       break;
     }

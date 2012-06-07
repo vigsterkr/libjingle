@@ -416,6 +416,7 @@ def mac_common_include_x86_32(env):
   env.Append(
     CCFLAGS = [
       '-m32',
+      '-mmacosx-version-min=10.5',
       '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
     ],
     LINKFLAGS = [
@@ -431,6 +432,7 @@ def mac_common_include_x86_64(env):
     CCFLAGS = [
       '-m64',
       '-fPIC',
+      '-mmacosx-version-min=10.6',
       '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
     ],
     LINKFLAGS = [

@@ -881,6 +881,9 @@ void BuildRtpMap(const MediaContentDescription* media_desc,
       InitAttrLine(kAttributeRtpmap, &os);
       os << kSdpDelimiterColon << it->id << " "
          << it->name << "/" << it->clockrate;
+      if (it->channels != 1) {
+        os << "/" << it->channels;
+      }
       AddLine(os.str(), message);
     }
   }
@@ -1341,8 +1344,7 @@ bool ParseRtpmapAttribute(const std::string& line,
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
   // RFC 4566
-  // a=rtpmap:<payload type> <encoding name>/<clock rate>
-  // [/<encodingparameters>]
+  // a=rtpmap:<payload type> <encoding name>/<clock rate>[/<encodingparameters>]
   // 2 mandatory fields
   if (fields.size() < 2) {
     return false;
@@ -1351,13 +1353,15 @@ bool ParseRtpmapAttribute(const std::string& line,
   GetValue(fields[0], kAttributeRtpmap, &payload_type_value);
   const int payload_type = talk_base::FromString<int>(payload_type_value);
   const std::string encoder = fields[1];
-  const size_t pos = encoder.find("/");
-  if (pos == std::string::npos) {
+  std::vector<std::string> codec_params;
+  talk_base::split(encoder, '/', &codec_params);
+  // <encoding name>/<clock rate>[/<encodingparameters>]
+  // 2 mandatory fields
+  if (codec_params.size() < 2 || codec_params.size() > 3) {
     return false;
   }
-  const std::string encoding_name = encoder.substr(0, pos);
-  const int clock_rate =
-      talk_base::FromString<int>(encoder.substr(pos + 1));
+  const std::string encoding_name = codec_params[0];
+  const int clock_rate = talk_base::FromString<int>(codec_params[1]);
   if (media_type == cricket::MEDIA_TYPE_VIDEO) {
     VideoContentDescription* video_desc =
         static_cast<VideoContentDescription*>(media_desc);
@@ -1368,10 +1372,19 @@ bool ParseRtpmapAttribute(const std::string& line,
                                              kDefaultVideoFrameRate,
                                              kDefaultVideoPreference));
   } else if (media_type == cricket::MEDIA_TYPE_AUDIO) {
+    // RFC 4566
+    // For audio streams, <encoding parameters> indicates the number
+    // of audio channels.  This parameter is OPTIONAL and may be
+    // omitted if the number of channels is one, provided that no
+    // additional parameters are needed.
+    int channels = 1;
+    if (codec_params.size() == 3) {
+      channels = talk_base::FromString<int>(codec_params[2]);
+    }
     AudioContentDescription* audio_desc =
         static_cast<AudioContentDescription*>(media_desc);
     audio_desc->AddCodec(cricket::AudioCodec(payload_type, encoding_name,
-                                             clock_rate, 0, 0, 0));
+                                             clock_rate, 0, channels, 0));
   }
   return true;
 }

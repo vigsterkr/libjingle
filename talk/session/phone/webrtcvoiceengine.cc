@@ -108,20 +108,20 @@ static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
 
 // WebRtcVoiceEngine
 const WebRtcVoiceEngine::CodecPref WebRtcVoiceEngine::kCodecPrefs[] = {
-  { "ISAC",   16000,  103 },
-  { "ISAC",   32000,  104 },
-  { "CELT",   32000,  110 },
-  { "speex",  16000,  107 },
-  { "G722",   16000,  9 },
-  { "ILBC",   8000,   102 },
-  { "speex",  8000,   108 },
-  { "PCMU",   8000,   0 },
-  { "PCMA",   8000,   8 },
-  { "CN",     32000,  106 },
-  { "CN",     16000,  105 },
-  { "CN",     8000,   13 },
-  { "red",    8000,   127 },
-  { "telephone-event", 8000, 126 },
+  { "ISAC",   16000,  1, 103 },
+  { "ISAC",   32000,  1, 104 },
+  { "CELT",   32000,  2, 110 },
+  { "speex",  16000,  1, 107 },
+  { "G722",   16000,  1, 9 },
+  { "ILBC",   8000,   1, 102 },
+  { "speex",  8000,   1, 108 },
+  { "PCMU",   8000,   1, 0 },
+  { "PCMA",   8000,   1, 8 },
+  { "CN",     32000,  1, 106 },
+  { "CN",     16000,  1, 105 },
+  { "CN",     8000,   1, 13 },
+  { "red",    8000,   1, 127 },
+  { "telephone-event", 8000, 1, 126 },
 };
 
 class WebRtcSoundclipMedia : public SoundclipMedia {
@@ -268,7 +268,8 @@ void WebRtcVoiceEngine::ConstructCodecs() {
       const CodecPref* pref = NULL;
       for (size_t j = 0; j < ARRAY_SIZE(kCodecPrefs); ++j) {
         if (_stricmp(kCodecPrefs[j].name, voe_codec.plname) == 0 &&
-            kCodecPrefs[j].clockrate == voe_codec.plfreq) {
+            kCodecPrefs[j].clockrate == voe_codec.plfreq &&
+            kCodecPrefs[j].channels == voe_codec.channels) {
           pref = &kCodecPrefs[j];
           break;
         }
@@ -511,6 +512,16 @@ bool WebRtcVoiceEngine::SetOptions(int options) {
 
   // No typing detection support on iOS or Android.
 #endif  // !IOS && !ANDROID
+
+  return true;
+}
+
+bool WebRtcVoiceEngine::SetDelayOffset(int offset) {
+  voe_wrapper_->processing()->SetDelayOffsetMs(offset);
+  if (voe_wrapper_->processing()->DelayOffsetMs() != offset) {
+    LOG_RTCERR1(SetDelayOffsetMs, offset);
+    return false;
+  }
 
   return true;
 }

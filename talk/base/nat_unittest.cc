@@ -183,6 +183,30 @@ void TestFilters(
            NAT_SYMMETRIC, true, true);
 }
 
+bool TestConnectivity(const SocketAddress& src, const IPAddress& dst) {
+  // The physical NAT tests require connectivity to the selected ip from the
+  // internal address used for the NAT. Things like firewalls can break that, so
+  // check to see if it's worth even trying with this ip.
+  scoped_ptr<PhysicalSocketServer> pss(new PhysicalSocketServer());
+  scoped_ptr<AsyncSocket> client(pss->CreateAsyncSocket(src.family(),
+                                                        SOCK_DGRAM));
+  scoped_ptr<AsyncSocket> server(pss->CreateAsyncSocket(src.family(),
+                                                        SOCK_DGRAM));
+  if (client->Bind(SocketAddress(src.ipaddr(), 0)) != 0 ||
+      server->Bind(SocketAddress(dst, 0)) != 0) {
+    return false;
+  }
+  const char* buf = "hello other socket";
+  size_t len = strlen(buf);
+  int sent = client->SendTo(buf, len, server->GetLocalAddress());
+  SocketAddress addr;
+  const size_t kRecvBufSize = 64;
+  char recvbuf[kRecvBufSize];
+  Thread::Current()->SleepMs(100);
+  int received = server->RecvFrom(recvbuf, kRecvBufSize, &addr);
+  return received == sent && ::memcmp(buf, recvbuf, len) == 0;
+}
+
 void TestPhysicalInternal(const SocketAddress& int_addr) {
   BasicNetworkManager network_manager;
   network_manager.set_ipv6_enabled(true);
@@ -199,12 +223,12 @@ void TestPhysicalInternal(const SocketAddress& int_addr) {
 
   SocketAddress ext_addr1(int_addr);
   SocketAddress ext_addr2;
-  // Find an available IP with matching family. Link-local IPv6 addresses break
-  // this test, so filter out 'private' IPs.
+  // Find an available IP with matching family. The test breaks if int_addr
+  // can't talk to ip, so check for connectivity as well.
   for (std::vector<Network*>::iterator it = networks.begin();
       it != networks.end(); ++it) {
     const IPAddress& ip = (*it)->ip();
-    if (ip.family() == int_addr.family() && !IPIsPrivate(ip)) {
+    if (ip.family() == int_addr.family() && TestConnectivity(int_addr, ip)) {
       ext_addr2.SetIP(ip);
       break;
     }

@@ -1481,6 +1481,14 @@ TEST(WebRtcVoiceEngineTest, Has32Channels) {
   engine.Terminate();
 }
 
+// Test that we set our preferred codecs properly.
+TEST(WebRtcVoiceEngineTest, SetRecvCodecs) {
+  cricket::WebRtcVoiceEngine engine;
+  EXPECT_TRUE(engine.Init());
+  cricket::WebRtcVoiceMediaChannel channel(&engine);
+  EXPECT_TRUE(channel.SetRecvCodecs(engine.codecs()));
+}
+
 #ifdef WIN32
 // Test our workarounds to WebRtc VoE' munging of the coinit count
 TEST(WebRtcVoiceEngineTest, CoInitialize) {

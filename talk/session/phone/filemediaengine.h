@@ -86,6 +86,7 @@ class FileMediaEngine : public MediaEngineInterface {
   virtual SoundclipMedia* CreateSoundclip() { return NULL; }
   virtual bool SetAudioOptions(int options) { return true; }
   virtual bool SetVideoOptions(int options) { return true; }
+  virtual bool SetAudioDelayOffset(int offset) { return true; }
   virtual bool SetDefaultVideoEncoderConfig(const VideoEncoderConfig& config) {
     return true;
   }
