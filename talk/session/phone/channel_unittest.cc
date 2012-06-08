@@ -29,6 +29,8 @@
 #include "talk/base/logging.h"
 #include "talk/base/pathutils.h"
 #include "talk/base/signalthread.h"
+#include "talk/base/ssladapter.h"
+#include "talk/base/sslidentity.h"
 #include "talk/base/window.h"
 #include "talk/p2p/base/fakesession.h"
 #include "talk/session/phone/channel.h"
@@ -41,6 +43,12 @@
 #include "talk/session/phone/rtpdump.h"
 #include "talk/session/phone/screencastid.h"
 #include "talk/session/phone/testutils.h"
+
+#define MAYBE_SKIP_TEST(feature)                    \
+  if (!(talk_base::SSLStreamAdapter::feature())) {  \
+    LOG(LS_INFO) << "Feature disabled... skipping"; \
+    return;                                         \
+  }
 
 using cricket::CA_OFFER;
 using cricket::CA_PRANSWER;
@@ -107,6 +115,10 @@ class FakeScreenCaptureFactory
   cricket::FakeVideoCapturer* window_capturer_;
 };
 
+// Controls how long we wait for a session to send messages that we
+// expect, in milliseconds.  We put it high to avoid flaky tests.
+static const int kEventTimeout = 5000;
+
 class VoiceTraits : public Traits<cricket::VoiceChannel,
                                   cricket::FakeVoiceMediaChannel,
                                   cricket::AudioContentDescription,
@@ -132,10 +144,14 @@ class DataTraits : public Traits<cricket::DataChannel,
 template<class T>
 class ChannelTest : public testing::Test, public sigslot::has_slots<> {
  public:
-  enum Flags { RTCP = 0x1, RTCP_MUX = 0x2, SECURE = 0x4, SSRC_MUX = 0x8 };
+  enum Flags { RTCP = 0x1, RTCP_MUX = 0x2, SECURE = 0x4, SSRC_MUX = 0x8,
+               DTLS = 0x10 };
+
   ChannelTest(const uint8* rtp_data, int rtp_len,
               const uint8* rtcp_data, int rtcp_len)
-      : media_channel1_(NULL),
+      : session1_(true),
+        session2_(false),
+        media_channel1_(NULL),
         media_channel2_(NULL),
         rtp_packet_(reinterpret_cast<const char*>(rtp_data), rtp_len),
         rtcp_packet_(reinterpret_cast<const char*>(rtcp_data), rtcp_len),
@@ -143,6 +159,10 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
         media_info_callbacks2_(),
         ssrc_(0),
         error_(T::MediaChannel::ERROR_NONE) {
+  }
+
+  static void SetUpTestCase() {
+    talk_base::InitializeSSL();
   }
 
   void CreateChannels(int flags1, int flags2) {
@@ -190,6 +210,16 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
                   &local_media_content2_);
     CopyContent(local_media_content1_, &remote_media_content1_);
     CopyContent(local_media_content2_, &remote_media_content2_);
+
+    if (flags1 & DTLS) {
+      identity1_.reset(talk_base::SSLIdentity::Generate("session1"));
+      session1_.set_ssl_identity(identity1_.get());
+    }
+    if (flags2 & DTLS) {
+      identity2_.reset(talk_base::SSLIdentity::Generate("session2"));
+      session2_.set_ssl_identity(identity2_.get());
+    }
+
     // Add stream information (SSRC) to the local content but not to the remote
     // content. This means that we per default know the SSRC of what we send but
     // not what we receive.
@@ -210,6 +240,7 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
       int flags, talk_base::Thread* thread) {
     media_channel1_ = ch1;
     media_channel2_ = ch2;
+
     channel1_.reset(CreateChannel(thread, &media_engine_, ch1, &session1_,
                                   (flags & RTCP) != 0));
     channel2_.reset(CreateChannel(thread, &media_engine_, ch2, &session1_,
@@ -259,10 +290,9 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
       channel1_->Enable(true);
       result = channel2_->SetRemoteContent(&remote_media_content1_, CA_OFFER);
       if (result) {
+        session1_.Connect(&session2_);
+
         result = channel2_->SetLocalContent(&local_media_content2_, CA_ANSWER);
-        if (result) {
-          session1_.Connect(&session2_);
-        }
       }
     }
     return result;
@@ -1098,14 +1128,26 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
   }
 
   // Test that we properly send SRTP with RTCP in both directions.
-  void SendSrtpToSrtp() {
-    CreateChannels(RTCP | SECURE, RTCP | SECURE);
+  // You can pass in DTLS and/or RTCP_MUX as flags.
+  void SendSrtpToSrtp(int flags1_in = 0, int flags2_in = 0) {
+    ASSERT((flags1_in & ~(RTCP_MUX | DTLS)) == 0);
+    ASSERT((flags2_in & ~(RTCP_MUX | DTLS)) == 0);
+
+    int flags1 = RTCP | SECURE | flags1_in;
+    int flags2 = RTCP | SECURE | flags2_in;
+    bool dtls1 = !!(flags1_in & DTLS);
+    bool dtls2 = !!(flags2_in & DTLS);
+    CreateChannels(flags1, flags2);
     EXPECT_FALSE(channel1_->secure());
     EXPECT_FALSE(channel2_->secure());
     EXPECT_TRUE(SendInitiate());
+    EXPECT_TRUE_WAIT(channel1_->writable(), kEventTimeout);
+    EXPECT_TRUE_WAIT(channel2_->writable(), kEventTimeout);
     EXPECT_TRUE(SendAccept());
     EXPECT_TRUE(channel1_->secure());
     EXPECT_TRUE(channel2_->secure());
+    EXPECT_EQ(dtls1 && dtls2, channel1_->secure_dtls());
+    EXPECT_EQ(dtls1 && dtls2, channel2_->secure_dtls());
     EXPECT_TRUE(SendRtp1());
     EXPECT_TRUE(SendRtp2());
     EXPECT_TRUE(SendRtcp1());
@@ -1129,25 +1171,6 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_TRUE(SendAccept());
     EXPECT_FALSE(channel1_->secure());
     EXPECT_FALSE(channel2_->secure());
-    EXPECT_TRUE(SendRtp1());
-    EXPECT_TRUE(SendRtp2());
-    EXPECT_TRUE(SendRtcp1());
-    EXPECT_TRUE(SendRtcp2());
-    EXPECT_TRUE(CheckRtp1());
-    EXPECT_TRUE(CheckRtp2());
-    EXPECT_TRUE(CheckNoRtp1());
-    EXPECT_TRUE(CheckNoRtp2());
-    EXPECT_TRUE(CheckRtcp1());
-    EXPECT_TRUE(CheckRtcp2());
-    EXPECT_TRUE(CheckNoRtcp1());
-    EXPECT_TRUE(CheckNoRtcp2());
-  }
-
-  // Test that we properly send SRTP with RTCP mux in both directions.
-  void SendSrtcpMux() {
-    CreateChannels(RTCP | RTCP_MUX  | SECURE, RTCP | RTCP_MUX | SECURE);
-    EXPECT_TRUE(SendInitiate());
-    EXPECT_TRUE(SendAccept());
     EXPECT_TRUE(SendRtp1());
     EXPECT_TRUE(SendRtp2());
     EXPECT_TRUE(SendRtcp1());
@@ -1668,6 +1691,8 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
   typename T::Content local_media_content2_;
   typename T::Content remote_media_content1_;
   typename T::Content remote_media_content2_;
+  talk_base::scoped_ptr<talk_base::SSLIdentity> identity1_;
+  talk_base::scoped_ptr<talk_base::SSLIdentity> identity2_;
   // The RTP and RTCP packets to send in the tests.
   std::string rtp_packet_;
   std::string rtcp_packet_;
@@ -1886,12 +1911,31 @@ TEST_F(VoiceChannelTest, SendEarlyRtcpMuxToRtcpMux) {
   Base::SendEarlyRtcpMuxToRtcpMux();
 }
 
+TEST_F(VoiceChannelTest, SendSrtpToSrtpRtcpMux) {
+  Base::SendSrtpToSrtp(RTCP_MUX, RTCP_MUX);
+}
+
 TEST_F(VoiceChannelTest, SendSrtpToRtp) {
   Base::SendSrtpToSrtp();
 }
 
 TEST_F(VoiceChannelTest, SendSrtcpMux) {
-  Base::SendSrtcpMux();
+  Base::SendSrtpToSrtp(RTCP_MUX, RTCP_MUX);
+}
+
+TEST_F(VoiceChannelTest, SendDtlsSrtpToSrtp) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS, 0);
+}
+
+TEST_F(VoiceChannelTest, SendDtlsSrtpToDtlsSrtp) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS, DTLS);
+}
+
+TEST_F(VoiceChannelTest, SendDtlsSrtpToDtlsSrtpRtcpMux) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS | RTCP_MUX, DTLS | RTCP_MUX);
 }
 
 TEST_F(VoiceChannelTest, SendEarlyMediaUsingRtcpMuxSrtp) {
@@ -2230,8 +2274,23 @@ TEST_F(VideoChannelTest, SendSrtpToRtp) {
   Base::SendSrtpToSrtp();
 }
 
+TEST_F(VideoChannelTest, SendDtlsSrtpToSrtp) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS, 0);
+}
+
+TEST_F(VideoChannelTest, SendDtlsSrtpToDtlsSrtp) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS, DTLS);
+}
+
+TEST_F(VideoChannelTest, SendDtlsSrtpToDtlsSrtpRtcpMux) {
+  MAYBE_SKIP_TEST(HaveDtlsSrtp);
+  Base::SendSrtpToSrtp(DTLS | RTCP_MUX, DTLS | RTCP_MUX);
+}
+
 TEST_F(VideoChannelTest, SendSrtcpMux) {
-  Base::SendSrtcpMux();
+  Base::SendSrtpToSrtp(RTCP_MUX, RTCP_MUX);
 }
 
 TEST_F(VideoChannelTest, SendEarlyMediaUsingRtcpMuxSrtp) {
@@ -2498,7 +2557,7 @@ TEST_F(DataChannelTest, SendSrtpToRtp) {
 }
 
 TEST_F(DataChannelTest, SendSrtcpMux) {
-  Base::SendSrtcpMux();
+  Base::SendSrtpToSrtp(RTCP_MUX, RTCP_MUX);
 }
 
 TEST_F(DataChannelTest, SendRtpToRtpOnThread) {

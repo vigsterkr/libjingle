@@ -399,6 +399,11 @@ bool GetMediaComponentFromChannelName(
     const std::string& channel_name, int* component);
 bool GetMediaTypeFromChannelName(
     const std::string& channel_name, cricket::MediaType* media_type);
+
+void GetSupportedAudioCryptoSuites(std::vector<std::string>* crypto_suites);
+void GetSupportedVideoCryptoSuites(std::vector<std::string>* crypto_suites);
+void GetSupportedDataCryptoSuites(std::vector<std::string>* crypto_suites);
+void GetSupportedDefaultCryptoSuites(std::vector<std::string>* crypto_suites);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_

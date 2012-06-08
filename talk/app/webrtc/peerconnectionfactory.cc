@@ -161,6 +161,8 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
 }
 
 bool PeerConnectionFactory::Initialize_s() {
+  talk_base::InitRandom(talk_base::Time());
+
   if (owns_ptrs_) {
     allocator_factory_ = PortAllocatorFactory::Create(worker_thread_);
     if (allocator_factory_.get() == NULL)

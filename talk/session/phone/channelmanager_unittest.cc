@@ -44,7 +44,7 @@ class ChannelManagerTest : public testing::Test {
     fdm_ = new cricket::FakeDeviceManager();
     cm_ = new cricket::ChannelManager(
         fme_, fdme_, fdm_, talk_base::Thread::Current());
-    session_ = new cricket::FakeSession();
+    session_ = new cricket::FakeSession(true);
 
     std::vector<std::string> in_device_list, out_device_list, vid_device_list;
     in_device_list.push_back("audio-in1");

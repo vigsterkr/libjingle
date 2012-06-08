@@ -206,11 +206,12 @@ class BaseSession : public sigslot::has_slots<>,
   };
 
   enum Error {
-    ERROR_NONE = 0,      // no error
-    ERROR_TIME = 1,      // no response to signaling
-    ERROR_RESPONSE = 2,  // error during signaling
-    ERROR_NETWORK = 3,   // network error, could not allocate network resources
-    ERROR_CONTENT = 4,   // channel errors in SetLocalContent/SetRemoteContent
+    ERROR_NONE = 0,       // no error
+    ERROR_TIME = 1,       // no response to signaling
+    ERROR_RESPONSE = 2,   // error during signaling
+    ERROR_NETWORK = 3,    // network error, could not allocate network resources
+    ERROR_CONTENT = 4,    // channel errors in SetLocalContent/SetRemoteContent
+    ERROR_TRANSPORT = 5,  // transport error of some kind
   };
 
   // Convert State to a readable string.

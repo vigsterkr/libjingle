@@ -111,7 +111,7 @@ bool FindMatchingCrypto(const CryptoParamsVec& cryptos,
 }
 
 // For audio, HMAC 32 is prefered because of the low overhead.
-static void GetSupportedAudioCryptoSuites(
+void GetSupportedAudioCryptoSuites(
     std::vector<std::string>* crypto_suites) {
 #ifdef HAVE_SRTP
   crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_32);
@@ -119,14 +119,17 @@ static void GetSupportedAudioCryptoSuites(
 #endif
 }
 
-static void GetSupportedVideoCryptoSuites(
+void GetSupportedVideoCryptoSuites(
     std::vector<std::string>* crypto_suites) {
-#ifdef HAVE_SRTP
-  crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_80);
-#endif
+  GetSupportedDefaultCryptoSuites(crypto_suites);
 }
 
-static void GetSupportedDataCryptoSuites(
+void GetSupportedDataCryptoSuites(
+    std::vector<std::string>* crypto_suites) {
+  GetSupportedDefaultCryptoSuites(crypto_suites);
+}
+
+void GetSupportedDefaultCryptoSuites(
     std::vector<std::string>* crypto_suites) {
 #ifdef HAVE_SRTP
   crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_80);

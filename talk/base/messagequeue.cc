@@ -32,17 +32,10 @@
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagequeue.h"
-#include "talk/base/nullsocketserver.h"
 #include "talk/base/physicalsocketserver.h"
 
 
 namespace talk_base {
-
-#ifdef NO_SOCKETSERVER
-typedef NullSocketServer DefaultSocketServer;
-#else
-typedef PhysicalSocketServer DefaultSocketServer;
-#endif
 
 const uint32 kMaxMsgLatency = 150;  // 150 ms
 
@@ -87,13 +80,13 @@ void MessageQueueManager::Remove(MessageQueue *message_queue) {
     iter = std::find(message_queues_.begin(), message_queues_.end(),
                      message_queue);
     if (iter != message_queues_.end()) {
-      message_queues_.erase(iter);      
+      message_queues_.erase(iter);
     }
     destroy = message_queues_.empty();
   }
   if (destroy) {
     instance_ = NULL;
-    delete this;    
+    delete this;
   }
 }
 
@@ -117,7 +110,7 @@ MessageQueue::MessageQueue(SocketServer* ss)
     // server, and provide it to the MessageQueue, since the Thread controls
     // the I/O model, and MQ is agnostic to those details.  Anyway, this causes
     // messagequeue_unittest to depend on network libraries... yuck.
-    default_ss_.reset(new DefaultSocketServer());
+    default_ss_.reset(new PhysicalSocketServer());
     ss_ = default_ss_.get();
   }
   ss_->SetMessageQueue(this);

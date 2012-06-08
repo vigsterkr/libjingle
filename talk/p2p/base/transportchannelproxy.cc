@@ -112,7 +112,6 @@ bool TransportChannelProxy::SetSrtpCiphers(const std::vector<std::string>&
   if (impl_) {
     return impl_->SetSrtpCiphers(ciphers);
   }
-
   return true;
 }
 

@@ -99,7 +99,7 @@ class StreamInterfaceChannel : public talk_base::StreamInterface,
 //
 //   - Data written to DtlsTransportChannelWrapper is passed either to
 //      downward_ or directly to channel_, depending on whether DTLS is
-//     negotiated and whether dtls_data_bypass_ is set (true for SRTP).
+//     negotiated and whether the flags include PF_SRTP_BYPASS
 //
 //   - The SSLStreamAdapter writes to downward_->Write()
 //     which translates it into packet writes on channel_.

@@ -92,8 +92,8 @@ class TransportChannelImpl : public TransportChannel {
 
   // Set DTLS Remote fingerprint. Must be after local identity set.
   virtual bool SetRemoteFingerprint(const std::string& digest_alg,
-                            const uint8* digest,
-                            size_t digest_len) {
+    const uint8* digest,
+    size_t digest_len) {
     return false;
   }
 

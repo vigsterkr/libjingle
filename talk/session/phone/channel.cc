@@ -77,8 +77,12 @@ enum {
   MSG_ISSCREENCASTING = 32,
   MSG_SCREENCASTFPS = 33,
   MSG_SETSCREENCASTFACTORY = 34,
-  MSG_FIRSTPACKETRECEIVED = 35
+  MSG_FIRSTPACKETRECEIVED = 35,
+  MSG_SESSION_ERROR = 36
 };
+
+// Value specified in RFC 5764.
+static const char kDtlsSrtpExporterLabel[] = "EXTRACTOR-dtls_srtp";
 
 // TODO: use the device manager for creation of screen capturers when
 // the cl enabling it has landed.
@@ -227,6 +231,13 @@ struct DataChannelErrorMessageData : public talk_base::MessageData {
   DataMediaChannel::Error error;
 };
 
+struct SessionErrorMessageData : public talk_base::MessageData {
+  explicit SessionErrorMessageData(cricket::BaseSession::Error error)
+      : error_(error) {}
+
+  BaseSession::Error error_;
+};
+
 struct SsrcMessageData : public talk_base::MessageData {
   explicit SsrcMessageData(uint32 ssrc) : ssrc(ssrc), result(false) {}
   uint32 ssrc;
@@ -357,7 +368,9 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       local_content_direction_(MD_INACTIVE),
       remote_content_direction_(MD_INACTIVE),
       muted_(false),
-      has_received_packet_(false) {
+      has_received_packet_(false),
+      dtls_keyed_(false),
+      crypto_required_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   LOG(LS_INFO) << "Created channel for " << content_name;
 }
@@ -386,6 +399,11 @@ bool BaseChannel::Init(TransportChannel* transport_channel,
     return false;
   }
   transport_channel_ = transport_channel;
+
+  if (!SetDtlsSrtpCiphers(transport_channel_, false)) {
+    return false;
+  }
+
   media_channel_->SetInterface(this);
   transport_channel_->SignalWritableState.connect(
       this, &BaseChannel::OnWritableState);
@@ -467,6 +485,8 @@ void BaseChannel::set_rtcp_transport_channel(TransportChannel* channel) {
     }
     rtcp_transport_channel_ = channel;
     if (rtcp_transport_channel_) {
+      // TODO: Propagate this error code
+      VERIFY(SetDtlsSrtpCiphers(rtcp_transport_channel_, true));
       rtcp_transport_channel_->SignalWritableState.connect(
           this, &BaseChannel::OnWritableState);
       rtcp_transport_channel_->SignalReadPacket.connect(
@@ -610,6 +630,12 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
 
     // Update the length of the packet now that we've added the auth tag.
     packet->SetLength(len);
+  } else if (crypto_required_) {
+    // This is a double check for something that supposedly can't happen.
+    LOG(LS_ERROR) <<
+        "Trying to send insecure packet when crypto is required by policy";
+    ASSERT(false);
+    return false;
   }
 
   // Signal to the media sink after protecting the packet.
@@ -619,7 +645,8 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
   }
 
   // Bon voyage.
-  return (channel->SendPacket(packet->data(), packet->length(), 0)
+  return (channel->SendPacket(packet->data(), packet->length(),
+      (secure() && secure_dtls()) ? PF_SRTP_BYPASS : 0)
       == static_cast<int>(packet->length()));
 }
 
@@ -680,6 +707,12 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
     }
 
     packet->SetLength(len);
+  } else if (crypto_required_) {
+    // This is a double check for something that supposedly can't happen.
+    LOG(LS_ERROR) <<
+        "Trying to receive insecure packet when crypto is required by policy";
+    ASSERT(false);
+    return;
   }
 
   // Signal to the media sink after unprotecting the packet.
@@ -771,9 +804,124 @@ void BaseChannel::ChannelWritable_w() {
   LOG(LS_INFO) << "Channel socket writable ("
                << transport_channel_->component() << ")"
                << (was_ever_writable_ ? "" : " for the first time");
+  // If we're doing DTLS-SRTP, now is the time.
+  if (!was_ever_writable_) {
+    if (!SetupDtlsSrtp(false)) {
+      LOG(LS_ERROR) << "Couldn't finish DTLS-SRTP on RTP channel";
+      SessionErrorMessageData data(BaseSession::ERROR_TRANSPORT);
+      // Sent synchronously.
+      signaling_thread()->Send(this, MSG_SESSION_ERROR, &data);
+      return;
+    }
+
+    if (rtcp_transport_channel_) {
+      if (!SetupDtlsSrtp(true)) {
+        LOG(LS_ERROR) << "Couldn't finish DTLS-SRTP on RTCP channel";
+        SessionErrorMessageData data(BaseSession::ERROR_TRANSPORT);
+        // Sent synchronously.
+        signaling_thread()->Send(this, MSG_SESSION_ERROR, &data);
+        return;
+      }
+    }
+  }
+
   was_ever_writable_ = true;
   writable_ = true;
   ChangeState();
+}
+
+bool BaseChannel::SetDtlsSrtpCiphers(TransportChannel *tc, bool rtcp) {
+  std::vector<std::string> ciphers;
+  // We always use the default SRTP ciphers for RTCP, but we may use different
+  // ciphers for RTP depending on the media type.
+  if (!rtcp) {
+    GetSrtpCiphers(&ciphers);
+  } else {
+    GetSupportedDefaultCryptoSuites(&ciphers);
+  }
+  return tc->SetSrtpCiphers(ciphers);
+}
+
+// This function returns true if either DTLS-SRTP is not in use
+// *or* DTLS-SRTP is successfully set up.
+bool BaseChannel::SetupDtlsSrtp(bool rtcp_channel) {
+  bool ret = false;
+
+  TransportChannel *channel = rtcp_channel ?
+      rtcp_transport_channel_ : transport_channel_;
+
+  // No DTLS
+  if (!channel->IsDtlsActive())
+    return true;
+
+  std::string selected_cipher;
+
+  if (!channel->GetSrtpCipher(&selected_cipher)) {
+    LOG(LS_ERROR) << "No DTLS-SRTP selected cipher";
+    return false;
+  }
+
+  // OK, we're now doing DTLS (RFC 5764)
+  std::vector<unsigned char> dtls_buffer(SRTP_MASTER_KEY_KEY_LEN * 2 +
+                                         SRTP_MASTER_KEY_SALT_LEN * 2);
+
+  // RFC 5705 exporter using the RFC 5764 parameters
+  if (!channel->ExportKeyingMaterial(
+          kDtlsSrtpExporterLabel,
+          NULL, 0, false,
+          &dtls_buffer[0], dtls_buffer.size())) {
+    LOG(LS_WARNING) << "DTLS-SRTP key export failed";
+    ASSERT(false);  // This should never happen
+    return false;
+  }
+
+  // Sync up the keys with the DTLS-SRTP interface
+  std::vector<unsigned char> client_write_key(SRTP_MASTER_KEY_KEY_LEN +
+    SRTP_MASTER_KEY_SALT_LEN);
+  std::vector<unsigned char> server_write_key(SRTP_MASTER_KEY_KEY_LEN +
+    SRTP_MASTER_KEY_SALT_LEN);
+  size_t offset = 0;
+  memcpy(&client_write_key[0], &dtls_buffer[offset],
+    SRTP_MASTER_KEY_KEY_LEN);
+  offset += SRTP_MASTER_KEY_KEY_LEN;
+  memcpy(&server_write_key[0], &dtls_buffer[offset],
+    SRTP_MASTER_KEY_KEY_LEN);
+  offset += SRTP_MASTER_KEY_KEY_LEN;
+  memcpy(&client_write_key[SRTP_MASTER_KEY_KEY_LEN],
+    &dtls_buffer[offset], SRTP_MASTER_KEY_SALT_LEN);
+  offset += SRTP_MASTER_KEY_SALT_LEN;
+  memcpy(&server_write_key[SRTP_MASTER_KEY_KEY_LEN],
+    &dtls_buffer[offset], SRTP_MASTER_KEY_SALT_LEN);
+  offset += SRTP_MASTER_KEY_SALT_LEN;
+
+  std::vector<unsigned char> *send_key, *recv_key;
+
+  if (session()->initiator()) {
+    send_key = &server_write_key;
+    recv_key = &client_write_key;
+  } else {
+    send_key = &client_write_key;
+    recv_key = &server_write_key;
+  }
+
+  if (rtcp_channel) {
+    ret = srtp_filter_.SetRtcpParams(selected_cipher,
+      &(*send_key)[0], send_key->size(),
+      selected_cipher,
+      &(*recv_key)[0], recv_key->size());
+  } else {
+    ret = srtp_filter_.SetRtpParams(selected_cipher,
+      &(*send_key)[0], send_key->size(),
+      selected_cipher,
+      &(*recv_key)[0], recv_key->size());
+  }
+
+  if (!ret)
+    LOG(LS_WARNING) << "DTLS-SRTP key installation failed";
+  else
+    dtls_keyed_ = true;
+
+  return ret;
 }
 
 void BaseChannel::ChannelNotWritable_w() {
@@ -800,10 +948,26 @@ bool BaseChannel::SetSrtp_w(const std::vector<CryptoParams>& cryptos,
       ret = srtp_filter_.SetOffer(cryptos, src);
       break;
     case CA_PRANSWER:
-      ret = srtp_filter_.SetProvisionalAnswer(cryptos, src);
+      // If we're doing DTLS-SRTP, we don't want to update the filter
+      // with an answer, because we already have SRTP parameters.
+      if (transport_channel_->IsDtlsActive()) {
+        LOG(LS_INFO) <<
+          "Ignoring SDES answer parameters because we are using DTLS-SRTP";
+        ret = true;
+      } else {
+        ret = srtp_filter_.SetProvisionalAnswer(cryptos, src);
+      }
       break;
     case CA_ANSWER:
-      ret = srtp_filter_.SetAnswer(cryptos, src);
+      // If we're doing DTLS-SRTP, we don't want to update the filter
+      // with an answer, because we already have SRTP parameters.
+      if (transport_channel_->IsDtlsActive()) {
+        LOG(LS_INFO) <<
+          "Ignoring SDES answer parameters because we are using DTLS-SRTP";
+        ret = true;
+      } else {
+        ret = srtp_filter_.SetAnswer(cryptos, src);
+      }
       break;
     case CA_UPDATE:
       // no crypto params.
@@ -1006,6 +1170,8 @@ bool BaseChannel::UpdateRemoteStreams_w(
 
 bool BaseChannel::SetBaseLocalContent_w(const MediaContentDescription* content,
                                         ContentAction action) {
+  // Cache crypto_required_ for belt and suspenders check on SendPacket
+  crypto_required_ = content->crypto_required();
   bool ret = UpdateLocalStreams_w(content->streams(), action);
   // Set local SRTP parameters (what we will encrypt with).
   ret &= SetSrtp_w(content->cryptos(), action, CS_LOCAL);
@@ -1085,6 +1251,12 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
     }
     case MSG_FIRSTPACKETRECEIVED: {
       SignalFirstPacketReceived(this);
+      break;
+    }
+    case MSG_SESSION_ERROR: {
+      SessionErrorMessageData* data = static_cast<SessionErrorMessageData*>
+          (pmsg->pdata);
+      session_->SetError(data->error_);
       break;
     }
   }
@@ -1482,6 +1654,10 @@ void VoiceChannel::OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode,
     default:
       break;
   }
+}
+
+void VoiceChannel::GetSrtpCiphers(std::vector<std::string>* ciphers) const {
+  GetSupportedAudioCryptoSuites(ciphers);
 }
 
 VideoChannel::VideoChannel(talk_base::Thread* thread,
@@ -1989,6 +2165,11 @@ void VideoChannel::OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode,
   }
 }
 
+
+void VideoChannel::GetSrtpCiphers(std::vector<std::string>* ciphers) const {
+  GetSupportedVideoCryptoSuites(ciphers);
+}
+
 DataChannel::DataChannel(talk_base::Thread* thread,
                          DataMediaChannel* media_channel,
                          BaseSession* session,
@@ -2213,6 +2394,11 @@ void DataChannel::OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode,
     default:
       break;
   }
+}
+
+
+void DataChannel::GetSrtpCiphers(std::vector<std::string>* ciphers) const {
+  GetSupportedDataCryptoSuites(ciphers);
 }
 
 }  // namespace cricket

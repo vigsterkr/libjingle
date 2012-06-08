@@ -56,7 +56,9 @@ ThreadManager* ThreadManager::Instance() {
 #ifdef POSIX
 ThreadManager::ThreadManager() {
   pthread_key_create(&key_, NULL);
+#ifndef NO_MAIN_THREAD_WRAPPING
   WrapCurrentThread();
+#endif
 #ifdef USE_COCOA_THREADING
   InitCocoaMultiThreading();
 #endif
@@ -85,7 +87,9 @@ void ThreadManager::SetCurrentThread(Thread *thread) {
 #ifdef WIN32
 ThreadManager::ThreadManager() {
   key_ = TlsAlloc();
+#ifndef NO_MAIN_THREAD_WRAPPING
   WrapCurrentThread();
+#endif
 }
 
 ThreadManager::~ThreadManager() {
