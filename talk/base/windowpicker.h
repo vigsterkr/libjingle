@@ -63,6 +63,10 @@ class WindowPicker {
   // Gets a list of desktop descriptions and appends to descriptions.
   // Returns true if successful.
   virtual bool GetDesktopList(DesktopDescriptionList* descriptions) = 0;
+  // Gets the width and height of a desktop.
+  // Returns true if successful.
+  virtual bool GetDesktopDimensions(const DesktopId& id, int* width,
+                                    int* height) = 0;
 };
 
 }  // namespace talk_base

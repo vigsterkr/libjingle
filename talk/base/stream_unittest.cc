@@ -451,4 +451,59 @@ TEST(FifoBufferTest, WriteOffsetAndReadOffset) {
   EXPECT_EQ(SR_BLOCK, buf.ReadOffset(out, 10, 16, NULL));
 }
 
+TEST(AsyncWriteTest, TestWrite) {
+  FifoBuffer* buf = new FifoBuffer(100);
+  AsyncWriteStream stream(buf, Thread::Current());
+  EXPECT_EQ(SS_OPEN, stream.GetState());
+
+  // Write "abc".  Will go to the logging thread, which is the current
+  // thread.
+  stream.Write("abc", 3, NULL, NULL);
+  char bytes[100];
+  size_t count;
+  // Messages on the thread's queue haven't been processed, so "abc"
+  // hasn't been written yet.
+  EXPECT_NE(SR_SUCCESS, buf->ReadOffset(&bytes, 3, 0, &count));
+  // Now we process the messages on the thread's queue, so "abc" has
+  // been written.
+  EXPECT_TRUE_WAIT(SR_SUCCESS == buf->ReadOffset(&bytes, 3, 0, &count), 10);
+  EXPECT_EQ(3u, count);
+  EXPECT_EQ(0, memcmp(bytes, "abc", 3));
+
+  // Write "def".  Will go to the logging thread, which is the current
+  // thread.
+  stream.Write("d", 1, &count, NULL);
+  stream.Write("e", 1, &count, NULL);
+  stream.Write("f", 1, &count, NULL);
+  EXPECT_EQ(1u, count);
+  // Messages on the thread's queue haven't been processed, so "def"
+  // hasn't been written yet.
+  EXPECT_NE(SR_SUCCESS, buf->ReadOffset(&bytes, 3, 3, &count));
+  // Flush() causes the message to be processed, so "def" has now been
+  // written.
+  stream.Flush();
+  EXPECT_EQ(SR_SUCCESS, buf->ReadOffset(&bytes, 3, 3, &count));
+  EXPECT_EQ(3u, count);
+  EXPECT_EQ(0, memcmp(bytes, "def", 3));
+
+  // Write "xyz".  Will go to the logging thread, which is the current
+  // thread.
+  stream.Write("xyz", 3, &count, NULL);
+  EXPECT_EQ(3u, count);
+  // Messages on the thread's queue haven't been processed, so "xyz"
+  // hasn't been written yet.
+  EXPECT_NE(SR_SUCCESS, buf->ReadOffset(&bytes, 3, 6, &count));
+  // Close() causes the message to be processed, so "xyz" has now been
+  // written.
+  stream.Close();
+  EXPECT_EQ(SR_SUCCESS, buf->ReadOffset(&bytes, 3, 6, &count));
+  EXPECT_EQ(3u, count);
+  EXPECT_EQ(0, memcmp(bytes, "xyz", 3));
+  EXPECT_EQ(SS_CLOSED, stream.GetState());
+
+  // Is't closed, so the writes should fail.
+  EXPECT_EQ(SR_ERROR, stream.Write("000", 3, NULL, NULL));
+
+}
+
 }  // namespace talk_base

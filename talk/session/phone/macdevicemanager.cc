@@ -61,6 +61,7 @@ static const char* kFilteredAudioDevicesName[] = {
 // TODO: Try to get hold of a copy of Final Cut to understand why we
 //               crash while scanning their components on OS X.
 static const char* const kFilteredVideoDevicesName[] =  {
+    "Google Camera Adapter",   // Our own magiccams
     "DVCPRO HD",               // Final cut
     "Sonix SN9C201p",          // Crashes in OpenAComponent and CloseComponent
     NULL,

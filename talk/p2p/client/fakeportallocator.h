@@ -25,7 +25,8 @@ class FakePortAllocatorSession : public PortAllocatorSession {
                            int component,
                            const std::string& ice_ufrag,
                            const std::string& ice_pwd)
-      : PortAllocatorSession(component, ice_ufrag, ice_pwd, 0),
+      : PortAllocatorSession(component, ice_ufrag, ice_pwd,
+                             cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG),
         worker_thread_(worker_thread),
         factory_(factory),
         network_("network", "unittest",

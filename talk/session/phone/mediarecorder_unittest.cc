@@ -327,7 +327,7 @@ void TestRecordHeaderAndMedia(BaseChannel* channel,
 
 TEST(MediaRecorderTest, TestMediaRecorderVoiceChannel) {
   // Create the voice channel.
-  FakeSession session(true);
+  FakeSession session;
   FakeMediaEngine media_engine;
   VoiceChannel channel(talk_base::Thread::Current(), &media_engine,
                        new FakeVoiceMediaChannel(NULL), &session, "", false);
@@ -339,7 +339,7 @@ TEST(MediaRecorderTest, TestMediaRecorderVoiceChannel) {
 
 TEST(MediaRecorderTest, TestMediaRecorderVideoChannel) {
   // Create the video channel.
-  FakeSession session(true);
+  FakeSession session;
   FakeMediaEngine media_engine;
   FakeVideoMediaChannel* media_channel = new FakeVideoMediaChannel(NULL);
   VideoChannel channel(talk_base::Thread::Current(), &media_engine,

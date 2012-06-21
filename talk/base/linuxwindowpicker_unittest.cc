@@ -43,4 +43,18 @@ TEST(LinuxWindowPickerTest, TestGetWindowList) {
   window_picker.GetWindowList(&descriptions);
 }
 
+TEST(LinuxWindowPickerTest, TestGetDesktopList) {
+  LinuxWindowPicker window_picker;
+  DesktopDescriptionList descriptions;
+  EXPECT_TRUE(window_picker.Init());
+  EXPECT_TRUE(window_picker.GetDesktopList(&descriptions));
+  EXPECT_TRUE(descriptions.size() > 0);
+  int width = 0;
+  int height = 0;
+  EXPECT_TRUE(window_picker.GetDesktopDimensions(
+      descriptions[0].id(), &width, &height));
+  EXPECT_TRUE(width > 0);
+  EXPECT_TRUE(height > 0);
+}
+
 }  // namespace talk_base

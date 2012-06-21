@@ -136,6 +136,8 @@ class P2PTransportChannelTestBase : public testing::Test,
     ep2_.allocator_.reset(new cricket::BasicPortAllocator(
         &ep2_.network_manager_, kStunAddr, kRelayUdpIntAddr,
         kRelayTcpIntAddr, kRelaySslTcpIntAddr));
+    SetAllocatorFlags(0, cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
+    SetAllocatorFlags(1, cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
   }
 
  protected:
@@ -393,22 +395,24 @@ class P2PTransportChannelTestBase : public testing::Test,
       EXPECT_EQ(expected.remote_type, RemoteCandidate(ep1_ch1())->type());
       EXPECT_EQ(expected.remote_proto, RemoteCandidate(ep1_ch1())->protocol());
 
-      /* TODO - Enable ep2 candidates check.
-      // Checking for best connection candidates information at remote.
-      EXPECT_TRUE_WAIT_MARGIN(
-          LocalCandidate(ep2_ch1())->type() == expected.local_type2 &&
-          LocalCandidate(ep2_ch1())->protocol() == expected.local_proto2 &&
-          RemoteCandidate(ep2_ch1())->type() == expected.remote_type2 &&
-          RemoteCandidate(ep2_ch1())->protocol() == expected.remote_proto2,
-          converge_wait - talk_base::TimeSince(converge_start),
-          converge_wait - talk_base::TimeSince(converge_start));
-
-      // For verbose
-      EXPECT_EQ(expected.local_type2, LocalCandidate(ep2_ch1())->type());
-      EXPECT_EQ(expected.local_proto2, LocalCandidate(ep2_ch1())->protocol());
-      EXPECT_EQ(expected.remote_type2, RemoteCandidate(ep2_ch1())->type());
-      EXPECT_EQ(expected.remote_proto2, RemoteCandidate(ep2_ch1())->protocol());
-      */
+      // TODO(ronghuawu): Enable below check when USE-CANDIDATE is ready.
+      /*if (ep2_.protocol_type_ == cricket::ICEPROTO_RFC5245) {
+        // Checking for best connection candidates information at remote.
+        EXPECT_TRUE_WAIT_MARGIN(
+            LocalCandidate(ep2_ch1())->type() == expected.local_type2 &&
+            LocalCandidate(ep2_ch1())->protocol() == expected.local_proto2 &&
+            RemoteCandidate(ep2_ch1())->type() == expected.remote_type2 &&
+            RemoteCandidate(ep2_ch1())->protocol() == expected.remote_proto2,
+            converge_wait - talk_base::TimeSince(converge_start),
+            converge_wait - talk_base::TimeSince(converge_start));
+      
+        // For verbose
+        EXPECT_EQ(expected.local_type2, LocalCandidate(ep2_ch1())->type());
+        EXPECT_EQ(expected.local_proto2, LocalCandidate(ep2_ch1())->protocol());
+        EXPECT_EQ(expected.remote_type2, RemoteCandidate(ep2_ch1())->type());
+        EXPECT_EQ(expected.remote_proto2,
+                  RemoteCandidate(ep2_ch1())->protocol());
+      }*/
 
       converge_time = talk_base::TimeSince(converge_start);
       if (converge_time < converge_wait) {
@@ -560,9 +564,12 @@ const P2PTransportChannelTestBase::Result P2PTransportChannelTestBase::
 class P2PTransportChannelTest : public P2PTransportChannelTestBase {
  protected:
   static const Result* kMatrix[NUM_CONFIGS][NUM_CONFIGS];
-  void ConfigureEndpoints(Config config1, Config config2) {
+  void ConfigureEndpoints(Config config1, Config config2,
+      cricket::IceProtocolType type) {
     ConfigureEndpoint(0, config1);
+    SetIceProtocol(0, type);
     ConfigureEndpoint(1, config2);
+    SetIceProtocol(1, type);
   }
   void ConfigureEndpoint(int endpoint, Config config) {
     switch (config) {
@@ -653,11 +660,11 @@ const P2PTransportChannelTest::Result*
 //      OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP  PRXH  PRXS
 /*OP*/ {LULU, LUSU, LULU, LULU, LULU, LUSU, LULU, LTLT, LTLT, LSRS, NULL, LTLT},
 /*CO*/ {LULU, LUSU, LUSU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
-/*AD*/ {LULU, LUSU, LULU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
-/*PO*/ {LULU, LUSU, SUSU, SUSU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
-/*SY*/ {LULU, LUSU, SUSU, LURU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
+/*AD*/ {LULU, LUSU, LUSU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
+/*PO*/ {LULU, LUSU, LUSU, SUSU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
+/*SY*/ {LULU, LUSU, LUSU, LURU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
 /*2C*/ {LULU, LUSU, LUSU, SUSU, SUSU, LUSU, SUSU, NULL, NULL, LSRS, NULL, LTRT},
-/*SC*/ {LULU, LUSU, SUSU, LURU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
+/*SC*/ {LULU, LUSU, LUSU, LURU, LURU, LUSU, LURU, NULL, NULL, LSRS, NULL, LTRT},
 /*!U*/ {LTLT, NULL, NULL, NULL, NULL, NULL, NULL, LTLT, LTLT, LSRS, NULL, LTRT},
 /*!T*/ {LTRT, NULL, NULL, NULL, NULL, NULL, NULL, LTLT, LTRT, LSRS, NULL, LTRT},
 /*HT*/ {LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, LSRS, NULL, LSRS},
@@ -667,20 +674,25 @@ const P2PTransportChannelTest::Result*
 
 // The actual tests that exercise all the various configurations.
 // Test names are of the form P2PTransportChannelTest_TestOPENToNAT_FULL_CONE
+// Same test case is run in both GICE and ICE mode.
 #define P2P_TEST_DECLARATION(x, y, z) \
-  TEST_F(P2PTransportChannelTest, z##Test##x##To##y) { \
-    ConfigureEndpoints(x, y); \
+  TEST_F(P2PTransportChannelTest, z##Test##x##To##y##AsGice) { \
+    ConfigureEndpoints(x, y, cricket::ICEPROTO_GOOGLE); \
     if (kMatrix[x][y] != NULL) \
       Test(*kMatrix[x][y]); \
     else \
       LOG(LS_WARNING) << "Not yet implemented"; \
+  } \
+  TEST_F(P2PTransportChannelTest, z##Test##x##To##y##AsIce) { \
+    ConfigureEndpoints(x, y, cricket::ICEPROTO_RFC5245); \
+    if (kMatrix[x][y] != NULL) \
+      Test(*kMatrix[x][y]); \
+    else \
+    LOG(LS_WARNING) << "Not yet implemented"; \
   }
 
 #define P2P_TEST(x, y) \
   P2P_TEST_DECLARATION(x, y,)
-
-#define FLAKY_P2P_TEST(x, y) \
-  P2P_TEST_DECLARATION(x, y, DISABLED_)
 
 #define P2P_TEST_SET(x) \
   P2P_TEST(x, OPEN) \
@@ -696,27 +708,13 @@ const P2PTransportChannelTest::Result*
   P2P_TEST(x, PROXY_HTTPS) \
   P2P_TEST(x, PROXY_SOCKS)
 
-#define FLAKY_P2P_TEST_SET(x) \
-  P2P_TEST(x, OPEN) \
-  P2P_TEST(x, NAT_FULL_CONE) \
-  FLAKY_P2P_TEST(x, NAT_ADDR_RESTRICTED) \
-  P2P_TEST(x, NAT_PORT_RESTRICTED) \
-  P2P_TEST(x, NAT_SYMMETRIC) \
-  P2P_TEST(x, NAT_DOUBLE_CONE) \
-  P2P_TEST(x, NAT_SYMMETRIC_THEN_CONE) \
-  P2P_TEST(x, BLOCK_UDP) \
-  P2P_TEST(x, BLOCK_UDP_AND_INCOMING_TCP) \
-  P2P_TEST(x, BLOCK_ALL_BUT_OUTGOING_HTTP) \
-  P2P_TEST(x, PROXY_HTTPS) \
-  P2P_TEST(x, PROXY_SOCKS)
-
 P2P_TEST_SET(OPEN)
 P2P_TEST_SET(NAT_FULL_CONE)
-FLAKY_P2P_TEST_SET(NAT_ADDR_RESTRICTED)
-FLAKY_P2P_TEST_SET(NAT_PORT_RESTRICTED)
-FLAKY_P2P_TEST_SET(NAT_SYMMETRIC)
+P2P_TEST_SET(NAT_ADDR_RESTRICTED)
+P2P_TEST_SET(NAT_PORT_RESTRICTED)
+P2P_TEST_SET(NAT_SYMMETRIC)
 P2P_TEST_SET(NAT_DOUBLE_CONE)
-FLAKY_P2P_TEST_SET(NAT_SYMMETRIC_THEN_CONE)
+P2P_TEST_SET(NAT_SYMMETRIC_THEN_CONE)
 P2P_TEST_SET(BLOCK_UDP)
 P2P_TEST_SET(BLOCK_UDP_AND_INCOMING_TCP)
 P2P_TEST_SET(BLOCK_ALL_BUT_OUTGOING_HTTP)
@@ -725,7 +723,7 @@ P2P_TEST_SET(PROXY_SOCKS)
 
 // Test the operation of GetStats.
 TEST_F(P2PTransportChannelTest, GetStats) {
-  ConfigureEndpoints(OPEN, OPEN);
+  ConfigureEndpoints(OPEN, OPEN, cricket::ICEPROTO_GOOGLE);
   CreateChannels(1);
   EXPECT_TRUE_WAIT_MARGIN(ep1_ch1()->readable() && ep1_ch1()->writable() &&
                           ep2_ch1()->readable() && ep2_ch1()->writable(),
@@ -747,7 +745,7 @@ TEST_F(P2PTransportChannelTest, GetStats) {
 
 // Test that we properly handle getting a STUN error due to slow signaling.
 TEST_F(P2PTransportChannelTest, SlowSignaling) {
-  ConfigureEndpoints(OPEN, NAT_SYMMETRIC);
+  ConfigureEndpoints(OPEN, NAT_SYMMETRIC, cricket::ICEPROTO_GOOGLE);
   // Make signaling from the callee take 500ms, so that the initial STUN pings
   // from the callee beat the signaling, and so the caller responds with a
   // unknown username error. We should just eat that and carry on; mishandling
@@ -766,7 +764,7 @@ TEST_F(P2PTransportChannelTest, SlowSignaling) {
 // Test that a host behind NAT cannot be reached when incoming_only
 // is set to true.
 TEST_F(P2PTransportChannelTest, IncomingOnlyBlocked) {
-  ConfigureEndpoints(NAT_FULL_CONE, OPEN);
+  ConfigureEndpoints(NAT_FULL_CONE, OPEN, cricket::ICEPROTO_GOOGLE);
 
   SetAllocatorFlags(0, kOnlyLocalPorts);
   CreateChannels(1);
@@ -786,7 +784,7 @@ TEST_F(P2PTransportChannelTest, IncomingOnlyBlocked) {
 // Test that a peer behind NAT can connect to a peer that has
 // incoming_only flag set.
 TEST_F(P2PTransportChannelTest, IncomingOnlyOpen) {
-  ConfigureEndpoints(OPEN, NAT_FULL_CONE);
+  ConfigureEndpoints(OPEN, NAT_FULL_CONE, cricket::ICEPROTO_GOOGLE);
 
   SetAllocatorFlags(0, kOnlyLocalPorts);
   CreateChannels(1);

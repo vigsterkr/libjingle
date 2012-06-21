@@ -34,11 +34,13 @@
 #include <string>
 #include "talk/base/basictypes.h"
 #include "talk/base/common.h"
+#include "talk/base/logging.h"
 #include "talk/base/messagequeue.h"
 #include "talk/base/stream.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
+#include "talk/base/timeutils.h"
 
 #ifdef WIN32
 #include "talk/base/win32.h"
@@ -519,6 +521,87 @@ bool FileStream::Unlock() {
 
 void FileStream::DoClose() {
   fclose(file_);
+}
+
+AsyncWriteStream::~AsyncWriteStream() {
+  write_thread_->Clear(this, 0, NULL);
+  ClearBufferAndWrite();
+
+  CritScope cs(&crit_stream_);
+  stream_.reset();
+}
+
+StreamResult AsyncWriteStream::Read(void* buffer, size_t buffer_len,
+                                    size_t* read, int* error) {
+  if (error) *error = -1;
+  return SR_ERROR;
+}
+
+void AsyncWriteStream::Close() {
+  if (state_ == SS_CLOSED) {
+    return;
+  }
+
+  write_thread_->Clear(this, 0, NULL);
+  ClearBufferAndWrite();
+
+  CritScope cs(&crit_stream_);
+  stream_->Close();
+  state_ = SS_CLOSED;
+}
+
+StreamResult AsyncWriteStream::Write(const void* data, size_t data_len,
+                                     size_t* written, int* error) {
+  if (state_ == SS_CLOSED) {
+    return SR_ERROR;
+  }
+
+  size_t previous_buffer_length = 0;
+  {
+    CritScope cs(&crit_buffer_);
+    previous_buffer_length = buffer_.length();
+    buffer_.AppendData(data, data_len);
+  }
+
+  if (previous_buffer_length == 0) {
+    // If there's stuff already in the buffer, then we already called
+    // Post and the write_thread_ hasn't pulled it out yet, so we
+    // don't need to re-Post.
+    write_thread_->Post(this, 0, NULL);
+  }
+  // Return immediately, assuming that it works.
+  if (written) {
+    *written = data_len;
+  }
+  return SR_SUCCESS;
+}
+
+void AsyncWriteStream::OnMessage(talk_base::Message* pmsg) {
+  ClearBufferAndWrite();
+}
+
+bool AsyncWriteStream::Flush() {
+  if (state_ == SS_CLOSED) {
+    return false;
+  }
+
+  ClearBufferAndWrite();
+
+  CritScope cs(&crit_stream_);
+  return stream_->Flush();
+}
+
+void AsyncWriteStream::ClearBufferAndWrite() {
+  Buffer to_write;
+  {
+    CritScope cs_buffer(&crit_buffer_);
+    buffer_.TransferTo(&to_write);
+  }
+
+  if (to_write.length() > 0) {
+    CritScope cs(&crit_stream_);
+    stream_->WriteAll(to_write.data(), to_write.length(), NULL, NULL);
+  }
 }
 
 #ifdef POSIX

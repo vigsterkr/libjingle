@@ -337,6 +337,8 @@ void P2PTransportChannel::OnUnknownAddress(
   // Port has received a valid stun packet from an address that no Connection
   // is currently available for. See if we already have a candidate with the
   // address. If it isn't we need to create new candidate for it.
+  bool ufrag_per_port =
+      !(allocator_->flags() & PORTALLOCATOR_ENABLE_SHARED_UFRAG);
   const Candidate* candidate = NULL;
   bool known_username = false;
   std::string remote_password;
@@ -345,7 +347,7 @@ void P2PTransportChannel::OnUnknownAddress(
     if ((*it).username() == remote_username) {
       remote_password = (*it).password();
       known_username = true;
-      if ((*it).address() == address) {
+      if (ufrag_per_port || ((*it).address() == address)) {
         candidate = &(*it);
         break;
       }
@@ -372,6 +374,9 @@ void P2PTransportChannel::OnUnknownAddress(
   Candidate new_remote_candidate;
   if (candidate != NULL) {
     new_remote_candidate = *candidate;
+    if (ufrag_per_port) {
+      new_remote_candidate.set_address(address);
+    }
   } else {
     // Create a new candidate with this address.
 

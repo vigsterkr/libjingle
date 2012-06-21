@@ -28,8 +28,10 @@
 #ifndef TALK_P2P_BASE_CANDIDATE_H_
 #define TALK_P2P_BASE_CANDIDATE_H_
 
+#include <climits>
 #include <string>
 #include <sstream>
+#include "talk/base/basictypes.h"
 #include "talk/base/socketaddress.h"
 #include "talk/p2p/base/constants.h"
 
@@ -39,7 +41,7 @@ namespace cricket {
 
 class Candidate {
  public:
-  // TODO: Match the ordering and param list as per RFC 5245
+  // TODO(mallinath): Match the ordering and param list as per RFC 5245
   // candidate-attribute syntax. http://tools.ietf.org/html/rfc5245#section-15.1
   Candidate() : component_(0), priority_(0), generation_(0), foundation_(0) {}
   Candidate(const std::string& id, int component, const std::string& protocol,
@@ -77,7 +79,11 @@ class Candidate {
     return static_cast<float>(priority_ >> 24) / 127;
   }
   void set_preference(float preference) {
-    priority_ = static_cast<uint32>(preference * 127) << 24;
+    // Limiting priority to UINT_MAX when value exceeds uint32 max.
+    // This can happen for e.g. when preference = 3.
+    uint64 prio_val = static_cast<uint64>(preference * 127) << 24;
+    priority_ = static_cast<uint32>(
+      talk_base::_min(prio_val, static_cast<uint64>(UINT_MAX)));
   }
 
   const std::string & username() const { return username_; }

@@ -191,6 +191,14 @@ bool MacWindowPicker::GetDesktopList(DesktopDescriptionList* descriptions) {
   return display_count > 0;
 }
 
+bool MacWindowPicker::GetDesktopDimensions(const DesktopId& id,
+                                           int* width,
+                                           int* height) {
+  // TODO: Implement GetDesktopDimensions for Mac.
+  LOG(LS_ERROR) << "Not implemented.";
+  return false;
+}
+
 bool MacWindowPicker::GetWindowList(WindowDescriptionList* descriptions) {
   // Init if we're not already inited.
   if (get_window_list_ == NULL && !Init()) {

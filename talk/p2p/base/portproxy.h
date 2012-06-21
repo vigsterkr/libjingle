@@ -90,6 +90,36 @@ class PortProxy : public Port {
     return impl_->network();
   }
 
+  virtual void set_ice_protocol(IceProtocolType protocol) {
+    ASSERT(impl_ != NULL);
+    return impl_->set_ice_protocol(protocol);
+  }
+
+  virtual IceProtocolType ice_protocol() const {
+    ASSERT(impl_ != NULL);
+    return impl_->ice_protocol();
+  }
+
+  virtual void set_role(TransportRole role) {
+    ASSERT(impl_ != NULL);
+    return impl_->set_role(role);
+  }
+
+  virtual TransportRole role() {
+    ASSERT(impl_ != NULL);
+    return impl_->role();
+  }
+
+  virtual void set_tiebreaker(uint64 tiebreaker) {
+    ASSERT(impl_ != NULL);
+    return impl_->set_tiebreaker(tiebreaker);
+  }
+
+  virtual uint64 tiebreaker() {
+    ASSERT(impl_ != NULL);
+    return impl_->tiebreaker();
+  }
+
  private:
   void OnUnknownAddress(Port *port, const talk_base::SocketAddress &addr,
                         IceMessage *stun_msg,

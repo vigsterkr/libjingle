@@ -30,6 +30,10 @@
 
 #include "talk/base/basictypes.h"
 
+namespace flute {
+class MagicCamVideoRenderer;
+}
+
 namespace cricket {
 
 // Simple rotation constants.
@@ -42,8 +46,10 @@ enum {
 
 // Represents a YUV420 (a.k.a. I420) video frame.
 class VideoFrame {
+  friend class flute::MagicCamVideoRenderer;
+
  public:
-  VideoFrame() {}
+  VideoFrame() : rendered_(false) {}
   virtual ~VideoFrame() {}
 
   // Creates a frame from a raw sample with FourCC |format| and size |w| x |h|.
@@ -161,6 +167,11 @@ class VideoFrame {
                                        size_t pixel_width, size_t pixel_height,
                                        int64 elapsed_time,
                                        int64 time_stamp) const = 0;
+
+  // The frame needs to be rendered to magiccam only once.
+  // TODO: Remove this flag once magiccam rendering is fully replaced
+  // by client3d rendering.
+  mutable bool rendered_;
 };
 
 }  // namespace cricket

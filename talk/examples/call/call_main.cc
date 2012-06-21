@@ -210,6 +210,7 @@ int main(int argc, char **argv) {
   // define options
   DEFINE_bool(a, false, "Turn on auto accept.");
   DEFINE_bool(d, false, "Turn on debugging.");
+  DEFINE_string(log, "", "Turn on debugging to a file.");
   DEFINE_string(protocol, "hybrid",
       "Initial signaling protocol to use: jingle, gingle, or hybrid.");
   DEFINE_string(secure, "enable",
@@ -245,6 +246,7 @@ int main(int argc, char **argv) {
 
   bool auto_accept = FLAG_a;
   bool debug = FLAG_d;
+  std::string log = FLAG_log;
   std::string protocol = FLAG_protocol;
   bool test_server = FLAG_testserver;
   bool allow_plain = FLAG_allowplain;
@@ -299,8 +301,20 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (debug)
+  if (debug) {
     talk_base::LogMessage::LogToDebug(talk_base::LS_VERBOSE);
+  }
+
+  if (!log.empty()) {
+    talk_base::StreamInterface* stream =
+        talk_base::Filesystem::OpenFile(log, "a");
+    if (stream) {
+      talk_base::LogMessage::LogToStream(stream, talk_base::LS_VERBOSE);
+    } else {
+      Print(("Cannot open debug log " + log + "\n").c_str());
+      return 1;
+    }
+  }
 
   if (username.empty()) {
     Print("JID: ");

@@ -52,6 +52,8 @@ class LinuxWindowPicker : public WindowPicker {
   virtual bool MoveToFront(const WindowId& id);
   virtual bool GetWindowList(WindowDescriptionList* descriptions);
   virtual bool GetDesktopList(DesktopDescriptionList* descriptions);
+  virtual bool GetDesktopDimensions(const DesktopId& id, int* width,
+                                    int* height);
   uint8* GetWindowIcon(const WindowId& id, int* width, int* height);
   uint8* GetWindowThumbnail(const WindowId& id, int width, int height);
   int GetNumDesktops();

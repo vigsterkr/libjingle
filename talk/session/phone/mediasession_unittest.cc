@@ -254,54 +254,6 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
     }
   }
 
-  void TestCryptoWithBundle(bool offer) {
-    f1_.set_secure(SEC_ENABLED);
-    MediaSessionOptions options;
-    options.has_audio = true;
-    options.has_video = true;
-    talk_base::scoped_ptr<SessionDescription> ref_desc;
-    talk_base::scoped_ptr<SessionDescription> desc;
-    if (offer) {
-      options.bundle_enabled = false;
-      ref_desc.reset(f1_.CreateOffer(options, NULL));
-      options.bundle_enabled = true;
-      desc.reset(f1_.CreateOffer(options, ref_desc.get()));
-    } else {
-      options.bundle_enabled = true;
-      ref_desc.reset(f1_.CreateOffer(options, NULL));
-      desc.reset(f1_.CreateAnswer(ref_desc.get(), options, NULL));
-    }
-    ASSERT_TRUE(desc.get() != NULL);
-    const cricket::MediaContentDescription* audio_media_desc =
-        static_cast<const cricket::MediaContentDescription*> (
-            desc.get()->GetContentDescriptionByName("audio"));
-    ASSERT_TRUE(audio_media_desc != NULL);
-    const cricket::MediaContentDescription* video_media_desc =
-        static_cast<const cricket::MediaContentDescription*> (
-            desc.get()->GetContentDescriptionByName("video"));
-    ASSERT_TRUE(video_media_desc != NULL);
-    EXPECT_TRUE(CompareCryptoParams(audio_media_desc->cryptos(),
-                                    video_media_desc->cryptos()));
-    EXPECT_EQ(1u, audio_media_desc->cryptos().size());
-    EXPECT_EQ(std::string(CS_AES_CM_128_HMAC_SHA1_80),
-              audio_media_desc->cryptos()[0].cipher_suite);
-
-    // Verify the selected crypto is one from the reference audio
-    // media content.
-    const cricket::MediaContentDescription* ref_audio_media_desc =
-        static_cast<const cricket::MediaContentDescription*> (
-            ref_desc.get()->GetContentDescriptionByName("audio"));
-    bool found = false;
-    for (size_t i = 0; i < ref_audio_media_desc->cryptos().size(); ++i) {
-      if (ref_audio_media_desc->cryptos()[i].Matches(
-          audio_media_desc->cryptos()[0])) {
-        found = true;
-        break;
-      }
-    }
-    EXPECT_TRUE(found);
-  }
-
  protected:
   MediaSessionDescriptionFactory f1_;
   MediaSessionDescriptionFactory f2_;
@@ -1081,17 +1033,4 @@ TEST_F(MediaSessionDescriptionFactoryTest,
   options.has_video = true;
   options.bundle_enabled = true;
   TestTransportInfo(false, options, true);
-}
-
-
-// Create an offer with bundle enabled and verify the crypto parameters are
-// the common set of the available cryptos.
-TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoWithOfferBundle) {
-  TestCryptoWithBundle(true);
-}
-
-// Create an answer with bundle enabled and verify the crypto parameters are
-// the common set of the available cryptos.
-TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoWithAnswerBundle) {
-  TestCryptoWithBundle(false);
 }

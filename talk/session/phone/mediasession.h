@@ -159,9 +159,6 @@ class MediaContentDescription : public ContentDescription {
   void AddCrypto(const CryptoParams& params) {
     cryptos_.push_back(params);
   }
-  void set_cryptos(const std::vector<CryptoParams>& cryptos) {
-    cryptos_ = cryptos;
-  }
   bool crypto_required() const { return crypto_required_; }
   void set_crypto_required(bool crypto) {
     crypto_required_ = crypto;
@@ -399,11 +396,6 @@ bool GetMediaComponentFromChannelName(
     const std::string& channel_name, int* component);
 bool GetMediaTypeFromChannelName(
     const std::string& channel_name, cricket::MediaType* media_type);
-
-void GetSupportedAudioCryptoSuites(std::vector<std::string>* crypto_suites);
-void GetSupportedVideoCryptoSuites(std::vector<std::string>* crypto_suites);
-void GetSupportedDataCryptoSuites(std::vector<std::string>* crypto_suites);
-void GetSupportedDefaultCryptoSuites(std::vector<std::string>* crypto_suites);
 }  // namespace cricket
 
 #endif  // TALK_SESSION_PHONE_MEDIASESSION_H_

@@ -132,6 +132,7 @@ enum LogErrorContext {
 class LogMessage {
  public:
   static const int NO_LOGGING;
+  static const uint32 WARN_SLOW_LOGS_DELAY = 50;  // ms
 
   LogMessage(const char* file, int line, LoggingSeverity sev,
              LogErrorContext err_ctx = ERRCTX_NONE, int err = 0,
@@ -211,6 +212,10 @@ class LogMessage {
   // String data generated in the constructor, that should be appended to
   // the message before output.
   std::string extra_;
+
+  // If time it takes to write to stream is more than this, log one
+  // additional warning about it.
+  uint32 warn_slow_logs_delay_;
 
   // Global lock for the logging subsystem
   static CriticalSection crit_;

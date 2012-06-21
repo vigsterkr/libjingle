@@ -87,15 +87,7 @@ class BaseChannel
     return rtcp_transport_channel_;
   }
   bool enabled() const { return enabled_; }
-
-  // This function returns true iff we are using SRTP.
   bool secure() const { return srtp_filter_.IsActive(); }
-  // The following function returns true if we are using
-  // DTLS-based keying. If you turned off SRTP later, however
-  // you could have secure() == false and dtls_secure() == true.
-  bool secure_dtls() const { return dtls_keyed_; }
-
-  bool writable() const { return writable_; }
   bool muted() const { return muted_; }
 
   // Channel control
@@ -198,13 +190,11 @@ class BaseChannel
     return remote_streams_;
   }
 
-  // Used for latency measurements.
-  sigslot::signal1<BaseChannel*> SignalFirstPacketReceived;
-
  protected:
   MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
   void set_rtcp_transport_channel(TransportChannel* transport);
+  bool writable() const { return writable_; }
   bool was_ever_writable() const { return was_ever_writable_; }
   void set_local_content_direction(MediaContentDirection direction) {
     local_content_direction_ = direction;
@@ -252,11 +242,6 @@ class BaseChannel
   void ChannelNotWritable_w();
   bool AddRecvStream_w(const StreamParams& sp);
   bool RemoveRecvStream_w(uint32 ssrc);
-  // Do the DTLS key expansion and impose it on the SRTP/SRTCP filters.
-  // |rtcp_channel| indicates whether to set up the RTP or RTCP filter.
-  bool SetupDtlsSrtp(bool rtcp_channel);
-  // Set the DTLS-SRTP cipher policy on this channel as appropriate.
-  bool SetDtlsSrtpCiphers(TransportChannel *tc, bool rtcp);
 
   // Configuration and setting.
   void SetChannelOptions_w(int options);
@@ -289,8 +274,6 @@ class BaseChannel
   virtual void OnMessage(talk_base::Message* pmsg);
 
   // Handled in derived classes
-  // Get the SRTP ciphers to use for RTP media
-  virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const = 0;
   virtual void OnConnectionMonitorUpdate(SocketMonitor* monitor,
       const std::vector<ConnectionInfo>& infos) = 0;
 
@@ -323,9 +306,6 @@ class BaseChannel
   MediaContentDirection local_content_direction_;
   MediaContentDirection remote_content_direction_;
   bool muted_;
-  bool has_received_packet_;
-  bool dtls_keyed_;
-  bool crypto_required_;
 };
 
 // VoiceChannel is a specialization that adds support for early media, DTMF,
@@ -391,6 +371,7 @@ class VoiceChannel : public BaseChannel {
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                   ContentAction action);
+
   bool SetRingbackTone_w(const void* buf, int len);
   bool PlayRingbackTone_w(uint32 ssrc, bool play, bool loop);
   void HandleEarlyMediaTimeout();
@@ -398,7 +379,6 @@ class VoiceChannel : public BaseChannel {
   bool SetOutputScaling_w(uint32 ssrc, double left, double right);
 
   virtual void OnMessage(talk_base::Message* pmsg);
-  virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const;
   virtual void OnConnectionMonitorUpdate(
       SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(
@@ -407,7 +387,6 @@ class VoiceChannel : public BaseChannel {
   void OnVoiceChannelError(uint32 ssrc, VoiceMediaChannel::Error error);
   void SendLastMediaError();
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
-
 
   static const int kEarlyMediaTimeout = 1000;
   bool received_media_;
@@ -458,7 +437,6 @@ class VideoChannel : public BaseChannel {
 
   void SetScreenCaptureFactory(
       ScreenCapturerFactory* screencapture_factory);
-
  protected:
   // downcasts a MediaChannel
   virtual VideoMediaChannel* media_channel() const {
@@ -476,6 +454,7 @@ class VideoChannel : public BaseChannel {
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                   ContentAction action);
+
   void SendIntraFrame_w() {
     media_channel()->SendIntraFrame();
   }
@@ -497,7 +476,6 @@ class VideoChannel : public BaseChannel {
       ScreenCapturerFactory* screencapture_factory);
 
   virtual void OnMessage(talk_base::Message* pmsg);
-  virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const;
   virtual void OnConnectionMonitorUpdate(
       SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(
@@ -583,7 +561,6 @@ class DataChannel : public BaseChannel {
   virtual void ChangeState();
 
   virtual void OnMessage(talk_base::Message* pmsg);
-  virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const;
   virtual void OnConnectionMonitorUpdate(
       SocketMonitor* monitor, const std::vector<ConnectionInfo>& infos);
   virtual void OnMediaMonitorUpdate(

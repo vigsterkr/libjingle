@@ -17,6 +17,8 @@ class Win32WindowPicker : public WindowPicker {
   virtual bool MoveToFront(const WindowId& id);
   virtual bool GetWindowList(WindowDescriptionList* descriptions);
   virtual bool GetDesktopList(DesktopDescriptionList* descriptions);
+  virtual bool GetDesktopDimensions(const DesktopId& id, int* width,
+                                    int* height);
 
  protected:
   static BOOL CALLBACK EnumProc(HWND hwnd, LPARAM l_param);

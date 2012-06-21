@@ -592,7 +592,8 @@ void RelayEntry::HandleConnectFailure(
     talk_base::AsyncPacketSocket* socket) {
   // Make sure it's the current connection that has failed, it might
   // be an old socked that has not yet been disposed.
-  if (!socket || socket == current_connection_->socket()) {
+  if (!socket ||
+      (current_connection_ && socket == current_connection_->socket())) {
     if (current_connection_)
       port()->SignalConnectFailure(current_connection_->protocol_address());
 

@@ -45,6 +45,7 @@ static const int kMaxLogLineSize = 1024 - 60;
 
 #include <iostream>
 #include <iomanip>
+#include <limits.h>
 #include <vector>
 
 #include "talk/base/logging.h"
@@ -118,7 +119,8 @@ bool LogMessage::is_diagnostic_mode_ = false;
 
 LogMessage::LogMessage(const char* file, int line, LoggingSeverity sev,
                        LogErrorContext err_ctx, int err, const char* module)
-    : severity_(sev) {
+    : severity_(sev),
+      warn_slow_logs_delay_(WARN_SLOW_LOGS_DELAY) {
   // Android's logging facility keeps track of timestamp and thread.
 #ifndef ANDROID
   if (timestamp_) {
@@ -194,12 +196,24 @@ LogMessage::~LogMessage() {
     OutputToDebug(str, severity_);
   }
 
+  uint32 before = Time();
   // Must lock streams_ before accessing
   CritScope cs(&crit_);
   for (StreamList::iterator it = streams_.begin(); it != streams_.end(); ++it) {
     if (severity_ >= it->second) {
       OutputToStream(it->first, str);
     }
+  }
+  uint32 delay = TimeSince(before);
+  if (delay >= warn_slow_logs_delay_) {
+    LogMessage slow_log_warning =
+        talk_base::LogMessage(__FILE__, __LINE__, LS_WARNING);
+    // If our warning is slow, we don't want to warn about it, because
+    // that would lead to inifinite recursion.  So, give a really big
+    // number for the delay threshold.
+    slow_log_warning.warn_slow_logs_delay_ = UINT_MAX;
+    slow_log_warning.stream() << "Slow log: took " << delay << "ms to write "
+                              << str.size() << " bytes.";
   }
 }
 

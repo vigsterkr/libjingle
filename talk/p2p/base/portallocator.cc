@@ -37,8 +37,11 @@ PortAllocatorSession::PortAllocatorSession(int component,
                                            uint32 flags)
     : component_(component),
       flags_(flags),
-      username_(ice_ufrag),
-      password_(ice_pwd) {
+      // If PORTALLOCATOR_ENABLE_SHARED_UFRAG flag is not enabled, ignore the
+      // incoming ufrag and pwd, which will cause each Port to generate one
+      // by itself.
+      username_(flags_ & PORTALLOCATOR_ENABLE_SHARED_UFRAG ? ice_ufrag : ""),
+      password_(flags_ & PORTALLOCATOR_ENABLE_SHARED_UFRAG ? ice_pwd : "") {
 }
 
 PortAllocator::~PortAllocator() {

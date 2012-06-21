@@ -29,6 +29,7 @@
 #define TALK_BASE_STREAM_H_
 
 #include "talk/base/basictypes.h"
+#include "talk/base/buffer.h"
 #include "talk/base/criticalsection.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagehandler.h"
@@ -197,6 +198,9 @@ class StreamInterface : public MessageHandler {
   // Returns false if not known.
   virtual bool GetWriteRemaining(size_t* size) const { return false; }
 
+  // Return true if flush is successful.
+  virtual bool Flush() { return false; }
+
   // Communicates the amount of data which will be written to the stream.  The
   // stream may choose to preallocate memory to accomodate this data.  The
   // stream may return false to indicate that there is not enough room (ie,
@@ -315,6 +319,9 @@ class StreamAdapterInterface : public StreamInterface,
   }
   virtual bool ReserveSize(size_t size) {
     return stream_->ReserveSize(size);
+  }
+  virtual bool Flush() {
+    return stream_->Flush();
   }
 
   void Attach(StreamInterface* stream, bool owned = true);
@@ -440,7 +447,7 @@ class FileStream : public StreamInterface {
   virtual bool GetAvailable(size_t* size) const;
   virtual bool ReserveSize(size_t size);
 
-  bool Flush();
+  virtual bool Flush();
 
 #if defined(POSIX)
   // Tries to aquire an exclusive lock on the file.
@@ -460,6 +467,46 @@ class FileStream : public StreamInterface {
  private:
   DISALLOW_EVIL_CONSTRUCTORS(FileStream);
 };
+
+
+// A stream which pushes writes onto a separate thread and
+// returns from the write call immediately.
+class AsyncWriteStream : public StreamInterface {
+ public:
+  // Takes ownership of the stream, but not the thread.
+  AsyncWriteStream(StreamInterface* stream, talk_base::Thread* write_thread)
+      : stream_(stream),
+        write_thread_(write_thread),
+        state_(stream ? stream->GetState() : SS_CLOSED) {
+  }
+
+  virtual ~AsyncWriteStream();
+
+  // StreamInterface Interface
+  virtual StreamState GetState() const { return state_; }
+  virtual StreamResult Read(void* buffer, size_t buffer_len,
+                            size_t* read, int* error);
+  virtual StreamResult Write(const void* data, size_t data_len,
+                             size_t* written, int* error);
+  virtual void Close();
+  virtual bool Flush();
+
+ protected:
+  // From MessageHandler
+  virtual void OnMessage(talk_base::Message* pmsg);
+  virtual void ClearBufferAndWrite();
+
+ private:
+  talk_base::scoped_ptr<StreamInterface> stream_;
+  Thread* write_thread_;
+  StreamState state_;
+  Buffer buffer_;
+  CriticalSection crit_stream_;
+  CriticalSection crit_buffer_;
+
+  DISALLOW_EVIL_CONSTRUCTORS(AsyncWriteStream);
+};
+
 
 #ifdef POSIX
 // A FileStream that is actually not a file, but the output or input of a

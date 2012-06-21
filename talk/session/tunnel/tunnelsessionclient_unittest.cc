@@ -56,10 +56,14 @@ class TunnelSessionClientTest : public testing::Test,
         local_client_(kLocalJid, &local_sm_),
         remote_client_(kRemoteJid, &remote_sm_),
         done_(false) {
+    local_sm_.SignalSessionCreate.connect(this,
+        &TunnelSessionClientTest::OnSessionCreate);
     local_sm_.SignalRequestSignaling.connect(this,
         &TunnelSessionClientTest::OnLocalRequestSignaling);
     local_sm_.SignalOutgoingMessage.connect(this,
         &TunnelSessionClientTest::OnOutgoingMessage);
+    remote_sm_.SignalSessionCreate.connect(this,
+        &TunnelSessionClientTest::OnSessionCreate);
     remote_sm_.SignalRequestSignaling.connect(this,
         &TunnelSessionClientTest::OnRemoteRequestSignaling);
     remote_sm_.SignalOutgoingMessage.connect(this,
@@ -91,6 +95,11 @@ class TunnelSessionClientTest : public testing::Test,
 
  private:
   enum { MSG_LSIGNAL, MSG_RSIGNAL };
+
+  // Use this callback to allow local ips for this test.
+  void OnSessionCreate(cricket::Session* session, bool incoming) {
+    session->set_allow_local_ips(true);
+  }
 
   // There's no SessionManager* argument in this callback, so we need 2 of them.
   void OnLocalRequestSignaling() {

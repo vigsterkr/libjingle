@@ -103,7 +103,6 @@ class WebRtcVoiceEngine
   SoundclipMedia* CreateSoundclip();
 
   bool SetOptions(int options);
-  bool SetDelayOffset(int offset);
   bool SetDevices(const Device* in_device, const Device* out_device);
   bool GetOutputVolume(int* level);
   bool SetOutputVolume(int level);
@@ -169,7 +168,6 @@ class WebRtcVoiceEngine
   struct CodecPref {
     const char* name;
     int clockrate;
-    int channels;
     int payload_type;
   };
 

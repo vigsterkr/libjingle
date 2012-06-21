@@ -1649,7 +1649,7 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   talk_base::scoped_ptr<UDPPort> udpport1(CreateUdpPort(kLocalAddr1));
   udpport1->PrepareAddress();
   // Compare foundation of candidates from both ports.
-  // TODO: Update this check with a STUN port which has the same
+  // TODO(mallinath): Update this check with a STUN port which has the same
   // base of UDP Port. This will happen once we have a common socket for all
   // ports.
   EXPECT_EQ(udpport->candidates()[0].foundation(),
@@ -1691,4 +1691,13 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
             relayport->candidates()[1].foundation());
   EXPECT_NE(relayport->candidates()[2].foundation(),
             relayport->candidates()[3].foundation());
+}
+
+// Test priority value overflow handling when preference is set to 3.
+TEST_F(PortTest, TestCandidatePreference) {
+  cricket::Candidate cand1;
+  cand1.set_preference(3);
+  cricket::Candidate cand2;
+  cand2.set_preference(2);
+  EXPECT_TRUE(cand1.preference() > cand2.preference());
 }

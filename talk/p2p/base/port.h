@@ -120,11 +120,11 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void set_priority(uint32 priority) { priority_ = priority; }
 
   // Methods to set/get ICE role and tiebreaker values.
-  void set_role(TransportRole role) { role_ = role; }
-  TransportRole role() { return role_; }
+  virtual void set_role(TransportRole role) { role_ = role; }
+  virtual TransportRole role() { return role_; }
 
-  void set_tiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
-  uint64 tiebreaker() { return tiebreaker_; }
+  virtual void set_tiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  virtual uint64 tiebreaker() { return tiebreaker_; }
 
   void set_related_address(const talk_base::SocketAddress& address) {
     related_address_ = address;
@@ -259,8 +259,10 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // 1. Add / Verify MI attribute in STUN binding requests.
   // 2. Username attribute in STUN binding request will be RFRAF:LFRAG,
   // as opposed to RFRAGLFRAG.
-  void set_ice_protocol(IceProtocolType protocol) {ice_protocol_ = protocol; }
-  IceProtocolType ice_protocol() const { return ice_protocol_; }
+  virtual void set_ice_protocol(IceProtocolType protocol) {
+    ice_protocol_ = protocol;
+  }
+  virtual IceProtocolType ice_protocol() const { return ice_protocol_; }
 
   // This method will return local and remote username fragements from the
   // stun username attribute if present.
@@ -489,6 +491,7 @@ class Connection : public talk_base::MessageHandler,
   uint32 last_ping_received_;  // last time we received a ping from the other
                                // side
   uint32 last_data_received_;
+  uint32 last_ping_response_received_;
   std::vector<uint32> pings_since_last_response_;
 
   talk_base::RateTracker recv_rate_tracker_;

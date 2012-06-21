@@ -176,6 +176,12 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       role_(ROLE_UNKNOWN),
       tiebreaker_(0) {
   ASSERT(factory_ != NULL);
+  // If the username_fragment and password are empty, we should just create one.
+  if (ice_username_fragment_.empty()) {
+    ASSERT(password_.empty());
+    ice_username_fragment_ = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
+    password_ = talk_base::CreateRandomString(ICE_PWD_LENGTH);
+  }
   LOG_J(LS_INFO, this) << "Port created";
 }
 
@@ -751,7 +757,7 @@ Connection::Connection(Port* port, size_t index,
     write_state_(STATE_WRITE_CONNECT), connected_(true), pruned_(false),
     requests_(port->thread()), rtt_(DEFAULT_RTT),
     last_ping_sent_(0), last_ping_received_(0), last_data_received_(0),
-    reported_(false), nominated_(false) {
+    last_ping_response_received_(0), reported_(false), nominated_(false) {
   // Wire up to send stun packets
   requests_.SignalSendPacket.connect(this, &Connection::OnSendStunPacket);
   LOG_J(LS_INFO, this) << "Connection created";
@@ -930,7 +936,12 @@ void Connection::UpdateState(uint32 now) {
       (last_ping_received_ + CONNECTION_READ_TIMEOUT <= now)) {
     LOG_J(LS_INFO, this) << "Unreadable after "
                          << now - last_ping_received_
-                         << " ms without a ping, rtt=" << rtt;
+                         << " ms without a ping,"
+                         << " ms since last received response="
+                         << now - last_ping_response_received_
+                         << " ms since last received data="
+                         << now - last_data_received_
+                         << " rtt=" << rtt;
     set_read_state(STATE_READ_TIMEOUT);
   }
 
@@ -1053,6 +1064,7 @@ void Connection::OnConnectionRequestResponse(ConnectionRequest* request,
                           << ", rtt=" << rtt;
 
   pings_since_last_response_.clear();
+  last_ping_response_received_ = talk_base::Time();
   rtt_ = (RTT_RATIO * rtt_ + rtt) / (RTT_RATIO + 1);
 }
 

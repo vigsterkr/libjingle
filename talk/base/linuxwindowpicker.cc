@@ -390,6 +390,21 @@ class XWindowEnumerator {
                                 height);
   }
 
+  bool GetDesktopDimensions(const DesktopId& id, int* width, int* height) {
+    if (!Init()) {
+      return false;
+    }
+    XErrorSuppressor error_suppressor(display_);
+    XWindowAttributes attr;
+    if (!XGetWindowAttributes(display_, id.id(), &attr)) {
+      LOG(LS_ERROR) << "XGetWindowAttributes() failed";
+      return false;
+    }
+    *width = attr.width;
+    *height = attr.height;
+    return true;
+  }
+
  private:
   uint8* GetDrawableThumbnail(Drawable src_drawable,
                               Visual* visual,
@@ -730,6 +745,11 @@ uint8* LinuxWindowPicker::GetDesktopThumbnail(const DesktopId& id,
                                               int width,
                                               int height) {
   return enumerator_->GetDesktopThumbnail(id, width, height);
+}
+
+bool LinuxWindowPicker::GetDesktopDimensions(const DesktopId& id, int* width,
+                                             int* height) {
+  return enumerator_->GetDesktopDimensions(id, width, height);
 }
 
 }  // namespace talk_base

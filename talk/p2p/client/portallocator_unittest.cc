@@ -446,6 +446,49 @@ TEST_F(PortAllocatorTest, TestBasicMuxFeatures) {
   EXPECT_NE(proxy4->impl(), proxy1->impl());
 }
 
+// Test that when the PORTALLOCATOR_ENABLE_SHARED_UFRAG is enabled we got same
+// ufrag and pwd for the collected candidates.
+TEST_F(PortAllocatorTest, TestEnableSharedUfrag) {
+  allocator().set_flags(allocator().flags() |
+                        cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
+  AddInterface(kClientAddr);
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->GetInitialPorts();
+  ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
+  EXPECT_PRED5(CheckCandidate, candidates_[0],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "local", "udp", kClientAddr);
+  EXPECT_PRED5(CheckCandidate, candidates_[1],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "stun", "udp", kClientAddr);
+  EXPECT_EQ(2U, ports_.size());
+  EXPECT_EQ(kIceUfrag0, candidates_[0].username());
+  EXPECT_EQ(kIceUfrag0, candidates_[1].username());
+  EXPECT_EQ(kIcePwd0, candidates_[0].password());
+  EXPECT_EQ(kIcePwd0, candidates_[1].password());
+}
+
+// Test that when the PORTALLOCATOR_ENABLE_SHARED_UFRAG isn't enabled we got
+// different ufrag and pwd for the collected candidates.
+TEST_F(PortAllocatorTest, TestDisableSharedUfrag) {
+  allocator().set_flags(allocator().flags() &
+                        ~cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
+  AddInterface(kClientAddr);
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->GetInitialPorts();
+  ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
+  EXPECT_PRED5(CheckCandidate, candidates_[0],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "local", "udp", kClientAddr);
+  EXPECT_PRED5(CheckCandidate, candidates_[1],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "stun", "udp", kClientAddr);
+  EXPECT_EQ(2U, ports_.size());
+  // Port should generate random ufrag and pwd.
+  EXPECT_NE(kIceUfrag0, candidates_[0].username());
+  EXPECT_NE(kIceUfrag0, candidates_[1].username());
+  EXPECT_NE(candidates_[0].username(), candidates_[1].username());
+  EXPECT_NE(kIcePwd0, candidates_[0].password());
+  EXPECT_NE(kIcePwd0, candidates_[1].password());
+  EXPECT_NE(candidates_[0].password(), candidates_[1].password());
+}
+
 // Test that the httpportallocator correctly maintains its lists of stun and
 // relay servers, by never allowing an empty list.
 TEST(HttpPortAllocatorTest, TestHttpPortAllocatorHostLists) {

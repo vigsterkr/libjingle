@@ -70,30 +70,26 @@ Libjingle needs to be downloaded and patched
   * First, install Libjingle.  Since this README lives within Libjingle,
     this step is normally already done.
     Libjingle home page is here http://code.google.com/p/libjingle/
-    Libjingle can be downloaded with the following commands.
-    
-    svn checkout http://libjingle.googlecode.com/svn/trunk/ libjingle-read-only
-      OR 
-    gclient config --name trunk http://libjingle.googlecode.com/svn/trunk/
-    gclient sync --force
-
-    For gclient, you need to have depot tools installed. Depot tools can be
-    installed from
-    https://sites.google.com/a/chromium.org/dev/developers/how-tos/depottools
+    For example, on Windows, download
+    http://libjingle.googlecode.com/files/libjingle-0.5.2.zip
+    unzip to C:\src\
 
   * Second, Libjingle depends on two open-source projects, expat and srtp.
     Download expat from http://sourceforge.net/projects/expat/ to
-    talk/third_party/expat-2.0.1/. Download srtp from
-    http://srtp.cvs.sourceforge.net/srtp/ to talk/third_party/srtp.
-    Note that srtp should be taken from HEAD, as 1.4.4 does not has the
-    critical patches which Libjingle needs.
+    talk/third_party/expat-2.0.1/. Download srtp at
+    http://libjingle.googlecode.com/files/srtp-cvs.zip to
+    talk/third_party/srtp. Note that srtp-1.4.4 does not work since it misses
+    the extensions used by Libjingle.
     If you put expat or srtp in a different directory, you need to edit
     talk/libjingle.scons correspondingly.
+    rename srtp-cvs to srtp
     For example, on Windows, download expat
     http://sourceforge.net/projects/expat/files/expat/2.0.1/expat-2.0.1.tar.gz
-    Unzip to C:\src\libjingle\talk\third_party
-    Download srtp from http://srtp.cvs.sourceforge.net/srtp and untar to
-    C:\src\libjingle\talk\third_party\srtp
+    Unzip to C:\src\libjingle-0.5.2\talk\third_party
+    Download srtp
+    http://libjingle.googlecode.com/files/srtp-cvs.zip
+    Unzip to C:\src\libjingle-0.5.2\talk\third_party
+    rename C:\src\libjingle-0.5.2\talk\third_party\srtp-cvs srtp
 
   * Third, on Windows, copy config.h
     copy talk\third_party\srtp\config.hw talk\third_party\srtp\crypto\include\config.h

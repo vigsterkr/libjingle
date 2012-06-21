@@ -105,6 +105,14 @@ bool Win32WindowPicker::GetDesktopList(DesktopDescriptionList* descriptions) {
   return success;
 }
 
+bool Win32WindowPicker::GetDesktopDimensions(const DesktopId& id,
+                                             int* width,
+                                             int* height) {
+  // TODO: Implement GetDesktopDimensions for win32.
+  LOG(LS_ERROR) << "Not implemented.";
+  return false;
+}
+
 bool Win32WindowPicker::IsVisible(const WindowId& id) {
   return (::IsWindow(id.id()) != FALSE && ::IsWindowVisible(id.id()) != FALSE);
 }
