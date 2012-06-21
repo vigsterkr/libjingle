@@ -42,11 +42,11 @@ namespace cricket {
 ///////////////////////////////////////////////////////////////////////////
 // Implementation of RtpDumpSink.
 ///////////////////////////////////////////////////////////////////////////
-RtpDumpSink::RtpDumpSink(const std::string& filename)
+RtpDumpSink::RtpDumpSink(talk_base::StreamInterface* stream)
     : max_size_(INT_MAX),
       recording_(false),
-      packet_filter_(PF_NONE),
-      filename_(filename) {
+      packet_filter_(PF_NONE) {
+  stream_.reset(stream);
 }
 
 RtpDumpSink::~RtpDumpSink() {}
@@ -63,8 +63,6 @@ bool RtpDumpSink::Enable(bool enable) {
 
   // Create a file and the RTP writer if we have not done yet.
   if (recording_ && !writer_.get()) {
-    stream_.reset(talk_base::Filesystem::OpenFile(
-        talk_base::Pathname(filename_), "wb"));
     if (!stream_.get()) {
       return false;
     }
@@ -121,24 +119,24 @@ MediaRecorder::~MediaRecorder() {
 }
 
 bool MediaRecorder::AddChannel(VoiceChannel* channel,
-                               const std::string& send_filename,
-                               const std::string& recv_filename,
+                               talk_base::StreamInterface* send_stream,
+                               talk_base::StreamInterface* recv_stream,
                                int filter) {
-  return InternalAddChannel(channel, false, send_filename, recv_filename,
+  return InternalAddChannel(channel, false, send_stream, recv_stream,
                             filter);
 }
 bool MediaRecorder::AddChannel(VideoChannel* channel,
-                               const std::string& send_filename,
-                               const std::string& recv_filename,
+                               talk_base::StreamInterface* send_stream,
+                               talk_base::StreamInterface* recv_stream,
                                int filter) {
-  return InternalAddChannel(channel, true, send_filename, recv_filename,
+  return InternalAddChannel(channel, true, send_stream, recv_stream,
                             filter);
 }
 
 bool MediaRecorder::InternalAddChannel(BaseChannel* channel,
                                        bool video_channel,
-                                       const std::string& send_filename,
-                                       const std::string& recv_filename,
+                                       talk_base::StreamInterface* send_stream,
+                                       talk_base::StreamInterface* recv_stream,
                                        int filter) {
   if (!channel) {
     return false;
@@ -152,9 +150,9 @@ bool MediaRecorder::InternalAddChannel(BaseChannel* channel,
   SinkPair* sink_pair = new SinkPair;
   sink_pair->video_channel = video_channel;
   sink_pair->filter = filter;
-  sink_pair->send_sink.reset(new RtpDumpSink(send_filename));
+  sink_pair->send_sink.reset(new RtpDumpSink(send_stream));
   sink_pair->send_sink->set_packet_filter(filter);
-  sink_pair->recv_sink.reset(new RtpDumpSink(recv_filename));
+  sink_pair->recv_sink.reset(new RtpDumpSink(recv_stream));
   sink_pair->recv_sink->set_packet_filter(filter);
   sinks_[channel] = sink_pair;
 

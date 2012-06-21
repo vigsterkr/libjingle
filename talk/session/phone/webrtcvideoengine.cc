@@ -39,6 +39,8 @@
 #include "talk/base/byteorder.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
+#include "talk/base/thread.h"
+#include "talk/base/timeutils.h"
 #include "talk/session/phone/filevideocapturer.h"
 #include "talk/session/phone/rtputils.h"
 #include "talk/session/phone/streamparams.h"
@@ -81,6 +83,13 @@ static const bool kRembNotSending = false;
 static const bool kRembSending = true;
 // static const bool kRembNotReceiving = false;  // Not used for now.
 static const bool kRembReceiving = true;
+
+struct FlushBlackFrameData : public talk_base::MessageData {
+  FlushBlackFrameData(uint32 s, int64 t) : ssrc(s), timestamp(t) {
+  }
+  uint32 ssrc;
+  int64 timestamp;
+};
 
 class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
  public:
@@ -302,12 +311,24 @@ class WebRtcVideoChannelSendInfo  {
                              webrtc::ViEExternalCapture* external_capture)
       : channel_id_(channel_id),
         capture_id_(capture_id),
+        sending_(false),
+        video_capturer_(NULL),
         encoder_observer_(channel_id),
-        external_capture_(external_capture) {
+        external_capture_(external_capture),
+        capturer_updated_(false),
+        reference_timestamp_(0),
+        timestamp_delta_(0),
+        interval_(0),
+        last_frame_width_(0),
+        last_frame_height_(0),
+        last_frame_elapsed_time_(0),
+        last_frame_time_stamp_(0) {
   }
 
   int channel_id() const { return channel_id_; }
   int capture_id() const { return capture_id_; }
+  void set_sending(bool sending) { sending_ = sending; }
+  bool sending() const { return sending_; }
 
   WebRtcEncoderObserver* encoder_observer() { return &encoder_observer_; }
   webrtc::ViEExternalCapture* external_capture() { return external_capture_; }
@@ -316,6 +337,14 @@ class WebRtcVideoChannelSendInfo  {
   }
   void set_video_format(const VideoFormat& video_format) {
     video_format_ = video_format;
+    if (video_format_ != cricket::VideoFormat()) {
+      interval_ = video_format_.interval;
+    }
+  }
+  void set_interval(int64 interval) {
+    if (video_format() == cricket::VideoFormat()) {
+      interval_ = interval;
+    }
   }
 
   StreamParams* stream_params() { return stream_params_.get(); }
@@ -330,10 +359,82 @@ class WebRtcVideoChannelSendInfo  {
   WebRtcLocalStreamInfo* local_stream_info() {
     return &local_stream_info_;
   }
+  VideoCapturer* video_capturer() {
+    return video_capturer_;
+  }
+  void set_video_capturer(VideoCapturer* video_capturer) {
+    if (video_capturer == video_capturer_) {
+      return;
+    }
+    capturer_updated_ = true;
+    video_capturer_ = video_capturer;
+  }
+  int64 last_frame_time_stamp() {
+    talk_base::CritScope cs(&crit_);
+    return last_frame_time_stamp_;
+  }
+  void GetLastFrameInfo(size_t* last_frame_width,
+                        size_t* last_frame_height,
+                        int64* last_frame_elapsed_time) const {
+    talk_base::CritScope cs(&crit_);
+    *last_frame_width = last_frame_width_;
+    *last_frame_height = last_frame_height_;
+    *last_frame_elapsed_time = last_frame_elapsed_time_;
+  }
+  void RecalculateTimestamp(VideoFrame& frame, WebRtc_Word64* clocks) {
+    if (!reference_timestamp_) {
+      // ViE will use the first received timestamp as reference. Do that here
+      // too.
+      reference_timestamp_ = frame.GetTimeStamp();
+      ASSERT(!timestamp_delta_);
+    }
+    // TODO: compensate for wrapparound.
+    if (capturer_updated_) {
+      capturer_updated_ = false;
+      // A new capturer has been added. The new and old capturer will most
+      // likely have a discrepancy in timestamp. Compensate for this.
+      timestamp_delta_ = reference_timestamp_ - frame.GetTimeStamp();
+    }
+    // Update the reference timestamp as a new frame has arrived.
+    reference_timestamp_ = frame.GetTimeStamp() + timestamp_delta_;
+    frame.SetTimeStamp(reference_timestamp_);
+
+    // It's better to let webrtc estimate the timestamp than trying to do it
+    // here since webrtc knows better how it wants the timestamp to be
+    // estimated.
+    // TODO: revisit setting *clocks to 0 when BWE is not dependent on
+    // RTP timestamp.
+    *clocks = 0;
+    // Calculate next expected timestamp in case next frame is provided by a new
+    // capturer.
+    reference_timestamp_ += interval_;
+  }
+  void ProcessFrame(const VideoFrame& original_frame, bool mute,
+                    VideoFrame** processed_frame, WebRtc_Word64* clocks) {
+    *processed_frame = original_frame.Copy();
+    RecalculateTimestamp(**processed_frame, clocks);
+    {
+      talk_base::CritScope cs(&crit_);
+      last_frame_width_ = (*processed_frame)->GetWidth();
+      last_frame_height_ = (*processed_frame)->GetHeight();
+      last_frame_elapsed_time_ = (*processed_frame)->GetElapsedTime();
+      last_frame_time_stamp_ = (*processed_frame)->GetTimeStamp();
+    }
+    if (mute) {
+      WebRtcVideoFrame* black_frame = new WebRtcVideoFrame();
+      black_frame->InitToBlack(original_frame.GetWidth(),
+                               original_frame.GetHeight(), 1, 1,
+                               original_frame.GetElapsedTime(),
+                               original_frame.GetTimeStamp());
+      *processed_frame = black_frame;
+    }
+  }
 
  private:
   int channel_id_;
   int capture_id_;
+  bool sending_;
+  VideoCapturer* video_capturer_;
   WebRtcEncoderObserver encoder_observer_;
   webrtc::ViEExternalCapture* external_capture_;
 
@@ -342,6 +443,23 @@ class WebRtcVideoChannelSendInfo  {
   talk_base::scoped_ptr<StreamParams> stream_params_;
 
   WebRtcLocalStreamInfo local_stream_info_;
+
+  bool capturer_updated_;
+
+  // To compensate for timestamp jumps when switching capturers.
+  int64 reference_timestamp_;  // The timestamp that ViE is expecting.
+  int64 timestamp_delta_;  // The offset in timestamp between the capturers
+                           // capturers timestamp and |reference_timestamp_|.
+  int64 interval_;
+
+  // Used for black frame generation.
+  // |crit_| protects |last_frame_*| from concurrent access as they are
+  // written to by the capturer thread but also read by the black frame thread.
+  mutable talk_base::CriticalSection crit_;
+  size_t last_frame_width_;
+  size_t last_frame_height_;
+  int64 last_frame_elapsed_time_;
+  int64 last_frame_time_stamp_;
 };
 
 const WebRtcVideoEngine::VideoCodecPref
@@ -386,6 +504,13 @@ static void UpdateVideoCodec(const cricket::VideoFormat& video_format,
     return;
   }
   target_codec->width = video_format.width;
+  // Resolution needs to be divisible by 2.
+  if (target_codec->width & 0x1) {
+    target_codec->width -= 1;
+  }
+  if (target_codec->height & 0x1) {
+    target_codec->height -= 1;
+  }
   target_codec->height = video_format.height;
   target_codec->maxFramerate = cricket::VideoFormat::IntervalToFps(
       video_format.interval);
@@ -420,6 +545,7 @@ void WebRtcVideoEngine::Construct(ViEWrapper* vie_wrapper,
   local_renderer_w_ = local_renderer_h_ = 0;
   local_renderer_ = NULL;
   video_capturer_ = NULL;
+  frame_listeners_ = 0;
   capture_started_ = false;
 
   ApplyLogging("");
@@ -599,9 +725,8 @@ CaptureResult WebRtcVideoEngine::SetCapture(bool capture) {
 }
 
 CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
+  bool capture = capture_started_ && frame_listeners_;
   CaptureResult result = CR_SUCCESS;
-
-  bool capture = capture_started_;
   if (!IsCapturing() && capture) {  // Start capturing.
     if (video_capturer_ == NULL) {
       return CR_NO_DEVICE;
@@ -647,19 +772,27 @@ bool WebRtcVideoEngine::IsCapturing() const {
 
 void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
                                         const CapturedFrame* frame) {
-  // Force 16:10 for now. We'll be smarter with the capture refactor.
+  // TODO: Use ComputeCrop.
+  // Force the default crop for now.
+  int cropped_width = frame->width;
   int cropped_height = frame->width * default_codec_format_.height
       / default_codec_format_.width;
   if (cropped_height > frame->height) {
-    // TODO: Once we support horizontal cropping, add cropped_width.
     cropped_height = frame->height;
+  }
+
+  if (cropped_width & 1) {
+    cropped_width -= 1;
+  }
+  if (cropped_height & 1) {
+    cropped_height -= 1;
   }
 
   // This CapturedFrame* will already be in I420. In the future, when
   // WebRtcVideoFrame has support for independent planes, we can just attach
   // to it and update the pointers when cropping.
   WebRtcVideoFrame i420_frame;
-  if (!i420_frame.Init(frame, frame->width, cropped_height)) {
+  if (!i420_frame.Init(frame, cropped_width, cropped_height)) {
     LOG(LS_ERROR) << "Couldn't convert to I420! "
                   << frame->width << " x " << cropped_height;
     return;
@@ -987,6 +1120,21 @@ int WebRtcVideoEngine::GetNumOfChannels() {
   return channels_.size();
 }
 
+void WebRtcVideoEngine::IncrementFrameListeners() {
+  if (++frame_listeners_ == 1) {
+    UpdateCapturingState();
+  }
+  // In the unlikely event of wrapparound.
+  ASSERT(frame_listeners_ >= 0);
+}
+
+void WebRtcVideoEngine::DecrementFrameListeners() {
+  if (--frame_listeners_ == 0) {
+    UpdateCapturingState();
+  }
+  ASSERT(frame_listeners_ >= 0);
+}
+
 void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
                               const char* trace, const int length) {
   talk_base::LoggingSeverity sev = talk_base::LS_VERBOSE;
@@ -1034,7 +1182,8 @@ void WebRtcVideoEngine::ClearCapturer() {
 // WebRtcVideoMediaChannel
 
 WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
-    WebRtcVideoEngine* engine, VoiceMediaChannel* channel)
+    WebRtcVideoEngine* engine,
+    VoiceMediaChannel* channel)
     : engine_(engine),
       voice_channel_(channel),
       vie_channel_(-1),
@@ -1318,7 +1467,7 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   }
 
   if (sending_) {
-    return StartSend(channel_id);
+    return StartSend(send_channel);
   }
   return true;
 }
@@ -1338,7 +1487,7 @@ bool WebRtcVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
     return false;
   }
   if (sending_) {
-    StopSend(channel_id);
+    StopSend(send_channel);
   }
   // The receive channels depend on the default channel, recycle it instead.
   if (IsDefaultChannel(channel_id)) {
@@ -1471,15 +1620,16 @@ bool WebRtcVideoMediaChannel::StartSend() {
   for (SendChannelMap::iterator iter = send_channels_.begin();
        iter != send_channels_.end(); ++iter) {
     WebRtcVideoChannelSendInfo* send_channel = iter->second;
-    const int channel_id = send_channel->channel_id();
-    if (!StartSend(channel_id)) {
+    if (!StartSend(send_channel)) {
       success = false;
     }
   }
   return success;
 }
 
-bool WebRtcVideoMediaChannel::StartSend(int channel_id) {
+bool WebRtcVideoMediaChannel::StartSend(
+    WebRtcVideoChannelSendInfo* send_channel) {
+  const int channel_id = send_channel->channel_id();
   if (engine()->vie()->base()->StartSend(channel_id) != 0) {
     LOG_RTCERR1(StartSend, channel_id);
     return false;
@@ -1493,7 +1643,10 @@ bool WebRtcVideoMediaChannel::StartSend(int channel_id) {
     LOG_RTCERR3(SetRembStatus, channel_id, kRembSending, remb_receiving);
     return false;
   }
-
+  send_channel->set_sending(true);
+  if (!send_channel->video_capturer()) {
+    engine_->IncrementFrameListeners();
+  }
   return true;
 }
 
@@ -1502,15 +1655,16 @@ bool WebRtcVideoMediaChannel::StopSend() {
   for (SendChannelMap::iterator iter = send_channels_.begin();
        iter != send_channels_.end(); ++iter) {
     WebRtcVideoChannelSendInfo* send_channel = iter->second;
-    const int channel_id = send_channel->channel_id();
-    if (!StopSend(channel_id)) {
+    if (!StopSend(send_channel)) {
       success = false;
     }
   }
   return success;
 }
 
-bool WebRtcVideoMediaChannel::StopSend(int channel_id) {
+bool WebRtcVideoMediaChannel::StopSend(
+    WebRtcVideoChannelSendInfo* send_channel) {
+  const int channel_id = send_channel->channel_id();
   if (engine()->vie()->base()->StopSend(channel_id) != 0) {
     LOG_RTCERR1(StopSend, channel_id);
     return false;
@@ -1525,6 +1679,10 @@ bool WebRtcVideoMediaChannel::StopSend(int channel_id) {
                                            receiving) != 0) {
     LOG_RTCERR3(SetRembStatus, channel_id, kRembNotSending, receiving);
     return false;
+  }
+  send_channel->set_sending(false);
+  if (!send_channel->video_capturer()) {
+    engine_->DecrementFrameListeners();
   }
   return true;
 }
@@ -1584,6 +1742,18 @@ bool WebRtcVideoMediaChannel::GetSendChannelKey(uint32 local_ssrc,
   // ssrc is the key.
   *key = local_ssrc;
   return true;
+}
+
+WebRtcVideoChannelSendInfo* WebRtcVideoMediaChannel::GetSendChannel(
+    VideoCapturer* video_capturer) {
+  for (SendChannelMap::iterator iter = send_channels_.begin();
+       iter != send_channels_.end(); ++iter) {
+    WebRtcVideoChannelSendInfo* send_channel = iter->second;
+    if (send_channel->video_capturer() == video_capturer) {
+      return send_channel;
+    }
+  }
+  return NULL;
 }
 
 WebRtcVideoChannelSendInfo* WebRtcVideoMediaChannel::GetSendChannel(
@@ -1656,6 +1826,53 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
   }
   delete send_channel;
   send_channels_.erase(ssrc_key);
+  return true;
+}
+
+void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
+                                              const CapturedFrame* frame) {
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(capturer);
+  if (!send_channel) {
+    return;
+  }
+  int cropped_height = frame->height;
+  const VideoFormat& video_format = send_channel->video_format();
+  if (video_format != cricket::VideoFormat()) {
+    // Force 16:10 for now. We'll be smarter with the capture refactor.
+    int cropped_height = frame->width * video_format.height
+        / video_format.width;
+    if (cropped_height > frame->height) {
+      // TODO: Once we support horizontal cropping, add
+      // cropped_width.
+      cropped_height = frame->height;
+    }
+  }
+
+  // This CapturedFrame* will already be in I420. In the future, when
+  // WebRtcVideoFrame has support for independent planes, we can just attach
+  // to it and update the pointers when cropping.
+  WebRtcVideoFrame i420_frame;
+  if (!i420_frame.Init(frame, frame->width, cropped_height)) {
+    LOG(LS_ERROR) << "Couldn't convert to I420! "
+                  << frame->width << " x " << cropped_height;
+    return;
+  }
+  SendFrame(send_channel, &i420_frame, true);
+}
+
+bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
+  VideoCapturer* capturer = send_channel->video_capturer();
+  if (capturer == NULL) {
+    return false;
+  }
+  capturer->SignalFrameCaptured.disconnect(this);
+  send_channel->set_video_capturer(NULL);
+  if (send_channel->sending()) {
+    engine_->IncrementFrameListeners();
+  }
+  const int64 timestamp = send_channel->last_frame_time_stamp();
+  QueueBlackFrame(ssrc, timestamp, send_codec_->maxFramerate);
   return true;
 }
 
@@ -1847,6 +2064,60 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   return true;
 }
 
+bool WebRtcVideoMediaChannel::SetCapturer(uint32 ssrc,
+                                          VideoCapturer* capturer) {
+  if (ssrc == 0) {
+    // Allow ssrc 0 for legacy reasons. Let it mean if there is only one send
+    // stream set capturer for that stream. Alternative implementation is to
+    // set the capturer for all send streams. This might open up a can of worms
+    // though since this should be phased out.
+    LOG(LS_WARNING) << "Use of SSRC = 0 is deprecated when setting capturer."
+                    << "please provide the SSRC for the stream to set the"
+                    << "capturer.";
+    if (send_channels_.size() == 1) {
+      StreamParams* stream_params =
+          send_channels_.begin()->second->stream_params();
+      if (!stream_params) {
+        return false;
+      }
+      const uint32 default_ssrc = stream_params->first_ssrc();
+      LOG(LS_INFO) << "The SSRC of this call was:" << default_ssrc;
+      if (!default_ssrc) {
+        return false;
+      }
+      return SetCapturer(default_ssrc, capturer);
+    } else if (send_channels_.empty()) {
+      LOG(LS_WARNING) << "No send streams registered";
+      return false;
+    } else {
+      LOG(LS_WARNING) << "SSRC = 0 is ambiguous. Following local SSRCs have"
+                      << "been registered (which one correpsonds to 0?): ";
+      for (SendChannelMap::const_iterator iter = send_channels_.begin();
+           iter != send_channels_.end(); ++iter) {
+        LOG(LS_WARNING) << iter->second << ",";
+      }
+      return false;
+    }
+  }
+  if (!capturer) {
+    return RemoveCapturer(ssrc);
+  }
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
+  if (!send_channel) {
+    return false;
+  }
+  if (send_channel->sending() && !send_channel->video_capturer()) {
+    engine_->DecrementFrameListeners();
+  }
+  send_channel->set_video_capturer(capturer);
+  capturer->SignalFrameCaptured.connect(
+      this,
+      &WebRtcVideoMediaChannel::OnFrameCaptured);
+  const int64 timestamp = send_channel->last_frame_time_stamp();
+  QueueBlackFrame(ssrc, timestamp, send_codec_->maxFramerate);
+  return true;
+}
+
 bool WebRtcVideoMediaChannel::RequestIntraFrame() {
   // There is no API exposed to application to request a key frame
   // ViE does this internally when there are errors from decoder
@@ -1964,6 +2235,11 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
     return false;
   }
 
+  // Trigger SetSendCodec to set correct noise reduction state if the option has
+  // changed.
+  bool denoiser_changed = (options_ & OPT_VIDEO_NOISE_REDUCTION) !=
+      (options & OPT_VIDEO_NOISE_REDUCTION);
+
   // Save the options, to be interpreted where appropriate.
   options_ = options;
 
@@ -1971,7 +2247,9 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
   int conf_max_bitrate = kDefaultConferenceModeMaxVideoBitrate;
   int expected_bitrate = InConferenceMode() ?
       conf_max_bitrate : kMaxVideoBitrate;
-  if (NULL != send_codec_.get() && send_max_bitrate_ != expected_bitrate) {
+
+  if (NULL != send_codec_.get() &&
+      (send_max_bitrate_ != expected_bitrate || denoiser_changed)) {
     // On success, SetSendCodec() will reset send_max_bitrate_ to
     // expected_bitrate.
     if (!SetSendCodec(*send_codec_,
@@ -1982,19 +2260,6 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
     }
     LogSendCodecChange("SetOptions()");
   }
-
-  // Enable denoising if needed.
-  for (SendChannelMap::iterator iter = send_channels_.begin();
-       iter != send_channels_.end(); ++iter) {
-    WebRtcVideoChannelSendInfo* send_channel = iter->second;
-    int capture_id = send_channel->capture_id();
-    bool enable = (options_ & OPT_VIDEO_NOISE_REDUCTION) != 0;
-    if (engine()->vie()->image()->EnableDenoising(capture_id, enable) != 0) {
-      LOG_RTCERR2(EnableDenoising, capture_id, enable);
-      return false;
-    }
-  }
-
   return true;
 }
 
@@ -2032,32 +2297,33 @@ bool WebRtcVideoMediaChannel::GetRenderer(uint32 ssrc,
 
 // TODO: Add unittests to test this function.
 bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
-  // Currently there is only one capturer. It belongs to WebRtcVideoEngine. If
-  // the ssrc is 0 let that denote that the frame should be sent for all
-  // streams.
+  // If the ssrc is 0 it signifies that the frame is generated by the
+  // WebRtcVideoEngine. Send this frame on all streams who do not have their
+  // own capturer.
   // TODO: move the capturer from WebRtcVideoEngine to
   // WebRtcVideoMediaChannel. This is not done in the current cl to prevent this
   // from becoming very large (opening up this functionality would require
   // changes to WebRtcVideoEngine, LmiVideoEngine and LmiVideoMediaChannel).
-  if (ssrc != 0) {
-    WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
-    return SendFrame(send_channel, frame);
-  }
+  // This function should only be called from the WebRtcVideoEngine.
+  ASSERT(ssrc == 0);
   bool success = !send_channels_.empty();
   for (SendChannelMap::iterator iter = send_channels_.begin();
        iter != send_channels_.end(); ++iter) {
-    success = SendFrame(iter->second, frame) && success;
+    WebRtcVideoChannelSendInfo* send_channel = iter->second;
+    if (!send_channel->video_capturer()) {
+      success = SendFrame(send_channel, frame, false) && success;
+    }
   }
   return success;
 }
 
 bool WebRtcVideoMediaChannel::SendFrame(
     WebRtcVideoChannelSendInfo* send_channel,
-    const VideoFrame* frame) {
+    const VideoFrame* frame,
+    bool owns_capturer) {
   if (!send_channel) {
     return false;
   }
-  const int channel_id = send_channel->channel_id();
   WebRtcLocalStreamInfo* channel_stream_info =
       send_channel->local_stream_info();
 
@@ -2070,20 +2336,19 @@ bool WebRtcVideoMediaChannel::SendFrame(
   }
 
   // Checks if we need to reset vie send codec.
-  if (!MaybeResetVieSendCodec(channel_id, frame->GetWidth(),
-                              frame->GetHeight(), NULL)) {
+  if (!MaybeResetVieSendCodec(send_channel, frame->GetWidth(),
+                              frame->GetHeight(), owns_capturer, NULL)) {
     LOG(LS_ERROR) << "MaybeResetVieSendCodec failed with "
                   << frame->GetWidth() << "x" << frame->GetHeight();
     return false;
   }
-
-  // Blacken the frame if video is muted.
   const VideoFrame* frame_out = frame;
-  talk_base::scoped_ptr<VideoFrame> black_frame;
-  if (muted_) {
-    black_frame.reset(frame->Copy());
-    black_frame->SetToBlack();
-    frame_out = black_frame.get();
+  talk_base::scoped_ptr<VideoFrame> processed_frame;
+  WebRtc_Word64 clocks = 0;
+  send_channel->ProcessFrame(*frame_out,  muted_, processed_frame.use(),
+                             &clocks);
+  if (processed_frame.get()) {
+    frame_out = processed_frame.get();
   }
 
   webrtc::ViEVideoFrameI420 frame_i420;
@@ -2097,10 +2362,6 @@ bool WebRtcVideoMediaChannel::SendFrame(
   frame_i420.v_pitch = frame_out->GetVPitch();
   frame_i420.width = frame_out->GetWidth();
   frame_i420.height = frame_out->GetHeight();
-
-  // Convert from nanoseconds to milliseconds.
-  WebRtc_Word64 clocks = frame_out->GetTimeStamp() /
-      talk_base::kNumNanosecsPerMillisec;
 
   return send_channel->external_capture()->IncomingFrameI420(
       frame_i420, clocks) == 0;
@@ -2327,11 +2588,6 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
     return false;
   }
 
-  if (sending_) {
-    if (!StartSend(channel_id)) {
-      return false;
-    }
-  }
   send_channels_[local_ssrc_key] = send_channel.release();
 
   return true;
@@ -2377,6 +2633,13 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
     // All SetSendCodec calls were successful. Update the global state
     // accordingly.
     send_codec_.reset(new webrtc::VideoCodec(codec));
+    // Resolution needs to be divisible by 2.
+    if (send_codec_->width & 0x1) {
+      send_codec_->width -= 1;
+    }
+    if (send_codec_->height & 0x1) {
+      send_codec_->height -= 1;
+    }
     send_min_bitrate_ = min_bitrate;
     send_start_bitrate_ = start_bitrate;
     send_max_bitrate_ = max_bitrate;
@@ -2417,10 +2680,13 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
 
     // Turn off the VP8 error resilience
     target_codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
+
+    bool enable_denoising = (options_ & OPT_VIDEO_NOISE_REDUCTION) != 0;
+    target_codec.codecSpecific.VP8.denoisingOn = enable_denoising;
   }
 
   // Resolution and framerate may vary for different send channels.
-  const VideoFormat video_format = send_channel->video_format();
+  const VideoFormat& video_format = send_channel->video_format();
   UpdateVideoCodec(video_format, &target_codec);
 
   if (codec.width == 0 && codec.height == 0) {
@@ -2433,7 +2699,8 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
     }
 
   }
-
+  send_channel->set_interval(
+      cricket::VideoFormat::FpsToInterval(target_codec.maxFramerate));
   return true;
 }
 
@@ -2504,10 +2771,12 @@ int WebRtcVideoMediaChannel::GetRecvChannelNum(uint32 ssrc) {
 // we need to reset the send codec on vie.
 // The new send codec size should not exceed send_codec_ which is controlled
 // only by the 'jec' logic.
-bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int channel_id,
-                                                     int new_width,
-                                                     int new_height,
-                                                     bool* reset) {
+bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
+    WebRtcVideoChannelSendInfo* send_channel,
+    int new_width,
+    int new_height,
+    bool owns_capturer,
+    bool* reset) {
   if (reset) {
     *reset = false;
   }
@@ -2515,17 +2784,22 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int channel_id,
   if (NULL == send_codec_.get()) {
     return false;
   }
+  webrtc::VideoCodec target_codec = *send_codec_.get();
+  const VideoFormat& video_format = send_channel->video_format();
+  UpdateVideoCodec(video_format, &target_codec);
 
-  // Vie send codec size should not exceed send_codec_.
+  // Vie send codec size should not exceed target_codec.
   int target_width = new_width;
   int target_height = new_height;
-  if (new_width > send_codec_->width || new_height > send_codec_->height) {
-    target_width = send_codec_->width;
-    target_height = send_codec_->height;
+  if (!owns_capturer &&
+      (new_width > target_codec.width || new_height > target_codec.height)) {
+    target_width = target_codec.width;
+    target_height = target_codec.height;
   }
 
   // Get current vie codec.
   webrtc::VideoCodec vie_codec;
+  const int channel_id = send_channel->channel_id();
   if (engine()->vie()->codec()->GetSendCodec(channel_id, vie_codec) != 0) {
     LOG_RTCERR1(GetSendCodec, channel_id);
     return false;
@@ -2553,6 +2827,13 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(int channel_id,
   return true;
 }
 
+void WebRtcVideoMediaChannel::OnMessage(talk_base::Message* msg) {
+  FlushBlackFrameData* black_frame_data =
+      static_cast<FlushBlackFrameData*> (msg->pdata);
+  FlushBlackFrame(black_frame_data->ssrc, black_frame_data->timestamp);
+  delete black_frame_data;
+}
+
 int WebRtcVideoMediaChannel::SendPacket(int channel, const void* data,
                                         int len) {
   if (!network_interface_) {
@@ -2570,6 +2851,47 @@ int WebRtcVideoMediaChannel::SendRTCPPacket(int channel,
   }
   talk_base::Buffer packet(data, len, kMaxRtpPacketLen);
   return network_interface_->SendRtcp(&packet) ? len : -1;
+}
+
+void WebRtcVideoMediaChannel::QueueBlackFrame(uint32 ssrc, int64 timestamp,
+                                              int framerate) {
+  if (timestamp) {
+    FlushBlackFrameData* black_frame_data = new FlushBlackFrameData(
+        ssrc,
+        timestamp);
+    const int delay_ms = static_cast<int> (
+        2 * cricket::VideoFormat::FpsToInterval(framerate) *
+        talk_base::kNumMillisecsPerSec / talk_base::kNumNanosecsPerSec);
+    talk_base::Thread::Current()->PostDelayed(delay_ms, this, 0,
+                                              black_frame_data);
+  }
+}
+
+void WebRtcVideoMediaChannel::FlushBlackFrame(uint32 ssrc, int64 timestamp) {
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
+  if (!send_channel) {
+    return;
+  }
+  talk_base::scoped_ptr<const VideoFrame> black_frame_ptr;
+
+  int64 last_frame_time_stamp = send_channel->last_frame_time_stamp();
+  if (last_frame_time_stamp == timestamp) {
+    size_t last_frame_width = 0;
+    size_t last_frame_height = 0;
+    int64 last_frame_elapsed_time = 0;
+    send_channel->GetLastFrameInfo(&last_frame_width, &last_frame_height,
+                                   &last_frame_elapsed_time);
+    if (!last_frame_width || !last_frame_height) {
+      return;
+    }
+    WebRtcVideoFrame black_frame;
+    if (!black_frame.InitToBlack(last_frame_width, last_frame_height, 1, 1,
+                                 last_frame_elapsed_time,
+                                 last_frame_time_stamp) ||
+        !SendFrame(send_channel, &black_frame, true)) {
+      LOG(LS_ERROR) << "Failed to send black frame.";
+    }
+  }
 }
 
 }  // namespace cricket

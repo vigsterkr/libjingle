@@ -621,6 +621,7 @@ class FakeVoiceEngine : public FakeBaseEngine {
  public:
   FakeVoiceEngine()
       : output_volume_(-1),
+        delay_offset_(0),
         rx_processor_(NULL),
         tx_processor_(NULL) {
   }
@@ -655,8 +656,13 @@ class FakeVoiceEngine : public FakeBaseEngine {
     codecs_ = codecs;
   }
 
+  bool SetDelayOffset(int offset) {
+    delay_offset_ = offset;
+    return true;
+  }
+
   bool SetDevices(const Device* in_device,
-                          const Device* out_device) {
+                  const Device* out_device) {
     in_device_ = (in_device) ? in_device->name : "";
     out_device_ = (out_device) ? out_device->name : "";
     options_changed_ = true;
@@ -714,6 +720,7 @@ class FakeVoiceEngine : public FakeBaseEngine {
   std::vector<FakeVoiceMediaChannel*> channels_;
   std::vector<AudioCodec> codecs_;
   int output_volume_;
+  int delay_offset_;
   std::string in_device_;
   std::string out_device_;
   VoiceProcessor* rx_processor_;
@@ -841,6 +848,7 @@ class FakeMediaEngine
   }
 
   int audio_options() const { return voice_.options_; }
+  int audio_delay_offset() const { return voice_.delay_offset_; }
   int output_volume() const { return voice_.output_volume_; }
   const VideoEncoderConfig& default_video_encoder_config() const {
     return video_.default_encoder_config_;

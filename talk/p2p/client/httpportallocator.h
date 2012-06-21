@@ -135,7 +135,7 @@ class HttpPortAllocatorSessionBase : public BasicPortAllocatorSession {
         BasicPortAllocatorSession::allocator());
   }
 
-  std::string GetSessionRequestUrl() const;
+  std::string GetSessionRequestUrl();
 
  private:
   FRIEND_TEST(::HttpPortAllocatorTest, TestSessionRequestUrl);

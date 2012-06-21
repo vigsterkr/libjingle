@@ -32,6 +32,8 @@
 #include <string>
 #endif  // _DEBUG
 
+#include "talk/base/sigslot.h"
+
 namespace cricket {
 
 class VideoFrame;

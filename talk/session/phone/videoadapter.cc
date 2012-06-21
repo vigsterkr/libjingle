@@ -38,9 +38,9 @@ static const int kMaxCpuDowngrades = 4;  // Downgrade at most 4 times for CPU.
 static const int kDefaultDowngradeWaitTimeMs = 2000;
 
 // Default CPU thresholds.
-static const float kHighSystemThreshold = 0.90f;
-static const float kLowSystemThreshold = 0.70f;
-static const float kMediumProcessThreshold = 0.40f;
+static const float kHighSystemThreshold = 0.85f;
+static const float kLowSystemThreshold = 0.65f;
+static const float kMediumProcessThreshold = 0.35f;
 
 // TODO: Consider making scale factor table settable, to allow
 // application to select quality vs performance tradeoff.
@@ -119,7 +119,7 @@ VideoAdapter::VideoAdapter()
     : output_num_pixels_(0),
       black_output_(false),
       is_black_(false),
-      drop_frame_count_(0) {
+      interval_next_frame_(0) {
 }
 
 VideoAdapter::~VideoAdapter() {
@@ -140,7 +140,6 @@ void VideoAdapter::SetOutputFormat(const VideoFormat& format) {
   output_num_pixels_ = output_format_.width * output_format_.height;
   output_format_.interval = talk_base::_max(
       output_format_.interval, input_format_.interval);
-  drop_frame_count_ = 0;
 }
 
 const VideoFormat& VideoAdapter::input_format() {
@@ -167,6 +166,8 @@ int VideoAdapter::GetOutputNumPixels() const {
   return output_num_pixels_;
 }
 
+// TODO: Add AdaptFrameRate function that only drops frames but
+// not resolution.
 bool VideoAdapter::AdaptFrame(const VideoFrame* in_frame,
                               const VideoFrame** out_frame) {
   talk_base::CritScope cs(&critical_section_);
@@ -181,15 +182,21 @@ bool VideoAdapter::AdaptFrame(const VideoFrame* in_frame,
     // Drop all frames as the output format is 0x0.
     should_drop = true;
   } else {
-    // Drop some frames based on the ratio of the input fps and the output fps.
-    // We assume that the output fps is a factor of the input fps. In other
-    // words, the output interval is divided by the input interval evenly.
-    should_drop = (drop_frame_count_ > 0);
-    if (input_format_.interval > 0 &&
-        output_format_.interval > input_format_.interval) {
-      ++drop_frame_count_;
-      drop_frame_count_ %= output_format_.interval / input_format_.interval;
+    // Drop some frames based on input fps and output fps.
+    // Normally output fps is less than input fps.
+    // TODO: Consider adjusting interval to reflect the adjusted
+    // interval between frames after dropping some frames.
+    interval_next_frame_ += input_format_.interval;
+    if (interval_next_frame_ >= output_format_.interval) {
+      interval_next_frame_ %= output_format_.interval;
+    } else {
+      should_drop = true;
     }
+  }
+
+  if (should_drop) {
+    *out_frame = NULL;
+    return true;
   }
 
   if (output_num_pixels_) {
@@ -198,11 +205,6 @@ bool VideoAdapter::AdaptFrame(const VideoFrame* in_frame,
                                                  output_num_pixels_);
     output_format_.width = static_cast<int>(in_frame->GetWidth() * scale);
     output_format_.height = static_cast<int>(in_frame->GetHeight() * scale);
-  }
-
-  if (should_drop) {
-    *out_frame = NULL;
-    return true;
   }
 
   if (!StretchToOutputFrame(in_frame)) {

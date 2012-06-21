@@ -44,7 +44,7 @@ class ChannelManagerTest : public testing::Test {
     fdm_ = new cricket::FakeDeviceManager();
     cm_ = new cricket::ChannelManager(
         fme_, fdme_, fdm_, talk_base::Thread::Current());
-    session_ = new cricket::FakeSession();
+    session_ = new cricket::FakeSession(true);
 
     std::vector<std::string> in_device_list, out_device_list, vid_device_list;
     in_device_list.push_back("audio-in1");
@@ -198,6 +198,9 @@ TEST_F(ChannelManagerTest, SetAudioOptionsBeforeInit) {
   EXPECT_EQ("audio-in1", fme_->audio_in_device());
   EXPECT_EQ("audio-out1", fme_->audio_out_device());
   EXPECT_EQ(0x2, fme_->audio_options());
+  EXPECT_EQ(0, fme_->audio_delay_offset());
+  EXPECT_EQ(cricket::MediaEngineInterface::kDefaultAudioDelayOffset,
+            fme_->audio_delay_offset());
 }
 
 TEST_F(ChannelManagerTest, GetAudioOptionsBeforeInit) {
@@ -218,23 +221,45 @@ TEST_F(ChannelManagerTest, GetAudioOptionsBeforeInit) {
   EXPECT_EQ(0x2, opts);
 }
 
+TEST_F(ChannelManagerTest, GetAudioOptionsWithNullParameters) {
+  std::string audio_in, audio_out;
+  int opts;
+  EXPECT_TRUE(cm_->SetAudioOptions("audio-in2", "audio-out2", 0x1));
+  EXPECT_TRUE(cm_->GetAudioOptions(&audio_in, NULL, NULL));
+  EXPECT_EQ("audio-in2", audio_in);
+  EXPECT_TRUE(cm_->GetAudioOptions(NULL, &audio_out, NULL));
+  EXPECT_EQ("audio-out2", audio_out);
+  EXPECT_TRUE(cm_->GetAudioOptions(NULL, NULL, &opts));
+  EXPECT_EQ(0x1, opts);
+}
+
 TEST_F(ChannelManagerTest, SetAudioOptions) {
   // Test initial state.
   EXPECT_TRUE(cm_->Init());
+  EXPECT_EQ(std::string(cricket::DeviceManagerInterface::kDefaultDeviceName),
+            fme_->audio_in_device());
+  EXPECT_EQ(std::string(cricket::DeviceManagerInterface::kDefaultDeviceName),
+            fme_->audio_out_device());
+  EXPECT_EQ(cricket::MediaEngineInterface::DEFAULT_AUDIO_OPTIONS,
+            fme_->audio_options());
+  EXPECT_EQ(cricket::MediaEngineInterface::kDefaultAudioDelayOffset,
+            fme_->audio_delay_offset());
+  // Test setting defaults.
+  EXPECT_TRUE(cm_->SetAudioOptions("", "",
+      cricket::MediaEngineInterface::DEFAULT_AUDIO_OPTIONS));
   EXPECT_EQ("", fme_->audio_in_device());
   EXPECT_EQ("", fme_->audio_out_device());
   EXPECT_EQ(cricket::MediaEngineInterface::DEFAULT_AUDIO_OPTIONS,
             fme_->audio_options());
-  // Test setting defaults.
-  EXPECT_TRUE(cm_->SetAudioOptions("", "", 0x3));
-  EXPECT_EQ("", fme_->audio_in_device());
-  EXPECT_EQ("", fme_->audio_out_device());
-  EXPECT_EQ(0x3, fme_->audio_options());
+  EXPECT_EQ(cricket::MediaEngineInterface::kDefaultAudioDelayOffset,
+            fme_->audio_delay_offset());
   // Test setting specific values.
   EXPECT_TRUE(cm_->SetAudioOptions("audio-in1", "audio-out1", 0x2));
   EXPECT_EQ("audio-in1", fme_->audio_in_device());
   EXPECT_EQ("audio-out1", fme_->audio_out_device());
   EXPECT_EQ(0x2, fme_->audio_options());
+  EXPECT_EQ(cricket::MediaEngineInterface::kDefaultAudioDelayOffset,
+            fme_->audio_delay_offset());
   // Test setting bad values.
   EXPECT_FALSE(cm_->SetAudioOptions("audio-in9", "audio-out2", 0x1));
 }
@@ -308,8 +333,7 @@ TEST_F(ChannelManagerTest, SetAudioOptionsUnplugPlug) {
   EXPECT_EQ("", fme_->audio_out_device());
   // The channel manager keeps the preferences "audio-in1" and "audio-out1".
   std::string audio_in, audio_out;
-  int opts;
-  EXPECT_TRUE(cm_->GetAudioOptions(&audio_in, &audio_out, &opts));
+  EXPECT_TRUE(cm_->GetAudioOptions(&audio_in, &audio_out, NULL));
   EXPECT_EQ("audio-in1", audio_in);
   EXPECT_EQ("audio-out1", audio_out);
   cm_->Terminate();
@@ -323,7 +347,7 @@ TEST_F(ChannelManagerTest, SetAudioOptionsUnplugPlug) {
   EXPECT_TRUE(cm_->Init());
   EXPECT_EQ("audio-in1", fme_->audio_in_device());
   EXPECT_EQ("audio-out1", fme_->audio_out_device());
-  EXPECT_TRUE(cm_->GetAudioOptions(&audio_in, &audio_out, &opts));
+  EXPECT_TRUE(cm_->GetAudioOptions(&audio_in, &audio_out, NULL));
   EXPECT_EQ("audio-in1", audio_in);
   EXPECT_EQ("audio-out1", audio_out);
 }

@@ -875,6 +875,16 @@ TEST_F(WebRtcVoiceEngineTestFake, SetDevicesWithInitiallyBadDevices) {
 // and start sending/playing out on it.
 TEST_F(WebRtcVoiceEngineTestFake, ConferenceSendAndPlayout) {
   EXPECT_TRUE(SetupEngine());
+
+  bool enabled;
+  webrtc::EcModes ec_mode;
+  webrtc::NsModes ns_mode;
+  EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
+  // Enable state (false) should be unchanged by conference mode.
+  EXPECT_EQ(0, voe_.SetEcStatus(false, ec_mode));
+  EXPECT_EQ(0, voe_.SetNsStatus(false, ns_mode));
+
   int channel_num = voe_.GetLastChannel();
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
   std::vector<cricket::AudioCodec> codecs;
@@ -883,22 +893,29 @@ TEST_F(WebRtcVoiceEngineTestFake, ConferenceSendAndPlayout) {
   EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
   EXPECT_TRUE(voe_.GetSend(channel_num));
 
-  bool enabled;
-  webrtc::EcModes ec_mode;
-  webrtc::NsModes ns_mode;
   EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_FALSE(enabled);
 #ifdef CHROMEOS
   EXPECT_EQ(webrtc::kEcDefault, ec_mode);
 #else
   EXPECT_EQ(webrtc::kEcConference, ec_mode);
 #endif
   EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
-  EXPECT_TRUE(enabled);
+  EXPECT_FALSE(enabled);
 #ifdef CHROMEOS
   EXPECT_EQ(webrtc::kNsDefault, ns_mode);
 #else
   EXPECT_EQ(webrtc::kNsConference, ns_mode);
 #endif
+
+  // Enable state (true) should be unchanged.
+  EXPECT_EQ(0, voe_.SetEcStatus(true, ec_mode));
+  EXPECT_EQ(0, voe_.SetNsStatus(true, ns_mode));
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  EXPECT_EQ(0, voe_.GetEcStatus(enabled, ec_mode));
+  EXPECT_TRUE(enabled);
+  EXPECT_EQ(0, voe_.GetNsStatus(enabled, ns_mode));
+  EXPECT_TRUE(enabled);
 
   EXPECT_TRUE(channel_->SetPlayout(true));
   EXPECT_TRUE(voe_.GetPlayout(channel_num));
@@ -1364,7 +1381,7 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   // Check codecs by name.
   EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "CELT", 32000, 0, 2, 0)));
-  EXPECT_FALSE(engine.FindCodec(
+  EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "CELT", 32000, 0, 1, 0)));
   EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "ISAC", 16000, 0, 1, 0)));
@@ -1414,7 +1431,7 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 5000, 0, 1, 0)));
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 0, 5000, 1, 0)));
   // Check that there aren't any extra codecs lying around.
-  EXPECT_EQ(14U, engine.codecs().size());
+  EXPECT_EQ(15U, engine.codecs().size());
   // Verify the payload id of common audio codecs, including CN, ISAC, and G722.
   for (std::vector<cricket::AudioCodec>::const_iterator it =
       engine.codecs().begin(); it != engine.codecs().end(); ++it) {
@@ -1462,6 +1479,14 @@ TEST(WebRtcVoiceEngineTest, Has32Channels) {
   }
 
   engine.Terminate();
+}
+
+// Test that we set our preferred codecs properly.
+TEST(WebRtcVoiceEngineTest, SetRecvCodecs) {
+  cricket::WebRtcVoiceEngine engine;
+  EXPECT_TRUE(engine.Init());
+  cricket::WebRtcVoiceMediaChannel channel(&engine);
+  EXPECT_TRUE(channel.SetRecvCodecs(engine.codecs()));
 }
 
 #ifdef WIN32

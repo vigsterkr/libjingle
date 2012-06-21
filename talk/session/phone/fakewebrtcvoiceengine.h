@@ -779,7 +779,8 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(SetTypingDetectionParameters, (int timeWindow,
                                              int costPerTyping,
                                              int reportingThreshold,
-                                             int penaltyDecay));
+                                             int penaltyDecay,
+                                             int typeEventDelay));
   WEBRTC_STUB(EnableHighPassFilter, (bool enable));
   bool IsHighPassFilterEnabled() { return false; }
   bool IsStereoChannelSwappingEnabled() { return false; }

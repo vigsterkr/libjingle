@@ -35,15 +35,21 @@ namespace cricket {
 class CpuInfo {
  public:
   // The following flags must match libyuv/cpu_id.h values.
-  // These flags are only valid on x86 processors.
-  static const int kCpuHasX86 = 1;
-  static const int kCpuHasSSE2 = 2;
-  static const int kCpuHasSSSE3 = 4;
-  static const int kCpuHasSSE41 = 8;
+  static const int kCpuInitialized = 0x1;
 
   // These flags are only valid on ARM processors.
-  static const int kCpuHasARM = 16;
-  static const int kCpuHasNEON = 32;
+  static const int kCpuHasARM = 0x2;
+  static const int kCpuHasNEON = 0x4;
+  // 0x8 reserved for future ARM flag.
+
+  // These flags are only valid on x86 processors.
+  static const int kCpuHasX86 = 0x10;
+  static const int kCpuHasSSE2 = 0x20;
+  static const int kCpuHasSSSE3 = 0x40;
+  static const int kCpuHasSSE41 = 0x80;
+  static const int kCpuHasSSE42 = 0x100;
+  static const int kCpuHasAVX = 0x200;
+  // 0x400 reserved for AVX2.
 
   // Detect CPU has SSE2 etc.
   static bool TestCpuFlag(int flag);

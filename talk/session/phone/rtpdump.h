@@ -216,11 +216,14 @@ class RtpDumpWriter {
   talk_base::StreamResult WritePacket(const void* data, size_t data_len,
                                       uint32 elapsed, bool rtcp);
   size_t FilterPacket(const void* data, size_t data_len, bool rtcp);
+  talk_base::StreamResult WriteToStream(const void* data, size_t data_len);
 
   talk_base::StreamInterface* stream_;
   int packet_filter_;
   bool file_header_written_;
   uint32 start_time_ms_;  // Time when the record starts.
+  // If writing to the stream takes longer than this many ms, log a warning.
+  uint32 warn_slow_writes_delay_;
   DISALLOW_COPY_AND_ASSIGN(RtpDumpWriter);
 };
 

@@ -46,7 +46,7 @@ int ResolveHostname(const std::string& hostname, int family,
   addresses->clear();
   struct addrinfo* result = NULL;
   struct addrinfo hints = {0};
-  // TODO(djw): For now this is IPv4 only so existing users remain unaffected.
+  // TODO: For now this is IPv4 only so existing users remain unaffected.
   hints.ai_family = AF_INET;
   hints.ai_flags = AI_ADDRCONFIG;
   int ret = getaddrinfo(hostname.c_str(), NULL, &hints, &result);

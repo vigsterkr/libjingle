@@ -136,6 +136,9 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool ShouldIgnoreTrace(const std::string& trace);
   int GetNumOfChannels();
 
+  void IncrementFrameListeners();
+  void DecrementFrameListeners();
+
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.
@@ -184,6 +187,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   VideoChannels channels_;
 
   VideoCapturer* video_capturer_;
+  int frame_listeners_;
   bool capture_started_;
   int local_renderer_w_;
   int local_renderer_h_;
@@ -194,11 +198,12 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   talk_base::CriticalSection signal_media_critical_;
 };
 
-class WebRtcVideoMediaChannel : public VideoMediaChannel,
+class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
+                                public VideoMediaChannel,
                                 public webrtc::Transport {
  public:
-  WebRtcVideoMediaChannel(
-      WebRtcVideoEngine* engine, VoiceMediaChannel* voice_channel);
+  WebRtcVideoMediaChannel(WebRtcVideoEngine* engine,
+                          VoiceMediaChannel* voice_channel);
   ~WebRtcVideoMediaChannel();
   bool Init();
 
@@ -220,10 +225,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   virtual bool RemoveRecvStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool GetStats(VideoMediaInfo* info);
-  virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer) {
-    // TODO: implement.
-    return false;
-  }
+  virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer);
   virtual bool SendIntraFrame();
   virtual bool RequestIntraFrame();
 
@@ -248,7 +250,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool GetRenderer(uint32 ssrc, VideoRenderer** renderer);
   bool SendFrame(uint32 ssrc, const VideoFrame* frame);
   bool SendFrame(WebRtcVideoChannelSendInfo* channel_info,
-                 const VideoFrame* frame);
+                 const VideoFrame* frame, bool owns_capturer);
 
   // Thunk functions for use with HybridVideoEngine
   void OnLocalFrame(VideoCapturer* capturer, const VideoFrame* frame) {
@@ -256,6 +258,8 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   }
   void OnLocalFrameFormat(VideoCapturer* capturer, const VideoFormat* format) {
   }
+
+  virtual void OnMessage(talk_base::Message* msg);
 
  protected:
   int GetLastEngineError() { return engine()->GetLastEngineError(); }
@@ -302,16 +306,17 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // Given captured video frame size, checks if we need to reset vie send codec.
   // |reset| is set to whether resetting has happened on vie or not.
   // Returns false on error.
-  bool MaybeResetVieSendCodec(int channel_id, int new_width, int new_height,
+  bool MaybeResetVieSendCodec(WebRtcVideoChannelSendInfo* send_channel,
+                              int new_width, int new_height, bool owns_capturer,
                               bool* reset);
   // Helper function for starting the sending of media on all channels or
   // |channel_id|. Note that these two function do not change |sending_|.
   bool StartSend();
-  bool StartSend(int channel_id);
+  bool StartSend(WebRtcVideoChannelSendInfo* send_channel);
   // Helper function for stop the sending of media on all channels or
   // |channel_id|. Note that these two function do not change |sending_|.
   bool StopSend();
-  bool StopSend(int channel_id);
+  bool StopSend(WebRtcVideoChannelSendInfo* send_channel);
   bool SendIntraFrame(int channel_id);
 
   // Send with one local SSRC. Normal case.
@@ -324,6 +329,7 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   // If the local ssrc correspond to that of the default channel the key is 0.
   // For all other channels the returned key will be the same as the local ssrc.
   bool GetSendChannelKey(uint32 local_ssrc, uint32* key);
+  WebRtcVideoChannelSendInfo* GetSendChannel(VideoCapturer* video_capturer);
   WebRtcVideoChannelSendInfo* GetSendChannel(uint32 local_ssrc);
   // Creates a new unique key that can be used for inserting a new send channel
   // into |send_channels_|
@@ -337,6 +343,8 @@ class WebRtcVideoMediaChannel : public VideoMediaChannel,
   bool DeleteSendChannel(uint32 ssrc_key);
 
   bool InConferenceMode() const { return (options_ & OPT_CONFERENCE) != 0; }
+  void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
+  bool RemoveCapturer(uint32 ssrc);
 
 
   // Global state.

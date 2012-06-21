@@ -73,7 +73,7 @@ class VideoAdapter {
   int output_num_pixels_;
   bool black_output_;  // Flag to tell if we need to black output_frame_.
   bool is_black_;  // Flag to tell if output_frame_ is currently black.
-  int64 drop_frame_count_;
+  int64 interval_next_frame_;
   talk_base::scoped_ptr<VideoFrame> output_frame_;
   // The critical section to protect the above variables.
   talk_base::CriticalSection critical_section_;

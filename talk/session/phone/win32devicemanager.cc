@@ -77,7 +77,6 @@ static const char* kFilteredAudioDevicesName[] = {
     NULL,
 };
 static const char* const kFilteredVideoDevicesName[] =  {
-    "Google Camera Adapter",   // Our own magiccams
     "Asus virtual Camera",     // Bad Asus desktop virtual cam
     "Bluetooth Video",         // Bad Sony viao bluetooth sharing driver
     NULL,

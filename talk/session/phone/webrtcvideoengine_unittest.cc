@@ -100,7 +100,7 @@ class WebRtcVideoEngineTestFake : public testing::Test {
     }
     cricket::WebRtcVideoFrame frame;
     size_t size = width * height * 3 / 2;  // I420
-    talk_base::scoped_ptr<uint8> pixel(new uint8[size]);
+    talk_base::scoped_array<uint8> pixel(new uint8[size]);
     if (!frame.Init(cricket::FOURCC_I420,
                     width, height, width, height,
                     pixel.get(), size, 1, 1, 0, 0, 0)) {
@@ -683,17 +683,26 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
   EXPECT_EQ(1, vie_.GetNumCapturers());
   int channel_num = vie_.GetLastChannel();
   int capture_id = vie_.GetCaptureId(channel_num);
+  // Set send codecs on the channel.
+  std::vector<cricket::VideoCodec> codecs;
+  codecs.push_back(kVP8Codec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
 
   // Set options with OPT_VIDEO_NOISE_REDUCTION flag.
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_VIDEO_NOISE_REDUCTION));
 
   // Verify capture has denoising turned on.
-  EXPECT_TRUE(vie_.GetCaptureDenoising(capture_id));
+  webrtc::VideoCodec send_codec;
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, send_codec));
+  EXPECT_TRUE(send_codec.codecSpecific.VP8.denoisingOn);
+  EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));
 
   // Set options back to zero.
   EXPECT_TRUE(channel_->SetOptions(0));
 
   // Verify capture has denoising turned off.
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, send_codec));
+  EXPECT_FALSE(send_codec.codecSpecific.VP8.denoisingOn);
   EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));
 }
 
@@ -795,31 +804,6 @@ TEST_F(WebRtcVideoEngineTest, CreateChannel) {
   delete channel;
 }
 
-TEST_F(WebRtcVideoEngineTest, SetVideoCapturer) {
-  // Use 123 to verify there's no assumption to the module id
-  FakeWebRtcVideoCaptureModule* vcm =
-      new FakeWebRtcVideoCaptureModule(NULL, 123);
-  talk_base::scoped_ptr<cricket::WebRtcVideoCapturer> capturer(
-      new cricket::WebRtcVideoCapturer);
-  EXPECT_TRUE(capturer->Init(vcm));
-  EXPECT_TRUE(engine_.Init());
-  EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get()));
-  EXPECT_FALSE(engine_.IsCapturing());
-  EXPECT_EQ(cricket::CR_PENDING, engine_.SetCapture(true));
-  EXPECT_TRUE(engine_.IsCapturing());
-
-  EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
-  EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
-  EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
-      engine_.default_codec_format().interval),
-            vcm->cap().maxFPS);
-  EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
-  EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
-
-  EXPECT_TRUE(engine_.SetVideoCapturer(NULL));
-  EXPECT_FALSE(engine_.IsCapturing());
-}
-
 TEST_F(WebRtcVideoEngineTest, TestRegisterVideoProcessor) {
   Base::RegisterVideoProcessor();
 }
@@ -908,8 +892,8 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStats) {
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStatsMultipleRecvStreams) {
   Base::GetStatsMultipleRecvStreams();
 }
-// TODO: Restore this test once we support multiple send streams.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStatsMultipleSendStreams) {
+
+TEST_F(WebRtcVideoMediaChannelTest, GetStatsMultipleSendStreams) {
   Base::GetStatsMultipleSendStreams();
 }
 
@@ -943,8 +927,47 @@ TEST_F(WebRtcVideoMediaChannelTest, AddRemoveSendStreams) {
   Base::AddRemoveSendStreams();
 }
 
+TEST_F(WebRtcVideoMediaChannelTest, SetVideoCapturer) {
+  // Use 123 to verify there's no assumption to the module id
+  FakeWebRtcVideoCaptureModule* vcm =
+      new FakeWebRtcVideoCaptureModule(NULL, 123);
+  talk_base::scoped_ptr<cricket::WebRtcVideoCapturer> capturer(
+      new cricket::WebRtcVideoCapturer);
+  EXPECT_TRUE(capturer->Init(vcm));
+  EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get()));
+  EXPECT_FALSE(engine_.IsCapturing());
+  EXPECT_EQ(cricket::CR_SUCCESS, engine_.SetCapture(true));
+  cricket::VideoCodec codec(DefaultCodec());
+  EXPECT_TRUE(SetOneCodec(codec));
+  EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_TRUE(engine_.IsCapturing());
+
+  EXPECT_EQ(engine_.default_codec_format().width, vcm->cap().width);
+  EXPECT_EQ(engine_.default_codec_format().height, vcm->cap().height);
+  EXPECT_EQ(cricket::VideoFormat::IntervalToFps(
+      engine_.default_codec_format().interval),
+            vcm->cap().maxFPS);
+  EXPECT_EQ(webrtc::kVideoI420, vcm->cap().rawType);
+  EXPECT_EQ(webrtc::kVideoCodecUnknown, vcm->cap().codecType);
+
+  EXPECT_TRUE(engine_.SetVideoCapturer(NULL));
+  EXPECT_FALSE(engine_.IsCapturing());
+}
+
 TEST_F(WebRtcVideoMediaChannelTest, SimulateConference) {
   Base::SimulateConference();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, AddRemoveCapturer) {
+  Base::AddRemoveCapturer();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, RemoveCapturerWithoutAdd) {
+  Base::RemoveCapturerWithoutAdd();
+}
+
+TEST_F(WebRtcVideoMediaChannelTest, AddRemoveCapturerMultipleSources) {
+  Base::AddRemoveCapturerMultipleSources();
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {

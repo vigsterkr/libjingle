@@ -41,7 +41,7 @@ namespace cricket {
 
 class Candidate {
  public:
-  // TODO(mallinath): Match the ordering and param list as per RFC 5245
+  // TODO: Match the ordering and param list as per RFC 5245
   // candidate-attribute syntax. http://tools.ietf.org/html/rfc5245#section-15.1
   Candidate() : component_(0), priority_(0), generation_(0), foundation_(0) {}
   Candidate(const std::string& id, int component, const std::string& protocol,

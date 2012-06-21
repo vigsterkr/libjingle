@@ -1649,7 +1649,7 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   talk_base::scoped_ptr<UDPPort> udpport1(CreateUdpPort(kLocalAddr1));
   udpport1->PrepareAddress();
   // Compare foundation of candidates from both ports.
-  // TODO(mallinath): Update this check with a STUN port which has the same
+  // TODO: Update this check with a STUN port which has the same
   // base of UDP Port. This will happen once we have a common socket for all
   // ports.
   EXPECT_EQ(udpport->candidates()[0].foundation(),

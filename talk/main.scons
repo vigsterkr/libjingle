@@ -301,10 +301,11 @@ win_opt_env = win_env.Clone(
 
 win_opt_env.Prepend(
   CCFLAGS=[
-      '/Zi',     # enable debugging
-      '/O1',     # optimize for size
-      '/MT',     # link with LIBCMT.LIB (multi-threaded, static linked crt)
-      '/GS',     # enable security checks
+      '/Zi',       # enable debugging
+      '/O1',       # optimize for size
+      '/fp:fast',  # float faster but less precise
+      '/MT',       # link with LIBCMT.LIB (multi-threaded, static linked crt)
+      '/GS',       # enable security checks
   ],
   LINKFLAGS = [
     '/safeseh',  # protect against attacks against exception handlers
@@ -416,6 +417,7 @@ def mac_common_include_x86_32(env):
   env.Append(
     CCFLAGS = [
       '-m32',
+      '-mmacosx-version-min=10.5',
       '-isysroot', '/Developer/SDKs/MacOSX10.5.sdk',
     ],
     LINKFLAGS = [
@@ -431,6 +433,7 @@ def mac_common_include_x86_64(env):
     CCFLAGS = [
       '-m64',
       '-fPIC',
+      '-mmacosx-version-min=10.6',
       '-isysroot', '/Developer/SDKs/MacOSX10.6.sdk',
     ],
     LINKFLAGS = [

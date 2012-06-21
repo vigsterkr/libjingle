@@ -395,7 +395,7 @@ class P2PTransportChannelTestBase : public testing::Test,
       EXPECT_EQ(expected.remote_type, RemoteCandidate(ep1_ch1())->type());
       EXPECT_EQ(expected.remote_proto, RemoteCandidate(ep1_ch1())->protocol());
 
-      // TODO(ronghuawu): Enable below check when USE-CANDIDATE is ready.
+      // TODO: Enable below check when USE-CANDIDATE is ready.
       /*if (ep2_.protocol_type_ == cricket::ICEPROTO_RFC5245) {
         // Checking for best connection candidates information at remote.
         EXPECT_TRUE_WAIT_MARGIN(

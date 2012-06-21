@@ -101,7 +101,7 @@ void MacAsyncSocket::OnResolveResult(SignalThread* thread) {
 
 // Connect to a remote address.
 int MacAsyncSocket::Connect(const SocketAddress& addr) {
-  // TODO(djw): Consolidate all the connect->resolve->doconnect implementations.
+  // TODO: Consolidate all the connect->resolve->doconnect implementations.
   if (state_ != CS_CLOSED) {
     SetError(EALREADY);
     return SOCKET_ERROR;

@@ -53,7 +53,8 @@ class RtpDumpWriter;
 // a file.
 class RtpDumpSink : public MediaSinkInterface, public sigslot::has_slots<> {
  public:
-  explicit RtpDumpSink(const std::string& filename);
+  // Takes ownership of stream.
+  explicit RtpDumpSink(talk_base::StreamInterface* stream);
   virtual ~RtpDumpSink();
 
   virtual void SetMaxSize(size_t size);
@@ -68,8 +69,7 @@ class RtpDumpSink : public MediaSinkInterface, public sigslot::has_slots<> {
   size_t max_size_;
   bool recording_;
   int packet_filter_;
-  std::string filename_;
-  talk_base::scoped_ptr<talk_base::FileStream> stream_;
+  talk_base::scoped_ptr<talk_base::StreamInterface> stream_;
   talk_base::scoped_ptr<RtpDumpWriter> writer_;
   talk_base::CriticalSection critical_section_;
 
@@ -82,12 +82,12 @@ class MediaRecorder {
   virtual ~MediaRecorder();
 
   bool AddChannel(VoiceChannel* channel,
-                  const std::string& send_filename,
-                  const std::string& recv_filename,
+                  talk_base::StreamInterface* send_stream,
+                  talk_base::StreamInterface* recv_stream,
                   int filter);
   bool AddChannel(VideoChannel* channel,
-                  const std::string& send_filename,
-                  const std::string& recv_filename,
+                  talk_base::StreamInterface* send_stream,
+                  talk_base::StreamInterface* recv_stream,
                   int filter);
   void RemoveChannel(BaseChannel* channel, SinkType type);
   bool EnableChannel(BaseChannel* channel, bool enable_send, bool enable_recv,
@@ -104,8 +104,8 @@ class MediaRecorder {
 
   bool InternalAddChannel(BaseChannel* channel,
                           bool video_channel,
-                          const std::string& send_filename,
-                          const std::string& recv_filename,
+                          talk_base::StreamInterface* send_stream,
+                          talk_base::StreamInterface* recv_stream,
                           int filter);
 
   std::map<BaseChannel*, SinkPair*> sinks_;

@@ -177,8 +177,7 @@ TEST_WEBRTCVIDEOFRAME(CopyToBuffer1Pixel)
 
 TEST_WEBRTCVIDEOFRAME(StretchToFrame)
 TEST_WEBRTCVIDEOFRAME(Copy)
-// TODO: WebRtcVideoFrame is not currently refcounted.
-// TEST_WEBRTCVIDEOFRAME(CopyIsRef)
+TEST_WEBRTCVIDEOFRAME(CopyIsRef)
 TEST_WEBRTCVIDEOFRAME(MakeExclusive)
 
 // These functions test implementation-specific details.
@@ -206,10 +205,9 @@ TEST_F(WebRtcVideoFrameTest, Transfer) {
   ASSERT_TRUE(LoadFrameNoRepeat(&frame1));
   uint8* buffer;
   size_t size;
-  frame1.Detach(&buffer, &size),
+  frame1.Detach(&buffer, &size);
   frame2.Attach(buffer, size, kWidth, kHeight, 1, 1,
                 frame1.GetElapsedTime(), frame1.GetTimeStamp(), 0);
   EXPECT_TRUE(IsNull(frame1));
   EXPECT_TRUE(IsSize(frame2, kWidth, kHeight));
 }
-

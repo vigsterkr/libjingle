@@ -111,7 +111,7 @@ bool FindMatchingCrypto(const CryptoParamsVec& cryptos,
 }
 
 // For audio, HMAC 32 is prefered because of the low overhead.
-static void GetSupportedAudioCryptoSuites(
+void GetSupportedAudioCryptoSuites(
     std::vector<std::string>* crypto_suites) {
 #ifdef HAVE_SRTP
   crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_32);
@@ -119,14 +119,17 @@ static void GetSupportedAudioCryptoSuites(
 #endif
 }
 
-static void GetSupportedVideoCryptoSuites(
+void GetSupportedVideoCryptoSuites(
     std::vector<std::string>* crypto_suites) {
-#ifdef HAVE_SRTP
-  crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_80);
-#endif
+  GetSupportedDefaultCryptoSuites(crypto_suites);
 }
 
-static void GetSupportedDataCryptoSuites(
+void GetSupportedDataCryptoSuites(
+    std::vector<std::string>* crypto_suites) {
+  GetSupportedDefaultCryptoSuites(crypto_suites);
+}
+
+void GetSupportedDefaultCryptoSuites(
     std::vector<std::string>* crypto_suites) {
 #ifdef HAVE_SRTP
   crypto_suites->push_back(CS_AES_CM_128_HMAC_SHA1_80);
@@ -328,6 +331,105 @@ static bool UpdateTransportInfoForBundle(const ContentGroup& bundle_group,
       iter->ice_ufrag = selected_ufrag;
       iter->ice_pwd = selected_pwd;
     }
+  }
+  return true;
+}
+
+// Gets the CryptoParamsVec of the given |content_name| from |description|, and
+// sets it to |cryptos|.
+static bool GetCryptosByName(SessionDescription* description,
+                             const std::string& content_name,
+                             CryptoParamsVec* cryptos) {
+  if (!description || !cryptos) {
+    return false;
+  }
+  const MediaContentDescription* media_desc =
+      static_cast<MediaContentDescription*> (
+          description->GetContentDescriptionByName(content_name));
+  if (!media_desc) {
+    return false;
+  }
+  *cryptos = media_desc->cryptos();
+  return true;
+}
+
+// Predicate function used by the remove_if.
+// Returns true if the |crypto|'s cipher_suite is not found in |filter|.
+static bool CryptoNotFound(const CryptoParams crypto,
+                           const CryptoParamsVec* filter) {
+  if (filter == NULL) {
+    return true;
+  }
+  for (CryptoParamsVec::const_iterator iter = filter->begin();
+       iter != filter->end(); ++iter) {
+    if (iter->cipher_suite == crypto.cipher_suite) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Prunes the |target_cryptos| by removing the crypto params (cipher_suite)
+// which are not available in |filter|.
+static void PruneCryptos(const CryptoParamsVec& filter,
+                         CryptoParamsVec* target_cryptos) {
+  if (!target_cryptos) {
+    return;
+  }
+  target_cryptos->erase(std::remove_if(target_cryptos->begin(),
+                                       target_cryptos->end(),
+                                       bind2nd(ptr_fun(CryptoNotFound),
+                                               &filter)),
+                        target_cryptos->end());
+}
+
+// Updates the crypto parameters of the |description| according to the given
+// |bundle_group|. The crypto parameters of all the contents within the
+// |bundle_group| should be updated to use the common subset of the
+// available cryptos.
+static bool UpdateCryptoParamsForBundle(const ContentGroup& bundle_group,
+                                        SessionDescription* description) {
+  const std::set<std::string> content_names = bundle_group.content_types();
+  if (content_names.empty()) {
+    return false;
+  }
+
+  // Get the common cryptos.
+  CryptoParamsVec common_cryptos;
+  for (std::set<std::string>::const_iterator iter = content_names.begin();
+       iter != content_names.end(); ++iter) {
+    if (iter == content_names.begin()) {
+      // Initial the common_cryptos with the first content in the bundle group.
+      if (!GetCryptosByName(description, *iter, &common_cryptos)) {
+        return false;
+      }
+      if (common_cryptos.empty()) {
+        // If there's no crypto params, we should just return.
+        return true;
+      }
+    } else {
+      CryptoParamsVec cryptos;
+      if (!GetCryptosByName(description, *iter, &cryptos)) {
+        return false;
+      }
+      PruneCryptos(cryptos, &common_cryptos);
+    }
+  }
+
+  if (common_cryptos.empty()) {
+    return false;
+  }
+
+  // Update to use the common cryptos.
+  for (std::set<std::string>::const_iterator iter = content_names.begin();
+       iter != content_names.end(); ++iter) {
+    MediaContentDescription* media_desc =
+        static_cast<MediaContentDescription*> (
+            description->GetContentDescriptionByName(*iter));
+    if (!media_desc) {
+      return false;
+    }
+    media_desc->set_cryptos(common_cryptos);
   }
   return true;
 }
@@ -567,6 +669,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
   if (options.bundle_enabled) {
     offer->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, offer.get())) {
+      LOG(LS_ERROR) << "CreateOffer Failed to UpdateTransportInfoForBundle.";
+      return NULL;
+    }
+    if (!UpdateCryptoParamsForBundle(bundle_group, offer.get())) {
+      LOG(LS_ERROR) << "CreateOffer Failed to UpdateCryptoParamsForBundle.";
       return NULL;
     }
   }
@@ -683,6 +790,12 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE)) {
     accept->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, accept.get())) {
+      LOG(LS_ERROR) << "CreateAnswer Failed to UpdateTransportInfoForBundle.";
+      return NULL;
+    }
+
+    if (!UpdateCryptoParamsForBundle(bundle_group, accept.get())) {
+      LOG(LS_ERROR) << "CreateAnswer Failed to UpdateCryptoParamsForBundle.";
       return NULL;
     }
   }

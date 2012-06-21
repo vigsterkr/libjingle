@@ -521,10 +521,22 @@ TEST(HttpPortAllocatorTest, TestHttpPortAllocatorHostLists) {
 TEST(HttpPortAllocatorTest, TestSessionRequestUrl) {
   talk_base::FakeNetworkManager network_manager;
   cricket::HttpPortAllocator alloc(&network_manager, "unit test agent");
+
+  // Disable PORTALLOCATOR_ENABLE_SHARED_UFRAG.
+  alloc.set_flags(alloc.flags() & ~cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
   talk_base::scoped_ptr<cricket::HttpPortAllocatorSessionBase> session(
       static_cast<cricket::HttpPortAllocatorSession*>(
           alloc.CreateSessionInternal(0, kIceUfrag0, kIcePwd0)));
   std::string url = session->GetSessionRequestUrl();
+  LOG(LS_INFO) << "url: " << url;
+  EXPECT_EQ(std::string(cricket::HttpPortAllocator::kCreateSessionURL), url);
+
+  // Enable PORTALLOCATOR_ENABLE_SHARED_UFRAG.
+  alloc.set_flags(alloc.flags() | cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
+  session.reset(static_cast<cricket::HttpPortAllocatorSession*>(
+      alloc.CreateSessionInternal(0, kIceUfrag0, kIcePwd0)));
+  url = session->GetSessionRequestUrl();
+  LOG(LS_INFO) << "url: " << url;
   std::vector<std::string> parts;
   talk_base::split(url, '?', &parts);
   ASSERT_EQ(2U, parts.size());
@@ -541,6 +553,6 @@ TEST(HttpPortAllocatorTest, TestSessionRequestUrl) {
     args[talk_base::s_url_decode(parts[0])] = talk_base::s_url_decode(parts[1]);
   }
 
-  EXPECT_EQ(session->username(), args["username"]);
-  EXPECT_EQ(session->password(), args["password"]);
+  EXPECT_EQ(kIceUfrag0, args["username"]);
+  EXPECT_EQ(kIcePwd0, args["password"]);
 }

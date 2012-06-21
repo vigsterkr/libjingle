@@ -319,7 +319,8 @@ RtpDumpWriter::RtpDumpWriter(talk_base::StreamInterface* stream)
     : stream_(stream),
       packet_filter_(PF_ALL),
       file_header_written_(false),
-      start_time_ms_(talk_base::Time()) {
+      start_time_ms_(talk_base::Time()),
+      warn_slow_writes_delay_(talk_base::LogMessage::WARN_SLOW_LOGS_DELAY) {
 }
 
 void RtpDumpWriter::set_packet_filter(int filter) {
@@ -332,9 +333,9 @@ uint32 RtpDumpWriter::GetElapsedTime() const {
 }
 
 talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
-  talk_base::StreamResult res = stream_->WriteAll(
+  talk_base::StreamResult res = WriteToStream(
       RtpDumpFileHeader::kFirstLine,
-      strlen(RtpDumpFileHeader::kFirstLine), NULL, NULL);
+      strlen(RtpDumpFileHeader::kFirstLine));
   if (res != talk_base::SR_SUCCESS) {
     return res;
   }
@@ -342,7 +343,7 @@ talk_base::StreamResult RtpDumpWriter::WriteFileHeader() {
   talk_base::ByteBuffer buf;
   RtpDumpFileHeader file_header(talk_base::Time(), 0, 0);
   file_header.WriteToByteBuffer(&buf);
-  return stream_->WriteAll(buf.Data(), buf.Length(), NULL, NULL);
+  return WriteToStream(buf.Data(), buf.Length());
 }
 
 talk_base::StreamResult RtpDumpWriter::WritePacket(
@@ -371,13 +372,13 @@ talk_base::StreamResult RtpDumpWriter::WritePacket(
                       RtpDumpPacket::kHeaderLength + write_len));
   buf.WriteUInt16(static_cast<uint16>(rtcp ? 0 : data_len));
   buf.WriteUInt32(elapsed);
-  res = stream_->WriteAll(buf.Data(), buf.Length(), NULL, NULL);
+  res = WriteToStream(buf.Data(), buf.Length());
   if (res != talk_base::SR_SUCCESS) {
     return res;
   }
 
   // Write the header or full packet as indicated by write_len.
-  return stream_->WriteAll(data, write_len, NULL, NULL);
+  return WriteToStream(data, write_len);
 }
 
 size_t RtpDumpWriter::FilterPacket(const void* data, size_t data_len,
@@ -402,6 +403,19 @@ size_t RtpDumpWriter::FilterPacket(const void* data, size_t data_len,
   }
 
   return filtered_len;
+}
+
+talk_base::StreamResult RtpDumpWriter::WriteToStream(
+    const void* data, size_t data_len) {
+  uint32 before = talk_base::Time();
+  talk_base::StreamResult result =
+      stream_->WriteAll(data, data_len, NULL, NULL);
+  uint32 delay = talk_base::TimeSince(before);
+  if (delay >= warn_slow_writes_delay_) {
+    LOG(LS_WARNING) << "Slow RtpDump: took " << delay << "ms to write "
+                    << data_len << " bytes.";
+  }
+  return result;
 }
 
 }  // namespace cricket

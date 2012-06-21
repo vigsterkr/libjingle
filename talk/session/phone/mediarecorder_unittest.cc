@@ -39,6 +39,11 @@
 
 namespace cricket {
 
+talk_base::StreamInterface* Open(const std::string& path) {
+  return talk_base::Filesystem::OpenFile(
+      talk_base::Pathname(path), "wb");
+}
+
 /////////////////////////////////////////////////////////////////////////
 // Test RtpDumpSink
 /////////////////////////////////////////////////////////////////////////
@@ -47,7 +52,7 @@ class RtpDumpSinkTest : public testing::Test {
   virtual void SetUp() {
     EXPECT_TRUE(talk_base::Filesystem::GetTemporaryFolder(path_, true, NULL));
     path_.SetFilename("sink-test.rtpdump");
-    sink_.reset(new RtpDumpSink(path_.pathname()));
+    sink_.reset(new RtpDumpSink(Open(path_.pathname())));
 
     for (int i = 0; i < ARRAY_SIZE(rtp_buf_); ++i) {
       RtpTestUtility::kTestRawRtpPackets[i].WriteToByteBuffer(
@@ -186,10 +191,10 @@ void TestMediaRecorder(BaseChannel* channel,
   std::string recv_file = path.pathname();
   if (video_media_channel) {
     EXPECT_TRUE(recorder->AddChannel(static_cast<VideoChannel*>(channel),
-                                     send_file, recv_file, filter));
+                                     Open(send_file), Open(recv_file), filter));
   } else {
     EXPECT_TRUE(recorder->AddChannel(static_cast<VoiceChannel*>(channel),
-                                     send_file, recv_file, filter));
+                                     Open(send_file), Open(recv_file), filter));
   }
 
   // Enable recording only the sent media.
@@ -262,11 +267,11 @@ void TestRecordHeaderAndMedia(BaseChannel* channel,
   if (video_media_channel) {
     EXPECT_TRUE(header_recorder->AddChannel(
         static_cast<VideoChannel*>(channel),
-        send_header_file, recv_header_file, PF_RTPHEADER));
+        Open(send_header_file), Open(recv_header_file), PF_RTPHEADER));
   } else {
     EXPECT_TRUE(header_recorder->AddChannel(
         static_cast<VoiceChannel*>(channel),
-        send_header_file, recv_header_file, PF_RTPHEADER));
+        Open(send_header_file), Open(recv_header_file), PF_RTPHEADER));
   }
 
   // Enable recording both sent and received.
@@ -294,11 +299,11 @@ void TestRecordHeaderAndMedia(BaseChannel* channel,
   if (video_media_channel) {
     EXPECT_TRUE(recorder->AddChannel(
         static_cast<VideoChannel*>(channel),
-        send_file, recv_file, PF_RTPPACKET));
+        Open(send_file), Open(recv_file), PF_RTPPACKET));
   } else {
     EXPECT_TRUE(recorder->AddChannel(
         static_cast<VoiceChannel*>(channel),
-        send_file, recv_file, PF_RTPPACKET));
+        Open(send_file), Open(recv_file), PF_RTPPACKET));
   }
 
   // Enable recording both sent and received.
@@ -327,7 +332,7 @@ void TestRecordHeaderAndMedia(BaseChannel* channel,
 
 TEST(MediaRecorderTest, TestMediaRecorderVoiceChannel) {
   // Create the voice channel.
-  FakeSession session;
+  FakeSession session(true);
   FakeMediaEngine media_engine;
   VoiceChannel channel(talk_base::Thread::Current(), &media_engine,
                        new FakeVoiceMediaChannel(NULL), &session, "", false);
@@ -339,7 +344,7 @@ TEST(MediaRecorderTest, TestMediaRecorderVoiceChannel) {
 
 TEST(MediaRecorderTest, TestMediaRecorderVideoChannel) {
   // Create the video channel.
-  FakeSession session;
+  FakeSession session(true);
   FakeMediaEngine media_engine;
   FakeVideoMediaChannel* media_channel = new FakeVideoMediaChannel(NULL);
   VideoChannel channel(talk_base::Thread::Current(), &media_engine,

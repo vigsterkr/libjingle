@@ -177,10 +177,15 @@ void HttpPortAllocatorSessionBase::TryCreateRelaySession() {
   SendSessionRequest(host, talk_base::HTTP_SECURE_PORT);
 }
 
-std::string HttpPortAllocatorSessionBase::GetSessionRequestUrl() const {
-  return std::string(HttpPortAllocator::kCreateSessionURL) +
-      "?username=" + talk_base::s_url_encode(username()) +
-      "&password=" + talk_base::s_url_encode(password());
+std::string HttpPortAllocatorSessionBase::GetSessionRequestUrl() {
+  std::string url = std::string(HttpPortAllocator::kCreateSessionURL);
+  if (allocator()->flags() & PORTALLOCATOR_ENABLE_SHARED_UFRAG) {
+    ASSERT(!username().empty());
+    ASSERT(!password().empty());
+    url = url + "?username=" + talk_base::s_url_encode(username()) +
+        "&password=" + talk_base::s_url_encode(password());
+  }
+  return url;
 }
 
 void HttpPortAllocatorSessionBase::ReceiveSessionResponse(

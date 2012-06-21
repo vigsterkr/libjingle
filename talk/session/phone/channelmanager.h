@@ -126,7 +126,8 @@ class ChannelManager : public talk_base::MessageHandler,
             !soundclips_.empty());
   }
 
-  // Configures the audio and video devices.
+  // Configures the audio and video devices. A null pointer can be passed to
+  // GetAudioOptions() for any parameter of no interest.
   bool GetAudioOptions(std::string* wave_in_device,
                        std::string* wave_out_device, int* opts);
   bool SetAudioOptions(const std::string& wave_in_device,
@@ -181,6 +182,14 @@ class ChannelManager : public talk_base::MessageHandler,
   // This API is mainly a hook used by unittests.
   const std::string& video_device_name() const { return video_device_name_; }
 
+ protected:
+  // Adds non-transient parameters which can only be changed through the
+  // options store.
+  bool SetAudioOptions(const std::string& wave_in_device,
+                       const std::string& wave_out_device, int opts,
+                       int delay_offset);
+  int audio_delay_offset() const { return audio_delay_offset_; }
+
  private:
   typedef std::vector<VoiceChannel*> VoiceChannels;
   typedef std::vector<VideoChannel*> VideoChannels;
@@ -205,7 +214,7 @@ class ChannelManager : public talk_base::MessageHandler,
   void DestroyDataChannel_w(DataChannel* data_channel);
   Soundclip* CreateSoundclip_w();
   void DestroySoundclip_w(Soundclip* soundclip);
-  bool SetAudioOptions_w(int opts, const Device* in_dev,
+  bool SetAudioOptions_w(int opts, int delay_offset, const Device* in_dev,
                          const Device* out_dev);
   bool GetOutputVolume_w(int* level);
   bool SetOutputVolume_w(int level);
@@ -247,6 +256,7 @@ class ChannelManager : public talk_base::MessageHandler,
   std::string audio_in_device_;
   std::string audio_out_device_;
   int audio_options_;
+  int audio_delay_offset_;
   int audio_output_volume_;
   std::string camera_device_;
   VideoEncoderConfig default_video_encoder_config_;
