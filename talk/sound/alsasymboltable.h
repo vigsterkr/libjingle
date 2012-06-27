@@ -28,10 +28,13 @@
 #ifndef TALK_SOUND_ALSASYMBOLTABLE_H_
 #define TALK_SOUND_ALSASYMBOLTABLE_H_
 
+#include <alsa/asoundlib.h>
+
 #include "talk/base/latebindingsymboltable.h"
 
 namespace cricket {
 
+#define ALSA_SYMBOLS_CLASS_NAME AlsaSymbolTable
 // The ALSA symbols we need, as an X-Macro list.
 // This list must contain precisely every libasound function that is used in
 // alsasoundsystem.cc.
@@ -54,12 +57,9 @@ namespace cricket {
   X(snd_pcm_writei) \
   X(snd_strerror)
 
-LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(AlsaSymbolTable)
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(AlsaSymbolTable, sym)
-ALSA_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DECLARE_END(AlsaSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME ALSA_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST ALSA_SYMBOLS_LIST
+#include "talk/base/latebindingsymboltable.h.def"
 
 }  // namespace cricket
 

@@ -194,10 +194,10 @@ void HttpPortAllocatorSessionBase::ReceiveSessionResponse(
   StringMap map;
   ParseMap(response, map);
 
-  if (map["username"] != username()) {
+  if (!username().empty() && map["username"] != username()) {
     LOG(LS_WARNING) << "Received unexpected username value from relay server.";
   }
-  if (map["password"] != password()) {
+  if (!password().empty() && map["password"] != password()) {
     LOG(LS_WARNING) << "Received unexpected password value from relay server.";
   }
 
@@ -206,7 +206,9 @@ void HttpPortAllocatorSessionBase::ReceiveSessionResponse(
   std::string relay_tcp_port = map["relay.tcp_port"];
   std::string relay_ssltcp_port = map["relay.ssltcp_port"];
 
-  PortConfiguration* config = new PortConfiguration(stun_hosts_[0]);
+  PortConfiguration* config = new PortConfiguration(stun_hosts_[0],
+                                                    map["username"],
+                                                    map["password"]);
 
   PortConfiguration::PortList ports;
   if (!relay_udp_port.empty()) {

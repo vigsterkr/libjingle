@@ -28,10 +28,18 @@
 #ifndef TALK_SOUND_PULSEAUDIOSYMBOLTABLE_H_
 #define TALK_SOUND_PULSEAUDIOSYMBOLTABLE_H_
 
+#include <pulse/context.h>
+#include <pulse/def.h>
+#include <pulse/error.h>
+#include <pulse/introspect.h>
+#include <pulse/stream.h>
+#include <pulse/thread-mainloop.h>
+
 #include "talk/base/latebindingsymboltable.h"
 
 namespace cricket {
 
+#define PULSE_AUDIO_SYMBOLS_CLASS_NAME PulseAudioSymbolTable
 // The PulseAudio symbols we need, as an X-Macro list.
 // This list must contain precisely every libpulse function that is used in
 // pulseaudiosoundsystem.cc.
@@ -87,12 +95,9 @@ namespace cricket {
   X(pa_threaded_mainloop_unlock) \
   X(pa_threaded_mainloop_wait)
 
-LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(PulseAudioSymbolTable)
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(PulseAudioSymbolTable, sym)
-PULSE_AUDIO_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DECLARE_END(PulseAudioSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME PULSE_AUDIO_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST PULSE_AUDIO_SYMBOLS_LIST
+#include "talk/base/latebindingsymboltable.h.def"
 
 }  // namespace cricket
 

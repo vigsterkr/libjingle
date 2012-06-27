@@ -28,6 +28,8 @@
 #ifndef TALK_BASE_WINDOW_H_
 #define TALK_BASE_WINDOW_H_
 
+#include "talk/base/stringencode.h"
+
 // Define platform specific window types.
 #if defined(LINUX)
 typedef unsigned long Window;  // Avoid include <X11/Xlib.h>.
@@ -121,6 +123,10 @@ enum WindowEvent {
   WE_MINIMIZE = 2,
   WE_RESTORE = 3,
 };
+
+inline std::string ToString(const WindowId& window) {
+  return ToString(window.id());
+}
 
 }  // namespace talk_base
 

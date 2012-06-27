@@ -1701,3 +1701,5 @@ TEST_F(PortTest, TestCandidatePreference) {
   cand2.set_preference(2);
   EXPECT_TRUE(cand1.preference() > cand2.preference());
 }
+
+// TODO: Add unit tests to verify the RelayEntry::OnConnect.

@@ -185,6 +185,8 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
 // Records configuration information useful in creating ports.
 struct PortConfiguration : public talk_base::MessageData {
   talk_base::SocketAddress stun_address;
+  std::string username;
+  std::string password;
 
   typedef std::vector<ProtocolAddress> PortList;
   struct RelayServer {
@@ -197,6 +199,10 @@ struct PortConfiguration : public talk_base::MessageData {
   RelayList relays;
 
   explicit PortConfiguration(const talk_base::SocketAddress& stun_address);
+
+  PortConfiguration(const talk_base::SocketAddress& stun_address,
+                    const std::string& username,
+                    const std::string& password);
 
   // Adds another relay server, with the given ports and modifier, to the list.
   void AddRelay(const PortList& ports, int priority_modifier);

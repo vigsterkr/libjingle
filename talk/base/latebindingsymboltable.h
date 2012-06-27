@@ -31,161 +31,49 @@
 #include <string.h>
 
 #include "talk/base/common.h"
-#include "talk/base/logging.h"
-
-// This file provides macros for creating "symbol table" classes to simplify the
-// dynamic loading of symbols from DLLs. Currently the implementation only
-// supports Linux and pure C symbols.
-// See talk/sound/pulseaudiosymboltable.(h|cc) for an example.
 
 namespace talk_base {
 
 #ifdef LINUX
 typedef void *DllHandle;
-
-const DllHandle kInvalidDllHandle = NULL;
 #else
-#error Not implemented
+#error Not implemented for this platform
 #endif
 
-// These are helpers for use only by the class below.
-DllHandle InternalLoadDll(const char dll_name[]);
-
-void InternalUnloadDll(DllHandle handle);
-
-bool InternalLoadSymbols(DllHandle handle,
-                         int num_symbols,
-                         const char *const symbol_names[],
-                         void *symbols[]);
-
-template <int SYMBOL_TABLE_SIZE,
-          const char kDllName[],
-          const char *const kSymbolNames[]>
+// This is the base class for "symbol table" classes to simplify the dynamic
+// loading of symbols from DLLs. Currently the implementation only supports
+// Linux and pure C symbols (or extern "C" symbols that wrap C++ functions).
+// Sub-classes for specific DLLs are generated via the "supermacro" files
+// latebindingsymboltable.h.def and latebindingsymboltable.cc.def. See
+// talk/sound/pulseaudiosymboltable.(h|cc) for an example.
 class LateBindingSymbolTable {
  public:
-  LateBindingSymbolTable()
-      : handle_(kInvalidDllHandle),
-        undefined_symbols_(false) {
-    memset(symbols_, 0, sizeof(symbols_));
-  }
+  struct TableInfo {
+    const char *dll_name;
+    int num_symbols;
+    // Array of size num_symbols.
+    const char *const *symbol_names;
+  };
 
-  ~LateBindingSymbolTable() {
-    Unload();
-  }
+  LateBindingSymbolTable(const TableInfo *info, void **table);
+  ~LateBindingSymbolTable();
 
-  static int NumSymbols() {
-    return SYMBOL_TABLE_SIZE;
-  }
-
-  // We do not use this, but we offer it for theoretical convenience.
-  static const char *GetSymbolName(int index) {
-    ASSERT(index < NumSymbols());
-    return kSymbolNames[index];
-  }
-
-  bool IsLoaded() const {
-    return handle_ != kInvalidDllHandle;
-  }
-
+  bool IsLoaded() const;
   // Loads the DLL and the symbol table. Returns true iff the DLL and symbol
   // table loaded successfully.
-  bool Load() {
-    if (IsLoaded()) {
-      return true;
-    }
-    if (undefined_symbols_) {
-      // We do not attempt to load again because repeated attempts are not
-      // likely to succeed and DLL loading is costly.
-      LOG(LS_ERROR) << "We know there are undefined symbols";
-      return false;
-    }
-    handle_ = InternalLoadDll(kDllName);
-    if (!IsLoaded()) {
-      return false;
-    }
-    if (!InternalLoadSymbols(handle_, NumSymbols(), kSymbolNames, symbols_)) {
-      undefined_symbols_ = true;
-      Unload();
-      return false;
-    }
-    return true;
-  }
-
-  void Unload() {
-    if (!IsLoaded()) {
-      return;
-    }
-    InternalUnloadDll(handle_);
-    handle_ = kInvalidDllHandle;
-    memset(symbols_, 0, sizeof(symbols_));
-  }
-
-  // Retrieves the given symbol. NOTE: Recommended to use LATESYM_GET below
-  // instead of this.
-  void *GetSymbol(int index) const {
-    ASSERT(IsLoaded());
-    ASSERT(index < NumSymbols());
-    return symbols_[index];
-  }
+  bool Load();
+  void Unload();
 
  private:
+  void ClearSymbols();
+
+  const TableInfo *info_;
+  void **table_;
   DllHandle handle_;
   bool undefined_symbols_;
-  void *symbols_[SYMBOL_TABLE_SIZE];
 
   DISALLOW_COPY_AND_ASSIGN(LateBindingSymbolTable);
 };
-
-// This macro must be invoked in a header to declare a symbol table class.
-#define LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(ClassName) \
-enum {
-
-// This macro must be invoked in the header declaration once for each symbol
-// (recommended to use an X-Macro to avoid duplication).
-// This macro defines an enum with names built from the symbols, which
-// essentially creates a hash table in the compiler from symbol names to their
-// indices in the symbol table class.
-#define LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(ClassName, sym) \
-  ClassName##_SYMBOL_TABLE_INDEX_##sym,
-
-// This macro completes the header declaration.
-#define LATE_BINDING_SYMBOL_TABLE_DECLARE_END(ClassName) \
-  ClassName##_SYMBOL_TABLE_SIZE \
-}; \
-\
-extern const char ClassName##_kDllName[]; \
-extern const char *const \
-    ClassName##_kSymbolNames[ClassName##_SYMBOL_TABLE_SIZE]; \
-\
-typedef ::talk_base::LateBindingSymbolTable<ClassName##_SYMBOL_TABLE_SIZE, \
-                                            ClassName##_kDllName, \
-                                            ClassName##_kSymbolNames> \
-    ClassName;
-
-// This macro must be invoked in a .cc file to define a previously-declared
-// symbol table class.
-#define LATE_BINDING_SYMBOL_TABLE_DEFINE_BEGIN(ClassName, dllName) \
-const char ClassName##_kDllName[] = dllName; \
-const char *const ClassName##_kSymbolNames[ClassName##_SYMBOL_TABLE_SIZE] = {
-
-// This macro must be invoked in the .cc definition once for each symbol
-// (recommended to use an X-Macro to avoid duplication).
-// This would have to use the mangled name if we were to ever support C++
-// symbols.
-#define LATE_BINDING_SYMBOL_TABLE_DEFINE_ENTRY(ClassName, sym) \
-  #sym,
-
-#define LATE_BINDING_SYMBOL_TABLE_DEFINE_END(ClassName) \
-};
-
-// Index of a given symbol in the given symbol table class.
-#define LATESYM_INDEXOF(ClassName, sym) \
-  (ClassName##_SYMBOL_TABLE_INDEX_##sym)
-
-// Returns a reference to the given late-binded symbol, with the correct type.
-#define LATESYM_GET(ClassName, inst, sym) \
-  (*reinterpret_cast<typeof(&sym)>( \
-      (inst)->GetSymbol(LATESYM_INDEXOF(ClassName, sym))))
 
 }  // namespace talk_base
 

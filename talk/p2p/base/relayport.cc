@@ -232,6 +232,7 @@ void RelayPort::AddExternalAddress(const ProtocolAddress& addr, bool final) {
 void RelayPort::SetReady() {
   if (!ready_) {
     ready_ = true;
+    SignalAddressReady(this);
   }
 }
 
@@ -513,7 +514,9 @@ void RelayEntry::OnConnect(const talk_base::SocketAddress& mapped_addr,
   connected_ = true;
 
   port_->set_related_address(mapped_addr);
-  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto), true);
+  // TODO: Pass |final| as true so that the Port can set up the
+  // related address to mapped address.
+  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto), false);
   port_->SetReady();
 }
 

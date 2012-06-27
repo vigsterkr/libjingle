@@ -28,8 +28,6 @@
 #ifndef TALK_SOUND_ALSASOUNDSYSTEM_H_
 #define TALK_SOUND_ALSASOUNDSYSTEM_H_
 
-#include <alsa/asoundlib.h>
-
 #include "talk/base/constructormagic.h"
 #include "talk/sound/alsasymboltable.h"
 #include "talk/sound/soundsysteminterface.h"

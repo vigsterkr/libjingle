@@ -28,10 +28,16 @@
 #ifndef TALK_BASE_LIBDBUSGLIBSYMBOLTABLE_H_
 #define TALK_BASE_LIBDBUSGLIBSYMBOLTABLE_H_
 
+#ifdef HAVE_DBUS_GLIB
+
+#include <dbus/dbus-glib.h>
+#include <dbus/dbus-glib-lowlevel.h>
+
 #include "talk/base/latebindingsymboltable.h"
 
 namespace talk_base {
 
+#define LIBDBUS_GLIB_CLASS_NAME LibDBusGlibSymbolTable
 // The libdbus-glib symbols we need, as an X-Macro list.
 // This list must contain precisely every libdbus-glib function that is used in
 // dbus.cc.
@@ -72,14 +78,12 @@ namespace talk_base {
   X(g_thread_init) \
   X(g_type_init)
 
-LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(LibDBusGlibSymbolTable)
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(LibDBusGlibSymbolTable, sym)
-LIBDBUS_GLIB_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DECLARE_END(LibDBusGlibSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME LIBDBUS_GLIB_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST LIBDBUS_GLIB_SYMBOLS_LIST
+#include "talk/base/latebindingsymboltable.h.def"
 
 }  // namespace talk_base
 
-#endif  // TALK_BASE_LIBDBUSGLIBSYMBOLTABLE_H_
+#endif  // HAVE_DBUS_GLIB
 
+#endif  // TALK_BASE_LIBDBUSGLIBSYMBOLTABLE_H_

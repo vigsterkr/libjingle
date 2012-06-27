@@ -30,21 +30,9 @@
 
 #ifdef HAVE_LIBPULSE
 
-// For the flag enums, which can't be forward-declared.
-#include <pulse/def.h>
-
 #include "talk/base/constructormagic.h"
 #include "talk/sound/pulseaudiosymboltable.h"
 #include "talk/sound/soundsysteminterface.h"
-
-struct pa_context;
-struct pa_operation;
-struct pa_sample_spec;
-struct pa_server_info;
-struct pa_sink_info;
-struct pa_source_info;
-struct pa_stream;
-struct pa_threaded_mainloop;
 
 namespace cricket {
 

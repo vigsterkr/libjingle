@@ -36,37 +36,29 @@ namespace talk_base {
 
 #ifdef LINUX
 
-// Some libm symbols for our test.
+#define LIBM_SYMBOLS_CLASS_NAME LibmTestSymbolTable
 #define LIBM_SYMBOLS_LIST \
   X(acos) \
   X(sin) \
   X(tan)
 
-LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(LibmTestSymbolTable)
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(LibmTestSymbolTable, sym)
-LIBM_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DECLARE_END(LibmTestSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME LIBM_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST LIBM_SYMBOLS_LIST
+#include "talk/base/latebindingsymboltable.h.def"
 
-LATE_BINDING_SYMBOL_TABLE_DEFINE_BEGIN(LibmTestSymbolTable, "libm.so.6")
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DEFINE_ENTRY(LibmTestSymbolTable, sym)
-LIBM_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DEFINE_END(LibmTestSymbolTable)
-
-#define LATE(sym) \
-  LATESYM_GET(LibmTestSymbolTable, &table, sym)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME LIBM_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST LIBM_SYMBOLS_LIST
+#define LATE_BINDING_SYMBOL_TABLE_DLL_NAME "libm.so.6"
+#include "talk/base/latebindingsymboltable.cc.def"
 
 TEST(LateBindingSymbolTable, libm) {
   LibmTestSymbolTable table;
   EXPECT_FALSE(table.IsLoaded());
   ASSERT_TRUE(table.Load());
   EXPECT_TRUE(table.IsLoaded());
-  EXPECT_EQ(LATE(acos)(0.5), acos(0.5));
-  EXPECT_EQ(LATE(sin)(0.5), sin(0.5));
-  EXPECT_EQ(LATE(tan)(0.5), tan(0.5));
+  EXPECT_EQ(table.acos()(0.5), acos(0.5));
+  EXPECT_EQ(table.sin()(0.5), sin(0.5));
+  EXPECT_EQ(table.tan()(0.5), tan(0.5));
   // It would be nice to check that the addresses are the same, but the nature
   // of dynamic linking and relocation makes them actually be different.
   table.Unload();

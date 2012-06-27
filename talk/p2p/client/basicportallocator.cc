@@ -903,8 +903,7 @@ void AllocationSequence::CreateRelayPorts() {
                                         network_, ip_,
                                         session_->allocator()->min_port(),
                                         session_->allocator()->max_port(),
-                                        session_->username(),
-                                        session_->password());
+                                        config_->username, config_->password);
     if (port) {
       // Note: We must add the allocated port before we add addresses because
       //       the latter will create candidates that need name and preference
@@ -936,6 +935,15 @@ void AllocationSequence::CreateRelayPorts() {
 PortConfiguration::PortConfiguration(
     const talk_base::SocketAddress& stun_address)
     : stun_address(stun_address) {
+}
+
+PortConfiguration::PortConfiguration(
+    const talk_base::SocketAddress& stun_address,
+    const std::string& username,
+    const std::string& password)
+    : stun_address(stun_address),
+      username(username),
+      password(password) {
 }
 
 void PortConfiguration::AddRelay(const PortList& ports, int priority_modifier) {

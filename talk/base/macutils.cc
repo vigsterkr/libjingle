@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2007--2009, Google Inc.
+ * Copyright 2007 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -126,10 +126,12 @@ MacOSVersionName GetOSVersionName() {
   int major = 0, minor = 0, bugfix = 0;
   if (!GetOSVersion(&major, &minor, &bugfix))
     return kMacOSUnknown;
-  if (major > 10)
+  if (major > 10) {
     return kMacOSNewer;
-  if ((major < 10) || (minor < 3))
+  }
+  if ((major < 10) || (minor < 3)) {
     return kMacOSOlder;
+  }
   switch (minor) {
     case 3:
       return kMacOSPanther;
@@ -137,6 +139,12 @@ MacOSVersionName GetOSVersionName() {
       return kMacOSTiger;
     case 5:
       return kMacOSLeopard;
+    case 6:
+      return kMacOSSnowLeopard;
+    case 7:
+      return kMacOSLion;
+    case 8:
+      return kMacOSMountainLion;
   }
   return kMacOSNewer;
 }

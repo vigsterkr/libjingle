@@ -29,12 +29,6 @@
 
 #ifdef HAVE_LIBPULSE
 
-#include <pulse/context.h>
-#include <pulse/error.h>
-#include <pulse/introspect.h>
-#include <pulse/stream.h>
-#include <pulse/thread-mainloop.h>
-
 #include "talk/base/common.h"
 #include "talk/base/fileutils.h"  // for GetApplicationName()
 #include "talk/base/logging.h"
@@ -142,12 +136,6 @@ class PulseAudioDeviceLocator : public SoundDeviceLocator {
   }
 };
 
-// Accesses Pulse functions through our late-binding symbol table instead of
-// directly. This way we don't have to link to libpulse, which means our binary
-// will work on systems that don't have it.
-#define LATE(sym) \
-  LATESYM_GET(PulseAudioSymbolTable, &pulse_->symbol_table_, sym)
-
 // Functionality that is common to both PulseAudioInputStream and
 // PulseAudioOutputStream.
 class PulseAudioStream {
@@ -165,12 +153,12 @@ class PulseAudioStream {
   bool Close() {
     if (!IsClosed()) {
       // Unset this here so that we don't get a TERMINATED callback.
-      LATE(pa_stream_set_state_callback)(stream_, NULL, NULL);
-      if (LATE(pa_stream_disconnect)(stream_) != 0) {
+      symbol_table()->pa_stream_set_state_callback()(stream_, NULL, NULL);
+      if (symbol_table()->pa_stream_disconnect()(stream_) != 0) {
         LOG(LS_ERROR) << "Can't disconnect stream";
         // Continue and return true anyways.
       }
-      LATE(pa_stream_unref)(stream_);
+      symbol_table()->pa_stream_unref()(stream_);
       stream_ = NULL;
     }
     return true;
@@ -185,7 +173,8 @@ class PulseAudioStream {
     pa_usec_t latency;
     int negative;
     Lock();
-    int re = LATE(pa_stream_get_latency)(stream_, &latency, &negative);
+    int re = symbol_table()->pa_stream_get_latency()(stream_, &latency,
+        &negative);
     Unlock();
     if (re != 0) {
       LOG(LS_ERROR) << "Can't query latency";
@@ -205,6 +194,10 @@ class PulseAudioStream {
 
   PulseAudioSoundSystem *pulse() {
     return pulse_;
+  }
+
+  PulseAudioSymbolTable *symbol_table() {
+    return &pulse()->symbol_table_;
   }
 
   pa_stream *stream() {
@@ -232,11 +225,6 @@ class PulseAudioStream {
   DISALLOW_COPY_AND_ASSIGN(PulseAudioStream);
 };
 
-// Redefine for the next two classes.
-#undef LATE
-#define LATE(sym) \
-  LATESYM_GET(PulseAudioSymbolTable, &stream_.pulse()->symbol_table_, sym)
-
 // Implementation of an input stream. See soundinputstreaminterface.h regarding
 // thread-safety.
 class PulseAudioInputStream :
@@ -261,7 +249,8 @@ class PulseAudioInputStream :
         temp_sample_data_(NULL),
         temp_sample_data_size_(0) {
     // This callback seems to never be issued, but let's set it anyways.
-    LATE(pa_stream_set_overflow_callback)(stream, &OverflowCallback, NULL);
+    symbol_table()->pa_stream_set_overflow_callback()(stream, &OverflowCallback,
+        NULL);
   }
 
   virtual ~PulseAudioInputStream() {
@@ -293,11 +282,11 @@ class PulseAudioInputStream :
     data.instance = this;
     data.channel_volumes = &channel_volumes;
 
-    pa_operation *op = LATE(pa_context_get_source_info_by_index)(
-        stream_.pulse()->context_,
-        LATE(pa_stream_get_device_index)(stream_.stream()),
-        &GetVolumeCallbackThunk,
-        &data);
+    pa_operation *op = symbol_table()->pa_context_get_source_info_by_index()(
+            stream_.pulse()->context_,
+            symbol_table()->pa_stream_get_device_index()(stream_.stream()),
+            &GetVolumeCallbackThunk,
+            &data);
     if (!stream_.pulse()->FinishOperation(op)) {
       goto done;
     }
@@ -350,9 +339,10 @@ class PulseAudioInputStream :
     data.instance = this;
     data.channels = &channels;
 
-    uint32_t device_index = LATE(pa_stream_get_device_index)(stream_.stream());
+    uint32_t device_index = symbol_table()->pa_stream_get_device_index()(
+        stream_.stream());
 
-    pa_operation *op = LATE(pa_context_get_source_info_by_index)(
+    pa_operation *op = symbol_table()->pa_context_get_source_info_by_index()(
         stream_.pulse()->context_,
         device_index,
         &GetSourceChannelCountCallbackThunk,
@@ -370,9 +360,9 @@ class PulseAudioInputStream :
     }
 
     pa_cvolume channel_volumes;
-    LATE(pa_cvolume_set)(&channel_volumes, channels, pa_volume);
+    symbol_table()->pa_cvolume_set()(&channel_volumes, channels, pa_volume);
 
-    op = LATE(pa_context_set_source_volume_by_index)(
+    op = symbol_table()->pa_context_set_source_volume_by_index()(
         stream_.pulse()->context_,
         device_index,
         &channel_volumes,
@@ -384,7 +374,7 @@ class PulseAudioInputStream :
       goto done;
     }
     // Don't need to wait for this to complete.
-    LATE(pa_operation_unref)(op);
+    symbol_table()->pa_operation_unref()(op);
 
     ret = true;
    done:
@@ -418,15 +408,19 @@ class PulseAudioInputStream :
     stream_.Unlock();
   }
 
+  PulseAudioSymbolTable *symbol_table() {
+    return stream_.symbol_table();
+  }
+
   void EnableReadCallback() {
-    LATE(pa_stream_set_read_callback)(
+    symbol_table()->pa_stream_set_read_callback()(
          stream_.stream(),
          &ReadCallbackThunk,
          this);
   }
 
   void DisableReadCallback() {
-    LATE(pa_stream_set_read_callback)(
+    symbol_table()->pa_stream_set_read_callback()(
          stream_.stream(),
          NULL,
          NULL);
@@ -443,9 +437,9 @@ class PulseAudioInputStream :
   void OnReadCallback() {
     // We get the data pointer and size now in order to save one Lock/Unlock
     // on OnMessage.
-    if (LATE(pa_stream_peek)(stream_.stream(),
-                             &temp_sample_data_,
-                             &temp_sample_data_size_) != 0) {
+    if (symbol_table()->pa_stream_peek()(stream_.stream(),
+                                         &temp_sample_data_,
+                                         &temp_sample_data_size_) != 0) {
       LOG(LS_ERROR) << "Can't read data!";
       return;
     }
@@ -475,11 +469,11 @@ class PulseAudioInputStream :
     Lock();
     for (;;) {
       // Ack the last thing we read.
-      if (LATE(pa_stream_drop)(stream_.stream()) != 0) {
+      if (symbol_table()->pa_stream_drop()(stream_.stream()) != 0) {
         LOG(LS_ERROR) << "Can't ack read data";
       }
 
-      if (LATE(pa_stream_readable_size)(stream_.stream()) <= 0) {
+      if (symbol_table()->pa_stream_readable_size()(stream_.stream()) <= 0) {
         // Then that was all the data.
         break;
       }
@@ -487,9 +481,9 @@ class PulseAudioInputStream :
       // Else more data.
       const void *sample_data;
       size_t sample_data_size;
-      if (LATE(pa_stream_peek)(stream_.stream(),
-                               &sample_data,
-                               &sample_data_size) != 0) {
+      if (symbol_table()->pa_stream_peek()(stream_.stream(),
+                                           &sample_data,
+                                           &sample_data_size) != 0) {
         LOG(LS_ERROR) << "Can't read data!";
         break;
       }
@@ -614,9 +608,9 @@ class PulseAudioOutputStream :
       : stream_(pulse, stream, flags),
         configured_latency_(latency),
         temp_buffer_space_(0) {
-    LATE(pa_stream_set_underflow_callback)(stream,
-                                           &UnderflowCallbackThunk,
-                                           this);
+    symbol_table()->pa_stream_set_underflow_callback()(stream,
+                                                       &UnderflowCallbackThunk,
+                                                       this);
   }
 
   virtual ~PulseAudioOutputStream() {
@@ -637,12 +631,12 @@ class PulseAudioOutputStream :
                             size_t size) {
     bool ret = true;
     Lock();
-    if (LATE(pa_stream_write)(stream_.stream(),
-                              sample_data,
-                              size,
-                              NULL,
-                              0,
-                              PA_SEEK_RELATIVE) != 0) {
+    if (symbol_table()->pa_stream_write()(stream_.stream(),
+                                          sample_data,
+                                          size,
+                                          NULL,
+                                          0,
+                                          PA_SEEK_RELATIVE) != 0) {
       LOG(LS_ERROR) << "Unable to write";
       ret = false;
     }
@@ -661,11 +655,11 @@ class PulseAudioOutputStream :
     data.instance = this;
     data.channel_volumes = &channel_volumes;
 
-    pa_operation *op = LATE(pa_context_get_sink_input_info)(
-        stream_.pulse()->context_,
-        LATE(pa_stream_get_index)(stream_.stream()),
-        &GetVolumeCallbackThunk,
-        &data);
+    pa_operation *op = symbol_table()->pa_context_get_sink_input_info()(
+            stream_.pulse()->context_,
+            symbol_table()->pa_stream_get_index()(stream_.stream()),
+            &GetVolumeCallbackThunk,
+            &data);
     if (!stream_.pulse()->FinishOperation(op)) {
       goto done;
     }
@@ -700,7 +694,7 @@ class PulseAudioOutputStream :
 
     Lock();
 
-    const pa_sample_spec *spec = LATE(pa_stream_get_sample_spec)(
+    const pa_sample_spec *spec = symbol_table()->pa_stream_get_sample_spec()(
         stream_.stream());
     if (!spec) {
       LOG(LS_ERROR) << "pa_stream_get_sample_spec()";
@@ -708,12 +702,13 @@ class PulseAudioOutputStream :
     }
 
     pa_cvolume channel_volumes;
-    LATE(pa_cvolume_set)(&channel_volumes, spec->channels, pa_volume);
+    symbol_table()->pa_cvolume_set()(&channel_volumes, spec->channels,
+        pa_volume);
 
     pa_operation *op;
-    op = LATE(pa_context_set_sink_input_volume)(
+    op = symbol_table()->pa_context_set_sink_input_volume()(
         stream_.pulse()->context_,
-        LATE(pa_stream_get_index)(stream_.stream()),
+        symbol_table()->pa_stream_get_index()(stream_.stream()),
         &channel_volumes,
         // This callback merely logs errors.
         &SetVolumeCallback,
@@ -723,7 +718,7 @@ class PulseAudioOutputStream :
       goto done;
     }
     // Don't need to wait for this to complete.
-    LATE(pa_operation_unref)(op);
+    symbol_table()->pa_operation_unref()(op);
 
     ret = true;
    done:
@@ -738,9 +733,9 @@ class PulseAudioOutputStream :
     bool ret = true;
     if (!stream_.IsClosed()) {
       Lock();
-      LATE(pa_stream_set_underflow_callback)(stream_.stream(),
-                                             NULL,
-                                             NULL);
+      symbol_table()->pa_stream_set_underflow_callback()(stream_.stream(),
+                                                         NULL,
+                                                         NULL);
       ret = stream_.Close();
       Unlock();
     }
@@ -760,7 +755,8 @@ class PulseAudioOutputStream :
   virtual bool GetWriteBuffer(void **buffer, size_t *size) {
     bool ret = true;
     Lock();
-    if (LATE(pa_stream_begin_write)(stream_.stream(), buffer, size) != 0) {
+    if (symbol_table()->pa_stream_begin_write()(stream_.stream(), buffer, size)
+            != 0) {
       LOG(LS_ERROR) << "Can't get write buffer";
       ret = false;
     }
@@ -774,17 +770,17 @@ class PulseAudioOutputStream :
     bool ret = true;
     Lock();
     if (written == 0) {
-      if (LATE(pa_stream_cancel_write)(stream_.stream()) != 0) {
+      if (symbol_table()->pa_stream_cancel_write()(stream_.stream()) != 0) {
         LOG(LS_ERROR) << "Can't cancel write";
         ret = false;
       }
     } else {
-      if (LATE(pa_stream_write)(stream_.stream(),
-                                buffer,
-                                written,
-                                NULL,
-                                0,
-                                PA_SEEK_RELATIVE) != 0) {
+      if (symbol_table()->pa_stream_write()(stream_.stream(),
+                                            buffer,
+                                            written,
+                                            NULL,
+                                            0,
+                                            PA_SEEK_RELATIVE) != 0) {
         LOG(LS_ERROR) << "Unable to write";
         ret = false;
       }
@@ -803,11 +799,17 @@ class PulseAudioOutputStream :
     stream_.Unlock();
   }
 
+  PulseAudioSymbolTable *symbol_table() {
+    return stream_.symbol_table();
+  }
+
   void EnableWriteCallback() {
-    pa_stream_state_t state = LATE(pa_stream_get_state)(stream_.stream());
+    pa_stream_state_t state = symbol_table()->pa_stream_get_state()(
+        stream_.stream());
     if (state == PA_STREAM_READY) {
       // May already have available space. Must check.
-      temp_buffer_space_ = LATE(pa_stream_writable_size)(stream_.stream());
+      temp_buffer_space_ = symbol_table()->pa_stream_writable_size()(
+          stream_.stream());
       if (temp_buffer_space_ > 0) {
         // Yup, there is already space available, so if we register a write
         // callback then it will not receive any event. So dispatch one ourself
@@ -816,14 +818,14 @@ class PulseAudioOutputStream :
         return;
       }
     }
-    LATE(pa_stream_set_write_callback)(
+    symbol_table()->pa_stream_set_write_callback()(
          stream_.stream(),
          &WriteCallbackThunk,
          this);
   }
 
   void DisableWriteCallback() {
-    LATE(pa_stream_set_write_callback)(
+    symbol_table()->pa_stream_set_write_callback()(
          stream_.stream(),
          NULL,
          NULL);
@@ -891,14 +893,14 @@ class PulseAudioOutputStream :
 
     // Otherwise reconfigure the stream with a higher target latency.
 
-    const pa_sample_spec *spec = LATE(pa_stream_get_sample_spec)(
+    const pa_sample_spec *spec = symbol_table()->pa_stream_get_sample_spec()(
         stream_.stream());
     if (!spec) {
       LOG(LS_ERROR) << "pa_stream_get_sample_spec()";
       return;
     }
 
-    size_t bytes_per_sec = LATE(pa_bytes_per_second)(spec);
+    size_t bytes_per_sec = symbol_table()->pa_bytes_per_second()(spec);
 
     int new_latency = configured_latency_ +
         bytes_per_sec * kPlaybackLatencyIncrementMsecs /
@@ -907,17 +909,18 @@ class PulseAudioOutputStream :
     pa_buffer_attr new_attr = {0};
     FillPlaybackBufferAttr(new_latency, &new_attr);
 
-    pa_operation *op = LATE(pa_stream_set_buffer_attr)(stream_.stream(),
-                                                       &new_attr,
-                                                       // No callback.
-                                                       NULL,
-                                                       NULL);
+    pa_operation *op = symbol_table()->pa_stream_set_buffer_attr()(
+        stream_.stream(),
+        &new_attr,
+        // No callback.
+        NULL,
+        NULL);
     if (!op) {
       LOG(LS_ERROR) << "pa_stream_set_buffer_attr()";
       return;
     }
     // Don't need to wait for this to complete.
-    LATE(pa_operation_unref)(op);
+    symbol_table()->pa_operation_unref()(op);
 
     // Save the new latency in case we underflow again.
     configured_latency_ = new_latency;
@@ -970,11 +973,6 @@ class PulseAudioOutputStream :
   DISALLOW_COPY_AND_ASSIGN(PulseAudioOutputStream);
 };
 
-// Redefine for the main class.
-#undef LATE
-#define LATE(sym) \
-  LATESYM_GET(PulseAudioSymbolTable, &symbol_table_, sym)
-
 PulseAudioSoundSystem::PulseAudioSoundSystem()
     : mainloop_(NULL), context_(NULL) {
 }
@@ -997,13 +995,13 @@ bool PulseAudioSoundSystem::Init() {
   }
 
   // Now create and start the Pulse event thread.
-  mainloop_ = LATE(pa_threaded_mainloop_new)();
+  mainloop_ = symbol_table_.pa_threaded_mainloop_new()();
   if (!mainloop_) {
     LOG(LS_ERROR) << "Can't create mainloop";
     goto fail0;
   }
 
-  if (LATE(pa_threaded_mainloop_start)(mainloop_) != 0) {
+  if (symbol_table_.pa_threaded_mainloop_start()(mainloop_) != 0) {
     LOG(LS_ERROR) << "Can't start mainloop";
     goto fail1;
   }
@@ -1020,9 +1018,9 @@ bool PulseAudioSoundSystem::Init() {
   return true;
 
  fail2:
-  LATE(pa_threaded_mainloop_stop)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_stop()(mainloop_);
  fail1:
-  LATE(pa_threaded_mainloop_free)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_free()(mainloop_);
   mainloop_ = NULL;
  fail0:
   return false;
@@ -1034,12 +1032,12 @@ void PulseAudioSoundSystem::Terminate() {
   }
 
   Lock();
-  LATE(pa_context_disconnect)(context_);
-  LATE(pa_context_unref)(context_);
+  symbol_table_.pa_context_disconnect()(context_);
+  symbol_table_.pa_context_unref()(context_);
   Unlock();
   context_ = NULL;
-  LATE(pa_threaded_mainloop_stop)(mainloop_);
-  LATE(pa_threaded_mainloop_free)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_stop()(mainloop_);
+  symbol_table_.pa_threaded_mainloop_free()(mainloop_);
   mainloop_ = NULL;
 
   // We do not unload the symbol table because we may need it again soon if
@@ -1050,7 +1048,7 @@ bool PulseAudioSoundSystem::EnumeratePlaybackDevices(
     SoundDeviceLocatorList *devices) {
   return EnumerateDevices<pa_sink_info>(
       devices,
-      &LATE(pa_context_get_sink_info_list),
+      symbol_table_.pa_context_get_sink_info_list(),
       &EnumeratePlaybackDevicesCallbackThunk);
 }
 
@@ -1058,7 +1056,7 @@ bool PulseAudioSoundSystem::EnumerateCaptureDevices(
     SoundDeviceLocatorList *devices) {
   return EnumerateDevices<pa_source_info>(
       devices,
-      &LATE(pa_context_get_source_info_list),
+      symbol_table_.pa_context_get_source_info_list(),
       &EnumerateCaptureDevicesCallbackThunk);
 }
 
@@ -1114,7 +1112,7 @@ void PulseAudioSoundSystem::ConnectToPulseCallbackThunk(
 
 void PulseAudioSoundSystem::OnConnectToPulseCallback(
     pa_context *context, bool *connect_done) {
-  pa_context_state_t state = LATE(pa_context_get_state)(context);
+  pa_context_state_t state = symbol_table_.pa_context_get_state()(context);
   if (state == PA_CONTEXT_READY ||
       state == PA_CONTEXT_FAILED ||
       state == PA_CONTEXT_TERMINATED) {
@@ -1134,15 +1132,16 @@ bool PulseAudioSoundSystem::ConnectToPulse(pa_context *context) {
   data.instance = this;
   data.connect_done = false;
 
-  LATE(pa_context_set_state_callback)(context,
-                                      &ConnectToPulseCallbackThunk,
-                                      &data);
+  symbol_table_.pa_context_set_state_callback()(context,
+                                                &ConnectToPulseCallbackThunk,
+                                                &data);
 
   // Connect to PulseAudio sound server.
-  if (LATE(pa_context_connect)(context,
-                               NULL,          // Default server
-                               PA_CONTEXT_NOAUTOSPAWN,
-                               NULL) != 0) {  // No special fork handling needed
+  if (symbol_table_.pa_context_connect()(
+          context,
+          NULL,          // Default server
+          PA_CONTEXT_NOAUTOSPAWN,
+          NULL) != 0) {  // No special fork handling needed
     LOG(LS_ERROR) << "Can't start connection to PulseAudio sound server";
     ret = false;
     goto done;
@@ -1154,7 +1153,7 @@ bool PulseAudioSoundSystem::ConnectToPulse(pa_context *context) {
   } while (!data.connect_done);
 
   // Now check to see what final state we reached.
-  state = LATE(pa_context_get_state)(context);
+  state = symbol_table_.pa_context_get_state()(context);
 
   if (state != PA_CONTEXT_READY) {
     if (state == PA_CONTEXT_FAILED) {
@@ -1172,7 +1171,7 @@ bool PulseAudioSoundSystem::ConnectToPulse(pa_context *context) {
   // We unset our callback for safety just in case the state might somehow
   // change later, because the pointer to "data" will be invalid after return
   // from this function.
-  LATE(pa_context_set_state_callback)(context, NULL, NULL);
+  symbol_table_.pa_context_set_state_callback()(context, NULL, NULL);
   return ret;
 }
 
@@ -1183,8 +1182,8 @@ pa_context *PulseAudioSoundSystem::CreateNewConnection() {
   // TODO: Pulse etiquette says this name should be localized. Do
   // we care?
   talk_base::Filesystem::GetApplicationName(&app_name);
-  pa_context *context = LATE(pa_context_new)(
-      LATE(pa_threaded_mainloop_get_api)(mainloop_),
+  pa_context *context = symbol_table_.pa_context_new()(
+      symbol_table_.pa_threaded_mainloop_get_api()(mainloop_),
       app_name.c_str());
   if (!context) {
     LOG(LS_ERROR) << "Can't create context";
@@ -1200,7 +1199,7 @@ pa_context *PulseAudioSoundSystem::CreateNewConnection() {
   return context;
 
  fail1:
-  LATE(pa_context_unref)(context);
+  symbol_table_.pa_context_unref()(context);
  fail0:
   return NULL;
 }
@@ -1340,7 +1339,7 @@ bool PulseAudioSoundSystem::GetDefaultDevice(SoundDeviceLocator **device) {
   data.instance = this;
   data.device = device;
   Lock();
-  pa_operation *op = LATE(pa_context_get_server_info)(
+  pa_operation *op = symbol_table_.pa_context_get_server_info()(
       context_,
       &GetDefaultDeviceCallbackThunk<field>,
       &data);
@@ -1358,7 +1357,7 @@ void PulseAudioSoundSystem::StreamStateChangedCallbackThunk(
 }
 
 void PulseAudioSoundSystem::OnStreamStateChangedCallback(pa_stream *stream) {
-  pa_stream_state_t state = LATE(pa_stream_get_state)(stream);
+  pa_stream_state_t state = symbol_table_.pa_stream_get_state()(stream);
   if (state == PA_STREAM_READY) {
     LOG(LS_INFO) << "Pulse stream " << stream << " ready";
   } else if (state == PA_STREAM_FAILED ||
@@ -1409,7 +1408,7 @@ StreamInterface *PulseAudioSoundSystem::OpenDevice(
     // automatically to reach that target latency. However, that flag doesn't
     // exist in Ubuntu 8.04 and many people still use that, so we have to check
     // the protocol version of libpulse.
-    if (LATE(pa_context_get_protocol_version)(context_) >=
+    if (symbol_table_.pa_context_get_protocol_version()(context_) >=
         kAdjustLatencyProtocolVersion) {
       pa_flags |= PA_STREAM_ADJUST_LATENCY;
     }
@@ -1417,16 +1416,17 @@ StreamInterface *PulseAudioSoundSystem::OpenDevice(
 
   Lock();
 
-  pa_stream *stream = LATE(pa_stream_new)(context_, stream_name, &spec, NULL);
+  pa_stream *stream = symbol_table_.pa_stream_new()(context_, stream_name,
+      &spec, NULL);
   if (!stream) {
     LOG(LS_ERROR) << "Can't create pa_stream";
     goto done;
   }
 
   // Set a state callback to log errors.
-  LATE(pa_stream_set_state_callback)(stream,
-                                     &StreamStateChangedCallbackThunk,
-                                     this);
+  symbol_table_.pa_stream_set_state_callback()(stream,
+                                               &StreamStateChangedCallbackThunk,
+                                               this);
 
   stream_interface = (this->*connect_fn)(
       stream,
@@ -1437,7 +1437,7 @@ StreamInterface *PulseAudioSoundSystem::OpenDevice(
       spec);
   if (!stream_interface) {
     LOG(LS_ERROR) << "Can't connect stream to " << dev;
-    LATE(pa_stream_unref)(stream);
+    symbol_table_.pa_stream_unref()(stream);
   }
 
  done:
@@ -1457,7 +1457,7 @@ SoundOutputStreamInterface *PulseAudioSoundSystem::ConnectOutputStream(
   pa_buffer_attr *pattr = NULL;
   if (latency != kNoLatencyRequirements) {
     // kLowLatency is 0, so we treat it the same as a request for zero latency.
-    ssize_t bytes_per_sec = LATE(pa_bytes_per_second)(&spec);
+    ssize_t bytes_per_sec = symbol_table_.pa_bytes_per_second()(&spec);
     latency = talk_base::_max(
         latency,
         static_cast<int>(
@@ -1466,14 +1466,15 @@ SoundOutputStreamInterface *PulseAudioSoundSystem::ConnectOutputStream(
     FillPlaybackBufferAttr(latency, &attr);
     pattr = &attr;
   }
-  if (LATE(pa_stream_connect_playback)(stream,
-                                       dev,
-                                       pattr,
-                                       pa_flags,
-                                       // Let server choose volume
-                                       NULL,
-                                       // Not synchronized to any other playout
-                                       NULL) != 0) {
+  if (symbol_table_.pa_stream_connect_playback()(
+          stream,
+          dev,
+          pattr,
+          pa_flags,
+          // Let server choose volume
+          NULL,
+          // Not synchronized to any other playout
+          NULL) != 0) {
     return NULL;
   }
   return new PulseAudioOutputStream(this, stream, flags, latency);
@@ -1490,7 +1491,7 @@ SoundInputStreamInterface *PulseAudioSoundSystem::ConnectInputStream(
   pa_buffer_attr attr = {0};
   pa_buffer_attr *pattr = NULL;
   if (latency != kNoLatencyRequirements) {
-    size_t bytes_per_sec = LATE(pa_bytes_per_second)(&spec);
+    size_t bytes_per_sec = symbol_table_.pa_bytes_per_second()(&spec);
     if (latency == kLowLatency) {
       latency = bytes_per_sec * kLowCaptureLatencyMsecs /
           talk_base::kNumMicrosecsPerSec;
@@ -1504,10 +1505,10 @@ SoundInputStreamInterface *PulseAudioSoundSystem::ConnectInputStream(
                     << ", maxlength = " << attr.maxlength;
     pattr = &attr;
   }
-  if (LATE(pa_stream_connect_record)(stream,
-                                     dev,
-                                     pattr,
-                                     pa_flags) != 0) {
+  if (symbol_table_.pa_stream_connect_record()(stream,
+                                               dev,
+                                               pattr,
+                                               pa_flags) != 0) {
     return NULL;
   }
   return new PulseAudioInputStream(this, stream, flags);
@@ -1522,34 +1523,35 @@ bool PulseAudioSoundSystem::FinishOperation(pa_operation *op) {
 
   do {
     Wait();
-  } while (LATE(pa_operation_get_state)(op) == PA_OPERATION_RUNNING);
+  } while (symbol_table_.pa_operation_get_state()(op) == PA_OPERATION_RUNNING);
 
-  LATE(pa_operation_unref)(op);
+  symbol_table_.pa_operation_unref()(op);
 
   return true;
 }
 
 inline void PulseAudioSoundSystem::Lock() {
-  LATE(pa_threaded_mainloop_lock)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_lock()(mainloop_);
 }
 
 inline void PulseAudioSoundSystem::Unlock() {
-  LATE(pa_threaded_mainloop_unlock)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_unlock()(mainloop_);
 }
 
 // Must be called with the lock held.
 inline void PulseAudioSoundSystem::Wait() {
-  LATE(pa_threaded_mainloop_wait)(mainloop_);
+  symbol_table_.pa_threaded_mainloop_wait()(mainloop_);
 }
 
 // Must be called with the lock held.
 inline void PulseAudioSoundSystem::Signal() {
-  LATE(pa_threaded_mainloop_signal)(mainloop_, 0);
+  symbol_table_.pa_threaded_mainloop_signal()(mainloop_, 0);
 }
 
 // Must be called with the lock held.
 const char *PulseAudioSoundSystem::LastError() {
-  return LATE(pa_strerror)(LATE(pa_context_errno)(context_));
+  return symbol_table_.pa_strerror()(symbol_table_.pa_context_errno()(
+      context_));
 }
 
 }  // namespace cricket

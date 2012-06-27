@@ -29,11 +29,9 @@
 
 namespace cricket {
 
-LATE_BINDING_SYMBOL_TABLE_DEFINE_BEGIN(AlsaSymbolTable, "libasound.so.2")
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DEFINE_ENTRY(AlsaSymbolTable, sym)
-ALSA_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DEFINE_END(AlsaSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME ALSA_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST ALSA_SYMBOLS_LIST
+#define LATE_BINDING_SYMBOL_TABLE_DLL_NAME "libasound.so.2"
+#include "talk/base/latebindingsymboltable.cc.def"
 
 }  // namespace cricket

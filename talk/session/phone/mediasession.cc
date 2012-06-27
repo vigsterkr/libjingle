@@ -468,6 +468,7 @@ static bool CreateMediaContentOffer(
     offer->AddLegacyStream(talk_base::CreateRandomNonZeroId());
   }
 
+#ifdef HAVE_SRTP
   if (secure_policy != SEC_DISABLED) {
     if (current_cryptos) {
       AddMediaCryptos(*current_cryptos, offer);
@@ -478,6 +479,7 @@ static bool CreateMediaContentOffer(
       }
     }
   }
+#endif
 
   if (offer->crypto_required() && offer->cryptos().empty()) {
     return false;

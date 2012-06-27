@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2007--2009, Google Inc.
+ * Copyright 2007 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -49,12 +49,15 @@ void DecodeFourChar(UInt32 fc, std::string* out);
 std::string DecodeEvent(EventRef event);
 
 enum MacOSVersionName {
-  kMacOSUnknown,  // ???
-  kMacOSOlder,    // 10.2-
-  kMacOSPanther,  // 10.3
-  kMacOSTiger,    // 10.4
-  kMacOSLeopard,  // 10.5
-  kMacOSNewer,    // 10.6+
+  kMacOSUnknown,       // ???
+  kMacOSOlder,         // 10.2-
+  kMacOSPanther,       // 10.3
+  kMacOSTiger,         // 10.4
+  kMacOSLeopard,       // 10.5
+  kMacOSSnowLeopard,   // 10.6
+  kMacOSLion,          // 10.7
+  kMacOSMountainLion,  // 10.8
+  kMacOSNewer,         // 10.9+
 };
 
 bool GetOSVersion(int* major, int* minor, int* bugfix);

@@ -28,13 +28,16 @@
 #ifndef TALK_SESSION_PHONE_LIBUDEVSYMBOLTABLE_H_
 #define TALK_SESSION_PHONE_LIBUDEVSYMBOLTABLE_H_
 
+#include <libudev.h>
+
 #include "talk/base/latebindingsymboltable.h"
 
 namespace cricket {
 
+#define LIBUDEV_SYMBOLS_CLASS_NAME LibUDevSymbolTable
 // The libudev symbols we need, as an X-Macro list.
 // This list must contain precisely every libudev function that is used in
-// devicemanager.cc.
+// linuxdevicemanager.cc.
 #define LIBUDEV_SYMBOLS_LIST \
   X(udev_device_unref) \
   X(udev_monitor_enable_receiving) \
@@ -46,12 +49,11 @@ namespace cricket {
   X(udev_new) \
   X(udev_unref)
 
-LATE_BINDING_SYMBOL_TABLE_DECLARE_BEGIN(LibUDevSymbolTable)
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DECLARE_ENTRY(LibUDevSymbolTable, sym)
-LIBUDEV_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DECLARE_END(LibUDevSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME LIBUDEV_SYMBOLS_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST LIBUDEV_SYMBOLS_LIST
+#include "talk/base/latebindingsymboltable.h.def"
+#undef LATE_BINDING_SYMBOL_TABLE_CLASS_NAME
+#undef LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST
 
 }  // namespace cricket
 

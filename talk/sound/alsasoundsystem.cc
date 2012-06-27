@@ -83,13 +83,6 @@ class AlsaDeviceLocator : public SoundDeviceLocator {
   }
 };
 
-// Accesses ALSA functions through our late-binding symbol table instead of
-// directly. This way we don't have to link to libasound, which means our binary
-// will load faster and we can run on strange systems that may not have
-// libasound
-#define LATE(sym) \
-  LATESYM_GET(AlsaSymbolTable, &alsa_->symbol_table_, sym)
-
 // Functionality that is common to both AlsaInputStream and AlsaOutputStream.
 class AlsaStream {
  public:
@@ -119,7 +112,7 @@ class AlsaStream {
     // into PhysicalSocketServer, but PhysicalSocketServer is nasty enough
     // already and the current clients of SoundSystemInterface do not run
     // anything else on their worker threads, so snd_pcm_wait() is good enough.
-    frames = LATE(snd_pcm_avail_update)(handle_);
+    frames = symbol_table()->snd_pcm_avail_update()(handle_);
     if (frames < 0) {
       LOG(LS_ERROR) << "snd_pcm_avail_update(): " << GetError(frames);
       Recover(frames);
@@ -129,7 +122,7 @@ class AlsaStream {
       return frames;
     }
     // Else no space/data available, so must wait.
-    int ready = LATE(snd_pcm_wait)(handle_, wait_timeout_ms_);
+    int ready = symbol_table()->snd_pcm_wait()(handle_, wait_timeout_ms_);
     if (ready < 0) {
       LOG(LS_ERROR) << "snd_pcm_wait(): " << GetError(ready);
       Recover(ready);
@@ -142,7 +135,7 @@ class AlsaStream {
       return 0;
     }
     // Else ready > 0 (i.e., 1), so it's ready. Get count.
-    frames = LATE(snd_pcm_avail_update)(handle_);
+    frames = symbol_table()->snd_pcm_avail_update()(handle_);
     if (frames < 0) {
       LOG(LS_ERROR) << "snd_pcm_avail_update(): " << GetError(frames);
       Recover(frames);
@@ -161,7 +154,7 @@ class AlsaStream {
     }
 
     snd_pcm_sframes_t delay;
-    int err = LATE(snd_pcm_delay)(handle_, &delay);
+    int err = symbol_table()->snd_pcm_delay()(handle_, &delay);
     if (err != 0) {
       LOG(LS_ERROR) << "snd_pcm_delay(): " << GetError(err);
       Recover(err);
@@ -178,10 +171,11 @@ class AlsaStream {
   // in the error state forever.
   bool Recover(int error) {
     int err;
-    err = LATE(snd_pcm_recover)(handle_,
-                                error,
-                                // Silent; i.e., no logging on stderr.
-                                1);
+    err = symbol_table()->snd_pcm_recover()(
+        handle_,
+        error,
+        // Silent; i.e., no logging on stderr.
+        1);
     if (err != 0) {
       // Docs say snd_pcm_recover returns the original error if it is not one
       // of the recoverable ones, so this log message will probably contain the
@@ -191,10 +185,10 @@ class AlsaStream {
       return false;
     }
     if (error == -EPIPE &&  // Buffer underrun/overrun.
-        LATE(snd_pcm_stream)(handle_) == SND_PCM_STREAM_CAPTURE) {
+        symbol_table()->snd_pcm_stream()(handle_) == SND_PCM_STREAM_CAPTURE) {
       // For capture streams we also have to repeat the explicit start() to get
       // data flowing again.
-      err = LATE(snd_pcm_start)(handle_);
+      err = symbol_table()->snd_pcm_start()(handle_);
       if (err != 0) {
         LOG(LS_ERROR) << "snd_pcm_start(): " << GetError(err);
         return false;
@@ -206,12 +200,12 @@ class AlsaStream {
   bool Close() {
     if (handle_) {
       int err;
-      err = LATE(snd_pcm_drop)(handle_);
+      err = symbol_table()->snd_pcm_drop()(handle_);
       if (err != 0) {
         LOG(LS_ERROR) << "snd_pcm_drop(): " << GetError(err);
         // Continue anyways.
       }
-      err = LATE(snd_pcm_close)(handle_);
+      err = symbol_table()->snd_pcm_close()(handle_);
       if (err != 0) {
         LOG(LS_ERROR) << "snd_pcm_close(): " << GetError(err);
         // Continue anyways.
@@ -221,8 +215,8 @@ class AlsaStream {
     return true;
   }
 
-  AlsaSoundSystem *alsa() {
-    return alsa_;
+  AlsaSymbolTable *symbol_table() {
+    return &alsa_->symbol_table_;
   }
 
   snd_pcm_t *handle() {
@@ -247,11 +241,6 @@ class AlsaStream {
 
   DISALLOW_COPY_AND_ASSIGN(AlsaStream);
 };
-
-// Redefine for the next two classes.
-#undef LATE
-#define LATE(sym) \
-  LATESYM_GET(AlsaSymbolTable, &stream_.alsa()->symbol_table_, sym)
 
 // Implementation of an input stream. See soundinputstreaminterface.h regarding
 // thread-safety.
@@ -320,9 +309,10 @@ class AlsaInputStream :
         buffer_size_ = size;
       }
       // Read all the data.
-      snd_pcm_sframes_t read = LATE(snd_pcm_readi)(stream_.handle(),
-                                                   buffer_.get(),
-                                                   avail);
+      snd_pcm_sframes_t read = stream_.symbol_table()->snd_pcm_readi()(
+          stream_.handle(),
+          buffer_.get(),
+          avail);
       if (read < 0) {
         LOG(LS_ERROR) << "snd_pcm_readi(): " << GetError(read);
         stream_.Recover(read);
@@ -398,9 +388,10 @@ class AlsaOutputStream :
       return false;
     }
     snd_pcm_uframes_t frames = size / stream_.frame_size();
-    snd_pcm_sframes_t written = LATE(snd_pcm_writei)(stream_.handle(),
-                                                     sample_data,
-                                                     frames);
+    snd_pcm_sframes_t written = stream_.symbol_table()->snd_pcm_writei()(
+        stream_.handle(),
+        sample_data,
+        frames);
     if (written < 0) {
       LOG(LS_ERROR) << "snd_pcm_writei(): " << GetError(written);
       stream_.Recover(written);
@@ -461,10 +452,6 @@ class AlsaOutputStream :
 
   DISALLOW_COPY_AND_ASSIGN(AlsaOutputStream);
 };
-
-// Redefine for the main class.
-#undef LATE
-#define LATE(sym) LATESYM_GET(AlsaSymbolTable, &symbol_table_, sym)
 
 AlsaSoundSystem::AlsaSoundSystem() : initialized_(false) {}
 
@@ -567,16 +554,16 @@ bool AlsaSoundSystem::EnumerateDevices(
   int err;
 
   void **hints;
-  err = LATE(snd_device_name_hint)(-1,     // All cards
-                                   "pcm",  // Only PCM devices
-                                   &hints);
+  err = symbol_table_.snd_device_name_hint()(-1,     // All cards
+                                             "pcm",  // Only PCM devices
+                                             &hints);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_device_name_hint(): " << GetError(err);
     return false;
   }
 
   for (void **list = hints; *list != NULL; ++list) {
-    char *actual_type = LATE(snd_device_name_get_hint)(*list, "IOID");
+    char *actual_type = symbol_table_.snd_device_name_get_hint()(*list, "IOID");
     if (actual_type) {  // NULL means it's both.
       bool wrong_type = (strcmp(actual_type, type) != 0);
       free(actual_type);
@@ -586,7 +573,7 @@ bool AlsaSoundSystem::EnumerateDevices(
       }
     }
 
-    char *name = LATE(snd_device_name_get_hint)(*list, "NAME");
+    char *name = symbol_table_.snd_device_name_get_hint()(*list, "NAME");
     if (!name) {
       LOG(LS_ERROR) << "Device has no name???";
       // Skip it.
@@ -600,7 +587,7 @@ bool AlsaSoundSystem::EnumerateDevices(
         !talk_base::starts_with(name, ignore_prefix)) {
 
       // Yes, we do.
-      char *desc = LATE(snd_device_name_get_hint)(*list, "DESC");
+      char *desc = symbol_table_.snd_device_name_get_hint()(*list, "DESC");
       if (!desc) {
         // Virtual devices don't necessarily have descriptions. Use their names
         // instead (not pretty!).
@@ -619,7 +606,7 @@ bool AlsaSoundSystem::EnumerateDevices(
     free(name);
   }
 
-  err = LATE(snd_device_name_free_hint)(hints);
+  err = symbol_table_.snd_device_name_free_hint()(hints);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_device_name_free_hint(): " << GetError(err);
     // Continue and return true anyways, since we did get the whole list.
@@ -664,7 +651,7 @@ StreamInterface *AlsaSoundSystem::OpenDevice(
       device_name().c_str();
 
   snd_pcm_t *handle = NULL;
-  err = LATE(snd_pcm_open)(
+  err = symbol_table_.snd_pcm_open()(
       &handle,
       dev,
       type,
@@ -694,21 +681,21 @@ StreamInterface *AlsaSoundSystem::OpenDevice(
 
   ASSERT(params.format < ARRAY_SIZE(kCricketFormatToAlsaFormatTable));
 
-  err = LATE(snd_pcm_set_params)(handle,
-                                 kCricketFormatToAlsaFormatTable[params.format],
-                                 // SoundSystemInterface only supports
-                                 // interleaved audio.
-                                 SND_PCM_ACCESS_RW_INTERLEAVED,
-                                 params.channels,
-                                 params.freq,
-                                 1,  // Allow ALSA to resample.
-                                 latency);
+  err = symbol_table_.snd_pcm_set_params()(
+      handle,
+      kCricketFormatToAlsaFormatTable[params.format],
+      // SoundSystemInterface only supports interleaved audio.
+      SND_PCM_ACCESS_RW_INTERLEAVED,
+      params.channels,
+      params.freq,
+      1,  // Allow ALSA to resample.
+      latency);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_pcm_set_params(): " << GetError(err);
     goto fail;
   }
 
-  err = LATE(snd_pcm_prepare)(handle);
+  err = symbol_table_.snd_pcm_prepare()(handle);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_pcm_prepare(): " << GetError(err);
     goto fail;
@@ -728,7 +715,7 @@ StreamInterface *AlsaSoundSystem::OpenDevice(
   // Else fall through.
 
  fail:
-  err = LATE(snd_pcm_close)(handle);
+  err = symbol_table_.snd_pcm_close()(handle);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_pcm_close(): " << GetError(err);
   }
@@ -756,7 +743,7 @@ SoundInputStreamInterface *AlsaSoundSystem::StartInputStream(
   // input streams must be started manually or else snd_pcm_wait() will never
   // return true.
   int err;
-  err = LATE(snd_pcm_start)(handle);
+  err = symbol_table_.snd_pcm_start()(handle);
   if (err != 0) {
     LOG(LS_ERROR) << "snd_pcm_start(): " << GetError(err);
     return NULL;
@@ -766,7 +753,7 @@ SoundInputStreamInterface *AlsaSoundSystem::StartInputStream(
 }
 
 inline const char *AlsaSoundSystem::GetError(int err) {
-  return LATE(snd_strerror)(err);
+  return symbol_table_.snd_strerror()(err);
 }
 
 }  // namespace cricket

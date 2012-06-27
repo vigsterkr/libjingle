@@ -27,7 +27,6 @@
 
 #include "talk/session/phone/linuxdevicemanager.h"
 
-#include <libudev.h>
 #include <unistd.h>
 #include "talk/base/linux.h"
 #include "talk/base/logging.h"
@@ -73,8 +72,6 @@ class LinuxDeviceWatcher
   struct udev_monitor* udev_monitor_;
   bool registered_;
 };
-
-#define LATE(sym) LATESYM_GET(LibUDevSymbolTable, &libudev_, sym)
 
 static const char* const kFilteredAudioDevicesName[] = {
 #if defined(CHROMEOS)
@@ -313,7 +310,7 @@ bool LinuxDeviceWatcher::Start() {
     LOG(LS_WARNING) << "libudev not present/usable; LinuxDeviceWatcher disabled";
     return true;
   }
-  udev_ = LATE(udev_new)();
+  udev_ = libudev_.udev_new()();
   if (!udev_) {
     LOG_ERR(LS_ERROR) << "udev_new()";
     return true;
@@ -321,7 +318,7 @@ bool LinuxDeviceWatcher::Start() {
   // The second argument here is the event source. It can be either "kernel" or
   // "udev", but "udev" is the only correct choice. Apps listen on udev and the
   // udev daemon in turn listens on the kernel.
-  udev_monitor_ = LATE(udev_monitor_new_from_netlink)(udev_, "udev");
+  udev_monitor_ = libudev_.udev_monitor_new_from_netlink()(udev_, "udev");
   if (!udev_monitor_) {
     LOG_ERR(LS_ERROR) << "udev_monitor_new_from_netlink()";
     return true;
@@ -334,13 +331,12 @@ bool LinuxDeviceWatcher::Start() {
   // from the udev daemon, they come from the PulseAudio daemon, so we'd only
   // want to listen for audio device changes from udev if using ALSA. For
   // simplicity, we don't bother with any audio stuff at all.
-  if (LATE(udev_monitor_filter_add_match_subsystem_devtype)(udev_monitor_,
-                                                            "video4linux",
-                                                            NULL) < 0) {
+  if (libudev_.udev_monitor_filter_add_match_subsystem_devtype()(
+          udev_monitor_, "video4linux", NULL) < 0) {
     LOG_ERR(LS_ERROR) << "udev_monitor_filter_add_match_subsystem_devtype()";
     return true;
   }
-  if (LATE(udev_monitor_enable_receiving)(udev_monitor_) < 0) {
+  if (libudev_.udev_monitor_enable_receiving()(udev_monitor_) < 0) {
     LOG_ERR(LS_ERROR) << "udev_monitor_enable_receiving()";
     return true;
   }
@@ -357,11 +353,11 @@ void LinuxDeviceWatcher::Stop() {
     registered_ = false;
   }
   if (udev_monitor_) {
-    LATE(udev_monitor_unref)(udev_monitor_);
+    libudev_.udev_monitor_unref()(udev_monitor_);
     udev_monitor_ = NULL;
   }
   if (udev_) {
-    LATE(udev_unref)(udev_);
+    libudev_.udev_unref()(udev_);
     udev_ = NULL;
   }
   libudev_.Unload();
@@ -376,7 +372,7 @@ void LinuxDeviceWatcher::OnPreEvent(uint32 ff) {
 }
 
 void LinuxDeviceWatcher::OnEvent(uint32 ff, int err) {
-  udev_device* device = LATE(udev_monitor_receive_device)(udev_monitor_);
+  udev_device* device = libudev_.udev_monitor_receive_device()(udev_monitor_);
   if (!device) {
     // Probably the socket connection to the udev daemon was terminated (perhaps
     // the daemon crashed or is being restarted?).
@@ -392,12 +388,12 @@ void LinuxDeviceWatcher::OnEvent(uint32 ff, int err) {
 
   // Since we already have our own filesystem-based device enumeration code, we
   // simply re-enumerate rather than inspecting the device event.
-  LATE(udev_device_unref)(device);
+  libudev_.udev_device_unref()(device);
   manager_->SignalDevicesChange();
 }
 
 int LinuxDeviceWatcher::GetDescriptor() {
-  return LATE(udev_monitor_get_fd)(udev_monitor_);
+  return libudev_.udev_monitor_get_fd()(udev_monitor_);
 }
 
 bool LinuxDeviceWatcher::IsDescriptorClosed() {

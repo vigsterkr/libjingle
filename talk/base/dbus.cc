@@ -29,8 +29,7 @@
 
 #include "talk/base/dbus.h"
 
-#include <dbus/dbus-glib-lowlevel.h>
-
+#include "talk/base/logging.h"
 #include "talk/base/thread.h"
 
 namespace talk_base {
@@ -64,18 +63,18 @@ static void InitializeDBusGlibSymbol() {
   }
 }
 
-// Returns a reference to the given late-binded symbol, with the correct type.
-#define LATE(sym) LATESYM_GET(LibDBusGlibSymbolTable, \
-    DBusMonitor::GetDBusGlibSymbolTable(), sym)
+inline static LibDBusGlibSymbolTable *GetSymbols() {
+  return DBusMonitor::GetDBusGlibSymbolTable();
+}
 
 // Implementation of class DBusSigMessageData
 DBusSigMessageData::DBusSigMessageData(DBusMessage *message)
     : TypedMessageData<DBusMessage *>(message) {
-  LATE(dbus_message_ref)(data());
+  GetSymbols()->dbus_message_ref()(data());
 }
 
 DBusSigMessageData::~DBusSigMessageData() {
-  LATE(dbus_message_unref)(data());
+  GetSymbols()->dbus_message_unref()(data());
 }
 
 // Implementation of class DBusSigFilter
@@ -170,7 +169,7 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
       return;
     }
     monitor_->OnMonitoringStatusChanged(DMS_RUNNING);
-    LATE(g_main_loop_run)(mainloop_);
+    GetSymbols()->g_main_loop_run()(mainloop_);
     monitor_->OnMonitoringStatusChanged(DMS_STOPPED);
 
     // Done normally. Clean up DBus connection.
@@ -182,10 +181,10 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
   virtual void Stop() {
     ASSERT(NULL == idle_source_);
     // Add an idle source and let the gmainloop quit on idle.
-    idle_source_ = LATE(g_idle_source_new)();
+    idle_source_ = GetSymbols()->g_idle_source_new()();
     if (idle_source_) {
-      LATE(g_source_set_callback)(idle_source_, &Idle, this, NULL);
-      LATE(g_source_attach)(idle_source_, context_);
+      GetSymbols()->g_source_set_callback()(idle_source_, &Idle, this, NULL);
+      GetSymbols()->g_source_attach()(idle_source_, context_);
     } else {
       LOG(LS_ERROR) << "g_idle_source_new() failed.";
       QuitGMainloop();  // Try to quit anyway.
@@ -197,7 +196,8 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
  private:
   // Registers all DBus filters.
   void RegisterAllFilters() {
-    ASSERT(NULL != LATE(dbus_g_connection_get_connection)(connection_));
+    ASSERT(NULL != GetSymbols()->dbus_g_connection_get_connection()(
+        connection_));
 
     for (std::vector<DBusSigFilter *>::iterator it = filter_list_->begin();
          it != filter_list_->end(); ++it) {
@@ -207,12 +207,12 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
         continue;
       }
 
-      LATE(dbus_bus_add_match)(
-          LATE(dbus_g_connection_get_connection)(connection_),
+      GetSymbols()->dbus_bus_add_match()(
+          GetSymbols()->dbus_g_connection_get_connection()(connection_),
           filter->filter().c_str(), NULL);
 
-      if (!LATE(dbus_connection_add_filter)(
-              LATE(dbus_g_connection_get_connection)(connection_),
+      if (!GetSymbols()->dbus_connection_add_filter()(
+              GetSymbols()->dbus_g_connection_get_connection()(connection_),
               &DBusSigFilter::DBusCallback, filter, NULL)) {
         LOG(LS_ERROR) << "dbus_connection_add_filter() failed."
                       << "Filter: " << filter->filter();
@@ -223,7 +223,8 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
 
   // Unregisters all DBus filters.
   void UnRegisterAllFilters() {
-    ASSERT(NULL != LATE(dbus_g_connection_get_connection)(connection_));
+    ASSERT(NULL != GetSymbols()->dbus_g_connection_get_connection()(
+        connection_));
 
     for (std::vector<DBusSigFilter *>::iterator it = filter_list_->begin();
          it != filter_list_->end(); ++it) {
@@ -232,32 +233,33 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
         LOG(LS_ERROR) << "DBusSigFilter list corrupted.";
         continue;
       }
-      LATE(dbus_connection_remove_filter)(
-          LATE(dbus_g_connection_get_connection)(connection_),
+      GetSymbols()->dbus_connection_remove_filter()(
+          GetSymbols()->dbus_g_connection_get_connection()(connection_),
           &DBusSigFilter::DBusCallback, filter);
     }
   }
 
   // Sets up the monitoring thread.
   bool Setup() {
-    LATE(g_main_context_push_thread_default)(context_);
+    GetSymbols()->g_main_context_push_thread_default()(context_);
 
     // Start connection to dbus.
     // If dbus daemon is not running, returns false immediately.
-    connection_ = LATE(dbus_g_bus_get_private)(monitor_->type_, context_, NULL);
+    connection_ = GetSymbols()->dbus_g_bus_get_private()(monitor_->type_,
+        context_, NULL);
     if (NULL == connection_) {
       LOG(LS_ERROR) << "dbus_g_bus_get_private() unable to get connection.";
       return false;
     }
-    if (NULL == LATE(dbus_g_connection_get_connection)(connection_)) {
+    if (NULL == GetSymbols()->dbus_g_connection_get_connection()(connection_)) {
       LOG(LS_ERROR) << "dbus_g_connection_get_connection() returns NULL. "
                     << "DBus daemon is probably not running.";
       return false;
     }
 
     // Application don't exit if DBus daemon die.
-    LATE(dbus_connection_set_exit_on_disconnect)(
-        LATE(dbus_g_connection_get_connection)(connection_), FALSE);
+    GetSymbols()->dbus_connection_set_exit_on_disconnect()(
+        GetSymbols()->dbus_g_connection_get_connection()(connection_), FALSE);
 
     // Connect all filters.
     RegisterAllFilters();
@@ -269,23 +271,23 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
   void CleanUp() {
     if (idle_source_) {
       // We did an attach() with the GSource, so we need to destroy() it.
-      LATE(g_source_destroy)(idle_source_);
+      GetSymbols()->g_source_destroy()(idle_source_);
       // We need to unref() the GSource to end the last reference we got.
-      LATE(g_source_unref)(idle_source_);
+      GetSymbols()->g_source_unref()(idle_source_);
       idle_source_ = NULL;
     }
     if (connection_) {
-      if (LATE(dbus_g_connection_get_connection)(connection_)) {
+      if (GetSymbols()->dbus_g_connection_get_connection()(connection_)) {
         UnRegisterAllFilters();
-        LATE(dbus_connection_close)(
-            LATE(dbus_g_connection_get_connection)(connection_));
+        GetSymbols()->dbus_connection_close()(
+            GetSymbols()->dbus_g_connection_get_connection()(connection_));
       }
-      LATE(dbus_g_connection_unref)(connection_);
+      GetSymbols()->dbus_g_connection_unref()(connection_);
       connection_ = NULL;
     }
-    LATE(g_main_loop_unref)(mainloop_);
+    GetSymbols()->g_main_loop_unref()(mainloop_);
     mainloop_ = NULL;
-    LATE(g_main_context_unref)(context_);
+    GetSymbols()->g_main_context_unref()(context_);
     context_ = NULL;
   }
 
@@ -297,7 +299,7 @@ class DBusMonitor::DBusMonitoringThread : public talk_base::Thread {
 
   // We only hit this when ready to quit.
   void QuitGMainloop() {
-    LATE(g_main_loop_quit)(mainloop_);
+    GetSymbols()->g_main_loop_quit()(mainloop_);
   }
 
   DBusMonitor *monitor_;
@@ -352,20 +354,20 @@ bool DBusMonitor::AddFilter(DBusSigFilter *filter) {
 
 bool DBusMonitor::StartMonitoring() {
   if (!monitoring_thread_) {
-    LATE(g_type_init)();
-    LATE(g_thread_init)(NULL);
-    LATE(dbus_g_thread_init)();
+    GetSymbols()->g_type_init()();
+    GetSymbols()->g_thread_init()(NULL);
+    GetSymbols()->dbus_g_thread_init()();
 
-    GMainContext *context = LATE(g_main_context_new)();
+    GMainContext *context = GetSymbols()->g_main_context_new()();
     if (NULL == context) {
       LOG(LS_ERROR) << "g_main_context_new() failed.";
       return false;
     }
 
-    GMainLoop *mainloop = LATE(g_main_loop_new)(context, FALSE);
+    GMainLoop *mainloop = GetSymbols()->g_main_loop_new()(context, FALSE);
     if (NULL == mainloop) {
       LOG(LS_ERROR) << "g_main_loop_new() failed.";
-      LATE(g_main_context_unref)(context);
+      GetSymbols()->g_main_context_unref()(context);
       return false;
     }
 
@@ -373,8 +375,8 @@ bool DBusMonitor::StartMonitoring() {
                                                   &filter_list_);
     if (monitoring_thread_ == NULL) {
       LOG(LS_ERROR) << "Failed to create DBus monitoring thread.";
-      LATE(g_main_context_unref)(context);
-      LATE(g_main_loop_unref)(mainloop);
+      GetSymbols()->g_main_context_unref()(context);
+      GetSymbols()->g_main_loop_unref()(mainloop);
       return false;
     }
     monitoring_thread_->Start();

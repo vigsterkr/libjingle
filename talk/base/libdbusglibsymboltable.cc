@@ -25,17 +25,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef HAVE_DBUS_GLIB
+
 #include "talk/base/libdbusglibsymboltable.h"
 
 namespace talk_base {
 
-LATE_BINDING_SYMBOL_TABLE_DEFINE_BEGIN(LibDBusGlibSymbolTable,
-                                       "libdbus-glib-1.so")
-#define X(sym) \
-    LATE_BINDING_SYMBOL_TABLE_DEFINE_ENTRY(LibDBusGlibSymbolTable, sym)
-LIBDBUS_GLIB_SYMBOLS_LIST
-#undef X
-LATE_BINDING_SYMBOL_TABLE_DEFINE_END(LibDBusGlibSymbolTable)
+#define LATE_BINDING_SYMBOL_TABLE_CLASS_NAME LIBDBUS_GLIB_CLASS_NAME
+#define LATE_BINDING_SYMBOL_TABLE_SYMBOLS_LIST LIBDBUS_GLIB_SYMBOLS_LIST
+#define LATE_BINDING_SYMBOL_TABLE_DLL_NAME "libdbus-glib-1.so"
+#include "talk/base/latebindingsymboltable.cc.def"
 
 }  // namespace talk_base
 
+#endif  // HAVE_DBUS_GLIB

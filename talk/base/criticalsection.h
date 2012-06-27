@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2004, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without 
  * modification, are permitted provided that the following conditions are met:
@@ -28,6 +28,8 @@
 #ifndef TALK_BASE_CRITICALSECTION_H__
 #define TALK_BASE_CRITICALSECTION_H__
 
+#include "talk/base/constructormagic.h"
+
 #ifdef WIN32
 #include "talk/base/win32.h"
 #endif
@@ -50,7 +52,7 @@ namespace talk_base {
 
 #ifdef WIN32
 class CriticalSection {
-public:
+ public:
   CriticalSection() {
     InitializeCriticalSection(&crit_);
     // Windows docs say 0 is not a valid thread id
@@ -79,7 +81,7 @@ public:
   bool CurrentThreadIsOwner() const { return thread_ == GetCurrentThreadId(); }
 #endif  // CS_TRACK_OWNER
 
-private:
+ private:
   CRITICAL_SECTION crit_;
   TRACK_OWNER(DWORD thread_);  // The section's owning thread id
 };
@@ -87,7 +89,7 @@ private:
 
 #ifdef POSIX
 class CriticalSection {
-public:
+ public:
   CriticalSection() {
     pthread_mutexattr_t mutex_attribute;
     pthread_mutexattr_init(&mutex_attribute);
@@ -119,25 +121,52 @@ public:
   bool CurrentThreadIsOwner() const { return pthread_equal(thread_, pthread_self()); }
 #endif  // CS_TRACK_OWNER
 
-private:
+ private:
   pthread_mutex_t mutex_;
   TRACK_OWNER(pthread_t thread_);
 };
 #endif // POSIX
 
-// CritScope, for serializing exection through a scope
-
+// CritScope, for serializing execution through a scope.
 class CritScope {
-public:
-  CritScope(CriticalSection *pcrit) {
+ public:
+  explicit CritScope(CriticalSection *pcrit) {
     pcrit_ = pcrit;
     pcrit_->Enter();
   }
   ~CritScope() {
     pcrit_->Leave();
   }
-private:
+ private:
   CriticalSection *pcrit_;
+  DISALLOW_COPY_AND_ASSIGN(CritScope);
+};
+
+// Tries to lock a critical section on construction via
+// CriticalSection::TryEnter, and unlocks on destruction if the
+// lock was taken. Never blocks.
+//
+// IMPORTANT: Unlike CritScope, the lock may not be owned by this thread in
+// subsequent code. Users *must* check locked() to determine if the
+// lock was taken. If you're not calling locked(), you're doing it wrong!
+class TryCritScope {
+ public:
+  explicit TryCritScope(CriticalSection *pcrit) {
+    pcrit_ = pcrit;
+    locked_ = pcrit_->TryEnter();
+  }
+  ~TryCritScope() {
+    if (locked_) {
+      pcrit_->Leave();
+    }
+  }
+  bool locked() const {
+    return locked_;
+  }
+ private:
+  CriticalSection *pcrit_;
+  bool locked_;
+  DISALLOW_COPY_AND_ASSIGN(TryCritScope);
 };
 
 // TODO: Replace with platform-specific "atomic" ops.

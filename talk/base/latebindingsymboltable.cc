@@ -35,35 +35,19 @@
 
 namespace talk_base {
 
-inline static const char *GetDllError() {
+#ifdef LINUX
+static const DllHandle kInvalidDllHandle = NULL;
+#else
+#error Not implemented
+#endif
+
+static const char *GetDllError() {
 #ifdef LINUX
   const char *err = dlerror();
   if (err) {
     return err;
   } else {
     return "No error";
-  }
-#else
-#error Not implemented
-#endif
-}
-
-DllHandle InternalLoadDll(const char dll_name[]) {
-#ifdef LINUX
-  DllHandle handle = dlopen(dll_name, RTLD_NOW);
-#else
-#error Not implemented
-#endif
-  if (handle == kInvalidDllHandle) {
-    LOG(LS_WARNING) << "Can't load " << dll_name << ": " << GetDllError();
-  }
-  return handle;
-}
-
-void InternalUnloadDll(DllHandle handle) {
-#ifdef LINUX
-  if (dlclose(handle) != 0) {
-    LOG(LS_ERROR) << GetDllError();
   }
 #else
 #error Not implemented
@@ -80,6 +64,8 @@ static bool LoadSymbol(DllHandle handle,
     LOG(LS_ERROR) << "Error loading symbol " << symbol_name << ": " << err;
     return false;
   } else if (!*symbol) {
+    // ELF allows for symbols to be NULL, but that should never happen for our
+    // usage.
     LOG(LS_ERROR) << "Symbol " << symbol_name << " is NULL";
     return false;
   }
@@ -89,23 +75,78 @@ static bool LoadSymbol(DllHandle handle,
 #endif
 }
 
-// This routine MUST assign SOME value for every symbol, even if that value is
-// NULL, or else some symbols may be left with uninitialized data that the
-// caller may later interpret as a valid address.
-bool InternalLoadSymbols(DllHandle handle,
-                         int num_symbols,
-                         const char *const symbol_names[],
-                         void *symbols[]) {
+LateBindingSymbolTable::LateBindingSymbolTable(const TableInfo *info,
+    void **table)
+    : info_(info),
+      table_(table),
+      handle_(kInvalidDllHandle),
+      undefined_symbols_(false) {
+  ClearSymbols();
+}
+
+LateBindingSymbolTable::~LateBindingSymbolTable() {
+  Unload();
+}
+
+bool LateBindingSymbolTable::IsLoaded() const {
+  return handle_ != kInvalidDllHandle;
+}
+
+bool LateBindingSymbolTable::Load() {
+  if (IsLoaded()) {
+    return true;
+  }
+  if (undefined_symbols_) {
+    // We do not attempt to load again because repeated attempts are not
+    // likely to succeed and DLL loading is costly.
+    LOG(LS_ERROR) << "We know there are undefined symbols";
+    return false;
+  }
+
+#ifdef LINUX
+  handle_ = dlopen(info_->dll_name, RTLD_NOW);
+#else
+#error Not implemented
+#endif
+
+  if (handle_ == kInvalidDllHandle) {
+    LOG(LS_WARNING) << "Can't load " << info_->dll_name << ": "
+                    << GetDllError();
+    return false;
+  }
 #ifdef LINUX
   // Clear any old errors.
   dlerror();
 #endif
-  for (int i = 0; i < num_symbols; ++i) {
-    if (!LoadSymbol(handle, symbol_names[i], &symbols[i])) {
+  for (int i = 0; i < info_->num_symbols; ++i) {
+    if (!LoadSymbol(handle_, info_->symbol_names[i], &table_[i])) {
+      undefined_symbols_ = true;
+      Unload();
       return false;
     }
   }
   return true;
+}
+
+void LateBindingSymbolTable::Unload() {
+  if (!IsLoaded()) {
+    return;
+  }
+
+#ifdef LINUX
+  if (dlclose(handle_) != 0) {
+    LOG(LS_ERROR) << GetDllError();
+  }
+#else
+#error Not implemented
+#endif
+
+  handle_ = kInvalidDllHandle;
+  ClearSymbols();
+}
+
+void LateBindingSymbolTable::ClearSymbols() {
+  memset(table_, 0, sizeof(void *) * info_->num_symbols);
 }
 
 }  // namespace talk_base

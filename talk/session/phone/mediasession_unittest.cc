@@ -42,7 +42,7 @@
     ASSERT_EQ(s, cd->cryptos().size()); \
     ASSERT_EQ(std::string(cs), cd->cryptos()[0].cipher_suite)
 #else
-#define ASSERT_CRYPTO(c, r, s, cs) \
+#define ASSERT_CRYPTO(cd, r, s, cs) \
   ASSERT_EQ(false, cd->crypto_required()); \
   ASSERT_EQ(0U, cd->cryptos().size());
 #endif
