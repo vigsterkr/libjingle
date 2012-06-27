@@ -346,6 +346,8 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
   bool RemoveCapturer(uint32 ssrc);
 
+  void QueueBlackFrame(uint32 ssrc, int64 timestamp, int framerate);
+  void FlushBlackFrame(uint32 ssrc, int64 timestamp);
 
   // Global state.
   WebRtcVideoEngine* engine_;

@@ -36,9 +36,12 @@
 #include "talk/base/timeutils.h"
 #include "talk/session/phone/rtputils.h"
 
-namespace cricket {
-
+namespace {
 static const int kRtpSsrcOffset = 8;
+const int  kWarnSlowWritesDelayMs = 50;
+}  // namespace
+
+namespace cricket {
 
 const char RtpDumpFileHeader::kFirstLine[] = "#!rtpplay1.0 0.0.0.0/0\n";
 
@@ -320,7 +323,7 @@ RtpDumpWriter::RtpDumpWriter(talk_base::StreamInterface* stream)
       packet_filter_(PF_ALL),
       file_header_written_(false),
       start_time_ms_(talk_base::Time()),
-      warn_slow_writes_delay_(talk_base::LogMessage::WARN_SLOW_LOGS_DELAY) {
+      warn_slow_writes_delay_(kWarnSlowWritesDelayMs) {
 }
 
 void RtpDumpWriter::set_packet_filter(int filter) {
