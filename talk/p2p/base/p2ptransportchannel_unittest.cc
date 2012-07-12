@@ -266,7 +266,7 @@ class P2PTransportChannelTestBase : public testing::Test,
                                               const std::string& ice_ufrag,
                                               const std::string& ice_pwd) {
     cricket::P2PTransportChannel* channel = new cricket::P2PTransportChannel(
-        component, NULL, GetAllocator(endpoint));
+        "test content name", component, NULL, GetAllocator(endpoint));
     channel->SignalRequestSignaling.connect(
         this, &P2PTransportChannelTestBase::OnChannelRequestSignaling);
     channel->SignalCandidateReady.connect(this,
@@ -1000,4 +1000,3 @@ TEST_F(P2PTransportChannelTest, TestIceRoleConflict) {
 
   TestSendRecv(1);
 }
-

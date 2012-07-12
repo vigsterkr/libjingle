@@ -23,7 +23,7 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Common definition for video, including fourcc and VideoFormat
+// Common definition for video, including fourcc and VideoFormat.
 
 #ifndef TALK_SESSION_PHONE_VIDEOCOMMON_H_
 #define TALK_SESSION_PHONE_VIDEOCOMMON_H_
@@ -49,12 +49,14 @@ namespace cricket {
 //   http://www.fourcc.org/yuv.php
 //   http://v4l2spec.bytesex.org/spec/book1.htm
 //   http://developer.apple.com/quicktime/icefloe/dispatch020.html
+//   http://msdn.microsoft.com/library/windows/desktop/dd206750.aspx#nv12
 
 enum FourCC {
   // Canonical fourcc codes used in our code.
   FOURCC_I420 = FOURCC('I', '4', '2', '0'),
   FOURCC_I422 = FOURCC('I', '4', '2', '2'),
   FOURCC_I444 = FOURCC('I', '4', '4', '4'),
+  FOURCC_I411 = FOURCC('I', '4', '1', '1'),
   FOURCC_I400 = FOURCC('I', '4', '0', '0'),
   FOURCC_YV12 = FOURCC('Y', 'V', '1', '2'),
   FOURCC_YV16 = FOURCC('Y', 'V', '1', '6'),
@@ -68,9 +70,9 @@ enum FourCC {
   FOURCC_ABGR = FOURCC('A', 'B', 'G', 'R'),
   FOURCC_BGRA = FOURCC('B', 'G', 'R', 'A'),
   FOURCC_ARGB = FOURCC('A', 'R', 'G', 'B'),
-  FOURCC_RGBP = FOURCC('R', 'G', 'B', 'P'), // bgr565
-  FOURCC_RGBO = FOURCC('R', 'G', 'B', 'O'), // abgr1555
-  FOURCC_R444 = FOURCC('R', '4', '4', '4'), // argb4444
+  FOURCC_RGBP = FOURCC('R', 'G', 'B', 'P'),  // bgr565.
+  FOURCC_RGBO = FOURCC('R', 'G', 'B', 'O'),  // abgr1555.
+  FOURCC_R444 = FOURCC('R', '4', '4', '4'),  // argb4444.
   FOURCC_MJPG = FOURCC('M', 'J', 'P', 'G'),
   FOURCC_RAW  = FOURCC('r', 'a', 'w', ' '),
   FOURCC_NV21 = FOURCC('N', 'V', '2', '1'),
@@ -84,19 +86,19 @@ enum FourCC {
 
   // Aliases for canonical fourcc codes, replaced with their canonical
   // equivalents by CanonicalFourCC().
-  FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420
-  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420
-  FOURCC_YU16 = FOURCC('Y', 'U', '1', '6'),  // Alias for I422
-  FOURCC_YU24 = FOURCC('Y', 'U', '2', '4'),  // Alias for I444
-  FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2
-  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2 on Mac
-  FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY
-  FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY
-  FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),  // Alias for MJPG
-  FOURCC_DMB1 = FOURCC('d', 'm', 'b', '1'),  // Alias for MJPG on Mac
-  FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR
-  FOURCC_RGB3 = FOURCC('R', 'G', 'B', '3'),  // Alias for RAW
-  FOURCC_BGR3 = FOURCC('B', 'G', 'R', '3'),  // Alias for 24BG
+  FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420.
+  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420.
+  FOURCC_YU16 = FOURCC('Y', 'U', '1', '6'),  // Alias for I422.
+  FOURCC_YU24 = FOURCC('Y', 'U', '2', '4'),  // Alias for I444.
+  FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2.
+  FOURCC_YUVS = FOURCC('y', 'u', 'v', 's'),  // Alias for YUY2 on Mac.
+  FOURCC_HDYC = FOURCC('H', 'D', 'Y', 'C'),  // Alias for UYVY.
+  FOURCC_2VUY = FOURCC('2', 'v', 'u', 'y'),  // Alias for UYVY.
+  FOURCC_JPEG = FOURCC('J', 'P', 'E', 'G'),  // Alias for MJPG.
+  FOURCC_DMB1 = FOURCC('d', 'm', 'b', '1'),  // Alias for MJPG on Mac.
+  FOURCC_BA81 = FOURCC('B', 'A', '8', '1'),  // Alias for BGGR.
+  FOURCC_RGB3 = FOURCC('R', 'G', 'B', '3'),  // Alias for RAW.
+  FOURCC_BGR3 = FOURCC('B', 'G', 'R', '3'),  // Alias for 24BG.
 
   // Match any fourcc.
   FOURCC_ANY  = 0xFFFFFFFF,
@@ -105,7 +107,7 @@ enum FourCC {
 // Converts fourcc aliases into canonical ones.
 uint32 CanonicalFourCC(uint32 fourcc);
 
-// Get FourCC code as a string
+// Get FourCC code as a string.
 inline std::string GetFourccName(uint32 fourcc) {
   std::string name;
   name.push_back(static_cast<char>(fourcc & 0xFF));
@@ -119,17 +121,17 @@ inline std::string GetFourccName(uint32 fourcc) {
 // Definition of VideoFormat.
 //////////////////////////////////////////////////////////////////////////////
 
-// VideoFormat with Plain Old Data for global variables
+// VideoFormat with Plain Old Data for global variables.
 struct VideoFormatPod {
-  int width;  // in number of pixels
-  int height;  // in number of pixels
-  int64 interval;  // in nanoseconds
-  uint32 fourcc;  // color space. FOURCC_ANY means that any color space is OK.
+  int width;  // Number of pixels.
+  int height;  // Number of pixels.
+  int64 interval;  // Nanoseconds.
+  uint32 fourcc;  // Color space. FOURCC_ANY means that any color space is OK.
 };
 
-struct VideoFormat : VideoFormatPod{
+struct VideoFormat : VideoFormatPod {
   static const int64 kMinimumInterval =
-      talk_base::kNumNanosecsPerSec / 10000;  // 10k fps
+      talk_base::kNumNanosecsPerSec / 10000;  // 10k fps.
 
   VideoFormat() {
     Construct(0, 0, 0, 0);

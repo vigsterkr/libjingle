@@ -1,5 +1,5 @@
 // libjingle
-// Copyright 2004--2011 Google Inc.
+// Copyright 2011 Google Inc.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,7 @@
 #include "talk/base/timeutils.h"
 #include "talk/session/phone/webrtcvideoframe.h"
 
-#include "talk/base/win32.h"  // Need this to #include the impl files
+#include "talk/base/win32.h"  // Need this to #include the impl files.
 #ifdef WEBRTC_RELATIVE_PATH
 #include "modules/video_capture/main/interface/video_capture_factory.h"
 #else
@@ -53,21 +53,20 @@ struct kVideoFourCCEntry {
 // This indicates our format preferences and defines a mapping between
 // webrtc::RawVideoType (from video_capture_defines.h) to our FOURCCs.
 static kVideoFourCCEntry kSupportedFourCCs[] = {
-  { FOURCC_I420, webrtc::kVideoI420 },   // 12 bpp, no conversion
-  { FOURCC_YV12, webrtc::kVideoYV12 },   // 12 bpp, no conversion
-  { FOURCC_NV12, webrtc::kVideoNV12 },   // 12 bpp, fast conversion
-  { FOURCC_NV21, webrtc::kVideoNV21 },   // 12 bpp, fast conversion
-  { FOURCC_YUY2, webrtc::kVideoYUY2 },   // 16 bpp, fast conversion
-  { FOURCC_UYVY, webrtc::kVideoUYVY },   // 16 bpp, fast conversion
-  { FOURCC_MJPG, webrtc::kVideoMJPEG },  // compressed, slow conversion
-  { FOURCC_ARGB, webrtc::kVideoARGB },   // 32 bpp, slow conversion
-  { FOURCC_24BG, webrtc::kVideoRGB24 },  // 32 bpp, slow conversion
+  { FOURCC_I420, webrtc::kVideoI420 },   // 12 bpp, no conversion.
+  { FOURCC_YV12, webrtc::kVideoYV12 },   // 12 bpp, no conversion.
+  { FOURCC_NV12, webrtc::kVideoNV12 },   // 12 bpp, fast conversion.
+  { FOURCC_NV21, webrtc::kVideoNV21 },   // 12 bpp, fast conversion.
+  { FOURCC_YUY2, webrtc::kVideoYUY2 },   // 16 bpp, fast conversion.
+  { FOURCC_UYVY, webrtc::kVideoUYVY },   // 16 bpp, fast conversion.
+  { FOURCC_MJPG, webrtc::kVideoMJPEG },  // compressed, slow conversion.
+  { FOURCC_ARGB, webrtc::kVideoARGB },   // 32 bpp, slow conversion.
+  { FOURCC_24BG, webrtc::kVideoRGB24 },  // 24 bpp, slow conversion.
 };
 
 class WebRtcVcmFactory : public WebRtcVcmFactoryInterface {
  public:
-  virtual webrtc::VideoCaptureModule* Create(int id,
-                                             const char* device) {
+  virtual webrtc::VideoCaptureModule* Create(int id, const char* device) {
     return webrtc::VideoCaptureFactory::Create(id, device);
   }
   virtual webrtc::VideoCaptureModule::DeviceInfo* CreateDeviceInfo(int id) {
@@ -353,10 +352,10 @@ WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
   width = sample.Width();
   height = sample.Height();
   fourcc = FOURCC_I420;
+  // TODO: Support pixel aspect ratio (for OSX).
   pixel_width = 1;
   pixel_height = 1;
-  // convert units from VideoFrame RenderTimeMs
-  // to CapturedFrame (nanoseconds)
+  // Convert units from VideoFrame RenderTimeMs to CapturedFrame (nanoseconds).
   elapsed_time = sample.RenderTimeMs() * talk_base::kNumNanosecsPerMillisec;
   time_stamp = elapsed_time;
   data_size = sample.Length();

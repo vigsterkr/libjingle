@@ -74,6 +74,7 @@ class WebRtcPassthroughRenderTest : public testing::Test {
 TEST_F(WebRtcPassthroughRenderTest, Streams) {
   const int stream_id1 = 1234;
   const int stream_id2 = 5678;
+  const int stream_id3 = 9012;  // A stream that doesn't exist.
   webrtc::VideoRenderCallback* stream = NULL;
   // Add a new stream
   stream = AddIncomingRenderStream(stream_id1);
@@ -86,6 +87,7 @@ TEST_F(WebRtcPassthroughRenderTest, Streams) {
   EXPECT_TRUE(stream != NULL);
   EXPECT_TRUE(HasIncomingRenderStream(stream_id2));
   // Remove the stream
+  EXPECT_FALSE(DeleteIncomingRenderStream(stream_id3));
   EXPECT_TRUE(DeleteIncomingRenderStream(stream_id2));
   EXPECT_TRUE(!HasIncomingRenderStream(stream_id2));
   // Add back the removed stream
@@ -98,6 +100,7 @@ TEST_F(WebRtcPassthroughRenderTest, Renderer) {
   webrtc::VideoFrame frame;
   const int stream_id1 = 1234;
   const int stream_id2 = 5678;
+  const int stream_id3 = 9012;  // A stream that doesn't exist.
   webrtc::VideoRenderCallback* stream1 = NULL;
   webrtc::VideoRenderCallback* stream2 = NULL;
   // Add two new stream
@@ -110,8 +113,9 @@ TEST_F(WebRtcPassthroughRenderTest, Renderer) {
   // Register the external renderer
   WebRtcPassthroughRenderTest::ExternalRenderer renderer1;
   WebRtcPassthroughRenderTest::ExternalRenderer renderer2;
-  AddExternalRenderCallback(stream_id1, &renderer1);
-  AddExternalRenderCallback(stream_id2, &renderer2);
+  EXPECT_FALSE(AddExternalRenderCallback(stream_id3, &renderer1));
+  EXPECT_TRUE(AddExternalRenderCallback(stream_id1, &renderer1));
+  EXPECT_TRUE(AddExternalRenderCallback(stream_id2, &renderer2));
   int test_frame_num = 10;
   // RenderFrame without starting the render
   for (int i = 0; i < test_frame_num; ++i) {
@@ -119,12 +123,14 @@ TEST_F(WebRtcPassthroughRenderTest, Renderer) {
   }
   EXPECT_EQ(0, renderer1.frame_num());
   // Start the render and test again.
+  EXPECT_FALSE(StartRender(stream_id3));
   EXPECT_TRUE(StartRender(stream_id1));
   for (int i = 0; i < test_frame_num; ++i) {
     stream1->RenderFrame(stream_id1, frame);
   }
   EXPECT_EQ(test_frame_num, renderer1.frame_num());
   // Stop the render and test again.
+  EXPECT_FALSE(StopRender(stream_id3));
   EXPECT_TRUE(StopRender(stream_id1));
   for (int i = 0; i < test_frame_num; ++i) {
     stream1->RenderFrame(stream_id1, frame);

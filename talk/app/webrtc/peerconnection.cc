@@ -38,8 +38,10 @@
 
 namespace {
 
-// The number of the tokens in the config string.
+// The number of tokens in the config string.
 static const size_t kConfigTokens = 2;
+// The min number of tokens in the ice uri.
+static const size_t kMinIceUriTokens = 2;
 // Only the STUN or TURN server address appears in the config string.
 static const size_t kConfigAddress = 1;
 // Both of the STUN or TURN server address and port appear in the config string.
@@ -48,9 +50,14 @@ static const size_t kServiceCount = 5;
 // The default stun port.
 static const int kDefaultPort = 3478;
 
+// Deprecated (jsep00)
 // NOTE: Must be in the same order as the ServiceType enum.
 static const char* kValidServiceTypes[kServiceCount] = {
     "STUN", "STUNS", "TURN", "TURNS", "INVALID" };
+
+// NOTE: Must be in the same order as the ServiceType enum.
+static const char* kValidIceServiceTypes[kServiceCount] = {
+    "stun", "stuns", "turn", "turns", "invalid" };
 
 enum ServiceType {
   STUN,     // Indicates a STUN server.
@@ -71,6 +78,7 @@ enum {
   MSG_CLOSE,
   MSG_READYSTATE,
   MSG_SDPSTATE,
+  MSG_ICESTATE,
   MSG_TERMINATE,
   MSG_STARTICE,
   MSG_CREATEOFFER,
@@ -155,6 +163,102 @@ bool static ParseConfigString(const std::string& config,
   return true;
 }
 
+bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
+                     std::vector<StunConfiguration>* stun_config,
+                     std::vector<TurnConfiguration>* turn_config) {
+  // draft-nandakumar-rtcweb-stun-uri-01
+  // stunURI       = scheme ":" stun-host [ ":" stun-port ]
+  // scheme        = "stun" / "stuns"
+  // stun-host     = IP-literal / IPv4address / reg-name
+  // stun-port     = *DIGIT
+
+  // draft-petithuguenin-behave-turn-uris-01
+  // turnURI       = scheme ":" turn-host [ ":" turn-port ]
+  //                 [ "?transport=" transport ]
+  // scheme        = "turn" / "turns"
+  // transport     = "udp" / "tcp" / transport-ext
+  // transport-ext = 1*unreserved
+  // turn-host     = IP-literal / IPv4address / reg-name
+  // turn-port     = *DIGIT
+
+  // TODO: Handle IPV6 address
+  for (size_t i = 0; i < configuration.size(); ++i) {
+    webrtc::JsepInterface::IceServer server = configuration[i];
+    if (server.uri.empty()) {
+      LOG(WARNING) << "Empty uri.";
+      continue;
+    }
+    std::vector<std::string> tokens;
+    talk_base::tokenize(server.uri, '?', &tokens);
+    // TODO: Handle [ "?transport=" transport ].
+    std::string uri_without_transport = tokens[0];
+    tokens.clear();
+    talk_base::tokenize(uri_without_transport, ':', &tokens);
+    if (tokens.size() < kMinIceUriTokens) {
+      LOG(WARNING) << "Invalid uri: " << server.uri;
+      continue;
+    }
+    ServiceType service_type = INVALID;
+    const std::string& type = tokens[0];
+    for (size_t i = 0; i < kServiceCount; ++i) {
+      if (type.compare(kValidIceServiceTypes[i]) == 0) {
+        service_type = static_cast<ServiceType>(i);
+        break;
+      }
+    }
+    if (service_type == INVALID) {
+      LOG(WARNING) << "Invalid service type: " << type;
+      continue;
+    }
+    std::string address = tokens[1];
+    int port = kDefaultPort;
+    if (tokens.size() > kMinIceUriTokens) {
+      port = talk_base::FromString<int>(tokens[2]);
+      if (port <= 0 || port > 0xffff) {
+        LOG(WARNING) << "Invalid port: " << tokens[2];
+        continue;
+      }
+    }
+
+    switch (service_type) {
+      case STUN:
+      case STUNS:
+        stun_config->push_back(StunConfiguration(address, port));
+        break;
+      case TURN:
+      case TURNS:
+        turn_config->push_back(TurnConfiguration(address, port,
+                                                 "", server.password));
+        break;
+      case INVALID:
+      default:
+        LOG(WARNING) << "Configuration not supported: " << server.uri;
+        return false;
+    }
+  }
+  return true;
+}
+
+// TODO: Remove this once webrtcsession is updated to jsep01.
+webrtc::JsepInterface::Action GetAction(
+    webrtc::SessionDescriptionInterface::SdpType type) {
+  webrtc::JsepInterface::Action action = webrtc::JsepInterface::kOffer;
+  switch (type) {
+    case webrtc::SessionDescriptionInterface::kOffer:
+      action = webrtc::JsepInterface::kOffer;
+      break;
+    case webrtc::SessionDescriptionInterface::kPrAnswer:
+      action = webrtc::JsepInterface::kPrAnswer;
+      break;
+    case webrtc::SessionDescriptionInterface::kAnswer:
+      action = webrtc::JsepInterface::kAnswer;
+      break;
+    default:
+      break;
+  }
+  return action;
+}
+
 typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
     LocalMediaStreamParams;
 
@@ -221,6 +325,11 @@ struct SdpStateMessage : public talk_base::MessageData {
   webrtc::PeerConnectionInterface::SdpState state;
 };
 
+struct IceStateMessage : public talk_base::MessageData {
+  IceStateMessage() : state(webrtc::PeerConnectionInterface::kIceNew) {}
+  webrtc::PeerConnectionInterface::IceState state;
+};
+
 }  // namespace
 
 namespace webrtc {
@@ -240,6 +349,7 @@ PeerConnection::PeerConnection(PeerConnectionFactory* factory)
       observer_(NULL),
       ready_state_(kNew),
       sdp_state_(kSdpNew),
+      ice_state_(kIceNew),
       local_media_streams_(StreamCollection::Create()) {
 }
 
@@ -260,14 +370,29 @@ void PeerConnection::Terminate_s() {
 bool PeerConnection::Initialize(bool use_roap,
                                 const std::string& configuration,
                                 PeerConnectionObserver* observer) {
+  std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
+  std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
+  ParseConfigString(configuration, &stun_config, &turn_config);
+  return DoInitialize(use_roap, stun_config, turn_config, observer);
+}
+
+bool PeerConnection::Initialize(const JsepInterface::IceServers& configuration,
+                                JsepInterface::IceOptions options,
+                                PeerConnectionObserver* observer) {
+  std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
+  std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
+  ParseIceServers(configuration, &stun_config, &turn_config);
+  return DoInitialize(false, stun_config, turn_config, observer);
+}
+
+bool PeerConnection::DoInitialize(bool use_roap,
+                                  const StunConfigurations& stun_config,
+                                  const TurnConfigurations& turn_config,
+                                  PeerConnectionObserver* observer) {
   ASSERT(observer != NULL);
   if (!observer)
     return false;
   observer_ = observer;
-  std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
-  std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
-
-  ParseConfigString(configuration, &stun_config, &turn_config);
 
   port_allocator_.reset(factory_->port_allocator_factory()->CreatePortAllocator(
       stun_config, turn_config));
@@ -300,7 +425,7 @@ bool PeerConnection::Initialize(bool use_roap,
         this, &PeerConnection::OnNewPeerConnectionMessage);
     roap_signaling_->SignalStateChange.connect(
         this, &PeerConnection::OnSignalingStateChange);
-    ChangeReadyState(PeerConnectionInterface::kNegotiating);
+    ChangeReadyState(PeerConnectionInterface::kOpening);
   } else {
     // Register PeerConnection observer as receiver of local ice candidates.
     session_->RegisterObserver(observer_);
@@ -364,6 +489,12 @@ PeerConnectionInterface::SdpState PeerConnection::sdp_state() {
   return msg.state;
 }
 
+PeerConnectionInterface::IceState PeerConnection::ice_state() {
+  IceStateMessage msg;
+  signaling_thread()->Send(this, MSG_ICESTATE, &msg);
+  return msg.state;
+}
+
 bool PeerConnection::StartIce(IceOptions options) {
   IceOptionsParams msg(options);
   signaling_thread()->Send(this, MSG_STARTICE, &msg);
@@ -378,6 +509,25 @@ SessionDescriptionInterface* PeerConnection::CreateOffer(
   return msg.desc;
 }
 
+void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
+                                 const SessionDescriptionOptions& options) {
+  if (!observer) {
+    LOG(LS_ERROR) << "CreateOffer - observer is NULL.";
+    return;
+  }
+  talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
+      observer;
+  SessionDescriptionInterface* desc =
+      CreateOffer(MediaHints(options.has_audio(), options.has_video()));
+  if (!desc) {
+    std::string error = "CreateOffer failed.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+
+  observer_copy->OnSuccess(desc);
+}
+
 SessionDescriptionInterface* PeerConnection::CreateAnswer(
     const MediaHints& hints,
     const SessionDescriptionInterface* offer) {
@@ -386,6 +536,36 @@ SessionDescriptionInterface* PeerConnection::CreateAnswer(
   msg.const_desc = offer;
   signaling_thread()->Send(this, MSG_CREATEANSWER, &msg);
   return msg.desc;
+}
+
+void PeerConnection::CreateAnswer(CreateSessionDescriptionObserver* observer,
+                                  const SessionDescriptionOptions& options) {
+  if (!observer) {
+    LOG(LS_ERROR) << "CreateAnswer - observer is NULL.";
+    return;
+  }
+  talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
+      observer;
+  const SessionDescriptionInterface* offer = session_->remote_description();
+  std::string error;
+  if (!offer) {
+    error = "CreateAnswer can't be called before SetRemoteDescription.";
+    observer_copy->OnFailure(error);
+    return;
+  } else if (offer->type() != SessionDescriptionInterface::kOffer) {
+    error = "CreateAnswer failed because remote_description is not an offer.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+  SessionDescriptionInterface* desc =
+      CreateAnswer(MediaHints(options.has_audio(), options.has_video()), offer);
+  if (!desc) {
+    error = "CreateAnswer failed.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+
+  observer_copy->OnSuccess(desc);
 }
 
 bool PeerConnection::SetLocalDescription(Action action,
@@ -397,6 +577,38 @@ bool PeerConnection::SetLocalDescription(Action action,
   return msg.result;
 }
 
+void PeerConnection::SetLocalDescription(
+    SetSessionDescriptionObserver* observer,
+    SessionDescriptionInterface* desc) {
+  if (!observer) {
+    LOG(LS_ERROR) << "SetLocalDescription - observer is NULL.";
+    return;
+  }
+  talk_base::scoped_refptr<SetSessionDescriptionObserver> observer_copy =
+      observer;
+  std::string error;
+  if (!desc) {
+    error = "SessionDescription is NULL.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+
+  if (!SetLocalDescription(GetAction(desc->type()), desc)) {
+    error = "SetLocalDescription failed.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+
+  // TODO: Ice should be able to start even without local desc.
+  if (!StartIce(JsepInterface::kUseAll)) {
+    error = "StartIce failed.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+
+  observer_copy->OnSuccess();
+}
+
 bool PeerConnection::SetRemoteDescription(Action action,
                                           SessionDescriptionInterface* desc) {
   JsepSessionDescriptionParams msg;
@@ -406,11 +618,44 @@ bool PeerConnection::SetRemoteDescription(Action action,
   return msg.result;
 }
 
+void PeerConnection::SetRemoteDescription(
+    SetSessionDescriptionObserver* observer,
+    SessionDescriptionInterface* desc) {
+  bool result = false;
+  if (desc) {
+    result = SetRemoteDescription(GetAction(desc->type()), desc);
+  }
+  if (!observer) {
+    LOG(LS_ERROR) << "SetRemoteDescription - observer is NULL.";
+    return;
+  }
+  talk_base::scoped_refptr<SetSessionDescriptionObserver> observer_copy =
+      observer;
+  if (!result) {
+    std::string error = "SetRemoteDescription failed.";
+    observer_copy->OnFailure(error);
+    return;
+  }
+  observer_copy->OnSuccess();
+}
+
+bool PeerConnection::UpdateIce(const IceServers& configuration,
+                               IceOptions options) {
+  // TODO: Implement UpdateIce.
+  LOG(LS_ERROR) << "UpdateIce is not implemented.";
+  return false;
+}
+
 bool PeerConnection::ProcessIceMessage(
     const IceCandidateInterface* ice_candidate) {
   JsepIceCandidateParams msg(ice_candidate);
   signaling_thread()->Send(this, MSG_PROCESSICEMESSAGE, &msg);
   return msg.result;
+}
+
+bool PeerConnection::AddIceCandidate(
+    const IceCandidateInterface* ice_candidate) {
+  return ProcessIceMessage(ice_candidate);
 }
 
 const SessionDescriptionInterface* PeerConnection::local_description() const {
@@ -434,6 +679,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
       LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
       local_media_streams_->AddStream(msg->data());
       mediastream_signaling_->SetLocalStreams(local_media_streams_);
+      observer_->OnRenegotiationNeeded();
       break;
     }
     case MSG_REMOVESTREAM: {
@@ -503,6 +749,11 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
     case MSG_SDPSTATE: {
       SdpStateMessage* msg(static_cast<SdpStateMessage*> (data));
       msg->state = sdp_state_;
+      break;
+    }
+    case MSG_ICESTATE: {
+      IceStateMessage* msg(static_cast<IceStateMessage*> (data));
+      msg->state = ice_state_;
       break;
     }
     case MSG_STARTICE: {
@@ -595,7 +846,7 @@ void PeerConnection::OnSignalingStateChange(
     case RoapSignaling::kInitializing:
       break;
     case RoapSignaling::kIdle:
-      if (ready_state_ == PeerConnectionInterface::kNegotiating)
+      if (ready_state_ == PeerConnectionInterface::kOpening)
         ChangeReadyState(PeerConnectionInterface::kActive);
       ChangeSdpState(PeerConnectionInterface::kSdpIdle);
       break;
@@ -625,7 +876,7 @@ void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
       ChangeReadyState(PeerConnectionInterface::kNew);
     case cricket::BaseSession::STATE_SENTINITIATE:
     case cricket::BaseSession::STATE_RECEIVEDINITIATE:
-      ChangeReadyState(PeerConnectionInterface::kNegotiating);
+      ChangeReadyState(PeerConnectionInterface::kOpening);
       break;
     case cricket::BaseSession::STATE_SENTACCEPT:
     case cricket::BaseSession::STATE_RECEIVEDACCEPT:

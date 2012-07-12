@@ -124,11 +124,20 @@ enum TransportRole {
   ROLE_UNKNOWN
 };
 
+// For "writable" and "readable", we need to differentiate between
+// none, all, and some.
+enum TransportState {
+  TRANSPORT_STATE_NONE = 0,
+  TRANSPORT_STATE_SOME,
+  TRANSPORT_STATE_ALL
+};
+
 class Transport : public talk_base::MessageHandler,
                   public sigslot::has_slots<> {
  public:
   Transport(talk_base::Thread* signaling_thread,
             talk_base::Thread* worker_thread,
+            const std::string& content_name,
             const std::string& type,
             PortAllocator* allocator);
   virtual ~Transport();
@@ -138,6 +147,8 @@ class Transport : public talk_base::MessageHandler,
   // Returns the worker thread. The actual networking is done on this thread.
   talk_base::Thread* worker_thread() { return worker_thread_; }
 
+  // Returns the content_name of this transport.
+  const std::string& content_name() const { return content_name_; }
   // Returns the type of this transport.
   const std::string& type() const { return type_; }
 
@@ -147,8 +158,24 @@ class Transport : public talk_base::MessageHandler,
   // Returns the readable and states of this manager.  These bits are the ORs
   // of the corresponding bits on the managed channels.  Each time one of these
   // states changes, a signal is raised.
-  bool readable() const { return readable_; }
-  bool writable() const { return writable_; }
+  // TODO: Replace uses of readable() and writable() with
+  // any_channels_readable() and any_channels_writable().
+  bool readable() const { return any_channels_readable(); }
+  bool writable() const { return any_channels_writable(); }
+  bool any_channels_readable() const {
+    return (readable_ == TRANSPORT_STATE_SOME ||
+            readable_ == TRANSPORT_STATE_ALL);
+  }
+  bool any_channels_writable() const {
+    return (writable_ == TRANSPORT_STATE_SOME ||
+            writable_ == TRANSPORT_STATE_ALL);
+  }
+  bool all_channels_readable() const {
+    return (readable_ == TRANSPORT_STATE_ALL);
+  }
+  bool all_channels_writable() const {
+    return (writable_ == TRANSPORT_STATE_ALL);
+  }
   sigslot::signal1<Transport*> SignalReadableState;
   sigslot::signal1<Transport*> SignalWritableState;
 
@@ -315,7 +342,7 @@ class Transport : public talk_base::MessageHandler,
   void CallChannels_w(TransportChannelFunc func);
 
   // Computes the OR of the channel's read or write state (argument picks).
-  bool GetTransportState_s(bool read);
+  TransportState GetTransportState_s(bool read);
 
   void OnChannelCandidateReady_s();
 
@@ -323,11 +350,12 @@ class Transport : public talk_base::MessageHandler,
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;
+  std::string content_name_;
   std::string type_;
   PortAllocator* allocator_;
   bool destroyed_;
-  bool readable_;
-  bool writable_;
+  TransportState readable_;
+  TransportState writable_;
   bool connect_requested_;
   TransportRole role_;
   uint64 tiebreaker_;

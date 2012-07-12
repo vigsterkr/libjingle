@@ -1660,30 +1660,6 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_EQ_WAIT(T::MediaChannel::ERROR_PLAY_SRTP_AUTH_FAILED, error_, 500);
   }
 
-  void TestSetChannelOptions(bool options_should_change) {
-    CreateChannels(0, 0);
-
-    channel1_->SetChannelOptions(1);
-    channel2_->SetChannelOptions(1);
-    if (options_should_change) {
-      EXPECT_EQ(1, media_channel1_->GetOptions());
-      EXPECT_EQ(1, media_channel2_->GetOptions());
-    } else {
-      EXPECT_EQ(0, media_channel1_->GetOptions());
-      EXPECT_EQ(0, media_channel2_->GetOptions());
-    }
-
-    channel1_->SetChannelOptions(2);
-    channel2_->SetChannelOptions(2);
-    if (options_should_change) {
-      EXPECT_EQ(2, media_channel1_->GetOptions());
-      EXPECT_EQ(2, media_channel2_->GetOptions());
-    } else {
-      EXPECT_EQ(0, media_channel1_->GetOptions());
-      EXPECT_EQ(0, media_channel2_->GetOptions());
-    }
-  }
-
  protected:
   cricket::FakeSession session1_;
   cricket::FakeSession session2_;
@@ -1752,6 +1728,30 @@ class VoiceChannelTest
   VoiceChannelTest() : Base(kPcmuFrame, sizeof(kPcmuFrame),
                             kRtcpReport, sizeof(kRtcpReport)) {
   }
+
+  void TestSetChannelOptions() {
+    CreateChannels(0, 0);
+
+    cricket::AudioOptions options1;
+    options1.echo_cancellation.Set(false);
+    cricket::AudioOptions options2;
+    options1.echo_cancellation.Set(true);
+
+    channel1_->SetChannelOptions(options1);
+    channel2_->SetChannelOptions(options1);
+    cricket::AudioOptions actual_options;
+    ASSERT_TRUE(media_channel1_->GetOptions(&actual_options));
+    EXPECT_EQ(options1, actual_options);
+    ASSERT_TRUE(media_channel2_->GetOptions(&actual_options));
+    EXPECT_EQ(options1, actual_options);
+
+    channel1_->SetChannelOptions(options2);
+    channel2_->SetChannelOptions(options2);
+    ASSERT_TRUE(media_channel1_->GetOptions(&actual_options));
+    EXPECT_EQ(options2, actual_options);
+    ASSERT_TRUE(media_channel2_->GetOptions(&actual_options));
+    EXPECT_EQ(options2, actual_options);
+  }
 };
 
 // override to add NULL parameter
@@ -1817,6 +1817,20 @@ class VideoChannelTest
   Base;
   VideoChannelTest() : Base(kH264Packet, sizeof(kH264Packet),
                             kRtcpReport, sizeof(kRtcpReport)) {
+  }
+
+  void TestSetChannelOptions() {
+    CreateChannels(0, 0);
+
+    channel1_->SetChannelOptions(1);
+    channel2_->SetChannelOptions(1);
+    EXPECT_EQ(1, media_channel1_->GetOptions());
+    EXPECT_EQ(1, media_channel2_->GetOptions());
+
+    channel1_->SetChannelOptions(2);
+    channel2_->SetChannelOptions(2);
+    EXPECT_EQ(2, media_channel1_->GetOptions());
+    EXPECT_EQ(2, media_channel2_->GetOptions());
   }
 };
 
@@ -2151,8 +2165,7 @@ TEST_F(VoiceChannelTest, SendSsrcMuxToSsrcMuxWithRtcpMux) {
 }
 
 TEST_F(VoiceChannelTest, TestSetChannelOptions) {
-  // SetChannelOptions should do nothing on voice channel.
-  Base::TestSetChannelOptions(false);
+  TestSetChannelOptions();
 }
 
 // VideoChannelTest
@@ -2401,7 +2414,7 @@ TEST_F(VideoChannelTest, TestApplyViewRequest) {
 }
 
 TEST_F(VideoChannelTest, TestSetChannelOptions) {
-  Base::TestSetChannelOptions(true);
+  TestSetChannelOptions();
 }
 
 

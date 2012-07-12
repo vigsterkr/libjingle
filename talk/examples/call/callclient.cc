@@ -59,8 +59,13 @@
 #include "talk/xmpp/hangoutpubsubclient.h"
 #include "talk/xmpp/mucroomconfigtask.h"
 #include "talk/xmpp/mucroomlookuptask.h"
+#include "talk/xmpp/pingtask.h"
 
 namespace {
+
+// Must be period >= timeout.
+const uint32 kPingPeriodMillis = 10000;
+const uint32 kPingTimeoutMillis = 10000;
 
 const char* DescribeStatus(buzz::Status::Show show, const std::string& desc) {
   switch (show) {
@@ -599,6 +604,24 @@ void CallClient::InitPresence() {
 
   friend_invite_send_ = new buzz::FriendInviteSendTask(xmpp_client_);
   friend_invite_send_->Start();
+
+  StartXmppPing();
+}
+
+void CallClient::StartXmppPing() {
+  buzz::PingTask* ping = new buzz::PingTask(
+      xmpp_client_, talk_base::Thread::Current(),
+      kPingPeriodMillis, kPingTimeoutMillis);
+  ping->SignalTimeout.connect(this, &CallClient::OnPingTimeout);
+  ping->Start();
+}
+
+void CallClient::OnPingTimeout() {
+  LOG(LS_WARNING) << "XMPP Ping timeout. Will keep trying...";
+  StartXmppPing();
+
+  // Or should we do this instead?
+  // Quit();
 }
 
 void CallClient::SendStatus(const buzz::Status& status) {

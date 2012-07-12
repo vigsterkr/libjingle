@@ -138,7 +138,6 @@ NewSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
   AsyncSocket* socket =
       factory_->CreateAsyncSocket(remote.family(), SOCK_STREAM);
   if (!socket) {
-    ASSERT(false);
     if (err)
       *err = -1;
     return NULL;
@@ -186,7 +185,6 @@ ReuseSocketPool::RequestConnectedStream(const SocketAddress& remote, int* err) {
     AsyncSocket* socket =
         factory_->CreateAsyncSocket(family, SOCK_STREAM);
     if (!socket) {
-      ASSERT(false);
       if (err)
         *err = -1;
       return NULL;

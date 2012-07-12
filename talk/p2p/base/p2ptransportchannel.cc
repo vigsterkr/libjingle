@@ -155,10 +155,11 @@ bool ShouldSwitch(cricket::Connection* a_conn, cricket::Connection* b_conn) {
 
 namespace cricket {
 
-P2PTransportChannel::P2PTransportChannel(int component,
+P2PTransportChannel::P2PTransportChannel(const std::string& content_name,
+                                         int component,
                                          P2PTransport* transport,
                                          PortAllocator *allocator) :
-    TransportChannelImpl(component),
+    TransportChannelImpl(content_name, component),
     transport_(transport),
     allocator_(allocator),
     worker_thread_(talk_base::Thread::Current()),
@@ -436,7 +437,7 @@ void P2PTransportChannel::OnSignalingReady() {
   if (waiting_for_signaling_) {
     waiting_for_signaling_ = false;
     AddAllocatorSession(allocator_->CreateSession(
-        SessionId(), component(), ice_ufrag_, ice_pwd_));
+        SessionId(), content_name(), component(), ice_ufrag_, ice_pwd_));
   }
 }
 

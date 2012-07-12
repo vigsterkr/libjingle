@@ -33,6 +33,9 @@
 
 #include "talk/session/phone/webrtcvideoengine.h"
 
+#include <math.h>
+
+#include "libyuv/scale_argb.h"
 #include "talk/base/basictypes.h"
 #include "talk/base/common.h"
 #include "talk/base/buffer.h"
@@ -1028,7 +1031,8 @@ void WebRtcVideoEngine::ApplyLogging(const std::string& log_filter) {
   int filter = 0;
   switch (log_level_) {
     case talk_base::LS_VERBOSE: filter |= webrtc::kTraceAll;
-    case talk_base::LS_INFO: filter |= webrtc::kTraceStateInfo;
+    case talk_base::LS_INFO: filter |=
+        webrtc::kTraceStateInfo | webrtc::kTraceInfo;
     case talk_base::LS_WARNING: filter |= webrtc::kTraceWarning;
     case talk_base::LS_ERROR: filter |=
         webrtc::kTraceError | webrtc::kTraceCritical;
@@ -1835,28 +1839,33 @@ void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
   if (!send_channel) {
     return;
   }
-  int cropped_height = frame->height;
-  const VideoFormat& video_format = send_channel->video_format();
-  if (video_format != cricket::VideoFormat()) {
-    // Force 16:10 for now. We'll be smarter with the capture refactor.
-    int cropped_height = frame->width * video_format.height
-        / video_format.width;
-    if (cropped_height > frame->height) {
-      // TODO: Once we support horizontal cropping, add
-      // cropped_width.
-      cropped_height = frame->height;
-    }
-  }
 
-  // This CapturedFrame* will already be in I420. In the future, when
-  // WebRtcVideoFrame has support for independent planes, we can just attach
-  // to it and update the pointers when cropping.
   WebRtcVideoFrame i420_frame;
-  if (!i420_frame.Init(frame, frame->width, cropped_height)) {
-    LOG(LS_ERROR) << "Couldn't convert to I420! "
-                  << frame->width << " x " << cropped_height;
+  // kMaxCapturePixels is a practical limit for some codecs and set to the
+  // maximum single screen size as of 6/21/2012.
+  const int kMaxCapturePixels = 2880 * 1800;
+  if (frame->width * frame->height > kMaxCapturePixels &&
+      FOURCC_ARGB == frame->fourcc) {
+    CapturedFrame *scaled_frame = const_cast<CapturedFrame*>(frame);
+    // Compute new width such that width * height is less than maximum.
+    // Round down to even width to avoid later rounding up for subsampling.
+    int scaled_width = static_cast<int>(sqrtf(static_cast<float>(
+        kMaxCapturePixels) * frame->width / frame->height)) & ~3;
+    int scaled_height = kMaxCapturePixels / scaled_width & ~1;
+    libyuv::ARGBScale(reinterpret_cast<const uint8*>(frame->data),
+                      frame->width * 4, frame->width, frame->height,
+                      reinterpret_cast<uint8*>(scaled_frame->data),
+                      scaled_width * 4,
+                      scaled_width, scaled_height,
+                      libyuv::kFilterBilinear);
+    scaled_frame->width = scaled_width;
+    scaled_frame->height = scaled_height;
+  }
+  if (!i420_frame.Init(frame, frame->width, frame->height)) {
+    LOG(LS_ERROR) << "Couldn't convert to I420!";
     return;
   }
+
   SendFrame(send_channel, &i420_frame, true);
 }
 
@@ -2692,6 +2701,9 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
   if (codec.width == 0 && codec.height == 0) {
     LOG(LS_INFO) << "0x0 resolution selected. We will drop all the frames.";
   } else {
+    // Make sure startBitrate is less or equal to maxBitrate;
+    target_codec.startBitrate = talk_base::_min(target_codec.startBitrate,
+                                                target_codec.maxBitrate);
 
     if (0 != engine()->vie()->codec()->SetSendCodec(channel_id, target_codec)) {
       LOG_RTCERR2(SetSendCodec, channel_id, target_codec.plName);
@@ -2812,7 +2824,12 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
     // Set the new codec on vie.
     vie_codec.width = target_width;
     vie_codec.height = target_height;
+    vie_codec.maxFramerate = target_codec.maxFramerate;
+    vie_codec.startBitrate = target_codec.startBitrate;
 
+    // Make sure startBitrate is less or equal to maxBitrate;
+    vie_codec.startBitrate = talk_base::_min(vie_codec.startBitrate,
+                                             vie_codec.maxBitrate);
 
     if (engine()->vie()->codec()->SetSendCodec(channel_id, vie_codec) != 0) {
       LOG_RTCERR1(SetSendCodec, channel_id);

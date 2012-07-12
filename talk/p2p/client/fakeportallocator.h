@@ -22,10 +22,11 @@ class FakePortAllocatorSession : public PortAllocatorSession {
  public:
   FakePortAllocatorSession(talk_base::Thread* worker_thread,
                            talk_base::PacketSocketFactory* factory,
+                           const std::string& content_name,
                            int component,
                            const std::string& ice_ufrag,
                            const std::string& ice_pwd)
-      : PortAllocatorSession(component, ice_ufrag, ice_pwd,
+      : PortAllocatorSession(content_name, component, ice_ufrag, ice_pwd,
                              cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG),
         worker_thread_(worker_thread),
         factory_(factory),
@@ -92,11 +93,12 @@ class FakePortAllocator : public cricket::PortAllocator {
   }
 
   virtual cricket::PortAllocatorSession* CreateSessionInternal(
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd) {
     return new FakePortAllocatorSession(
-        worker_thread_, factory_, component, ice_ufrag, ice_pwd);
+        worker_thread_, factory_, content_name, component, ice_ufrag, ice_pwd);
   }
 
  private:

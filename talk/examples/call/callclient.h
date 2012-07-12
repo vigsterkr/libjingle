@@ -170,6 +170,8 @@ class CallClient: public sigslot::has_slots<> {
 
   void InitMedia();
   void InitPresence();
+  void StartXmppPing();
+  void OnPingTimeout();
   void OnRequestSignaling();
   void OnSessionCreate(cricket::Session* session, bool initiate);
   void OnCallCreate(cricket::Call* call);

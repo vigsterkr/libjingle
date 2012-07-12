@@ -31,11 +31,13 @@
 
 namespace cricket {
 
-PortAllocatorSession::PortAllocatorSession(int component,
+PortAllocatorSession::PortAllocatorSession(const std::string content_name,
+                                           int component,
                                            const std::string& ice_ufrag,
                                            const std::string& ice_pwd,
                                            uint32 flags)
-    : component_(component),
+    : content_name_(content_name),
+      component_(component),
       flags_(flags),
       // If PORTALLOCATOR_ENABLE_SHARED_UFRAG flag is not enabled, ignore the
       // incoming ufrag and pwd, which will cause each Port to generate one
@@ -53,6 +55,7 @@ PortAllocator::~PortAllocator() {
 
 PortAllocatorSession* PortAllocator::CreateSession(
     const std::string& sid,
+    const std::string& content_name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd) {
@@ -60,7 +63,7 @@ PortAllocatorSession* PortAllocator::CreateSession(
     PortAllocatorSessionMuxer* muxer = GetSessionMuxer(sid);
     if (!muxer) {
       PortAllocatorSession* session_impl = CreateSessionInternal(
-        component, ice_ufrag, ice_pwd);
+          content_name, component, ice_ufrag, ice_pwd);
       // Create PortAllocatorSessionMuxer object for |session_impl|.
       muxer = new PortAllocatorSessionMuxer(session_impl);
       muxer->SignalDestroyed.connect(
@@ -69,11 +72,11 @@ PortAllocatorSession* PortAllocator::CreateSession(
       muxers_[sid] = muxer;
     }
     PortAllocatorSessionProxy* proxy =
-        new PortAllocatorSessionProxy(component, flags_);
+        new PortAllocatorSessionProxy(content_name, component, flags_);
     muxer->RegisterSessionProxy(proxy);
     return proxy;
   }
-  return CreateSessionInternal(component, ice_ufrag, ice_pwd);
+  return CreateSessionInternal(content_name, component, ice_ufrag, ice_pwd);
 }
 
 PortAllocatorSessionMuxer* PortAllocator::GetSessionMuxer(

@@ -42,9 +42,10 @@ namespace cricket {
 
 RawTransport::RawTransport(talk_base::Thread* signaling_thread,
                            talk_base::Thread* worker_thread,
+                           const std::string& content_name,
                            PortAllocator* allocator)
     : Transport(signaling_thread, worker_thread,
-                NS_GINGLE_RAW, allocator) {
+                content_name, NS_GINGLE_RAW, allocator) {
 }
 
 RawTransport::~RawTransport() {
@@ -118,7 +119,7 @@ bool RawTransport::ParseRawAddress(const buzz::XmlElement* elem,
 }
 
 TransportChannelImpl* RawTransport::CreateTransportChannel(int component) {
-  return new RawTransportChannel(component, this,
+  return new RawTransportChannel(content_name(), component, this,
                                  worker_thread(),
                                  port_allocator());
 }

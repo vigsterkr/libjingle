@@ -62,6 +62,9 @@ class LateBindingSymbolTable {
   // Loads the DLL and the symbol table. Returns true iff the DLL and symbol
   // table loaded successfully.
   bool Load();
+  // Like load, but allows overriding the dll path for when the dll path is
+  // dynamic.
+  bool LoadFromPath(const char *dll_path);
   void Unload();
 
  private:

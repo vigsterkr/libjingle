@@ -58,6 +58,74 @@ const int kMinRtpHeaderExtensionId = 1;
 const int kMaxRtpHeaderExtensionId = 255;
 const int kScreencastDefaultFps = 5;
 
+// Used in AudioOptions to signify "unset" values.
+template <class T>
+class Settable {
+ public:
+ Settable() : set_(false), val_() {}
+  explicit Settable(T val) : set_(true), val_(val) {}
+
+  bool IsSet() const {
+    return set_;
+  }
+
+  bool Get(T* out) const {
+    *out = val_;
+    return set_;
+  }
+
+  void Set(T val) {
+    set_ = true;
+    val_ = val;
+  }
+
+  void Clear() {
+    set_ = false;
+    val_ = T();
+  }
+
+  bool operator==(const Settable<T>& o) const {
+    return (set_ == o.set_) && (val_ == o.val_);
+  }
+
+ private:
+  bool set_;
+  T val_;
+};
+
+// Options that can be applied to a VoiceMediaChannel or a VoiceMediaEngine.
+// Used to be flags, but that makes it hard to selectively apply options.
+// We are moving all of the setting of options to structs like this,
+// but some things currently still use flags.
+struct AudioOptions {
+  bool operator==(const AudioOptions& o) const {
+    return echo_cancellation == o.echo_cancellation &&
+        auto_gain_control == o.auto_gain_control &&
+        noise_suppression == o.noise_suppression &&
+        highpass_filter == o.highpass_filter &&
+        stereo_swapping == o.stereo_swapping &&
+        typing_detection == o.typing_detection &&
+        conference_mode == o.conference_mode &&
+        adjust_agc_delta == o.adjust_agc_delta;
+  }
+
+  // Audio processing that attempts to filter away the output signal from
+  // later inbound pickup.
+  Settable<bool> echo_cancellation;
+  // Audio processing to adjust the sensitivity of the local mic dynamically.
+  Settable<bool> auto_gain_control;
+  // Audio processing to filter out background noise.
+  Settable<bool> noise_suppression;
+  // Audio processing to remove background noise of lower frequencies.
+  Settable<bool> highpass_filter;
+  // Audio processing to swap the left and right channels.
+  Settable<bool> stereo_swapping;
+  // Audio processing to detect typing.
+  Settable<bool> typing_detection;
+  Settable<bool> conference_mode;
+  Settable<int> adjust_agc_delta;
+};
+
 // A class for playing out soundclips.
 class SoundclipMedia {
  public:
@@ -153,9 +221,6 @@ class MediaChannel : public sigslot::has_slots<> {
       const std::vector<RtpHeaderExtension>& extensions) = 0;
   // Sets the rate control to use when sending data.
   virtual bool SetSendBandwidth(bool autobw, int bps) = 0;
-  // Sets the media options to use.
-  virtual bool SetOptions(int options) = 0;
-  virtual int GetOptions() const = 0;
 
  protected:
   NetworkInterface *network_interface_;
@@ -432,6 +497,9 @@ class VoiceMediaChannel : public MediaChannel {
     ASSERT(error != NULL);
     *error = ERROR_NONE;
   }
+  // Sets the media options to use.
+  virtual bool SetOptions(const AudioOptions& options) = 0;
+  virtual bool GetOptions(AudioOptions* options) const = 0;
 
   // Signal errors from MediaChannel.  Arguments are:
   //     ssrc(uint32), and error(VoiceMediaChannel::Error).
@@ -479,6 +547,9 @@ class VideoMediaChannel : public MediaChannel {
   virtual bool SendIntraFrame() = 0;
   // Reuqest each of the remote senders to send an intra frame.
   virtual bool RequestIntraFrame() = 0;
+  // Sets the media options to use.
+  virtual bool SetOptions(int options) { return false; }
+  virtual int GetOptions() const { return 0; }
 
   // Signals events from the currently active window.
   sigslot::signal2<uint32, Error> SignalMediaError;
@@ -526,8 +597,6 @@ class DataMediaChannel : public MediaChannel {
     timing_ = timing;
   }
 
-  virtual bool SetOptions(int options) { return false; }
-  virtual int GetOptions() const { return 0; }
   virtual bool SetSendBandwidth(bool autobw, int bps);
   virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs);
   virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs);

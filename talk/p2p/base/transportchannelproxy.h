@@ -44,7 +44,8 @@ class TransportChannelImpl;
 // when negotiation completes, connect the proxy to the implementaiton.
 class TransportChannelProxy : public TransportChannel {
  public:
-  TransportChannelProxy(const std::string& name,
+  TransportChannelProxy(const std::string& content_name,
+                        const std::string& name,
                         int component);
   virtual ~TransportChannelProxy();
 

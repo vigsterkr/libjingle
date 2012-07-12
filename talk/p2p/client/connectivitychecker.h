@@ -115,6 +115,7 @@ class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
  public:
   TestHttpPortAllocatorSession(
       HttpPortAllocator* allocator,
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd,
@@ -123,7 +124,7 @@ class TestHttpPortAllocatorSession : public HttpPortAllocatorSession {
       const std::string& relay_token,
       const std::string& user_agent)
       : HttpPortAllocatorSession(
-          allocator, component, ice_ufrag, ice_pwd, stun_hosts,
+          allocator, content_name, component, ice_ufrag, ice_pwd, stun_hosts,
           relay_hosts, relay_token, user_agent) {
   }
   void set_proxy(const talk_base::ProxyInfo& proxy) {

@@ -377,10 +377,14 @@ void PseudoTcpChannel::OnChannelConnectionChanged(TransportChannel* channel,
   Socket* socket =
       worker_thread_->socketserver()->CreateAsyncSocket(family, SOCK_DGRAM);
   talk_base::scoped_ptr<Socket> mtu_socket(socket);
-  if (mtu_socket->Connect(candidate.address()) < 0 ||
-      mtu_socket->EstimateMTU(&mtu) < 0) {
-    LOG_F(LS_WARNING) << "Failed to estimate MTU, error="
-                      << mtu_socket->GetError();
+  if (socket == NULL) {
+    LOG_F(LS_WARNING) << "Couldn't create socket while estimating MTU.";
+  } else {
+    if (mtu_socket->Connect(candidate.address()) < 0 ||
+        mtu_socket->EstimateMTU(&mtu) < 0) {
+      LOG_F(LS_WARNING) << "Failed to estimate MTU, error="
+                        << mtu_socket->GetError();
+    }
   }
 
   LOG_F(LS_VERBOSE) << "Using MTU of " << mtu << " bytes";

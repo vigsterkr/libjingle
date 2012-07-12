@@ -47,9 +47,22 @@ namespace {
 typedef talk_base::TypedMessageData<bool> InitMessageData;
 
 struct CreatePeerConnectionParams : public talk_base::MessageData {
-  CreatePeerConnectionParams(bool use_roap,
-                             const std::string& configuration,
-                             webrtc::PeerConnectionObserver* observer)
+  CreatePeerConnectionParams(
+      const webrtc::JsepInterface::IceServers& configuration,
+      webrtc::JsepInterface::IceOptions options,
+      webrtc::PeerConnectionObserver* observer)
+      : configuration(configuration), options(options), observer(observer) {
+  }
+  scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
+  const webrtc::JsepInterface::IceServers& configuration;
+  webrtc::JsepInterface::IceOptions options;
+  webrtc::PeerConnectionObserver* observer;
+};
+
+struct CreatePeerConnectionParamsDeprecated : public talk_base::MessageData {
+  CreatePeerConnectionParamsDeprecated(bool use_roap,
+                                       const std::string& configuration,
+                                       webrtc::PeerConnectionObserver* observer)
       : use_roap(use_roap), configuration(configuration), observer(observer) {
   }
   bool use_roap;
@@ -60,8 +73,9 @@ struct CreatePeerConnectionParams : public talk_base::MessageData {
 
 enum {
   MSG_INIT_FACTORY = 1,
-  MSG_TERMINATE_FACTORY = 2,
-  MSG_CREATE_PEERCONNECTION = 3,
+  MSG_TERMINATE_FACTORY,
+  MSG_CREATE_PEERCONNECTION,
+  MSG_CREATE_PEERCONNECTION_JSEP00,
 };
 
 }  // namespace
@@ -152,6 +166,14 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
     case MSG_CREATE_PEERCONNECTION: {
       CreatePeerConnectionParams* pdata =
           static_cast<CreatePeerConnectionParams*> (msg->pdata);
+      pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
+                                                     pdata->options,
+                                                     pdata->observer);
+      break;
+    }
+    case MSG_CREATE_PEERCONNECTION_JSEP00: {
+      CreatePeerConnectionParamsDeprecated* pdata =
+          static_cast<CreatePeerConnectionParamsDeprecated*> (msg->pdata);
       pdata->peerconnection = CreatePeerConnection_s(pdata->use_roap,
                                                      pdata->configuration,
                                                      pdata->observer);
@@ -197,7 +219,17 @@ scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const std::string& configuration,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParams params(false, configuration, observer);
+  CreatePeerConnectionParamsDeprecated params(false, configuration, observer);
+  signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
+  return params.peerconnection;
+}
+
+scoped_refptr<PeerConnectionInterface>
+PeerConnectionFactory::CreatePeerConnection(
+    const JsepInterface::IceServers& configuration,
+    JsepInterface::IceOptions options,
+    PeerConnectionObserver* observer) {
+  CreatePeerConnectionParams params(configuration, options, observer);
   signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION, &params);
   return params.peerconnection;
 }
@@ -206,8 +238,8 @@ talk_base::scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreateRoapPeerConnection(
     const std::string& configuration,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParams params(true, configuration, observer);
-  signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION, &params);
+  CreatePeerConnectionParamsDeprecated params(true, configuration, observer);
+  signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
   return params.peerconnection;
 }
 
@@ -219,6 +251,20 @@ PeerConnectionFactory::CreatePeerConnection_s(
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
   if (!pc->Initialize(use_roap, configuration, observer)) {
+    delete pc;
+    pc = NULL;
+  }
+  return pc;
+}
+
+talk_base::scoped_refptr<PeerConnectionInterface>
+PeerConnectionFactory::CreatePeerConnection_s(
+    const JsepInterface::IceServers& configuration,
+    JsepInterface::IceOptions options,
+    PeerConnectionObserver* observer) {
+  talk_base::RefCountedObject<PeerConnection>* pc(
+      new talk_base::RefCountedObject<PeerConnection>(this));
+  if (!pc->Initialize(configuration, options, observer)) {
     delete pc;
     pc = NULL;
   }

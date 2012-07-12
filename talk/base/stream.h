@@ -484,6 +484,8 @@ class AsyncWriteStream : public StreamInterface {
 
   // StreamInterface Interface
   virtual StreamState GetState() const { return state_; }
+  // This is needed by some stream writers, such as RtpDumpWriter.
+  virtual bool GetPosition(size_t* position) const;
   virtual StreamResult Read(void* buffer, size_t buffer_len,
                             size_t* read, int* error);
   virtual StreamResult Write(const void* data, size_t data_len,
@@ -501,7 +503,7 @@ class AsyncWriteStream : public StreamInterface {
   Thread* write_thread_;
   StreamState state_;
   Buffer buffer_;
-  CriticalSection crit_stream_;
+  mutable CriticalSection crit_stream_;
   CriticalSection crit_buffer_;
 
   DISALLOW_EVIL_CONSTRUCTORS(AsyncWriteStream);

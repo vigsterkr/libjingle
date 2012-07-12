@@ -43,8 +43,8 @@ class Candidate;
 // client.
 class TransportChannelImpl : public TransportChannel {
  public:
-  explicit TransportChannelImpl(int component)
-    : TransportChannel(component) {}
+  explicit TransportChannelImpl(const std::string& content_name, int component)
+      : TransportChannel(content_name, component) {}
 
   // Returns the transport that created this channel.
   virtual Transport* GetTransport() = 0;

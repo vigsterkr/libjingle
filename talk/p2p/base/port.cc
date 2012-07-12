@@ -1020,7 +1020,8 @@ std::string Connection::ToString() const {
   const Candidate& local = local_candidate();
   const Candidate& remote = remote_candidate();
   std::stringstream ss;
-  ss << "Conn[" << local.id() << ":" << local.component()
+  ss << "Conn[" << port_->content_name()
+     << ":" << local.id() << ":" << local.component()
      << ":" << local.generation()
      << ":" << local.type() << ":" << local.protocol()
      << ":" << local.address().ToString()

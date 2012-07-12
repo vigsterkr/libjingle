@@ -94,7 +94,7 @@ void StreamInterfaceChannel::OnEvent(talk_base::StreamInterface* stream,
 DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
                                            Transport* transport,
                                            TransportChannelImpl* channel)
-    : TransportChannelImpl(channel->component()),
+    : TransportChannelImpl(channel->content_name(), channel->component()),
       transport_(transport),
       worker_thread_(talk_base::Thread::Current()),
       channel_(channel),

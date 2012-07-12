@@ -80,12 +80,21 @@ enum {
 
 Transport::Transport(talk_base::Thread* signaling_thread,
                      talk_base::Thread* worker_thread,
+                     const std::string& content_name,
                      const std::string& type,
                      PortAllocator* allocator)
   : signaling_thread_(signaling_thread),
-    worker_thread_(worker_thread), type_(type), allocator_(allocator),
-    destroyed_(false), readable_(false), writable_(false),
-    connect_requested_(false), role_(ROLE_UNKNOWN), tiebreaker_(0) {}
+    worker_thread_(worker_thread),
+    content_name_(content_name),
+    type_(type),
+    allocator_(allocator),
+    destroyed_(false),
+    readable_(TRANSPORT_STATE_NONE),
+    writable_(TRANSPORT_STATE_NONE),
+    connect_requested_(false),
+    role_(ROLE_UNKNOWN),
+    tiebreaker_(0) {
+}
 
 Transport::~Transport() {
   ASSERT(signaling_thread_->IsCurrent());
@@ -362,7 +371,7 @@ void Transport::OnChannelReadableState(TransportChannel* channel) {
 
 void Transport::OnChannelReadableState_s() {
   ASSERT(signaling_thread()->IsCurrent());
-  bool readable = GetTransportState_s(true);
+  TransportState readable = GetTransportState_s(true);
   if (readable_ != readable) {
     readable_ = readable;
     SignalReadableState(this);
@@ -376,25 +385,33 @@ void Transport::OnChannelWritableState(TransportChannel* channel) {
 
 void Transport::OnChannelWritableState_s() {
   ASSERT(signaling_thread()->IsCurrent());
-  bool writable = GetTransportState_s(false);
+  TransportState writable = GetTransportState_s(false);
   if (writable_ != writable) {
     writable_ = writable;
     SignalWritableState(this);
   }
 }
 
-bool Transport::GetTransportState_s(bool read) {
+TransportState Transport::GetTransportState_s(bool read) {
   ASSERT(signaling_thread()->IsCurrent());
-  bool result = false;
   talk_base::CritScope cs(&crit_);
+  bool any = false;
+  bool all = !channels_.empty();
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end();
        ++iter) {
     bool b = (read ? iter->second.get()->readable() :
       iter->second.get()->writable());
-    result = result || b;
+    any = any || b;
+    all = all && b;
   }
-  return result;
+  if (all) {
+    return TRANSPORT_STATE_ALL;
+  } else if (any) {
+    return TRANSPORT_STATE_SOME;
+  } else {
+    return TRANSPORT_STATE_NONE;
+  }
 }
 
 void Transport::OnChannelRequestSignaling(TransportChannelImpl* channel) {

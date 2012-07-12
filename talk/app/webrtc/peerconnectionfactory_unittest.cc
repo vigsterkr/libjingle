@@ -36,6 +36,9 @@
 
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 
+static const char kStunIceServer[] = "stun:stun.l.google.com:19302";
+static const char kTurnIceServer[] = "turn:test.com:1234";
+
 namespace webrtc {
 
 class NullPeerConnectionObserver : public PeerConnectionObserver {
@@ -46,6 +49,8 @@ class NullPeerConnectionObserver : public PeerConnectionObserver {
   virtual void OnStateChange(StateType state_changed) {}
   virtual void OnAddStream(MediaStreamInterface* stream) {}
   virtual void OnRemoveStream(MediaStreamInterface* stream) {}
+  virtual void OnRenegotiationNeeded() {}
+  virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {}
   virtual void OnIceComplete() {}
 };
@@ -58,6 +63,26 @@ TEST(PeerConnectionFactory, CreatePCUsingInternalModules) {
   NullPeerConnectionObserver observer;
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
       factory->CreatePeerConnection(kStunConfiguration, &observer));
+
+  EXPECT_TRUE(pc.get() != NULL);
+}
+
+TEST(PeerConnectionFactory, CreatePCUsingIceServers) {
+  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
+      CreatePeerConnectionFactory());
+  ASSERT_TRUE(factory.get() != NULL);
+
+  NullPeerConnectionObserver observer;
+  webrtc::JsepInterface::IceServers ice_servers;
+  webrtc::JsepInterface::IceServer ice_server;
+  ice_server.uri = kStunIceServer;
+  ice_servers.push_back(ice_server);
+  ice_server.uri = kTurnIceServer;
+  ice_servers.push_back(ice_server);
+  talk_base::scoped_refptr<PeerConnectionInterface> pc(
+      factory->CreatePeerConnection(ice_servers,
+                                    webrtc::JsepInterface::kUseAll,
+                                    &observer));
 
   EXPECT_TRUE(pc.get() != NULL);
 }

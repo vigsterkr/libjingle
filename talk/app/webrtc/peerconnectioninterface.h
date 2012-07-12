@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -49,7 +49,7 @@
 // SetLocalSessionDescription with the offer and SetRemoteSessionDescription
 // with the remote answer.
 // 8. Once a remote candidate is received from the remote peer, provide it to
-// the peerconnection by calling AddCandidate.
+// the peerconnection by calling AddIceCandidate.
 
 
 // The Receiver of a call can decide to accept or reject the call.
@@ -63,7 +63,7 @@
 // 4. Generate an answer to the remote offer by calling CreateAnswer.
 // 5. Provide the remote offer to the new PeerConnection object by calling
 // SetRemoteSessionDescription.
-// 6. Provide the remote ice candidates by calling AddCandidate.
+// 6. Provide the remote ice candidates by calling AddIceCandidate.
 // 7. Provide the local answer to the new PeerConnection by calling
 // SetLocalSessionDescription with the new answer.
 // 8. Start generating Ice candidates by calling StartIce. Once a candidate have
@@ -114,10 +114,11 @@ class PeerConnectionObserver : public IceCandidateObserver {
 
   virtual void OnError() = 0;
 
-  virtual void OnMessage(const std::string& msg) = 0;
+  virtual void OnMessage(const std::string& msg) {}  // Deprecated (jsep00)
 
   // Serialized signaling message
-  virtual void OnSignalingMessage(const std::string& msg) = 0;
+  // Deprecated (jsep00)
+  virtual void OnSignalingMessage(const std::string& msg) {}
 
   // Triggered when ReadyState, SdpState or IceState have changed.
   virtual void OnStateChange(StateType state_changed) = 0;
@@ -127,6 +128,9 @@ class PeerConnectionObserver : public IceCandidateObserver {
 
   // Triggered when a remote peer close a stream.
   virtual void OnRemoveStream(MediaStreamInterface* stream) = 0;
+
+  // Triggered when renegotation is needed, for example the ICE has restarted.
+  virtual void OnRenegotiationNeeded() {}
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
@@ -139,7 +143,8 @@ class PeerConnectionInterface : public JsepInterface,
  public:
   enum ReadyState {
     kNew,
-    kNegotiating,
+    kNegotiating,  // Deprecated (jsep00) - use kOpening instead
+    kOpening,
     kActive,
     kClosing,
     kClosed,
@@ -151,11 +156,23 @@ class PeerConnectionInterface : public JsepInterface,
     kSdpWaiting,
   };
 
+  enum IceState {
+    kIceNew,
+    kIceGathering,
+    kIceWaiting,
+    kIceChecking,
+    kIceConnected,
+    kIceCompleted,
+    kIceFailed,
+    kIceClosed,
+  };
+
   // Process a signaling message using the ROAP protocol.
+  // Deprecated (jsep00)
   virtual void ProcessSignalingMessage(const std::string& msg) = 0;
 
   // Sends the msg over a data stream.
-  virtual bool Send(const std::string& msg) = 0;
+  virtual bool Send(const std::string& msg) = 0;  // Deprecated (jsep00)
 
   // Accessor methods to active local streams.
   virtual talk_base::scoped_refptr<StreamCollectionInterface>
@@ -181,18 +198,21 @@ class PeerConnectionInterface : public JsepInterface,
 
   // Commit Stream changes. This will start sending media on new streams
   // and stop sending media on removed streams.
-  virtual void CommitStreamChanges() = 0;
+  virtual void CommitStreamChanges() = 0;  // Deprecated (jsep00)
 
   // Close the current session. This will trigger a Shutdown message
   // being sent and the readiness state change to Closing.
   // After calling this function no changes can be made to the sending streams.
-  virtual void Close() = 0;
+  virtual void Close() = 0;  // Deprecated (jsep00)
 
   // Returns the current ReadyState.
   virtual ReadyState ready_state() = 0;
 
   // Returns the current SdpState.
-  virtual SdpState sdp_state() = 0;
+  virtual SdpState sdp_state() = 0;  // Deprecated (jsep00)
+
+  // Returns the current IceState.
+  virtual IceState ice_state() = 0;
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
@@ -247,9 +267,15 @@ class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
 // PortAllocatorFactoryInterface as input.
 class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
  public:
+  // Deprecated (jsep00)
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const std::string& config,
                            PeerConnectionObserver* observer) = 0;
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const JsepInterface::IceServers& configuration,
+                           JsepInterface::IceOptions options,
+                           PeerConnectionObserver* observer) = 0;
+  // Deprecated (jsep00)
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreateRoapPeerConnection(const std::string& config,
                                PeerConnectionObserver* observer) = 0;

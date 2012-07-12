@@ -116,9 +116,6 @@ class BaseChannel
   void StartConnectionMonitor(int cms);
   void StopConnectionMonitor();
 
-  // Configuration and setting.
-  void SetChannelOptions(int options);
-
   void set_srtp_signal_silent_time(uint32 silent_time) {
     srtp_filter_.set_signal_silent_time(silent_time);
   }
@@ -258,9 +255,6 @@ class BaseChannel
   // Set the DTLS-SRTP cipher policy on this channel as appropriate.
   bool SetDtlsSrtpCiphers(TransportChannel *tc, bool rtcp);
 
-  // Configuration and setting.
-  void SetChannelOptions_w(int options);
-
   virtual void ChangeState() = 0;
 
   // Gets the content appropriate to the channel (audio or video).
@@ -380,6 +374,9 @@ class VoiceChannel : public BaseChannel {
   sigslot::signal3<VoiceChannel*, uint32, VoiceMediaChannel::Error>
       SignalMediaError;
 
+  // Configuration and setting.
+  bool SetChannelOptions(const AudioOptions& options);
+
  private:
   // overrides from BaseChannel
   virtual void OnChannelRead(TransportChannel* channel,
@@ -407,7 +404,8 @@ class VoiceChannel : public BaseChannel {
   void OnVoiceChannelError(uint32 ssrc, VoiceMediaChannel::Error error);
   void SendLastMediaError();
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
-
+  // Configuration and setting.
+  bool SetChannelOptions_w(const AudioOptions& options);
 
   static const int kEarlyMediaTimeout = 1000;
   bool received_media_;
@@ -459,6 +457,9 @@ class VideoChannel : public BaseChannel {
   void SetScreenCaptureFactory(
       ScreenCapturerFactory* screencapture_factory);
 
+  // Configuration and setting.
+  void SetChannelOptions(int options);
+
  protected:
   // downcasts a MediaChannel
   virtual VideoMediaChannel* media_channel() const {
@@ -509,6 +510,8 @@ class VideoChannel : public BaseChannel {
 
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
+  // Configuration and setting.
+  void SetChannelOptions_w(int options);
 
   VoiceChannel* voice_channel_;
   VideoRenderer* renderer_;

@@ -150,6 +150,8 @@ class RoapSignaling : public IceCandidateObserver {
   void SendShutDown();
 
   // Implements IceCandidateObserver interface.
+  virtual void OnIceChange() {}
+
   // OnIceComplete is called when all local candidates have been collected.
   // This tell RoapSignaling that it is ready to respond to offers
   // or create offer messages.

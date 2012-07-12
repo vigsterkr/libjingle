@@ -93,6 +93,11 @@ bool LateBindingSymbolTable::IsLoaded() const {
 }
 
 bool LateBindingSymbolTable::Load() {
+  ASSERT(info_->dll_name != NULL);
+  return LoadFromPath(info_->dll_name);
+}
+
+bool LateBindingSymbolTable::LoadFromPath(const char *dll_path) {
   if (IsLoaded()) {
     return true;
   }
@@ -104,13 +109,13 @@ bool LateBindingSymbolTable::Load() {
   }
 
 #ifdef LINUX
-  handle_ = dlopen(info_->dll_name, RTLD_NOW);
+  handle_ = dlopen(dll_path, RTLD_NOW);
 #else
 #error Not implemented
 #endif
 
   if (handle_ == kInvalidDllHandle) {
-    LOG(LS_WARNING) << "Can't load " << info_->dll_name << ": "
+    LOG(LS_WARNING) << "Can't load " << dll_path << ": "
                     << GetDllError();
     return false;
   }

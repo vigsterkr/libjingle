@@ -84,6 +84,8 @@ enum {
 // Value specified in RFC 5764.
 static const char kDtlsSrtpExporterLabel[] = "EXTRACTOR-dtls_srtp";
 
+static const int kAgcMinus10db = -10;
+
 // TODO: use the device manager for creation of screen capturers when
 // the cl enabling it has landed.
 class NullScreenCapturerFactory : public VideoChannel::ScreenCapturerFactory {
@@ -253,8 +255,17 @@ struct StreamMessageData : public talk_base::MessageData {
   bool result;
 };
 
-struct ChannelOptionsMessageData : public talk_base::MessageData {
-  explicit ChannelOptionsMessageData(int in_options) : options(in_options) {}
+struct AudioOptionsMessageData : public talk_base::MessageData {
+  explicit AudioOptionsMessageData(const AudioOptions& options)
+      : options(options),
+        result(false) {
+  }
+  AudioOptions options;
+  bool result;
+};
+
+struct VideoOptionsMessageData : public talk_base::MessageData {
+  explicit VideoOptionsMessageData(int options) : options(options) {}
   int options;
 };
 
@@ -750,11 +761,6 @@ void BaseChannel::OnSessionState(BaseSession* session,
   }
 }
 
-void BaseChannel::SetChannelOptions(int options) {
-  ChannelOptionsMessageData data(options);
-  Send(MSG_SETCHANNELOPTIONS, &data);
-}
-
 void BaseChannel::EnableMedia_w() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   if (enabled_)
@@ -802,6 +808,7 @@ void BaseChannel::ChannelWritable_w() {
   if (writable_)
     return;
   LOG(LS_INFO) << "Channel socket writable ("
+               << transport_channel_->content_name() << ", "
                << transport_channel_->component() << ")"
                << (was_ever_writable_ ? "" : " for the first time");
   // If we're doing DTLS-SRTP, now is the time.
@@ -930,6 +937,7 @@ void BaseChannel::ChannelNotWritable_w() {
     return;
 
   LOG(LS_INFO) << "Channel socket not writable ("
+               << transport_channel_->content_name() << ", "
                << transport_channel_->component() << ")";
   writable_ = false;
   ChangeState();
@@ -1013,10 +1021,6 @@ bool BaseChannel::SetRtcpMux_w(bool enable, ContentAction action,
   }
 
   return ret;
-}
-
-void BaseChannel::SetChannelOptions_w(int options) {
-  media_channel()->SetOptions(options);
 }
 
 bool BaseChannel::AddRecvStream_w(const StreamParams& sp) {
@@ -1508,20 +1512,20 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   if (action != CA_UPDATE) {
     // Tweak our audio processing settings, if needed.
-    int audio_options = media_channel()->GetOptions();
-    if (audio->conference_mode()) {
-      audio_options |= OPT_CONFERENCE;
+    AudioOptions audio_options;
+    if (!media_channel()->GetOptions(&audio_options)) {
+      LOG(LS_WARNING) << "Can not set audio options from on remote content.";
     } else {
-      audio_options &= (~OPT_CONFERENCE);
-    }
-    if (audio->agc_minus_10db()) {
-      audio_options |= OPT_AGC_MINUS_10DB;
-    } else {
-      audio_options &= (~OPT_AGC_MINUS_10DB);
-    }
-    if (!media_channel()->SetOptions(audio_options)) {
-      // Log an error on failure, but don't abort the call.
-      LOG(LS_ERROR) << "Failed to set voice channel options";
+      if (audio->conference_mode()) {
+	audio_options.conference_mode.Set(true);
+      }
+      if (audio->agc_minus_10db()) {
+	audio_options.adjust_agc_delta.Set(kAgcMinus10db);
+      }
+      if (!media_channel()->SetOptions(audio_options)) {
+	// Log an error on failure, but don't abort the call.
+	LOG(LS_ERROR) << "Failed to set voice channel options";
+      }
     }
   }
 
@@ -1569,6 +1573,16 @@ bool VoiceChannel::SetOutputScaling_w(uint32 ssrc, double left, double right) {
   return media_channel()->SetOutputScaling(ssrc, left, right);
 }
 
+bool VoiceChannel::SetChannelOptions(const AudioOptions& options) {
+  AudioOptionsMessageData data(options);
+  Send(MSG_SETCHANNELOPTIONS, &data);
+  return data.result;
+}
+
+bool VoiceChannel::SetChannelOptions_w(const AudioOptions& options) {
+  return media_channel()->SetOptions(options);
+}
+
 void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
     case MSG_SETRINGBACKTONE: {
@@ -1602,6 +1616,12 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
           static_cast<VoiceChannelErrorMessageData*>(pmsg->pdata);
       SignalMediaError(this, data->ssrc, data->error);
       delete data;
+      break;
+    }
+    case MSG_SETCHANNELOPTIONS: {
+      AudioOptionsMessageData* data =
+          static_cast<AudioOptionsMessageData*>(pmsg->pdata);
+      data->result = SetChannelOptions_w(data->options);
       break;
     }
     default:
@@ -1996,6 +2016,15 @@ void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
   SignalScreencastWindowEvent(ssrc, we);
 }
 
+void VideoChannel::SetChannelOptions(int options) {
+  VideoOptionsMessageData data(options);
+  Send(MSG_SETCHANNELOPTIONS, &data);
+}
+
+void VideoChannel::SetChannelOptions_w(int options) {
+  media_channel()->SetOptions(options);
+}
+
 void VideoChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
     case MSG_SETRENDERER: {
@@ -2050,8 +2079,8 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       break;
     }
     case MSG_SETCHANNELOPTIONS: {
-      const ChannelOptionsMessageData* data =
-          static_cast<ChannelOptionsMessageData*>(pmsg->pdata);
+      const VideoOptionsMessageData* data =
+         static_cast<VideoOptionsMessageData*>(pmsg->pdata);
       SetChannelOptions_w(data->options);
       break;
     }

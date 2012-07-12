@@ -65,8 +65,8 @@ uint32 CanonicalFourCC(uint32 fourcc) {
 // The C++ standard requires a namespace-scope definition of static const
 // integral types even when they are initialized in the declaration (see
 // [class.static.data]/4), but MSVC with /Ze is non-conforming and treats that
-// as a multiply defined symbol error (see
-// http://msdn.microsoft.com/en-us/library/34h23df8.aspx).
+// as a multiply defined symbol error. See Also:
+// http://msdn.microsoft.com/en-us/library/34h23df8.aspx
 #ifndef _MSC_EXTENSIONS
 const int64 VideoFormat::kMinimumInterval;  // Initialized in header.
 #endif
@@ -75,7 +75,7 @@ std::string VideoFormat::ToString() const {
   std::string fourcc_name = GetFourccName(fourcc) + " ";
   for (std::string::const_iterator i = fourcc_name.begin();
       i < fourcc_name.end(); ++i) {
-    // Test character is printable; Avoid isprint() which asserts on negatives
+    // Test character is printable; Avoid isprint() which asserts on negatives.
     if (*i < 32 || *i >= 127) {
       fourcc_name = "";
       break;

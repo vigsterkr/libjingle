@@ -43,6 +43,13 @@ namespace talk_base {
 
 class WindowPickerFactory {
  public:
+  virtual ~WindowPickerFactory() {}
+
+  // Instance method for dependency injection.
+  virtual WindowPicker* Create() {
+    return CreateWindowPicker();
+  }
+
   static WindowPicker* CreateWindowPicker() {
 #if defined(WIN32)
     return new Win32WindowPicker();

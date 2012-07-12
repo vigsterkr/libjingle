@@ -287,7 +287,8 @@ HttpClient::HttpClient(const std::string& agent, StreamPool* pool,
       transaction_(transaction), free_transaction_(false),
       retries_(kDefaultRetries), attempt_(0), redirects_(0),
       redirect_action_(REDIRECT_DEFAULT),
-      uri_form_(URI_DEFAULT), cache_(NULL), cache_state_(CS_READY) {
+      uri_form_(URI_DEFAULT), cache_(NULL), cache_state_(CS_READY),
+      resolver_(NULL) {
   base_.notify(this);
   if (NULL == transaction_) {
     free_transaction_ = true;
@@ -298,6 +299,9 @@ HttpClient::HttpClient(const std::string& agent, StreamPool* pool,
 HttpClient::~HttpClient() {
   base_.notify(NULL);
   base_.abort(HE_SHUTDOWN);
+  if (resolver_) {
+    resolver_->Destroy(false);
+  }
   release();
   if (free_transaction_)
     delete transaction_;
@@ -310,6 +314,30 @@ void HttpClient::reset() {
   context_.reset();
   redirects_ = 0;
   base_.abort(HE_OPERATION_CANCELLED);
+}
+
+void HttpClient::OnResolveResult(SignalThread* thread) {
+  if (thread != resolver_) {
+    return;
+  }
+  int error = resolver_->error();
+  server_ = resolver_->address();
+  resolver_->Destroy(false);
+  resolver_ = NULL;
+  if (error != 0) {
+    LOG(LS_ERROR) << "Error " << error << " resolving name: "
+                  << server_;
+    onHttpComplete(HM_CONNECT, HE_CONNECT_FAILED);
+  } else {
+    connect();
+  }
+}
+
+void HttpClient::StartDNSLookup() {
+  resolver_ = new AsyncResolver();
+  resolver_->set_address(server_);
+  resolver_->SignalWorkDone.connect(this, &HttpClient::OnResolveResult);
+  resolver_->Start();
 }
 
 void HttpClient::set_server(const SocketAddress& address) {
@@ -386,6 +414,10 @@ void HttpClient::start() {
 
 void HttpClient::connect() {
   int stream_err;
+  if (server_.IsUnresolvedIP()) {
+    StartDNSLookup();
+    return;
+  }
   StreamInterface* stream = pool_->RequestConnectedStream(server_, &stream_err);
   if (stream == NULL) {
     ASSERT(0 != stream_err);

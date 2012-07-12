@@ -48,11 +48,19 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   JsepSessionDescription();
   virtual ~JsepSessionDescription();
 
-  // Takes ownership of |description|.
+  // TODO: Remove below 2 methods when they are no longer used - when
+  // the deprecated methods in JsepInterface are removed.
   bool Initialize(cricket::SessionDescription* description,
       const std::string& session_id,
       const std::string& session_version);
   bool Initialize(const std::string& sdp);
+
+  // Takes ownership of |description|.
+  bool Initialize(cricket::SessionDescription* description,
+      const std::string& session_id,
+      const std::string& session_version,
+      SdpType type);
+  bool Initialize(const std::string& sdp, SdpType type);
 
   virtual const cricket::SessionDescription* description() const {
     return description_.get();
@@ -62,6 +70,9 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   }
   virtual std::string session_version() const {
     return session_version_;
+  }
+  virtual SdpType type() const {
+    return type_;
   }
   virtual bool AddCandidate(const IceCandidateInterface* candidate);
   virtual size_t number_of_mediasections() const;
@@ -73,6 +84,7 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
   std::string session_id_;
   std::string session_version_;
+  SdpType type_;
   std::vector<JsepCandidateCollection> candidate_collection_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);

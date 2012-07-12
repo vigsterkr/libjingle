@@ -51,8 +51,7 @@ template<class Base>
 class RtpHelper : public Base {
  public:
   RtpHelper()
-      : options_(0),
-        sending_(false),
+      : sending_(false),
         playout_(false),
         fail_set_send_codecs_(false),
         fail_set_recv_codecs_(false),
@@ -68,7 +67,6 @@ class RtpHelper : public Base {
   bool playout() const { return playout_; }
   const std::list<std::string>& rtp_packets() const { return rtp_packets_; }
   const std::list<std::string>& rtcp_packets() const { return rtcp_packets_; }
-  int options() const { return options_; }
 
   bool SendRtp(const void* data, int len) {
     if (!sending_ || !Base::network_interface_) {
@@ -108,13 +106,6 @@ class RtpHelper : public Base {
   }
   bool CheckNoRtcp() {
     return rtcp_packets_.empty();
-  }
-  virtual bool SetOptions(int options) {
-    options_ = options;
-    return true;
-  }
-  virtual int GetOptions() const {
-    return options_;
   }
   virtual bool SetRecvRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) {
@@ -202,7 +193,6 @@ class RtpHelper : public Base {
   }
 
  private:
-  int options_;
   bool sending_;
   bool playout_;
   std::vector<RtpHeaderExtension> recv_extensions_;
@@ -227,7 +217,8 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
         ringback_tone_ssrc_(0),
         ringback_tone_play_(false),
         ringback_tone_loop_(false),
-        time_since_last_typing_(-1) {
+        time_since_last_typing_(-1),
+        options_() {
     output_scalings_[0] = OutputScaling();  // For default channel.
   }
   ~FakeVoiceMediaChannel();
@@ -236,6 +227,7 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   const std::vector<AudioCodec>& codecs() const { return send_codecs(); }
   bool muted() const { return muted_; }
   const std::vector<DtmfEvent>& dtmf_queue() const { return dtmf_queue_; }
+  const AudioOptions& options() const { return options_; }
 
   uint32 ringback_tone_ssrc() const { return ringback_tone_ssrc_; }
   bool ringback_tone_play() const { return ringback_tone_play_; }
@@ -344,6 +336,15 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
     VoiceMediaChannel::SignalMediaError(ssrc, error);
   }
 
+  virtual bool SetOptions(const AudioOptions& options) {
+    options_ = options;
+    return true;
+  }
+  virtual bool GetOptions(AudioOptions* options) const {
+    *options = options_;
+    return true;
+  }
+
  private:
   struct OutputScaling {
     OutputScaling() : left(1.0), right(1.0) {}
@@ -361,6 +362,7 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   bool ringback_tone_play_;
   bool ringback_tone_loop_;
   int time_since_last_typing_;
+  AudioOptions options_;
 };
 
 class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
@@ -369,7 +371,8 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
       : engine_(engine),
         muted_(false),
         sent_intra_frame_(false),
-        requested_intra_frame_(false) {
+        requested_intra_frame_(false),
+        options_(0)  {
   }
   ~FakeVideoMediaChannel();
 
@@ -378,6 +381,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   const std::vector<VideoCodec>& codecs() const { return send_codecs(); }
   bool muted() const { return muted_; }
   bool rendering() const { return playout(); }
+  int options() const { return options_; }
   const std::map<uint32, VideoRenderer*>& renderers() const {
     return renderers_;
   }
@@ -476,6 +480,13 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     requested_intra_frame_ = true;
     return true;
   }
+  virtual bool SetOptions(int options) {
+    options_ = options;
+    return true;
+  }
+  virtual int GetOptions() const {
+    return options_;
+  }
   void set_sent_intra_frame(bool v) { sent_intra_frame_ = v; }
   bool sent_intra_frame() const { return sent_intra_frame_; }
   void set_requested_intra_frame(bool v) { requested_intra_frame_ = v; }
@@ -501,6 +512,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   bool muted_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
+  int options_;
 };
 
 class FakeSoundclipMedia : public SoundclipMedia {

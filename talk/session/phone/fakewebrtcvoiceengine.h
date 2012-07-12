@@ -101,9 +101,17 @@ class FakeWebRtcVoiceEngine
         codecs_(codecs),
         num_codecs_(num_codecs),
         ec_enabled_(false),
+        ec_metrics_enabled_(false),
+        cng_enabled_(false),
         ns_enabled_(false),
+        agc_enabled_(false),
+        highpass_filter_enabled_(false),
+        stereo_swapping_enabled_(false),
+        typing_detection_enabled_(false),
         ec_mode_(webrtc::kEcDefault),
+        aecm_mode_(webrtc::kAecmSpeakerphone),
         ns_mode_(webrtc::kNsDefault),
+        agc_mode_(webrtc::kAgcDefault),
         observer_(NULL),
         playout_fail_channel_(-1),
         send_fail_channel_(-1),
@@ -120,6 +128,7 @@ class FakeWebRtcVoiceEngine
       delete i->second;
     }
   }
+
   bool IsExternalMediaProcessorRegistered() const {
     return media_processor_ != NULL;
   }
@@ -727,8 +736,17 @@ class FakeWebRtcVoiceEngine
     mode = ns_mode_;
     return 0;
   }
-  WEBRTC_STUB(SetAgcStatus, (bool enable, webrtc::AgcModes mode));
-  WEBRTC_STUB(GetAgcStatus, (bool& enabled, webrtc::AgcModes& mode));
+
+  WEBRTC_FUNC(SetAgcStatus, (bool enable, webrtc::AgcModes mode)) {
+    agc_enabled_ = enable;
+    agc_mode_ = mode;
+    return 0;
+  }
+  WEBRTC_FUNC(GetAgcStatus, (bool& enabled, webrtc::AgcModes& mode)) {
+    enabled = agc_enabled_;
+    mode = agc_mode_;
+    return 0;
+  }
 
   WEBRTC_FUNC(SetAgcConfig, (const webrtc::AgcConfig config)) {
     agc_config_ = config;
@@ -750,8 +768,16 @@ class FakeWebRtcVoiceEngine
   }
   virtual void SetDelayOffsetMs(int offset) {}
   WEBRTC_STUB(DelayOffsetMs, ());
-  WEBRTC_STUB(SetAecmMode, (webrtc::AecmModes mode, bool enableCNG));
-  WEBRTC_STUB(GetAecmMode, (webrtc::AecmModes& mode, bool& enabledCNG));
+  WEBRTC_FUNC(SetAecmMode, (webrtc::AecmModes mode, bool enableCNG)) {
+    aecm_mode_ = mode;
+    cng_enabled_ = enableCNG;
+    return 0;
+  }
+  WEBRTC_FUNC(GetAecmMode, (webrtc::AecmModes& mode, bool& enabledCNG)) {
+    mode = aecm_mode_;
+    enabledCNG = cng_enabled_;
+    return 0;
+  }
   WEBRTC_STUB(SetRxNsStatus, (int channel, bool enable, webrtc::NsModes mode));
   WEBRTC_STUB(GetRxNsStatus, (int channel, bool& enabled,
                               webrtc::NsModes& mode));
@@ -765,26 +791,48 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(RegisterRxVadObserver, (int, webrtc::VoERxVadCallback&));
   WEBRTC_STUB(DeRegisterRxVadObserver, (int channel));
   WEBRTC_STUB(VoiceActivityIndicator, (int channel));
-  WEBRTC_STUB(SetEcMetricsStatus, (bool enable));
-  WEBRTC_STUB(GetEcMetricsStatus, (bool& enable));
+  WEBRTC_FUNC(SetEcMetricsStatus, (bool enable)) {
+    ec_metrics_enabled_ = enable;
+    return 0;
+  }
+  WEBRTC_FUNC(GetEcMetricsStatus, (bool& enabled)) {
+    enabled = ec_metrics_enabled_;
+    return 0;
+  }
   WEBRTC_STUB(GetEchoMetrics, (int& ERL, int& ERLE, int& RERL, int& A_NLP));
   WEBRTC_STUB(GetEcDelayMetrics, (int& delay_median, int& delay_std));
 
   WEBRTC_STUB(StartDebugRecording, (const char* fileNameUTF8));
   WEBRTC_STUB(StopDebugRecording, ());
 
-  WEBRTC_STUB(SetTypingDetectionStatus, (bool enable));
-  WEBRTC_STUB(GetTypingDetectionStatus, (bool& enabled));
+  WEBRTC_FUNC(SetTypingDetectionStatus, (bool enable)) {
+    typing_detection_enabled_ = enable;
+    return 0;
+  }
+  WEBRTC_FUNC(GetTypingDetectionStatus, (bool& enabled)) {
+    enabled = typing_detection_enabled_;
+    return 0;
+  }
+
   WEBRTC_STUB(TimeSinceLastTyping, (int& seconds));
   WEBRTC_STUB(SetTypingDetectionParameters, (int timeWindow,
                                              int costPerTyping,
                                              int reportingThreshold,
                                              int penaltyDecay,
                                              int typeEventDelay));
-  WEBRTC_STUB(EnableHighPassFilter, (bool enable));
-  bool IsHighPassFilterEnabled() { return false; }
-  bool IsStereoChannelSwappingEnabled() { return false; }
-  void EnableStereoChannelSwapping(bool enable) { return; }
+  int EnableHighPassFilter(bool enable) {
+    highpass_filter_enabled_ = enable;
+    return 0;
+  }
+  bool IsHighPassFilterEnabled() {
+    return highpass_filter_enabled_;
+  }
+  bool IsStereoChannelSwappingEnabled() {
+    return stereo_swapping_enabled_;
+  }
+  void EnableStereoChannelSwapping(bool enable) {
+    stereo_swapping_enabled_ = enable;
+  }
   // webrtc::VoEExternalMedia
   WEBRTC_FUNC(RegisterExternalMediaProcessing,
               (int channel, webrtc::ProcessingTypes type,
@@ -859,9 +907,17 @@ class FakeWebRtcVoiceEngine
   const cricket::AudioCodec* const* codecs_;
   int num_codecs_;
   bool ec_enabled_;
+  bool ec_metrics_enabled_;
+  bool cng_enabled_;
   bool ns_enabled_;
+  bool agc_enabled_;
+  bool highpass_filter_enabled_;
+  bool stereo_swapping_enabled_;
+  bool typing_detection_enabled_;
   webrtc::EcModes ec_mode_;
+  webrtc::AecmModes aecm_mode_;
   webrtc::NsModes ns_mode_;
+  webrtc::AgcModes agc_mode_;
   webrtc::AgcConfig agc_config_;
   webrtc::VoiceEngineObserver* observer_;
   int playout_fail_channel_;

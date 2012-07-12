@@ -38,6 +38,7 @@ class P2PTransport : public Transport {
  public:
   P2PTransport(talk_base::Thread* signaling_thread,
                talk_base::Thread* worker_thread,
+               const std::string& content_name,
                PortAllocator* allocator);
   virtual ~P2PTransport();
 

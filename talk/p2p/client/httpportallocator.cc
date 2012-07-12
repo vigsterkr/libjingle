@@ -123,6 +123,7 @@ HttpPortAllocatorBase::~HttpPortAllocatorBase() {
 
 HttpPortAllocatorSessionBase::HttpPortAllocatorSessionBase(
     HttpPortAllocatorBase* allocator,
+    const std::string& content_name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd,
@@ -130,7 +131,7 @@ HttpPortAllocatorSessionBase::HttpPortAllocatorSessionBase(
     const std::vector<std::string>& relay_hosts,
     const std::string& relay_token,
     const std::string& user_agent)
-    : BasicPortAllocatorSession(allocator, component,
+    : BasicPortAllocatorSession(allocator, content_name, component,
                                 ice_ufrag, ice_pwd),
       relay_hosts_(relay_hosts), stun_hosts_(stun_hosts),
       relay_token_(relay_token), agent_(user_agent), attempts_(0) {
@@ -244,9 +245,10 @@ HttpPortAllocator::HttpPortAllocator(
 HttpPortAllocator::~HttpPortAllocator() {}
 
 PortAllocatorSession* HttpPortAllocator::CreateSessionInternal(
+    const std::string& content_name,
     int component,
     const std::string& ice_ufrag, const std::string& ice_pwd) {
-  return new HttpPortAllocatorSession(this, component,
+  return new HttpPortAllocatorSession(this, content_name, component,
                                       ice_ufrag, ice_pwd, stun_hosts(),
                                       relay_hosts(), relay_token(),
                                       user_agent());
@@ -256,6 +258,7 @@ PortAllocatorSession* HttpPortAllocator::CreateSessionInternal(
 
 HttpPortAllocatorSession::HttpPortAllocatorSession(
     HttpPortAllocator* allocator,
+    const std::string& content_name,
     int component,
     const std::string& ice_ufrag,
     const std::string& ice_pwd,
@@ -263,7 +266,7 @@ HttpPortAllocatorSession::HttpPortAllocatorSession(
     const std::vector<std::string>& relay_hosts,
     const std::string& relay,
     const std::string& agent)
-    : HttpPortAllocatorSessionBase(allocator, component,
+    : HttpPortAllocatorSessionBase(allocator, content_name, component,
                                    ice_ufrag, ice_pwd, stun_hosts,
                                    relay_hosts, relay, agent) {
 }

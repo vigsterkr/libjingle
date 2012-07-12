@@ -83,7 +83,7 @@ TransportChannel* TransportProxy::CreateChannel(
 
   // We always create a proxy in case we need to change out the transport later.
   TransportChannelProxy* channel =
-      new TransportChannelProxy(name, component);
+      new TransportChannelProxy(content_name(), name, component);
   channels_[component] = channel;
 
   if (state_ == STATE_NEGOTIATED) {
@@ -352,7 +352,7 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
   if (transproxy)
     return transproxy;
 
-  Transport* transport = CreateTransport();
+  Transport* transport = CreateTransport(content_name);
   transport->SetRole(initiator_ ? ROLE_CONTROLLING : ROLE_CONTROLLED);
   transport->SetTiebreaker(ice_tiebreaker_);
   // TODO: Connect all the Transport signals to TransportProxy
@@ -424,10 +424,11 @@ void BaseSession::DestroyTransportProxy(
   }
 }
 
-cricket::Transport* BaseSession::CreateTransport() {
+cricket::Transport* BaseSession::CreateTransport(
+    const std::string& content_name) {
   ASSERT(transport_type_ == NS_GINGLE_P2P);
   return new cricket::DtlsTransport<P2PTransport>(
-      signaling_thread(), worker_thread(), port_allocator());
+      signaling_thread(), worker_thread(), content_name, port_allocator());
 }
 
 void BaseSession::SetState(State state) {

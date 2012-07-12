@@ -58,7 +58,9 @@ class PortAllocatorSessionMuxer;
 
 class PortAllocatorSession : public sigslot::has_slots<> {
  public:
-  PortAllocatorSession(int component,
+  // Content name passed in mostly for logging and debugging.
+  PortAllocatorSession(const std::string content_name,
+                       int component,
                        const std::string& username,
                        const std::string& password,
                        uint32 flags);
@@ -68,6 +70,7 @@ class PortAllocatorSession : public sigslot::has_slots<> {
 
   uint32 flags() const { return flags_; }
   void set_flags(uint32 flags) { flags_ = flags; }
+  std::string content_name() const { return content_name_; }
   int component() const { return component_; }
 
   // Prepares an initial set of ports to try.
@@ -91,6 +94,7 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   const std::string& username() const { return username_; }
   const std::string& password() const { return password_; }
 
+  std::string content_name_;
   int component_;
 
  private:
@@ -111,6 +115,7 @@ class PortAllocator : public sigslot::has_slots<> {
 
   PortAllocatorSession* CreateSession(
       const std::string& sid,
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd);
@@ -143,6 +148,7 @@ class PortAllocator : public sigslot::has_slots<> {
 
  protected:
   virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd) = 0;

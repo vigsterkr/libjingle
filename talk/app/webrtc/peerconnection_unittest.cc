@@ -42,6 +42,8 @@
 #include "talk/session/phone/fakevideorenderer.h"
 #include "talk/session/phone/videorenderer.h"
 
+using webrtc::SessionDescriptionInterface;
+
 void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
                        std::list<webrtc::VideoTrackInterface*>* video_tracks) {
   webrtc::VideoTracks* track_list = media_stream->video_tracks();
@@ -244,6 +246,8 @@ class PeerConnectionTestClientBase
     }
   }
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* /*media_stream*/) {}
+  virtual void OnRenegotiationNeeded() {}
+  virtual void OnIceChange() {}
   virtual void OnIceCandidate(
       const webrtc::IceCandidateInterface* /*candidate*/) {}
   virtual void OnIceComplete() {}
@@ -274,12 +278,11 @@ class PeerConnectionTestClientBase
       return false;
     }
 
-    const std::string server_configuration = "STUN stun.l.google.com:19302";
-    peer_connection_ = CreatePeerConnection(server_configuration);
+    peer_connection_ = CreatePeerConnection();
     return peer_connection_.get() != NULL;
   }
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection(const std::string config) = 0;
+      CreatePeerConnection() = 0;
   MessageReceiver* signaling_message_receiver() {
     return signaling_message_receiver_;
   }
@@ -373,7 +376,8 @@ class RoapTestClient
 
  protected:
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection(const std::string config) {
+      CreatePeerConnection() {
+    const std::string config = "STUN stun.l.google.com:19302";
     return peer_connection_factory()->CreateRoapPeerConnection(config, this);
   }
 
@@ -382,18 +386,18 @@ class RoapTestClient
       : PeerConnectionTestClientBase<RoapMessageReceiver>(id) {}
 };
 
-class JsepTestClient
+class Jsep00TestClient
     : public PeerConnectionTestClientBase<JsepMessageReceiver> {
  public:
-  static JsepTestClient* CreateClient(int id) {
-    JsepTestClient* client(new JsepTestClient(id));
+  static Jsep00TestClient* CreateClient(int id) {
+    Jsep00TestClient* client(new Jsep00TestClient(id));
     if (!client->Init()) {
       delete client;
       return NULL;
     }
     return client;
   }
-  ~JsepTestClient() {}
+  ~Jsep00TestClient() {}
 
   virtual void StartSession() {
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> offer(
@@ -439,11 +443,12 @@ class JsepTestClient
   }
 
  protected:
-  explicit JsepTestClient(int id)
+  explicit Jsep00TestClient(int id)
     : PeerConnectionTestClientBase<JsepMessageReceiver>(id) {}
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection(const std::string config) {
+      CreatePeerConnection() {
+    const std::string config = "STUN stun.l.google.com:19302";
     return peer_connection_factory()->CreatePeerConnection(config, this);
   }
 
@@ -476,6 +481,201 @@ class JsepTestClient
            webrtc::CreateSessionDescription(msg));
     EXPECT_TRUE(peer_connection()->SetRemoteDescription(
         webrtc::PeerConnectionInterface::kAnswer, desc.release()));
+  }
+};
+
+class MockCreateSessionDescriptionObserver
+    : public webrtc::CreateSessionDescriptionObserver {
+ public:
+  MockCreateSessionDescriptionObserver()
+      : called_(false),
+        result_(false) {}
+  virtual ~MockCreateSessionDescriptionObserver() {}
+  virtual void OnSuccess(SessionDescriptionInterface* desc) {
+    called_ = true;
+    result_ = true;
+    desc_.reset(desc);
+  }
+  virtual void OnFailure(const std::string& error) {
+    called_ = true;
+    result_ = false;
+  }
+  bool called() const { return called_; }
+  bool result() const { return result_; }
+  SessionDescriptionInterface* release_desc() {
+    return desc_.release();
+  }
+
+ private:
+  bool called_;
+  bool result_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_;
+};
+
+class MockSetSessionDescriptionObserver
+    : public webrtc::SetSessionDescriptionObserver {
+ public:
+  MockSetSessionDescriptionObserver()
+      : called_(false),
+        result_(false) {}
+  virtual ~MockSetSessionDescriptionObserver() {}
+  virtual void OnSuccess() {
+    called_ = true;
+    result_ = true;
+  }
+  virtual void OnFailure(const std::string& error) {
+    called_ = true;
+    result_ = false;
+  }
+  bool called() const { return called_; }
+  bool result() const { return result_; }
+
+ private:
+  bool called_;
+  bool result_;
+};
+
+class JsepTestClient
+    : public PeerConnectionTestClientBase<JsepMessageReceiver> {
+ public:
+  static JsepTestClient* CreateClient(int id) {
+    JsepTestClient* client(new JsepTestClient(id));
+    if (!client->Init()) {
+      delete client;
+      return NULL;
+    }
+    return client;
+  }
+  ~JsepTestClient() {}
+
+  virtual void StartSession() {
+    talk_base::scoped_ptr<SessionDescriptionInterface> offer;
+    EXPECT_TRUE(DoCreateOffer(offer.use()));
+
+    std::string sdp;
+    EXPECT_TRUE(offer->ToString(&sdp));
+    EXPECT_TRUE(DoSetLocalDescription(offer.release()));
+    signaling_message_receiver()->ReceiveSdpMessage(
+        webrtc::PeerConnectionInterface::kOffer, sdp);
+  }
+  // JsepMessageReceiver callback.
+  virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
+                                 std::string& msg) {
+    if (action == webrtc::PeerConnectionInterface::kOffer) {
+      HandleIncomingOffer(msg);
+    } else {
+      HandleIncomingAnswer(msg);
+    }
+  }
+  // JsepMessageReceiver callback.
+  virtual void ReceiveIceMessage(const std::string& label,
+                                 const std::string& msg) {
+    talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
+        webrtc::CreateIceCandidate(label, msg));
+    EXPECT_TRUE(peer_connection()->AddIceCandidate(candidate.get()));
+  }
+  // Implements PeerConnectionObserver functions needed by Jsep.
+  virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
+    LOG(INFO) << "OnIceCandidate " << candidate->label();
+    std::string ice_sdp;
+    EXPECT_TRUE(candidate->ToString(&ice_sdp));
+    if (signaling_message_receiver() == NULL) {
+      // Remote party may be deleted.
+      return;
+    }
+    signaling_message_receiver()->ReceiveIceMessage(candidate->label(),
+                                                    ice_sdp);
+  }
+  virtual void OnIceComplete() {
+    LOG(INFO) << "OnIceComplete";
+  }
+
+ protected:
+  explicit JsepTestClient(int id)
+    : PeerConnectionTestClientBase<JsepMessageReceiver>(id) {}
+
+  virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
+      CreatePeerConnection() {
+    // CreatePeerConnection with IceServers.
+    webrtc::JsepInterface::IceServers ice_servers;
+    webrtc::JsepInterface::IceServer ice_server;
+    ice_server.uri = "stun:stun.l.google.com:19302";
+    ice_servers.push_back(ice_server);
+    return peer_connection_factory()->CreatePeerConnection(ice_servers,
+        webrtc::JsepInterface::kUseAll, this);
+  }
+
+  void HandleIncomingOffer(const std::string& msg) {
+    if (peer_connection()->local_streams()->count() == 0) {
+      // If we are not sending any streams ourselves it is time to add some.
+      AddMediaStream();
+    }
+    talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+           webrtc::CreateSessionDescription(msg,
+               SessionDescriptionInterface::kOffer));
+    EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
+    talk_base::scoped_ptr<SessionDescriptionInterface> answer;
+    EXPECT_TRUE(DoCreateAnswer(answer.use()));
+    std::string sdp;
+    EXPECT_TRUE(answer->ToString(&sdp));
+    EXPECT_TRUE(DoSetLocalDescription(answer.release()));
+    if (signaling_message_receiver()) {
+      signaling_message_receiver()->ReceiveSdpMessage(
+          webrtc::PeerConnectionInterface::kAnswer, sdp);
+    }
+  }
+
+  void HandleIncomingAnswer(const std::string& msg) {
+    talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+           webrtc::CreateSessionDescription(msg,
+               SessionDescriptionInterface::kAnswer));
+    EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
+  }
+
+  bool DoCreateOfferAnswer(SessionDescriptionInterface** desc,
+                           bool offer) {
+    talk_base::scoped_refptr<MockCreateSessionDescriptionObserver>
+        observer(new talk_base::RefCountedObject<
+            MockCreateSessionDescriptionObserver>());
+    if (offer) {
+      peer_connection()->CreateOffer(observer,
+                                     webrtc::SessionDescriptionOptions());
+    } else {
+      peer_connection()->CreateAnswer(observer,
+                                      webrtc::SessionDescriptionOptions());
+    }
+    EXPECT_EQ_WAIT(true, observer->called(), 5000);
+    *desc = observer->release_desc();
+    return observer->result();
+  }
+
+  bool DoCreateOffer(SessionDescriptionInterface** desc) {
+    return DoCreateOfferAnswer(desc, true);
+  }
+
+  bool DoCreateAnswer(SessionDescriptionInterface** desc) {
+    return DoCreateOfferAnswer(desc, false);
+  }
+
+  bool DoSetSessionDescription(SessionDescriptionInterface* desc, bool local) {
+    talk_base::scoped_refptr<MockSetSessionDescriptionObserver>
+        observer(new talk_base::RefCountedObject<
+            MockSetSessionDescriptionObserver>());
+    if (local) {
+      peer_connection()->SetLocalDescription(observer, desc);
+    } else {
+      peer_connection()->SetRemoteDescription(observer, desc);
+    }
+    EXPECT_EQ_WAIT(true, observer->called(), 5000);
+    return observer->result();
+  }
+
+  bool DoSetLocalDescription(SessionDescriptionInterface* desc) {
+    return DoSetSessionDescription(desc, true);
+  }
+
+  bool DoSetRemoteDescription(SessionDescriptionInterface* desc) {
+    return DoSetSessionDescription(desc, false);
   }
 };
 
@@ -577,10 +777,16 @@ class P2PTestConductor : public testing::Test {
 };
 
 typedef P2PTestConductor<RoapTestClient> RoapPeerConnectionP2PTestClient;
+typedef P2PTestConductor<Jsep00TestClient> Jsep00PeerConnectionP2PTestClient;
 typedef P2PTestConductor<JsepTestClient> JsepPeerConnectionP2PTestClient;
 
 // This test sets up a ROAP call between two parties
 TEST_F(RoapPeerConnectionP2PTestClient, LocalP2PTest) {
+  LocalP2PTest();
+}
+
+// This test sets up a Jsep call with deprecated jsep apis between two parties.
+TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {
   LocalP2PTest();
 }
 

@@ -63,7 +63,7 @@ class DtlsTestClient : public sigslot::has_slots<> {
       signaling_thread_(signaling_thread),
       worker_thread_(worker_thread),
       transport_(new cricket::DtlsTransport<cricket::FakeTransport>(
-          signaling_thread_, worker_thread, NULL)),
+          signaling_thread_, worker_thread, "dtls content name", NULL)),
       packet_size_(0),
       use_dtls_srtp_(false),
       negotiated_dtls_(false) {

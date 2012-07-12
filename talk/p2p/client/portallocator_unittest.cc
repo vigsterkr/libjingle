@@ -109,7 +109,8 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
   cricket::PortAllocatorSession* CreateSession(
       const std::string& sid, int component) {
     cricket::PortAllocatorSession* session =
-        allocator_->CreateSession(sid, component, kIceUfrag0, kIcePwd0);
+        allocator_->CreateSession(
+            sid, "test content", component, kIceUfrag0, kIcePwd0);
     session->SignalPortReady.connect(this,
             &PortAllocatorTest::OnPortReady);
     session->SignalCandidatesReady.connect(this,
@@ -526,7 +527,8 @@ TEST(HttpPortAllocatorTest, TestSessionRequestUrl) {
   alloc.set_flags(alloc.flags() & ~cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
   talk_base::scoped_ptr<cricket::HttpPortAllocatorSessionBase> session(
       static_cast<cricket::HttpPortAllocatorSession*>(
-          alloc.CreateSessionInternal(0, kIceUfrag0, kIcePwd0)));
+          alloc.CreateSessionInternal(
+              "test content", 0, kIceUfrag0, kIcePwd0)));
   std::string url = session->GetSessionRequestUrl();
   LOG(LS_INFO) << "url: " << url;
   EXPECT_EQ(std::string(cricket::HttpPortAllocator::kCreateSessionURL), url);
@@ -534,7 +536,7 @@ TEST(HttpPortAllocatorTest, TestSessionRequestUrl) {
   // Enable PORTALLOCATOR_ENABLE_SHARED_UFRAG.
   alloc.set_flags(alloc.flags() | cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG);
   session.reset(static_cast<cricket::HttpPortAllocatorSession*>(
-      alloc.CreateSessionInternal(0, kIceUfrag0, kIcePwd0)));
+      alloc.CreateSessionInternal("test content", 0, kIceUfrag0, kIcePwd0)));
   url = session->GetSessionRequestUrl();
   LOG(LS_INFO) << "url: " << url;
   std::vector<std::string> parts;

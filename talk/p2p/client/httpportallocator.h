@@ -62,6 +62,7 @@ class HttpPortAllocatorBase : public BasicPortAllocator {
   // CreateSession is defined in BasicPortAllocator but is
   // redefined here as pure virtual.
   virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd) = 0;
@@ -107,6 +108,7 @@ class HttpPortAllocatorSessionBase : public BasicPortAllocatorSession {
  public:
   HttpPortAllocatorSessionBase(
       HttpPortAllocatorBase* allocator,
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd,
@@ -156,6 +158,7 @@ class HttpPortAllocator : public HttpPortAllocatorBase {
                     const std::string& user_agent);
   virtual ~HttpPortAllocator();
   virtual PortAllocatorSession* CreateSessionInternal(
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag, const std::string& ice_pwd);
 };
@@ -164,6 +167,7 @@ class HttpPortAllocatorSession : public HttpPortAllocatorSessionBase {
  public:
   HttpPortAllocatorSession(
       HttpPortAllocator* allocator,
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd,

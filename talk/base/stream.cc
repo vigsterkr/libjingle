@@ -531,10 +531,17 @@ AsyncWriteStream::~AsyncWriteStream() {
   stream_.reset();
 }
 
+// This is needed by some stream writers, such as RtpDumpWriter.
+bool AsyncWriteStream::GetPosition(size_t* position) const {
+  CritScope cs(&crit_stream_);
+  return stream_->GetPosition(position);
+}
+
+// This is needed by some stream writers, such as the plugin log writers.
 StreamResult AsyncWriteStream::Read(void* buffer, size_t buffer_len,
                                     size_t* read, int* error) {
-  if (error) *error = -1;
-  return SR_ERROR;
+  CritScope cs(&crit_stream_);
+  return stream_->Read(buffer, buffer_len, read, error);
 }
 
 void AsyncWriteStream::Close() {

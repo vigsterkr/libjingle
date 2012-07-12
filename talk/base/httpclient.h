@@ -30,6 +30,7 @@
 
 #include "talk/base/common.h"
 #include "talk/base/httpbase.h"
+#include "talk/base/nethelpers.h"
 #include "talk/base/proxyinfo.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
@@ -62,6 +63,7 @@ class DiskCache;
 class HttpClient;
 class IPNetPool;
 
+class SignalThread;
 // What to do:  Define STRICT_HTTP_ERROR=1 in your makefile.  Use HttpError in
 // your code (HttpErrorType should only be used for code that is shared
 // with groups which have not yet migrated).
@@ -71,7 +73,7 @@ typedef HttpError HttpErrorType;
 typedef int HttpErrorType;
 #endif  // !STRICT_HTTP_ERROR
 
-class HttpClient : private IHttpNotify {
+class HttpClient : private IHttpNotify, public sigslot::has_slots<> {
 public:
   // If HttpRequestData and HttpResponseData objects are provided, they must
   // be freed by the caller.  Otherwise, an internal object is allocated.
@@ -172,6 +174,9 @@ protected:
 
   HttpError OnHeaderAvailable(bool ignore_data, bool chunked, size_t data_size);
 
+  void StartDNSLookup();
+  void OnResolveResult(SignalThread* thread);
+
   // IHttpNotify Interface
   virtual HttpError onHttpHeaderComplete(bool chunked, size_t& data_size);
   virtual void onHttpComplete(HttpMode mode, HttpError err);
@@ -194,6 +199,7 @@ private:
   scoped_ptr<HttpAuthContext> context_;
   DiskCache* cache_;
   CacheState cache_state_;
+  AsyncResolver* resolver_;
 };
 
 //////////////////////////////////////////////////////////////////////

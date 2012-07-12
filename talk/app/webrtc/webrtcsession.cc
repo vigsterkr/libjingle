@@ -217,7 +217,8 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   ASSERT(session_version_ + 1 > session_version_);
   JsepSessionDescription* offer = new JsepSessionDescription();
   if (!offer->Initialize(desc, session_id_,
-                         talk_base::ToString(++session_version_))) {
+                         talk_base::ToString(++session_version_),
+                         SessionDescriptionInterface::kOffer)) {
     delete offer;
     return NULL;
   }
@@ -248,7 +249,8 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   ASSERT(session_version_ + 1 > session_version_);
   JsepSessionDescription* answer = new JsepSessionDescription();
   if (!answer->Initialize(desc, session_id_,
-                          talk_base::ToString(++session_version_))) {
+                          talk_base::ToString(++session_version_),
+                          SessionDescriptionInterface::kAnswer)) {
     delete answer;
     return NULL;
   }
@@ -262,17 +264,20 @@ bool WebRtcSession::SetLocalDescription(Action action,
   if (!ExpectSetLocalDescription(action)) {
     LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
                   << "action: " << action << " state: " << state();
+    delete desc;
     return false;
   }
   if (!desc || !desc->description()) {
     LOG(LS_ERROR) << "SetLocalDescription called with an invalid session"
                   <<" description";
+    delete desc;
     return false;
   }
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !HasCrypto(desc->description())) {
     LOG(LS_ERROR) << "SetLocalDescription called with a session"
                   <<" description without crypto enabled";
+    delete desc;
     return false;
   }
 
@@ -285,6 +290,7 @@ bool WebRtcSession::SetLocalDescription(Action action,
   }
 
   if (!CreateChannels(desc->description())) {
+    delete desc;
     return false;
   }
 
@@ -317,21 +323,25 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   if (!ExpectSetRemoteDescription(action)) {
     LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
                   << "action: " << action << " state: " << state();
+    delete desc;
     return false;
   }
   if (!desc || !desc->description()) {
     LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
                   <<" description";
+    delete desc;
     return false;
   }
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !HasCrypto(desc->description())) {
     LOG(LS_ERROR) << "SetRemoteDescription called with a session"
                   <<" description without crypto enabled";
+    delete desc;
     return false;
   }
 
   if (!CreateChannels(desc->description())) {
+    delete desc;
     return false;
   }
 
@@ -363,6 +373,7 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   if (ice_started_ && !UseCandidatesInSessionDescription(desc)) {
     LOG(LS_ERROR) << "SetRemoteDescription: Argument |desc| contains "
                   << "invalid candidates";
+    delete desc;
     return false;
   }
   // We retain all received candidates.

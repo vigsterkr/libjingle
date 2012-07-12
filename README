@@ -141,9 +141,11 @@ other input RTP dump, you may need to change the codecs in call_main.cc, lines
 Libjingle also builds two server tools, a relay server and a STUN server. The
 relay server may be used to relay traffic when a direct peer-to-peer connection
 could not be established. The STUN Server implements the STUN protocol for
-Simple Traversal of UDP over NAT. See the Libjingle Developer Guide at
-http://code.google.com/apis/talk/index.html for information about configuring a
-client to use this relay server and this STUN server.
+Session Traversal Utilities for NAT(rfc5389), and the TURN server is in active
+development to reach compatibility with rfc5766. See the Libjingle Developer
+Guide at http://developers.google.com/talk/libjingle/developer_guide for
+information about configuring a client to use this relay server and this STUN
+server.
 
 To use LinphoneMediaEngine, you need to perform the following additional steps:
   * Download and install the "MediaStreamer" library on your

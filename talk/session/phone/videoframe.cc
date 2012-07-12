@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2011 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,6 +30,7 @@
 #include <cstring>
 
 #ifdef HAVE_YUV
+#include "libyuv/compare.h"
 #include "libyuv/planar_functions.h"
 #include "libyuv/scale.h"
 #endif
@@ -170,7 +171,10 @@ bool VideoFrame::Validate(uint32 fourcc, int w, int h,
     LOG(LS_ERROR) << "Invalid sample pointer";
     return false;
   }
-
+#ifdef HAVE_LMI
+  // Scan pages to ensure they are there.
+  libyuv::HashDjb2(sample, sample_size, 5381);
+#endif
   return true;
 }
 

@@ -452,67 +452,151 @@ SoundclipMedia *WebRtcVoiceEngine::CreateSoundclip() {
 }
 
 // TODO: Add a comprehensive unittests for SetOptions().
-bool WebRtcVoiceEngine::SetOptions(int options) {
-  bool aec = (options & MediaEngineInterface::ECHO_CANCELLATION) != 0;
-  bool agc = (options & MediaEngineInterface::AUTO_GAIN_CONTROL) != 0;
-#if !defined(IOS) && !defined(ANDROID)
-  if (voe_wrapper_->processing()->SetEcStatus(aec) == -1) {
-    LOG_RTCERR1(SetEcStatus, aec);
+bool WebRtcVoiceEngine::SetOptions(int flags) {
+  AudioOptions options;
+
+  // Convert flags to AudioOptions.
+  options.echo_cancellation.Set(
+      ((flags & MediaEngineInterface::ECHO_CANCELLATION) != 0));
+  options.auto_gain_control.Set(
+      ((flags & MediaEngineInterface::AUTO_GAIN_CONTROL) != 0));
+  options.noise_suppression.Set(
+      ((flags & MediaEngineInterface::NOISE_SUPPRESSION) != 0));
+  options.highpass_filter.Set(
+      ((flags & MediaEngineInterface::HIGHPASS_FILTER) != 0));
+  options.stereo_swapping.Set(
+      ((flags & MediaEngineInterface::STEREO_FLIPPING) != 0));
+
+  // Typing detection warning is always on.
+  options.typing_detection.Set(true);
+
+  // Make sure they are all set so that ApplyOptions applies all of
+  // them when we clear overrides.
+  options.conference_mode.Set(false);
+  options.adjust_agc_delta.Set(0);
+
+  return SetAudioOptions(options);
+}
+
+bool WebRtcVoiceEngine::SetAudioOptions(const AudioOptions& options) {
+  if (!ApplyOptions(options)) {
     return false;
   }
-  if (aec) {
-    if (voe_wrapper_->processing()->SetEcMetricsStatus(true) == -1) {
-      LOG_RTCERR1(SetEcMetricsStatus, true);
+  options_ = options;
+  return true;
+}
+
+bool WebRtcVoiceEngine::SetOptionOverrides(const AudioOptions& overrides) {
+  if (!ApplyOptions(overrides)) {
+    return false;
+  }
+  option_overrides_ = overrides;
+  return true;
+}
+
+bool WebRtcVoiceEngine::ClearOptionOverrides() {
+  LOG(LS_INFO) << "Clear option overrides.";
+  AudioOptions options = options_;
+
+  if (!ApplyOptions(options)) {
+    return false;
+  }
+  option_overrides_ = AudioOptions();
+  return true;
+}
+
+bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
+  WebRtcAudioOptions options = WebRtcAudioOptions(options_in);
+#if defined(IOS) || defined(ANDROID)
+  // Use speakerphone mode with comfort noise generation for mobile.
+  options.ec_mode = kEcAecm;
+  // On mobile, GIPS recommends fixed AGC (not adaptive)
+  options.agc_mode = kAgcFixedDigital;
+  // On mobile, GIPS recommends moderate aggressiveness.
+  options.noise_suppression.Set(true);
+  options.ns_mode = kNsModerateSuppression;
+  // No typing detection support on iOS or Android.
+  options.typing_detection.Set(false);
+#elif CHROMEOS  // IOS || ANDROID
+  // Conference mode doesn't work well on ChromeOS.
+  options.conference_mode.Set(false);
+#endif  // CHROMEOS
+
+  webrtc::VoEAudioProcessing* voep = voe_wrapper_->processing();
+
+  bool echo_cancellation;
+  if (options.echo_cancellation.Get(&echo_cancellation)) {
+    if (voep->SetEcStatus(echo_cancellation, options.ec_mode) == -1) {
+      LOG_RTCERR2(SetEcStatus, echo_cancellation, options.ec_mode);
+      return false;
+    }
+    if (voep->SetEcMetricsStatus(echo_cancellation) == -1) {
+      LOG_RTCERR1(SetEcMetricsStatus, echo_cancellation);
+      return false;
+    }
+    if (options.ec_mode == webrtc::kEcAecm) {
+      if (voep->SetAecmMode(options.aecm_mode, true) != 0) {
+        LOG_RTCERR2(SetAecmMode, options.aecm_mode, true);
+        return false;
+      }
+    }
+  }
+
+  bool auto_gain_control;
+  if (options.auto_gain_control.Get(&auto_gain_control)) {
+    if (voep->SetAgcStatus(auto_gain_control, options.agc_mode) == -1) {
+      LOG_RTCERR2(SetAgcStatus, auto_gain_control, options.agc_mode);
       return false;
     }
   }
 
-  if (voe_wrapper_->processing()->SetAgcStatus(agc) == -1) {
-    LOG_RTCERR1(SetAgcStatus, agc);
-    return false;
-  }
-
-  bool ns = (options & MediaEngineInterface::NOISE_SUPPRESSION) != 0;
-  if (voe_wrapper_->processing()->SetNsStatus(ns) == -1) {
-    LOG_RTCERR1(SetNsStatus, ns);
-    return false;
-  }
-
-
-  // Typing detection warning is always on.
-  if (voe_wrapper_->processing()->SetTypingDetectionStatus(true) == -1) {
-    // In case of error, log the info and continue
-    LOG_RTCERR1(SetTypingDetectionStatus, true);
-  }
-
-#else
-  if (voe_wrapper_->processing()->SetEcStatus(aec, kEcAecm) == -1) {
-    LOG_RTCERR2(SetEcStatus, aec, kEcAecm);
-    return false;
-  }
-
-  if (aec) {
-    // Use speakerphone mode with comfort noise generation for mobile.
-    if (voe_wrapper_->processing()->SetAecmMode(kAecmSpeakerphone, true) != 0) {
-      LOG_RTCERR2(SetAecmMode, kAecmSpeakerphone, true);
+  bool noise_suppression;
+  if (options.noise_suppression.Get(&noise_suppression)) {
+    if (voep->SetNsStatus(noise_suppression, options.ns_mode) == -1) {
+      LOG_RTCERR2(SetNsStatus, noise_suppression, options.ns_mode);
+      return false;
     }
   }
 
-  // On mobile, GIPS recommends fixed AGC (not adaptive)
-  if (voe_wrapper_->processing()->SetAgcStatus(agc, kAgcFixedDigital) == -1) {
-    LOG_RTCERR2(SetAgcStatus, agc, kAgcFixedDigital);
-    return false;
+  bool highpass_filter;
+  if (options.highpass_filter.Get(&highpass_filter)) {
+    if (voep->EnableHighPassFilter(highpass_filter) == -1) {
+      LOG_RTCERR1(SetHighpassFilterStatus, highpass_filter);
+      return false;
+    }
   }
 
-  // On mobile, GIPS recommends moderate aggressiveness.
-  if (voe_wrapper_->processing()->SetNsStatus(true,
-      kNsModerateSuppression) == -1) {
-    LOG_RTCERR2(SetNsStatus, ns, kNsModerateSuppression);
-    return false;
+  bool stereo_swapping;
+  if (options.stereo_swapping.Get(&stereo_swapping)) {
+    voep->EnableStereoChannelSwapping(stereo_swapping);
+    if (voep->IsStereoChannelSwappingEnabled() != stereo_swapping) {
+      LOG_RTCERR1(EnableStereoChannelSwapping, stereo_swapping);
+      return false;
+    }
   }
 
-  // No typing detection support on iOS or Android.
-#endif  // !IOS && !ANDROID
+  bool typing_detection;
+  if (options.typing_detection.Get(&typing_detection)) {
+    if (voep->SetTypingDetectionStatus(typing_detection) == -1) {
+      // In case of error, log the info and continue
+      LOG_RTCERR1(SetTypingDetectionStatus, true);
+    }
+  }
+
+  int adjust_agc_delta;
+  if (options.adjust_agc_delta.Get(&adjust_agc_delta)) {
+    if (!AdjustAgcLevel(adjust_agc_delta)) {
+      return false;
+    }
+  }
+
+  bool conference_mode;
+  if (options.conference_mode.Get(&conference_mode)) {
+    if (!SetConferenceMode(conference_mode)) {
+      LOG_RTCERR1(SetConferenceMode, conference_mode);
+      return false;
+    }
+  }
 
   return true;
 }
@@ -1018,7 +1102,7 @@ void WebRtcVoiceEngine::UnregisterSoundclip(WebRtcSoundclipMedia *soundclip) {
 // to save the current webrtc::AgcConfig as well.
 bool WebRtcVoiceEngine::AdjustAgcLevel(int delta) {
   webrtc::AgcConfig config = default_agc_config_;
-  config.targetLeveldBOv += delta;
+  config.targetLeveldBOv -= delta;
 
   LOG(LS_INFO) << "Adjusting AGC level from default -"
                << default_agc_config_.targetLeveldBOv << "dB to -"
@@ -1245,8 +1329,7 @@ WebRtcVoiceMediaChannel::WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine)
     : WebRtcMediaChannel<VoiceMediaChannel, WebRtcVoiceEngine>(
           engine,
           engine->voe()->base()->CreateChannel()),
-      options_(0),
-      agc_adjusted_(false),
+      options_(),
       dtmf_allowed_(false),
       desired_playout_(false),
       playout_(false),
@@ -1293,9 +1376,9 @@ WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
   }
 }
 
-bool WebRtcVoiceMediaChannel::SetOptions(int flags) {
+bool WebRtcVoiceMediaChannel::SetOptions(const AudioOptions& options) {
   // Always accept flags that are unchanged.
-  if (options_ == flags) {
+  if (options_ == options) {
     return true;
   }
 
@@ -1305,7 +1388,7 @@ bool WebRtcVoiceMediaChannel::SetOptions(int flags) {
   }
 
   // Save the options, to be interpreted where appropriate.
-  options_ = flags;
+  options_ = options;
   return true;
 }
 
@@ -1576,26 +1659,7 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
   }
 
   if (send == SEND_MICROPHONE) {
-#ifdef CHROMEOS
-    // Conference mode doesn't work well on ChromeOS.
-    if (!engine()->SetConferenceMode(false)) {
-      LOG_RTCERR1(SetConferenceMode, voe_channel());
-      return false;
-    }
-#else
-    // Multi-point conferences use conference-mode noise filtering.
-    if (!engine()->SetConferenceMode(
-        0 != (options_ & OPT_CONFERENCE))) {
-      LOG_RTCERR1(SetConferenceMode, voe_channel());
-      return false;
-    }
-#endif  // CHROMEOS
-
-    if ((options_ & OPT_AGC_MINUS_10DB) && !agc_adjusted_) {
-      if (engine()->AdjustAgcLevel(kMinus10DbAdjustment)) {
-        agc_adjusted_ = true;
-      }
-    }
+    engine()->SetOptionOverrides(options_);
 
     // VoiceEngine resets sequence number when StopSend is called. This
     // sometimes causes libSRTP to complain about packets being
@@ -1661,17 +1725,7 @@ bool WebRtcVoiceMediaChannel::ChangeSend(SendFlags send) {
       LOG_RTCERR1(StopSend, voe_channel());
     }
 
-    // Reset the AGC level, if it was set.
-    if (agc_adjusted_) {
-      if (engine()->AdjustAgcLevel(0)) {
-        agc_adjusted_ = false;
-      }
-    }
-
-    // Disable conference-mode noise filtering.
-    if (!engine()->SetConferenceMode(false)) {
-      LOG_RTCERR1(SetConferenceMode, voe_channel());
-    }
+    engine()->ClearOptionOverrides();
   }
   send_ = send;
   return true;
@@ -1726,7 +1780,8 @@ bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
   talk_base::CritScope lock(&mux_channels_cs_);
 
   // Reuse default channel for recv stream in 1:1 call.
-  if ((options_ & OPT_CONFERENCE) == 0) {
+  bool conference_mode;
+  if (!options_.conference_mode.Get(&conference_mode) || !conference_mode) {
     LOG(LS_INFO) << "Recv stream " << sp.first_ssrc()
                  << " reuse default channel";
     return true;

@@ -105,7 +105,8 @@ class PortAllocatorSessionProxyTest : public testing::Test {
   PortAllocatorSessionProxyTest()
       : socket_factory_(talk_base::Thread::Current()),
         allocator_(talk_base::Thread::Current(), NULL),
-        session_(talk_base::Thread::Current(), &socket_factory_, 1,
+        session_(talk_base::Thread::Current(), &socket_factory_,
+                 "test content", 1,
                  kIceUfrag0, kIcePwd0),
         session_muxer_(new PortAllocatorSessionMuxer(&session_)) {
   }
@@ -116,7 +117,7 @@ class PortAllocatorSessionProxyTest : public testing::Test {
 
   TestSessionChannel* CreateChannel() {
     PortAllocatorSessionProxy* proxy =
-        new PortAllocatorSessionProxy(1, 0);
+        new PortAllocatorSessionProxy("test content", 1, 0);
     TestSessionChannel* channel = new TestSessionChannel(proxy);
     session_muxer_->RegisterSessionProxy(proxy);
     channel->GetInitialPorts();
@@ -141,7 +142,8 @@ TEST_F(PortAllocatorSessionProxyTest, TestBasic) {
   delete channel;
 }
 
-TEST_F(PortAllocatorSessionProxyTest, TestLateBinding) {
+// Disabling test since its flaky on Pulse. b/6776750
+TEST_F(PortAllocatorSessionProxyTest, DISABLED_TestLateBinding) {
   TestSessionChannel* channel1 = CreateChannel();
   EXPECT_EQ_WAIT(1, channel1->candidates_count(), 1000);
   EXPECT_EQ(1, channel1->ports_count());
@@ -150,7 +152,7 @@ TEST_F(PortAllocatorSessionProxyTest, TestLateBinding) {
   // Creating another PortAllocatorSessionProxy and it also should receive
   // already happened events.
   PortAllocatorSessionProxy* proxy =
-      new PortAllocatorSessionProxy(2, 0);
+      new PortAllocatorSessionProxy("test content", 2, 0);
   TestSessionChannel* channel2 = new TestSessionChannel(proxy);
   session_muxer_->RegisterSessionProxy(proxy);
   EXPECT_TRUE(channel2->IsGettingAllPorts());
@@ -161,4 +163,3 @@ TEST_F(PortAllocatorSessionProxyTest, TestLateBinding) {
   delete channel1;
   delete channel2;
 }
-

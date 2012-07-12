@@ -41,6 +41,7 @@ class RawTransport : public Transport, public TransportParser {
  public:
   RawTransport(talk_base::Thread* signaling_thread,
                talk_base::Thread* worker_thread,
+               const std::string& content_name,
                PortAllocator* allocator);
   virtual ~RawTransport();
 

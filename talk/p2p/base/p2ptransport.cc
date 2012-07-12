@@ -54,9 +54,10 @@ namespace cricket {
 
 P2PTransport::P2PTransport(talk_base::Thread* signaling_thread,
                            talk_base::Thread* worker_thread,
+                           const std::string& content_name,
                            PortAllocator* allocator)
     : Transport(signaling_thread, worker_thread,
-                NS_GINGLE_P2P, allocator) {
+                content_name, NS_GINGLE_P2P, allocator) {
 }
 
 P2PTransport::~P2PTransport() {
@@ -210,7 +211,8 @@ bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
 }
 
 TransportChannelImpl* P2PTransport::CreateTransportChannel(int component) {
-  return new P2PTransportChannel(component, this, port_allocator());
+  return new P2PTransportChannel(
+      content_name(), component, this, port_allocator());
 }
 
 void P2PTransport::DestroyTransportChannel(TransportChannelImpl* channel) {

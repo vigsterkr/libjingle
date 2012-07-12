@@ -200,16 +200,19 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual bool RemoveRecvStream(uint32 ssrc) { return true; }
   virtual bool Mute(bool on) { return false; }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
-  virtual bool SetOptions(int options) {
+  virtual bool SetOptions(const AudioOptions& options) {
     options_ = options;
     return true;
   }
-  virtual int GetOptions() const { return options_; }
+  virtual bool GetOptions(AudioOptions* options) const {
+    *options = options_;
+    return true;
+  }
 
  private:
   uint32 send_ssrc_;
   talk_base::scoped_ptr<RtpSenderReceiver> rtp_sender_receiver_;
-  int options_;
+  AudioOptions options_;
 
   DISALLOW_COPY_AND_ASSIGN(FileVoiceChannel);
 };

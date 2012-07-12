@@ -44,6 +44,7 @@ class WebRtcVideoFrameTest : public VideoFrameTest<cricket::WebRtcVideoFrame> {
 
 TEST_WEBRTCVIDEOFRAME(ConstructI420)
 TEST_WEBRTCVIDEOFRAME(ConstructI4201Pixel)
+TEST_WEBRTCVIDEOFRAME(ConstructI4205Pixel)
 // TODO: WebRtcVideoFrame does not support horizontal crop.
 // Re-evaluate once it supports 3 independent planes, since we might want to
 // just Init normally and then crop by adjusting pointers.
@@ -64,6 +65,9 @@ TEST_WEBRTCVIDEOFRAME(ConstructBlack)
 // TEST_WEBRTCVIDEOFRAME(ValidateMjpgI444)
 // TEST_WEBRTCVIDEOFRAME(ValidateMjpgI411)
 // TEST_WEBRTCVIDEOFRAME(ValidateMjpgI400)
+// TEST_WEBRTCVIDEOFRAME(ValidateMjpgI420InvalidSize)
+// TEST_WEBRTCVIDEOFRAME(ValidateI420InvalidSize)
+TEST_WEBRTCVIDEOFRAME(ValidateI420)
 
 // TODO: WebRtcVideoFrame does not support odd sizes.
 // Re-evaluate once WebRTC switches to libyuv

@@ -114,7 +114,9 @@ static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
 
 class MockPeerConnectionObserver : public PeerConnectionObserver {
  public:
-  MockPeerConnectionObserver() : ice_complete_(false) {
+  MockPeerConnectionObserver()
+      : renegotiation_needed_(false),
+        ice_complete_(false) {
   }
   ~MockPeerConnectionObserver() {
   }
@@ -152,6 +154,10 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   virtual void OnRemoveStream(MediaStreamInterface* stream) {
     last_removed_stream_ = stream;
   }
+  virtual void OnRenegotiationNeeded() {
+    renegotiation_needed_ = true;
+  }
+  virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
     std::string sdp;
     EXPECT_TRUE(candidate->ToString(&sdp));
@@ -181,12 +187,65 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   PeerConnectionInterface::ReadyState state_;
   PeerConnectionInterface::SdpState sdp_state_;
   scoped_ptr<IceCandidateInterface> last_candidate_;
+  bool renegotiation_needed_;
   bool ice_complete_;
 
  private:
   scoped_refptr<MediaStreamInterface> last_added_stream_;
   scoped_refptr<MediaStreamInterface> last_removed_stream_;
 };
+
+class MockCreateSessionDescriptionObserver
+    : public webrtc::CreateSessionDescriptionObserver {
+ public:
+  MockCreateSessionDescriptionObserver()
+      : called_(false),
+        result_(false) {}
+  virtual ~MockCreateSessionDescriptionObserver() {}
+  virtual void OnSuccess(SessionDescriptionInterface* desc) {
+    called_ = true;
+    result_ = true;
+    desc_.reset(desc);
+  }
+  virtual void OnFailure(const std::string& error) {
+    called_ = true;
+    result_ = false;
+  }
+  bool called() const { return called_; }
+  bool result() const { return result_; }
+  SessionDescriptionInterface* release_desc() {
+    return desc_.release();
+  }
+
+ private:
+  bool called_;
+  bool result_;
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_;
+};
+
+class MockSetSessionDescriptionObserver
+    : public webrtc::SetSessionDescriptionObserver {
+ public:
+  MockSetSessionDescriptionObserver()
+      : called_(false),
+        result_(false) {}
+  virtual ~MockSetSessionDescriptionObserver() {}
+  virtual void OnSuccess() {
+    called_ = true;
+    result_ = true;
+  }
+  virtual void OnFailure(const std::string& error) {
+    called_ = true;
+    result_ = false;
+  }
+  bool called() const { return called_; }
+  bool result() const { return result_; }
+
+ private:
+  bool called_;
+  bool result_;
+};
+
 
 class PeerConnectionInterfaceTest : public testing::Test {
  protected:
@@ -203,7 +262,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     pc_ = pc_factory_->CreateRoapPeerConnection(kStunConfiguration, &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
     observer_.SetPeerConnectionInterface(pc_.get());
-    EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
   }
 
   void CreatePeerConnection() {
@@ -277,6 +336,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
     stream->AddTrack(video_track.get());
     pc_->AddStream(stream);
     pc_->CommitStreamChanges();
+    EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
+    observer_.renegotiation_needed_ = false;
   }
 
   void AddVoiceStream(const std::string& label) {
@@ -288,6 +349,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
     stream->AddTrack(audio_track.get());
     pc_->AddStream(stream);
     pc_->CommitStreamChanges();
+    EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
+    observer_.renegotiation_needed_ = false;
   }
 
   void AddAudioVideoStream(const std::string& stream_label,
@@ -305,6 +368,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
     pc_->RemoveStream(stream_label);
     pc_->AddStream(stream);
     pc_->CommitStreamChanges();
+    EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
+    observer_.renegotiation_needed_ = false;
   }
 
   void WaitForRoapOffer() {
@@ -313,6 +378,49 @@ class PeerConnectionInterfaceTest : public testing::Test {
     // Wait for the ICE agent to find the candidates and send an offer.
     EXPECT_EQ_WAIT(RoapMessageBase::kOffer, observer_.last_message_.type(),
                    kTimeout);
+  }
+
+  bool DoCreateOfferAnswer(SessionDescriptionInterface** desc, bool offer) {
+    talk_base::scoped_refptr<MockCreateSessionDescriptionObserver>
+        observer(new talk_base::RefCountedObject<
+            MockCreateSessionDescriptionObserver>());
+    if (offer) {
+      pc_->CreateOffer(observer, webrtc::SessionDescriptionOptions());
+    } else {
+      pc_->CreateAnswer(observer, webrtc::SessionDescriptionOptions());
+    }
+    EXPECT_EQ_WAIT(true, observer->called(), kTimeout);
+    *desc = observer->release_desc();
+    return observer->result();
+  }
+
+  bool DoCreateOffer(SessionDescriptionInterface** desc) {
+    return DoCreateOfferAnswer(desc, true);
+  }
+
+  bool DoCreateAnswer(SessionDescriptionInterface** desc) {
+    return DoCreateOfferAnswer(desc, false);
+  }
+
+  bool DoSetSessionDescription(SessionDescriptionInterface* desc, bool local) {
+    talk_base::scoped_refptr<MockSetSessionDescriptionObserver>
+        observer(new talk_base::RefCountedObject<
+            MockSetSessionDescriptionObserver>());
+    if (local) {
+      pc_->SetLocalDescription(observer, desc);
+    } else {
+      pc_->SetRemoteDescription(observer, desc);
+    }
+    EXPECT_EQ_WAIT(true, observer->called(), kTimeout);
+    return observer->result();
+  }
+
+  bool DoSetLocalDescription(SessionDescriptionInterface* desc) {
+    return DoSetSessionDescription(desc, true);
+  }
+
+  bool DoSetRemoteDescription(SessionDescriptionInterface* desc) {
+    return DoSetSessionDescription(desc, false);
   }
 
   scoped_refptr<FakePortAllocatorFactory> port_allocator_factory_;
@@ -339,7 +447,7 @@ TEST_F(PeerConnectionInterfaceTest, RoapAddStream) {
   ASSERT_EQ(1u, pc_->local_streams()->count());
   EXPECT_EQ(kStreamLabel1, pc_->local_streams()->at(0)->label());
 
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kNegotiating, observer_.state_,
+  EXPECT_EQ_WAIT(PeerConnectionInterface::kOpening, observer_.state_,
                  kTimeout);
   pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
   EXPECT_EQ_WAIT(PeerConnectionInterface::kActive, observer_.state_, kTimeout);
@@ -429,17 +537,16 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_InitiateCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
-  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
-  SessionDescriptionInterface* answer(
-      pc_->CreateAnswer(webrtc::MediaHints(), offer));
+  // SetRemoteDescription takes ownership of offer.
+  SessionDescriptionInterface* offer = NULL;
+  EXPECT_TRUE(DoCreateOffer(&offer));
+  EXPECT_TRUE(DoSetRemoteDescription(offer));
 
-  // SetLocalDescription takes ownership of offer.
-  EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kOffer,
-                                       offer));
-  EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
-  // SetRemoteDescription takes ownership of answer.
-  EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kAnswer,
-                                        answer));
+  EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
+  // SetLocalDescription takes ownership of answer.
+  SessionDescriptionInterface* answer = NULL;
+  EXPECT_TRUE(DoCreateAnswer(&answer));
+  EXPECT_TRUE(DoSetLocalDescription(answer));
   EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
 
   // Since we answer with the same session description as we offer we can
@@ -451,16 +558,15 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_ReceiveCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
-  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
-  SessionDescriptionInterface* answer(pc_->CreateAnswer(webrtc::MediaHints(),
-                                                        offer));
   // SetRemoteDescription takes ownership of offer.
-  EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kOffer,
-                                        offer));
-  EXPECT_EQ(PeerConnectionInterface::kNegotiating, observer_.state_);
+  SessionDescriptionInterface* offer = NULL;
+  EXPECT_TRUE(DoCreateOffer(&offer));
+  EXPECT_TRUE(DoSetRemoteDescription(offer));
+  EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
   // SetLocalDescription takes ownership of answer.
-  EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kAnswer,
-                                       answer));
+  SessionDescriptionInterface* answer = NULL;
+  EXPECT_TRUE(DoCreateAnswer(&answer));
+  EXPECT_TRUE(DoSetLocalDescription(answer));
   EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
 
   // Since we answer with the same session description as we offer we can
@@ -471,24 +577,22 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_ReceiveCall) {
 // Test that candidates are generated and that we can parse our own candidates.
 TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
   CreatePeerConnection();
-  EXPECT_FALSE(pc_->StartIce(PeerConnectionInterface::kUseAll));
 
-  SessionDescriptionInterface* offer(pc_->CreateOffer(webrtc::MediaHints()));
-  SessionDescriptionInterface* answer(
-      pc_->CreateAnswer(webrtc::MediaHints(), offer));
-  EXPECT_TRUE(pc_->SetLocalDescription(PeerConnectionInterface::kOffer,
-                                       offer));
-  EXPECT_TRUE(pc_->StartIce(PeerConnectionInterface::kUseAll));
+  EXPECT_FALSE(pc_->AddIceCandidate(observer_.last_candidate_.get()));
+  // SetRemoteDescription takes ownership of offer.
+  SessionDescriptionInterface* offer = NULL;
+  EXPECT_TRUE(DoCreateOffer(&offer));
+  EXPECT_TRUE(DoSetRemoteDescription(offer));
+
+  // SetLocalDescription takes ownership of answer.
+  SessionDescriptionInterface* answer = NULL;
+  EXPECT_TRUE(DoCreateAnswer(&answer));
+  EXPECT_TRUE(DoSetLocalDescription(answer));
 
   EXPECT_TRUE_WAIT(observer_.last_candidate_.get() != NULL, kTimeout);
   EXPECT_TRUE_WAIT(observer_.ice_complete_, kTimeout);
-  EXPECT_FALSE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
 
-  // SetRemoteDescription takes ownership of answer.
-  EXPECT_TRUE(pc_->SetRemoteDescription(PeerConnectionInterface::kAnswer,
-                                        answer));
-
-  EXPECT_TRUE(pc_->ProcessIceMessage(observer_.last_candidate_.get()));
+  EXPECT_TRUE(pc_->AddIceCandidate(observer_.last_candidate_.get()));
 }
 
 // Test that the CreateOffer and CreatAnswer will fail if the track labels are
@@ -496,18 +600,21 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
 TEST_F(PeerConnectionInterfaceTest, Jsep_CreateOfferAnswerWithInvalidStream) {
   CreatePeerConnection();
   // Create a regular offer for the CreateAnswer test later.
-  scoped_ptr<SessionDescriptionInterface> offer(
-      pc_->CreateOffer(webrtc::MediaHints()));
-  EXPECT_TRUE(offer.get() != NULL);
+  SessionDescriptionInterface* offer = NULL;
+  EXPECT_TRUE(DoCreateOffer(&offer));
+  EXPECT_TRUE(offer != NULL);
+  delete offer;
+  offer = NULL;
 
   // Create a local stream with audio&video tracks having same label.
   AddAudioVideoStream(kStreamLabel1, "track_label", "track_label");
 
   // Test CreateOffer
-  EXPECT_EQ(NULL, pc_->CreateOffer(webrtc::MediaHints()));
+  EXPECT_FALSE(DoCreateOffer(&offer));
 
   // Test CreateAnswer
-  EXPECT_EQ(NULL, pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
+  SessionDescriptionInterface* answer = NULL;
+  EXPECT_FALSE(DoCreateAnswer(&answer));
 }
 
 // Test that we will get different SSRCs for each tracks in the offer and answer
@@ -518,8 +625,8 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_SsrcInOfferAnswer) {
   AddAudioVideoStream(kStreamLabel1, "audio_label", "video_label");
 
   // Test CreateOffer
-  scoped_ptr<SessionDescriptionInterface> offer(
-      pc_->CreateOffer(webrtc::MediaHints()));
+  scoped_ptr<SessionDescriptionInterface> offer;
+  EXPECT_TRUE(DoCreateOffer(offer.use()));
   int audio_ssrc = 0;
   int video_ssrc = 0;
   EXPECT_TRUE(GetFirstSsrc(GetFirstAudioContent(offer->description()),
@@ -529,8 +636,9 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_SsrcInOfferAnswer) {
   EXPECT_NE(audio_ssrc, video_ssrc);
 
   // Test CreateAnswer
-  scoped_ptr<SessionDescriptionInterface> answer(
-      pc_->CreateAnswer(webrtc::MediaHints(), offer.get()));
+  EXPECT_TRUE(DoSetRemoteDescription(offer.release()));
+  scoped_ptr<SessionDescriptionInterface> answer;
+  EXPECT_TRUE(DoCreateAnswer(answer.use()));
   audio_ssrc = 0;
   video_ssrc = 0;
   EXPECT_TRUE(GetFirstSsrc(GetFirstAudioContent(answer->description()),

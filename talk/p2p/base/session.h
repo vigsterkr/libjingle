@@ -346,7 +346,7 @@ class BaseSession : public sigslot::has_slots<>,
   // TransportProxy is owned by session.  Return proxy just for convenience.
   TransportProxy* GetOrCreateTransportProxy(const std::string& content_name);
   // Creates the actual transport object. Overridable for testing.
-  virtual Transport* CreateTransport();
+  virtual Transport* CreateTransport(const std::string& content_name);
 
   void OnSignalingReady();
   void SpeculativelyConnectAllTransportChannels();

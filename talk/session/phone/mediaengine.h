@@ -63,8 +63,10 @@ class VideoCapturer;
 class MediaEngineInterface {
  public:
   // Bitmask flags for options that may be supported by the media engine
-  // implementation
-  enum AudioOptions {
+  // implementation.  This can be converted to and from an
+  // AudioOptions struct for backwards compatibility with calls that
+  // use flags until we transition to using structs everywhere.
+  enum AudioFlags {
     // Audio processing that attempts to filter away the output signal from
     // later inbound pickup.
     ECHO_CANCELLATION         = 1 << 0,

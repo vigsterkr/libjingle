@@ -297,25 +297,32 @@ bool WebRtcVideoFrame::Reset(uint32 format, int w, int h, int dw, int dh,
                              size_t pixel_width, size_t pixel_height,
                              int64 elapsed_time, int64 time_stamp,
                              int rotation) {
-  // WebRtcVideoFrame currently doesn't support color conversion or rotation.
-  // TODO: Add horizontal cropping support.
-  if (rotation != 0) {
-    return false;
-  }
   if (!Validate(format, w, h, sample, sample_size)) {
     return false;
   }
   // Translate aliases to standard enums (e.g., IYUV -> I420).
   format = CanonicalFourCC(format);
 
+  // Round display width and height down to multiple of 4, to avoid webrtc
+  // size calculation error on odd sizes.
+  // TODO(Ronghua): Remove this once the webrtc allocator is fixed.
+  dw = (dw > 4) ? (dw & ~3) : dw;
+  dh = (dh > 4) ? (dh & ~3) : dh;
+
   // Set up a new buffer.
-  size_t desired_size = SizeOf(dw, dh);
+  // TODO: Support lazy allocation.
+  int new_width = dw;
+  int new_height = dh;
+  if (rotation == 90 || rotation == 270) {  // If rotated swap width, height.
+    new_width = dh;
+    new_height = dw;
+  }
+
+  size_t desired_size = SizeOf(new_width, new_height);
   talk_base::scoped_refptr<RefCountedBuffer> video_buffer(
       new RefCountedBuffer(desired_size));
-  Attach(video_buffer.get(), desired_size, dw, dh, pixel_width, pixel_height,
-         elapsed_time, time_stamp, rotation);
-
-  memcpy(frame()->Buffer(), sample, desired_size);
+  Attach(video_buffer.get(), desired_size, new_width, new_height,
+         pixel_width, pixel_height, elapsed_time, time_stamp, rotation);
 
   int horiz_crop = ((w - dw) / 2) & ~1;
   // ARGB on Windows has negative height.

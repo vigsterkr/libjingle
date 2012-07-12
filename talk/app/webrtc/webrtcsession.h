@@ -95,13 +95,27 @@ class WebRtcSession : public cricket::BaseSession,
 
   virtual bool SetRemoteDescription(Action action,
                                     SessionDescriptionInterface* desc);
-
-  virtual bool ProcessIceMessage(const IceCandidateInterface* candidate);
+  virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
   virtual const SessionDescriptionInterface* local_description() const {
     return local_desc_.get();
   }
   virtual const SessionDescriptionInterface* remote_description() const {
     return remote_desc_.get();
+  }
+
+  // TODO: Implement below functions to replace the deprecated ones.
+  virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
+                           const SessionDescriptionOptions& options) {}
+  virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
+                            const SessionDescriptionOptions& options) {}
+  virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
+                                   SessionDescriptionInterface* desc) {}
+  virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
+                                    SessionDescriptionInterface* desc) {}
+  virtual bool UpdateIce(const IceServers& configuration,
+                         IceOptions options) { return false; }
+  virtual bool AddIceCandidate(const IceCandidateInterface* candidate) {
+    return false;
   }
 
  private:

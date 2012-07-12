@@ -85,6 +85,8 @@ class MockCandidateObserver : public webrtc::IceCandidateObserver {
       : oncandidatesready_(false) {
   }
 
+  virtual void OnIceChange() {}
+
   // Found a new candidate.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
     if (candidate->label() == kMediaContentLabel0) {
@@ -624,14 +626,17 @@ TEST_F(WebRtcSessionTest, SetNonCryptoOffer) {
   desc_factory_->set_secure(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
-  talk_base::scoped_ptr<JsepSessionDescription> offer(
-      CreateOfferSessionDescription(options));
-  ASSERT_TRUE(offer.get() != NULL);
+  JsepSessionDescription* offer = CreateOfferSessionDescription(options);
+  ASSERT_TRUE(offer != NULL);
   VerifyNoCryptoParams(offer->description());
+  // SetRemoteDescription and SetLocalDescription will take the ownership of
+  // the offer.
   EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer,
-                                              offer.get()));
+                                              offer));
+  offer = CreateOfferSessionDescription(options);
+  ASSERT_TRUE(offer != NULL);
   EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                             offer.get()));
+                                             offer));
 }
 
 // Test we will return fail when apply an answer that doesn't have
@@ -641,12 +646,10 @@ TEST_F(WebRtcSessionTest, SetLocalNonCryptoAnswer) {
   SessionDescriptionInterface* offer = NULL;
   JsepSessionDescription* answer = NULL;
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
-
+  // SetRemoteDescription and SetLocalDescription will take the ownership of
+  // the offer.
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
-  // When the SetLocalDescription failed the ownership of answer wasn't
-  // transferred. So we need to delete it here.
-  delete answer;
 }
 
 // Test we will return fail when apply an answer that doesn't have
@@ -656,12 +659,10 @@ TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
   SessionDescriptionInterface* offer = NULL;
   JsepSessionDescription* answer = NULL;
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
-
+  // SetRemoteDescription and SetLocalDescription will take the ownership of
+  // the offer.
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
-  // When the SetRemoteDescription failed the ownership of answer wasn't
-  // transferred. So we need to delete it here.
-  delete answer;
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {
@@ -692,6 +693,7 @@ TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteOffer) {
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  offer = session_->CreateOffer(MediaHints());
   EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
 }
 
@@ -700,6 +702,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteAndLocalOffer) {
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  offer = session_->CreateOffer(MediaHints());
   EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
 }
 

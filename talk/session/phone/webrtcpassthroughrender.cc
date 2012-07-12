@@ -32,6 +32,9 @@
 
 namespace cricket {
 
+#define LOG_FIND_STREAM_ERROR(func, id) LOG(LS_ERROR) \
+    << "" << func << " - Failed to find stream: " << id
+
 class PassthroughStream: public webrtc::VideoRenderCallback {
  public:
   explicit PassthroughStream(const WebRtc_UWord32 stream_id)
@@ -93,8 +96,11 @@ webrtc::VideoRenderCallback* WebRtcPassthroughRender::AddIncomingRenderStream(
     const float right, const float bottom) {
   talk_base::CritScope cs(&render_critical_);
   // Stream already exist.
-  if (FindStream(stream_id) != NULL)
+  if (FindStream(stream_id) != NULL) {
+    LOG(LS_ERROR) << "AddIncomingRenderStream - Stream already exists: "
+                  << stream_id;
     return NULL;
+  }
 
   PassthroughStream* stream = new PassthroughStream(stream_id);
   // Store the stream
@@ -107,6 +113,7 @@ WebRtc_Word32 WebRtcPassthroughRender::DeleteIncomingRenderStream(
   talk_base::CritScope cs(&render_critical_);
   PassthroughStream* stream = FindStream(stream_id);
   if (stream == NULL) {
+    LOG_FIND_STREAM_ERROR("DeleteIncomingRenderStream", stream_id);
     return -1;
   }
   delete stream;
@@ -120,6 +127,7 @@ WebRtc_Word32 WebRtcPassthroughRender::AddExternalRenderCallback(
   talk_base::CritScope cs(&render_critical_);
   PassthroughStream* stream = FindStream(stream_id);
   if (stream == NULL) {
+    LOG_FIND_STREAM_ERROR("AddExternalRenderCallback", stream_id);
     return -1;
   }
   return stream->SetRenderer(render_object);
@@ -139,6 +147,7 @@ WebRtc_Word32 WebRtcPassthroughRender::StartRender(
   talk_base::CritScope cs(&render_critical_);
   PassthroughStream* stream = FindStream(stream_id);
   if (stream == NULL) {
+    LOG_FIND_STREAM_ERROR("StartRender", stream_id);
     return -1;
   }
   return stream->StartRender();
@@ -149,6 +158,7 @@ WebRtc_Word32 WebRtcPassthroughRender::StopRender(
   talk_base::CritScope cs(&render_critical_);
   PassthroughStream* stream = FindStream(stream_id);
   if (stream == NULL) {
+    LOG_FIND_STREAM_ERROR("StopRender", stream_id);
     return -1;
   }
   return stream->StopRender();
@@ -160,7 +170,6 @@ PassthroughStream* WebRtcPassthroughRender::FindStream(
     const WebRtc_UWord32 stream_id) const {
   StreamMap::const_iterator it = stream_render_map_.find(stream_id);
   if (it == stream_render_map_.end()) {
-    LOG(LS_WARNING) << "Failed to find stream: " << stream_id;
     return NULL;
   }
   return it->second;

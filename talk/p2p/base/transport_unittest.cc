@@ -45,7 +45,8 @@ class TransportTest : public testing::Test,
  public:
   TransportTest()
       : thread_(talk_base::Thread::Current()),
-        transport_(new cricket::P2PTransport(thread_, thread_, NULL)),
+        transport_(new cricket::P2PTransport(
+            thread_, thread_, "test content name", NULL)),
         connecting_signalled_(false) {
     transport_->SignalConnecting.connect(this, &TransportTest::OnConnecting);
   }
@@ -223,7 +224,8 @@ TEST_F(TransportTest, TestRawTransportWriteAndParseCandidate) {
   WriteError write_error;
   cricket::XmlElements elems;
   cricket::RawTransport parser(talk_base::Thread::Current(),
-                               talk_base::Thread::Current(), NULL);
+                               talk_base::Thread::Current(),
+                               "test content name", NULL);
   FakeCandidateTranslator translator;
   EXPECT_TRUE(parser.WriteCandidates(cricket::PROTOCOL_GINGLE, candidates,
                                      &translator,

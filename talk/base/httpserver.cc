@@ -258,6 +258,9 @@ int HttpListenServer::Listen(const SocketAddress& address) {
   AsyncSocket* sock =
       Thread::Current()->socketserver()->CreateAsyncSocket(address.family(),
                                                            SOCK_STREAM);
+  if (!sock) {
+    return SOCKET_ERROR;
+  }
   listener_.reset(sock);
   listener_->SignalReadEvent.connect(this, &HttpListenServer::OnReadEvent);
   if ((listener_->Bind(address) != SOCKET_ERROR) &&

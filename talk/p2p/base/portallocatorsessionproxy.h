@@ -75,12 +75,14 @@ class PortAllocatorSessionMuxer : public talk_base::MessageHandler,
 
 class PortAllocatorSessionProxy : public PortAllocatorSession {
  public:
-  PortAllocatorSessionProxy(int component,
+  PortAllocatorSessionProxy(const std::string& content_name,
+                            int component,
                             uint32 flags)
         // Use empty string as the ufrag and pwd because the proxy always uses
         // the ufrag and pwd from the underlying implementation.
-      : PortAllocatorSession(component, "", "", flags),
-        impl_(NULL) {}
+      : PortAllocatorSession(content_name, component, "", "", flags),
+        impl_(NULL) {
+  }
 
   virtual ~PortAllocatorSessionProxy();
 

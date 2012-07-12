@@ -36,15 +36,21 @@ using cricket::SessionDescription;
 namespace webrtc {
 
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
+  return CreateSessionDescription(sdp, SessionDescriptionInterface::kOffer);
+}
+
+SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp,
+    SessionDescriptionInterface::SdpType type) {
   JsepSessionDescription* jsep_desc = new JsepSessionDescription();
-  if (!jsep_desc->Initialize(sdp)) {
+  if (!jsep_desc->Initialize(sdp, type)) {
     delete jsep_desc;
     return NULL;
   }
   return jsep_desc;
 }
 
-JsepSessionDescription::JsepSessionDescription() {
+JsepSessionDescription::JsepSessionDescription()
+    : type_(kOffer) {
 }
 
 JsepSessionDescription::~JsepSessionDescription() {}
@@ -53,14 +59,29 @@ bool JsepSessionDescription::Initialize(
     cricket::SessionDescription* description,
     const std::string& session_id,
     const std::string& session_version) {
+  return Initialize(description, session_id, session_version, type_);
+}
+
+bool JsepSessionDescription::Initialize(const std::string& sdp) {
+  return Initialize(sdp, type_);
+}
+
+bool JsepSessionDescription::Initialize(
+    cricket::SessionDescription* description,
+    const std::string& session_id,
+    const std::string& session_version,
+    SdpType type) {
   session_id_ = session_id;
   session_version_ = session_version;
+  type_ = type;
   description_.reset(description);
   candidate_collection_.resize(number_of_mediasections());
   return true;
 }
 
-bool JsepSessionDescription::Initialize(const std::string& sdp) {
+bool JsepSessionDescription::Initialize(const std::string& sdp,
+                                        SdpType type) {
+  type_ = type;
   return SdpDeserialize(sdp, this);
 }
 

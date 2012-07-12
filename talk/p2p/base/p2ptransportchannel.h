@@ -67,7 +67,8 @@ class RemoteCandidate : public Candidate {
 class P2PTransportChannel : public TransportChannelImpl,
                             public talk_base::MessageHandler {
  public:
-  P2PTransportChannel(int component,
+  P2PTransportChannel(const std::string& content_name,
+                      int component,
                       P2PTransport* transport,
                       PortAllocator *allocator);
   virtual ~P2PTransportChannel();

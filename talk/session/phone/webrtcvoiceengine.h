@@ -50,6 +50,31 @@
 
 namespace cricket {
 
+// Extend AudioOptions to include various WebRtc-specific options.
+struct WebRtcAudioOptions : AudioOptions {
+  WebRtcAudioOptions()
+      : AudioOptions(),
+        ec_mode(webrtc::kEcDefault),
+        aecm_mode(webrtc::kAecmSpeakerphone),
+        agc_mode(webrtc::kAgcDefault),
+        ns_mode(webrtc::kNsDefault) {
+  }
+
+  explicit WebRtcAudioOptions(const AudioOptions& options)
+      : AudioOptions(options),
+        ec_mode(webrtc::kEcDefault),
+        aecm_mode(webrtc::kAecmSpeakerphone),
+        agc_mode(webrtc::kAgcDefault),
+        ns_mode(webrtc::kNsDefault) {
+  }
+
+  webrtc::EcModes ec_mode;
+  webrtc::AecmModes aecm_mode;
+  webrtc::AgcModes agc_mode;
+  webrtc::NsModes ns_mode;
+};
+
+
 // WebRtcSoundclipStream is an adapter object that allows a memory stream to be
 // passed into WebRtc, and support looping.
 class WebRtcSoundclipStream : public webrtc::InStream {
@@ -102,7 +127,25 @@ class WebRtcVoiceEngine
 
   SoundclipMedia* CreateSoundclip();
 
-  bool SetOptions(int options);
+  // TODO: Rename to SetOptions and replace the old
+  // flags-based SetOptions.
+  bool SetAudioOptions(const AudioOptions& options);
+  // Eventually, we will replace them with AudioOptions.
+  // In the meantime, we leave this here for backwards compat.
+  bool SetOptions(int flags);
+  // Overrides, when set, take precedence over the options on a
+  // per-option basis.  For example, if AGC is set in options and AEC
+  // is set in overrides, AGC and AEC will be both be set.  Overrides
+  // can also turn off options.  For example, if AGC is set to "on" in
+  // options and AGC is set to "off" in overrides, the result is that
+  // AGC will be off until different overrides are applied or until
+  // the overrides are cleared.  Only one set of overrides is present
+  // at a time (they do not "stack").  And when the overrides are
+  // cleared, the media engine's state reverts back to the options set
+  // via SetOptions.  This allows us to have both "persistent options"
+  // (the normal options) and "temporary options" (overrides).
+  bool SetOptionOverrides(const AudioOptions& options);
+  bool ClearOptionOverrides();
   bool SetDelayOffset(int offset);
   bool SetDevices(const Device* in_device, const Device* out_device);
   bool GetOutputVolume(int* level);
@@ -177,6 +220,11 @@ class WebRtcVoiceEngine
   void ConstructCodecs();
   bool InitInternal();
   void ApplyLogging(const std::string& log_filter);
+  // Applies either options or overrides.  Every option that is "set"
+  // will be applied.  Every option not "set" will be ignored.  This
+  // allows us to selectively turn on and off different options easily
+  // at any time.
+  bool ApplyOptions(const AudioOptions& options);
   virtual void Print(const webrtc::TraceLevel level,
                      const char* trace_string, const int length);
   virtual void CallbackOnError(const int channel, const int errCode);
@@ -229,6 +277,14 @@ class WebRtcVoiceEngine
   talk_base::CriticalSection channels_cs_;
   webrtc::AgcConfig default_agc_config_;
   bool initialized_;
+  // See SetOptions and SetOptionOverrides for a description of the
+  // difference between options and overrides.
+  // options_ are the base options, which combined with the
+  // option_overrides_, create the current options being used.
+  // options_ is stored so that when option_overrides_ is cleared, we
+  // can restore the options_ without the option_overrides.
+  AudioOptions options_;
+  AudioOptions option_overrides_;
 
   talk_base::CriticalSection signal_media_critical_;
 };
@@ -292,8 +348,11 @@ class WebRtcVoiceMediaChannel
  public:
   explicit WebRtcVoiceMediaChannel(WebRtcVoiceEngine *engine);
   virtual ~WebRtcVoiceMediaChannel();
-  virtual bool SetOptions(int options);
-  virtual int GetOptions() const { return options_; }
+  virtual bool SetOptions(const AudioOptions& options);
+  virtual bool GetOptions(AudioOptions* options) const {
+    *options = options_;
+    return true;
+  }
   virtual bool SetRecvCodecs(const std::vector<AudioCodec> &codecs);
   virtual bool SetSendCodecs(const std::vector<AudioCodec> &codecs);
   virtual bool SetRecvRtpHeaderExtensions(
@@ -350,10 +409,6 @@ class WebRtcVoiceMediaChannel
   static Error WebRtcErrorToChannelError(int err_code);
 
  private:
-  // A -10dB gain adjustment is actually +10 in
-  // AgcConfig.targetLeveldBOv
-  static const int kMinus10DbAdjustment = 10;
-
   bool ChangePlayout(bool playout);
   bool ChangeSend(SendFlags send);
 
@@ -362,8 +417,7 @@ class WebRtcVoiceMediaChannel
   std::set<int> ringback_channels_;  // channels playing ringback
   std::vector<AudioCodec> recv_codecs_;
   talk_base::scoped_ptr<webrtc::CodecInst> send_codec_;
-  int options_;
-  bool agc_adjusted_;
+  AudioOptions options_;
   bool dtmf_allowed_;
   bool desired_playout_;
   bool playout_;

@@ -600,11 +600,12 @@ std::string RedirectXml(SignalingProtocol protocol,
 // TODO: Break out and join with fakeportallocator.h
 class TestPortAllocatorSession : public cricket::PortAllocatorSession {
  public:
-  TestPortAllocatorSession(int component,
+  TestPortAllocatorSession(const std::string& content_name,
+                           int component,
                            const std::string& ice_ufrag,
                            const std::string& ice_pwd,
                            const int port_offset)
-      : PortAllocatorSession(component, ice_ufrag, ice_pwd, 0),
+      : PortAllocatorSession(content_name, component, ice_ufrag, ice_pwd, 0),
         port_offset_(port_offset),
         ports_(kNumPorts),
         address_("127.0.0.1", 0),
@@ -675,11 +676,12 @@ class TestPortAllocator : public cricket::PortAllocator {
 
   virtual cricket::PortAllocatorSession*
   CreateSessionInternal(
+                const std::string& content_name,
                 int component,
                 const std::string& ice_ufrag,
                 const std::string& ice_pwd) {
     port_offset_ += 2;
-    return new TestPortAllocatorSession(component,
+    return new TestPortAllocatorSession(content_name, component,
                                         ice_ufrag, ice_pwd, port_offset_ - 2);
   }
 

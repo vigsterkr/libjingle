@@ -51,6 +51,7 @@ class TestHttpServer : public HttpServer, public sigslot::has_slots<> {
   }
 
   SocketAddress address() const { return socket_->GetLocalAddress(); }
+  void Close() const { socket_->Close(); }
 
  private:
   void OnAccept(AsyncSocket* socket) {
@@ -167,6 +168,36 @@ TEST_F(AsyncHttpRequestTest, TestGetNotFound) {
   EXPECT_TRUE_WAIT(done(), 5000);
   size_t size;
   EXPECT_EQ(404U, req->response().scode);
+  ASSERT_TRUE(req->response().document.get() != NULL);
+  req->response().document->GetSize(&size);
+  EXPECT_EQ(0U, size);
+  req->Release();
+}
+
+TEST_F(AsyncHttpRequestTest, TestGetToNonServer) {
+  AsyncHttpRequest* req = CreateGetRequest(
+      "127.0.0.1", server().address().port(),
+      kServerGetPath);
+  // Stop the server before we send the request.
+  server().Close();
+  req->Start();
+  EXPECT_TRUE_WAIT(done(), 10000);
+  size_t size;
+  EXPECT_EQ(500U, req->response().scode);
+  ASSERT_TRUE(req->response().document.get() != NULL);
+  req->response().document->GetSize(&size);
+  EXPECT_EQ(0U, size);
+  req->Release();
+}
+
+TEST_F(AsyncHttpRequestTest, TestGetToInvalidHostname) {
+  AsyncHttpRequest* req = CreateGetRequest(
+      "invalid", server().address().port(),
+      kServerGetPath);
+  req->Start();
+  EXPECT_TRUE_WAIT(done(), 5000);
+  size_t size;
+  EXPECT_EQ(500U, req->response().scode);
   ASSERT_TRUE(req->response().document.get() != NULL);
   req->response().document->GetSize(&size);
   EXPECT_EQ(0U, size);

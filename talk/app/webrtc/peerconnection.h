@@ -43,6 +43,11 @@
 namespace webrtc {
 class MediaStreamHandlers;
 
+typedef std::vector<PortAllocatorFactoryInterface::StunConfiguration>
+    StunConfigurations;
+typedef std::vector<PortAllocatorFactoryInterface::TurnConfiguration>
+    TurnConfigurations;
+
 // PeerConnectionImpl implements the PeerConnection interface.
 // It uses RoapSignaling and WebRtcSession to implement
 // the PeerConnection functionality.
@@ -55,6 +60,9 @@ class PeerConnection : public PeerConnectionInterface,
 
   bool Initialize(bool use_roap,
                   const std::string& configuration,
+                  PeerConnectionObserver* observer);
+  bool Initialize(const JsepInterface::IceServers& configuration,
+                  JsepInterface::IceOptions options,
                   PeerConnectionObserver* observer);
 
   virtual ~PeerConnection();
@@ -74,21 +82,37 @@ class PeerConnection : public PeerConnectionInterface,
   virtual void Close();
   virtual ReadyState ready_state();
   virtual SdpState sdp_state();
+  virtual IceState ice_state();
 
-  // Jsep functions.
+  // TODO: Implement PeerconnectionProxy to Send all the incoming
+  // calls to the signaling thread.
+
+  // TODO: Remove deprecated Jsep functions.
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
       const SessionDescriptionInterface* offer);
-
   virtual bool StartIce(IceOptions options);
   virtual bool SetLocalDescription(Action action,
                                    SessionDescriptionInterface* desc);
   virtual bool SetRemoteDescription(Action action,
                                     SessionDescriptionInterface* desc);
   virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
+
   virtual const SessionDescriptionInterface* local_description() const;
   virtual const SessionDescriptionInterface* remote_description() const;
+
+  // JSEP01
+  virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
+                           const SessionDescriptionOptions& options);
+  virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
+                            const SessionDescriptionOptions& options);
+  virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
+                                   SessionDescriptionInterface* desc);
+  virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
+                                    SessionDescriptionInterface* desc);
+  virtual bool UpdateIce(const IceServers& configuration, IceOptions options);
+  virtual bool AddIceCandidate(const IceCandidateInterface* candidate);
 
  private:
   // Implement talk_base::MessageHandler.
@@ -110,6 +134,10 @@ class PeerConnection : public PeerConnectionInterface,
   void ChangeSdpState(PeerConnectionInterface::SdpState sdp_state);
   void Terminate_s();
 
+  bool DoInitialize(bool use_roap, const StunConfigurations& stun_config,
+                    const TurnConfigurations& turn_config,
+                    PeerConnectionObserver* observer);
+
   talk_base::Thread* signaling_thread() const {
     return factory_->signaling_thread();
   }
@@ -124,6 +152,8 @@ class PeerConnection : public PeerConnectionInterface,
   PeerConnectionObserver* observer_;
   ReadyState ready_state_;
   SdpState sdp_state_;
+  // TODO: Implement ice_state.
+  IceState ice_state_;
   talk_base::scoped_refptr<StreamCollection> local_media_streams_;
 
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;

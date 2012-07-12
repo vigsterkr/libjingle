@@ -49,10 +49,11 @@ class TestHttpPortAllocator : public HttpPortAllocator {
     SetRelayToken(relay_token);
   }
   PortAllocatorSession* CreateSessionInternal(
+      const std::string& content_name,
       int component,
       const std::string& ice_ufrag,
       const std::string& ice_pwd) {
-    return new TestHttpPortAllocatorSession(this, component,
+    return new TestHttpPortAllocatorSession(this, content_name, component,
                                             ice_ufrag, ice_pwd,
                                             stun_hosts(), relay_hosts(),
                                             relay_token(), user_agent());
@@ -466,6 +467,7 @@ void ConnectivityChecker::AllocateRelayPorts() {
   TestHttpPortAllocatorSession* allocator_session =
       reinterpret_cast<TestHttpPortAllocatorSession*>(
           port_allocator_->CreateSessionInternal(
+              "connectivity checker test content",
               ICE_CANDIDATE_COMPONENT_RTP,
               talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
               talk_base::CreateRandomString(ICE_PWD_LENGTH)));

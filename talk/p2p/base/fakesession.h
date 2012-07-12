@@ -57,8 +57,9 @@ class FakeTransportChannel : public TransportChannelImpl,
                              public talk_base::MessageHandler {
  public:
   explicit FakeTransportChannel(Transport* transport,
+                                const std::string& content_name,
                                 int component)
-      : TransportChannelImpl(component),
+      : TransportChannelImpl(content_name, component),
         transport_(transport),
         dest_(NULL),
         state_(STATE_INIT),
@@ -224,8 +225,10 @@ class FakeTransport : public Transport {
   typedef std::map<int, FakeTransportChannel*> ChannelMap;
   FakeTransport(talk_base::Thread* signaling_thread,
                 talk_base::Thread* worker_thread,
+                const std::string& content_name,
                 PortAllocator* alllocator = NULL)
-      : Transport(signaling_thread, worker_thread, "test", NULL),
+      : Transport(signaling_thread, worker_thread,
+                  content_name, "test_type", NULL),
       dest_(NULL),
       async_(false),
       identity_(NULL) {
@@ -256,7 +259,7 @@ class FakeTransport : public Transport {
       return NULL;
     }
     FakeTransportChannel* channel =
-        new FakeTransportChannel(this, component);
+        new FakeTransportChannel(this, content_name(), component);
     channel->SetAsync(async_);
     SetChannelDestination(component, channel);
     channels_[component] = channel;
@@ -345,8 +348,8 @@ class FakeSession : public BaseSession {
   }
 
  protected:
-  virtual Transport* CreateTransport() {
-    return new FakeTransport(signaling_thread(), worker_thread());
+  virtual Transport* CreateTransport(const std::string& content_name) {
+    return new FakeTransport(signaling_thread(), worker_thread(), content_name);
   }
 
   void CompleteNegotiation() {

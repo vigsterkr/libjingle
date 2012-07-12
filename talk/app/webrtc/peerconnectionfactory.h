@@ -44,6 +44,10 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
       CreatePeerConnection(const std::string& config,
                            PeerConnectionObserver* observer);
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const JsepInterface::IceServers& configuration,
+                           JsepInterface::IceOptions options,
+                           PeerConnectionObserver* observer);
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreateRoapPeerConnection(const std::string& config,
                                PeerConnectionObserver* observer);
   bool Initialize();
@@ -80,6 +84,10 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
       bool use_roap,
       const std::string& configuration,
+      PeerConnectionObserver* observer);
+  talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
+      const JsepInterface::IceServers& configuration,
+      JsepInterface::IceOptions options,
       PeerConnectionObserver* observer);
   // Implements talk_base::MessageHandler.
   void OnMessage(talk_base::Message* msg);

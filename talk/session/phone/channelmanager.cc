@@ -91,8 +91,8 @@ struct CreationParams : public talk_base::MessageData {
   DataChannel* data_channel;
 };
 
-struct AudioOptions : public talk_base::MessageData {
-  AudioOptions(int o, const Device* in, const Device* out, int delay)
+struct AudioOptionsParams : public talk_base::MessageData {
+  AudioOptionsParams(int o, const Device* in, const Device* out, int delay)
       : options(o), in_device(in), out_device(out), delay_offset(delay) {}
   int options;
   const Device* in_device;
@@ -569,7 +569,7 @@ bool ChannelManager::SetAudioOptions(const std::string& in_name,
   // If we're initialized, pass the settings to the media engine.
   bool ret = true;
   if (initialized_) {
-    AudioOptions options(opts, &in_dev, &out_dev, delay_offset);
+    AudioOptionsParams options(opts, &in_dev, &out_dev, delay_offset);
     ret = (Send(MSG_SETAUDIOOPTIONS, &options) && options.result);
   }
 
@@ -962,7 +962,7 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
       break;
     }
     case MSG_SETAUDIOOPTIONS: {
-      AudioOptions* p = static_cast<AudioOptions*>(data);
+      AudioOptionsParams* p = static_cast<AudioOptionsParams*>(data);
       p->result = SetAudioOptions_w(p->options, p->delay_offset,
                                     p->in_device, p->out_device);
       break;
