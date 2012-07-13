@@ -105,6 +105,10 @@ RemoteVideoTrackHandler::RemoteVideoTrackHandler(
     MediaProviderInterface* provider)
     : VideoTrackHandler(track, provider),
       remote_video_track_(track) {
+  if (video_track_->enabled()) {
+    provider_->SetRemoteRenderer(video_track_->label(),
+                                 video_track_->FrameInput());
+  }
 }
 
 RemoteVideoTrackHandler::~RemoteVideoTrackHandler() {
@@ -126,7 +130,11 @@ void RemoteVideoTrackHandler::OnStateChanged() {
 }
 
 void RemoteVideoTrackHandler::OnEnabledChanged() {
-  // TODO: What should happen when enabled is changed?
+  cricket::VideoRenderer* renderer = NULL;
+  if (video_track_->enabled()) {
+    renderer = video_track_->FrameInput();
+  }
+  provider_->SetRemoteRenderer(video_track_->label(), renderer);
 }
 
 MediaStreamHandler::MediaStreamHandler(MediaStreamInterface* stream,

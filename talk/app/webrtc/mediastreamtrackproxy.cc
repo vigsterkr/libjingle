@@ -42,6 +42,9 @@ enum {
   MSG_GET_VIDEODEVICE,
   MSG_GET_VIDEORENDERER,
   MSG_SET_VIDEORENDERER,
+  MSG_ADD_VIDEORENDERER,
+  MSG_REMOVE_VIDEORENDERER,
+  MSG_GET_VIDEOFRAMEINPUT,
 };
 
 typedef talk_base::TypedMessageData<std::string*> LabelMessageData;
@@ -50,6 +53,10 @@ typedef talk_base::TypedMessageData<webrtc::ObserverInterface*>
 typedef talk_base::TypedMessageData
     <webrtc::MediaStreamTrackInterface::TrackState> TrackStateMessageData;
 typedef talk_base::TypedMessageData<bool> EnableMessageData;
+typedef talk_base::TypedMessageData<webrtc::VideoRendererInterface*>
+    VideoRendererInterfaceMessageData;
+typedef talk_base::TypedMessageData<cricket::VideoRenderer*>
+    VideoFrameInputMessageData;
 
 
 class AudioDeviceMessageData : public talk_base::MessageData {
@@ -365,6 +372,33 @@ VideoRendererWrapperInterface* VideoTrackProxy::GetRenderer() {
   return video_track_->GetRenderer();
 }
 
+void VideoTrackProxy::AddRenderer(VideoRendererInterface* renderer) {
+  if (!signaling_thread_->IsCurrent()) {
+    VideoRendererInterfaceMessageData msg(renderer);
+    Send(MSG_ADD_VIDEORENDERER, &msg);
+    return;
+  }
+  video_track_->AddRenderer(renderer);
+}
+
+void VideoTrackProxy::RemoveRenderer(VideoRendererInterface* renderer) {
+  if (!signaling_thread_->IsCurrent()) {
+    VideoRendererInterfaceMessageData msg(renderer);
+    Send(MSG_REMOVE_VIDEORENDERER, &msg);
+    return;
+  }
+  video_track_->RemoveRenderer(renderer);
+}
+
+cricket::VideoRenderer* VideoTrackProxy::FrameInput() {
+  if (!signaling_thread_->IsCurrent()) {
+    VideoFrameInputMessageData msg(NULL);
+    Send(MSG_GET_VIDEOFRAMEINPUT, &msg);
+    return msg.data();
+  }
+  return video_track_->FrameInput();
+}
+
 void VideoTrackProxy::OnMessage(talk_base::Message* msg) {
   if (!MediaStreamTrackProxy<LocalVideoTrackInterface>::HandleMessage(msg)) {
     switch (msg->message_id) {
@@ -384,6 +418,24 @@ void VideoTrackProxy::OnMessage(talk_base::Message* msg) {
         VideoRendererMessageData* video_renderer =
             static_cast<VideoRendererMessageData*>(msg->pdata);
         video_track_->SetRenderer(video_renderer->video_renderer_.get());
+        break;
+      }
+      case MSG_ADD_VIDEORENDERER: {
+        VideoRendererInterfaceMessageData* renderer =
+            static_cast<VideoRendererInterfaceMessageData*>(msg->pdata);
+        video_track_->AddRenderer(renderer->data());
+        break;
+      }
+      case MSG_REMOVE_VIDEORENDERER: {
+        VideoRendererInterfaceMessageData* message =
+            static_cast<VideoRendererInterfaceMessageData*>(msg->pdata);
+        video_track_->RemoveRenderer(message->data());
+        break;
+      }
+      case MSG_GET_VIDEOFRAMEINPUT: {
+        VideoFrameInputMessageData* message =
+            static_cast<VideoFrameInputMessageData*>(msg->pdata);
+        message->data() = video_track_->FrameInput();
         break;
       }
     default:

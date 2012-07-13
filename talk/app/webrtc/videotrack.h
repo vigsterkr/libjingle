@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,6 +33,7 @@
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/mediastreamtrack.h"
 #include "talk/app/webrtc/notifier.h"
+#include "talk/app/webrtc/videotrackrenderers.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/scoped_ref_ptr.h"
 
@@ -64,6 +65,10 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
   virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
   VideoRendererWrapperInterface* GetRenderer();
 
+  virtual void AddRenderer(VideoRendererInterface* renderer);
+  virtual void RemoveRenderer(VideoRendererInterface* renderer);
+  virtual cricket::VideoRenderer* FrameInput();
+
   virtual std::string kind() const;
 
  protected:
@@ -71,6 +76,7 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
   VideoTrack(const std::string& label, cricket::VideoCapturer* video_device);
 
  private:
+  VideoTrackRenderers renderers_;
   talk_base::scoped_ptr<cricket::VideoCapturer> video_device_;
   talk_base::scoped_refptr<VideoRendererWrapperInterface> video_renderer_;
 };

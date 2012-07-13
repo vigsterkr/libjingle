@@ -321,8 +321,10 @@ bool WebRtcVideoFrame::Reset(uint32 format, int w, int h, int dw, int dh,
   size_t desired_size = SizeOf(new_width, new_height);
   talk_base::scoped_refptr<RefCountedBuffer> video_buffer(
       new RefCountedBuffer(desired_size));
+  // Since the libyuv::ConvertToI420 will handle the rotation, so the
+  // new frame's rotation should always be 0.
   Attach(video_buffer.get(), desired_size, new_width, new_height,
-         pixel_width, pixel_height, elapsed_time, time_stamp, rotation);
+         pixel_width, pixel_height, elapsed_time, time_stamp, 0);
 
   int horiz_crop = ((w - dw) / 2) & ~1;
   // ARGB on Windows has negative height.

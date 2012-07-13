@@ -64,6 +64,18 @@ std::string VideoTrack::kind() const {
   return kVideoTrackKind;
 }
 
+void VideoTrack::AddRenderer(VideoRendererInterface* renderer) {
+  renderers_.AddRenderer(renderer);
+}
+
+void VideoTrack::RemoveRenderer(VideoRendererInterface* renderer) {
+  renderers_.RemoveRenderer(renderer);
+}
+
+cricket::VideoRenderer* VideoTrack::FrameInput() {
+  return &renderers_;
+}
+
 talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateRemote(
     const std::string& label) {
   talk_base::RefCountedObject<VideoTrack>* track =

@@ -775,21 +775,12 @@ bool WebRtcVideoEngine::IsCapturing() const {
 
 void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
                                         const CapturedFrame* frame) {
-  // TODO: Use ComputeCrop.
-  // Force the default crop for now.
-  int cropped_width = frame->width;
-  int cropped_height = frame->width * default_codec_format_.height
-      / default_codec_format_.width;
-  if (cropped_height > frame->height) {
-    cropped_height = frame->height;
-  }
-
-  if (cropped_width & 1) {
-    cropped_width -= 1;
-  }
-  if (cropped_height & 1) {
-    cropped_height -= 1;
-  }
+  // Crop to desired aspect ratio.
+  int cropped_width, cropped_height;
+  ComputeCrop(default_codec_format_.width, default_codec_format_.height,
+              frame->width, abs(frame->height),
+              frame->pixel_width, frame->pixel_height,
+              frame->rotation, &cropped_width, &cropped_height);
 
   // This CapturedFrame* will already be in I420. In the future, when
   // WebRtcVideoFrame has support for independent planes, we can just attach
@@ -797,7 +788,7 @@ void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
   WebRtcVideoFrame i420_frame;
   if (!i420_frame.Init(frame, cropped_width, cropped_height)) {
     LOG(LS_ERROR) << "Couldn't convert to I420! "
-                  << frame->width << " x " << cropped_height;
+                  << cropped_width << " x " << cropped_height;
     return;
   }
 

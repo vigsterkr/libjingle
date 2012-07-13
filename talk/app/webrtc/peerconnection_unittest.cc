@@ -34,13 +34,12 @@
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
 #include "talk/app/webrtc/test/fakevideocapturemodule.h"
+#include "talk/app/webrtc/test/fakevideotrackrenderer.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
-#include "talk/session/phone/fakevideorenderer.h"
-#include "talk/session/phone/videorenderer.h"
 
 using webrtc::SessionDescriptionInterface;
 
@@ -55,6 +54,7 @@ void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
 
 class SignalingMessageReceiver {
  public:
+  // Returns the number of rendered frames.
   virtual int num_rendered_frames() = 0;
 
   // Makes it possible for the remote side to decide when to start capturing.
@@ -209,8 +209,8 @@ class PeerConnectionTestClientBase
   }
 
   virtual int num_rendered_frames() {
-    if (fake_video_renderer_ == NULL) {
-      return -1;
+    if (fake_video_renderer_.get() == NULL) {
+      return 0;
     }
     return fake_video_renderer_->num_rendered_frames();
   }
@@ -223,19 +223,12 @@ class PeerConnectionTestClientBase
   virtual void OnAddStream(webrtc::MediaStreamInterface* media_stream) {
     std::list<webrtc::VideoTrackInterface*> video_tracks;
     GetAllVideoTracks(media_stream, &video_tracks);
-    int track_id = 0;
     // Currently only one video track is supported.
     // TODO: enable multiple video tracks.
     EXPECT_EQ(1u, video_tracks.size());
-    for (std::list<webrtc::VideoTrackInterface*>::iterator iter =
-             video_tracks.begin();
-         iter != video_tracks.end();
-         ++iter) {
-      fake_video_renderer_ = new cricket::FakeVideoRenderer();
-      video_renderer_wrapper_ = webrtc::CreateVideoRenderer(
-          fake_video_renderer_);
-      (*iter)->SetRenderer(video_renderer_wrapper_);
-      track_id++;
+    if (video_tracks.size() > 0) {
+      fake_video_renderer_.reset(
+          new webrtc::FakeVideoTrackRenderer(video_tracks.front()));
     }
     // The video renderer has been added. Tell the far end to start capturing
     // frames. That way the number of captured frames should be equal to number
@@ -327,13 +320,8 @@ class PeerConnectionTestClientBase
   // Needed to keep track of number of frames send.
   talk_base::scoped_refptr<FakeAudioCaptureModule> fake_audio_capture_module_;
   FakeVideoCaptureModule* fake_video_capture_module_;
-  // Ensures that fake_video_renderer_ is available as long as this class
-  // exists. It also ensures destruction of the memory associated with it when
-  // this class is deleted.
-  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
-      video_renderer_wrapper_;
   // Needed to keep track of number of frames received.
-  cricket::FakeVideoRenderer* fake_video_renderer_;
+  talk_base::scoped_ptr<webrtc::FakeVideoTrackRenderer> fake_video_renderer_;
 
   // For remote peer communication.
   MessageReceiver* signaling_message_receiver_;

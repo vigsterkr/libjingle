@@ -129,6 +129,10 @@ class VideoTrackProxy : public MediaStreamTrackProxy<LocalVideoTrackInterface> {
   virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
   VideoRendererWrapperInterface* GetRenderer();
 
+  virtual void AddRenderer(VideoRendererInterface* renderer);
+  virtual void RemoveRenderer(VideoRendererInterface* renderer);
+  virtual cricket::VideoRenderer* FrameInput();
+
  protected:
   VideoTrackProxy(const std::string& label,
                   talk_base::Thread* signaling_thread);

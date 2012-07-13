@@ -204,6 +204,18 @@ class MockLocalVideoTrack
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
     return track_impl_->GetVideoCapture();
   }
+  virtual void AddRenderer(VideoRendererInterface* renderer) {
+    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
+    return track_impl_->AddRenderer(renderer);
+  }
+  virtual void RemoveRenderer(VideoRendererInterface* renderer) {
+    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
+    return track_impl_->RemoveRenderer(renderer);
+  }
+  virtual cricket::VideoRenderer* FrameInput() {
+    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
+    return track_impl_->FrameInput();
+  }
 };
 
 class MockLocalAudioTrack

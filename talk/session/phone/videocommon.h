@@ -117,6 +117,14 @@ inline std::string GetFourccName(uint32 fourcc) {
   return name;
 }
 
+// Compute the frame size that conversion should crop to based on aspect ratio.
+// Ensures size is multiple of 2 due to I420 and conversion limitations.
+void ComputeCrop(int cropped_format_width, int cropped_format_height,
+                 int frame_width, int frame_height,
+                 int pixel_width, int pixel_height,
+                 int rotation,
+                 int* cropped_width, int* cropped_height);
+
 //////////////////////////////////////////////////////////////////////////////
 // Definition of VideoFormat.
 //////////////////////////////////////////////////////////////////////////////

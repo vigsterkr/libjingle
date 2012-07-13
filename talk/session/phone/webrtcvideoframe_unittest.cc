@@ -36,6 +36,41 @@ class WebRtcVideoFrameTest : public VideoFrameTest<cricket::WebRtcVideoFrame> {
   WebRtcVideoFrameTest() {
     repeat_ = FLAG_yuvconverter_repeat;
   }
+
+  void TestInit(int cropped_width, int cropped_height) {
+    const int frame_width = 1920;
+    const int frame_height = 1080;
+
+    // Build the CapturedFrame.
+    cricket::CapturedFrame captured_frame;
+    captured_frame.fourcc = cricket::FOURCC_I420;
+    captured_frame.pixel_width = 1;
+    captured_frame.pixel_height = 1;
+    captured_frame.elapsed_time = 1234;
+    captured_frame.time_stamp = 5678;
+    captured_frame.rotation = 0;
+    captured_frame.width = frame_width;
+    captured_frame.height = frame_height;
+    captured_frame.data_size = (frame_width * frame_height) +
+        ((frame_width + 1) / 2) * ((frame_height + 1) / 2) * 2;
+    talk_base::scoped_array<uint8> captured_frame_buffer(
+        new uint8[captured_frame.data_size]);
+    captured_frame.data = captured_frame_buffer.get();
+
+    // Create the new frame from the CapturedFrame.
+    cricket::WebRtcVideoFrame frame;
+    EXPECT_TRUE(frame.Init(&captured_frame, cropped_width, cropped_height));
+
+    // Verify the new frame.
+    EXPECT_EQ(1u, frame.GetPixelWidth());
+    EXPECT_EQ(1u, frame.GetPixelHeight());
+    EXPECT_EQ(1234, frame.GetElapsedTime());
+    EXPECT_EQ(5678, frame.GetTimeStamp());
+    EXPECT_EQ(0, frame.GetRotation());
+    // The size of the new frame should have been cropped to multiple of 4.
+    EXPECT_EQ(static_cast<size_t>(cropped_width & ~3), frame.GetWidth());
+    EXPECT_EQ(static_cast<size_t>(cropped_height & ~3), frame.GetHeight());
+  }
 };
 
 #define TEST_WEBRTCVIDEOFRAME(X) TEST_F(WebRtcVideoFrameTest, X) { \
@@ -43,6 +78,51 @@ class WebRtcVideoFrameTest : public VideoFrameTest<cricket::WebRtcVideoFrame> {
 }
 
 TEST_WEBRTCVIDEOFRAME(ConstructI420)
+TEST_WEBRTCVIDEOFRAME(ConstructI422)
+TEST_WEBRTCVIDEOFRAME(ConstructYuy2)
+TEST_WEBRTCVIDEOFRAME(ConstructYuy2Unaligned)
+TEST_WEBRTCVIDEOFRAME(ConstructYuy2Wide)
+TEST_WEBRTCVIDEOFRAME(ConstructYV12)
+TEST_WEBRTCVIDEOFRAME(ConstructUyvy)
+TEST_WEBRTCVIDEOFRAME(ConstructM420)
+TEST_WEBRTCVIDEOFRAME(ConstructQ420)
+TEST_WEBRTCVIDEOFRAME(ConstructNV21)
+TEST_WEBRTCVIDEOFRAME(ConstructNV12)
+TEST_WEBRTCVIDEOFRAME(ConstructABGR)
+TEST_WEBRTCVIDEOFRAME(ConstructARGB)
+TEST_WEBRTCVIDEOFRAME(ConstructARGBWide)
+TEST_WEBRTCVIDEOFRAME(ConstructBGRA)
+TEST_WEBRTCVIDEOFRAME(Construct24BG)
+TEST_WEBRTCVIDEOFRAME(ConstructRaw)
+TEST_WEBRTCVIDEOFRAME(ConstructRGB565)
+TEST_WEBRTCVIDEOFRAME(ConstructARGB1555)
+TEST_WEBRTCVIDEOFRAME(ConstructARGB4444)
+
+TEST_WEBRTCVIDEOFRAME(ConstructI420Mirror)
+TEST_WEBRTCVIDEOFRAME(ConstructI420Rotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructI420Rotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructI420Rotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructI420Rotate270)
+TEST_WEBRTCVIDEOFRAME(ConstructYV12Rotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructYV12Rotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructYV12Rotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructYV12Rotate270)
+TEST_WEBRTCVIDEOFRAME(ConstructNV12Rotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructNV12Rotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructNV12Rotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructNV12Rotate270)
+TEST_WEBRTCVIDEOFRAME(ConstructNV21Rotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructNV21Rotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructNV21Rotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructNV21Rotate270)
+TEST_WEBRTCVIDEOFRAME(ConstructUYVYRotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructUYVYRotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructUYVYRotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructUYVYRotate270)
+TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate0)
+TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate90)
+TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate180)
+TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate270)
 TEST_WEBRTCVIDEOFRAME(ConstructI4201Pixel)
 TEST_WEBRTCVIDEOFRAME(ConstructI4205Pixel)
 // TODO: WebRtcVideoFrame does not support horizontal crop.
@@ -214,4 +294,21 @@ TEST_F(WebRtcVideoFrameTest, Transfer) {
                 frame1.GetElapsedTime(), frame1.GetTimeStamp(), 0);
   EXPECT_TRUE(IsNull(frame1));
   EXPECT_TRUE(IsSize(frame2, kWidth, kHeight));
+}
+
+// Tests the Init function with different cropped size.
+TEST_F(WebRtcVideoFrameTest, InitEvenSize) {
+  TestInit(640, 360);
+}
+
+TEST_F(WebRtcVideoFrameTest, InitOddWidth) {
+  TestInit(601, 480);
+}
+
+TEST_F(WebRtcVideoFrameTest, InitOddHeight) {
+  TestInit(360, 765);
+}
+
+TEST_F(WebRtcVideoFrameTest, InitOddWidthHeight) {
+  TestInit(355, 1021);
 }
