@@ -105,8 +105,12 @@ bool JsepSessionDescription::AddCandidate(
     return false;
   }
   cricket::Candidate updated_candidate = candidate->candidate();
-  updated_candidate.set_username(transport_info->ice_ufrag);
-  updated_candidate.set_password(transport_info->ice_pwd);
+  if (updated_candidate.username().empty()) {
+    updated_candidate.set_username(transport_info->ice_ufrag);
+  }
+  if (updated_candidate.password().empty()) {
+    updated_candidate.set_password(transport_info->ice_pwd);
+  }
   candidate_collection_[mediasection_index].add(
        new JsepIceCandidate(candidate->label(), updated_candidate));
   return true;

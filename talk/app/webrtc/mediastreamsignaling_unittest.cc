@@ -55,7 +55,7 @@ using webrtc::StreamCollectionInterface;
 static const char kSdpString1[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
-    "s=\r\n"
+    "s=-\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/AVPF 103\r\n"
     "a=mid:audio\r\n"
@@ -75,7 +75,7 @@ static const char kSdpString1[] =
 static const char kSdpString2[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
-    "s=\r\n"
+    "s=-\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/AVPF 103\r\n"
     "a=mid:audio\r\n"

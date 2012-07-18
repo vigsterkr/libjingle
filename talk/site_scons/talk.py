@@ -540,6 +540,17 @@ def ExtendComponent(env, component, **kwargs):
 
   node = builder(name, srcs)
 
+  if env.Bit('mac') and 'ComponentProgram' == component:
+    # Build .dSYM debug packages. This is useful even for non-stripped
+    # binaries, as the dsym utility will fetch symbols from all
+    # statically-linked libraries (the linker doesn't include them in to the
+    # final binary).
+    build_dsym = env.Command(
+        env.Dir('$STAGING_DIR/%s.dSYM' % node[0]),
+        node,
+        'dsymutil -o $TARGET $SOURCE')
+    env.Alias('all_dsym', env.Alias('%s.dSYM' % node[0], build_dsym))
+
   if signed:
     # Get the name of the built binary, then get the name of the final signed
     # version from it.  We need the output path since we don't know the file

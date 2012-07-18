@@ -25,11 +25,13 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if HAVE_CONFIG_H
-#include "config.h"
-#endif  // HAVE_CONFIG_H
-
 #if HAVE_OPENSSL_SSL_H
+
+#include "talk/base/openssladapter.h"
+
+#if defined(POSIX)
+#include <unistd.h>
+#endif
 
 #include <openssl/bio.h>
 #include <openssl/crypto.h>
@@ -39,9 +41,12 @@
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif  // HAVE_CONFIG_H
+
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
-#include "talk/base/openssladapter.h"
 #include "talk/base/sslroots.h"
 #include "talk/base/stringutils.h"
 

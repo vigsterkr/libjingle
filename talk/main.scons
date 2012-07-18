@@ -101,6 +101,8 @@ root_env.AppendUnique(locales = [
 
 AddTargetGroup('all_breakpads', 'breakpad files can be built')
 
+AddTargetGroup('all_dsym', 'dsym debug packages can be built')
+
 #-------------------------------------------------------------------------------
 # W I N D O W S
 #
@@ -187,7 +189,10 @@ win_env.Append(
     '$PLATFORM_SDK_VISTA_6_0_DIR/Lib'
   ],
   LINKFLAGS = [
-    '-manifest' # TODO: Why do we need this?
+    '-manifest', # TODO: Why do we need this?
+    # Some of the third-party libraries we link in don't have public symbols, so
+    # ignore that linker warning.
+    '/ignore:4221',
   ],
   MIDLFLAGS = [
     '/win32',
@@ -682,6 +687,14 @@ if '-mfpu=neon' in linux_cross_arm_env['CFLAGS'] or \
    '-mfpu=neon' in linux_cross_arm_env['CXXFLAGS']:
   print "Building with ARM NEON support."
   linux_cross_arm_env.SetBits('arm_neon')
+
+# Detect hardfp from the -mfloat-abi build flag
+DeclareBit('arm_hardfp', 'ARM supporting hardfp')
+if '-mfloat-abi=hard' in linux_cross_arm_env['CFLAGS'] or \
+   '-mfloat-abi=hard' in linux_cross_arm_env['CCFLAGS'] or \
+   '-mfloat-abi=hard' in linux_cross_arm_env['CXXFLAGS']:
+  print "Building with hard floating point support."
+  linux_cross_arm_env.SetBits('arm_hardfp')
 
 
 linux_cross_arm_dbg_env = linux_cross_arm_env.Clone(

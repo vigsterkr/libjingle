@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -80,9 +80,7 @@ TEST(PeerConnectionFactory, CreatePCUsingIceServers) {
   ice_server.uri = kTurnIceServer;
   ice_servers.push_back(ice_server);
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(ice_servers,
-                                    webrtc::JsepInterface::kUseAll,
-                                    &observer));
+      factory->CreatePeerConnection(ice_servers, NULL, &observer));
 
   EXPECT_TRUE(pc.get() != NULL);
 }

@@ -355,16 +355,17 @@ bool WebRtcVoiceEngine::InitInternal() {
   LOG(LS_INFO) << "WebRtc VoiceEngine Version:";
   LogMultiline(talk_base::LS_INFO, buffer);
 
+  // Save the default AGC configuration settings. This must happen before
+  // calling SetOptions or the default will be overwritten.
+  if (voe_wrapper_->processing()->GetAgcConfig(default_agc_config_) == -1) {
+    LOG_RTCERR0(GetAGCConfig);
+    return false;
+  }
+
   // Turn on AEC and AGC by default.
   if (!SetOptions(
       MediaEngineInterface::ECHO_CANCELLATION |
       MediaEngineInterface::AUTO_GAIN_CONTROL)) {
-    return false;
-  }
-
-  // Save the default AGC configuration settings.
-  if (voe_wrapper_->processing()->GetAgcConfig(default_agc_config_) == -1) {
-    LOG_RTCERR0(GetAGCConfig);
     return false;
   }
 
@@ -487,6 +488,7 @@ bool WebRtcVoiceEngine::SetAudioOptions(const AudioOptions& options) {
 }
 
 bool WebRtcVoiceEngine::SetOptionOverrides(const AudioOptions& overrides) {
+  LOG(LS_INFO) << "Setting option overrides: " << overrides.ToString();
   if (!ApplyOptions(overrides)) {
     return false;
   }
@@ -495,7 +497,7 @@ bool WebRtcVoiceEngine::SetOptionOverrides(const AudioOptions& overrides) {
 }
 
 bool WebRtcVoiceEngine::ClearOptionOverrides() {
-  LOG(LS_INFO) << "Clear option overrides.";
+  LOG(LS_INFO) << "Clearing option overrides.";
   AudioOptions options = options_;
 
   if (!ApplyOptions(options)) {
@@ -521,6 +523,8 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
   // Conference mode doesn't work well on ChromeOS.
   options.conference_mode.Set(false);
 #endif  // CHROMEOS
+
+  LOG(LS_INFO) << "Applying audio options: " << options.ToString();
 
   webrtc::VoEAudioProcessing* voep = voe_wrapper_->processing();
 
@@ -1377,17 +1381,23 @@ WebRtcVoiceMediaChannel::~WebRtcVoiceMediaChannel() {
 }
 
 bool WebRtcVoiceMediaChannel::SetOptions(const AudioOptions& options) {
+  LOG(LS_INFO) << "Setting voice channel options: " << options.ToString();
+
   // Always accept flags that are unchanged.
   if (options_ == options) {
     return true;
   }
 
-  // Reject new options if we're already sending.
   if (send_ != SEND_NOTHING) {
-    return false;
+    if (!engine()->SetOptionOverrides(options)) {
+      LOG(LS_WARNING) <<
+          "Failed to engine SetOptionOverrides during channel SetOptions.";
+      return false;
+    }
+  } else {
+    // Will be interpreted when appropriate.
   }
 
-  // Save the options, to be interpreted where appropriate.
   options_ = options;
   return true;
 }

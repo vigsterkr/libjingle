@@ -137,7 +137,6 @@ class PeerConnectionObserver : public IceCandidateObserver {
   ~PeerConnectionObserver() {}
 };
 
-
 class PeerConnectionInterface : public JsepInterface,
                                 public talk_base::RefCountInterface {
  public:
@@ -185,12 +184,25 @@ class PeerConnectionInterface : public JsepInterface,
   // Add a new local stream.
   // This function does not trigger any changes to the stream until
   // CommitStreamChanges is called.
+  // Deprecated (jsep00)
   virtual void AddStream(LocalMediaStreamInterface* stream) = 0;
+
+  // Add a new MediaStream to be sent on this PeerConnection.
+  // Note that a SessionDescription negotiation is needed before the
+  // remote peer can receive the stream.
+  virtual bool AddStream(MediaStreamInterface* stream,
+                         const MediaConstraintsInterface* constraints) = 0;
 
   // Remove a local stream and stop sending it.
   // This function does not trigger any changes to the stream until
   // CommitStreamChanges is called.
+  // Deprecated (jsep00)
   virtual void RemoveStream(LocalMediaStreamInterface* stream) = 0;
+
+  // Remove a MediaStream from this PeerConnection.
+  // Note that a SessionDescription negotiation is need before the
+  // remote peer is notified.
+  virtual void RemoveStream(MediaStreamInterface* stream) = 0;
 
   // Remove a local stream and stop sending it.
   // Returns false if a stream with |label| does not exist.
@@ -273,7 +285,7 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
                            PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
-                           JsepInterface::IceOptions options,
+                           const MediaConstraintsInterface* constraints,
                            PeerConnectionObserver* observer) = 0;
   // Deprecated (jsep00)
   virtual talk_base::scoped_refptr<PeerConnectionInterface>

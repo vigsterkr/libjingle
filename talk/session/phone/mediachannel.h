@@ -109,6 +109,45 @@ struct AudioOptions {
         adjust_agc_delta == o.adjust_agc_delta;
   }
 
+  virtual std::string ToString() const {
+    std::ostringstream ost;
+    ost << "AudioOptions {";
+    bool aec;
+    if (echo_cancellation.Get(&aec)) {
+      ost << "aec: " << aec << ", ";
+    }
+    bool agc;
+    if (auto_gain_control.Get(&agc)) {
+      ost << "agc: " << agc << ", ";
+    }
+    bool ns;
+    if (noise_suppression.Get(&ns)) {
+      ost << "ns: " << ns << ", ";
+    }
+    bool hf;
+    if (highpass_filter.Get(&hf)) {
+      ost << "hf: " << hf << ", ";
+    }
+    bool swap;
+    if (stereo_swapping.Get(&swap)) {
+      ost << "swap: " << swap << ", ";
+    }
+    bool typing;
+    if (typing_detection.Get(&typing)) {
+      ost << "typing: " << typing << ", ";
+    }
+    bool conference;
+    if (conference_mode.Get(&conference)) {
+      ost << "conference: " << conference << ", ";
+    }
+    int agc_delta;
+    if (adjust_agc_delta.Get(&agc_delta)) {
+      ost << "agc_delta: " << agc_delta << ", ";
+    }
+    ost << "}";
+    return ost.str();
+  }
+
   // Audio processing that attempts to filter away the output signal from
   // later inbound pickup.
   Settable<bool> echo_cancellation;

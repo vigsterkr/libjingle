@@ -30,6 +30,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(POSIX)
+#include <unistd.h>
+#endif
 
 #include "talk/examples/peerconnection/server/utils.h"
 
@@ -301,4 +304,3 @@ DataSocket* ListeningSocket::Accept() const {
 
   return new DataSocket(client);
 }
-

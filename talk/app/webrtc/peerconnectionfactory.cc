@@ -49,13 +49,15 @@ typedef talk_base::TypedMessageData<bool> InitMessageData;
 struct CreatePeerConnectionParams : public talk_base::MessageData {
   CreatePeerConnectionParams(
       const webrtc::JsepInterface::IceServers& configuration,
-      webrtc::JsepInterface::IceOptions options,
+      const webrtc::MediaConstraintsInterface* constraints,
       webrtc::PeerConnectionObserver* observer)
-      : configuration(configuration), options(options), observer(observer) {
+      : configuration(configuration),
+        constraints(constraints),
+        observer(observer) {
   }
   scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
   const webrtc::JsepInterface::IceServers& configuration;
-  webrtc::JsepInterface::IceOptions options;
+  const webrtc::MediaConstraintsInterface* constraints;
   webrtc::PeerConnectionObserver* observer;
 };
 
@@ -167,7 +169,7 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
       CreatePeerConnectionParams* pdata =
           static_cast<CreatePeerConnectionParams*> (msg->pdata);
       pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
-                                                     pdata->options,
+                                                     pdata->constraints,
                                                      pdata->observer);
       break;
     }
@@ -227,9 +229,9 @@ PeerConnectionFactory::CreatePeerConnection(
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const JsepInterface::IceServers& configuration,
-    JsepInterface::IceOptions options,
+    const MediaConstraintsInterface* constraints,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParams params(configuration, options, observer);
+  CreatePeerConnectionParams params(configuration, constraints, observer);
   signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION, &params);
   return params.peerconnection;
 }
@@ -260,11 +262,11 @@ PeerConnectionFactory::CreatePeerConnection_s(
 talk_base::scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection_s(
     const JsepInterface::IceServers& configuration,
-    JsepInterface::IceOptions options,
+    const MediaConstraintsInterface* constraints,
     PeerConnectionObserver* observer) {
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
-  if (!pc->Initialize(configuration, options, observer)) {
+  if (!pc->Initialize(configuration, constraints, observer)) {
     delete pc;
     pc = NULL;
   }

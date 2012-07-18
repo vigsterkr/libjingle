@@ -1604,6 +1604,22 @@ TEST_F(WebRtcVoiceEngineTestFake, SetOptions) {
   EXPECT_TRUE(typing_detection_enabled);
 }
 
+TEST_F(WebRtcVoiceEngineTestFake, InitDoesNotOverwriteDefaultAgcConfig) {
+  webrtc::AgcConfig set_config = {0};
+  set_config.targetLeveldBOv = 3;
+  set_config.digitalCompressionGaindB = 9;
+  set_config.limiterEnable = true;
+  EXPECT_EQ(0, voe_.SetAgcConfig(set_config));
+  EXPECT_TRUE(engine_.Init());
+
+  webrtc::AgcConfig config = {0};
+  EXPECT_EQ(0, voe_.GetAgcConfig(config));
+  EXPECT_EQ(set_config.targetLeveldBOv, config.targetLeveldBOv);
+  EXPECT_EQ(set_config.digitalCompressionGaindB,
+            config.digitalCompressionGaindB);
+  EXPECT_EQ(set_config.limiterEnable, config.limiterEnable);
+}
+
 TEST_F(WebRtcVoiceEngineTestFake, SetOptionOverridesViaChannels) {
   EXPECT_TRUE(SetupEngine());
   talk_base::scoped_ptr<cricket::VoiceMediaChannel> channel1(
@@ -1630,12 +1646,17 @@ TEST_F(WebRtcVoiceEngineTestFake, SetOptionOverridesViaChannels) {
   options1.auto_gain_control.Set(true);
   options1.noise_suppression.Set(false);
   ASSERT_TRUE(channel1->SetOptions(options1));
+  cricket::AudioOptions actual_options;
+  ASSERT_TRUE(channel1->GetOptions(&actual_options));
+  EXPECT_EQ(options1, actual_options);
 
   // NS but not AGC, AEC unset.
   cricket::AudioOptions options2;
   options2.auto_gain_control.Set(false);
   options2.noise_suppression.Set(true);
   ASSERT_TRUE(channel2->SetOptions(options2));
+  ASSERT_TRUE(channel2->GetOptions(&actual_options));
+  EXPECT_EQ(options2, actual_options);
 
   ASSERT_TRUE(engine_.SetAudioOptions(options0));
   bool ec_enabled;
@@ -1682,6 +1703,22 @@ TEST_F(WebRtcVoiceEngineTestFake, SetOptionOverridesViaChannels) {
   EXPECT_TRUE(ec_enabled);
   EXPECT_TRUE(agc_enabled);
   EXPECT_TRUE(ns_enabled);
+
+  // Make sure settings take effect while we are sending.
+  ASSERT_TRUE(engine_.SetAudioOptions(options0));
+  cricket::AudioOptions options3;
+  options3.auto_gain_control.Set(false);
+  options3.noise_suppression.Set(false);
+  channel2->SetSend(cricket::SEND_MICROPHONE);
+  channel2->SetOptions(options3);
+  ASSERT_TRUE(channel2->GetOptions(&actual_options));
+  EXPECT_EQ(options3, actual_options);
+  voe_.GetEcStatus(ec_enabled, ec_mode);
+  voe_.GetAgcStatus(agc_enabled, agc_mode);
+  voe_.GetNsStatus(ns_enabled, ns_mode);
+  EXPECT_TRUE(ec_enabled);
+  EXPECT_FALSE(agc_enabled);
+  EXPECT_FALSE(ns_enabled);
 }
 
 // Tests for the actual WebRtc VoE library.

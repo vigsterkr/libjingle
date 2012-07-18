@@ -199,15 +199,17 @@ class FakeJsep : public JsepInterface {
   }
   // TODO: Implement below functions to replace the deprecated ones.
   virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
-                           const SessionDescriptionOptions& options) {}
+                           const MediaConstraintsInterface* constraints) {}
   virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
-                            const SessionDescriptionOptions& options) {}
+                            const MediaConstraintsInterface* constraints) {}
   virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
                                    SessionDescriptionInterface* desc) {}
   virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
                                     SessionDescriptionInterface* desc) {}
   virtual bool UpdateIce(const IceServers& configuration,
-                         IceOptions options) { return false; }
+                         const MediaConstraintsInterface* constraints) {
+    return false;
+  }
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate) {
     return false;
   }

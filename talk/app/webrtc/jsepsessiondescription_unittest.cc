@@ -45,6 +45,8 @@ using webrtc::JsepSessionDescription;
 using webrtc::SessionDescriptionInterface;
 using talk_base::scoped_ptr;
 
+static const char kCandidateUfrag[] = "ufrag";
+static const char kCandidatePwd[] = "pwd";
 static const char kCandidateUfragVoice[] = "ufrag_voice";
 static const char kCandidatePwdVoice[] = "pwd_voice";
 static const char kCandidateUfragVideo[] = "ufrag_video";
@@ -87,8 +89,8 @@ class JsepSessionDescriptionTest : public testing::Test {
     int port = 1234;
     talk_base::SocketAddress address("127.0.0.1", port++);
     cricket::Candidate candidate("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP,
-                                 "udp", address, 1, "user_rtp",
-                                 "password_rtp", "local", "eth0", 0, 0);
+                                 "udp", address, 1, "",
+                                 "", "local", "eth0", 0, 0);
     candidate_ = candidate;
     const std::string session_id =
         talk_base::ToString(talk_base::CreateRandomId());
@@ -133,6 +135,23 @@ TEST_F(JsepSessionDescriptionTest, AddCandidate) {
   ASSERT_TRUE(ice_candidate != NULL);
   candidate_.set_username(kCandidateUfragVoice);
   candidate_.set_password(kCandidatePwdVoice);
+  EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
+
+  EXPECT_EQ(0u, jsep_desc_->candidates(1)->count());
+}
+
+TEST_F(JsepSessionDescriptionTest, AddCandidateAlreadyHasUfrag) {
+  candidate_.set_username(kCandidateUfrag);
+  candidate_.set_password(kCandidatePwd);
+  JsepIceCandidate jsep_candidate("0", candidate_);
+  EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
+  const IceCandidateCollection* ice_candidates = jsep_desc_->candidates(0);
+  ASSERT_TRUE(ice_candidates != NULL);
+  EXPECT_EQ(1u, ice_candidates->count());
+  const IceCandidateInterface* ice_candidate = ice_candidates->at(0);
+  ASSERT_TRUE(ice_candidate != NULL);
+  candidate_.set_username(kCandidateUfrag);
+  candidate_.set_password(kCandidatePwd);
   EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
 
   EXPECT_EQ(0u, jsep_desc_->candidates(1)->count());

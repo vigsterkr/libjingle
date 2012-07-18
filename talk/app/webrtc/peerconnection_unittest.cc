@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -118,7 +118,7 @@ class PeerConnectionTestClientBase
     stream->AddTrack(audio_track);
     stream->AddTrack(video_track_);
 
-    peer_connection_->AddStream(stream);
+    EXPECT_TRUE(peer_connection_->AddStream(stream, NULL));
     peer_connection_->CommitStreamChanges();
   }
 
@@ -590,7 +590,7 @@ class JsepTestClient
     ice_server.uri = "stun:stun.l.google.com:19302";
     ice_servers.push_back(ice_server);
     return peer_connection_factory()->CreatePeerConnection(ice_servers,
-        webrtc::JsepInterface::kUseAll, this);
+        NULL, this);
   }
 
   void HandleIncomingOffer(const std::string& msg) {
@@ -626,11 +626,9 @@ class JsepTestClient
         observer(new talk_base::RefCountedObject<
             MockCreateSessionDescriptionObserver>());
     if (offer) {
-      peer_connection()->CreateOffer(observer,
-                                     webrtc::SessionDescriptionOptions());
+      peer_connection()->CreateOffer(observer, NULL);
     } else {
-      peer_connection()->CreateAnswer(observer,
-                                      webrtc::SessionDescriptionOptions());
+      peer_connection()->CreateAnswer(observer, NULL);
     }
     EXPECT_EQ_WAIT(true, observer->called(), 5000);
     *desc = observer->release_desc();

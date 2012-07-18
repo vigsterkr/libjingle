@@ -385,9 +385,9 @@ class PeerConnectionInterfaceTest : public testing::Test {
         observer(new talk_base::RefCountedObject<
             MockCreateSessionDescriptionObserver>());
     if (offer) {
-      pc_->CreateOffer(observer, webrtc::SessionDescriptionOptions());
+      pc_->CreateOffer(observer, NULL);
     } else {
-      pc_->CreateAnswer(observer, webrtc::SessionDescriptionOptions());
+      pc_->CreateAnswer(observer, NULL);
     }
     EXPECT_EQ_WAIT(true, observer->called(), kTimeout);
     *desc = observer->release_desc();

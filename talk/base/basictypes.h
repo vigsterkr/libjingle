@@ -99,14 +99,19 @@ typedef signed char int8;
     defined(__i386__) || defined(_M_IX86)
 #define CPU_X86 1
 #endif
-
+// Detect compiler is for arm.
+#if defined(__arm__) || defined(_M_ARM)
+#define CPU_ARM 1
+#endif
+#if defined(CPU_X86) && defined(CPU_ARM)
+#error CPU_X86 and CPU_ARM both defined.
+#endif
 #if !defined(ARCH_CPU_BIG_ENDIAN) && !defined(ARCH_CPU_LITTLE_ENDIAN)
-// gcc provides __BYTE_ORDER macros
-#if defined(CPU_X86) || (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
-    __BYTE_ORDER == __LITTLE_ENDIAN)
+// x86, arm or GCC provided __BYTE_ORDER__ macros
+#if CPU_X86 || CPU_ARM ||  \
+  (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define ARCH_CPU_LITTLE_ENDIAN
-#elif defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && \
-    __BYTE_ORDER == __BIG_ENDIAN
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define ARCH_CPU_BIG_ENDIAN
 #else
 #error ARCH_CPU_BIG_ENDIAN or ARCH_CPU_LITTLE_ENDIAN should be defined.

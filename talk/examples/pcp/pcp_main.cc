@@ -2,6 +2,10 @@
 
 #include <time.h>
 
+#if defined(POSIX)
+#include <unistd.h>
+#endif
+
 #include <iomanip>
 #include <iostream>
 #include <string>

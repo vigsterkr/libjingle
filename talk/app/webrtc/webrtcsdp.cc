@@ -99,6 +99,8 @@ static const char kAttributeCandidate[] = "candidate";
 static const char kAttributeCandidateTyp[] = "typ";
 static const char kAttributeCandidateRaddr[] = "raddr";
 static const char kAttributeCandidateRport[] = "rport";
+static const char kAttributeCandidateUsername[] = "username";
+static const char kAttributeCandidatePassword[] = "password";
 static const char kAttributeCandidateGeneration[] = "generation";
 static const char kAttributeRtpmap[] = "rtpmap";
 static const char kAttributeRtcp[] = "rtcp";
@@ -131,7 +133,7 @@ static const char kSessionOriginSessionVersion[] = "0";
 static const char kSessionOriginNettype[] = "IN";
 static const char kSessionOriginAddrtype[] = "IP4";
 static const char kSessionOriginAddress[] = "127.0.0.1";
-static const char kSessionName[] = "s=";
+static const char kSessionName[] = "s=-";
 static const char kTimeDescription[] = "t=0 0";
 static const char kAttrGroup[] = "a=group:BUNDLE";
 static const char kConnectionNettype[] = "IN";
@@ -672,12 +674,22 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   }
 
   // Extension
+  // Empty string as the candidate username and password.
+  // Will be updated later with the ice-ufrag and ice-pwd.
+  // TODO: Remove the username/password extension, which is currently
+  // kept for backwards compatibility.
+  std::string username;
+  std::string password;
   uint32 generation = 0;
   for (size_t i = current_position; i + 1 < fields.size(); ++i) {
     // RFC 5245
     // *(SP extension-att-name SP extension-att-value)
     if (fields[i] == kAttributeCandidateGeneration) {
       generation = talk_base::FromString<uint32>(fields[++i]);
+    } else if (fields[i] == kAttributeCandidateUsername) {
+      username = fields[++i];
+    } else if (fields[i] == kAttributeCandidatePassword) {
+      password = fields[++i];
     } else {
       // Skip the unknown extension.
       ++i;
@@ -687,10 +699,6 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   // Empty string as the candidate id and network name.
   const std::string id;
   const std::string network_name;
-  // Empty string as the candidate username and password.
-  // Will be updated later with the ice-ufrag and ice-pwd.
-  const std::string username;
-  const std::string password;
   *candidate = Candidate(id, component_id, transport, address, priority,
       username, password, candidate_type, network_name, generation,
       foundation);

@@ -27,6 +27,8 @@
 
 #include "talk/session/phone/videoframe.h"
 
+#include "talk/session/phone/videocommon.h"
+
 #include <cstring>
 
 #ifdef HAVE_YUV
@@ -158,23 +160,147 @@ bool VideoFrame::Validate(uint32 fourcc, int w, int h,
     LOG(LS_ERROR) << "Invalid dimensions: " << w << "x" << h;
     return false;
   }
+  uint32 format = CanonicalFourCC(fourcc);
+  int expected_bpp = 8;
+  switch (format) {
+    case FOURCC_I400:
+    case FOURCC_RGGB:
+    case FOURCC_BGGR:
+    case FOURCC_GRBG:
+    case FOURCC_GBRG:
+      expected_bpp = 8;
+      break;
+    case FOURCC_I420:
+    case FOURCC_I411:
+    case FOURCC_YV12:
+    case FOURCC_M420:
+    case FOURCC_Q420:
+    case FOURCC_NV21:
+    case FOURCC_NV12:
+      expected_bpp = 12;
+      break;
+    case FOURCC_I422:
+    case FOURCC_YV16:
+    case FOURCC_YUY2:
+    case FOURCC_UYVY:
+    case FOURCC_RGBP:
+    case FOURCC_RGBO:
+    case FOURCC_R444:
+      expected_bpp = 16;
+      break;
+    case FOURCC_V210:
+      expected_bpp = 22;  // 22.5 actually.
+      break;
+    case FOURCC_I444:
+    case FOURCC_YV24:
+    case FOURCC_24BG:
+    case FOURCC_RAW:
+      expected_bpp = 24;
+      break;
 
-  // Sanity check size field is not too small or too large.
-  // 80 x 40 is less than half the minimum camera capture size
-  // even a jpeg frame will be larger than 2048 bytes.
-  if ((w * h >= 80 * 40 && sample_size < 2048) ||
-      sample_size > kMaxSampleSize) {
-    LOG(LS_ERROR) << "Invalid size field: " << sample_size;
-    return false;
+    case FOURCC_ABGR:
+    case FOURCC_BGRA:
+    case FOURCC_ARGB:
+      expected_bpp = 32;
+      break;
+
+    case FOURCC_MJPG:
+    case FOURCC_H264:
+      expected_bpp = 0;
+      break;
+    default:
+      expected_bpp = 8;  // Expect format is at least 8 bits per pixel.
+      break;
+  }
+  size_t expected_size = (w * expected_bpp + 7) / 8 * h;
+  // For compressed formats, expect 4 bits per 16 x 16 macro.  I420 would be
+  // 6 bits, but grey can be 4 bits.
+  if (expected_bpp == 0) {
+    expected_size = ((w + 15) / 16) * ((h + 15) / 16) * 4 / 8;
   }
   if (sample == NULL) {
-    LOG(LS_ERROR) << "Invalid sample pointer";
+    LOG(LS_ERROR) << "NULL sample pointer."
+                  << " format: " << GetFourccName(format)
+                  << " bpp: " << expected_bpp
+                  << " size: " << w << "x" << h
+                  << " expected: " << expected_size
+                  << " " << sample_size;
     return false;
   }
-#ifdef HAVE_LMI
-  // Scan pages to ensure they are there.
-  libyuv::HashDjb2(sample, sample_size, 5381);
-#endif
+  if (sample_size < expected_size) {
+    LOG(LS_ERROR) << "Size field is too small."
+                  << " format: " << GetFourccName(format)
+                  << " bpp: " << expected_bpp
+                  << " size: " << w << "x" << h
+                  << " " << sample_size
+                  << " expected: " << expected_size
+                  << " sample[0..3]: " << static_cast<int>(sample[0])
+                  << ", " << static_cast<int>(sample[1])
+                  << ", " << static_cast<int>(sample[2])
+                  << ", " << static_cast<int>(sample[3]);
+    return false;
+  }
+  if (sample_size > kMaxSampleSize) {
+    LOG(LS_WARNING) << "Size field is invalid."
+                    << " format: " << GetFourccName(format)
+                    << " bpp: " << expected_bpp
+                    << " size: " << w << "x" << h
+                    << " " << sample_size
+                    << " expected: " << 2 * expected_size
+                    << " sample[0..3]: " << static_cast<int>(sample[0])
+                    << ", " << static_cast<int>(sample[1])
+                    << ", " << static_cast<int>(sample[2])
+                    << ", " << static_cast<int>(sample[3]);
+    return false;
+  }
+  // Show large size warning once every 100 frames.
+  static int large_warn100 = 0;
+  size_t large_expected_size = expected_size * 2;
+  if (expected_bpp >= 8 &&
+      (sample_size > large_expected_size || sample_size > kMaxSampleSize) &&
+      large_warn100 % 100 == 0) {
+    ++large_warn100;
+    LOG(LS_WARNING) << "Size field is too large."
+                    << " format: " << GetFourccName(format)
+                    << " bpp: " << expected_bpp
+                    << " size: " << w << "x" << h
+                    << " bytes: " << sample_size
+                    << " expected: " << large_expected_size
+                    << " sample[0..3]: " << static_cast<int>(sample[0])
+                    << ", " << static_cast<int>(sample[1])
+                    << ", " << static_cast<int>(sample[2])
+                    << ", " << static_cast<int>(sample[3]);
+  }
+  // Scan pages to ensure they are there and don't contain a single value and
+  // to generate an error.
+  if (!memcmp(sample + sample_size - 8, sample + sample_size - 4, 4) &&
+      !memcmp(sample, sample + 4, sample_size - 4)) {
+    LOG(LS_WARNING) << "Duplicate value for all pixels."
+                    << " format: " << GetFourccName(format)
+                    << " bpp: " << expected_bpp
+                    << " size: " << w << "x" << h
+                    << " bytes: " << sample_size
+                    << " expected: " << expected_size
+                    << " sample[0..3]: " << static_cast<int>(sample[0])
+                    << ", " << static_cast<int>(sample[1])
+                    << ", " << static_cast<int>(sample[2])
+                    << ", " << static_cast<int>(sample[3]);
+  }
+
+  static bool valid_once = true;
+  if (valid_once) {
+    valid_once = false;
+    LOG(LS_INFO) << "Validate frame passed."
+                 << " format: " << GetFourccName(format)
+                 << " bpp: " << expected_bpp
+                 << " size: " << w << "x" << h
+                 << " bytes: " << sample_size
+                 << " expected: " << expected_size
+                 << " sample[0..3]: " << static_cast<int>(sample[0])
+                 << ", " << static_cast<int>(sample[1])
+                 << ", " << static_cast<int>(sample[2])
+                 << ", " << static_cast<int>(sample[3]);
+  }
   return true;
 }
 

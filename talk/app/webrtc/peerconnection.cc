@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -69,7 +69,9 @@ enum ServiceType {
 
 enum {
   MSG_ADDSTREAM = 1,
+  MSG_ADDSTREAMJSEP00,
   MSG_REMOVESTREAM,
+  MSG_REMOVESTREAMJSEP00,
   MSG_REMOVESTREAM_BYLABEL,
   MSG_COMMITSTREAMCHANGES,
   MSG_PROCESSSIGNALINGMESSAGE,
@@ -259,6 +261,18 @@ webrtc::JsepInterface::Action GetAction(
   return action;
 }
 
+struct MediaStreamParams : public talk_base::MessageData {
+  MediaStreamParams(webrtc::MediaStreamInterface* stream,
+                    const webrtc::MediaConstraintsInterface* constraints)
+      : stream(stream),
+        constraints(constraints),
+        result(false) {
+  }
+  webrtc::MediaStreamInterface* stream;
+  const webrtc::MediaConstraintsInterface* constraints;
+  bool result;
+};
+
 typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
     LocalMediaStreamParams;
 
@@ -307,12 +321,6 @@ struct StreamCollectionParams : public talk_base::MessageData {
   explicit StreamCollectionParams(webrtc::StreamCollectionInterface* streams)
       : streams(streams) {}
   talk_base::scoped_refptr<webrtc::StreamCollectionInterface> streams;
-};
-
-struct MediaStreamParams : public talk_base::MessageData {
-  explicit MediaStreamParams(webrtc::MediaStreamInterface* stream)
-      : stream(stream) {}
-  talk_base::scoped_refptr<webrtc::MediaStreamInterface> stream;
 };
 
 struct ReadyStateMessage : public talk_base::MessageData {
@@ -377,11 +385,12 @@ bool PeerConnection::Initialize(bool use_roap,
 }
 
 bool PeerConnection::Initialize(const JsepInterface::IceServers& configuration,
-                                JsepInterface::IceOptions options,
+                                const MediaConstraintsInterface* constraints,
                                 PeerConnectionObserver* observer) {
   std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
   std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
   ParseIceServers(configuration, &stun_config, &turn_config);
+  // TODO: Take |constraints| into consideration.
   return DoInitialize(false, stun_config, turn_config, observer);
 }
 
@@ -455,11 +464,23 @@ void PeerConnection::ProcessSignalingMessage(const std::string& msg) {
 
 void PeerConnection::AddStream(LocalMediaStreamInterface* local_stream) {
   LocalMediaStreamParams msg(local_stream);
+  signaling_thread()->Send(this, MSG_ADDSTREAMJSEP00, &msg);
+}
+
+bool PeerConnection::AddStream(MediaStreamInterface* local_stream,
+                               const MediaConstraintsInterface* constraints) {
+  MediaStreamParams msg(local_stream, constraints);
   signaling_thread()->Send(this, MSG_ADDSTREAM, &msg);
+  return msg.result;
 }
 
 void PeerConnection::RemoveStream(LocalMediaStreamInterface* remove_stream) {
   LocalMediaStreamParams msg(remove_stream);
+  signaling_thread()->Send(this, MSG_REMOVESTREAMJSEP00, &msg);
+}
+
+void PeerConnection::RemoveStream(MediaStreamInterface* remove_stream) {
+  MediaStreamParams msg(remove_stream, NULL);
   signaling_thread()->Send(this, MSG_REMOVESTREAM, &msg);
 }
 
@@ -510,15 +531,16 @@ SessionDescriptionInterface* PeerConnection::CreateOffer(
 }
 
 void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
-                                 const SessionDescriptionOptions& options) {
+                                 const MediaConstraintsInterface* constraints) {
   if (!observer) {
     LOG(LS_ERROR) << "CreateOffer - observer is NULL.";
     return;
   }
   talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
       observer;
+  // TODO: Take |constraints| into consideration.
   SessionDescriptionInterface* desc =
-      CreateOffer(MediaHints(options.has_audio(), options.has_video()));
+      CreateOffer(MediaHints(true, true));
   if (!desc) {
     std::string error = "CreateOffer failed.";
     observer_copy->OnFailure(error);
@@ -538,8 +560,9 @@ SessionDescriptionInterface* PeerConnection::CreateAnswer(
   return msg.desc;
 }
 
-void PeerConnection::CreateAnswer(CreateSessionDescriptionObserver* observer,
-                                  const SessionDescriptionOptions& options) {
+void PeerConnection::CreateAnswer(
+    CreateSessionDescriptionObserver* observer,
+    const MediaConstraintsInterface* constraints) {
   if (!observer) {
     LOG(LS_ERROR) << "CreateAnswer - observer is NULL.";
     return;
@@ -557,8 +580,9 @@ void PeerConnection::CreateAnswer(CreateSessionDescriptionObserver* observer,
     observer_copy->OnFailure(error);
     return;
   }
+  // TODO: Take |constraints| into consideration.
   SessionDescriptionInterface* desc =
-      CreateAnswer(MediaHints(options.has_audio(), options.has_video()), offer);
+      CreateAnswer(MediaHints(true, true), offer);
   if (!desc) {
     error = "CreateAnswer failed.";
     observer_copy->OnFailure(error);
@@ -640,7 +664,7 @@ void PeerConnection::SetRemoteDescription(
 }
 
 bool PeerConnection::UpdateIce(const IceServers& configuration,
-                               IceOptions options) {
+                               const MediaConstraintsInterface* constraints) {
   // TODO: Implement UpdateIce.
   LOG(LS_ERROR) << "UpdateIce is not implemented.";
   return false;
@@ -676,6 +700,15 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
   talk_base::MessageData* data = msg->pdata;
   switch (msg->message_id) {
     case MSG_ADDSTREAM: {
+      MediaStreamParams* msg(static_cast<MediaStreamParams*> (data));
+      // TODO: Implement support for MediaConstraints in AddStream.
+      local_media_streams_->AddStream(msg->stream);
+      mediastream_signaling_->SetLocalStreams(local_media_streams_);
+      observer_->OnRenegotiationNeeded();
+      msg->result = true;
+      break;
+    }
+    case MSG_ADDSTREAMJSEP00: {
       LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
       local_media_streams_->AddStream(msg->data());
       mediastream_signaling_->SetLocalStreams(local_media_streams_);
@@ -683,6 +716,13 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
       break;
     }
     case MSG_REMOVESTREAM: {
+      MediaStreamParams* msg(static_cast<MediaStreamParams*> (data));
+      local_media_streams_->RemoveStream(msg->stream);
+      mediastream_signaling_->SetLocalStreams(local_media_streams_);
+      observer_->OnRenegotiationNeeded();
+      break;
+    }
+    case MSG_REMOVESTREAMJSEP00: {
       LocalMediaStreamParams* msg(static_cast<LocalMediaStreamParams*> (data));
       local_media_streams_->RemoveStream(msg->data());
       mediastream_signaling_->SetLocalStreams(local_media_streams_);

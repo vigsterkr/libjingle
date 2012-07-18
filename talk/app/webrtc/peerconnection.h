@@ -62,7 +62,7 @@ class PeerConnection : public PeerConnectionInterface,
                   const std::string& configuration,
                   PeerConnectionObserver* observer);
   bool Initialize(const JsepInterface::IceServers& configuration,
-                  JsepInterface::IceOptions options,
+                  const MediaConstraintsInterface* constraints,
                   PeerConnectionObserver* observer);
 
   virtual ~PeerConnection();
@@ -76,7 +76,10 @@ class PeerConnection : public PeerConnectionInterface,
   virtual talk_base::scoped_refptr<StreamCollectionInterface> local_streams();
   virtual talk_base::scoped_refptr<StreamCollectionInterface> remote_streams();
   virtual void AddStream(LocalMediaStreamInterface* stream);
+  virtual bool AddStream(MediaStreamInterface* local_stream,
+                         const MediaConstraintsInterface* constraints);
   virtual void RemoveStream(LocalMediaStreamInterface* stream);
+  virtual void RemoveStream(MediaStreamInterface* local_stream);
   virtual bool RemoveStream(const std::string& label);
   virtual void CommitStreamChanges();
   virtual void Close();
@@ -104,14 +107,15 @@ class PeerConnection : public PeerConnectionInterface,
 
   // JSEP01
   virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
-                           const SessionDescriptionOptions& options);
+                           const MediaConstraintsInterface* constraints);
   virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
-                            const SessionDescriptionOptions& options);
+                            const MediaConstraintsInterface* constraints);
   virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
                                    SessionDescriptionInterface* desc);
   virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
                                     SessionDescriptionInterface* desc);
-  virtual bool UpdateIce(const IceServers& configuration, IceOptions options);
+  virtual bool UpdateIce(const IceServers& configuration,
+                         const MediaConstraintsInterface* constraints);
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate);
 
  private:

@@ -78,7 +78,7 @@ static const uint32 kCandidateFoundation = 1;
 static const char kSdpFullString[] =
     "v=0\r\n"
     "o=- 18446744069414584320 18446462598732840960 IN IP4 127.0.0.1\r\n"
-    "s=\r\n"
+    "s=-\r\n"
     "t=0 0\r\n"
     "m=audio 2345 RTP/SAVPF 103 104\r\n"
     "c=IN IP4 74.125.127.126\r\n"
@@ -146,7 +146,7 @@ static const char kSdpFullString[] =
 static const char kSdpString[] =
     "v=0\r\n"
     "o=- 18446744069414584320 18446462598732840960 IN IP4 127.0.0.1\r\n"
-    "s=\r\n"
+    "s=-\r\n"
     "t=0 0\r\n"
     "m=audio 1 RTP/SAVPF 103 104\r\n"
     "c=IN IP4 0.0.0.0\r\n"
@@ -188,6 +188,11 @@ static const char kSdpString[] =
 static const char kSdpOneCandidate[] =
     "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host "
     "generation 0\r\n";
+
+// One candidate reference string.
+static const char kSdpOneCandidateOldFormat[] =
+    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host network_name"
+    " eth0 username user_rtp password password_rtp generation 0\r\n";
 
 // Session id and version
 static const char kSessionId[] = "18446744069414584320";
@@ -354,25 +359,25 @@ class WebRtcSdpTest : public testing::Test {
     cricket::Candidate candidate5(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
-        "user_rtp", "password_rtp", cricket::LOCAL_PORT_TYPE,
+        "", "", cricket::LOCAL_PORT_TYPE,
         "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate6(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
-        "user_rtcp", "password_rtcp", cricket::LOCAL_PORT_TYPE,
+        "", "", cricket::LOCAL_PORT_TYPE,
         "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate7(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
-        "user_video_rtcp", "password_video_rtcp", cricket::LOCAL_PORT_TYPE,
+        "", "", cricket::LOCAL_PORT_TYPE,
         "", kCandidateGeneration, kCandidateFoundation);
     v6_address.SetPort(port++);
     cricket::Candidate candidate8(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
-        "user_video_rtp", "password_video_rtp", cricket::LOCAL_PORT_TYPE,
+        "", "", cricket::LOCAL_PORT_TYPE,
         "", kCandidateGeneration, kCandidateFoundation);
 
     // stun
@@ -816,12 +821,23 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithInactiveContent) {
   EXPECT_TRUE(TestDeserializeDirection(cricket::MD_INACTIVE));
 }
 
-TEST_F(WebRtcSdpTest, SdpDeserializeCandidate) {
+TEST_F(WebRtcSdpTest, DeserializeCandidate) {
   const std::string kDummyLabel = "dummy_label";
   JsepIceCandidate jcandidate(kDummyLabel);
   EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidate, &jcandidate));
   EXPECT_EQ(kDummyLabel, jcandidate.label());
   EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeCandidateOldFormat) {
+  const std::string kDummyLabel = "dummy_label";
+  JsepIceCandidate jcandidate(kDummyLabel);
+  EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidateOldFormat, &jcandidate));
+  EXPECT_EQ(kDummyLabel, jcandidate.label());
+  Candidate ref_candidate = jcandidate_->candidate();
+  ref_candidate.set_username("user_rtp");
+  ref_candidate.set_password("password_rtp");
+  EXPECT_TRUE(jcandidate.candidate().IsEquivalent(ref_candidate));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
@@ -833,7 +849,7 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
   // Broken session description
   EXPECT_EQ(false, ReplaceAndTryToParse("v=", kSdpDestroyer));
   EXPECT_EQ(false, ReplaceAndTryToParse("o=", kSdpDestroyer));
-  EXPECT_EQ(false, ReplaceAndTryToParse("s=", kSdpDestroyer));
+  EXPECT_EQ(false, ReplaceAndTryToParse("s=-", kSdpDestroyer));
   // Broken time description
   EXPECT_EQ(false, ReplaceAndTryToParse("t=", kSdpDestroyer));
 

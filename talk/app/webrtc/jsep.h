@@ -195,6 +195,17 @@ class SetSessionDescriptionObserver : public talk_base::RefCountInterface {
   ~SetSessionDescriptionObserver() {}
 };
 
+// MediaConstraintsInterface
+// Object used for passing arguments regarding media constraints from JavaScript
+// to the PeerConnection implementation.
+// The actual structure is being standardized.
+class MediaConstraintsInterface {
+ public:
+ protected:
+  // Dtor protected as objects shouldn't be deleted via this interface.
+  ~MediaConstraintsInterface() {}
+};
+
 // Interface for implementing Jsep. PeerConnection implements these functions.
 class JsepInterface {
  public:
@@ -207,6 +218,7 @@ class JsepInterface {
   };
 
   // Indicates what types of local candidates should be used.
+  // Deprecated (jsep00)
   enum IceOptions {
     kUseAll,
     kNoRelay,
@@ -259,11 +271,11 @@ class JsepInterface {
   // Create a new offer.
   // The CreateSessionDescriptionObserver callback will be called when done.
   virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
-                           const SessionDescriptionOptions& options) = 0;
+                           const MediaConstraintsInterface* constraints) = 0;
   // Create an answer to an offer.
   // The CreateSessionDescriptionObserver callback will be called when done.
   virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
-                            const SessionDescriptionOptions& options) = 0;
+                            const MediaConstraintsInterface* constraints) = 0;
   // Sets the local session description.
   // JsepInterface takes the ownership of |desc| even if it fails.
   // The |observer| callback will be called when done.
@@ -277,7 +289,7 @@ class JsepInterface {
   // Restarts or updates the ICE Agent process of gathering local candidates
   // and pinging remote candidates.
   virtual bool UpdateIce(const IceServers& configuration,
-                         IceOptions options) = 0;
+                         const MediaConstraintsInterface* constraints) = 0;
   // Provides a remote candidate to the ICE Agent.
   // A copy of the |candidate| will be created and added to the remote
   // description. So the caller of this method still has the ownership of the
