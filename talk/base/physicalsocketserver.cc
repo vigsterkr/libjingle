@@ -111,14 +111,6 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
     : ss_(ss), s_(s), enabled_events_(0), error_(0),
       state_((s == INVALID_SOCKET) ? CS_CLOSED : CS_CONNECTED),
       resolver_(NULL) {
-#ifdef WIN32
-    // EnsureWinsockInit() ensures that winsock is initialized. The default
-    // version of this function doesn't do anything because winsock is
-    // initialized by constructor of a static object. If neccessary libjingle
-    // users can link it with a different version of this function by replacing
-    // win32socketinit.cc. See win32socketinit.cc for more details.
-    EnsureWinsockInit();
-#endif
     if (s_ != INVALID_SOCKET) {
       enabled_events_ = DE_READ | DE_WRITE;
 
@@ -1172,6 +1164,14 @@ PhysicalSocketServer::PhysicalSocketServer()
     : fWait_(false),
       last_tick_tracked_(0),
       last_tick_dispatch_count_(0) {
+#ifdef WIN32
+    // EnsureWinsockInit() ensures that winsock is initialized. The default
+    // version of this function doesn't do anything because winsock is
+    // initialized by constructor of a static object. If neccessary libjingle
+    // users can link it with a different version of this function by replacing
+    // win32socketinit.cc. See win32socketinit.cc for more details.
+    EnsureWinsockInit();
+#endif
   signal_wakeup_ = new Signaler(this, &fWait_);
 #ifdef WIN32
   socket_ev_ = WSACreateEvent();
