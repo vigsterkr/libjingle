@@ -253,7 +253,7 @@ void ConnectivityChecker::OnRelayAddressReady(Port* port) {
   ASSERT(worker_ == talk_base::Thread::Current());
   RelayPort* relay_port = reinterpret_cast<RelayPort*>(port);
   const ProtocolAddress* address = relay_port->ServerAddress(0);
-  talk_base::IPAddress ip = port->network()->ip();
+  talk_base::IPAddress ip = port->Network()->ip();
   NicMap::iterator i = nics_.find(NicId(ip, port->proxy().address));
   if (i != nics_.end()) {
     // We have it already, add the new information.
@@ -285,9 +285,9 @@ void ConnectivityChecker::OnRelayAddressReady(Port* port) {
 
 void ConnectivityChecker::OnStunAddressReady(Port* port) {
   ASSERT(worker_ == talk_base::Thread::Current());
-  const std::vector<Candidate> candidates = port->candidates();
+  const std::vector<Candidate> candidates = port->Candidates();
   Candidate c = candidates[0];
-  talk_base::IPAddress ip = port->network()->ip();
+  talk_base::IPAddress ip = port->Network()->ip();
   NicMap::iterator i = nics_.find(NicId(ip, port->proxy().address));
   if (i != nics_.end()) {
     // We have it already, add the new information.
@@ -304,7 +304,7 @@ void ConnectivityChecker::OnStunAddressReady(Port* port) {
 void ConnectivityChecker::OnStunAddressError(Port* port) {
   ASSERT(worker_ == talk_base::Thread::Current());
   LOG(LS_ERROR) << "Stun address error.";
-  talk_base::IPAddress ip = port->network()->ip();
+  talk_base::IPAddress ip = port->Network()->ip();
   NicMap::iterator i = nics_.find(NicId(ip, port->proxy().address));
   if (i != nics_.end()) {
     // We have it already, add the new information.

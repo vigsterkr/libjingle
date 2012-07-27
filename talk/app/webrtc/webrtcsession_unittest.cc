@@ -29,22 +29,22 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/webrtcsession.h"
-#include "talk/base/logging.h"
 #include "talk/base/fakenetwork.h"
 #include "talk/base/firewallsocketserver.h"
 #include "talk/base/gunit.h"
+#include "talk/base/logging.h"
 #include "talk/base/network.h"
 #include "talk/base/physicalsocketserver.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/virtualsocketserver.h"
+#include "talk/media/base/fakemediaengine.h"
+#include "talk/media/devices/fakedevicemanager.h"
 #include "talk/p2p/base/stunserver.h"
 #include "talk/p2p/base/teststunserver.h"
 #include "talk/p2p/client/basicportallocator.h"
-#include "talk/session/phone/channelmanager.h"
-#include "talk/session/phone/fakedevicemanager.h"
-#include "talk/session/phone/fakemediaengine.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/channelmanager.h"
+#include "talk/session/media/mediasession.h"
 
 using cricket::BaseSession;
 using talk_base::scoped_ptr;
@@ -69,12 +69,11 @@ static const char kStream2[] = "stream2";
 static const char kVideoTrack2[] = "video2";
 static const char kAudioTrack2[] = "audio2";
 
-// Label of candidates belonging to the first media content.
-static const char kMediaContentLabel0[] = "0";
+// Media index of candidates belonging to the first media content.
 static const int kMediaContentIndex0 = 0;
+static const char kMediaContentName0[] = "audio";
 
-// Label of candidates belonging to the second media content.
-static const char kMediaContentLabel1[] = "1";
+// Media index of candidates belonging to the second media content.
 static const int kMediaContentIndex1 = 1;
 
 static const int kIceCandidatesTimeout = 10000;
@@ -89,9 +88,9 @@ class MockCandidateObserver : public webrtc::IceCandidateObserver {
 
   // Found a new candidate.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    if (candidate->label() == kMediaContentLabel0) {
+    if (candidate->sdp_mline_index() == kMediaContentIndex0) {
       mline_0_candidates_.push_back(candidate->candidate());
-    } else if (candidate->label() == kMediaContentLabel1) {
+    } else if (candidate->sdp_mline_index() == kMediaContentIndex1) {
       mline_1_candidates_.push_back(candidate->candidate());
     }
   }
@@ -379,7 +378,8 @@ class WebRtcSessionTest : public testing::Test {
     talk_base::replace_substrs(kCrypto.c_str(), kCrypto.length(),
                                kCryptoX.c_str(), kCryptoX.length(),
                                &nocrypto_answer_str);
-    *nocrypto_answer = new JsepSessionDescription();
+    *nocrypto_answer =
+        new JsepSessionDescription(JsepSessionDescription::kAnswer);
     EXPECT_TRUE((*nocrypto_answer)->Initialize(nocrypto_answer_str));
   }
   JsepSessionDescription* CreateOfferSessionDescription(
@@ -388,7 +388,8 @@ class WebRtcSessionTest : public testing::Test {
         talk_base::ToString(talk_base::CreateRandomId());
     const std::string session_version =
         talk_base::ToString(talk_base::CreateRandomId());
-    JsepSessionDescription* offer = new JsepSessionDescription();
+    JsepSessionDescription* offer(
+        new JsepSessionDescription(JsepSessionDescription::kOffer));
     if (!offer->Initialize(desc_factory_->CreateOffer(options, NULL),
                            session_id, session_version)) {
       delete offer;
@@ -417,7 +418,8 @@ class WebRtcSessionTest : public testing::Test {
       talk_base::replace_substrs(kRtcpMux.c_str(), kRtcpMux.length(),
                                  kXRtcpMux.c_str(), kXRtcpMux.length(),
                                  &sdp);
-      JsepSessionDescription* new_answer = new JsepSessionDescription();
+      JsepSessionDescription* new_answer(
+          new JsepSessionDescription(JsepSessionDescription::kAnswer));
       EXPECT_TRUE(new_answer->Initialize(sdp));
       delete answer;
       answer = new_answer;
@@ -777,17 +779,28 @@ TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
 
   cricket::Candidate candidate1;
   candidate1.set_component(1);
-  JsepIceCandidate ice_candidate(talk_base::ToString(0), candidate1);
+  cricket::Candidate candidate2;
+  candidate2.set_component(2);
+  JsepIceCandidate ice_candidate1(kMediaContentName0, 0, candidate1);
+  JsepIceCandidate ice_candidate2(kMediaContentName0, 0, candidate2);
 
-  // Fail since we have not set a remote description
-  EXPECT_FALSE(session_->ProcessIceMessage(&ice_candidate));
+  // Test receiving a candidate before the remote description is set.
+  EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate1));
 
   SetRemoteAndLocalSessionDescription();
 
-  EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate));
+  EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate2));
 
-  JsepIceCandidate bad_ice_candidate("bad content name", candidate1);
+  JsepIceCandidate bad_ice_candidate("bad content name", 99, candidate1);
   EXPECT_FALSE(session_->ProcessIceMessage(&bad_ice_candidate));
+
+  const SessionDescriptionInterface* remote_desc =
+      session_->remote_description();
+  ASSERT_TRUE(remote_desc != NULL);
+  const IceCandidateCollection* candidates =
+      remote_desc->candidates(kMediaContentIndex0);
+  ASSERT_EQ(2u, candidates->count());
+  EXPECT_EQ(kMediaContentIndex0, candidates->at(0)->sdp_mline_index());
 }
 
 // Test that a remote candidate is added to the remote session description and
@@ -796,7 +809,8 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   WebRtcSessionTest::Init();
   cricket::Candidate candidate1;
   candidate1.set_component(1);
-  JsepIceCandidate ice_candidate1(kMediaContentLabel0, candidate1);
+  JsepIceCandidate ice_candidate1(kMediaContentName0, kMediaContentIndex0,
+                                  candidate1);
 
   SetRemoteAndLocalSessionDescription();
   EXPECT_TRUE(session_->StartIce(JsepInterface::kUseAll));
@@ -809,14 +823,15 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   const IceCandidateCollection* candidates =
       remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(1u, candidates->count());
-  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+  EXPECT_EQ(kMediaContentIndex0, candidates->at(0)->sdp_mline_index());
 
   // Update the RemoteSessionDescription with a new session description and
   // a candidate and check that the new remote session description contains both
   // candidates.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   cricket::Candidate candidate2;
-  JsepIceCandidate ice_candidate2(kMediaContentLabel0, candidate2);
+  JsepIceCandidate ice_candidate2(kMediaContentName0, kMediaContentIndex0,
+                                  candidate2);
   EXPECT_TRUE(offer->AddCandidate(&ice_candidate2));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
 
@@ -825,13 +840,13 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   ASSERT_EQ(2u, remote_desc->number_of_mediasections());
   candidates = remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(2u, candidates->count());
-  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+  EXPECT_EQ(kMediaContentIndex0, candidates->at(0)->sdp_mline_index());
   // Username and password have be updated with the TransportInfo of the
   // SessionDescription, won't be equal to the original one.
   candidate2.set_username(candidates->at(0)->candidate().username());
   candidate2.set_password(candidates->at(0)->candidate().password());
   EXPECT_TRUE(candidate2.IsEquivalent(candidates->at(0)->candidate()));
-  EXPECT_EQ(kMediaContentLabel0, candidates->at(1)->label());
+  EXPECT_EQ(kMediaContentIndex0, candidates->at(1)->sdp_mline_index());
   // No need to verify the username and password.
   candidate1.set_username(candidates->at(1)->candidate().username());
   candidate1.set_password(candidates->at(1)->candidate().password());
@@ -884,7 +899,8 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
 
   cricket::Candidate candidate1;
   candidate1.set_component(1);
-  JsepIceCandidate ice_candidate(kMediaContentLabel0, candidate1);
+  JsepIceCandidate ice_candidate(kMediaContentName0, kMediaContentIndex0,
+                                 candidate1);
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
 
@@ -898,7 +914,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
   const IceCandidateCollection* candidates =
       remote_desc->candidates(kMediaContentIndex0);
   ASSERT_EQ(1u, candidates->count());
-  EXPECT_EQ(kMediaContentLabel0, candidates->at(0)->label());
+  EXPECT_EQ(kMediaContentIndex0, candidates->at(0)->sdp_mline_index());
 
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                               remote_desc);
@@ -969,7 +985,8 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
                              kVideoMidReplaceStr.length(),
                              &sdp);
 
-  JsepSessionDescription* modified_offer = new JsepSessionDescription();
+  JsepSessionDescription* modified_offer(new JsepSessionDescription(
+      JsepSessionDescription::kOffer));
   EXPECT_TRUE(modified_offer->Initialize(sdp));
 
   EXPECT_TRUE(session_->SetLocalDescription(
@@ -1109,7 +1126,7 @@ TEST_F(WebRtcSessionTest, VerifyBundleFlagInPA) {
       offer->description()->Copy();
   offer_copy->RemoveGroupByName(cricket::GROUP_TYPE_BUNDLE);
   JsepSessionDescription* modified_offer =
-      new JsepSessionDescription();
+      new JsepSessionDescription(JsepSessionDescription::kOffer);
   modified_offer->Initialize(offer_copy, "1", "1");
 
   session_->SetLocalDescription(JsepInterface::kOffer, modified_offer);

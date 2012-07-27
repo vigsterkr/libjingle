@@ -116,6 +116,7 @@ class TransportProxy : public sigslot::has_slots<>,
   TransportChannel* GetChannel(int component);
   TransportChannel* CreateChannel(const std::string& channel_name,
                                   int component);
+  bool HasChannel(int component);
   void DestroyChannel(int component);
   void AddSentCandidates(const Candidates& candidates);
   void AddUnsentCandidates(const Candidates& candidates);
@@ -129,8 +130,12 @@ class TransportProxy : public sigslot::has_slots<>,
     candidates_allocated_ = allocated;
   }
   bool candidates_allocated() { return candidates_allocated_; }
-  void SetLocalTransportInfo(const TransportInfo& info) {
-    transport_->get()->SetLocalTransportInfo(info);
+  void SetLocalTransportDescription(const TransportDescription& description) {
+    transport_->get()->SetLocalTransportDescription(description);
+  }
+
+  void OnRemoteCandidates(const Candidates& candidates) {
+    transport_->get()->OnRemoteCandidates(candidates);
   }
 
   // As CandidateTranslator
@@ -266,7 +271,7 @@ class BaseSession : public sigslot::has_slots<>,
          iter != transports_.end(); ++iter) {
       TransportInfo info;
       if (GetLocalTransportInfo(iter->second->content_name(), &info)) {
-        iter->second->SetLocalTransportInfo(info);
+        iter->second->SetLocalTransportDescription(info.description);
       }
     }
     return true;
@@ -350,6 +355,11 @@ class BaseSession : public sigslot::has_slots<>,
 
   void OnSignalingReady();
   void SpeculativelyConnectAllTransportChannels();
+  // Helper method to provide remote candidates to the transport.
+  bool OnRemoteCandidates(const std::string& content_name,
+                          const Candidates& candidates,
+                          std::string* error);
+
   // This method will mux transport channels by content_name.
   // First content is used for muxing.
   bool MaybeEnableMuxingSupport();

@@ -53,7 +53,8 @@ struct PeerConnectionClientObserver {
   virtual ~PeerConnectionClientObserver() {}
 };
 
-class PeerConnectionClient : public sigslot::has_slots<> {
+class PeerConnectionClient : public sigslot::has_slots<>,
+                             public talk_base::MessageHandler {
  public:
   enum State {
     NOT_CONNECTED,
@@ -81,6 +82,9 @@ class PeerConnectionClient : public sigslot::has_slots<> {
   bool IsSendingMessage();
 
   bool SignOut();
+
+  // implements the MessageHandler interface
+  void OnMessage(talk_base::Message* msg);
 
  protected:
   void DoConnect();

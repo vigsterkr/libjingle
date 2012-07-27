@@ -69,7 +69,8 @@ class TestSessionChannel : public sigslot::has_slots<> {
     EXPECT_EQ(proxy_session_, session);
     allocation_complete_ = true;
   }
-  void OnPortReady(PortAllocatorSession* session, cricket::Port* port) {
+  void OnPortReady(PortAllocatorSession* session,
+                   cricket::PortInterface* port) {
     EXPECT_EQ(proxy_session_, session);
     ++ports_count_;
   }

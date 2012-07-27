@@ -483,8 +483,8 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
 
   port->set_content_name(content_name());
   port->set_component(component_);
-  port->set_priority(priority);
   port->set_generation(generation());
+  port->SetPriority(priority);
   if (allocator_->proxy().type != talk_base::PROXY_NONE)
     port->set_proxy(allocator_->user_agent(), allocator_->proxy());
 
@@ -522,7 +522,7 @@ void BasicPortAllocatorSession::OnAddressReady(Port *port) {
 
   // Only accumulate the candidates whose protocol has been enabled
   std::vector<Candidate> candidates;
-  const std::vector<Candidate>& potentials = port->candidates();
+  const std::vector<Candidate>& potentials = port->Candidates();
   for (size_t i = 0; i < potentials.size(); ++i) {
     ProtocolType pvalue;
     if (!StringToProto(potentials[i].protocol().c_str(), &pvalue))
@@ -552,7 +552,7 @@ void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
     if (!it->ready || (it->sequence != seq))
       continue;
 
-    const std::vector<Candidate>& potentials = it->port->candidates();
+    const std::vector<Candidate>& potentials = it->port->Candidates();
     for (size_t i = 0; i < potentials.size(); ++i) {
       ProtocolType pvalue;
       if (!StringToProto(potentials[i].protocol().c_str(), &pvalue))
@@ -597,15 +597,19 @@ void BasicPortAllocatorSession::MaybeSignalCandidatesAllocationDone() {
   SignalCandidatesAllocationDone(this);
 }
 
-void BasicPortAllocatorSession::OnPortDestroyed(Port* port) {
+void BasicPortAllocatorSession::OnPortDestroyed(
+    PortInterface* port) {
   ASSERT(talk_base::Thread::Current() == network_thread_);
-  std::vector<PortData>::iterator iter =
-      std::find(ports_.begin(), ports_.end(), port);
-  ASSERT(iter != ports_.end());
-  ports_.erase(iter);
-
-  LOG_J(LS_INFO, port) << "Removed port from allocator ("
-                       << static_cast<int>(ports_.size()) << " remaining)";
+  for (std::vector<PortData>::iterator iter = ports_.begin();
+       iter != ports_.end(); ++iter) {
+    if (port == iter->port) {
+      ports_.erase(iter);
+      LOG_J(LS_INFO, port) << "Removed port from allocator ("
+                           << static_cast<int>(ports_.size()) << " remaining)";
+      return;
+    }
+  }
+  ASSERT(false);
 }
 
 void BasicPortAllocatorSession::OnAddressError(Port* port) {
@@ -616,7 +620,7 @@ void BasicPortAllocatorSession::OnAddressError(Port* port) {
   // SignalAddressError is currently sent from StunPort. But this signal
   // itself is generic. If sent from RelayPort, it needs special handling as it
   // have more than one candidate.
-  if (port->type() != RELAY_PORT_TYPE)
+  if (port->Type() != RELAY_PORT_TYPE)
     iter->sequence->RemoveCandidates(1);
   // Send candidate allocation complete signal if all other expected candidates
   // are already received.

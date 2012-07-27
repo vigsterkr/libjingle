@@ -28,29 +28,56 @@
 
 #include "talk/app/webrtc/webrtcsdp.h"
 #include "talk/base/stringencode.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/mediasession.h"
 
 using talk_base::scoped_ptr;
 using cricket::SessionDescription;
 
 namespace webrtc {
 
+static const char* kSupportedTypes[] = {
+    JsepSessionDescription::kOffer,
+    JsepSessionDescription::kPrAnswer,
+    JsepSessionDescription::kAnswer
+};
+
+static bool IsTypeSupported(const std::string& type) {
+  bool type_supported = false;
+  for (size_t i = 0; i < ARRAY_SIZE(kSupportedTypes); ++i) {
+    if (kSupportedTypes[i] == type) {
+      type_supported = true;
+      break;
+    }
+  }
+  return type_supported;
+}
+
+const char JsepSessionDescription::kOffer[] = "offer";
+const char JsepSessionDescription::kPrAnswer[] = "pranswer";
+const char JsepSessionDescription::kAnswer[] = "answer";
+
+// TODO: Remove CreateSessionDescription(const std::string& sdp) once
+// JSEP00 is removed.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
-  return CreateSessionDescription(sdp, SessionDescriptionInterface::kOffer);
+  return CreateSessionDescription(sdp, JsepSessionDescription::kOffer);
 }
 
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp,
-    SessionDescriptionInterface::SdpType type) {
-  JsepSessionDescription* jsep_desc = new JsepSessionDescription();
-  if (!jsep_desc->Initialize(sdp, type)) {
+                                                      const std::string& type) {
+  if (!IsTypeSupported(type)) {
+    return NULL;
+  }
+
+  JsepSessionDescription* jsep_desc = new JsepSessionDescription(type);
+  if (!jsep_desc->Initialize(sdp)) {
     delete jsep_desc;
     return NULL;
   }
   return jsep_desc;
 }
 
-JsepSessionDescription::JsepSessionDescription()
-    : type_(kOffer) {
+JsepSessionDescription::JsepSessionDescription(const std::string& type)
+    : type_(type) {
 }
 
 JsepSessionDescription::~JsepSessionDescription() {}
@@ -59,39 +86,26 @@ bool JsepSessionDescription::Initialize(
     cricket::SessionDescription* description,
     const std::string& session_id,
     const std::string& session_version) {
-  return Initialize(description, session_id, session_version, type_);
-}
 
-bool JsepSessionDescription::Initialize(const std::string& sdp) {
-  return Initialize(sdp, type_);
-}
-
-bool JsepSessionDescription::Initialize(
-    cricket::SessionDescription* description,
-    const std::string& session_id,
-    const std::string& session_version,
-    SdpType type) {
   session_id_ = session_id;
   session_version_ = session_version;
-  type_ = type;
   description_.reset(description);
   candidate_collection_.resize(number_of_mediasections());
   return true;
 }
 
-bool JsepSessionDescription::Initialize(const std::string& sdp,
-                                        SdpType type) {
-  type_ = type;
+bool JsepSessionDescription::Initialize(const std::string& sdp) {
   return SdpDeserialize(sdp, this);
 }
 
 bool JsepSessionDescription::AddCandidate(
     const IceCandidateInterface* candidate) {
-  if (!candidate)
+  if (!candidate || candidate->sdp_mline_index() < 0)
     return false;
-  size_t mediasection_index;
-  if (!talk_base::FromString<size_t>(candidate->label(), &mediasection_index))
+  size_t mediasection_index = 0;
+  if (!GetMediasectionIndex(candidate, &mediasection_index)) {
     return false;
+  }
   if (mediasection_index >= number_of_mediasections())
     return false;
   if (candidate_collection_[mediasection_index].HasCandidate(candidate)) {
@@ -104,15 +118,19 @@ bool JsepSessionDescription::AddCandidate(
   if (!transport_info) {
     return false;
   }
+
   cricket::Candidate updated_candidate = candidate->candidate();
   if (updated_candidate.username().empty()) {
-    updated_candidate.set_username(transport_info->ice_ufrag);
+    updated_candidate.set_username(transport_info->description.ice_ufrag);
   }
   if (updated_candidate.password().empty()) {
-    updated_candidate.set_password(transport_info->ice_pwd);
+    updated_candidate.set_password(transport_info->description.ice_pwd);
   }
+
   candidate_collection_[mediasection_index].add(
-       new JsepIceCandidate(candidate->label(), updated_candidate));
+       new JsepIceCandidate(candidate->sdp_mid(),
+                            candidate->sdp_mline_index(),
+                            updated_candidate));
   return true;
 }
 
@@ -132,6 +150,55 @@ bool JsepSessionDescription::ToString(std::string* out) const {
     return false;
   *out = SdpSerialize(*this);
   return !out->empty();
+}
+
+bool JsepSessionDescription::GetMediasectionIndex(
+    const IceCandidateInterface* candidate,
+    size_t* index) {
+  if (!candidate || !index) {
+    return false;
+  }
+  *index = static_cast<size_t>(candidate->sdp_mline_index());
+  if (description_.get() && !candidate->sdp_mid().empty()) {
+    bool found = false;
+    // Try to match the sdp_mid with content name.
+    for (size_t i = 0; i < description_->contents().size(); ++i) {
+      if (candidate->sdp_mid() == description_->contents().at(i).name) {
+        *index = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // If the sdp_mid is presented but we can't find a match, we consider
+      // this as an error.
+      return false;
+    }
+  }
+  return true;
+}
+
+// TODO: Remove this once webrtcsession is updated to jsep01.
+JsepInterface::Action
+JsepSessionDescription::GetAction(const std::string& type) {
+  bool known_type = false;
+  JsepInterface::Action  action = webrtc::JsepInterface::kOffer;
+
+  if (type == kOffer) {
+    action = webrtc::JsepInterface::kOffer;
+    known_type =true;
+  }
+  if (type == kPrAnswer) {
+    action = webrtc::JsepInterface::kPrAnswer;
+    known_type =true;
+  }
+  if (type == kAnswer) {
+    action = webrtc::JsepInterface::kAnswer;
+    known_type =true;
+  }
+
+  ASSERT(known_type);
+  return action;
 }
 
 }  // namespace webrtc

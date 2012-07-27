@@ -142,7 +142,8 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
     return *(allocator_.get());
   }
 
-  void OnPortReady(cricket::PortAllocatorSession* ses, cricket::Port* port) {
+  void OnPortReady(cricket::PortAllocatorSession* ses,
+                   cricket::PortInterface* port) {
     LOG(LS_INFO) << "OnPortReady: " << port->ToString();
     ports_.push_back(port);
   }
@@ -163,7 +164,7 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
   talk_base::FakeNetworkManager network_manager_;
   talk_base::scoped_ptr<cricket::BasicPortAllocator> allocator_;
   talk_base::scoped_ptr<cricket::PortAllocatorSession> session_;
-  std::vector<cricket::Port*> ports_;
+  std::vector<cricket::PortInterface*> ports_;
   std::vector<cricket::Candidate> candidates_;
   bool candidate_allocation_done_;
 };

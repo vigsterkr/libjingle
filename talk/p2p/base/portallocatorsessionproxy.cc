@@ -27,6 +27,7 @@
 
 #include "talk/p2p/base/portallocatorsessionproxy.h"
 
+#include "talk/base/thread.h"
 #include "talk/p2p/base/portallocator.h"
 #include "talk/p2p/base/portproxy.h"
 
@@ -83,15 +84,15 @@ void PortAllocatorSessionMuxer::OnCandidatesAllocationDone(
 }
 
 void PortAllocatorSessionMuxer::OnPortReady(PortAllocatorSession* session,
-                                            Port* port) {
+                                            PortInterface* port) {
   ASSERT(session == session_.get());
   ports_.push_back(port);
   port->SignalDestroyed.connect(
       this, &PortAllocatorSessionMuxer::OnPortDestroyed);
 }
 
-void PortAllocatorSessionMuxer::OnPortDestroyed(Port* port) {
-  std::vector<Port*>::iterator it =
+void PortAllocatorSessionMuxer::OnPortDestroyed(PortInterface* port) {
+  std::vector<PortInterface*>::iterator it =
       std::find(ports_.begin(), ports_.end(), port);
   if (it != ports_.end())
     ports_.erase(it);
@@ -136,19 +137,19 @@ void PortAllocatorSessionMuxer::SendAllocationDone_w(
 void PortAllocatorSessionMuxer::SendAllocatedPorts_w(
     PortAllocatorSessionProxy* proxy) {
   for (size_t i = 0; i < ports_.size(); ++i) {
-    Port* port = ports_[i];
+    PortInterface* port = ports_[i];
     proxy->OnPortReady(session_.get(), port);
     // If port already has candidates, send this to the clients of proxy
     // session. This can happen if proxy is created later than the actual
     // implementation.
-    if (!port->candidates().empty()) {
-      proxy->OnCandidatesReady(session_.get(), port->candidates());
+    if (!port->Candidates().empty()) {
+      proxy->OnCandidatesReady(session_.get(), port->Candidates());
     }
   }
 }
 
 PortAllocatorSessionProxy::~PortAllocatorSessionProxy() {
-  std::map<Port*, PortProxy*>::iterator it;
+  std::map<PortInterface*, PortProxy*>::iterator it;
   for (it = proxy_ports_.begin(); it != proxy_ports_.end(); it++)
     delete it->second;
 
@@ -200,12 +201,10 @@ bool PortAllocatorSessionProxy::IsGettingAllPorts() {
 }
 
 void PortAllocatorSessionProxy::OnPortReady(PortAllocatorSession* session,
-                                            Port* port) {
+                                            PortInterface* port) {
   ASSERT(session == impl_);
 
-  PortProxy* proxy_port = new PortProxy(
-      port->thread(), port->type(), port->socket_factory(), port->network(),
-      port->ip(), port->min_port(), port->max_port(), username(), password());
+  PortProxy* proxy_port = new PortProxy();
   proxy_port->set_impl(port);
   proxy_ports_[port] = proxy_port;
   SignalPortReady(this, proxy_port);

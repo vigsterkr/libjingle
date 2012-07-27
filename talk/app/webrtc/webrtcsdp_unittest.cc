@@ -38,7 +38,7 @@
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/udpport.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/mediasession.h"
 
 using cricket::AudioCodec;
 using cricket::AudioContentDescription;
@@ -55,6 +55,7 @@ using cricket::RELAY_PORT_TYPE;
 using cricket::SessionDescription;
 using cricket::StreamParams;
 using cricket::STUN_PORT_TYPE;
+using cricket::TransportDescription;
 using cricket::TransportInfo;
 using cricket::VideoCodec;
 using cricket::VideoContentDescription;
@@ -102,7 +103,8 @@ static const char kSdpFullString[] =
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
-    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
+    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 "
+    "dummy_session_params\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
@@ -130,7 +132,7 @@ static const char kSdpFullString[] =
     "a=sendrecv\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
-    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
+    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
@@ -156,7 +158,8 @@ static const char kSdpString[] =
     "a=mid:audio_content_name\r\n"
     "a=rtcp-mux\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
-    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 \r\n"
+    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 "
+    "dummy_session_params\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
@@ -172,7 +175,7 @@ static const char kSdpString[] =
     "a=sendrecv\r\n"
     "a=mid:video_content_name\r\n"
     "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
-    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32 \r\n"
+    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
@@ -239,7 +242,7 @@ static void Replace(const std::string& line,
 }
 
 static bool ReplaceAndTryToParse(const char* search, const char* replace) {
-  JsepSessionDescription desc;
+  JsepSessionDescription desc("dummy");
   std::string sdp = kSdpFullString;
   Replace(search, replace, &sdp);
   return webrtc::SdpDeserialize(sdp, &desc);
@@ -270,7 +273,8 @@ static void ReplaceDirection(cricket::MediaContentDirection direction,
 
 class WebRtcSdpTest : public testing::Test {
  public:
-  WebRtcSdpTest() {
+  WebRtcSdpTest()
+     : jdesc_("dummy") {
     // AudioContentDescription
     talk_base::scoped_ptr<AudioContentDescription> audio(
         new AudioContentDescription());
@@ -289,7 +293,8 @@ class WebRtcSdpTest : public testing::Test {
     audio_stream2.ssrcs.push_back(kAudioTrack2Ssrc);
     audio->AddStream(audio_stream2);
     audio->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_32",
-        "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32", ""));
+        "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32",
+        "dummy_session_params"));
     audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 1, 0));
     audio->AddCodec(AudioCodec(104, "CELT", 32000, 0, 2, 0));
     desc_.AddContent(kAudioContentName, NS_JINGLE_RTP,
@@ -324,12 +329,18 @@ class WebRtcSdpTest : public testing::Test {
                      video.release());
 
     // TransportInfo
-    EXPECT_TRUE(desc_.AddTransportInfo(TransportInfo(kAudioContentName,
-        NS_GINGLE_P2P, kCandidateUfragVoice, kCandidatePwdVoice,
-        Candidates())));
-    EXPECT_TRUE(desc_.AddTransportInfo(TransportInfo(kVideoContentName,
-        NS_GINGLE_P2P, kCandidateUfragVideo, kCandidatePwdVideo,
-        Candidates())));
+    EXPECT_TRUE(desc_.AddTransportInfo(
+        TransportInfo(kAudioContentName,
+                      TransportDescription(NS_GINGLE_P2P, "",
+                                           kCandidateUfragVoice,
+                                           kCandidatePwdVoice,
+                                           NULL, Candidates()))));
+    EXPECT_TRUE(desc_.AddTransportInfo(
+        TransportInfo(kVideoContentName,
+                      TransportDescription(NS_GINGLE_P2P, "",
+                                           kCandidateUfragVideo,
+                                           kCandidatePwdVideo,
+                                           NULL, Candidates()))));
 
     // v4 host
     int port = 1234;
@@ -433,17 +444,21 @@ class WebRtcSdpTest : public testing::Test {
     candidates_.push_back(candidate11);
     candidates_.push_back(candidate12);
 
-    jcandidate_.reset(new JsepIceCandidate("1", candidate1));
+    jcandidate_.reset(new JsepIceCandidate(std::string("audio_content_name"),
+                                           0, candidate1));
 
     // Set up JsepSessionDescription.
     jdesc_.Initialize(desc_.Copy(), kSessionId, kSessionVersion);
+    std::string mline_id;
     int mline_index = 0;
     for (size_t i = 0; i< candidates_.size(); ++i) {
       // In this test, the audio m line index will be 0, and the video m line
       // will be 1.
       bool is_video = (i > 5);
+      mline_id = is_video ? "video_content_name" : "audio_content_name";
       mline_index = is_video ? 1 : 0;
-      JsepIceCandidate jice(talk_base::ToString<int>(mline_index),
+      JsepIceCandidate jice(mline_id,
+                            mline_index,
                             candidates_.at(i));
       jdesc_.AddCandidate(&jice);
     }
@@ -560,13 +575,21 @@ class WebRtcSdpTest : public testing::Test {
       const cricket::TransportInfo transport1 = transports1.at(i);
       const cricket::TransportInfo transport2 = transports2.at(i);
       EXPECT_EQ(transport1.content_name, transport2.content_name);
-      EXPECT_EQ(transport1.transport_type, transport2.transport_type);
-      EXPECT_EQ(transport1.ice_ufrag, transport2.ice_ufrag);
-      EXPECT_EQ(transport1.ice_pwd, transport2.ice_pwd);
-      EXPECT_EQ(transport1.dtls_digest_alg, transport2.dtls_digest_alg);
-      EXPECT_EQ(transport1.dtls_fingerprint, transport2.dtls_fingerprint);
-      EXPECT_TRUE(CompareCandidates(transport1.candidates,
-                                    transport2.candidates));
+      EXPECT_EQ(transport1.description.transport_type,
+                transport2.description.transport_type);
+      EXPECT_EQ(transport1.description.ice_ufrag,
+                transport2.description.ice_ufrag);
+      EXPECT_EQ(transport1.description.ice_pwd,
+                transport2.description.ice_pwd);
+      if (transport1.description.identity_fingerprint.get() != NULL) {
+        EXPECT_EQ(*transport1.description.identity_fingerprint.get(),
+                  *transport2.description.identity_fingerprint.get());
+      } else {
+        EXPECT_EQ(transport1.description.identity_fingerprint.get(),
+                  transport2.description.identity_fingerprint.get());
+      }
+      EXPECT_TRUE(CompareCandidates(transport1.description.candidates,
+                                    transport2.description.candidates));
     }
     return true;
   }
@@ -600,7 +623,8 @@ class WebRtcSdpTest : public testing::Test {
       for (size_t j = 0; j < cc1->count(); ++j) {
         const IceCandidateInterface* c1 = cc1->at(j);
         const IceCandidateInterface* c2 = cc2->at(j);
-        EXPECT_EQ(c1->label(), c2->label());
+        EXPECT_EQ(c1->sdp_mid(), c2->sdp_mid());
+        EXPECT_EQ(c1->sdp_mline_index(), c2->sdp_mline_index());
         EXPECT_TRUE(c1->candidate().IsEquivalent(c2->candidate()));
       }
     }
@@ -632,8 +656,10 @@ class WebRtcSdpTest : public testing::Test {
     } else {
       ASSERT(false);
     }
-    TransportInfo transport_info(content_name, NS_GINGLE_P2P,
-        ufrag, pwd, Candidates());
+    TransportInfo transport_info(content_name,
+                                 TransportDescription(NS_GINGLE_P2P, "",
+                                                      ufrag, pwd, NULL,
+                                                      Candidates()));
     SessionDescription* desc =
         const_cast<SessionDescription*>(jdesc->description());
     desc->RemoveTransportInfoByName(content_name);
@@ -641,7 +667,7 @@ class WebRtcSdpTest : public testing::Test {
     for (size_t i = 0; i < jdesc_.number_of_mediasections(); ++i) {
       const IceCandidateCollection* cc = jdesc_.candidates(i);
       for (size_t j = 0; j < cc->count(); ++j) {
-        if (cc->at(j)->label() == talk_base::ToString<int>(mline_index)) {
+        if (cc->at(j)->sdp_mline_index() == mline_index) {
           const_cast<Candidate&>(cc->at(j)->candidate()).set_username(
               ufrag);
           const_cast<Candidate&>(cc->at(j)->candidate()).set_password(
@@ -671,7 +697,7 @@ class WebRtcSdpTest : public testing::Test {
   bool TestDeserializeDirection(cricket::MediaContentDirection direction) {
     std::string new_sdp = kSdpFullString;
     ReplaceDirection(direction, &new_sdp);
-    JsepSessionDescription new_jdesc;
+    JsepSessionDescription new_jdesc("dummy");
 
     EXPECT_TRUE(webrtc::SdpDeserialize(new_sdp,
                                        &new_jdesc));
@@ -703,13 +729,13 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescription) {
 }
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionEmpty) {
-  JsepSessionDescription jdesc_empty;
+  JsepSessionDescription jdesc_empty("dummy");
   EXPECT_EQ("", webrtc::SdpSerialize(jdesc_empty));
 }
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
-  JsepSessionDescription jdesc_no_candidates;
+  JsepSessionDescription jdesc_no_candidates("dummy");
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
                                              kSessionId, kSessionVersion));
   std::string message = webrtc::SdpSerialize(jdesc_no_candidates);
@@ -751,7 +777,7 @@ TEST_F(WebRtcSdpTest, SerializeCandidates) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescription) {
-  JsepSessionDescription jdesc;
+  JsepSessionDescription jdesc("dummy");
   // Deserialize
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &jdesc));
   // Verify
@@ -760,16 +786,16 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescription) {
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
-  JsepSessionDescription jdesc_no_candidates;
+  JsepSessionDescription jdesc_no_candidates("dummy");
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
                                              kSessionId, kSessionVersion));
-  JsepSessionDescription new_jdesc;
+  JsepSessionDescription new_jdesc("dummy");
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpString, &new_jdesc));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_no_candidates, new_jdesc));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
-  JsepSessionDescription jdesc_with_bundle;
+  JsepSessionDescription jdesc_with_bundle("dummy");
   std::string sdp_with_bundle = kSdpFullString;
   InjectAfter("t=0 0\r\n",
               "a=group:BUNDLE audio_content_name video_content_name\r\n",
@@ -787,7 +813,7 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithUfragPwd) {
   // Remove the original ice-ufrag and ice-pwd
-  JsepSessionDescription jdesc_with_ufrag_pwd;
+  JsepSessionDescription jdesc_with_ufrag_pwd("dummy");
   std::string sdp_with_ufrag_pwd = kSdpFullString;
   EXPECT_TRUE(RemoveCandidateUfragPwd(&sdp_with_ufrag_pwd));
   // Add session level ufrag and pwd
@@ -822,18 +848,22 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithInactiveContent) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidate) {
-  const std::string kDummyLabel = "dummy_label";
-  JsepIceCandidate jcandidate(kDummyLabel);
+  const std::string kDummyMid = "dummy_mid";
+  const int kDummyIndex = 123;
+  JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
   EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidate, &jcandidate));
-  EXPECT_EQ(kDummyLabel, jcandidate.label());
+  EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
+  EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
   EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidateOldFormat) {
-  const std::string kDummyLabel = "dummy_label";
-  JsepIceCandidate jcandidate(kDummyLabel);
+  const std::string kDummyMid = "dummy_mid";
+  const int kDummyIndex = 123;
+  JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
   EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidateOldFormat, &jcandidate));
-  EXPECT_EQ(kDummyLabel, jcandidate.label());
+  EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
+  EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
   Candidate ref_candidate = jcandidate_->candidate();
   ref_candidate.set_username("user_rtp");
   ref_candidate.set_password("password_rtp");

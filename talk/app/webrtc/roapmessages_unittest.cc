@@ -31,7 +31,7 @@
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
 #include "talk/p2p/base/transport.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/mediasession.h"
 
 using cricket::Candidates;
 using cricket::AudioContentDescription;

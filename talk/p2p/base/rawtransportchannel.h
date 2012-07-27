@@ -43,12 +43,12 @@ class Thread;
 
 namespace cricket {
 
-class Port;
 class Connection;
-class StunPort;
-class RelayPort;
 class PortAllocator;
 class PortAllocatorSession;
+class PortInterface;
+class RelayPort;
+class StunPort;
 
 // Implements a channel that just sends bare packets once we have received the
 // address of the other side.  We pick a single address to send them based on
@@ -96,12 +96,12 @@ class RawTransportChannel : public TransportChannelImpl,
   PortAllocatorSession* allocator_session_;
   StunPort* stun_port_;
   RelayPort* relay_port_;
-  Port* port_;
+  PortInterface* port_;
   bool use_relay_;
   talk_base::SocketAddress remote_address_;
 
   // Called when the allocator creates another port.
-  void OnPortReady(PortAllocatorSession* session, Port* port);
+  void OnPortReady(PortAllocatorSession* session, PortInterface* port);
 
   // Called when one of the ports we are using has determined its address.
   void OnCandidatesReady(PortAllocatorSession *session,
@@ -109,14 +109,14 @@ class RawTransportChannel : public TransportChannelImpl,
 
   // Called once we have chosen the port to use for communication with the
   // other client.  This will send its address and prepare the port for use.
-  void SetPort(Port* port);
+  void SetPort(PortInterface* port);
 
   // Called once we have a port and a remote address.  This will set mark the
   // channel as writable and signal the route to the client.
   void SetWritable();
 
   // Called when we receive a packet from the other client.
-  void OnReadPacket(Port* port, const char* data, size_t size,
+  void OnReadPacket(PortInterface* port, const char* data, size_t size,
                     const talk_base::SocketAddress& addr);
 
   // Handles a message to destroy unused ports.

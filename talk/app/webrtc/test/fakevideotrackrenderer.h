@@ -29,7 +29,7 @@
 #define TALK_APP_WEBRTC_TEST_FAKEVIDEOTRACKRENDERER_H_
 
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/session/phone/fakevideorenderer.h"
+#include "talk/media/base/fakevideorenderer.h"
 
 namespace webrtc {
 

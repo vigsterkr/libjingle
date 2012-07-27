@@ -29,14 +29,61 @@
 
 namespace cricket {
 
-void PortProxy::set_impl(Port* port) {
+void PortProxy::set_impl(PortInterface* port) {
   impl_ = port;
   impl_->SignalUnknownAddress.connect(
       this, &PortProxy::OnUnknownAddress);
   impl_->SignalDestroyed.connect(this, &PortProxy::OnPortDestroyed);
 }
 
+const std::string& PortProxy::Type() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Type();
+}
+
+talk_base::Network* PortProxy::Network() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Network();
+}
+
+void PortProxy::SetIceProtocolType(IceProtocolType protocol) {
+  ASSERT(impl_ != NULL);
+  impl_->SetIceProtocolType(protocol);
+}
+
+IceProtocolType PortProxy::IceProtocol() const {
+  ASSERT(impl_ != NULL);
+  return impl_->IceProtocol();
+}
+
+// Methods to set/get ICE role and tiebreaker values.
+void PortProxy::SetRole(TransportRole role) {
+  ASSERT(impl_ != NULL);
+  impl_->SetRole(role);
+}
+
+TransportRole PortProxy::Role() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Role();
+}
+
+void PortProxy::SetTiebreaker(uint64 tiebreaker) {
+  ASSERT(impl_ != NULL);
+  impl_->SetTiebreaker(tiebreaker);
+}
+
+uint64 PortProxy::Tiebreaker() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Tiebreaker();
+}
+
+uint32 PortProxy::Priority() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Priority();
+}
+
 void PortProxy::PrepareAddress() {
+  ASSERT(impl_ != NULL);
   impl_->PrepareAddress();
 }
 
@@ -65,8 +112,42 @@ int PortProxy::GetError() {
   return impl_->GetError();
 }
 
+const std::vector<Candidate>& PortProxy::Candidates() const {
+  ASSERT(impl_ != NULL);
+  return impl_->Candidates();
+}
+
+void PortProxy::SendBindingResponse(
+    StunMessage* request, const talk_base::SocketAddress& addr) {
+  ASSERT(impl_ != NULL);
+  impl_->SendBindingResponse(request, addr);
+}
+
+Connection* PortProxy::GetConnection(
+    const talk_base::SocketAddress& remote_addr) {
+  ASSERT(impl_ != NULL);
+  return impl_->GetConnection(remote_addr);
+}
+
+void PortProxy::SendBindingErrorResponse(
+    StunMessage* request, const talk_base::SocketAddress& addr,
+    int error_code, const std::string& reason) {
+  ASSERT(impl_ != NULL);
+  impl_->SendBindingErrorResponse(request, addr, error_code, reason);
+}
+
+void PortProxy::EnablePortPackets() {
+  ASSERT(impl_ != NULL);
+  impl_->EnablePortPackets();
+}
+
+std::string PortProxy::ToString() const {
+  ASSERT(impl_ != NULL);
+  return impl_->ToString();
+}
+
 void PortProxy::OnUnknownAddress(
-    Port *port,
+    PortInterface *port,
     const talk_base::SocketAddress &addr,
     IceMessage *stun_msg,
     const std::string &remote_username,
@@ -76,7 +157,7 @@ void PortProxy::OnUnknownAddress(
   SignalUnknownAddress(this, addr, stun_msg, remote_username, true);
 }
 
-void PortProxy::OnPortDestroyed(Port* port) {
+void PortProxy::OnPortDestroyed(PortInterface* port) {
   ASSERT(port == impl_);
   // |port| will be destroyed in PortAllocatorSessionMuxer.
   SignalDestroyed(this);

@@ -38,21 +38,21 @@
 #include "talk/base/macsocketserver.h"
 #endif
 #include "talk/base/pathutils.h"
-#include "talk/base/stream.h"
 #include "talk/base/ssladapter.h"
+#include "talk/base/stream.h"
 #include "talk/base/win32socketserver.h"
-#include "talk/examples/login/xmppthread.h"
-#include "talk/examples/login/xmppauth.h"
-#include "talk/examples/login/xmpppump.h"
 #include "talk/examples/call/callclient.h"
 #include "talk/examples/call/console.h"
 #include "talk/examples/call/mediaenginefactory.h"
+#include "talk/examples/login/xmppauth.h"
+#include "talk/examples/login/xmpppump.h"
+#include "talk/examples/login/xmppthread.h"
 #include "talk/p2p/base/constants.h"
 #ifdef ANDROID
-#include "talk/session/phone/androidmediaengine.h"
+#include "talk/media/other/androidmediaengine.h"
 #endif
-#include "talk/session/phone/mediasessionclient.h"
-#include "talk/session/phone/srtpfilter.h"
+#include "talk/session/media/mediasessionclient.h"
+#include "talk/session/media/srtpfilter.h"
 #include "talk/xmpp/xmppclientsettings.h"
 
 class DebugLog : public sigslot::has_slots<> {

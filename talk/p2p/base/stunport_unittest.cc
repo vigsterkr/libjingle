@@ -101,8 +101,8 @@ class StunPortTest : public testing::Test,
 // Test that we can create a STUN port
 TEST_F(StunPortTest, TestBasic) {
   CreateStunPort(kStunAddr);
-  EXPECT_EQ("stun", port()->type());
-  EXPECT_EQ(0U, port()->candidates().size());
+  EXPECT_EQ("stun", port()->Type());
+  EXPECT_EQ(0U, port()->Candidates().size());
 }
 
 // Test that we can get an address from a STUN server.
@@ -110,8 +110,8 @@ TEST_F(StunPortTest, TestPrepareAddress) {
   CreateStunPort(kStunAddr);
   PrepareAddress();
   EXPECT_TRUE_WAIT(done(), kTimeoutMs);
-  ASSERT_EQ(1U, port()->candidates().size());
-  EXPECT_TRUE(kLocalAddr.EqualIPs(port()->candidates()[0].address()));
+  ASSERT_EQ(1U, port()->Candidates().size());
+  EXPECT_TRUE(kLocalAddr.EqualIPs(port()->Candidates()[0].address()));
 
   // TODO: Add IPv6 tests here, once either physicalsocketserver supports
   // IPv6, or this test is changed to use VirtualSocketServer.
@@ -123,7 +123,7 @@ TEST_F(StunPortTest, TestPrepareAddressFail) {
   PrepareAddress();
   EXPECT_TRUE_WAIT(done(), kTimeoutMs);
   EXPECT_TRUE(error());
-  EXPECT_EQ(0U, port()->candidates().size());
+  EXPECT_EQ(0U, port()->Candidates().size());
 }
 
 // Test that we can get an address from a STUN server specified by a hostname.
@@ -131,8 +131,8 @@ TEST_F(StunPortTest, TestPrepareAddressHostname) {
   CreateStunPort(kStunHostnameAddr);
   PrepareAddress();
   EXPECT_TRUE_WAIT(done(), kTimeoutMs);
-  ASSERT_EQ(1U, port()->candidates().size());
-  EXPECT_TRUE(kLocalAddr.EqualIPs(port()->candidates()[0].address()));
+  ASSERT_EQ(1U, port()->Candidates().size());
+  EXPECT_TRUE(kLocalAddr.EqualIPs(port()->Candidates()[0].address()));
 }
 
 // Test that we handle hostname lookup failures properly.
@@ -141,5 +141,5 @@ TEST_F(StunPortTest, TestPrepareAddressHostnameFail) {
   PrepareAddress();
   EXPECT_TRUE_WAIT(done(), kTimeoutMs);
   EXPECT_TRUE(error());
-  EXPECT_EQ(0U, port()->candidates().size());
+  EXPECT_EQ(0U, port()->Candidates().size());
 }

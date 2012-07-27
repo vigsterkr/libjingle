@@ -40,6 +40,7 @@
 #include "talk/base/socketaddress.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/candidate.h"
+#include "talk/p2p/base/portinterface.h"
 #include "talk/p2p/base/stun.h"
 #include "talk/p2p/base/stunrequest.h"
 #include "talk/p2p/base/transport.h"
@@ -87,13 +88,34 @@ struct ProtocolAddress {
 // Represents a local communication mechanism that can be used to create
 // connections to similar mechanisms of the other client.  Subclasses of this
 // one add support for specific mechanisms like local UDP ports.
-class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
+class Port : public PortInterface, public talk_base::MessageHandler,
+             public sigslot::has_slots<> {
  public:
   Port(talk_base::Thread* thread, const std::string& type,
        talk_base::PacketSocketFactory* factory, talk_base::Network* network,
        const talk_base::IPAddress& ip, int min_port, int max_port,
        const std::string& username_fragment, const std::string& password);
   virtual ~Port();
+
+  virtual const std::string& Type() const { return type_; }
+  virtual talk_base::Network* Network() const { return network_; }
+
+  // This method will set the flag which enables standard ICE/STUN procedures
+  // in STUN connectivity checks. Currently this method does
+  // 1. Add / Verify MI attribute in STUN binding requests.
+  // 2. Username attribute in STUN binding request will be RFRAF:LFRAG,
+  // as opposed to RFRAGLFRAG.
+  virtual void SetIceProtocolType(IceProtocolType protocol) {
+    ice_protocol_ = protocol;
+  }
+  virtual IceProtocolType IceProtocol() const { return ice_protocol_; }
+
+  // Methods to set/get ICE role and tiebreaker values.
+  void SetRole(TransportRole role) { role_ = role; }
+  TransportRole Role() const { return role_; }
+
+  void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  uint64 Tiebreaker() const { return tiebreaker_; }
 
   // The thread on which this port performs its I/O.
   talk_base::Thread* thread() { return thread_; }
@@ -116,15 +138,9 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // A value in [0,2**32-1] that indicates the priority for this port
   // versus other ports on this client.  (Larger indicates more
   // priorty.)
-  virtual uint32 priority() const { return priority_; }
-  void set_priority(uint32 priority) { priority_ = priority; }
-
-  // Methods to set/get ICE role and tiebreaker values.
-  virtual void set_role(TransportRole role) { role_ = role; }
-  virtual TransportRole role() { return role_; }
-
-  virtual void set_tiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
-  virtual uint64 tiebreaker() { return tiebreaker_; }
+  // Note: These methods will be removed after priority CL commited.
+  virtual uint32 Priority() const { return priority_; }
+  void SetPriority(uint32 priority) { priority_ = priority; }
 
   void set_related_address(const talk_base::SocketAddress& address) {
     related_address_ = address;
@@ -133,12 +149,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   const talk_base::SocketAddress& related_address() const {
     return related_address_;
   }
-
-  // Identifies the port type.
-  const std::string& type() const { return type_; }
-
-  // Identifies network that this port was allocated on.
-  virtual talk_base::Network* network() { return network_; }
 
   // Identifies the generation that this port was created in.
   uint32 generation() { return generation_; }
@@ -166,12 +176,13 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Once it is ready, we will send SignalAddressReady.  If errors are
   // preventing the port from getting an address, it may send
   // SignalAddressError.
-  virtual void PrepareAddress() = 0;
   sigslot::signal1<Port*> SignalAddressReady;
   sigslot::signal1<Port*> SignalAddressError;
 
   // Provides all of the above information in one handy object.
-  const std::vector<Candidate>& candidates() const { return candidates_; }
+  virtual const std::vector<Candidate>& Candidates() const {
+    return candidates_;
+  }
 
   // Returns a map containing all of the connections of this port, keyed by the
   // remote address.
@@ -182,25 +193,8 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   virtual Connection* GetConnection(
       const talk_base::SocketAddress& remote_addr);
 
-  // Creates a new connection to the given address.
-  enum CandidateOrigin { ORIGIN_THIS_PORT, ORIGIN_OTHER_PORT, ORIGIN_MESSAGE };
-  virtual Connection* CreateConnection(const Candidate& remote_candidate,
-    CandidateOrigin origin) = 0;
-
   // Called each time a connection is created.
   sigslot::signal2<Port*, Connection*> SignalConnectionCreated;
-
-  // Sends the given packet to the given address, provided that the address is
-  // that of a connection or an address that has sent to us already.
-  virtual int SendTo(
-      const void* data, size_t size, const talk_base::SocketAddress& addr,
-      bool payload) = 0;
-
-  // Indicates that we received a successful STUN binding request from an
-  // address that doesn't correspond to any current connection.  To turn this
-  // into a real connection, call CreateConnection.
-  sigslot::signal5<Port*, const talk_base::SocketAddress&, IceMessage*,
-                   const std::string&, bool> SignalUnknownAddress;
 
   // Sends a response message (normal or error) to the given request.  One of
   // these methods should be called as a response to SignalUnknownAddress.
@@ -211,14 +205,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
       StunMessage* request, const talk_base::SocketAddress& addr,
       int error_code, const std::string& reason);
 
-  // Indicates that errors occurred when performing I/O.
-  sigslot::signal2<Port*, int> SignalReadError;
-  sigslot::signal2<Port*, int> SignalWriteError;
-
-  // Functions on the underlying socket(s).
-  virtual int SetOption(talk_base::Socket::Option opt, int value) = 0;
-  virtual int GetError() = 0;
-
   void set_proxy(const std::string& user_agent,
                  const talk_base::ProxyInfo& proxy) {
     user_agent_ = user_agent;
@@ -227,13 +213,7 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   const std::string& user_agent() { return user_agent_; }
   const talk_base::ProxyInfo& proxy() { return proxy_; }
 
-  // Normally, packets arrive through a connection (or they result signaling of
-  // unknown address).  Calling this method turns off delivery of packets
-  // through their respective connection and instead delivers every packet
-  // through this port.
-  void EnablePortPackets();
-  sigslot::signal4<Port*, const char*, size_t, const talk_base::SocketAddress&>
-      SignalReadPacket;
+  virtual void EnablePortPackets();
 
   // Indicates to the port that its official use has now begun.  This will
   // start the timer that checks to see if the port is being used.
@@ -242,27 +222,13 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // Called if the port has no connections and is no longer useful.
   void Destroy();
 
-  // Signaled when this port decides to delete itself because it no longer has
-  // any usefulness.
-  sigslot::signal1<Port*> SignalDestroyed;
-
   virtual void OnMessage(talk_base::Message *pmsg);
 
   // Debugging description of this port
-  std::string ToString() const;
+  virtual std::string ToString() const;
   talk_base::IPAddress& ip() { return ip_; }
   int min_port() { return min_port_; }
   int max_port() { return max_port_; }
-
-  // This method will set the flag which enables standard ICE/STUN procedures
-  // in STUN connectivity checks. Currently this method does
-  // 1. Add / Verify MI attribute in STUN binding requests.
-  // 2. Username attribute in STUN binding request will be RFRAF:LFRAG,
-  // as opposed to RFRAGLFRAG.
-  virtual void set_ice_protocol(IceProtocolType protocol) {
-    ice_protocol_ = protocol;
-  }
-  virtual IceProtocolType ice_protocol() const { return ice_protocol_; }
 
   // This method will return local and remote username fragements from the
   // stun username attribute if present.
@@ -274,7 +240,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
 
   bool MaybeIceRoleConflict(
       const talk_base::SocketAddress& addr, IceMessage* stun_msg);
-  sigslot::signal0<> SignalRoleConflict;
 
  protected:
   // Fills in the local address of the port.
@@ -290,7 +255,6 @@ class Port : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // then we will signal the client.
   void OnReadPacket(const char* data, size_t size,
                     const talk_base::SocketAddress& addr);
-
 
   // If the given data comprises a complete and correct STUN message then the
   // return value is true, otherwise false. If the message username corresponds

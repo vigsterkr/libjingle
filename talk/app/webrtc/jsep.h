@@ -87,11 +87,13 @@ class MediaHints {  // Deprecated (jsep00)
 class IceCandidateInterface {
  public:
   virtual ~IceCandidateInterface() {}
-  // The m= line this candidate is associated with.
-  // This is an integer index value stored as a string.
-  virtual std::string label() const = 0;  // Deprecated (jsep00)
-  // TODO: media_id should correspond to a=mid:.
-  virtual std::string media_id() const { return label(); }
+  /// If present, this contains the identierfier of the "media stream
+  // identification" as defined in [RFC 3388] for m-line this candidate is
+  // assocated with.
+  virtual std::string sdp_mid() const = 0;
+  // This indeicates the index (starting at zero) of m-line in the SDP this
+  // candidate is assocated with.
+  virtual int sdp_mline_index() const = 0;
   virtual const cricket::Candidate& candidate() const = 0;
   // Creates a SDP-ized form of this candidate.
   virtual bool ToString(std::string* out) const = 0;
@@ -99,7 +101,8 @@ class IceCandidateInterface {
 
 // Creates a IceCandidateInterface based on SDP string.
 // Returns NULL if the sdp string can't be parsed.
-IceCandidateInterface* CreateIceCandidate(const std::string& label,
+IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
+                                          int sdp_mline_index,
                                           const std::string& sdp);
 
 // This class represents a collection of candidates for a specific m-line.
@@ -119,22 +122,13 @@ class IceCandidateCollection {
 // a time and is therefore not expected to be thread safe.
 class SessionDescriptionInterface {
  public:
-  // The SdpType enums serve as arguments to setLocalDescription and
-  // setRemoteDescription.
-  // They provide information as to how the SDP should be handled.
-  enum SdpType {
-    kOffer,
-    kPrAnswer,
-    kAnswer,
-  };
-
   virtual ~SessionDescriptionInterface() {}
   virtual const cricket::SessionDescription* description() const = 0;
   // Get the session id and session version, which are defined based on
   // RFC 4566 for the SDP o= line.
   virtual std::string session_id() const = 0;
   virtual std::string session_version() const = 0;
-  virtual SdpType type() const = 0;
+  virtual std::string type() const = 0;
   // Adds the specified candidate to the description.
   // Ownership is not transferred.
   // Returns false if the session description does not have a media section that
@@ -154,7 +148,7 @@ SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp);
 // Creates a SessionDescriptionInterface based on SDP string and the SdpType.
 // Returns NULL if the sdp string can't be parsed.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp,
-    SessionDescriptionInterface::SdpType type);
+                                                      const std::string& type);
 
 // Jsep Ice candidate callback interface. An application should implement these
 // methods to be notified of new local candidates.
@@ -211,6 +205,7 @@ class JsepInterface {
  public:
   // Indicates the type of SessionDescription in a call to SetLocalDescription
   // and SetRemoteDescription.
+  // Deprecated (jsep00)
   enum Action {
     kOffer,
     kPrAnswer,

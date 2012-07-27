@@ -93,8 +93,8 @@ static const int kTiebreaker1 = 11111;
 static const int kTiebreaker2 = 22222;
 
 static Candidate GetCandidate(Port* port) {
-  assert(port->candidates().size() == 1);
-  return port->candidates()[0];
+  assert(port->Candidates().size() == 1);
+  return port->Candidates()[0];
 }
 
 static SocketAddress GetAddress(Port* port) {
@@ -123,7 +123,7 @@ class TestPort : public Port {
            const std::string& username_fragment, const std::string& password)
       : Port(thread, type, factory, network, ip, min_port, max_port,
              username_fragment, password) {
-    set_priority(kDefaultHostPriority);
+    SetPriority(kDefaultHostPriority);
   }
   ~TestPort() {}
 
@@ -234,7 +234,7 @@ class TestChannel : public sigslot::has_slots<> {
     address_count_++;
   }
 
-  void OnUnknownAddress(Port* port, const SocketAddress& addr,
+  void OnUnknownAddress(PortInterface* port, const SocketAddress& addr,
                         IceMessage* msg, const std::string& rf,
                         bool /*port_muxed*/) {
     ASSERT_EQ(src_.get(), port);
@@ -249,7 +249,7 @@ class TestChannel : public sigslot::has_slots<> {
         msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY);
     const cricket::StunUInt32Attribute* fingerprint_attr =
         msg->GetUInt32(STUN_ATTR_FINGERPRINT);
-    if (src_->ice_protocol() == cricket::ICEPROTO_RFC5245) {
+    if (src_->IceProtocol() == cricket::ICEPROTO_RFC5245) {
       EXPECT_TRUE(priority_attr != NULL);
       EXPECT_TRUE(mi_attr != NULL);
       EXPECT_TRUE(fingerprint_attr != NULL);
@@ -377,12 +377,12 @@ class PortTest : public testing::Test {
                          PacketSocketFactory* socket_factory) {
     UDPPort* port =  UDPPort::Create(main_, socket_factory, &network_,
                                      addr.ipaddr(), 0, 0, username_, password_);
-    port->set_ice_protocol(ice_protocol_);
+    port->SetIceProtocolType(ice_protocol_);
     return port;
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr) {
     TCPPort* port = CreateTcpPort(addr, &socket_factory_);
-    port->set_ice_protocol(ice_protocol_);
+    port->SetIceProtocolType(ice_protocol_);
     return port;
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr,
@@ -390,7 +390,7 @@ class PortTest : public testing::Test {
     TCPPort* port =  TCPPort::Create(main_, socket_factory, &network_,
                                      addr.ipaddr(), 0, 0, username_, password_,
                                      true);
-    port->set_ice_protocol(ice_protocol_);
+    port->SetIceProtocolType(ice_protocol_);
     return port;
   }
   StunPort* CreateStunPort(const SocketAddress& addr,
@@ -398,7 +398,7 @@ class PortTest : public testing::Test {
     StunPort* port =  StunPort::Create(main_, factory, &network_,
                                        addr.ipaddr(), 0, 0,
                                        username_, password_, kStunAddr);
-    port->set_ice_protocol(ice_protocol_);
+    port->SetIceProtocolType(ice_protocol_);
     return port;
   }
   RelayPort* CreateRelayPort(const SocketAddress& addr,
@@ -415,7 +415,7 @@ class PortTest : public testing::Test {
                                         username_, password_);
     // TODO: Add an external address for ext_proto, so that the
     // other side can connect to this port using a non-UDP protocol.
-    port->set_ice_protocol(ice_protocol_);
+    port->SetIceProtocolType(ice_protocol_);
     return port;
   }
   talk_base::NATServer* CreateNatServer(const SocketAddress& addr,
@@ -448,7 +448,7 @@ class PortTest : public testing::Test {
                         bool accept, bool same_addr1,
                         bool same_addr2, bool possible);
 
-  void set_ice_protocol(cricket::IceProtocolType protocol) {
+  void SetIceProtocolType(cricket::IceProtocolType protocol) {
     ice_protocol_ = protocol;
   }
 
@@ -895,15 +895,15 @@ TEST_F(PortTest, TestSslTcpToSslTcpRelay) {
 // verifies Message Integrity attribute in STUN messages and username in STUN
 // binding request will have colon (":") between remote and local username.
 TEST_F(PortTest, TestLocalToLocalAsIce) {
-  set_ice_protocol(cricket::ICEPROTO_RFC5245);
+  SetIceProtocolType(cricket::ICEPROTO_RFC5245);
   UDPPort* port1 = CreateUdpPort(kLocalAddr1);
-  port1->set_role(cricket::ROLE_CONTROLLING);
-  port1->set_tiebreaker(kTiebreaker1);
-  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port1->ice_protocol());
+  port1->SetRole(cricket::ROLE_CONTROLLING);
+  port1->SetTiebreaker(kTiebreaker1);
+  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port1->IceProtocol());
   UDPPort* port2 = CreateUdpPort(kLocalAddr2);
-  port2->set_role(cricket::ROLE_CONTROLLED);
-  port2->set_tiebreaker(kTiebreaker2);
-  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port2->ice_protocol());
+  port2->SetRole(cricket::ROLE_CONTROLLED);
+  port2->SetTiebreaker(kTiebreaker2);
+  ASSERT_EQ(cricket::ICEPROTO_RFC5245, port2->IceProtocol());
   // Same parameters as TestLocalToLocal above.
   TestConnectivity("udp", port1, "udp", port2, true, true, true, true);
 }
@@ -929,10 +929,10 @@ TEST_F(PortTest, TestDelayedBindingUdp) {
   socket->set_state(AsyncPacketSocket::STATE_BINDING);
   port->PrepareAddress();
 
-  EXPECT_EQ(0U, port->candidates().size());
+  EXPECT_EQ(0U, port->Candidates().size());
   socket->SignalAddressReady(socket, kLocalAddr2);
 
-  EXPECT_EQ(1U, port->candidates().size());
+  EXPECT_EQ(1U, port->Candidates().size());
 }
 
 TEST_F(PortTest, TestDelayedBindingTcp) {
@@ -946,10 +946,10 @@ TEST_F(PortTest, TestDelayedBindingTcp) {
   socket->set_state(AsyncPacketSocket::STATE_BINDING);
   port->PrepareAddress();
 
-  EXPECT_EQ(0U, port->candidates().size());
+  EXPECT_EQ(0U, port->Candidates().size());
   socket->SignalAddressReady(socket, kLocalAddr2);
 
-  EXPECT_EQ(1U, port->candidates().size());
+  EXPECT_EQ(1U, port->Candidates().size());
 }
 
 void PortTest::TestCrossFamilyPorts(int type) {
@@ -1016,16 +1016,16 @@ TEST_F(PortTest, TestSendStunMessageAsGice) {
       CreateTestPort(kLocalAddr1, "lfrag", "lpass"));
   talk_base::scoped_ptr<TestPort> rport(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  lport->set_ice_protocol(ICEPROTO_GOOGLE);
-  rport->set_ice_protocol(ICEPROTO_GOOGLE);
+  lport->SetIceProtocolType(ICEPROTO_GOOGLE);
+  rport->SetIceProtocolType(ICEPROTO_GOOGLE);
 
   // Send a fake ping from lport to rport.
   lport->PrepareAddress();
   rport->PrepareAddress();
-  ASSERT_FALSE(rport->candidates().empty());
-  Connection* conn = lport->CreateConnection(rport->candidates()[0],
+  ASSERT_FALSE(rport->Candidates().empty());
+  Connection* conn = lport->CreateConnection(rport->Candidates()[0],
       Port::ORIGIN_MESSAGE);
-  rport->CreateConnection(lport->candidates()[0], Port::ORIGIN_MESSAGE);
+  rport->CreateConnection(lport->Candidates()[0], Port::ORIGIN_MESSAGE);
   conn->Ping(0);
 
   // Check that it's a proper BINDING-REQUEST.
@@ -1045,7 +1045,7 @@ TEST_F(PortTest, TestSendStunMessageAsGice) {
   talk_base::scoped_ptr<IceMessage> request(CopyStunMessage(msg));
 
   // Respond with a BINDING-RESPONSE.
-  rport->SendBindingResponse(request.get(), lport->candidates()[0].address());
+  rport->SendBindingResponse(request.get(), lport->Candidates()[0].address());
   msg = rport->last_stun_msg();
   ASSERT_TRUE(msg != NULL);
   EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
@@ -1056,7 +1056,7 @@ TEST_F(PortTest, TestSendStunMessageAsGice) {
   const StunAddressAttribute* addr_attr = msg->GetAddress(
       STUN_ATTR_MAPPED_ADDRESS);
   ASSERT_TRUE(addr_attr != NULL);
-  EXPECT_EQ(lport->candidates()[0].address(), addr_attr->GetAddress());
+  EXPECT_EQ(lport->Candidates()[0].address(), addr_attr->GetAddress());
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_XOR_MAPPED_ADDRESS) == NULL);
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) == NULL);
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_PRIORITY) == NULL);
@@ -1065,7 +1065,7 @@ TEST_F(PortTest, TestSendStunMessageAsGice) {
   // Respond with a BINDING-ERROR-RESPONSE. This wouldn't happen in real life,
   // but we can do it here.
   rport->SendBindingErrorResponse(request.get(),
-                                  rport->candidates()[0].address(),
+                                  rport->Candidates()[0].address(),
                                   STUN_ERROR_SERVER_ERROR,
                                   STUN_ERROR_REASON_SERVER_ERROR);
   msg = rport->last_stun_msg();
@@ -1093,21 +1093,21 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
       CreateTestPort(kLocalAddr1, "lfrag", "lpass"));
   talk_base::scoped_ptr<TestPort> rport(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  lport->set_ice_protocol(ICEPROTO_RFC5245);
-  lport->set_role(cricket::ROLE_CONTROLLING);
-  lport->set_tiebreaker(kTiebreaker1);
-  rport->set_ice_protocol(ICEPROTO_RFC5245);
-  rport->set_role(cricket::ROLE_CONTROLLED);
-  rport->set_tiebreaker(kTiebreaker2);
+  lport->SetIceProtocolType(ICEPROTO_RFC5245);
+  lport->SetRole(cricket::ROLE_CONTROLLING);
+  lport->SetTiebreaker(kTiebreaker1);
+  rport->SetIceProtocolType(ICEPROTO_RFC5245);
+  rport->SetRole(cricket::ROLE_CONTROLLED);
+  rport->SetTiebreaker(kTiebreaker2);
 
   // Send a fake ping from lport to rport.
   lport->PrepareAddress();
   rport->PrepareAddress();
-  ASSERT_FALSE(rport->candidates().empty());
+  ASSERT_FALSE(rport->Candidates().empty());
   Connection* lconn = lport->CreateConnection(
-      rport->candidates()[0], Port::ORIGIN_MESSAGE);
+      rport->Candidates()[0], Port::ORIGIN_MESSAGE);
   Connection* rconn = rport->CreateConnection(
-      lport->candidates()[0], Port::ORIGIN_MESSAGE);
+      lport->Candidates()[0], Port::ORIGIN_MESSAGE);
   lconn->Ping(0);
 
   // Check that it's a proper BINDING-REQUEST.
@@ -1129,7 +1129,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   const StunUInt64Attribute* ice_controlling_attr =
       msg->GetUInt64(STUN_ATTR_ICE_CONTROLLING);
   ASSERT_TRUE(ice_controlling_attr != NULL);
-  EXPECT_EQ(lport->tiebreaker(), ice_controlling_attr->value());
+  EXPECT_EQ(lport->Tiebreaker(), ice_controlling_attr->value());
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_ICE_CONTROLLED) == NULL);
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_USE_CANDIDATE) == NULL);
   EXPECT_TRUE(msg->GetUInt32(STUN_ATTR_FINGERPRINT) != NULL);
@@ -1140,7 +1140,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   talk_base::scoped_ptr<IceMessage> request(CopyStunMessage(msg));
 
   // Respond with a BINDING-RESPONSE.
-  rport->SendBindingResponse(request.get(), lport->candidates()[0].address());
+  rport->SendBindingResponse(request.get(), lport->Candidates()[0].address());
   msg = rport->last_stun_msg();
   ASSERT_TRUE(msg != NULL);
   EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
@@ -1148,7 +1148,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   const StunAddressAttribute* addr_attr = msg->GetAddress(
       STUN_ATTR_XOR_MAPPED_ADDRESS);
   ASSERT_TRUE(addr_attr != NULL);
-  EXPECT_EQ(lport->candidates()[0].address(), addr_attr->GetAddress());
+  EXPECT_EQ(lport->Candidates()[0].address(), addr_attr->GetAddress());
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) != NULL);
   EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
       rport->last_stun_buf()->Data(), rport->last_stun_buf()->Length(),
@@ -1168,7 +1168,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   // Respond with a BINDING-ERROR-RESPONSE. This wouldn't happen in real life,
   // but we can do it here.
   rport->SendBindingErrorResponse(request.get(),
-                                  lport->candidates()[0].address(),
+                                  lport->Candidates()[0].address(),
                                   STUN_ERROR_SERVER_ERROR,
                                   STUN_ERROR_REASON_SERVER_ERROR);
   msg = rport->last_stun_msg();
@@ -1200,7 +1200,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   const StunUInt64Attribute* ice_controlled_attr =
       msg->GetUInt64(STUN_ATTR_ICE_CONTROLLED);
   ASSERT_TRUE(ice_controlled_attr != NULL);
-  EXPECT_EQ(rport->tiebreaker(), ice_controlled_attr->value());
+  EXPECT_EQ(rport->Tiebreaker(), ice_controlled_attr->value());
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_USE_CANDIDATE) == NULL);
 }
 
@@ -1209,19 +1209,19 @@ TEST_F(PortTest, TestUseCandidateAttribute) {
       CreateTestPort(kLocalAddr1, "lfrag", "lpass"));
   talk_base::scoped_ptr<TestPort> rport(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  lport->set_ice_protocol(ICEPROTO_RFC5245);
-  lport->set_role(cricket::ROLE_CONTROLLING);
-  lport->set_tiebreaker(kTiebreaker1);
-  rport->set_ice_protocol(ICEPROTO_RFC5245);
-  rport->set_role(cricket::ROLE_CONTROLLED);
-  rport->set_tiebreaker(kTiebreaker2);
+  lport->SetIceProtocolType(ICEPROTO_RFC5245);
+  lport->SetRole(cricket::ROLE_CONTROLLING);
+  lport->SetTiebreaker(kTiebreaker1);
+  rport->SetIceProtocolType(ICEPROTO_RFC5245);
+  rport->SetRole(cricket::ROLE_CONTROLLED);
+  rport->SetTiebreaker(kTiebreaker2);
 
   // Send a fake ping from lport to rport.
   lport->PrepareAddress();
   rport->PrepareAddress();
-  ASSERT_FALSE(rport->candidates().empty());
+  ASSERT_FALSE(rport->Candidates().empty());
   Connection* lconn = lport->CreateConnection(
-      rport->candidates()[0], Port::ORIGIN_MESSAGE);
+      rport->Candidates()[0], Port::ORIGIN_MESSAGE);
   // Set nominated flag in controlling connection.
   lconn->set_nominated(true);
   lconn->Ping(0);
@@ -1240,7 +1240,7 @@ TEST_F(PortTest, TestHandleStunMessageAsGice) {
   // Our port will act as the "remote" port.
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_GOOGLE);
+  port->SetIceProtocolType(ICEPROTO_GOOGLE);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1307,7 +1307,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIce) {
   // Our port will act as the "remote" port.
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_RFC5245);
+  port->SetIceProtocolType(ICEPROTO_RFC5245);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1358,7 +1358,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIce) {
 TEST_F(PortTest, TestHandleStunMessageAsGiceBadUsername) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_GOOGLE);
+  port->SetIceProtocolType(ICEPROTO_GOOGLE);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1417,7 +1417,7 @@ TEST_F(PortTest, TestHandleStunMessageAsGiceBadUsername) {
 TEST_F(PortTest, TestHandleStunMessageAsIceBadUsername) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_RFC5245);
+  port->SetIceProtocolType(ICEPROTO_RFC5245);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1487,7 +1487,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadMessageIntegrity) {
   // Our port will act as the "remote" port.
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_RFC5245);
+  port->SetIceProtocolType(ICEPROTO_RFC5245);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1529,7 +1529,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadFingerprint) {
   // Our port will act as the "remote" port.
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
-  port->set_ice_protocol(ICEPROTO_RFC5245);
+  port->SetIceProtocolType(ICEPROTO_RFC5245);
 
   talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
   talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
@@ -1594,7 +1594,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadFingerprint) {
 TEST_F(PortTest, TestComputeCandidatePriority) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr1, "name", "pass"));
-  port->set_priority((90 << 24));
+  port->SetPriority((90 << 24));
   port->set_component(177);
   port->AddCandidateAddress(SocketAddress("192.168.1.4", 1234));
   port->AddCandidateAddress(SocketAddress("2001:db8::1234", 1234));
@@ -1616,44 +1616,47 @@ TEST_F(PortTest, TestComputeCandidatePriority) {
   uint32 expected_priority_teredo = 1509952079U;
   uint32 expected_priority_sitelocal = 1509949775U;
   uint32 expected_priority_6bone = 1509949775U;
-  ASSERT_EQ(expected_priority_v4, port->candidates()[0].priority());
-  ASSERT_EQ(expected_priority_v6, port->candidates()[1].priority());
-  ASSERT_EQ(expected_priority_ula, port->candidates()[2].priority());
-  ASSERT_EQ(expected_priority_v4mapped, port->candidates()[3].priority());
-  ASSERT_EQ(expected_priority_v4compat, port->candidates()[4].priority());
-  ASSERT_EQ(expected_priority_6to4, port->candidates()[5].priority());
-  ASSERT_EQ(expected_priority_teredo, port->candidates()[6].priority());
-  ASSERT_EQ(expected_priority_sitelocal, port->candidates()[7].priority());
-  ASSERT_EQ(expected_priority_6bone, port->candidates()[8].priority());
+  ASSERT_EQ(expected_priority_v4, port->Candidates()[0].priority());
+  ASSERT_EQ(expected_priority_v6, port->Candidates()[1].priority());
+  ASSERT_EQ(expected_priority_ula, port->Candidates()[2].priority());
+  ASSERT_EQ(expected_priority_v4mapped, port->Candidates()[3].priority());
+  ASSERT_EQ(expected_priority_v4compat, port->Candidates()[4].priority());
+  ASSERT_EQ(expected_priority_6to4, port->Candidates()[5].priority());
+  ASSERT_EQ(expected_priority_teredo, port->Candidates()[6].priority());
+  ASSERT_EQ(expected_priority_sitelocal, port->Candidates()[7].priority());
+  ASSERT_EQ(expected_priority_6bone, port->Candidates()[8].priority());
 }
 
 TEST_F(PortTest, TestPortProxyProperties) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr1, "name", "pass"));
-  port->set_priority(126);
+  port->SetPriority(126);
+  port->SetRole(cricket::ROLE_CONTROLLING);
+  port->SetTiebreaker(kTiebreaker1);
 
   // Create a proxy port.
-  talk_base::scoped_ptr<PortProxy> proxy(new PortProxy(port->thread(),
-      port->type(), port->socket_factory(), port->network(),
-      port->ip(), port->min_port(), port->max_port(), "name", "pass"));
+  talk_base::scoped_ptr<PortProxy> proxy(new PortProxy());
   proxy->set_impl(port.get());
-  EXPECT_EQ(port->priority(), proxy->priority());
-  EXPECT_EQ(port->network(), proxy->network());
+  EXPECT_EQ(port->Type(), proxy->Type());
+  EXPECT_EQ(port->Priority(), proxy->Priority());
+  EXPECT_EQ(port->Network(), proxy->Network());
+  EXPECT_EQ(port->Role(), proxy->Role());
+  EXPECT_EQ(port->Tiebreaker(), proxy->Tiebreaker());
 }
 
 TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   talk_base::scoped_ptr<UDPPort> udpport(CreateUdpPort(kLocalAddr1));
   udpport->PrepareAddress();
   // For UDPPort, related address will be empty.
-  EXPECT_TRUE(udpport->candidates()[0].related_address().IsNil());
+  EXPECT_TRUE(udpport->Candidates()[0].related_address().IsNil());
   talk_base::scoped_ptr<UDPPort> udpport1(CreateUdpPort(kLocalAddr1));
   udpport1->PrepareAddress();
   // Compare foundation of candidates from both ports.
   // TODO: Update this check with a STUN port which has the same
   // base of UDP Port. This will happen once we have a common socket for all
   // ports.
-  EXPECT_EQ(udpport->candidates()[0].foundation(),
-            udpport1->candidates()[0].foundation());
+  EXPECT_EQ(udpport->Candidates()[0].foundation(),
+            udpport1->Candidates()[0].foundation());
   talk_base::scoped_ptr<TestPort> testport(
       CreateTestPort(kLocalAddr1, "name", "pass"));
   // Test port is behaving like a stun port, where candidate address is
@@ -1662,9 +1665,9 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   testport->PrepareAddress();
   // Foundation of udpport and testport must be different as their types are
   // different, even though the same base address kLocalAddr1.
-  EXPECT_NE(udpport->candidates()[0].foundation(),
-            testport->candidates()[0].foundation());
-  EXPECT_EQ_WAIT(testport->candidates()[0].related_address().ipaddr(),
+  EXPECT_NE(udpport->Candidates()[0].foundation(),
+            testport->Candidates()[0].foundation());
+  EXPECT_EQ_WAIT(testport->Candidates()[0].related_address().ipaddr(),
                  kLocalAddr2.ipaddr(), kTimeout);
   talk_base::scoped_ptr<RelayPort> relayport(CreateRelayPort(kLocalAddr2));
   relayport->AddExternalAddress(ProtocolAddress(kRelayUdpIntAddr, PROTO_UDP));
@@ -1674,23 +1677,23 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   relayport->set_related_address(kLocalAddr1);
   relayport->AddExternalAddress(ProtocolAddress(kLocalAddr1, PROTO_UDP), true);
   EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
-                 relayport->candidates()[0].related_address().ipaddr(),
+                 relayport->Candidates()[0].related_address().ipaddr(),
                  kTimeout);
   EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
-                 relayport->candidates()[1].related_address().ipaddr(),
+                 relayport->Candidates()[1].related_address().ipaddr(),
                  kTimeout);
   EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
-                 relayport->candidates()[2].related_address().ipaddr(),
+                 relayport->Candidates()[2].related_address().ipaddr(),
                  kTimeout);
   EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
-                 relayport->candidates()[3].related_address().ipaddr(),
+                 relayport->Candidates()[3].related_address().ipaddr(),
                  kTimeout);
   // Relay candidate base will be the candidate itself. Hence all candidates
   // belonging to relay candidates will have different foundation.
-  EXPECT_NE(relayport->candidates()[0].foundation(),
-            relayport->candidates()[1].foundation());
-  EXPECT_NE(relayport->candidates()[2].foundation(),
-            relayport->candidates()[3].foundation());
+  EXPECT_NE(relayport->Candidates()[0].foundation(),
+            relayport->Candidates()[1].foundation());
+  EXPECT_NE(relayport->Candidates()[2].foundation(),
+            relayport->Candidates()[3].foundation());
 }
 
 // Test priority value overflow handling when preference is set to 3.

@@ -31,9 +31,13 @@
 
 #include <vector>
 
+#include "talk/base/flags.h"
 #include "talk/examples/peerconnection/server/data_socket.h"
 #include "talk/examples/peerconnection/server/peer_channel.h"
 #include "talk/examples/peerconnection/server/utils.h"
+
+DEFINE_bool(help, false, "Prints this message");
+DEFINE_int(port, 8888, "The port on which to listen.");
 
 static const size_t kMaxConnections = (FD_SETSIZE - 2);
 
@@ -63,19 +67,29 @@ void HandleBrowserRequest(DataSocket* ds, bool* quit) {
 }
 
 int main(int argc, char** argv) {
-  // TODO: make configurable.
-  static const unsigned short port = 8888;
+  FlagList::SetFlagsFromCommandLine(&argc, argv, true);
+  if (FLAG_help) {
+    FlagList::Print(NULL, false);
+    return 0;
+  }
+
+  // Abort if the user specifies a port that is outside the allowed
+  // range [1, 65535].
+  if ((FLAG_port < 1) || (FLAG_port > 65535)) {
+    printf("Error: %i is not a valid port.\n", FLAG_port);
+    return -1;
+  }
 
   ListeningSocket listener;
   if (!listener.Create()) {
     printf("Failed to create server socket\n");
     return -1;
-  } else if (!listener.Listen(port)) {
+  } else if (!listener.Listen(FLAG_port)) {
     printf("Failed to listen on server socket\n");
     return -1;
   }
 
-  printf("Server listening on port %i\n", port);
+  printf("Server listening on port %i\n", FLAG_port);
 
   PeerChannel clients;
   typedef std::vector<DataSocket*> SocketArray;

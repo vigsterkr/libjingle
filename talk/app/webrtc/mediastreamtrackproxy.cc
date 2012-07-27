@@ -27,7 +27,7 @@
 
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
 
-#include "talk/session/phone/videocapturer.h"
+#include "talk/media/base/videocapturer.h"
 
 namespace {
 

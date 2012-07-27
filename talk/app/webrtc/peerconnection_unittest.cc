@@ -80,7 +80,8 @@ class JsepMessageReceiver : public SignalingMessageReceiver {
  public:
   virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
                                  std::string& msg) = 0;
-  virtual void ReceiveIceMessage(const std::string& label,
+  virtual void ReceiveIceMessage(const std::string& sdp_mid,
+                                 int sdp_mline_index,
                                  const std::string& msg) = 0;
 
  protected:
@@ -408,23 +409,24 @@ class Jsep00TestClient
     }
   }
   // JsepMessageReceiver callback.
-  virtual void ReceiveIceMessage(const std::string& label,
+  virtual void ReceiveIceMessage(const std::string& sdp_mid,
+                                 int sdp_mline_index,
                                  const std::string& msg) {
     talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
-        webrtc::CreateIceCandidate(label, msg));
+        webrtc::CreateIceCandidate(sdp_mid, sdp_mline_index, msg));
     EXPECT_TRUE(peer_connection()->ProcessIceMessage(candidate.get()));
   }
   // Implements PeerConnectionObserver functions needed by Jsep.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    LOG(INFO) << "OnIceCandidate " << candidate->label();
+    LOG(INFO) << "OnIceCandidate " << candidate->sdp_mline_index();
     std::string ice_sdp;
     EXPECT_TRUE(candidate->ToString(&ice_sdp));
     if (signaling_message_receiver() == NULL) {
       // Remote party may be deleted.
       return;
     }
-    signaling_message_receiver()->ReceiveIceMessage(candidate->label(),
-                                                    ice_sdp);
+    signaling_message_receiver()->ReceiveIceMessage(candidate->sdp_mid(),
+        candidate->sdp_mline_index(), ice_sdp);
   }
   virtual void OnIceComplete() {
     LOG(INFO) << "OnIceComplete";
@@ -556,23 +558,24 @@ class JsepTestClient
     }
   }
   // JsepMessageReceiver callback.
-  virtual void ReceiveIceMessage(const std::string& label,
+  virtual void ReceiveIceMessage(const std::string& sdp_mid,
+                                 int sdp_mline_index,
                                  const std::string& msg) {
     talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
-        webrtc::CreateIceCandidate(label, msg));
+        webrtc::CreateIceCandidate(sdp_mid, sdp_mline_index, msg));
     EXPECT_TRUE(peer_connection()->AddIceCandidate(candidate.get()));
   }
   // Implements PeerConnectionObserver functions needed by Jsep.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    LOG(INFO) << "OnIceCandidate " << candidate->label();
+    LOG(INFO) << "OnIceCandidate " << candidate->sdp_mline_index();
     std::string ice_sdp;
     EXPECT_TRUE(candidate->ToString(&ice_sdp));
     if (signaling_message_receiver() == NULL) {
       // Remote party may be deleted.
       return;
     }
-    signaling_message_receiver()->ReceiveIceMessage(candidate->label(),
-                                                    ice_sdp);
+    signaling_message_receiver()->ReceiveIceMessage(candidate->sdp_mid(),
+        candidate->sdp_mline_index(), ice_sdp);
   }
   virtual void OnIceComplete() {
     LOG(INFO) << "OnIceComplete";
@@ -599,8 +602,7 @@ class JsepTestClient
       AddMediaStream();
     }
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription(msg,
-               SessionDescriptionInterface::kOffer));
+           webrtc::CreateSessionDescription(msg, "offer"));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
     talk_base::scoped_ptr<SessionDescriptionInterface> answer;
     EXPECT_TRUE(DoCreateAnswer(answer.use()));
@@ -615,8 +617,7 @@ class JsepTestClient
 
   void HandleIncomingAnswer(const std::string& msg) {
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription(msg,
-               SessionDescriptionInterface::kAnswer));
+           webrtc::CreateSessionDescription(msg, "answer"));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
   }
 

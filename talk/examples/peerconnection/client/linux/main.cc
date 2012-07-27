@@ -28,6 +28,7 @@
 #include <gtk/gtk.h>
 
 #include "talk/examples/peerconnection/client/conductor.h"
+#include "talk/examples/peerconnection/client/flagdefs.h"
 #include "talk/examples/peerconnection/client/linux/main_wnd.h"
 #include "talk/examples/peerconnection/client/peer_connection_client.h"
 
@@ -72,7 +73,20 @@ int main(int argc, char* argv[]) {
   g_type_init();
   g_thread_init(NULL);
 
-  GtkMainWnd wnd;
+  FlagList::SetFlagsFromCommandLine(&argc, argv, true);
+  if (FLAG_help) {
+    FlagList::Print(NULL, false);
+    return 0;
+  }
+
+  // Abort if the user specifies a port that is outside the allowed
+  // range [1, 65535].
+  if ((FLAG_port < 1) || (FLAG_port > 65535)) {
+    printf("Error: %i is not a valid port.\n", FLAG_port);
+    return -1;
+  }
+
+  GtkMainWnd wnd(FLAG_server, FLAG_port, FLAG_autoconnect, FLAG_autocall);
   wnd.Create();
 
   talk_base::AutoThread auto_thread;

@@ -25,7 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/session/phone/videorenderer.h"
+#include "talk/media/base/videorenderer.h"
 
 #include "talk/app/webrtc/mediastream.h"
 

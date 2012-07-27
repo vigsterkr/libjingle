@@ -36,7 +36,7 @@
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/mediasession.h"
 
 using webrtc::IceCandidateCollection;
 using webrtc::IceCandidateInterface;
@@ -73,13 +73,18 @@ static cricket::SessionDescription* CreateCricketSessionDescription() {
                    video.release());
 
   EXPECT_TRUE(desc->AddTransportInfo(
-      cricket::TransportInfo(cricket::CN_AUDIO, cricket::NS_GINGLE_P2P,
-                             kCandidateUfragVoice, kCandidatePwdVoice,
-                             cricket::Candidates())));
+      cricket::TransportInfo(
+                             cricket::CN_AUDIO,
+                             cricket::TransportDescription(
+                                 cricket::NS_GINGLE_P2P, "",
+                                 kCandidateUfragVoice, kCandidatePwdVoice,
+                                 NULL, cricket::Candidates()))));
   EXPECT_TRUE(desc->AddTransportInfo(
-      cricket::TransportInfo(cricket::CN_VIDEO, cricket::NS_GINGLE_P2P,
-                             kCandidateUfragVideo, kCandidatePwdVideo,
-                             cricket::Candidates())));
+      cricket::TransportInfo(cricket::CN_VIDEO,
+                             cricket::TransportDescription(
+                                 cricket::NS_GINGLE_P2P, "",
+                                 kCandidateUfragVideo, kCandidatePwdVideo,
+                                 NULL, cricket::Candidates()))));
   return desc;
 }
 
@@ -96,7 +101,7 @@ class JsepSessionDescriptionTest : public testing::Test {
         talk_base::ToString(talk_base::CreateRandomId());
     const std::string session_version =
         talk_base::ToString(talk_base::CreateRandomId());
-    jsep_desc_.reset(new JsepSessionDescription());
+    jsep_desc_.reset(new JsepSessionDescription("dummy"));
     ASSERT_TRUE(jsep_desc_->Initialize(CreateCricketSessionDescription(),
         session_id, session_version));
   }
@@ -109,7 +114,7 @@ class JsepSessionDescriptionTest : public testing::Test {
   }
 
   SessionDescriptionInterface* DeSerialize(const std::string& sdp) {
-    JsepSessionDescription* desc(new JsepSessionDescription());
+    JsepSessionDescription* desc(new JsepSessionDescription("dummy"));
     EXPECT_TRUE(desc->Initialize(sdp));
     return desc;
   }
@@ -125,8 +130,8 @@ TEST_F(JsepSessionDescriptionTest, CheckSessionDescription) {
 }
 
 // Test that we can add a candidate to a session description.
-TEST_F(JsepSessionDescriptionTest, AddCandidate) {
-  JsepIceCandidate jsep_candidate("0", candidate_);
+TEST_F(JsepSessionDescriptionTest, AddCandidateWithoutMid) {
+  JsepIceCandidate jsep_candidate("", 0, candidate_);
   EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
   const IceCandidateCollection* ice_candidates = jsep_desc_->candidates(0);
   ASSERT_TRUE(ice_candidates != NULL);
@@ -136,14 +141,28 @@ TEST_F(JsepSessionDescriptionTest, AddCandidate) {
   candidate_.set_username(kCandidateUfragVoice);
   candidate_.set_password(kCandidatePwdVoice);
   EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
-
   EXPECT_EQ(0u, jsep_desc_->candidates(1)->count());
+}
+
+TEST_F(JsepSessionDescriptionTest, AddCandidateWithMid) {
+  // mid and m-line index don't match, in this case mid is preferred.
+  JsepIceCandidate jsep_candidate("video", 0, candidate_);
+  EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
+  EXPECT_EQ(0u, jsep_desc_->candidates(0)->count());
+  const IceCandidateCollection* ice_candidates = jsep_desc_->candidates(1);
+  ASSERT_TRUE(ice_candidates != NULL);
+  EXPECT_EQ(1u, ice_candidates->count());
+  const IceCandidateInterface* ice_candidate = ice_candidates->at(0);
+  ASSERT_TRUE(ice_candidate != NULL);
+  candidate_.set_username(kCandidateUfragVideo);
+  candidate_.set_password(kCandidatePwdVideo);
+  EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
 }
 
 TEST_F(JsepSessionDescriptionTest, AddCandidateAlreadyHasUfrag) {
   candidate_.set_username(kCandidateUfrag);
   candidate_.set_password(kCandidatePwd);
-  JsepIceCandidate jsep_candidate("0", candidate_);
+  JsepIceCandidate jsep_candidate("audio", 0, candidate_);
   EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
   const IceCandidateCollection* ice_candidates = jsep_desc_->candidates(0);
   ASSERT_TRUE(ice_candidates != NULL);
@@ -160,10 +179,10 @@ TEST_F(JsepSessionDescriptionTest, AddCandidateAlreadyHasUfrag) {
 // Test that we can not add a candidate if there is no corresponding media
 // content in the session description.
 TEST_F(JsepSessionDescriptionTest, AddBadCandidate) {
-  JsepIceCandidate bad_candidate1("55", candidate_);
+  JsepIceCandidate bad_candidate1("", 55, candidate_);
   EXPECT_FALSE(jsep_desc_->AddCandidate(&bad_candidate1));
 
-  JsepIceCandidate bad_candidate2("some weird label", candidate_);
+  JsepIceCandidate bad_candidate2("some weird mid", 0, candidate_);
   EXPECT_FALSE(jsep_desc_->AddCandidate(&bad_candidate2));
 }
 
@@ -184,7 +203,7 @@ TEST_F(JsepSessionDescriptionTest, SerializeDeserializeWithCandidates) {
   std::string sdp = Serialize(jsep_desc_.get());
 
   // Add a candidate and check that the serialized result is different.
-  JsepIceCandidate jsep_candidate("0", candidate_);
+  JsepIceCandidate jsep_candidate("audio", 0, candidate_);
   EXPECT_TRUE(jsep_desc_->AddCandidate(&jsep_candidate));
   std::string sdp_with_candidate = Serialize(jsep_desc_.get());
   EXPECT_NE(sdp, sdp_with_candidate);

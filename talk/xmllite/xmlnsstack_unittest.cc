@@ -65,7 +65,7 @@ TEST(XmlnsStackTest, TestNsForPrefix) {
   EXPECT_EQ("ns2", stack.NsForPrefix("pre2").first);
   EXPECT_EQ("ns4", stack.NsForPrefix("").first);
   EXPECT_EQ("", stack.NsForPrefix("pre3").first);
-  EXPECT_EQ(false, stack.NsForPrefix("pre3").second);
+  EXPECT_FALSE(stack.NsForPrefix("pre3").second);
 }
 
 TEST(XmlnsStackTest, TestPrefixForNs) {

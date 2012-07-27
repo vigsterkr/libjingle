@@ -200,10 +200,10 @@ class Transport : public talk_base::MessageHandler,
   bool HasChannels();
   void DestroyChannel(int component);
 
-  // Set the TransportInfo to be used by the TransportChannel. This should be
-  // called before ConnectChannels().
-  void SetLocalTransportInfo(const TransportInfo& info) {
-    local_transport_info_ = info;
+  // Set the TransportDescription to be used by the TransportChannel.
+  // This should be called before ConnectChannels().
+  void SetLocalTransportDescription(const TransportDescription& description) {
+    local_transport_description_ = description;
   }
 
   // Tells all current and future channels to start connecting.  When the first
@@ -236,7 +236,7 @@ class Transport : public talk_base::MessageHandler,
   // If candidate is not acceptable, returns false and sets error.
   // Call this before calling OnRemoteCandidates.
   virtual bool VerifyCandidate(const Candidate& candidate,
-                               ParseError* error);
+                               std::string* error);
 
   // Signals when the best connection for a channel changes.
   sigslot::signal3<Transport*,
@@ -366,7 +366,7 @@ class Transport : public talk_base::MessageHandler,
   std::vector<Candidate> ready_candidates_;
   // Protects changes to channels and messages
   talk_base::CriticalSection crit_;
-  TransportInfo local_transport_info_;
+  TransportDescription local_transport_description_;
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);
 };

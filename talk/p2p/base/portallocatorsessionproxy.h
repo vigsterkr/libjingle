@@ -50,11 +50,11 @@ class PortAllocatorSessionMuxer : public talk_base::MessageHandler,
 
   void RegisterSessionProxy(PortAllocatorSessionProxy* session_proxy);
 
-  void OnPortReady(PortAllocatorSession* session, Port* port);
-  void OnPortDestroyed(Port* port);
+  void OnPortReady(PortAllocatorSession* session, PortInterface* port);
+  void OnPortDestroyed(PortInterface* port);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
 
-  const std::vector<Port*>& ports() { return ports_; }
+  const std::vector<PortInterface*>& ports() { return ports_; }
 
   sigslot::signal1<PortAllocatorSessionMuxer*> SignalDestroyed;
 
@@ -67,7 +67,7 @@ class PortAllocatorSessionMuxer : public talk_base::MessageHandler,
   // Port will be deleted when SignalDestroyed received, otherwise delete
   // happens when PortAllocatorSession dtor is called.
   talk_base::Thread* worker_thread_;
-  std::vector<Port*> ports_;
+  std::vector<PortInterface*> ports_;
   talk_base::scoped_ptr<PortAllocatorSession> session_;
   std::vector<PortAllocatorSessionProxy*> session_proxies_;
   bool candidate_done_signal_received_;
@@ -106,15 +106,15 @@ class PortAllocatorSessionProxy : public PortAllocatorSession {
   }
 
  private:
-  void OnPortReady(PortAllocatorSession* session, Port* port);
+  void OnPortReady(PortAllocatorSession* session, PortInterface* port);
   void OnCandidatesReady(PortAllocatorSession* session,
                          const std::vector<Candidate>& candidates);
-  void OnPortDestroyed(Port* port);
+  void OnPortDestroyed(PortInterface* port);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
 
   // This is the actual PortAllocatorSession, owned by PortAllocator.
   PortAllocatorSession* impl_;
-  std::map<Port*, PortProxy*> proxy_ports_;
+  std::map<PortInterface*, PortProxy*> proxy_ports_;
 
   friend class PortAllocatorSessionMuxer;
 };

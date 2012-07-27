@@ -28,9 +28,9 @@
 #include "talk/examples/call/mediaenginefactory.h"
 
 #include "talk/base/stringutils.h"
-#include "talk/session/phone/mediaengine.h"
-#include "talk/session/phone/fakemediaengine.h"
-#include "talk/session/phone/filemediaengine.h"
+#include "talk/media/base/fakemediaengine.h"
+#include "talk/media/base/filemediaengine.h"
+#include "talk/media/base/mediaengine.h"
 
 std::vector<cricket::AudioCodec> RequiredAudioCodecs() {
   std::vector<cricket::AudioCodec> audio_codecs;

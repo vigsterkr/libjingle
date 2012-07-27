@@ -639,7 +639,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
 
   void AddPort(cricket::Port* port) {
     port->set_component(component_);
-    port->set_priority(2130706432U);  // pref = 1.0
+    port->SetPriority(2130706432U);  // pref = 1.0
     port->set_generation(0);
     port->SignalDestroyed.connect(
         this, &TestPortAllocatorSession::OnPortDestroyed);
@@ -649,7 +649,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
     SignalPortReady(this, port);
   }
 
-  void OnPortDestroyed(cricket::Port* port) {
+  void OnPortDestroyed(cricket::PortInterface* port) {
     for (size_t i = 0; i < ports_.size(); i++) {
       if (ports_[i] == port)
         ports_[i] = NULL;
@@ -657,7 +657,7 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
   }
 
   void OnAddressReady(cricket::Port* port) {
-    SignalCandidatesReady(this, port->candidates());
+    SignalCandidatesReady(this, port->Candidates());
   }
 
  private:

@@ -94,6 +94,10 @@ TransportChannel* TransportProxy::CreateChannel(
   return channel;
 }
 
+bool TransportProxy::HasChannel(int component) {
+  return transport_->get()->HasChannel(component);
+}
+
 void TransportProxy::DestroyChannel(int component) {
   TransportChannel* channel = GetChannel(component);
   if (channel) {
@@ -376,7 +380,7 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
                                   new TransportWrapper(transport));
   TransportInfo info;
   if (GetLocalTransportInfo(content_name, &info)) {
-    transproxy->SetLocalTransportInfo(info);
+    transproxy->SetLocalTransportDescription(info.description);
   }
   transproxy->SignalCandidatesReady.connect(
       this, &BaseSession::OnTransportProxyCandidatesReady);
@@ -462,6 +466,34 @@ void BaseSession::SpeculativelyConnectAllTransportChannels() {
        iter != transports_.end(); ++iter) {
     iter->second->SpeculativelyConnectChannels();
   }
+}
+
+bool BaseSession::OnRemoteCandidates(const std::string& content_name,
+                                     const Candidates& candidates,
+                                     std::string* error) {
+  TransportProxy* proxy = GetTransportProxy(content_name);
+  if (!proxy) {
+    *error = "Unknown content name " + content_name;
+    return false;
+  }
+
+  if (!proxy->negotiated()) {
+    proxy->CompleteNegotiation();
+  }
+
+  // Verify each candidate before passing down to transport layer.
+  for (Candidates::const_iterator cand = candidates.begin();
+       cand != candidates.end(); ++cand) {
+    if (!proxy->impl()->VerifyCandidate(*cand, error))
+      return false;
+    if (!proxy->HasChannel(cand->component())) {
+      *error = "Candidate has unknown component: " + cand->ToString() +
+                " for content: "+ content_name;
+      return false;
+    }
+  }
+  proxy->OnRemoteCandidates(candidates);
+  return true;
 }
 
 bool BaseSession::ContentsGrouped() {
@@ -771,7 +803,8 @@ TransportInfos Session::GetEmptyTransportInfos(
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); ++content) {
     tinfos.push_back(
-        TransportInfo(content->name, transport_type(), Candidates()));
+        TransportInfo(content->name,
+          TransportDescription(transport_type(), Candidates())));
   }
   return tinfos;
 }
@@ -780,27 +813,12 @@ bool Session::OnRemoteCandidates(
     const TransportInfos& tinfos, ParseError* error) {
   for (TransportInfos::const_iterator tinfo = tinfos.begin();
        tinfo != tinfos.end(); ++tinfo) {
-    TransportProxy* transproxy = GetTransportProxy(tinfo->content_name);
-    if (transproxy == NULL) {
-      return BadParse("Unknown content name: " + tinfo->content_name, error);
+    std::string str_error;
+    if (!BaseSession::OnRemoteCandidates(
+        tinfo->content_name, tinfo->description.candidates, &str_error)) {
+      return BadParse(str_error, error);
     }
-
-    // Must complete negotiation before sending remote candidates, or
-    // there won't be any channel impls.
-    transproxy->CompleteNegotiation();
-    for (Candidates::const_iterator cand = tinfo->candidates.begin();
-         cand != tinfo->candidates.end(); ++cand) {
-      if (!transproxy->impl()->VerifyCandidate(*cand, error))
-        return false;
-      if (!transproxy->impl()->HasChannel(cand->component())) {
-        return BadParse("Candidate has unknown component: " + cand->ToString() +
-                        " for content: "+ tinfo->content_name,
-                        error);
-      }
-    }
-    transproxy->impl()->OnRemoteCandidates(tinfo->candidates);
   }
-
   return true;
 }
 
@@ -808,7 +826,7 @@ bool Session::CreateTransportProxies(const TransportInfos& tinfos,
                                      SessionError* error) {
   for (TransportInfos::const_iterator tinfo = tinfos.begin();
        tinfo != tinfos.end(); ++tinfo) {
-    if (tinfo->transport_type != transport_type()) {
+    if (tinfo->description.transport_type != transport_type()) {
       error->SetText("No supported transport in offer.");
       return false;
     }
@@ -1338,9 +1356,7 @@ bool Session::SendTransportInfoMessage(const TransportProxy* transproxy,
                                        const Candidates& candidates,
                                        SessionError* error) {
   return SendTransportInfoMessage(TransportInfo(transproxy->content_name(),
-                                                transproxy->type(),
-                                                candidates),
-                                  error);
+      TransportDescription(transproxy->type(), candidates)), error);
 }
 
 bool Session::WriteSessionAction(SignalingProtocol protocol,

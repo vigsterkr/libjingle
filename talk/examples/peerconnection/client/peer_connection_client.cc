@@ -43,6 +43,8 @@ namespace {
 
 // This is our magical hangup signal.
 const char kByeMessage[] = "BYE";
+// Delay between server connection retries, in milliseconds
+const int kReconnectDelay = 2000;
 
 talk_base::AsyncSocket* CreateClientSocket(int family) {
 #ifdef WIN32
@@ -520,8 +522,17 @@ void PeerConnectionClient::OnClose(talk_base::AsyncSocket* socket, int err) {
       callback_->OnMessageSent(err);
     }
   } else {
-    LOG(WARNING) << "Failed to connect to the server";
-    Close();
-    callback_->OnDisconnected();
+    if (socket == control_socket_.get()) {
+      LOG(WARNING) << "Connection refused; retrying in 2 seconds";
+      talk_base::Thread::Current()->PostDelayed(kReconnectDelay, this, 0);
+    } else {
+      Close();
+      callback_->OnDisconnected();
+    }
   }
+}
+
+void PeerConnectionClient::OnMessage(talk_base::Message* msg) {
+  // ignore msg; there is currently only one supported message ("retry")
+  DoConnect();
 }

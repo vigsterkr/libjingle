@@ -35,7 +35,7 @@
 #include "talk/base/helpers.h"
 #include "talk/base/logging.h"
 #include "talk/base/messagequeue.h"
-#include "talk/session/phone/channelmanager.h"
+#include "talk/session/media/channelmanager.h"
 
 using talk_base::scoped_refptr;
 

@@ -25,14 +25,14 @@
 
 #include <string>
 
+#include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectionfactory.h"
-#include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
-#include "talk/session/phone/webrtccommon.h"
-#include "talk/session/phone/webrtcvoe.h"
+#include "talk/media/webrtc/webrtccommon.h"
+#include "talk/media/webrtc/webrtcvoe.h"
 
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 

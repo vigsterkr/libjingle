@@ -105,7 +105,7 @@ class StunPortBindingRequest : public StunRequest {
   virtual void OnTimeout() {
     LOG(LS_ERROR) << "Binding request timed out from "
       << port_->GetLocalAddress().ToString()
-      << " (" << port_->network()->name() << ")";
+      << " (" << port_->Network()->name() << ")";
 
     port_->SignalAddressError(port_);
 

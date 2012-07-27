@@ -30,12 +30,14 @@
 #include <vector>
 
 #include "talk/app/webrtc/webrtcsdp.h"
+#include "talk/base/stringencode.h"
 
 namespace webrtc {
 
-IceCandidateInterface* CreateIceCandidate(const std::string& label,
+IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
+                                          int sdp_mline_index,
                                           const std::string& sdp) {
-  JsepIceCandidate* jsep_ice = new JsepIceCandidate(label);
+  JsepIceCandidate* jsep_ice = new JsepIceCandidate(sdp_mid, sdp_mline_index);
   if (!jsep_ice->Initialize(sdp)) {
     delete jsep_ice;
     return NULL;
@@ -43,13 +45,17 @@ IceCandidateInterface* CreateIceCandidate(const std::string& label,
   return jsep_ice;
 }
 
-JsepIceCandidate::JsepIceCandidate(const std::string& label)
-    : label_(label) {
+JsepIceCandidate::JsepIceCandidate(const std::string& sdp_mid,
+                                   int sdp_mline_index)
+    : sdp_mid_(sdp_mid),
+      sdp_mline_index_(sdp_mline_index) {
 }
 
-JsepIceCandidate::JsepIceCandidate(const std::string& label,
+JsepIceCandidate::JsepIceCandidate(const std::string& sdp_mid,
+                                   int sdp_mline_index,
                                    const cricket::Candidate& candidate)
-    : label_(label),
+    : sdp_mid_(sdp_mid),
+      sdp_mline_index_(sdp_mline_index),
       candidate_(candidate) {
 }
 
@@ -79,7 +85,8 @@ bool JsepCandidateCollection::HasCandidate(
   bool ret = false;
   for (std::vector<JsepIceCandidate*>::const_iterator it = candidates_.begin();
       it != candidates_.end(); ++it) {
-    if ((*it)->label() == candidate->label() &&
+    if ((*it)->sdp_mid() == candidate->sdp_mid() &&
+        (*it)->sdp_mline_index() == candidate->sdp_mline_index() &&
         (*it)->candidate().IsEquivalent(candidate->candidate())) {
       ret = true;
       break;

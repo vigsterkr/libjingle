@@ -31,7 +31,7 @@
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/session/phone/webrtcvideoframe.h"
+#include "talk/media/webrtc/webrtcvideoframe.h"
 
 using webrtc::FakeVideoTrackRenderer;
 using webrtc::VideoTrack;

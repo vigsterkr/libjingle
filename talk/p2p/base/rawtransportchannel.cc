@@ -31,8 +31,8 @@
 #include <vector>
 #include "talk/base/common.h"
 #include "talk/p2p/base/constants.h"
-#include "talk/p2p/base/port.h"
 #include "talk/p2p/base/portallocator.h"
+#include "talk/p2p/base/portinterface.h"
 #include "talk/p2p/base/rawtransport.h"
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/sessionmanager.h"
@@ -160,17 +160,17 @@ void RawTransportChannel::OnRemoteAddress(
 // transport type at all if we can't support it.
 
 void RawTransportChannel::OnPortReady(
-    PortAllocatorSession* session, Port* port) {
+    PortAllocatorSession* session, PortInterface* port) {
   ASSERT(session == allocator_session_);
 
-  if (port->type() == STUN_PORT_TYPE) {
+  if (port->Type() == STUN_PORT_TYPE) {
     stun_port_ = static_cast<StunPort*>(port);
 
 #if defined(FEATURE_ENABLE_STUN_CLASSIFICATION)
     // We need a secondary address to determine the NAT type.
     stun_port_->PrepareSecondaryAddress();
 #endif
-  } else if (port->type() == RELAY_PORT_TYPE) {
+  } else if (port->Type() == RELAY_PORT_TYPE) {
     relay_port_ = static_cast<RelayPort*>(port);
   } else {
     ASSERT(false);
@@ -227,7 +227,7 @@ void RawTransportChannel::OnCandidatesReady(
   }
 }
 
-void RawTransportChannel::SetPort(Port* port) {
+void RawTransportChannel::SetPort(PortInterface* port) {
   ASSERT(port_ == NULL);
   port_ = port;
 
@@ -238,9 +238,9 @@ void RawTransportChannel::SetPort(Port* port) {
 
   // Send a message to the other client containing our address.
 
-  ASSERT(port_->candidates().size() >= 1);
-  ASSERT(port_->candidates()[0].protocol() == "udp");
-  SignalCandidateReady(this, port_->candidates()[0]);
+  ASSERT(port_->Candidates().size() >= 1);
+  ASSERT(port_->Candidates()[0].protocol() == "udp");
+  SignalCandidateReady(this, port_->Candidates()[0]);
 
   // Read all packets from this port.
   port_->EnablePortPackets();
@@ -263,7 +263,7 @@ void RawTransportChannel::SetWritable() {
 }
 
 void RawTransportChannel::OnReadPacket(
-    Port* port, const char* data, size_t size,
+    PortInterface* port, const char* data, size_t size,
     const talk_base::SocketAddress& addr) {
   ASSERT(port_ == port);
   SignalReadPacket(this, data, size, 0);

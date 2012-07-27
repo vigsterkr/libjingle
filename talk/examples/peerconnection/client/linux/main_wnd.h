@@ -45,7 +45,7 @@ typedef struct _GtkTreeViewColumn GtkTreeViewColumn;
 // implementation.
 class GtkMainWnd : public MainWindow {
  public:
-  GtkMainWnd();
+  GtkMainWnd(const char* server, int port, bool autoconnect, bool autocall);
   ~GtkMainWnd();
 
   virtual void RegisterObserver(MainWndCallback* callback);
@@ -123,6 +123,8 @@ class GtkMainWnd : public MainWindow {
   MainWndCallback* callback_;
   std::string server_;
   std::string port_;
+  bool autoconnect_;
+  bool autocall_;
   talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
       local_renderer_wrapper_;
   talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>

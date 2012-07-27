@@ -218,8 +218,8 @@ void RelayPort::AddServerAddress(const ProtocolAddress& addr) {
 
 void RelayPort::AddExternalAddress(const ProtocolAddress& addr, bool final) {
   std::string proto_name = ProtoToString(addr.proto);
-  for (std::vector<Candidate>::const_iterator it = candidates().begin();
-       it != candidates().end(); ++it) {
+  for (std::vector<Candidate>::const_iterator it = Candidates().begin();
+       it != Candidates().end(); ++it) {
     if ((it->address() == addr.address) && (it->protocol() == proto_name)) {
       LOG(INFO) << "Redundant relay address: " << proto_name
                 << " @ " << addr.address.ToString();
@@ -267,7 +267,7 @@ Connection* RelayPort::CreateConnection(const Candidate& address,
   }
 
   // We don't support loopback on relays
-  if (address.type() == type()) {
+  if (address.type() == Type()) {
     return 0;
   }
 
@@ -276,8 +276,8 @@ Connection* RelayPort::CreateConnection(const Candidate& address,
   }
 
   size_t index = 0;
-  for (size_t i = 0; i < candidates().size(); ++i) {
-    const Candidate& local = candidates()[i];
+  for (size_t i = 0; i < Candidates().size(); ++i) {
+    const Candidate& local = Candidates()[i];
     if (local.protocol() == address.protocol()) {
       index = i;
       break;

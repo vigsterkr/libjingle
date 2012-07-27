@@ -284,7 +284,7 @@ void Port::OnReadPacket(
     // STUN message handled already
   } else if (msg->type() == STUN_BINDING_REQUEST) {
     // Check for role conflicts.
-    if (ice_protocol() == ICEPROTO_RFC5245 &&
+    if (IceProtocol() == ICEPROTO_RFC5245 &&
         !MaybeIceRoleConflict(addr, msg.get())) {
       LOG(LS_INFO) << "Received conflicting role from the peer.";
       return;
@@ -686,14 +686,14 @@ class ConnectionRequest : public StunRequest {
         new StunByteStringAttribute(STUN_ATTR_USERNAME, username));
 
     // Adding ICE-specific attributes to the STUN request message.
-    if (connection_->port()->ice_protocol() == ICEPROTO_RFC5245) {
+    if (connection_->port()->IceProtocol() == ICEPROTO_RFC5245) {
       // Adding ICE_CONTROLLED or ICE_CONTROLLING attribute based on the role.
-      if (connection_->port()->role() == ROLE_CONTROLLING) {
+      if (connection_->port()->Role() == ROLE_CONTROLLING) {
         request->AddAttribute(new StunUInt64Attribute(
-            STUN_ATTR_ICE_CONTROLLING, connection_->port()->tiebreaker()));
-      } else if (connection_->port()->role() == ROLE_CONTROLLED) {
+            STUN_ATTR_ICE_CONTROLLING, connection_->port()->Tiebreaker()));
+      } else if (connection_->port()->Role() == ROLE_CONTROLLED) {
         request->AddAttribute(new StunUInt64Attribute(
-            STUN_ATTR_ICE_CONTROLLED, connection_->port()->tiebreaker()));
+            STUN_ATTR_ICE_CONTROLLED, connection_->port()->Tiebreaker()));
       } else {
         ASSERT(false);
       }
@@ -767,8 +767,8 @@ Connection::~Connection() {
 }
 
 const Candidate& Connection::local_candidate() const {
-  ASSERT(local_candidate_index_ < port_->candidates().size());
-  return port_->candidates()[local_candidate_index_];
+  ASSERT(local_candidate_index_ < port_->Candidates().size());
+  return port_->Candidates()[local_candidate_index_];
 }
 
 void Connection::set_read_state(ReadState value) {
@@ -843,7 +843,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       case STUN_BINDING_REQUEST:
         if (remote_ufrag == remote_candidate_.username()) {
           // Check for role conflicts.
-          if (port_->ice_protocol() == ICEPROTO_RFC5245 &&
+          if (port_->IceProtocol() == ICEPROTO_RFC5245 &&
               !port_->MaybeIceRoleConflict(addr, msg.get())) {
             // Received conflicting role from the peer.
             LOG(LS_INFO) << "Received conflicting role from the peer.";
@@ -858,8 +858,8 @@ void Connection::OnReadPacket(const char* data, size_t size) {
           if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
             set_write_state(STATE_WRITE_CONNECT);
 
-          if ((port_->ice_protocol() == ICEPROTO_RFC5245) &&
-              (port_->role() == ROLE_CONTROLLED)) {
+          if ((port_->IceProtocol() == ICEPROTO_RFC5245) &&
+              (port_->Role() == ROLE_CONTROLLED)) {
             const StunByteStringAttribute* use_candidate_attr =
                 msg->GetByteString(STUN_ATTR_USE_CANDIDATE);
             if (use_candidate_attr)
@@ -883,7 +883,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       // id's match.
       case STUN_BINDING_RESPONSE:
       case STUN_BINDING_ERROR_RESPONSE:
-        if (port_->ice_protocol() == ICEPROTO_GOOGLE ||
+        if (port_->IceProtocol() == ICEPROTO_GOOGLE ||
             msg->ValidateMessageIntegrity(
                 data, size, remote_candidate().password())) {
           requests_.CheckResponse(msg.get());
@@ -1120,7 +1120,7 @@ void Connection::CheckTimeout() {
 
 void Connection::HandleRoleConflictFromPeer() {
   // Maybe we should reverse the nominated flag if we are in controlling mode.
-  if (port_->role() == ROLE_CONTROLLING)
+  if (port_->Role() == ROLE_CONTROLLING)
     nominated_ = false;  // Role change will be done from Transport.
   port_->SignalRoleConflict();
 }

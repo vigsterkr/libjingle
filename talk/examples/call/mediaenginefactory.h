@@ -28,7 +28,7 @@
 #ifndef TALK_EXAMPLES_CALL_MEDIAENGINEFACTORY_H_
 #define TALK_EXAMPLES_CALL_MEDIAENGINEFACTORY_H_
 
-#include "talk/session/phone/mediaengine.h"
+#include "talk/media/base/mediaengine.h"
 
 class MediaEngineFactory {
  public:

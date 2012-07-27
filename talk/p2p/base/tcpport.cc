@@ -211,7 +211,7 @@ TCPConnection::TCPConnection(TCPPort* port, const Candidate& candidate,
     // TODO: Handle failures here (unlikely since TCP).
 
     socket_ = port->socket_factory()->CreateClientTcpSocket(
-        talk_base::SocketAddress(port_->network()->ip(), 0),
+        talk_base::SocketAddress(port_->Network()->ip(), 0),
         candidate.address(), port->proxy(), port->user_agent(),
         candidate.protocol() == "ssltcp");
     if (socket_) {

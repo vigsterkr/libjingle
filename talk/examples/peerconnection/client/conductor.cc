@@ -35,11 +35,11 @@
 #include "third_party/webrtc/files/include/video_capture_factory.h"
 #endif
 #include "talk/app/webrtc/peerconnection.h"
-#include "talk/examples/peerconnection/client/defaults.h"
 #include "talk/base/common.h"
 #include "talk/base/logging.h"
+#include "talk/examples/peerconnection/client/defaults.h"
+#include "talk/media/devices/videorendererfactory.h"
 #include "talk/p2p/client/basicportallocator.h"
-#include "talk/session/phone/videorendererfactory.h"
 
 Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd)
   : peer_id_(-1),
@@ -133,7 +133,7 @@ void Conductor::OnRemoveStream(webrtc::MediaStreamInterface* stream) {
                                    stream);
 }
 void Conductor::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-  LOG(INFO) << __FUNCTION__ << " " << candidate->label();
+  LOG(INFO) << __FUNCTION__ << " " << candidate->sdp_mline_index();
 }
 
 void Conductor::OnIceComplete() {

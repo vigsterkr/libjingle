@@ -29,12 +29,13 @@
 
 #include <vector>
 
+#include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamhandler.h"
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
-#include "talk/session/phone/channelmanager.h"
-#include "talk/session/phone/webrtcvideocapturer.h"
+#include "talk/media/webrtc/webrtcvideocapturer.h"
+#include "talk/session/media/channelmanager.h"
 
 namespace {
 
@@ -239,26 +240,6 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
     }
   }
   return true;
-}
-
-// TODO: Remove this once webrtcsession is updated to jsep01.
-webrtc::JsepInterface::Action GetAction(
-    webrtc::SessionDescriptionInterface::SdpType type) {
-  webrtc::JsepInterface::Action action = webrtc::JsepInterface::kOffer;
-  switch (type) {
-    case webrtc::SessionDescriptionInterface::kOffer:
-      action = webrtc::JsepInterface::kOffer;
-      break;
-    case webrtc::SessionDescriptionInterface::kPrAnswer:
-      action = webrtc::JsepInterface::kPrAnswer;
-      break;
-    case webrtc::SessionDescriptionInterface::kAnswer:
-      action = webrtc::JsepInterface::kAnswer;
-      break;
-    default:
-      break;
-  }
-  return action;
 }
 
 struct MediaStreamParams : public talk_base::MessageData {
@@ -575,7 +556,7 @@ void PeerConnection::CreateAnswer(
     error = "CreateAnswer can't be called before SetRemoteDescription.";
     observer_copy->OnFailure(error);
     return;
-  } else if (offer->type() != SessionDescriptionInterface::kOffer) {
+  } else if (offer->type() != JsepSessionDescription::kOffer) {
     error = "CreateAnswer failed because remote_description is not an offer.";
     observer_copy->OnFailure(error);
     return;
@@ -617,7 +598,8 @@ void PeerConnection::SetLocalDescription(
     return;
   }
 
-  if (!SetLocalDescription(GetAction(desc->type()), desc)) {
+  if (!SetLocalDescription(JsepSessionDescription::GetAction(desc->type()),
+                           desc)) {
     error = "SetLocalDescription failed.";
     observer_copy->OnFailure(error);
     return;
@@ -647,7 +629,8 @@ void PeerConnection::SetRemoteDescription(
     SessionDescriptionInterface* desc) {
   bool result = false;
   if (desc) {
-    result = SetRemoteDescription(GetAction(desc->type()), desc);
+    result = SetRemoteDescription(
+        JsepSessionDescription::GetAction(desc->type()), desc);
   }
   if (!observer) {
     LOG(LS_ERROR) << "SetRemoteDescription - observer is NULL.";

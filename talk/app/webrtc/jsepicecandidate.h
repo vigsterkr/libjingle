@@ -40,8 +40,8 @@ namespace webrtc {
 
 class JsepIceCandidate : public IceCandidateInterface {
  public:
-  explicit JsepIceCandidate(const std::string& label);
-  JsepIceCandidate(const std::string& label,
+  JsepIceCandidate(const std::string& sdp_mid, int sdp_mline_index);
+  JsepIceCandidate(const std::string& sdp_mid, int sdp_mline_index,
                    const cricket::Candidate& candidate);
   ~JsepIceCandidate();
   bool Initialize(const std::string& sdp);
@@ -49,7 +49,8 @@ class JsepIceCandidate : public IceCandidateInterface {
     candidate_ = candidate;
   }
 
-  virtual std::string label() const { return label_;}
+  virtual std::string sdp_mid() const { return sdp_mid_; }
+  virtual int sdp_mline_index() const { return sdp_mline_index_; }
   virtual const cricket::Candidate& candidate() const {
     return candidate_;
   }
@@ -57,7 +58,8 @@ class JsepIceCandidate : public IceCandidateInterface {
   virtual bool ToString(std::string* out) const;
 
  private:
-  std::string label_;
+  std::string sdp_mid_;
+  int sdp_mline_index_;
   cricket::Candidate candidate_;
 
   DISALLOW_COPY_AND_ASSIGN(JsepIceCandidate);

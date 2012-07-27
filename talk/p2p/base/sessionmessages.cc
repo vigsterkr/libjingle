@@ -328,11 +328,12 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
 
   // If we don't have media, no need to separate the candidates.
   if (!has_audio && !has_video) {
-    TransportInfo tinfo(CN_OTHER, NS_GINGLE_P2P, Candidates());
+    TransportInfo tinfo(CN_OTHER,
+      TransportDescription(NS_GINGLE_P2P, Candidates()));
     if (!ParseCandidates(PROTOCOL_GINGLE, action_elem,
                          trans_parsers, NS_GINGLE_P2P,
                          translators, CN_OTHER,
-                         &tinfo.candidates, error)) {
+                         &tinfo.description.candidates, error)) {
       return false;
     }
 
@@ -341,8 +342,10 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
   }
 
   // If we have media, separate the candidates.
-  TransportInfo audio_tinfo(CN_AUDIO, NS_GINGLE_P2P, Candidates());
-  TransportInfo video_tinfo(CN_VIDEO, NS_GINGLE_P2P, Candidates());
+  TransportInfo audio_tinfo(CN_AUDIO,
+                            TransportDescription(NS_GINGLE_P2P, Candidates()));
+  TransportInfo video_tinfo(CN_VIDEO,
+                            TransportDescription(NS_GINGLE_P2P, Candidates()));
   for (const buzz::XmlElement* candidate_elem = action_elem->FirstElement();
        candidate_elem != NULL;
        candidate_elem = candidate_elem->NextElement()) {
@@ -354,7 +357,7 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
         if (!ParseGingleCandidate(
                 candidate_elem, trans_parsers,
                 translators, CN_AUDIO,
-                &audio_tinfo.candidates, error)) {
+                &audio_tinfo.description.candidates, error)) {
           return false;
         }
       } else if (has_video &&
@@ -363,7 +366,7 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
         if (!ParseGingleCandidate(
                 candidate_elem, trans_parsers,
                 translators, CN_VIDEO,
-                &video_tinfo.candidates, error)) {
+                &video_tinfo.description.candidates, error)) {
           return false;
         }
       } else {
@@ -388,11 +391,12 @@ bool ParseJingleTransportInfo(const buzz::XmlElement* trans_elem,
                               TransportInfos* tinfos,
                               ParseError* error) {
   std::string transport_type = trans_elem->Name().Namespace();
-  TransportInfo tinfo(content.name, transport_type, Candidates());
+  TransportInfo tinfo(content.name,
+    TransportDescription(transport_type, Candidates()));
   if (!ParseCandidates(PROTOCOL_JINGLE, trans_elem,
                        trans_parsers, transport_type,
                        translators, content.name,
-                       &tinfo.candidates, error))
+                       &tinfo.description.candidates, error))
     return false;
 
   tinfos->push_back(tinfo);
@@ -465,8 +469,8 @@ bool WriteGingleTransportInfos(const TransportInfos& tinfos,
                                WriteError* error) {
   for (TransportInfos::const_iterator tinfo = tinfos.begin();
        tinfo != tinfos.end(); ++tinfo) {
-    if (!WriteCandidates(PROTOCOL_GINGLE, tinfo->candidates,
-                         trans_parsers, tinfo->transport_type,
+    if (!WriteCandidates(PROTOCOL_GINGLE, tinfo->description.candidates,
+                         trans_parsers, tinfo->description.transport_type,
                          translators, tinfo->content_name,
                          elems, error))
       return false;
@@ -481,13 +485,14 @@ bool WriteJingleTransportInfo(const TransportInfo& tinfo,
                               XmlElements* elems,
                               WriteError* error) {
   XmlElements candidate_elems;
-  if (!WriteCandidates(PROTOCOL_JINGLE, tinfo.candidates,
-                       trans_parsers, tinfo.transport_type,
+  if (!WriteCandidates(PROTOCOL_JINGLE, tinfo.description.candidates,
+                       trans_parsers, tinfo.description.transport_type,
                        translators, tinfo.content_name,
                        &candidate_elems, error))
     return false;
 
-  buzz::XmlElement* trans_elem = NewTransportElement(tinfo.transport_type);
+  buzz::XmlElement* trans_elem = NewTransportElement(tinfo.description.
+                                                     transport_type);
   AddXmlChildren(trans_elem, candidate_elems);
   elems->push_back(trans_elem);
   return true;

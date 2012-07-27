@@ -32,8 +32,9 @@
 #include <vector>
 
 #include "talk/base/helpers.h"
+#include "talk/base/proxyinfo.h"
 #include "talk/base/sigslot.h"
-#include "talk/p2p/base/port.h"
+#include "talk/p2p/base/portinterface.h"
 
 namespace cricket {
 
@@ -81,7 +82,7 @@ class PortAllocatorSession : public sigslot::has_slots<> {
   virtual void StopGetAllPorts() = 0;
   virtual bool IsGettingAllPorts() = 0;
 
-  sigslot::signal2<PortAllocatorSession*, Port*> SignalPortReady;
+  sigslot::signal2<PortAllocatorSession*, PortInterface*> SignalPortReady;
   sigslot::signal2<PortAllocatorSession*,
                    const std::vector<Candidate>&> SignalCandidatesReady;
   sigslot::signal1<PortAllocatorSession*> SignalCandidatesAllocationDone;

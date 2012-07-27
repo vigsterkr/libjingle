@@ -56,6 +56,11 @@ void OnClickedCallback(GtkWidget* widget, gpointer data) {
   reinterpret_cast<GtkMainWnd*>(data)->OnClicked(widget);
 }
 
+gboolean SimulateButtonClick(gpointer button) {
+  g_signal_emit_by_name(button, "clicked");
+  return false;
+}
+
 gboolean OnKeyPressCallback(GtkWidget* widget, GdkEventKey* key,
                             gpointer data) {
   reinterpret_cast<GtkMainWnd*>(data)->OnKeyPress(widget, key);
@@ -65,6 +70,27 @@ gboolean OnKeyPressCallback(GtkWidget* widget, GdkEventKey* key,
 void OnRowActivatedCallback(GtkTreeView* tree_view, GtkTreePath* path,
                             GtkTreeViewColumn* column, gpointer data) {
   reinterpret_cast<GtkMainWnd*>(data)->OnRowActivated(tree_view, path, column);
+}
+
+gboolean SimulateLastRowActivated(gpointer data) {
+  GtkTreeView* tree_view = reinterpret_cast<GtkTreeView*>(data);
+  GtkTreeModel* model = gtk_tree_view_get_model(tree_view);
+
+  // "if iter is NULL, then the number of toplevel nodes is returned."
+  int rows = gtk_tree_model_iter_n_children(model, NULL);
+  GtkTreePath* lastpath = gtk_tree_path_new_from_indices(rows - 1, -1);
+
+  // Select the last item in the list
+  GtkTreeSelection* selection = gtk_tree_view_get_selection(tree_view);
+  gtk_tree_selection_select_path(selection, lastpath);
+
+  // Our TreeView only has one column, so it is column 0.
+  GtkTreeViewColumn* column = gtk_tree_view_get_column(tree_view, 0);
+
+  gtk_tree_view_row_activated(tree_view, lastpath, column);
+
+  gtk_tree_path_free(lastpath);
+  return false;
 }
 
 // Creates a tree view, that we use to display the list of peers.
@@ -114,12 +140,13 @@ gboolean Redraw(gpointer data) {
 // GtkMainWnd implementation.
 //
 
-GtkMainWnd::GtkMainWnd()
+GtkMainWnd::GtkMainWnd(const char* server, int port, bool autoconnect,
+                       bool autocall)
     : window_(NULL), draw_area_(NULL), vbox_(NULL), server_edit_(NULL),
       port_edit_(NULL), peer_list_(NULL), callback_(NULL),
-      server_("localhost") {
+      server_(server), autoconnect_(autoconnect), autocall_(autocall) {
   char buffer[10];
-  sprintfn(buffer, sizeof(buffer), "%i", kDefaultServerPort);
+  sprintfn(buffer, sizeof(buffer), "%i", port);
   port_ = buffer;
 }
 
@@ -247,6 +274,9 @@ void GtkMainWnd::SwitchToConnectUI() {
   gtk_box_pack_start(GTK_BOX(vbox_), halign, FALSE, FALSE, 0);
 
   gtk_widget_show_all(window_);
+
+  if (autoconnect_)
+    g_idle_add(SimulateButtonClick, button);
 }
 
 void GtkMainWnd::SwitchToPeerList(const Peers& peers) {
@@ -285,6 +315,9 @@ void GtkMainWnd::SwitchToPeerList(const Peers& peers) {
   AddToList(peer_list_, "List of currently connected peers:", -1);
   for (Peers::const_iterator i = peers.begin(); i != peers.end(); ++i)
     AddToList(peer_list_, i->second.c_str(), i->first);
+
+  if (autocall_ && peers.begin() != peers.end())
+    g_idle_add(SimulateLastRowActivated, peer_list_);
 }
 
 void GtkMainWnd::SwitchToStreamingUI() {
@@ -315,6 +348,10 @@ void GtkMainWnd::OnDestroyed(GtkWidget* widget, GdkEvent* event) {
 }
 
 void GtkMainWnd::OnClicked(GtkWidget* widget) {
+  // Make the connect button insensitive, so that it cannot be clicked more than
+  // once.  Now that the connection includes auto-retry, it should not be
+  // necessary to click it more than once.
+  gtk_widget_set_sensitive(widget, false);
   server_ = gtk_entry_get_text(GTK_ENTRY(server_edit_));
   port_ = gtk_entry_get_text(GTK_ENTRY(port_edit_));
   int port = port_.length() ? atoi(port_.c_str()) : 0;

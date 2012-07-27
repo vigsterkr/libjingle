@@ -35,6 +35,7 @@
 #include "talk/base/network.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
+#include "talk/p2p/base/port.h"
 #include "talk/p2p/base/portallocator.h"
 
 namespace cricket {
@@ -152,7 +153,7 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
       bool prepare_address = true);
   void OnAddressReady(Port* port);
   void OnProtocolEnabled(AllocationSequence* seq, ProtocolType proto);
-  void OnPortDestroyed(Port* port);
+  void OnPortDestroyed(PortInterface* port);
   void OnAddressError(Port* port);
   void OnConnectionCreated(Port* port, Connection* conn);
   void OnConnectionStateChange(Connection* conn);

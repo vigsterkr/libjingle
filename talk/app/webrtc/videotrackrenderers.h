@@ -32,7 +32,7 @@
 
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/base/criticalsection.h"
-#include "talk/session/phone/videorenderer.h"
+#include "talk/media/base/videorenderer.h"
 
 namespace webrtc {
 

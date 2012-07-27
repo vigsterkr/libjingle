@@ -35,15 +35,15 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringutils.h"
+#include "talk/media/base/codec.h"
+#include "talk/media/base/cryptoparams.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/udpport.h"
-#include "talk/session/phone/codec.h"
-#include "talk/session/phone/cryptoparams.h"
-#include "talk/session/phone/mediasession.h"
-#include "talk/session/phone/mediasessionclient.h"
+#include "talk/session/media/mediasession.h"
+#include "talk/session/media/mediasessionclient.h"
 
 using cricket::AudioContentDescription;
 using cricket::Candidate;
@@ -57,6 +57,7 @@ using cricket::MediaContentDescription;
 using cricket::MediaType;
 using cricket::NS_GINGLE_P2P;
 using cricket::StreamParams;
+using cricket::TransportDescription;
 using cricket::TransportInfo;
 using cricket::VideoContentDescription;
 using talk_base::SocketAddress;
@@ -775,11 +776,11 @@ void BuildMediaDescription(const ContentInfo* content_info,
     // ice-ufrag-att         = "ice-ufrag" ":" ufrag
     // ice-ufrag
     InitAttrLine(kAttributeIceUfrag, &os);
-    os << kSdpDelimiterColon << transport_info->ice_ufrag;
+    os << kSdpDelimiterColon << transport_info->description.ice_ufrag;
     AddLine(os.str(), message);
     // ice-pwd
     InitAttrLine(kAttributeIcePwd, &os);
-    os << kSdpDelimiterColon << transport_info->ice_pwd;
+    os << kSdpDelimiterColon << transport_info->description.ice_pwd;
     AddLine(os.str(), message);
   }
 
@@ -824,7 +825,10 @@ void BuildMediaDescription(const ContentInfo* content_info,
        it != media_desc->cryptos().end(); ++it) {
     InitAttrLine(kAttributeCrypto, &os);
     os << kSdpDelimiterColon << it->tag << " " << it->cipher_suite << " "
-       << it->key_params << " " << it->session_params;
+       << it->key_params;
+    if (!it->session_params.empty()) {
+      os << " " << it->session_params;
+    }
     AddLine(os.str(), message);
   }
 
@@ -1137,8 +1141,12 @@ bool ParseMediaDescription(const std::string& message,
 
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, content);
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".
-    TransportInfo transport_info(content_name, NS_GINGLE_P2P,
-        media_ice_ufrag, media_ice_pwd, Candidates());
+    TransportInfo transport_info(content_name,
+                                 TransportDescription(NS_GINGLE_P2P, "",
+                                                      media_ice_ufrag,
+                                                      media_ice_pwd,
+                                                      NULL,
+                                                      Candidates()));
     if (!desc->AddTransportInfo(transport_info)) {
       LOG(LS_ERROR) << "Failed to AddTransportInfo with content name: "
                     << content_name;
@@ -1165,6 +1173,7 @@ bool ParseContent(const std::string& message,
   // The candidates before update the media level "ice-pwd" and "ice-ufrag".
   Candidates candidates_orig;
   std::string line;
+  std::string mline_id;
   // Loop until the next m line
   while (!IsLineType(message, kLineTypeMedia, *pos)) {
     if (!GetLine(message, pos, &line)) {
@@ -1194,7 +1203,8 @@ bool ParseContent(const std::string& message,
       // mid-attribute      = "a=mid:" identification-tag
       // identification-tag = token
       // Use the mid identification-tag as the content name.
-      GetValue(line, kAttributeMid, content_name);
+      GetValue(line, kAttributeMid, &mline_id);
+      *content_name = mline_id;
       continue;
     } else if (HasAttribute(line, kAttributeRtcpMux)) {
       media_desc->set_rtcp_mux(true);
@@ -1253,7 +1263,7 @@ bool ParseContent(const std::string& message,
     ASSERT((*it).password().empty());
     (*it).set_password(*media_ice_pwd);
     candidates->push_back(
-        new JsepIceCandidate(talk_base::ToString<int>(mline_index), *it));
+        new JsepIceCandidate(mline_id, mline_index, *it));
   }
   return true;
 }

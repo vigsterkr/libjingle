@@ -45,22 +45,20 @@ namespace webrtc {
 
 class JsepSessionDescription : public SessionDescriptionInterface {
  public:
-  JsepSessionDescription();
+  // Supported types:
+  static const char kOffer[];
+  static const char kPrAnswer[];
+  static const char kAnswer[];
+
+  explicit JsepSessionDescription(const std::string& type);
   virtual ~JsepSessionDescription();
 
-  // TODO: Remove below 2 methods when they are no longer used - when
-  // the deprecated methods in JsepInterface are removed.
-  bool Initialize(cricket::SessionDescription* description,
-      const std::string& session_id,
-      const std::string& session_version);
   bool Initialize(const std::string& sdp);
 
   // Takes ownership of |description|.
   bool Initialize(cricket::SessionDescription* description,
       const std::string& session_id,
-      const std::string& session_version,
-      SdpType type);
-  bool Initialize(const std::string& sdp, SdpType type);
+      const std::string& session_version);
 
   virtual const cricket::SessionDescription* description() const {
     return description_.get();
@@ -71,7 +69,7 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   virtual std::string session_version() const {
     return session_version_;
   }
-  virtual SdpType type() const {
+  virtual std::string type() const {
     return type_;
   }
   virtual bool AddCandidate(const IceCandidateInterface* candidate);
@@ -80,12 +78,18 @@ class JsepSessionDescription : public SessionDescriptionInterface {
       size_t mediasection_index) const;
   virtual bool ToString(std::string* out) const;
 
+  // TODO: Remove this once webrtcsession is updated to jsep01.
+  static JsepInterface::Action GetAction(const std::string& type);
+
  private:
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
   std::string session_id_;
   std::string session_version_;
-  SdpType type_;
+  std::string type_;
   std::vector<JsepCandidateCollection> candidate_collection_;
+
+  bool GetMediasectionIndex(const IceCandidateInterface* candidate,
+                            size_t* index);
 
   DISALLOW_COPY_AND_ASSIGN(JsepSessionDescription);
 };

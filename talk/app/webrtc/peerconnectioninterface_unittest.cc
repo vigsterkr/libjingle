@@ -32,11 +32,11 @@
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/roapmessages.h"
+#include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
-#include "talk/base/gunit.h"
-#include "talk/session/phone/mediasession.h"
+#include "talk/session/media/mediasession.h"
 
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
@@ -162,7 +162,8 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
     std::string sdp;
     EXPECT_TRUE(candidate->ToString(&sdp));
     EXPECT_LT(0u, sdp.size());
-    last_candidate_.reset(webrtc::CreateIceCandidate(candidate->label(), sdp));
+    last_candidate_.reset(webrtc::CreateIceCandidate(candidate->sdp_mid(),
+        candidate->sdp_mline_index(), sdp));
     EXPECT_TRUE(last_candidate_.get() != NULL);
   }
   virtual void OnIceComplete() {

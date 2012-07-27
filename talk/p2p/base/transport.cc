@@ -218,15 +218,15 @@ void Transport::ConnectChannels_w() {
   connect_requested_ = true;
   signaling_thread()->Post(
       this, MSG_CANDIDATEREADY, NULL);
-  if (!local_transport_info_.ice_ufrag.empty() &&
-      !local_transport_info_.ice_pwd.empty()) {
+  if (!local_transport_description_.ice_ufrag.empty() &&
+      !local_transport_description_.ice_pwd.empty()) {
     // Set ufrag and pwd before Connect.
     talk_base::CritScope cs(&crit_);
     for (ChannelMap::iterator iter = channels_.begin();
          iter != channels_.end();
          ++iter) {
-      (iter->second.get())->SetIceUfrag(local_transport_info_.ice_ufrag);
-      (iter->second.get())->SetIcePwd(local_transport_info_.ice_pwd);
+      (iter->second.get())->SetIceUfrag(local_transport_description_.ice_ufrag);
+      (iter->second.get())->SetIcePwd(local_transport_description_.ice_pwd);
     }
   } else {
     // TODO: Maybe ASSERT here.
@@ -311,21 +311,24 @@ void Transport::CallChannels_w(TransportChannelFunc func) {
   }
 }
 
-bool Transport::VerifyCandidate(const Candidate& cand, ParseError* error) {
+bool Transport::VerifyCandidate(const Candidate& cand, std::string* error) {
   // No address zero.
   if (cand.address().IsNil() || cand.address().IsAny()) {
-    return BadParse("candidate has address of zero", error);
+    *error = "candidate has address of zero";
+    return false;
   }
 
   // Disallow all ports below 1024, except for 80 and 443 on public addresses.
   int port = cand.address().port();
   if (port < 1024) {
-    if ((port != 80) && (port != 443))
-      return BadParse(
-          "candidate has port below 1024, but not 80 or 443", error);
+    if ((port != 80) && (port != 443)) {
+      *error = "candidate has port below 1024, but not 80 or 443";
+      return false;
+    }
+
     if (cand.address().IsPrivateIP()) {
-      return BadParse(
-          "candidate has port of 80 or 443 with private IP address", error);
+      *error = "candidate has port of 80 or 443 with private IP address";
+      return false;
     }
   }
 

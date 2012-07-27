@@ -31,8 +31,8 @@
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/portallocatorfactory.h"
-#include "talk/session/phone/dummydevicemanager.h"
-#include "talk/session/phone/webrtcmediaengine.h"
+#include "talk/media/devices/dummydevicemanager.h"
+#include "talk/media/webrtc/webrtcmediaengine.h"
 
 #ifdef WEBRTC_RELATIVE_PATH
 #include "modules/audio_device/main/interface/audio_device.h"

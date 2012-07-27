@@ -28,8 +28,8 @@
 #include <string>
 
 #include "talk/app/webrtc/audiotrack.h"
-#include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
+#include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/roapsignaling.h"
 #include "talk/app/webrtc/streamcollection.h"
@@ -38,7 +38,7 @@
 #include "talk/base/helpers.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
-#include "talk/session/phone/channelmanager.h"
+#include "talk/session/media/channelmanager.h"
 
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
@@ -144,7 +144,8 @@ class FakeJsep : public JsepInterface {
         stream_signaling_.GetMediaSessionOptions(hints);
     const cricket::SessionDescription* desc =
         local_desc_.get() != NULL ? local_desc_->description() : NULL;
-    JsepSessionDescription* jdesc = new JsepSessionDescription();
+    JsepSessionDescription* jdesc =
+        new JsepSessionDescription(JsepSessionDescription::kOffer);
     if (!jdesc->Initialize(
             session_description_factory_->CreateOffer(options, desc),
             session_id_,
@@ -161,7 +162,8 @@ class FakeJsep : public JsepInterface {
         stream_signaling_.GetMediaSessionOptions(hints);
     const cricket::SessionDescription* desc =
         local_desc_.get() != NULL ? local_desc_->description() : NULL;
-    JsepSessionDescription* jdesc = new JsepSessionDescription();
+    JsepSessionDescription* jdesc =
+        new JsepSessionDescription(JsepSessionDescription::kAnswer);
     if (!jdesc->Initialize(
             session_description_factory_->CreateAnswer(offer->description(),
                                                        options, desc),

@@ -548,7 +548,7 @@ def ExtendComponent(env, component, **kwargs):
     build_dsym = env.Command(
         env.Dir('$STAGING_DIR/%s.dSYM' % node[0]),
         node,
-        'dsymutil -o $TARGET $SOURCE')
+        'mkdir -p `dirname $TARGET` && dsymutil -o $TARGET $SOURCE')
     env.Alias('all_dsym', env.Alias('%s.dSYM' % node[0], build_dsym))
 
   if signed:

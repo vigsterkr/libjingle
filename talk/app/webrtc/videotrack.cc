@@ -28,7 +28,7 @@
 
 #include <string>
 
-#include "talk/session/phone/webrtcvideocapturer.h"
+#include "talk/media/webrtc/webrtcvideocapturer.h"
 
 namespace webrtc {
 

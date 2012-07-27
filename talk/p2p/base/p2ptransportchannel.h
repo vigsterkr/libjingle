@@ -42,7 +42,7 @@
 #include <string>
 #include "talk/base/sigslot.h"
 #include "talk/p2p/base/candidate.h"
-#include "talk/p2p/base/port.h"
+#include "talk/p2p/base/portinterface.h"
 #include "talk/p2p/base/portallocator.h"
 #include "talk/p2p/base/transport.h"
 #include "talk/p2p/base/transportchannelimpl.h"
@@ -53,13 +53,13 @@ namespace cricket {
 // Adds the port on which the candidate originated.
 class RemoteCandidate : public Candidate {
  public:
-  RemoteCandidate(const Candidate& c, Port* origin_port)
+  RemoteCandidate(const Candidate& c, PortInterface* origin_port)
       : Candidate(c), origin_port_(origin_port) {}
 
-  Port* origin_port() { return origin_port_; }
+  PortInterface* origin_port() { return origin_port_; }
 
  private:
-  Port* origin_port_;
+  PortInterface* origin_port_;
 };
 
 // P2PTransportChannel manages the candidates and connection process to keep
@@ -112,32 +112,31 @@ class P2PTransportChannel : public TransportChannelImpl,
   void HandleNotWritable();
   void HandleAllTimedOut();
   Connection* GetBestConnectionOnNetwork(talk_base::Network* network);
-  bool CreateConnections(const Candidate &remote_candidate, Port* origin_port,
-                         bool readable);
-  bool CreateConnection(Port* port, const Candidate& remote_candidate,
-                        Port* origin_port, bool readable);
+  bool CreateConnections(const Candidate &remote_candidate,
+                         PortInterface* origin_port, bool readable);
+  bool CreateConnection(PortInterface* port, const Candidate& remote_candidate,
+                        PortInterface* origin_port, bool readable);
   bool FindConnection(cricket::Connection* connection) const;
   void RememberRemoteCandidate(const Candidate& remote_candidate,
-                               Port* origin_port);
+                               PortInterface* origin_port);
   bool IsPingable(Connection* conn);
   Connection* FindNextPingableConnection();
   int NumPingableConnections();
   void AddAllocatorSession(PortAllocatorSession* session);
 
-  void OnPortReady(PortAllocatorSession *session, Port* port);
+  void OnPortReady(PortAllocatorSession *session, PortInterface* port);
   void OnCandidatesReady(PortAllocatorSession *session,
                          const std::vector<Candidate>& candidates);
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
-  void OnUnknownAddress(Port* port, const talk_base::SocketAddress& addr,
+  void OnUnknownAddress(PortInterface* port,
+                        const talk_base::SocketAddress& addr,
                         IceMessage* stun_msg,
                         const std::string &remote_username, bool port_muxed);
-  void OnPortDestroyed(Port* port);
+  void OnPortDestroyed(PortInterface* port);
 
   void OnConnectionStateChange(Connection *connection);
   void OnReadPacket(Connection *connection, const char *data, size_t len);
   void OnConnectionDestroyed(Connection *connection);
-  bool MaybeIceRoleConflict(Port* port, const talk_base::SocketAddress& addr,
-                            IceMessage* stun_msg);
   void NominateBestConnection();
   void OnRoleConflict();
 
@@ -152,7 +151,7 @@ class P2PTransportChannel : public TransportChannelImpl,
   bool waiting_for_signaling_;
   int error_;
   std::vector<PortAllocatorSession*> allocator_sessions_;
-  std::vector<Port *> ports_;
+  std::vector<PortInterface *> ports_;
   std::vector<Connection *> connections_;
   Connection *best_connection_;
   std::vector<RemoteCandidate> remote_candidates_;
