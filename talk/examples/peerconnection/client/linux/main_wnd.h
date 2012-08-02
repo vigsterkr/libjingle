@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -56,8 +56,10 @@ class GtkMainWnd : public MainWindow {
   virtual void MessageBox(const char* caption, const char* text,
                           bool is_error);
   virtual MainWindow::UI current_ui();
-  virtual webrtc::VideoRendererWrapperInterface* local_renderer();
-  virtual webrtc::VideoRendererWrapperInterface* remote_renderer();
+  virtual void StartLocalRenderer(webrtc::VideoTrackInterface* local_video);
+  virtual void StopLocalRenderer();
+  virtual void StartRemoteRenderer(webrtc::VideoTrackInterface* remote_video);
+  virtual void StopRemoteRenderer();
 
   virtual void QueueUIThreadCallback(int msg_id, void* data);
 
@@ -85,14 +87,15 @@ class GtkMainWnd : public MainWindow {
   void OnRedraw();
 
  protected:
-  class VideoRenderer : public cricket::VideoRenderer {
+  class VideoRenderer : public webrtc::VideoRendererInterface {
    public:
-    explicit VideoRenderer(GtkMainWnd* main_wnd);
+    VideoRenderer(GtkMainWnd* main_wnd,
+                  webrtc::VideoTrackInterface* track_to_render);
     virtual ~VideoRenderer();
 
-    virtual bool SetSize(int width, int height, int reserved);
-
-    virtual bool RenderFrame(const cricket::VideoFrame* frame);
+    // VideoRendererInterface implementation
+    virtual void SetSize(int width, int height);
+    virtual void RenderFrame(const cricket::VideoFrame* frame);
 
     const uint8* image() const {
       return image_.get();
@@ -111,6 +114,7 @@ class GtkMainWnd : public MainWindow {
     int width_;
     int height_;
     GtkMainWnd* main_wnd_;
+    talk_base::scoped_refptr<webrtc::VideoTrackInterface> rendered_track_;
   };
 
  protected:
@@ -125,10 +129,8 @@ class GtkMainWnd : public MainWindow {
   std::string port_;
   bool autoconnect_;
   bool autocall_;
-  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
-      local_renderer_wrapper_;
-  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
-      remote_renderer_wrapper_;
+  talk_base::scoped_ptr<VideoRenderer> local_renderer_;
+  talk_base::scoped_ptr<VideoRenderer> remote_renderer_;
   talk_base::scoped_ptr<uint8> draw_buffer_;
   int draw_buffer_size_;
 };

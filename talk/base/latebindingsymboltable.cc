@@ -27,7 +27,7 @@
 
 #include "talk/base/latebindingsymboltable.h"
 
-#ifdef LINUX
+#ifdef POSIX
 #include <dlfcn.h>
 #endif
 
@@ -35,14 +35,14 @@
 
 namespace talk_base {
 
-#ifdef LINUX
+#ifdef POSIX
 static const DllHandle kInvalidDllHandle = NULL;
 #else
 #error Not implemented
 #endif
 
 static const char *GetDllError() {
-#ifdef LINUX
+#ifdef POSIX
   const char *err = dlerror();
   if (err) {
     return err;
@@ -57,7 +57,7 @@ static const char *GetDllError() {
 static bool LoadSymbol(DllHandle handle,
                        const char *symbol_name,
                        void **symbol) {
-#ifdef LINUX
+#ifdef POSIX
   *symbol = dlsym(handle, symbol_name);
   const char *err = dlerror();
   if (err) {
@@ -108,7 +108,7 @@ bool LateBindingSymbolTable::LoadFromPath(const char *dll_path) {
     return false;
   }
 
-#ifdef LINUX
+#ifdef POSIX
   handle_ = dlopen(dll_path, RTLD_NOW);
 #else
 #error Not implemented
@@ -119,7 +119,7 @@ bool LateBindingSymbolTable::LoadFromPath(const char *dll_path) {
                     << GetDllError();
     return false;
   }
-#ifdef LINUX
+#ifdef POSIX
   // Clear any old errors.
   dlerror();
 #endif
@@ -138,7 +138,7 @@ void LateBindingSymbolTable::Unload() {
     return;
   }
 
-#ifdef LINUX
+#ifdef POSIX
   if (dlclose(handle_) != 0) {
     LOG(LS_ERROR) << GetDllError();
   }

@@ -1836,18 +1836,16 @@ void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
   }
 
   WebRtcVideoFrame i420_frame;
-  const int kMaxCapturePixels = 2880 * 1800;
-  if (frame->width * frame->height > kMaxCapturePixels &&
-      FOURCC_ARGB == frame->fourcc) {
+  int scaled_width, scaled_height;
+  ComputeScale(frame->width, frame->height, &scaled_width, &scaled_height);
+  if (FOURCC_ARGB == frame->fourcc &&
+      (scaled_width != frame->height || scaled_height != frame->height)) {
     CapturedFrame* scaled_frame = const_cast<CapturedFrame*>(frame);
     // Compute new width such that width * height is less than maximum but
     // maintains original captured frame aspect ratio.
     // Round down width to multiple of 4 so odd width won't round up beyond
     // maximum, and so chroma channel is even width to simplify spatial
     // resampling.
-    int scaled_width = static_cast<int>(sqrtf(static_cast<float>(
-        kMaxCapturePixels) * frame->width / frame->height)) & ~3;
-    int scaled_height = kMaxCapturePixels / scaled_width & ~1;
     libyuv::ARGBScale(reinterpret_cast<const uint8*>(frame->data),
                       frame->width * 4, frame->width, frame->height,
                       reinterpret_cast<uint8*>(scaled_frame->data),

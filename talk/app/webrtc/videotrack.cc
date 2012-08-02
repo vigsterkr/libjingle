@@ -46,15 +46,6 @@ VideoTrack::VideoTrack(const std::string& label,
   video_device_.reset(video_device);
 }
 
-void VideoTrack::SetRenderer(VideoRendererWrapperInterface* renderer) {
-  video_renderer_ = renderer;
-  Notifier<LocalVideoTrackInterface>::FireOnChanged();
-}
-
-VideoRendererWrapperInterface* VideoTrack::GetRenderer() {
-  return video_renderer_.get();
-}
-
   // Get the VideoCapture device associated with this track.
 cricket::VideoCapturer* VideoTrack::GetVideoCapture() {
   return video_device_.get();

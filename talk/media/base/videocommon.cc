@@ -25,6 +25,7 @@
 
 #include "talk/media/base/videocommon.h"
 
+#include <math.h>
 #include <sstream>
 
 #include "talk/base/common.h"
@@ -62,12 +63,55 @@ uint32 CanonicalFourCC(uint32 fourcc) {
   return fourcc;
 }
 
+// TODO: Remove kMaxPixels when encoder has no limit.
+// TODO: Consider clamping dimensions to max independently,
+//     adjusting pixel width and pixel height.
+// Limit as of 7/16/12 is 21000 macroblocks (16 x 16 each). b/6726828
+// Compute a size to scale frames to that is below maximum compression
+// and rendering size.
+void ComputeScale(int frame_width, int frame_height,
+                  int* scaled_width, int* scaled_height) {
+  ASSERT(scaled_width != NULL);
+  ASSERT(scaled_height != NULL);
+  const int kMaxPixels = 2880 * 1800;
+  const int kMaxDimension = 4096;
+  int new_frame_width = frame_width;
+  int new_frame_height = frame_height;
+
+  // Limit width.
+  if (new_frame_width > kMaxDimension) {
+    new_frame_height = new_frame_height * kMaxDimension / new_frame_width & ~1;
+    new_frame_width = kMaxDimension;
+  }
+  // Limit height.
+  if (new_frame_height > kMaxDimension) {
+    new_frame_width = new_frame_width * kMaxDimension / new_frame_height & ~3;
+    new_frame_height = kMaxDimension;
+  }
+  // Limit number of pixels.
+  if (new_frame_width * new_frame_height > kMaxPixels) {
+    // Compute new width such that width * height is less than maximum but
+    // maintains original captured frame aspect ratio.
+    // Round down width to multiple of 4 so odd width won't round up beyond
+    // maximum, and so chroma channel is even width to simplify spatial
+    // resampling.
+    new_frame_width = static_cast<int>(sqrtf(static_cast<float>(
+        kMaxPixels) * new_frame_width / new_frame_height)) & ~3;
+    new_frame_height = kMaxPixels / new_frame_width & ~1;
+  }
+  *scaled_width = new_frame_width;
+  *scaled_height = new_frame_height;
+}
+
 void ComputeCrop(int cropped_format_width,
                  int cropped_format_height,
                  int frame_width, int frame_height,
                  int pixel_width, int pixel_height,
                  int rotation,
                  int* cropped_width, int* cropped_height) {
+  ASSERT(cropped_width != NULL);
+  ASSERT(cropped_height != NULL);
+  ASSERT(rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270);
   if (!pixel_width) {
     pixel_width = 1;
   }

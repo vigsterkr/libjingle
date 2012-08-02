@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -183,18 +183,21 @@ MainWindow::UI GtkMainWnd::current_ui() {
   return STREAMING;
 }
 
-webrtc::VideoRendererWrapperInterface* GtkMainWnd::local_renderer() {
-  if (!local_renderer_wrapper_.get())
-    local_renderer_wrapper_  =
-        webrtc::CreateVideoRenderer(new VideoRenderer(this));
-  return local_renderer_wrapper_.get();
+
+void GtkMainWnd::StartLocalRenderer(webrtc::VideoTrackInterface* local_video) {
+  local_renderer_.reset(new VideoRenderer(this, local_video));
 }
 
-webrtc::VideoRendererWrapperInterface*  GtkMainWnd::remote_renderer() {
-  if (!remote_renderer_wrapper_.get())
-    remote_renderer_wrapper_ =
-        webrtc::CreateVideoRenderer(new VideoRenderer(this));
-  return remote_renderer_wrapper_.get();
+void GtkMainWnd::StopLocalRenderer() {
+  local_renderer_.reset();
+}
+
+void GtkMainWnd::StartRemoteRenderer(webrtc::VideoTrackInterface* remote_video) {
+  remote_renderer_.reset(new VideoRenderer(this, remote_video));
+}
+
+void GtkMainWnd::StopRemoteRenderer() {
+  remote_renderer_.reset();
 }
 
 void GtkMainWnd::QueueUIThreadCallback(int msg_id, void* data) {
@@ -281,10 +284,6 @@ void GtkMainWnd::SwitchToConnectUI() {
 
 void GtkMainWnd::SwitchToPeerList(const Peers& peers) {
   LOG(INFO) << __FUNCTION__;
-
-  // Clean up buffers from a potential previous session.
-  local_renderer_wrapper_ = NULL;
-  remote_renderer_wrapper_ = NULL;
 
   if (!peer_list_) {
     gtk_container_set_border_width(GTK_CONTAINER(window_), 0);
@@ -405,8 +404,7 @@ void GtkMainWnd::OnRowActivated(GtkTreeView* tree_view, GtkTreePath* path,
 void GtkMainWnd::OnRedraw() {
   gdk_threads_enter();
 
-  VideoRenderer* remote_renderer =
-      static_cast<VideoRenderer*>(remote_renderer_wrapper_->renderer());
+  VideoRenderer* remote_renderer = remote_renderer_.get();
   if (remote_renderer && remote_renderer->image() != NULL &&
       draw_area_ != NULL) {
     int width = remote_renderer->width();
@@ -435,8 +433,7 @@ void GtkMainWnd::OnRedraw() {
       scaled += width * 2;
     }
 
-    VideoRenderer* local_renderer =
-        static_cast<VideoRenderer*>(local_renderer_wrapper_->renderer());
+    VideoRenderer* local_renderer = local_renderer_.get();
     if (local_renderer && local_renderer->image()) {
       image = reinterpret_cast<const uint32*>(local_renderer->image());
       scaled = reinterpret_cast<uint32*>(draw_buffer_.get());
@@ -472,23 +469,29 @@ void GtkMainWnd::OnRedraw() {
   gdk_threads_leave();
 }
 
-GtkMainWnd::VideoRenderer::VideoRenderer(GtkMainWnd* main_wnd)
-    : width_(0), height_(0), main_wnd_(main_wnd) {
+GtkMainWnd::VideoRenderer::VideoRenderer(
+    GtkMainWnd* main_wnd,
+    webrtc::VideoTrackInterface* track_to_render)
+    : width_(0),
+      height_(0),
+      main_wnd_(main_wnd),
+      rendered_track_(track_to_render) {
+  rendered_track_->AddRenderer(this);
 }
 
 GtkMainWnd::VideoRenderer::~VideoRenderer() {
+  rendered_track_->RemoveRenderer(this);
 }
 
-bool GtkMainWnd::VideoRenderer::SetSize(int width, int height, int reserved) {
+void GtkMainWnd::VideoRenderer::SetSize(int width, int height) {
   gdk_threads_enter();
   width_ = width;
   height_ = height;
   image_.reset(new uint8[width * height * 4]);
   gdk_threads_leave();
-  return true;
 }
 
-bool GtkMainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
+void GtkMainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
   gdk_threads_enter();
 
   int size = width_ * height_ * 4;
@@ -512,8 +515,6 @@ bool GtkMainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
   gdk_threads_leave();
 
   g_idle_add(Redraw, main_wnd_);
-
-  return true;
 }
 
 

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -31,7 +31,6 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
-#include "talk/app/webrtc/roapmessages.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
@@ -40,6 +39,7 @@
 
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStreamLabel2[] = "local_stream_2";
+static const char kStreamLabel3[] = "local_stream_3";
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 static const char kInvalidConfiguration[] = "a13151913541234:19302";
 static const int kDefaultStunPort = 3478;
@@ -64,38 +64,7 @@ using webrtc::MediaStreamInterface;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
-using webrtc::RoapMessageBase;
-using webrtc::RoapOffer;
 using webrtc::SessionDescriptionInterface;
-
-
-// Create ROAP message for shutdown.
-static std::string CreateShutdownMessage() {
-  webrtc::RoapShutdown shutdown("dummy_session", "", "", 1);
-  return shutdown.Serialize();
-}
-
-// Create a ROAP answer message.
-// The session description in the answer is set to the same as in the offer.
-static std::string CreateAnswerMessage(const RoapMessageBase& msg) {
-  webrtc::RoapOffer offer(msg);
-  EXPECT_TRUE(offer.Parse());
-  std::string answer_sdp = offer.SessionDescription();
-  // We should keep only one crypto in answer, but with BUNDLE enabled there
-  // will be only one in the offer already.
-
-  webrtc::RoapAnswer answer(offer.offer_session_id(), "dummy_session",
-                            offer.session_token(), offer.response_token(),
-                            offer.seq(), answer_sdp);
-  return answer.Serialize();
-}
-
-// Create ROAP message to answer ok to a ROAP shutdown or ROAP answer message.
-static std::string CreateOkMessage(const RoapMessageBase& msg) {
-  webrtc::RoapOk ok(msg.offer_session_id(), "dummy_session",
-                    msg.session_token(), msg.response_token(), msg.seq());
-  return ok.Serialize();
-}
 
 // Gets the first ssrc of given content type from the ContentInfo.
 static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
@@ -123,22 +92,14 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   void SetPeerConnectionInterface(PeerConnectionInterface* pc) {
     pc_ = pc;
     state_ = pc_->ready_state();
-    sdp_state_ = pc_->sdp_state();
   }
   virtual void OnError() {}
-  virtual void OnMessage(const std::string& msg) {}
-  virtual void OnSignalingMessage(const std::string& msg) {
-    EXPECT_TRUE(last_message_.Parse(msg));
-  }
   virtual void OnStateChange(StateType state_changed) {
     if (pc_.get() == NULL)
       return;
     switch (state_changed) {
       case kReadyState:
         state_ = pc_->ready_state();
-        break;
-      case kSdpState:
-        sdp_state_ = pc_->sdp_state();
         break;
       case kIceState:
         ADD_FAILURE();
@@ -184,9 +145,7 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   }
 
   scoped_refptr<PeerConnectionInterface> pc_;
-  RoapMessageBase last_message_;
   PeerConnectionInterface::ReadyState state_;
-  PeerConnectionInterface::SdpState sdp_state_;
   scoped_ptr<IceCandidateInterface> last_candidate_;
   bool renegotiation_needed_;
   bool ice_complete_;
@@ -259,13 +218,6 @@ class PeerConnectionInterfaceTest : public testing::Test {
     ASSERT_TRUE(pc_factory_.get() != NULL);
   }
 
-  void CreateRoapPeerConnection() {
-    pc_ = pc_factory_->CreateRoapPeerConnection(kStunConfiguration, &observer_);
-    ASSERT_TRUE(pc_.get() != NULL);
-    observer_.SetPeerConnectionInterface(pc_.get());
-    EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
-  }
-
   void CreatePeerConnection() {
     pc_ = pc_factory_->CreatePeerConnection(kStunConfiguration, &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
@@ -335,8 +287,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     scoped_refptr<LocalVideoTrackInterface> video_track(
         pc_factory_->CreateLocalVideoTrack(label, NULL));
     stream->AddTrack(video_track.get());
-    pc_->AddStream(stream);
-    pc_->CommitStreamChanges();
+    EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
     observer_.renegotiation_needed_ = false;
   }
@@ -348,8 +299,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     scoped_refptr<LocalAudioTrackInterface> audio_track(
         pc_factory_->CreateLocalAudioTrack(label, NULL));
     stream->AddTrack(audio_track.get());
-    pc_->AddStream(stream);
-    pc_->CommitStreamChanges();
+    EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
     observer_.renegotiation_needed_ = false;
   }
@@ -366,19 +316,9 @@ class PeerConnectionInterfaceTest : public testing::Test {
     scoped_refptr<LocalVideoTrackInterface> video_track(
         pc_factory_->CreateLocalVideoTrack(video_track_label, NULL));
     stream->AddTrack(video_track.get());
-    pc_->RemoveStream(stream_label);
-    pc_->AddStream(stream);
-    pc_->CommitStreamChanges();
+    EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
     observer_.renegotiation_needed_ = false;
-  }
-
-  void WaitForRoapOffer() {
-    EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpWaiting, observer_.sdp_state_,
-                   kTimeout);
-    // Wait for the ICE agent to find the candidates and send an offer.
-    EXPECT_EQ_WAIT(RoapMessageBase::kOffer, observer_.last_message_.type(),
-                   kTimeout);
   }
 
   bool DoCreateOfferAnswer(SessionDescriptionInterface** desc, bool offer) {
@@ -441,100 +381,36 @@ TEST_F(PeerConnectionInterfaceTest,
   CreatePeerConnectionWithDifferentConfigurations();
 }
 
-TEST_F(PeerConnectionInterfaceTest, RoapAddStream) {
-  CreateRoapPeerConnection();
+TEST_F(PeerConnectionInterfaceTest, AddStreams) {
+  CreatePeerConnection();
   AddStream(kStreamLabel1);
-  WaitForRoapOffer();
-  ASSERT_EQ(1u, pc_->local_streams()->count());
-  EXPECT_EQ(kStreamLabel1, pc_->local_streams()->at(0)->label());
-
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kOpening, observer_.state_,
-                 kTimeout);
-  pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kActive, observer_.state_, kTimeout);
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpIdle, observer_.sdp_state_,
-                 kTimeout);
-  // Since we answer with the same session description as we offer we can
-  // check if OnAddStream have been called.
-  EXPECT_EQ(kStreamLabel1, observer_.GetLastAddedStreamLabel());
-  ASSERT_EQ(1u, pc_->remote_streams()->count());
-  EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(0)->label());
-}
-
-TEST_F(PeerConnectionInterfaceTest, RoapUpdateStream) {
-  CreateRoapPeerConnection();
-  AddStream(kStreamLabel1);
-  WaitForRoapOffer();
-  pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
-  WAIT(PeerConnectionInterface::kActive ==  observer_.state_, kTimeout);
-  WAIT(PeerConnectionInterface::kSdpIdle == observer_.sdp_state_, kTimeout);
-
   AddVoiceStream(kStreamLabel2);
-  WaitForRoapOffer();
   ASSERT_EQ(2u, pc_->local_streams()->count());
-  EXPECT_EQ(kStreamLabel2, pc_->local_streams()->at(1)->label());
 
-  EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
-  pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpIdle, observer_.sdp_state_,
-                 kTimeout);
-  // Since we answer with the same session description as we offer we can
-  // check if OnAddStream have been called.
-  EXPECT_EQ(kStreamLabel2, observer_.GetLastAddedStreamLabel());
-  ASSERT_EQ(2u, pc_->remote_streams()->count());
-  EXPECT_EQ(kStreamLabel2, pc_->remote_streams()->at(0)->label());
-  EXPECT_EQ(kStreamLabel1, pc_->remote_streams()->at(1)->label());
+  // Fail to add another stream with audio since we already have an audio track.
+  scoped_refptr<LocalMediaStreamInterface> stream(
+      pc_factory_->CreateLocalMediaStream(kStreamLabel3));
+  scoped_refptr<LocalAudioTrackInterface> audio_track(
+      pc_factory_->CreateLocalAudioTrack(kStreamLabel3, NULL));
+  stream->AddTrack(audio_track.get());
+  EXPECT_FALSE(pc_->AddStream(stream, NULL));
 
-  pc_->RemoveStream(static_cast<LocalMediaStreamInterface*>(
-      pc_->local_streams()->at(1)));
-  pc_->CommitStreamChanges();
-  WaitForRoapOffer();
-  pc_->ProcessSignalingMessage(CreateAnswerMessage(observer_.last_message_));
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kSdpIdle, observer_.sdp_state_,
-                 kTimeout);
-  EXPECT_EQ(kStreamLabel2, observer_.GetLastRemovedStreamLabel());
-  EXPECT_EQ(1u, pc_->local_streams()->count());
-}
+  // Remove the stream with the audio track.
+  pc_->RemoveStream(pc_->local_streams()->at(1));
 
-TEST_F(PeerConnectionInterfaceTest, RoapSendClose) {
-  CreateRoapPeerConnection();
-  pc_->Close();
-  EXPECT_EQ(RoapMessageBase::kShutdown, observer_.last_message_.type());
-  EXPECT_EQ(PeerConnectionInterface::kClosing, observer_.state_);
-  pc_->ProcessSignalingMessage(CreateOkMessage(observer_.last_message_));
-  EXPECT_EQ_WAIT(PeerConnectionInterface::kClosed, observer_.state_, kTimeout);
-}
-
-TEST_F(PeerConnectionInterfaceTest, RoapReceiveClose) {
-  CreateRoapPeerConnection();
-  pc_->ProcessSignalingMessage(CreateShutdownMessage());
-  EXPECT_EQ_WAIT(RoapMessageBase::kOk, observer_.last_message_.type(),
-                 kTimeout);
-  EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
-}
-
-TEST_F(PeerConnectionInterfaceTest, RoapReceiveCloseWhileExpectingAnswer) {
-  CreateRoapPeerConnection();
-  AddStream(kStreamLabel1);
-  WaitForRoapOffer();
-
-  // Receive the shutdown message.
-  pc_->ProcessSignalingMessage(CreateShutdownMessage());
-  EXPECT_EQ_WAIT(RoapMessageBase::kOk, observer_.last_message_.type(),
-                 kTimeout);
-  EXPECT_EQ(PeerConnectionInterface::kClosed, observer_.state_);
+  // Test that we now can add the stream with the audio track.
+  EXPECT_TRUE(pc_->AddStream(stream, NULL));
 }
 
 TEST_F(PeerConnectionInterfaceTest, RemoveStream) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
-  EXPECT_EQ(1u, pc_->local_streams()->count());
-  EXPECT_FALSE(pc_->RemoveStream(kStreamLabel2));
-  EXPECT_TRUE(pc_->RemoveStream(kStreamLabel1));
+  ASSERT_EQ(1u, pc_->local_streams()->count());
+  pc_->RemoveStream(pc_->local_streams()->at(0));
   EXPECT_EQ(0u, pc_->local_streams()->count());
 }
 
-TEST_F(PeerConnectionInterfaceTest, Jsep_InitiateCall) {
+TEST_F(PeerConnectionInterfaceTest, InitiateCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
@@ -555,7 +431,7 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_InitiateCall) {
   EXPECT_EQ_WAIT(kStreamLabel1, observer_.GetLastAddedStreamLabel(), kTimeout);
 }
 
-TEST_F(PeerConnectionInterfaceTest, Jsep_ReceiveCall) {
+TEST_F(PeerConnectionInterfaceTest, ReceiveCall) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
@@ -576,7 +452,7 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_ReceiveCall) {
 }
 
 // Test that candidates are generated and that we can parse our own candidates.
-TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
+TEST_F(PeerConnectionInterfaceTest, IceCandidates) {
   CreatePeerConnection();
 
   EXPECT_FALSE(pc_->AddIceCandidate(observer_.last_candidate_.get()));
@@ -598,7 +474,7 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_IceCandidates) {
 
 // Test that the CreateOffer and CreatAnswer will fail if the track labels are
 // not unique.
-TEST_F(PeerConnectionInterfaceTest, Jsep_CreateOfferAnswerWithInvalidStream) {
+TEST_F(PeerConnectionInterfaceTest, CreateOfferAnswerWithInvalidStream) {
   CreatePeerConnection();
   // Create a regular offer for the CreateAnswer test later.
   SessionDescriptionInterface* offer = NULL;
@@ -620,7 +496,7 @@ TEST_F(PeerConnectionInterfaceTest, Jsep_CreateOfferAnswerWithInvalidStream) {
 
 // Test that we will get different SSRCs for each tracks in the offer and answer
 // we created.
-TEST_F(PeerConnectionInterfaceTest, Jsep_SsrcInOfferAnswer) {
+TEST_F(PeerConnectionInterfaceTest, SsrcInOfferAnswer) {
   CreatePeerConnection();
   // Create a local stream with audio&video tracks having different labels.
   AddAudioVideoStream(kStreamLabel1, "audio_label", "video_label");

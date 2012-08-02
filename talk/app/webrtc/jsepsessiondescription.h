@@ -45,11 +45,6 @@ namespace webrtc {
 
 class JsepSessionDescription : public SessionDescriptionInterface {
  public:
-  // Supported types:
-  static const char kOffer[];
-  static const char kPrAnswer[];
-  static const char kAnswer[];
-
   explicit JsepSessionDescription(const std::string& type);
   virtual ~JsepSessionDescription();
 

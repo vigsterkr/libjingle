@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,17 +29,39 @@
 
 #include <utility>
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_capture/main/interface/video_capture_factory.h"
-#else
-#include "third_party/webrtc/files/include/video_capture_factory.h"
-#endif
-#include "talk/app/webrtc/peerconnection.h"
 #include "talk/base/common.h"
+#include "talk/base/json.h"
 #include "talk/base/logging.h"
 #include "talk/examples/peerconnection/client/defaults.h"
-#include "talk/media/devices/videorendererfactory.h"
-#include "talk/p2p/client/basicportallocator.h"
+#include "talk/session/phone/devicemanager.h"
+
+// Names used for a IceCandidate JSON object.
+const char kCandidateSdpMidName[] = "sdpMid";
+const char kCandidateSdpMlineIndexName[] = "sdpMLineIndex";
+const char kCandidateSdpName[] = "candidate";
+
+// Names used for a SessionDescription JSON object.
+const char kSessionDescriptionTypeName[] = "type";
+const char kSessionDescriptionSdpName[] = "sdp";
+
+class DummySetSessionDescriptionObserver
+    : public webrtc::SetSessionDescriptionObserver {
+ public:
+  static DummySetSessionDescriptionObserver* Create() {
+    return
+        new talk_base::RefCountedObject<DummySetSessionDescriptionObserver>();
+  }
+  virtual void OnSuccess() {
+    LOG(INFO) << __FUNCTION__;
+  }
+  virtual void OnFailure(const std::string& error) {
+    LOG(INFO) << __FUNCTION__ << " " << error;
+  }
+
+ protected:
+  DummySetSessionDescriptionObserver() {}
+  ~DummySetSessionDescriptionObserver() {}
+};
 
 Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd)
   : peer_id_(-1),
@@ -75,20 +97,27 @@ bool Conductor::InitializePeerConnection() {
     return false;
   }
 
-  peer_connection_ = peer_connection_factory_->CreateRoapPeerConnection(
-      GetPeerConnectionString(), this);
-
+  webrtc::JsepInterface::IceServers servers;
+  webrtc::JsepInterface::IceServer server;
+  server.uri = GetPeerConnectionString();
+  servers.push_back(server);
+  peer_connection_ = peer_connection_factory_->CreatePeerConnection(servers,
+                                                                    NULL,
+                                                                    this);
   if (!peer_connection_.get()) {
     main_wnd_->MessageBox("Error",
         "CreatePeerConnection failed", true);
     DeletePeerConnection();
   }
+  AddStreams();
   return peer_connection_.get() != NULL;
 }
 
 void Conductor::DeletePeerConnection() {
   peer_connection_ = NULL;
   active_streams_.clear();
+  main_wnd_->StopLocalRenderer();
+  main_wnd_->StopRemoteRenderer();
   peer_connection_factory_ = NULL;
   peer_id_ = -1;
 }
@@ -110,13 +139,6 @@ void Conductor::OnError() {
   main_wnd_->QueueUIThreadCallback(PEER_CONNECTION_ERROR, NULL);
 }
 
-void Conductor::OnSignalingMessage(const std::string& msg) {
-  LOG(INFO) << __FUNCTION__;
-
-  std::string* msg_copy = new std::string(msg);
-  main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, msg_copy);
-}
-
 // Called when a remote stream is added
 void Conductor::OnAddStream(webrtc::MediaStreamInterface* stream) {
   LOG(INFO) << __FUNCTION__ << " " << stream->label();
@@ -132,12 +154,21 @@ void Conductor::OnRemoveStream(webrtc::MediaStreamInterface* stream) {
   main_wnd_->QueueUIThreadCallback(STREAM_REMOVED,
                                    stream);
 }
+
 void Conductor::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
   LOG(INFO) << __FUNCTION__ << " " << candidate->sdp_mline_index();
-}
+  Json::StyledWriter writer;
+  Json::Value jmessage;
 
-void Conductor::OnIceComplete() {
-  LOG(INFO) << __FUNCTION__;
+  jmessage[kCandidateSdpMidName] = candidate->sdp_mid();
+  jmessage[kCandidateSdpMlineIndexName] = candidate->sdp_mline_index();
+  std::string sdp;
+  if (!candidate->ToString(&sdp)) {
+    LOG(LS_ERROR) << "Failed to serialize candidate";
+    return;
+  }
+  jmessage[kCandidateSdpName] = sdp;
+  SendMessage(writer.write(jmessage));
 }
 
 //
@@ -185,10 +216,6 @@ void Conductor::OnMessageFromPeer(int peer_id, const std::string& message) {
     ASSERT(peer_id_ == -1);
     peer_id_ = peer_id;
 
-    // Got an offer.  Give it to the PeerConnection instance.
-    // Once processed, we will get a callback to OnSignalingMessage with
-    // our 'answer' which we'll send to the peer.
-    LOG(INFO) << "Got an offer from our peer: " << peer_id;
     if (!InitializePeerConnection()) {
       LOG(LS_ERROR) << "Failed to initialize our PeerConnection instance";
       client_->SignOut();
@@ -196,12 +223,65 @@ void Conductor::OnMessageFromPeer(int peer_id, const std::string& message) {
     }
   } else if (peer_id != peer_id_) {
     ASSERT(peer_id_ != -1);
-    LOG(WARNING) << "Received an offer from a peer while already in a "
+    LOG(WARNING) << "Received a message from unknown peer while already in a "
                     "conversation with a different peer.";
     return;
   }
 
-  peer_connection_->ProcessSignalingMessage(message);
+  Json::Reader reader;
+  Json::Value jmessage;
+  if (!reader.parse(message, jmessage)) {
+    LOG(WARNING) << "Received unknown message. " << message;
+    return;
+  }
+  std::string type;
+  std::string json_object;
+
+  GetStringFromJsonObject(jmessage, kSessionDescriptionTypeName, &type);
+  if (!type.empty()) {
+    std::string sdp;
+    if (!GetStringFromJsonObject(jmessage, kSessionDescriptionSdpName, &sdp)) {
+      LOG(WARNING) << "Can't parse received session description message.";
+      return;
+    }
+    webrtc::SessionDescriptionInterface* session_description(
+        webrtc::CreateSessionDescription(type, sdp));
+    if (!session_description) {
+      LOG(WARNING) << "Can't parse received session description message.";
+      return;
+    }
+    LOG(INFO) << " Received session description :" << message;
+    peer_connection_->SetRemoteDescription(
+        DummySetSessionDescriptionObserver::Create(), session_description);
+    if (session_description->type() ==
+        webrtc::SessionDescriptionInterface::kOffer) {
+      peer_connection_->CreateAnswer(this, NULL);
+    }
+    return;
+  } else {
+    std::string sdp_mid;
+    int sdp_mlineindex = 0;
+    std::string sdp;
+    if (!GetStringFromJsonObject(jmessage, kCandidateSdpMidName, &sdp_mid) ||
+        !GetIntFromJsonObject(jmessage, kCandidateSdpMlineIndexName,
+                              &sdp_mlineindex) ||
+        !GetStringFromJsonObject(jmessage, kCandidateSdpName, &sdp)) {
+      LOG(WARNING) << "Can't parse received message.";
+      return;
+    }
+    talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
+        webrtc::CreateIceCandidate(sdp_mid, sdp_mlineindex, sdp));
+    if (!candidate.get()) {
+      LOG(WARNING) << "Can't parse received candidate message.";
+      return;
+    }
+    if (!peer_connection_->AddIceCandidate(candidate.get())) {
+      LOG(WARNING) << "Failed to apply the received candidate";
+      return;
+    }
+    LOG(INFO) << " Received candidate :" << message;
+    return;
+  }
 }
 
 void Conductor::OnMessageSent(int err) {
@@ -242,36 +322,32 @@ void Conductor::ConnectToPeer(int peer_id) {
 
   if (InitializePeerConnection()) {
     peer_id_ = peer_id;
-    AddStreams();
+    peer_connection_->CreateOffer(this, NULL);
   } else {
     main_wnd_->MessageBox("Error", "Failed to initialize PeerConnection", true);
   }
 }
 
-talk_base::scoped_refptr<webrtc::VideoCaptureModule>
-Conductor::OpenVideoCaptureDevice() {
-  webrtc::VideoCaptureModule::DeviceInfo* device_info(
-      webrtc::VideoCaptureFactory::CreateDeviceInfo(0));
-  talk_base::scoped_refptr<webrtc::VideoCaptureModule> video_device;
-
-  const size_t kMaxDeviceNameLength = 128;
-  const size_t kMaxUniqueIdLength = 256;
-  char device_name[kMaxDeviceNameLength];
-  char unique_id[kMaxUniqueIdLength];
-
-  const size_t device_count = device_info->NumberOfDevices();
-  for (size_t i = 0; i < device_count; ++i) {
-    // Get the name of the video capture device.
-    device_info->GetDeviceName(i, device_name, kMaxDeviceNameLength, unique_id,
-        kMaxUniqueIdLength);
-    // Try to open this device.
-    video_device =
-        webrtc::VideoCaptureFactory::Create(0, unique_id);
-    if (video_device.get())
+cricket::VideoCapturer* Conductor::OpenVideoCaptureDevice() {
+  talk_base::scoped_ptr<cricket::DeviceManagerInterface> dev_manager(
+      cricket::DeviceManagerFactory::Create());
+  if (!dev_manager->Init()) {
+    LOG(LS_ERROR) << "Can't create device manager";
+    return NULL;
+  }
+  std::vector<cricket::Device> devs;
+  if (!dev_manager->GetVideoCaptureDevices(&devs)) {
+    LOG(LS_ERROR) << "Can't enumerate video devices";
+    return NULL;
+  }
+  std::vector<cricket::Device>::iterator dev_it = devs.begin();
+  cricket::VideoCapturer* capturer = NULL;
+  for (; dev_it != devs.end(); ++dev_it) {
+    capturer = dev_manager->CreateVideoCapturer(*dev_it);
+    if (capturer != NULL)
       break;
   }
-  delete device_info;
-  return video_device;
+  return capturer;
 }
 
 void Conductor::AddStreams() {
@@ -283,17 +359,17 @@ void Conductor::AddStreams() {
 
   talk_base::scoped_refptr<webrtc::LocalVideoTrackInterface> video_track(
       peer_connection_factory_->CreateLocalVideoTrack(
-          kVideoLabel, CreateVideoCapturer(OpenVideoCaptureDevice())));
-
-  video_track->SetRenderer(main_wnd_->local_renderer());
+          kVideoLabel, OpenVideoCaptureDevice()));
+  main_wnd_->StartLocalRenderer(video_track);
 
   talk_base::scoped_refptr<webrtc::LocalMediaStreamInterface> stream =
       peer_connection_factory_->CreateLocalMediaStream(kStreamLabel);
 
   stream->AddTrack(audio_track);
   stream->AddTrack(video_track);
-  peer_connection_->AddStream(stream);
-  peer_connection_->CommitStreamChanges();
+  if (!peer_connection_->AddStream(stream, NULL)) {
+    LOG(LS_ERROR) << "Adding stream to PeerConnection failed";
+  }
   typedef std::pair<std::string,
                     talk_base::scoped_refptr<webrtc::MediaStreamInterface> >
       MediaStreamPair;
@@ -358,10 +434,6 @@ void Conductor::UIThreadCallback(int msg_id, void* data) {
       break;
     }
 
-    case PEER_CONNECTION_ADDSTREAMS:
-      AddStreams();
-      break;
-
     case PEER_CONNECTION_ERROR:
       main_wnd_->MessageBox("Error", "an unknown error occurred", true);
       break;
@@ -372,29 +444,22 @@ void Conductor::UIThreadCallback(int msg_id, void* data) {
           data);
       talk_base::scoped_refptr<webrtc::VideoTracks> tracks =
           stream->video_tracks();
-      for (size_t i = 0; i < tracks->count(); ++i) {
-        webrtc::VideoTrackInterface* track = tracks->at(i);
+      // Only render the first track.
+      if (tracks->count() > 0) {
+        webrtc::VideoTrackInterface* track = tracks->at(0);
         LOG(INFO) << "Setting video renderer for track: " << track->label();
-        track->SetRenderer(main_wnd_->remote_renderer());
+        main_wnd_->StartRemoteRenderer(track);
       }
-      // If we haven't shared any streams with this peer (we're the receiver)
-      // then do so now.
-      if (active_streams_.empty())
-        AddStreams();
       stream->Release();
       break;
     }
 
     case STREAM_REMOVED: {
+      // Remote peer stopped sending a stream.
       webrtc::MediaStreamInterface* stream =
           reinterpret_cast<webrtc::MediaStreamInterface*>(
           data);
-      active_streams_.erase(stream->label());
       stream->Release();
-      if (active_streams_.empty()) {
-        LOG(INFO) << "All streams have been closed.";
-        main_wnd_->QueueUIThreadCallback(PEER_CONNECTION_CLOSED, NULL);
-      }
       break;
     }
 
@@ -402,4 +467,25 @@ void Conductor::UIThreadCallback(int msg_id, void* data) {
       ASSERT(false);
       break;
   }
+}
+
+void Conductor::OnSuccess(webrtc::SessionDescriptionInterface* desc) {
+  peer_connection_->SetLocalDescription(
+      DummySetSessionDescriptionObserver::Create(), desc);
+  Json::StyledWriter writer;
+  Json::Value jmessage;
+  jmessage[kSessionDescriptionTypeName] = desc->type();
+  std::string sdp;
+  desc->ToString(&sdp);
+  jmessage[kSessionDescriptionSdpName] = sdp;
+  SendMessage(writer.write(jmessage));
+}
+
+void Conductor::OnFailure(const std::string& error) {
+    LOG(LERROR) << error;
+}
+
+void Conductor::SendMessage(const std::string& json_object) {
+  std::string* msg = new std::string(json_object);
+  main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, msg);
 }

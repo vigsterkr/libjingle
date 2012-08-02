@@ -89,25 +89,6 @@ class MediaStreamTrackInterface : public talk_base::RefCountInterface,
   virtual bool set_state(TrackState new_state) = 0;
 };
 
-// Reference counted wrapper for a VideoRenderer.
-// Deprecated
-// TODO: Remove this when all clients no longer use this.
-class VideoRendererWrapperInterface : public talk_base::RefCountInterface {
- public:
-  virtual cricket::VideoRenderer* renderer() = 0;
-
- protected:
-  virtual ~VideoRendererWrapperInterface() {}
-};
-
-// Creates a reference counted object of type cricket::VideoRenderer.
-// webrtc::VideoRendererWrapperInterface take ownership of
-// cricket::VideoRenderer.
-// Deprecated
-// TODO: Remove this when all clients no longer use this.
-talk_base::scoped_refptr<VideoRendererWrapperInterface> CreateVideoRenderer(
-    cricket::VideoRenderer* renderer);
-
 // Interface for rendering VideoFrames from a VideoTrack
 class VideoRendererInterface {
  public:
@@ -123,17 +104,6 @@ class VideoRendererInterface {
 
 class VideoTrackInterface : public MediaStreamTrackInterface {
  public:
-  // Set the video renderer for a local or remote stream.
-  // This call will start decoding the received video stream and render it.
-  // The VideoRendererInterface is stored as a scoped_refptr. This means that
-  // it is not allowed to call delete renderer after this API has been called.
-  // Deprecated
-  virtual void SetRenderer(VideoRendererWrapperInterface* renderer) = 0;
-
-  // Get the VideoRenderer associated with this track.
-  // Deprecated
-  virtual VideoRendererWrapperInterface* GetRenderer() = 0;
-
   // Register a renderer that will render all frames received on this track.
   virtual void AddRenderer(VideoRendererInterface* renderer) = 0;
   // Deregister a renderer.

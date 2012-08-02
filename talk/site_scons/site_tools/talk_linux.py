@@ -259,12 +259,18 @@ def EnableFeatureWherePackagePresent(env, bit, cpp_flag, package):
            'built. To build with this feature, install the package that '
            'provides the \"%s.pc\" file.') % (package, bit, package)
 
+def GetGccVersion(unused_env):
+  version_string = _OutputFromShellCommand(
+      'gcc --version | head -n 1 |'
+      r'sed "s/.*\([0-9]\{1,\}\.[0-9]*\.[0-9]*\).*/\1/g"')
+  return tuple([int(x) for x in version_string.split('.')])
 
 def generate(env):
   if env.Bit('linux'):
     env.AddMethod(EnableFeatureWherePackagePresent)
     env.AddMethod(GetPackageParams)
     env.AddMethod(BuildDebianPackage)
+    env.AddMethod(GetGccVersion)
 
 
 def exists(env):

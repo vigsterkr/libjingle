@@ -693,6 +693,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
 
   // Verify capture has denoising turned on.
   webrtc::VideoCodec send_codec;
+  memset(&send_codec, 0, sizeof(send_codec));  // avoid uninitialized warning
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, send_codec));
   EXPECT_TRUE(send_codec.codecSpecific.VP8.denoisingOn);
   EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));

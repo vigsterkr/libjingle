@@ -52,18 +52,18 @@ static bool IsTypeSupported(const std::string& type) {
   return type_supported;
 }
 
-const char JsepSessionDescription::kOffer[] = "offer";
-const char JsepSessionDescription::kPrAnswer[] = "pranswer";
-const char JsepSessionDescription::kAnswer[] = "answer";
+const char SessionDescriptionInterface::kOffer[] = "offer";
+const char SessionDescriptionInterface::kPrAnswer[] = "pranswer";
+const char SessionDescriptionInterface::kAnswer[] = "answer";
 
 // TODO: Remove CreateSessionDescription(const std::string& sdp) once
 // JSEP00 is removed.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
-  return CreateSessionDescription(sdp, JsepSessionDescription::kOffer);
+  return CreateSessionDescription(JsepSessionDescription::kOffer, sdp);
 }
 
-SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp,
-                                                      const std::string& type) {
+SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
+                                                      const std::string& sdp) {
   if (!IsTypeSupported(type)) {
     return NULL;
   }

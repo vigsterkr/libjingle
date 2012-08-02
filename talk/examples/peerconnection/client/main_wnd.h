@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -75,8 +75,10 @@ class MainWindow {
   virtual void SwitchToPeerList(const Peers& peers) = 0;
   virtual void SwitchToStreamingUI() = 0;
 
-  virtual webrtc::VideoRendererWrapperInterface* local_renderer() = 0;
-  virtual webrtc::VideoRendererWrapperInterface* remote_renderer() = 0;
+  virtual void StartLocalRenderer(webrtc::VideoTrackInterface* local_video) = 0;
+  virtual void StopLocalRenderer() = 0;
+  virtual void StartRemoteRenderer(webrtc::VideoTrackInterface* remote_video) = 0;
+  virtual void StopRemoteRenderer() = 0;
 
   virtual void QueueUIThreadCallback(int msg_id, void* data) = 0;
 };
@@ -107,16 +109,19 @@ class MainWnd : public MainWindow {
                           bool is_error);
   virtual UI current_ui() { return ui_; }
 
-  virtual webrtc::VideoRendererWrapperInterface* local_renderer();
-  virtual webrtc::VideoRendererWrapperInterface* remote_renderer();
+  virtual void StartLocalRenderer(webrtc::VideoTrackInterface* local_video);
+  virtual void StopLocalRenderer();
+  virtual void StartRemoteRenderer(webrtc::VideoTrackInterface* remote_video);
+  virtual void StopRemoteRenderer();
 
   virtual void QueueUIThreadCallback(int msg_id, void* data);
 
   HWND handle() const { return wnd_; }
 
-  class VideoRenderer : public cricket::VideoRenderer {
+  class VideoRenderer : public webrtc::VideoRendererInterface {
    public:
-    VideoRenderer(HWND wnd, int width, int height);
+    VideoRenderer(HWND wnd, int width, int height,
+                  webrtc::VideoTrackInterface* track_to_render);
     virtual ~VideoRenderer();
 
     void Lock() {
@@ -127,10 +132,9 @@ class MainWnd : public MainWindow {
       ::LeaveCriticalSection(&buffer_lock_);
     }
 
-    virtual bool SetSize(int width, int height, int reserved);
-
-    // Called when a new frame is available for display.
-    virtual bool RenderFrame(const cricket::VideoFrame* frame);
+    // VideoRendererInterface implementation
+    virtual void SetSize(int width, int height);
+    virtual void RenderFrame(const cricket::VideoFrame* frame);
 
     const BITMAPINFO& bmi() const { return bmi_; }
     const uint8* image() const { return image_.get(); }
@@ -145,6 +149,7 @@ class MainWnd : public MainWindow {
     BITMAPINFO bmi_;
     talk_base::scoped_array<uint8> image_;
     CRITICAL_SECTION buffer_lock_;
+    talk_base::scoped_refptr<webrtc::VideoTrackInterface> rendered_track_;
   };
 
   // A little helper class to make sure we always to proper locking and
@@ -187,10 +192,8 @@ class MainWnd : public MainWindow {
   void HandleTabbing();
 
  private:
-  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
-      local_renderer_wrapper_;
-  talk_base::scoped_refptr<webrtc::VideoRendererWrapperInterface>
-      remote_renderer_wrapper_;
+  talk_base::scoped_ptr<VideoRenderer> local_renderer_;
+  talk_base::scoped_ptr<VideoRenderer> remote_renderer_;
   UI ui_;
   HWND wnd_;
   DWORD ui_thread_id_;

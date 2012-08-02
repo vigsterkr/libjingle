@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -42,7 +42,8 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   }
 
   PeerConnectionClient client;
-  Conductor conductor(&client, &wnd);
+  talk_base::scoped_refptr<Conductor> conductor(
+        new talk_base::RefCountedObject<Conductor>(&client, &wnd));
 
   // Main loop.
   MSG msg;
@@ -54,8 +55,8 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     }
   }
 
-  if (conductor.connection_active() || client.is_connected()) {
-    while ((conductor.connection_active() || client.is_connected()) &&
+  if (conductor->connection_active() || client.is_connected()) {
+    while ((conductor->connection_active() || client.is_connected()) &&
            (gm = ::GetMessage(&msg, NULL, 0, 0)) != 0 && gm != -1) {
       if (!wnd.PreTranslateMessage(&msg)) {
         ::TranslateMessage(&msg);

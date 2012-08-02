@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,9 +26,9 @@
  */
 
 // This file contains classes for listening on changes on MediaStreams and
-// MediaTracks and making sure appropriate action is taken.
-// Example: If a user sets a rendererer on a local video track the renderer is
-// connected to the appropriate camera.
+// MediaTracks that are connected to a certain PeerConnection.
+// Example: If a user sets a rendererer on a remote video track the renderer is
+// connected to the appropriate remote video stream.
 
 #ifndef TALK_APP_WEBRTC_MEDIASTREAMHANDLER_H_
 #define TALK_APP_WEBRTC_MEDIASTREAMHANDLER_H_
@@ -43,89 +43,133 @@
 
 namespace webrtc {
 
-// VideoTrackHandler listen to events on a VideoTrack instance and
-// executes the requested change.
-class VideoTrackHandler : public ObserverInterface {
+// BaseTrackHandler listen to events on a MediaStreamTrackInterface that are
+// connected to a certain PeerConnection.
+class BaseTrackHandler : public ObserverInterface {
  public:
-  VideoTrackHandler(VideoTrackInterface* track,
-                    MediaProviderInterface* provider);
-  virtual ~VideoTrackHandler();
+  explicit BaseTrackHandler(MediaStreamTrackInterface* track);
+  virtual ~BaseTrackHandler();
   virtual void OnChanged();
 
  protected:
-  virtual void OnRendererChanged() = 0;
   virtual void OnStateChanged() = 0;
   virtual void OnEnabledChanged() = 0;
 
-  MediaProviderInterface* provider_;
-  VideoTrackInterface* video_track_;
-
  private:
+  MediaStreamTrackInterface* track_;
   MediaStreamTrackInterface::TrackState state_;
   bool enabled_;
-  talk_base::scoped_refptr<VideoRendererWrapperInterface> renderer_;
 };
 
-class LocalVideoTrackHandler : public VideoTrackHandler {
+// LocalAudioTrackHandler listen to events on a local AudioTrack instance
+// connected to a PeerConnection and orders the |provider| to executes the
+// requested change.
+class LocalAudioTrackHandler : public BaseTrackHandler {
+ public:
+  LocalAudioTrackHandler(AudioTrackInterface* track,
+                         AudioProviderInterface* provider);
+  virtual ~LocalAudioTrackHandler();
+
+ protected:
+  virtual void OnStateChanged();
+  virtual void OnEnabledChanged();
+
+ private:
+  talk_base::scoped_refptr<AudioTrackInterface> audio_track_;
+  AudioProviderInterface* provider_;
+};
+
+// RemoteAudioTrackHandler listen to events on a remote AudioTrack instance
+// connected to a PeerConnection and orders the |provider| to executes the
+// requested change.
+class RemoteAudioTrackHandler : public BaseTrackHandler {
+ public:
+  RemoteAudioTrackHandler(AudioTrackInterface* track,
+                          AudioProviderInterface* provider);
+  virtual ~RemoteAudioTrackHandler();
+
+ protected:
+  virtual void OnStateChanged();
+  virtual void OnEnabledChanged();
+
+ private:
+  talk_base::scoped_refptr<AudioTrackInterface> audio_track_;
+  AudioProviderInterface* provider_;
+};
+
+// LocalVideoTrackHandler listen to events on a local VideoTrack instance
+// connected to a PeerConnection and orders the |provider| to executes the
+// requested change.
+class LocalVideoTrackHandler : public BaseTrackHandler {
  public:
   LocalVideoTrackHandler(LocalVideoTrackInterface* track,
-                         MediaProviderInterface* provider);
+                         VideoProviderInterface* provider);
   virtual ~LocalVideoTrackHandler();
 
  protected:
-  virtual void OnRendererChanged();
   virtual void OnStateChanged();
   virtual void OnEnabledChanged();
 
  private:
   talk_base::scoped_refptr<LocalVideoTrackInterface> local_video_track_;
+  VideoProviderInterface* provider_;
 };
 
-class RemoteVideoTrackHandler : public VideoTrackHandler {
+// RemoteVideoTrackHandler listen to events on a remote VideoTrack instance
+// connected to a PeerConnection and orders the |provider| to executes the
+// requested change.
+class RemoteVideoTrackHandler : public BaseTrackHandler {
  public:
   RemoteVideoTrackHandler(VideoTrackInterface* track,
-                          MediaProviderInterface* provider);
+                          VideoProviderInterface* provider);
   virtual ~RemoteVideoTrackHandler();
 
  protected:
-  virtual void OnRendererChanged();
   virtual void OnStateChanged();
   virtual void OnEnabledChanged();
 
  private:
   talk_base::scoped_refptr<VideoTrackInterface> remote_video_track_;
+  VideoProviderInterface* provider_;
 };
 
 class MediaStreamHandler : public ObserverInterface {
  public:
   MediaStreamHandler(MediaStreamInterface* stream,
-                     MediaProviderInterface* provider);
+                     AudioProviderInterface* audio_provider,
+                     VideoProviderInterface* video_provider);
   ~MediaStreamHandler();
   MediaStreamInterface* stream();
   virtual void OnChanged();
 
  protected:
   talk_base::scoped_refptr<MediaStreamInterface> stream_;
-  MediaProviderInterface* provider_;
-  typedef std::vector<VideoTrackHandler*> VideoTrackHandlers;
-  VideoTrackHandlers video_handlers_;
+  AudioProviderInterface* audio_provider_;
+  VideoProviderInterface* video_provider_;
+  typedef std::vector<BaseTrackHandler*> TrackHandlers;
+  TrackHandlers track_handlers_;
 };
 
 class LocalMediaStreamHandler : public MediaStreamHandler {
  public:
   LocalMediaStreamHandler(MediaStreamInterface* stream,
-                          MediaProviderInterface* provider);
+                          AudioProviderInterface* audio_provider,
+                          VideoProviderInterface* video_provider);
+  ~LocalMediaStreamHandler();
 };
 
 class RemoteMediaStreamHandler : public MediaStreamHandler {
  public:
   RemoteMediaStreamHandler(MediaStreamInterface* stream,
-                           MediaProviderInterface* provider);
+                           AudioProviderInterface* audio_provider,
+                           VideoProviderInterface* video_provider);
+  ~RemoteMediaStreamHandler();
 };
 
 class MediaStreamHandlers {
  public:
-  explicit MediaStreamHandlers(MediaProviderInterface* provider);
+  MediaStreamHandlers(AudioProviderInterface* audio_provider,
+                      VideoProviderInterface* video_provider);
   ~MediaStreamHandlers();
   void AddRemoteStream(MediaStreamInterface* stream);
   void RemoveRemoteStream(MediaStreamInterface* stream);
@@ -135,7 +179,8 @@ class MediaStreamHandlers {
   typedef std::list<MediaStreamHandler*> StreamHandlerList;
   StreamHandlerList local_streams_handlers_;
   StreamHandlerList remote_streams_handlers_;
-  MediaProviderInterface* provider_;
+  AudioProviderInterface* audio_provider_;
+  VideoProviderInterface* video_provider_;
 };
 
 }  // namespace webrtc

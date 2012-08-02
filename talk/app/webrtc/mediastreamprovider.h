@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,19 +37,35 @@ class VideoRenderer;
 
 namespace webrtc {
 
-// Interface for setting media devices on a certain MediaTrack.
-// This interface is called by classes in mediastreamhandler.h to
-// set new devices.
-class MediaProviderInterface {
+// This interface is called by AudioTrackHandler classes in mediastreamhandler.h
+// to change the settings of an audio track connected to certain PeerConnection.
+class AudioProviderInterface {
+ public:
+  // Enable/disable the audio playout of a remote audio track with name |name|.
+  virtual void SetAudioPlayout(const std::string& name, bool enable) = 0;
+  // Enable/disable sending audio on the local audio track with name |name|.
+  virtual void SetAudioSend(const std::string& name, bool enable) = 0;
+
+ protected:
+  virtual ~AudioProviderInterface() {}
+};
+
+// This interface is called by VideoTrackHandler classes in mediastreamhandler.h
+// to change the settings of a video track connected to a certain
+// PeerConnection.
+class VideoProviderInterface {
  public:
   virtual bool SetCaptureDevice(const std::string& name,
                                 cricket::VideoCapturer* camera) = 0;
-  virtual void SetLocalRenderer(const std::string& name,
-                                cricket::VideoRenderer* renderer) = 0;
-  virtual void SetRemoteRenderer(const std::string& name,
-                                 cricket::VideoRenderer* renderer) = 0;
+  // Enable/disable the video playout of a remote video track with name |name|.
+  virtual void SetVideoPlayout(const std::string& name,
+                               bool enable,
+                               cricket::VideoRenderer* renderer) = 0;
+  // Enable sending video on the local video track with name |name|.
+  virtual void SetVideoSend(const std::string& name, bool enable) = 0;
+
  protected:
-  virtual ~MediaProviderInterface() {}
+  virtual ~VideoProviderInterface() {}
 };
 
 }  // namespace webrtc

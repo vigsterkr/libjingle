@@ -120,7 +120,6 @@ class PeerConnectionTestClientBase
     stream->AddTrack(video_track_);
 
     EXPECT_TRUE(peer_connection_->AddStream(stream, NULL));
-    peer_connection_->CommitStreamChanges();
   }
 
   void StartCapturing() {
@@ -138,9 +137,6 @@ class PeerConnectionTestClientBase
     if (fake_video_capture_module_ != NULL) {
       fake_video_capture_module_->StopCapturing();
     }
-    // TODO: investigate why calling Close() triggers a crash when
-    // deleting the PeerConnection.
-    // peer_connection_->Close();
   }
 
   void set_signaling_message_receiver(
@@ -326,53 +322,6 @@ class PeerConnectionTestClientBase
 
   // For remote peer communication.
   MessageReceiver* signaling_message_receiver_;
-};
-
-class RoapTestClient
-    : public PeerConnectionTestClientBase<RoapMessageReceiver> {
- public:
-  static RoapTestClient* CreateClient(int id) {
-    RoapTestClient* client(new RoapTestClient(id));
-    if (!client->Init()) {
-      delete client;
-      return NULL;
-    }
-    return client;
-  }
-
-  ~RoapTestClient() {}
-
-  // Roap implementation don't need to do anything to start.
-  virtual void StartSession() {}
-
-  // Implements PeerConnectionObserver functions needed by ROAP.
-  virtual void OnSignalingMessage(const std::string& msg) {
-    if (signaling_message_receiver() == NULL) {
-      // Remote party may be deleted.
-      return;
-    }
-    signaling_message_receiver()->ReceiveMessage(msg);
-  }
-
-  // SignalingMessageReceiver callback.
-  virtual void ReceiveMessage(const std::string& msg) {
-    peer_connection()->ProcessSignalingMessage(msg);
-    if (peer_connection()->local_streams()->count() == 0) {
-      // If we are not sending any streams ourselves it is time to add some.
-      AddMediaStream();
-    }
-  }
-
- protected:
-  virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection() {
-    const std::string config = "STUN stun.l.google.com:19302";
-    return peer_connection_factory()->CreateRoapPeerConnection(config, this);
-  }
-
- private:
-  explicit RoapTestClient(int id)
-      : PeerConnectionTestClientBase<RoapMessageReceiver>(id) {}
 };
 
 class Jsep00TestClient
@@ -602,7 +551,7 @@ class JsepTestClient
       AddMediaStream();
     }
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription(msg, "offer"));
+           webrtc::CreateSessionDescription("offer", msg));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
     talk_base::scoped_ptr<SessionDescriptionInterface> answer;
     EXPECT_TRUE(DoCreateAnswer(answer.use()));
@@ -617,7 +566,7 @@ class JsepTestClient
 
   void HandleIncomingAnswer(const std::string& msg) {
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription(msg, "answer"));
+           webrtc::CreateSessionDescription("answer", msg));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
   }
 
@@ -763,14 +712,8 @@ class P2PTestConductor : public testing::Test {
   talk_base::scoped_ptr<SignalingClass> receiving_client_;
 };
 
-typedef P2PTestConductor<RoapTestClient> RoapPeerConnectionP2PTestClient;
 typedef P2PTestConductor<Jsep00TestClient> Jsep00PeerConnectionP2PTestClient;
 typedef P2PTestConductor<JsepTestClient> JsepPeerConnectionP2PTestClient;
-
-// This test sets up a ROAP call between two parties
-TEST_F(RoapPeerConnectionP2PTestClient, LocalP2PTest) {
-  LocalP2PTest();
-}
 
 // This test sets up a Jsep call with deprecated jsep apis between two parties.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {

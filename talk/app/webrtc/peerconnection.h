@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,17 +28,14 @@
 #ifndef TALK_APP_WEBRTC_PEERCONNECTION_H_
 #define TALK_APP_WEBRTC_PEERCONNECTION_H_
 
-#include <map>
 #include <string>
 
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/peerconnectionfactory.h"
-#include "talk/app/webrtc/roapsignaling.h"
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/p2p/client/httpportallocator.h"
 
 namespace webrtc {
 class MediaStreamHandlers;
@@ -49,46 +46,29 @@ typedef std::vector<PortAllocatorFactoryInterface::TurnConfiguration>
     TurnConfigurations;
 
 // PeerConnectionImpl implements the PeerConnection interface.
-// It uses RoapSignaling and WebRtcSession to implement
+// It uses MediaStreamSignaling and WebRtcSession to implement
 // the PeerConnection functionality.
 class PeerConnection : public PeerConnectionInterface,
                        public RemoteMediaStreamObserver,
-                       public talk_base::MessageHandler,
                        public sigslot::has_slots<> {
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
 
-  bool Initialize(bool use_roap,
-                  const std::string& configuration,
+
+  bool Initialize(const std::string& configuration,  // Deprecated JSEP00
                   PeerConnectionObserver* observer);
   bool Initialize(const JsepInterface::IceServers& configuration,
                   const MediaConstraintsInterface* constraints,
                   PeerConnectionObserver* observer);
-
-  virtual ~PeerConnection();
-
-  virtual void ProcessSignalingMessage(const std::string& msg);
-  virtual bool Send(const std::string& msg) {
-    // TODO: implement
-    ASSERT(false);
-    return false;
-  }
   virtual talk_base::scoped_refptr<StreamCollectionInterface> local_streams();
   virtual talk_base::scoped_refptr<StreamCollectionInterface> remote_streams();
   virtual void AddStream(LocalMediaStreamInterface* stream);
   virtual bool AddStream(MediaStreamInterface* local_stream,
                          const MediaConstraintsInterface* constraints);
-  virtual void RemoveStream(LocalMediaStreamInterface* stream);
   virtual void RemoveStream(MediaStreamInterface* local_stream);
-  virtual bool RemoveStream(const std::string& label);
-  virtual void CommitStreamChanges();
-  virtual void Close();
-  virtual ReadyState ready_state();
-  virtual SdpState sdp_state();
-  virtual IceState ice_state();
 
-  // TODO: Implement PeerconnectionProxy to Send all the incoming
-  // calls to the signaling thread.
+  virtual ReadyState ready_state();
+  virtual IceState ice_state();
 
   // TODO: Remove deprecated Jsep functions.
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
@@ -118,27 +98,19 @@ class PeerConnection : public PeerConnectionInterface,
                          const MediaConstraintsInterface* constraints);
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate);
 
+ protected:
+  virtual ~PeerConnection();
  private:
-  // Implement talk_base::MessageHandler.
-  void OnMessage(talk_base::Message* msg);
-
-  // Signals from RoapSignaling.
-  void OnNewPeerConnectionMessage(const std::string& message);
-  void OnSignalingStateChange(RoapSignaling::State state);
-
-  // Implements RemoteMediaStreamObserver.
+    // Implements RemoteMediaStreamObserver.
   virtual void OnAddStream(MediaStreamInterface* stream);
   virtual void OnRemoveStream(MediaStreamInterface* stream);
 
   // Signals from WebRtcSession.
   void OnSessionStateChange(cricket::BaseSession* session,
                             cricket::BaseSession::State state);
-
   void ChangeReadyState(PeerConnectionInterface::ReadyState ready_state);
-  void ChangeSdpState(PeerConnectionInterface::SdpState sdp_state);
-  void Terminate_s();
 
-  bool DoInitialize(bool use_roap, const StunConfigurations& stun_config,
+  bool DoInitialize(const StunConfigurations& stun_config,
                     const TurnConfigurations& turn_config,
                     PeerConnectionObserver* observer);
 
@@ -155,14 +127,12 @@ class PeerConnection : public PeerConnectionInterface,
   talk_base::scoped_refptr<PeerConnectionFactory> factory_;
   PeerConnectionObserver* observer_;
   ReadyState ready_state_;
-  SdpState sdp_state_;
   // TODO: Implement ice_state.
   IceState ice_state_;
   talk_base::scoped_refptr<StreamCollection> local_media_streams_;
 
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;
   talk_base::scoped_ptr<WebRtcSession> session_;
-  talk_base::scoped_ptr<RoapSignaling> roap_signaling_;
   talk_base::scoped_ptr<MediaStreamSignaling> mediastream_signaling_;
   talk_base::scoped_ptr<MediaStreamHandlers> stream_handler_;
 };

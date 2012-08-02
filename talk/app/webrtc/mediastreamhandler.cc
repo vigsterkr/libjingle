@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -27,125 +27,134 @@
 
 #include "talk/app/webrtc/mediastreamhandler.h"
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_capture/main/interface/video_capture.h"
-#else
-#include "third_party/webrtc/files/include/video_capture.h"
-#endif
-
 namespace webrtc {
 
-VideoTrackHandler::VideoTrackHandler(VideoTrackInterface* track,
-                                     MediaProviderInterface* provider)
-    : provider_(provider),
-      video_track_(track),
+BaseTrackHandler::BaseTrackHandler(MediaStreamTrackInterface* track)
+    : track_(track),
       state_(track->state()),
-      enabled_(track->enabled()),
-      renderer_(track->GetRenderer()) {
-  video_track_->RegisterObserver(this);
+      enabled_(track->enabled()) {
+  track_->RegisterObserver(this);
 }
 
-VideoTrackHandler::~VideoTrackHandler() {
-  video_track_->UnregisterObserver(this);
+BaseTrackHandler::~BaseTrackHandler() {
+  track_->UnregisterObserver(this);
 }
 
-void VideoTrackHandler::OnChanged() {
-  if (state_ != video_track_->state()) {
-    state_ = video_track_->state();
+void BaseTrackHandler::OnChanged() {
+  if (state_ != track_->state()) {
+    state_ = track_->state();
     OnStateChanged();
   }
-  if (renderer_.get() != video_track_->GetRenderer()) {
-    renderer_ = video_track_->GetRenderer();
-    OnRendererChanged();
-  }
-  if (enabled_ != video_track_->enabled()) {
-    enabled_ = video_track_->enabled();
+  if (enabled_ != track_->enabled()) {
+    enabled_ = track_->enabled();
     OnEnabledChanged();
   }
 }
 
+LocalAudioTrackHandler::LocalAudioTrackHandler(
+    AudioTrackInterface* track,
+    AudioProviderInterface* provider)
+    : BaseTrackHandler(track),
+      audio_track_(track),
+      provider_(provider) {
+  OnEnabledChanged();
+}
+
+LocalAudioTrackHandler::~LocalAudioTrackHandler() {
+}
+
+void LocalAudioTrackHandler::OnStateChanged() {
+  // TODO: What should happen when the state change?
+}
+
+void LocalAudioTrackHandler::OnEnabledChanged() {
+  provider_->SetAudioSend(audio_track_->label(), audio_track_->enabled());
+}
+
+RemoteAudioTrackHandler::RemoteAudioTrackHandler(
+    AudioTrackInterface* track,
+    AudioProviderInterface* provider)
+    : BaseTrackHandler(track),
+      audio_track_(track),
+      provider_(provider) {
+  OnEnabledChanged();
+}
+
+RemoteAudioTrackHandler::~RemoteAudioTrackHandler() {
+}
+
+void RemoteAudioTrackHandler::OnStateChanged() {
+  // TODO: What should happen when the state change?
+}
+
+void RemoteAudioTrackHandler::OnEnabledChanged() {
+  provider_->SetAudioPlayout(audio_track_->label(), audio_track_->enabled());
+}
+
 LocalVideoTrackHandler::LocalVideoTrackHandler(
     LocalVideoTrackInterface* track,
-    MediaProviderInterface* provider)
-    : VideoTrackHandler(track, provider),
-      local_video_track_(track) {
+    VideoProviderInterface* provider)
+    : BaseTrackHandler(track),
+      local_video_track_(track),
+      provider_(provider) {
   provider_->SetCaptureDevice(local_video_track_->label(),
                               local_video_track_->GetVideoCapture());
-  VideoRendererWrapperInterface* renderer = video_track_->GetRenderer();
-  if (renderer)
-    provider_->SetLocalRenderer(video_track_->label(), renderer->renderer());
+  OnEnabledChanged();
 }
 
 LocalVideoTrackHandler::~LocalVideoTrackHandler() {
-  // cricket::VideoRenderer and cricket::VideoCapturer is owned and deleted by
+  // cricket::VideoCapturer is owned and deleted by
   // the track. It must be removed from the media stream provider since it is
   // possible that the tracks reference count is set to zero when
   // local_video_track_ falls out of scope.
-  provider_->SetLocalRenderer(local_video_track_->label(), NULL);
   provider_->SetCaptureDevice(local_video_track_->label(), NULL);
 }
 
-void LocalVideoTrackHandler::OnRendererChanged() {
-  VideoRendererWrapperInterface* renderer = video_track_->GetRenderer();
-  if (renderer)
-    provider_->SetLocalRenderer(video_track_->label(), renderer->renderer());
-  else
-    provider_->SetLocalRenderer(video_track_->label(), NULL);
-}
-
 void LocalVideoTrackHandler::OnStateChanged() {
+  // TODO: What should happen when the state change?
 }
 
 void LocalVideoTrackHandler::OnEnabledChanged() {
-  // TODO What should happen when enabled is changed?
+  provider_->SetVideoSend(local_video_track_->label(),
+                          local_video_track_->enabled());
 }
 
 RemoteVideoTrackHandler::RemoteVideoTrackHandler(
     VideoTrackInterface* track,
-    MediaProviderInterface* provider)
-    : VideoTrackHandler(track, provider),
-      remote_video_track_(track) {
-  if (video_track_->enabled()) {
-    provider_->SetRemoteRenderer(video_track_->label(),
-                                 video_track_->FrameInput());
-  }
+    VideoProviderInterface* provider)
+    : BaseTrackHandler(track),
+      remote_video_track_(track),
+      provider_(provider) {
+  OnEnabledChanged();
 }
 
 RemoteVideoTrackHandler::~RemoteVideoTrackHandler() {
   // Since cricket::VideoRenderer is not reference counted
   // we need to remove the renderer before we are deleted.
-  provider_->SetRemoteRenderer(video_track_->label(), NULL);
-}
-
-
-void RemoteVideoTrackHandler::OnRendererChanged() {
-  VideoRendererWrapperInterface* renderer = video_track_->GetRenderer();
-  if (renderer)
-    provider_->SetRemoteRenderer(video_track_->label(), renderer->renderer());
-  else
-    provider_->SetRemoteRenderer(video_track_->label(), NULL);
+  provider_->SetVideoPlayout(remote_video_track_->label(), false, NULL);
 }
 
 void RemoteVideoTrackHandler::OnStateChanged() {
+  // TODO: What should happen when the state change?
 }
 
 void RemoteVideoTrackHandler::OnEnabledChanged() {
-  cricket::VideoRenderer* renderer = NULL;
-  if (video_track_->enabled()) {
-    renderer = video_track_->FrameInput();
-  }
-  provider_->SetRemoteRenderer(video_track_->label(), renderer);
+  provider_->SetVideoPlayout(remote_video_track_->label(),
+                             remote_video_track_->enabled(),
+                             remote_video_track_->FrameInput());
 }
 
 MediaStreamHandler::MediaStreamHandler(MediaStreamInterface* stream,
-                                       MediaProviderInterface* provider)
+                                       AudioProviderInterface* audio_provider,
+                                       VideoProviderInterface* video_provider)
     : stream_(stream),
-      provider_(provider) {
+      audio_provider_(audio_provider),
+      video_provider_(video_provider) {
 }
 
 MediaStreamHandler::~MediaStreamHandler() {
-  for (VideoTrackHandlers::iterator it = video_handlers_.begin();
-       it != video_handlers_.end(); ++it) {
+  for (TrackHandlers::iterator it = track_handlers_.begin();
+       it != track_handlers_.end(); ++it) {
     delete *it;
   }
 }
@@ -155,40 +164,67 @@ MediaStreamInterface* MediaStreamHandler::stream() {
 }
 
 void MediaStreamHandler::OnChanged() {
-  // TODO: Implement state change and enabled changed.
 }
 
 
 LocalMediaStreamHandler::LocalMediaStreamHandler(
     MediaStreamInterface* stream,
-    MediaProviderInterface* provider)
-    : MediaStreamHandler(stream, provider) {
-  VideoTracks* tracklist(stream->video_tracks());
-
-  for (size_t j = 0; j < tracklist->count(); ++j) {
-    LocalVideoTrackInterface* track =
-        static_cast<LocalVideoTrackInterface*>(tracklist->at(j));
-    VideoTrackHandler* handler(new LocalVideoTrackHandler(track, provider));
-    video_handlers_.push_back(handler);
+    AudioProviderInterface* audio_provider,
+    VideoProviderInterface* video_provider)
+    : MediaStreamHandler(stream, audio_provider, video_provider) {
+  // Create an AudioTrack handler for all audio tracks in the MediaStream.
+  AudioTracks* audio_tracklist(stream->audio_tracks());
+  for (size_t j = 0; j < audio_tracklist->count(); ++j) {
+    BaseTrackHandler* handler(new LocalAudioTrackHandler(audio_tracklist->at(j),
+                                                         audio_provider));
+    track_handlers_.push_back(handler);
   }
+  // Create a VideoTrack handler for all video tracks in the MediaStream.
+  VideoTracks* video_tracklist(stream->video_tracks());
+  for (size_t j = 0; j < video_tracklist->count(); ++j) {
+    LocalVideoTrackInterface* track =
+        static_cast<LocalVideoTrackInterface*>(video_tracklist->at(j));
+    BaseTrackHandler* handler(new LocalVideoTrackHandler(track,
+                                                         video_provider));
+    track_handlers_.push_back(handler);
+  }
+}
+
+LocalMediaStreamHandler::~LocalMediaStreamHandler() {
 }
 
 RemoteMediaStreamHandler::RemoteMediaStreamHandler(
     MediaStreamInterface* stream,
-    MediaProviderInterface* provider)
-    : MediaStreamHandler(stream, provider) {
-  VideoTracks* tracklist(stream->video_tracks());
+    AudioProviderInterface* audio_provider,
+    VideoProviderInterface* video_provider)
+    : MediaStreamHandler(stream, audio_provider, video_provider) {
+  // Create an AudioTrack handler for all audio tracks  in the MediaStream.
+  AudioTracks* audio_tracklist(stream->audio_tracks());
+  for (size_t j = 0; j < audio_tracklist->count(); ++j) {
+    BaseTrackHandler* handler(
+        new RemoteAudioTrackHandler(audio_tracklist->at(j), audio_provider));
+    track_handlers_.push_back(handler);
+  }
 
+  // Create a VideoTrack handler for all video tracks  in the MediaStream.
+  VideoTracks* tracklist(stream->video_tracks());
   for (size_t j = 0; j < tracklist->count(); ++j) {
     VideoTrackInterface* track =
         static_cast<VideoTrackInterface*>(tracklist->at(j));
-    VideoTrackHandler* handler(new RemoteVideoTrackHandler(track, provider));
-    video_handlers_.push_back(handler);
+    BaseTrackHandler* handler(
+        new RemoteVideoTrackHandler(track, video_provider));
+    track_handlers_.push_back(handler);
   }
 }
 
-MediaStreamHandlers::MediaStreamHandlers(MediaProviderInterface* provider)
-    : provider_(provider) {
+RemoteMediaStreamHandler::~RemoteMediaStreamHandler() {
+}
+
+MediaStreamHandlers::MediaStreamHandlers(
+    AudioProviderInterface* audio_provider,
+    VideoProviderInterface* video_provider)
+    : audio_provider_(audio_provider),
+      video_provider_(video_provider) {
 }
 
 MediaStreamHandlers::~MediaStreamHandlers() {
@@ -203,8 +239,8 @@ MediaStreamHandlers::~MediaStreamHandlers() {
 }
 
 void MediaStreamHandlers::AddRemoteStream(MediaStreamInterface* stream) {
-  RemoteMediaStreamHandler* handler = new RemoteMediaStreamHandler(stream,
-                                                                   provider_);
+  RemoteMediaStreamHandler* handler =
+      new RemoteMediaStreamHandler(stream, audio_provider_, video_provider_);
   remote_streams_handlers_.push_back(handler);
 }
 
@@ -251,8 +287,8 @@ void MediaStreamHandlers::CommitLocalStreams(
         break;
     }
     if (it == local_streams_handlers_.end()) {
-      LocalMediaStreamHandler* handler = new LocalMediaStreamHandler(
-          stream, provider_);
+      LocalMediaStreamHandler* handler =
+          new LocalMediaStreamHandler(stream, audio_provider_, video_provider_);
       local_streams_handlers_.push_back(handler);
     }
   }

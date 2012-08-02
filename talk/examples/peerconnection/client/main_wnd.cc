@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -161,10 +161,6 @@ void MainWnd::SwitchToConnectUI() {
 }
 
 void MainWnd::SwitchToPeerList(const Peers& peers) {
-  // Clean up buffers from a potential previous session.
-  local_renderer_wrapper_ = NULL;
-  remote_renderer_wrapper_ = NULL;
-
   LayoutConnectUI(false);
 
   ::SendMessage(listbox_, LB_RESETCONTENT, 0, 0);
@@ -193,18 +189,21 @@ void MainWnd::MessageBox(const char* caption, const char* text, bool is_error) {
   ::MessageBoxA(handle(), text, caption, flags);
 }
 
-webrtc::VideoRendererWrapperInterface* MainWnd::local_renderer() {
-  if (!local_renderer_wrapper_.get())
-    local_renderer_wrapper_  =
-        webrtc::CreateVideoRenderer(new VideoRenderer(handle(), 1, 1));
-  return local_renderer_wrapper_.get();
+
+void MainWnd::StartLocalRenderer(webrtc::VideoTrackInterface* local_video) {
+  local_renderer_.reset(new VideoRenderer(handle(), 1, 1, local_video));
 }
 
-webrtc::VideoRendererWrapperInterface* MainWnd::remote_renderer() {
-  if (!remote_renderer_wrapper_.get())
-    remote_renderer_wrapper_ =
-        webrtc::CreateVideoRenderer(new VideoRenderer(handle(), 1, 1));
-  return remote_renderer_wrapper_.get();
+void MainWnd::StopLocalRenderer() {
+  local_renderer_.reset();
+}
+
+void MainWnd::StartRemoteRenderer(webrtc::VideoTrackInterface* remote_video) {
+  remote_renderer_.reset(new VideoRenderer(handle(), 1, 1, remote_video));
+}
+
+void MainWnd::StopRemoteRenderer() {
+  remote_renderer_.reset();
 }
 
 void MainWnd::QueueUIThreadCallback(int msg_id, void* data) {
@@ -219,12 +218,8 @@ void MainWnd::OnPaint() {
   RECT rc;
   ::GetClientRect(handle(), &rc);
 
-  webrtc::VideoRendererWrapperInterface* renderer_wrapper = local_renderer();
-  VideoRenderer* local_renderer = renderer_wrapper ?
-      static_cast<VideoRenderer*>(renderer_wrapper->renderer()) : NULL;
-  renderer_wrapper = remote_renderer();
-  VideoRenderer* remote_renderer = renderer_wrapper ?
-      static_cast<VideoRenderer*>(renderer_wrapper->renderer()) : NULL;
+  VideoRenderer* local_renderer = local_renderer_.get();
+  VideoRenderer* remote_renderer = remote_renderer_.get();
   if (ui_ == STREAMING && remote_renderer && local_renderer) {
     AutoLock<VideoRenderer> local_lock(local_renderer);
     AutoLock<VideoRenderer> remote_lock(remote_renderer);
@@ -558,8 +553,10 @@ void MainWnd::HandleTabbing() {
 // MainWnd::VideoRenderer
 //
 
-MainWnd::VideoRenderer::VideoRenderer(HWND wnd, int width, int height)
-    : wnd_(wnd) {
+MainWnd::VideoRenderer::VideoRenderer(
+    HWND wnd, int width, int height,
+    webrtc::VideoTrackInterface* track_to_render)
+    : wnd_(wnd), rendered_track_(track_to_render) {
   ::InitializeCriticalSection(&buffer_lock_);
   ZeroMemory(&bmi_, sizeof(bmi_));
   bmi_.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -570,13 +567,15 @@ MainWnd::VideoRenderer::VideoRenderer(HWND wnd, int width, int height)
   bmi_.bmiHeader.biHeight = -height;
   bmi_.bmiHeader.biSizeImage = width * height *
                               (bmi_.bmiHeader.biBitCount >> 3);
+  rendered_track_->AddRenderer(this);
 }
 
 MainWnd::VideoRenderer::~VideoRenderer() {
+  rendered_track_->RemoveRenderer(this);
   ::DeleteCriticalSection(&buffer_lock_);
 }
 
-bool MainWnd::VideoRenderer::SetSize(int width, int height, int reserved) {
+void MainWnd::VideoRenderer::SetSize(int width, int height) {
   AutoLock<VideoRenderer> lock(this);
 
   bmi_.bmiHeader.biWidth = width;
@@ -584,13 +583,11 @@ bool MainWnd::VideoRenderer::SetSize(int width, int height, int reserved) {
   bmi_.bmiHeader.biSizeImage = width * height *
                                (bmi_.bmiHeader.biBitCount >> 3);
   image_.reset(new uint8[bmi_.bmiHeader.biSizeImage]);
-
-  return true;
 }
 
-bool MainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
+void MainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
   if (!frame)
-    return false;
+    return;
 
   {
     AutoLock<VideoRenderer> lock(this);
@@ -600,10 +597,7 @@ bool MainWnd::VideoRenderer::RenderFrame(const cricket::VideoFrame* frame) {
                               image_.get(),
                               bmi_.bmiHeader.biSizeImage,
                               bmi_.bmiHeader.biWidth *
-                                bmi_.bmiHeader.biBitCount / 8);
+                              bmi_.bmiHeader.biBitCount / 8);
   }
-
   InvalidateRect(wnd_, NULL, TRUE);
-
-  return true;
 }

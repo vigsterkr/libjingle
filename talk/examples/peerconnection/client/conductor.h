@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,7 @@
 #include "talk/examples/peerconnection/client/main_wnd.h"
 #include "talk/examples/peerconnection/client/peer_connection_client.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/base/scoped_ptr.h"
 
 namespace webrtc {
@@ -50,6 +50,7 @@ class VideoRenderer;
 
 class Conductor
   : public webrtc::PeerConnectionObserver,
+    public webrtc::CreateSessionDescriptionObserver,
     public PeerConnectionClientObserver,
     public MainWndCallback {
  public:
@@ -57,32 +58,29 @@ class Conductor
     MEDIA_CHANNELS_INITIALIZED = 1,
     PEER_CONNECTION_CLOSED,
     SEND_MESSAGE_TO_PEER,
-    PEER_CONNECTION_ADDSTREAMS,
     PEER_CONNECTION_ERROR,
     NEW_STREAM_ADDED,
     STREAM_REMOVED,
   };
 
   Conductor(PeerConnectionClient* client, MainWindow* main_wnd);
-  ~Conductor();
 
   bool connection_active() const;
 
   virtual void Close();
 
  protected:
+  ~Conductor();
   bool InitializePeerConnection();
   void DeletePeerConnection();
   void EnsureStreamingUI();
   void AddStreams();
-  talk_base::scoped_refptr<webrtc::VideoCaptureModule> OpenVideoCaptureDevice();
+  cricket::VideoCapturer* OpenVideoCaptureDevice();
 
   //
   // PeerConnectionObserver implementation.
   //
   virtual void OnError();
-  virtual void OnMessage(const std::string& msg) {}
-  virtual void OnSignalingMessage(const std::string& msg);
   virtual void OnStateChange(
       webrtc::PeerConnectionObserver::StateType state_changed) {}
   virtual void OnAddStream(webrtc::MediaStreamInterface* stream);
@@ -90,9 +88,6 @@ class Conductor
   virtual void OnRenegotiationNeeded() {}
   virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate);
-  virtual void OnIceComplete();
-
-
 
   //
   // PeerConnectionClientObserver implementation.
@@ -126,7 +121,14 @@ class Conductor
 
   virtual void UIThreadCallback(int msg_id, void* data);
 
+  // CreateSessionDescriptionObserver implementation.
+  virtual void OnSuccess(webrtc::SessionDescriptionInterface* desc);
+  virtual void OnFailure(const std::string& error);
+
  protected:
+  // Send a message to the remote peer.
+  void SendMessage(const std::string& json_object);
+
   int peer_id_;
   talk_base::scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
   talk_base::scoped_refptr<webrtc::PeerConnectionFactoryInterface>

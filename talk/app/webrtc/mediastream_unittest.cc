@@ -192,14 +192,6 @@ class MockLocalVideoTrack
         : MockMediaStreamTrack<LocalVideoTrackInterface>(implementation,
                                                          signaling_thread) {
     }
-  virtual void SetRenderer(webrtc::VideoRendererWrapperInterface* renderer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    track_impl_->SetRenderer(renderer);
-  }
-  virtual VideoRendererWrapperInterface* GetRenderer() {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->GetRenderer();
-  }
   virtual cricket::VideoCapturer* GetVideoCapture() {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
     return track_impl_->GetVideoCapture();
@@ -374,13 +366,6 @@ TEST_F(MediaStreamTest, ChangeVideoTrack) {
       .Times(Exactly(1));
   SetTrackState(video_track_, MediaStreamTrackInterface::kLive);
   EXPECT_EQ(MediaStreamTrackInterface::kLive, video_track_->state());
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  scoped_refptr<VideoRendererWrapperInterface> renderer(
-      CreateVideoRenderer(NULL));
-  video_track_->SetRenderer(renderer.get());
-  EXPECT_TRUE(renderer.get() == video_track_->GetRenderer());
 }
 
 TEST_F(MediaStreamTest, ChangeAudioTrack) {

@@ -34,7 +34,7 @@
 
 namespace talk_base {
 
-#ifdef LINUX
+#ifdef POSIX
 typedef void *DllHandle;
 #else
 #error Not implemented for this platform
@@ -42,9 +42,9 @@ typedef void *DllHandle;
 
 // This is the base class for "symbol table" classes to simplify the dynamic
 // loading of symbols from DLLs. Currently the implementation only supports
-// Linux and pure C symbols (or extern "C" symbols that wrap C++ functions).
-// Sub-classes for specific DLLs are generated via the "supermacro" files
-// latebindingsymboltable.h.def and latebindingsymboltable.cc.def. See
+// Linux and OS X, and pure C symbols (or extern "C" symbols that wrap C++
+// functions).  Sub-classes for specific DLLs are generated via the "supermacro"
+// files latebindingsymboltable.h.def and latebindingsymboltable.cc.def. See
 // talk/sound/pulseaudiosymboltable.(h|cc) for an example.
 class LateBindingSymbolTable {
  public:

@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -57,7 +57,7 @@ std::string GetEnvVarOrDefault(const char* env_var_name,
 }
 
 std::string GetPeerConnectionString() {
-  return GetEnvVarOrDefault("WEBRTC_CONNECT", "STUN stun.l.google.com:19302");
+  return GetEnvVarOrDefault("WEBRTC_CONNECT", "stun:stun.l.google.com:19302");
 }
 
 std::string GetDefaultServerName() {

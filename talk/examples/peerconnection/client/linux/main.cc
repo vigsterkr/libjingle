@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,7 +39,7 @@ class CustomSocketServer : public talk_base::PhysicalSocketServer {
   CustomSocketServer(talk_base::Thread* thread, GtkMainWnd* wnd)
       : thread_(thread), wnd_(wnd), conductor_(NULL), client_(NULL) {}
   virtual ~CustomSocketServer() {}
-  
+
   void set_client(PeerConnectionClient* client) { client_ = client; }
   void set_conductor(Conductor* conductor) { conductor_ = conductor; }
 
@@ -52,7 +52,7 @@ class CustomSocketServer : public talk_base::PhysicalSocketServer {
     // g_main_context_set_poll_func.
       while (gtk_events_pending())
         gtk_main_iteration();
-    
+
     if (!wnd_->IsWindow() && !conductor_->connection_active() &&
         client_ != NULL && !client_->is_connected()) {
       thread_->Quit();
@@ -96,9 +96,10 @@ int main(int argc, char* argv[]) {
 
   // Must be constructed after we set the socketserver.
   PeerConnectionClient client;
-  Conductor conductor(&client, &wnd);
+  talk_base::scoped_refptr<Conductor> conductor(
+      new talk_base::RefCountedObject<Conductor>(&client, &wnd));
   socket_server.set_client(&client);
-  socket_server.set_conductor(&conductor);
+  socket_server.set_conductor(conductor);
 
   thread->Run();
 

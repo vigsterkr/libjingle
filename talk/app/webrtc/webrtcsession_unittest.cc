@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,7 @@
 #include "talk/base/thread.h"
 #include "talk/base/virtualsocketserver.h"
 #include "talk/media/base/fakemediaengine.h"
+#include "talk/media/base/fakevideorenderer.h"
 #include "talk/media/devices/fakedevicemanager.h"
 #include "talk/p2p/base/stunserver.h"
 #include "talk/p2p/base/teststunserver.h"
@@ -120,6 +121,11 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
   virtual ~WebRtcSessionForTest() {}
 
   using cricket::BaseSession::GetTransportProxy;
+  using webrtc::WebRtcSession::SetAudioPlayout;
+  using webrtc::WebRtcSession::SetAudioSend;
+  using webrtc::WebRtcSession::SetCaptureDevice;
+  using webrtc::WebRtcSession::SetVideoPlayout;
+  using webrtc::WebRtcSession::SetVideoSend;
 };
 
 class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
@@ -198,10 +204,10 @@ class WebRtcSessionTest : public testing::Test {
   // TODO Investigate why ChannelManager crashes, if it's created
   // after stun_server.
   WebRtcSessionTest()
-    : media_engine(new cricket::FakeMediaEngine()),
-      device_manager(new cricket::FakeDeviceManager()),
+    : media_engine_(new cricket::FakeMediaEngine()),
+      device_manager_(new cricket::FakeDeviceManager()),
      channel_manager_(new cricket::ChannelManager(
-         media_engine, device_manager, talk_base::Thread::Current())),
+         media_engine_, device_manager_, talk_base::Thread::Current())),
       desc_factory_(new cricket::MediaSessionDescriptionFactory(
           channel_manager_.get())),
       pss_(new talk_base::PhysicalSocketServer),
@@ -444,8 +450,8 @@ class WebRtcSessionTest : public testing::Test {
     }
   }
 
-  cricket::FakeMediaEngine* media_engine;
-  cricket::FakeDeviceManager* device_manager;
+  cricket::FakeMediaEngine* media_engine_;
+  cricket::FakeDeviceManager* device_manager_;
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
   talk_base::scoped_ptr<cricket::MediaSessionDescriptionFactory> desc_factory_;
   talk_base::scoped_ptr<talk_base::PhysicalSocketServer> pss_;
@@ -523,8 +529,8 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
 
-  video_channel_ = media_engine->GetVideoChannel(0);
-  voice_channel_ = media_engine->GetVoiceChannel(0);
+  video_channel_ = media_engine_->GetVideoChannel(0);
+  voice_channel_ = media_engine_->GetVoiceChannel(0);
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack2 == video_channel_->recv_streams()[0].name);
@@ -579,8 +585,8 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
 
-  video_channel_ = media_engine->GetVideoChannel(0);
-  voice_channel_ = media_engine->GetVoiceChannel(0);
+  video_channel_ = media_engine_->GetVideoChannel(0);
+  voice_channel_ = media_engine_->GetVoiceChannel(0);
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack2 == video_channel_->recv_streams()[0].name);
@@ -999,8 +1005,8 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  ASSERT_TRUE((video_channel_ = media_engine->GetVideoChannel(0)) != NULL);
-  ASSERT_TRUE((voice_channel_ = media_engine->GetVoiceChannel(0)) != NULL);
+  ASSERT_TRUE((video_channel_ = media_engine_->GetVideoChannel(0)) != NULL);
+  ASSERT_TRUE((voice_channel_ = media_engine_->GetVoiceChannel(0)) != NULL);
 }
 
 // This test verifies the call setup when remote answer with audio only and
@@ -1018,8 +1024,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithAudioOnlyAnswer) {
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
 
-  video_channel_ = media_engine->GetVideoChannel(0);
-  voice_channel_ = media_engine->GetVoiceChannel(0);
+  video_channel_ = media_engine_->GetVideoChannel(0);
+  voice_channel_ = media_engine_->GetVoiceChannel(0);
 
   ASSERT_TRUE(video_channel_ == NULL);
 
@@ -1032,7 +1038,7 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithAudioOnlyAnswer) {
   mediastream_signaling_.UseOptionsWithStream2();
   SetRemoteAndLocalSessionDescription();
 
-  video_channel_ = media_engine->GetVideoChannel(0);
+  video_channel_ = media_engine_->GetVideoChannel(0);
   ASSERT_TRUE(video_channel_ != NULL);
 
   ASSERT_EQ(1u, video_channel_->recv_streams().size());
@@ -1056,8 +1062,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithVideoOnlyAnswer) {
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
 
-  video_channel_ = media_engine->GetVideoChannel(0);
-  voice_channel_ = media_engine->GetVoiceChannel(0);
+  video_channel_ = media_engine_->GetVideoChannel(0);
+  voice_channel_ = media_engine_->GetVoiceChannel(0);
 
   ASSERT_TRUE(voice_channel_ == NULL);
 
@@ -1071,7 +1077,7 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithVideoOnlyAnswer) {
   mediastream_signaling_.UseOptionsWithStream2();
   SetRemoteAndLocalSessionDescription();
 
-  voice_channel_ = media_engine->GetVoiceChannel(0);
+  voice_channel_ = media_engine_->GetVoiceChannel(0);
   ASSERT_TRUE(voice_channel_ != NULL);
 
   ASSERT_EQ(1u, voice_channel_->recv_streams().size());
@@ -1131,4 +1137,67 @@ TEST_F(WebRtcSessionTest, VerifyBundleFlagInPA) {
 
   session_->SetLocalDescription(JsepInterface::kOffer, modified_offer);
   EXPECT_EQ(0U, allocator_.flags());
+}
+
+TEST_F(WebRtcSessionTest, SetAudioPlayout) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
+  ASSERT_TRUE(channel != NULL);
+  ASSERT_EQ(1u, channel->recv_streams().size());
+  uint32 receive_ssrc  = channel->recv_streams()[0].first_ssrc();
+  double left_vol, right_vol;
+  EXPECT_TRUE(channel->GetOutputScaling(receive_ssrc, &left_vol, &right_vol));
+  EXPECT_EQ(1, left_vol);
+  EXPECT_EQ(1, right_vol);
+  session_->SetAudioPlayout(kAudioTrack1, false);
+  EXPECT_TRUE(channel->GetOutputScaling(receive_ssrc, &left_vol, &right_vol));
+  EXPECT_EQ(0, left_vol);
+  EXPECT_EQ(0, right_vol);
+  session_->SetAudioPlayout(kAudioTrack1, true);
+  EXPECT_TRUE(channel->GetOutputScaling(receive_ssrc, &left_vol, &right_vol));
+  EXPECT_EQ(1, left_vol);
+  EXPECT_EQ(1, right_vol);
+}
+
+TEST_F(WebRtcSessionTest, SetAudioSend) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
+  ASSERT_TRUE(channel != NULL);
+  EXPECT_FALSE(channel->muted());
+  session_->SetAudioSend(kAudioTrack1, false);
+  EXPECT_TRUE(channel->muted());
+  session_->SetAudioSend(kAudioTrack1, true);
+  EXPECT_FALSE(channel->muted());
+}
+
+TEST_F(WebRtcSessionTest, SetVideoPlayout) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+  cricket::FakeVideoMediaChannel* channel = media_engine_->GetVideoChannel(0);
+  ASSERT_TRUE(channel != NULL);
+  ASSERT_LT(0u, channel->renderers().size());
+  EXPECT_TRUE(channel->renderers().begin()->second == NULL);
+  cricket::FakeVideoRenderer renderer;
+  session_->SetVideoPlayout(kVideoTrack1, true, &renderer);
+  EXPECT_TRUE(channel->renderers().begin()->second == &renderer);
+  session_->SetVideoPlayout(kVideoTrack1, false, &renderer);
+  EXPECT_TRUE(channel->renderers().begin()->second == NULL);
+}
+
+TEST_F(WebRtcSessionTest, SetVideoSend) {
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+  cricket::FakeVideoMediaChannel* channel = media_engine_->GetVideoChannel(0);
+  ASSERT_TRUE(channel != NULL);
+  EXPECT_FALSE(channel->muted());
+  session_->SetVideoSend(kVideoTrack1, false);
+  EXPECT_TRUE(channel->muted());
+  session_->SetVideoSend(kVideoTrack1, true);
+  EXPECT_FALSE(channel->muted());
 }

@@ -1,5 +1,12 @@
 Libjingle
 
+0.6.20 - Aug 1, 2012
+  - Removed ROAP support from PeerConnection.
+  - Moved session/phone into session/media, media/base, media/webrtc,
+    media/devices and media/other.
+  - Added MediaTrack enabling/disabling support to PeerConnection.
+  - Bug fixes.
+
 0.6.19 - May 16, 2012
   - Added ice-ufrag and ice-pwd.
   - Added RFC 5245 defined ICE attributes.

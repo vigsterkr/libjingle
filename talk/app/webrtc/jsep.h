@@ -122,6 +122,11 @@ class IceCandidateCollection {
 // a time and is therefore not expected to be thread safe.
 class SessionDescriptionInterface {
  public:
+  // Supported types:
+  static const char kOffer[];
+  static const char kPrAnswer[];
+  static const char kAnswer[];
+
   virtual ~SessionDescriptionInterface() {}
   virtual const cricket::SessionDescription* description() const = 0;
   // Get the session id and session version, which are defined based on
@@ -145,10 +150,10 @@ class SessionDescriptionInterface {
 
 // Deprecated (jsep00)
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp);
-// Creates a SessionDescriptionInterface based on SDP string and the SdpType.
-// Returns NULL if the sdp string can't be parsed.
-SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp,
-                                                      const std::string& type);
+// Creates a SessionDescriptionInterface based on SDP string and the type.
+// Returns NULL if the sdp string can't be parsed or the type is unsupported.
+SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
+                                                      const std::string& sdp);
 
 // Jsep Ice candidate callback interface. An application should implement these
 // methods to be notified of new local candidates.

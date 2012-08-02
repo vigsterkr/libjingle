@@ -99,6 +99,40 @@ TEST(VideoCommonTest, TestVideoFormatCompare) {
   EXPECT_TRUE(format.IsPixelRateLess(format2));
 }
 
+TEST(VideoCommonTest, TestComputeScale) {
+  int scaled_width, scaled_height;
+
+  // Request small enough.  Expect no change.
+  ComputeScale(2560, 1600, &scaled_width, &scaled_height);
+  EXPECT_EQ(2560, scaled_width);
+  EXPECT_EQ(1600, scaled_height);
+
+  // Request too many pixels.  Expect max pixels.
+  ComputeScale(4096, 2560, &scaled_width, &scaled_height);
+  EXPECT_EQ(2880, scaled_width);
+  EXPECT_EQ(1800, scaled_height);
+
+  // Request too many pixels and too wide and tall.  Expect max pixels.
+  ComputeScale(16000, 10000, &scaled_width, &scaled_height);
+  EXPECT_EQ(2880, scaled_width);
+  EXPECT_EQ(1800, scaled_height);
+
+  // Request too wide. (two 30 inch monitors). Expect width scaled to max.
+  ComputeScale(5120, 1600, &scaled_width, &scaled_height);
+  EXPECT_EQ(4072, scaled_width);
+  EXPECT_EQ(1272, scaled_height);
+
+  // Request too wide but not too many pixels.  Expect width scaled to max.
+  ComputeScale(8192, 1024, &scaled_width, &scaled_height);
+  EXPECT_EQ(4096, scaled_width);
+  EXPECT_EQ(512, scaled_height);
+
+  // Request too tall.  Expect height scaled to max.
+  ComputeScale(1024, 8192, &scaled_width, &scaled_height);
+  EXPECT_EQ(512, scaled_width);
+  EXPECT_EQ(4096, scaled_height);
+}
+
 TEST(VideoCommonTest, TestComputeCrop) {
   int cropped_width, cropped_height;
 
@@ -108,8 +142,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Normal 1:1 pixels
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 640);
-  EXPECT_EQ(cropped_height, 360);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(360, cropped_height);
 
   // Request 4:3 to 16:9.  Expect vertical.
   ComputeCrop(640, 360,  // Crop size 16:9
@@ -117,8 +151,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Normal 1:1 pixels
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 640);
-  EXPECT_EQ(cropped_height, 360);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(360, cropped_height);
 
   // Request 16:9 to 4:3.  Expect horizontal crop.
   ComputeCrop(640, 480,  // Crop size 4:3
@@ -126,8 +160,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Normal 1:1 pixels
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 480);
-  EXPECT_EQ(cropped_height, 360);
+  EXPECT_EQ(480, cropped_width);
+  EXPECT_EQ(360, cropped_height);
 
   // Request 16:9 but VGA has 3:8 pixel aspect ratio. Expect no crop.
   // This occurs on HP4110 on OSX 10.5/10.6/10.7
@@ -136,8 +170,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               3, 8,  // Pixel aspect ratio is tall
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 640);
-  EXPECT_EQ(cropped_height, 480);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(480, cropped_height);
 
   // Request 16:9 but QVGA has 15:11 pixel aspect ratio. Expect horizontal crop.
   // This occurs on Logitech B910 on OSX 10.5/10.6/10.7 in Hangouts.
@@ -146,8 +180,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               15, 11,  // Pixel aspect ratio is wide
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 312);
-  EXPECT_EQ(cropped_height, 240);
+  EXPECT_EQ(312, cropped_width);
+  EXPECT_EQ(240, cropped_height);
 
   // Request 16:10 but QVGA has 15:11 pixel aspect ratio.
   // Expect horizontal crop.
@@ -157,8 +191,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               15, 11,  // Pixel aspect ratio is wide
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 280);
-  EXPECT_EQ(cropped_height, 240);
+  EXPECT_EQ(280, cropped_width);
+  EXPECT_EQ(240, cropped_height);
 
   // Request 16:9 but VGA has 6:5 pixel aspect ratio. Expect vertical crop.
   // This occurs on Logitech QuickCam Pro C9000 on OSX
@@ -167,8 +201,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               6, 5,  // Pixel aspect ratio is wide
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 640);
-  EXPECT_EQ(cropped_height, 432);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(432, cropped_height);
 
   // Request 16:10 but HD is 16:9. Expect horizontal crop.
   // This occurs in settings and local preview with HD experiment.
@@ -177,8 +211,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Pixel aspect ratio is wide
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 1152);
-  EXPECT_EQ(cropped_height, 720);
+  EXPECT_EQ(1152, cropped_width);
+  EXPECT_EQ(720, cropped_height);
 
   // Request 16:9 but HD has 3:4 pixel aspect ratio. Expect vertical crop.
   // This occurs on Logitech B910 on OSX 10.5/10.6.7 but not OSX 10.6.8 or 10.7
@@ -187,8 +221,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               3, 4,  // Pixel aspect ratio is wide
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 1280);
-  EXPECT_EQ(cropped_height, 540);
+  EXPECT_EQ(1280, cropped_width);
+  EXPECT_EQ(540, cropped_height);
 
   // Request 16:9 to 3:4 (portrait).  Expect no cropping.
   ComputeCrop(640, 360,  // Crop size 16:9
@@ -196,8 +230,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Normal 1:1 pixels
               90,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 640);
-  EXPECT_EQ(cropped_height, 480);
+  EXPECT_EQ(640, cropped_width);
+  EXPECT_EQ(480, cropped_height);
 
   // Cropped size 0x0.  Expect no cropping.
   // This is used when adding multiple capturers
@@ -206,8 +240,8 @@ TEST(VideoCommonTest, TestComputeCrop) {
               1, 1,  // Normal 1:1 pixels
               0,
               &cropped_width, &cropped_height);
-  EXPECT_EQ(cropped_width, 1024);
-  EXPECT_EQ(cropped_height, 768);
+  EXPECT_EQ(1024, cropped_width);
+  EXPECT_EQ(768, cropped_height);
 }
 
 }  // namespace cricket

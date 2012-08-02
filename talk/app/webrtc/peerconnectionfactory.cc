@@ -30,6 +30,7 @@
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
 #include "talk/app/webrtc/peerconnection.h"
+#include "talk/app/webrtc/peerconnectionproxy.h"
 #include "talk/app/webrtc/portallocatorfactory.h"
 #include "talk/media/devices/dummydevicemanager.h"
 #include "talk/media/webrtc/webrtcmediaengine.h"
@@ -62,12 +63,10 @@ struct CreatePeerConnectionParams : public talk_base::MessageData {
 };
 
 struct CreatePeerConnectionParamsDeprecated : public talk_base::MessageData {
-  CreatePeerConnectionParamsDeprecated(bool use_roap,
-                                       const std::string& configuration,
+  CreatePeerConnectionParamsDeprecated(const std::string& configuration,
                                        webrtc::PeerConnectionObserver* observer)
-      : use_roap(use_roap), configuration(configuration), observer(observer) {
+      : configuration(configuration), observer(observer) {
   }
-  bool use_roap;
   scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
   const std::string& configuration;
   webrtc::PeerConnectionObserver* observer;
@@ -176,8 +175,7 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
     case MSG_CREATE_PEERCONNECTION_JSEP00: {
       CreatePeerConnectionParamsDeprecated* pdata =
           static_cast<CreatePeerConnectionParamsDeprecated*> (msg->pdata);
-      pdata->peerconnection = CreatePeerConnection_s(pdata->use_roap,
-                                                     pdata->configuration,
+      pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
                                                      pdata->observer);
       break;
     }
@@ -221,7 +219,7 @@ scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const std::string& configuration,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParamsDeprecated params(false, configuration, observer);
+  CreatePeerConnectionParamsDeprecated params(configuration, observer);
   signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
   return params.peerconnection;
 }
@@ -236,27 +234,17 @@ PeerConnectionFactory::CreatePeerConnection(
   return params.peerconnection;
 }
 
-talk_base::scoped_refptr<PeerConnectionInterface>
-PeerConnectionFactory::CreateRoapPeerConnection(
-    const std::string& configuration,
-    PeerConnectionObserver* observer) {
-  CreatePeerConnectionParamsDeprecated params(true, configuration, observer);
-  signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
-  return params.peerconnection;
-}
-
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection_s(
-    bool use_roap,
     const std::string& configuration,
     PeerConnectionObserver* observer) {
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
-  if (!pc->Initialize(use_roap, configuration, observer)) {
+  if (!pc->Initialize(configuration, observer)) {
     delete pc;
-    pc = NULL;
+    return NULL;
   }
-  return pc;
+  return PeerConnectionProxy::Create(signaling_thread(), pc);
 }
 
 talk_base::scoped_refptr<PeerConnectionInterface>
@@ -268,9 +256,9 @@ PeerConnectionFactory::CreatePeerConnection_s(
       new talk_base::RefCountedObject<PeerConnection>(this));
   if (!pc->Initialize(configuration, constraints, observer)) {
     delete pc;
-    pc = NULL;
+    return NULL;
   }
-  return pc;
+  return PeerConnectionProxy::Create(signaling_thread(), pc);
 }
 
 scoped_refptr<LocalMediaStreamInterface>

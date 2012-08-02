@@ -62,8 +62,6 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
       cricket::VideoCapturer* video_device);
 
   virtual cricket::VideoCapturer* GetVideoCapture();
-  virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
-  VideoRendererWrapperInterface* GetRenderer();
 
   virtual void AddRenderer(VideoRendererInterface* renderer);
   virtual void RemoveRenderer(VideoRendererInterface* renderer);
@@ -78,7 +76,6 @@ class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
  private:
   VideoTrackRenderers renderers_;
   talk_base::scoped_ptr<cricket::VideoCapturer> video_device_;
-  talk_base::scoped_refptr<VideoRendererWrapperInterface> video_renderer_;
 };
 
 }  // namespace webrtc

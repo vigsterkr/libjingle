@@ -126,8 +126,6 @@ class VideoTrackProxy : public MediaStreamTrackProxy<LocalVideoTrackInterface> {
       talk_base::Thread* signaling_thread);
 
   virtual cricket::VideoCapturer* GetVideoCapture();
-  virtual void SetRenderer(VideoRendererWrapperInterface* renderer);
-  VideoRendererWrapperInterface* GetRenderer();
 
   virtual void AddRenderer(VideoRendererInterface* renderer);
   virtual void RemoveRenderer(VideoRendererInterface* renderer);

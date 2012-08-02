@@ -110,8 +110,53 @@ static bool ValidStreams(const Streams& streams) {
   Streams sorted_streams = streams;
   std::sort(sorted_streams.begin(), sorted_streams.end(), CompareStream);
   Streams::iterator it =
-      std::adjacent_find(sorted_streams.begin(), sorted_streams.end(), SameName);
+      std::adjacent_find(sorted_streams.begin(), sorted_streams.end(),
+                         SameName);
   return (it == sorted_streams.end());
+}
+
+static bool GetAudioSsrcByName(
+    const cricket::SessionDescription* session_description,
+    const std::string& name, uint32 *ssrc) {
+  const cricket::ContentInfo* audio_info =
+      cricket::GetFirstAudioContent(session_description);
+  if (!audio_info) {
+    LOG(LS_ERROR) << "Audio not used in this call";
+    return false;
+  }
+
+  const cricket::MediaContentDescription* audio_content =
+      static_cast<const cricket::MediaContentDescription*>(
+          audio_info->description);
+  cricket::StreamParams stream;
+  if (!cricket::GetStreamByNickAndName(audio_content->streams(), "", name,
+                                       &stream)) {
+    return false;
+  }
+  *ssrc = stream.first_ssrc();
+  return true;
+}
+
+static bool GetVideoSsrcByName(
+    const cricket::SessionDescription* session_description,
+    const std::string& name, uint32 *ssrc) {
+  const cricket::ContentInfo* video_info =
+      cricket::GetFirstVideoContent(session_description);
+  if (!video_info) {
+    LOG(LS_ERROR) << "Video not used in this call";
+    return false;
+  }
+
+  const cricket::MediaContentDescription* video_content =
+      static_cast<const cricket::MediaContentDescription*>(
+          video_info->description);
+  cricket::StreamParams stream;
+  if (!cricket::GetStreamByNickAndName(video_content->streams(), "", name,
+                                      &stream)) {
+    return false;
+  }
+  *ssrc = stream.first_ssrc();
+  return true;
 }
 
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
@@ -359,7 +404,6 @@ bool WebRtcSession::SetRemoteDescription(Action action,
       if (ReadyToEnableBundle() && !transport_muxed()) {
         MaybeEnableMuxingSupport();
       }
-
       EnableChannels();
       SetState(STATE_RECEIVEDACCEPT);
       break;
@@ -414,21 +458,54 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   return true;
 }
 
-void WebRtcSession::OnMessage(talk_base::Message* msg) {
-  switch (msg->message_id) {
-    case MSG_CANDIDATE_TIMEOUT:
-      LOG(LS_ERROR) << "Transport is not in writable state.";
-      SignalError();
-      break;
-    default:
-      break;
+void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {
+  ASSERT(signaling_thread()->IsCurrent());
+  if (!voice_channel_.get()) {
+    LOG(LS_ERROR) << "SetAudioPlayout: No audio channel exists.";
+    return;
   }
+  uint32 ssrc = 0;
+  if (!VERIFY(GetAudioSsrcByName(BaseSession::remote_description(),
+                                 name, &ssrc))) {
+    LOG(LS_ERROR) << "Trying to enable/disable an unexisting audio SSRC.";
+    return;
+  }
+  // TODO: Change the SSRC in the call to SetOutputScaling() to the
+  // proper SSRC once the voice engine bug is fixed.
+  // Currently this will mute all received audio tracks in this session.
+  voice_channel_->SetOutputScaling(0, enable ? 1 : 0, enable ? 1 : 0);
+}
+
+void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
+  ASSERT(signaling_thread()->IsCurrent());
+  if (!voice_channel_.get()) {
+    LOG(LS_ERROR) << "SetAudioSend: No audio channel exists.";
+    return;
+  }
+  uint32 ssrc = 0;
+  if (!VERIFY(GetAudioSsrcByName(BaseSession::local_description(),
+                                 name, &ssrc))) {
+    LOG(LS_ERROR) << "Trying to stop send audio on an unexisting audio SSRC.";
+    return;
+  }
+  // TODO Mute only the correct SSRC when there is support for
+  // multiple sending audio tracks.
+  voice_channel_->Mute(!enable);
 }
 
 bool WebRtcSession::SetCaptureDevice(const std::string& name,
                                      cricket::VideoCapturer* camera) {
-  // should be called from a signaling thread
   ASSERT(signaling_thread()->IsCurrent());
+  if (!video_channel_.get()) {
+    LOG(LS_ERROR) << "SetCaptureDevice: No video channel exists.";
+    return false;
+  }
+  uint32 ssrc = 0;
+  if (!VERIFY(GetVideoSsrcByName(BaseSession::local_description(),
+                                 name, &ssrc) || camera == NULL)) {
+    LOG(LS_ERROR) << "Trying to set camera device on a unknown  SSRC.";
+    return false;
+  }
 
   // TODO: Refactor this when there is support for multiple cameras.
   if (!channel_manager_->SetVideoCapturer(camera)) {
@@ -446,41 +523,52 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
   return true;
 }
 
-void WebRtcSession::SetLocalRenderer(const std::string& name,
-                                     cricket::VideoRenderer* renderer) {
-  ASSERT(signaling_thread()->IsCurrent());
-  // TODO: Fix SetLocalRenderer.
-  // video_channel_->SetLocalRenderer(0, renderer);
-}
-
-void WebRtcSession::SetRemoteRenderer(const std::string& name,
-                                      cricket::VideoRenderer* renderer) {
+void WebRtcSession::SetVideoPlayout(const std::string& name,
+                                    bool enable,
+                                    cricket::VideoRenderer* renderer) {
   ASSERT(signaling_thread()->IsCurrent());
   if (!video_channel_.get()) {
-    LOG(LS_INFO) << "VideoChannel doesn't exist.";
+    LOG(LS_ERROR) << "SetVideoPlayout: No video channel exists.";
     return;
   }
 
-  const cricket::ContentInfo* video_info =
-      cricket::GetFirstVideoContent(BaseSession::remote_description());
-  if (!video_info) {
-    LOG(LS_ERROR) << "Video not received in this call";
-    return;
-  }
-
-  const cricket::MediaContentDescription* video_content =
-      static_cast<const cricket::MediaContentDescription*>(
-          video_info->description);
-  cricket::StreamParams stream;
-  if (cricket::GetStreamByNickAndName(video_content->streams(), "", name,
-                                      &stream)) {
-    video_channel_->SetRenderer(stream.first_ssrc(), renderer);
+  uint32 ssrc = 0;
+  if (GetVideoSsrcByName(BaseSession::remote_description(), name, &ssrc)) {
+    video_channel_->SetRenderer(ssrc, enable ? renderer : NULL);
   } else {
-    // Allow that |stream| does not exist if renderer is null but assert
+    // Allow that |name| does not exist if renderer is null but assert
     // otherwise.
     VERIFY(renderer == NULL);
   }
 }
+
+void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
+  ASSERT(signaling_thread()->IsCurrent());
+  if (!video_channel_.get()) {
+    LOG(LS_ERROR) << "SetVideoSend: No video channel exists.";
+    return;
+  }
+  uint32 ssrc = 0;
+  if (!VERIFY(GetVideoSsrcByName(BaseSession::local_description(),
+                                 name, &ssrc))) {
+    LOG(LS_ERROR) << "Trying to change enable video send on an unexisting SSRC";
+    return;
+  }
+  // TODO Mute only the correct SSRC when there is support for it.
+  video_channel_->Mute(!enable);
+}
+
+void WebRtcSession::OnMessage(talk_base::Message* msg) {
+  switch (msg->message_id) {
+    case MSG_CANDIDATE_TIMEOUT:
+      LOG(LS_ERROR) << "Transport is not in writable state.";
+      SignalError();
+      break;
+    default:
+      break;
+  }
+}
+
 
 void WebRtcSession::OnTransportRequestSignaling(
     cricket::Transport* transport) {

@@ -52,7 +52,8 @@ namespace webrtc {
 class MediaStreamSignaling;
 
 class WebRtcSession : public cricket::BaseSession,
-                      public MediaProviderInterface,
+                      public AudioProviderInterface,
+                      public VideoProviderInterface,
                       public JsepInterface {
  public:
   WebRtcSession(cricket::ChannelManager* channel_manager,
@@ -120,16 +121,21 @@ class WebRtcSession : public cricket::BaseSession,
     return false;
   }
 
+  // AudioMediaProviderInterface implementation.
+  virtual void SetAudioPlayout(const std::string& name, bool enable);
+  virtual void SetAudioSend(const std::string& name, bool enable);
+
+  // Implements VideoMediaProviderInterface.
+  virtual bool SetCaptureDevice(const std::string& name,
+                                cricket::VideoCapturer* camera);
+  virtual void SetVideoPlayout(const std::string& name,
+                               bool enable,
+                               cricket::VideoRenderer* renderer);
+  virtual void SetVideoSend(const std::string& name, bool enable);
+
  private:
   virtual void OnMessage(talk_base::Message* msg);
 
-  // Implements MediaProviderInterface.
-  virtual bool SetCaptureDevice(const std::string& name,
-                                cricket::VideoCapturer* camera);
-  virtual void SetLocalRenderer(const std::string& name,
-                                cricket::VideoRenderer* renderer);
-  virtual void SetRemoteRenderer(const std::string& name,
-                                 cricket::VideoRenderer* renderer);
 
   // Transport related callbacks, override from cricket::BaseSession.
   virtual void OnTransportRequestSignaling(cricket::Transport* transport);

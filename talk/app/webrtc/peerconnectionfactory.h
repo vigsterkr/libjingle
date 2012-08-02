@@ -47,9 +47,6 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
                            PeerConnectionObserver* observer);
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreateRoapPeerConnection(const std::string& config,
-                               PeerConnectionObserver* observer);
   bool Initialize();
 
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
@@ -82,7 +79,6 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   bool Initialize_s();
   void Terminate_s();
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
-      bool use_roap,
       const std::string& configuration,
       PeerConnectionObserver* observer);
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(

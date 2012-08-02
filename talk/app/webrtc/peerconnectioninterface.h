@@ -39,16 +39,14 @@
 // an object that implements the PeerConnectionObserver interface.
 // 3. Create local MediaStream and MediaTracks using the PeerConnectionFactory
 // and add it to PeerConnection by calling AddStream.
-// 4. Once all mediastreams are added to peerconnection, call
-// CommitStreamChanges.
-// 5. Create an offer and serialize it and send it to the remote peer.
-// 6. Start generating Ice candidates by calling StartIce. Once a candidate have
-// been found PeerConnection will call the observer function OnIceCandidate.
-// These candidates must also be serialized and sent to the remote peer.
-// 7. Once an answer is received from the remote peer, call
+// 4. Create an offer and serialize it and send it to the remote peer.
+// 5. Once an ice candidate have been found PeerConnection will call the
+// observer function OnIceCandidate. The candidates must also be serialized and
+// sent to the remote peer.
+// 6. Once an answer is received from the remote peer, call
 // SetLocalSessionDescription with the offer and SetRemoteSessionDescription
 // with the remote answer.
-// 8. Once a remote candidate is received from the remote peer, provide it to
+// 7. Once a remote candidate is received from the remote peer, provide it to
 // the peerconnection by calling AddIceCandidate.
 
 
@@ -57,18 +55,15 @@
 // If application decides to accept the call
 // 1. Create PeerConnectionFactoryInterface if it doesn't exist.
 // 2. Create a new PeerConnection.
-// 3. The application can add its own MediaStreams by calling AddStream.
-// When all streams have been added the application must call
-// CommitStreamChanges.
-// 4. Generate an answer to the remote offer by calling CreateAnswer.
-// 5. Provide the remote offer to the new PeerConnection object by calling
+// 3. Provide the remote offer to the new PeerConnection object by calling
 // SetRemoteSessionDescription.
+// 4. Generate an answer to the remote offer by calling CreateAnswer and send it
+// back to the remote peer.
+// 5. Provide the local answer to the new PeerConnection by calling
+// SetLocalSessionDescription with the answer.
 // 6. Provide the remote ice candidates by calling AddIceCandidate.
-// 7. Provide the local answer to the new PeerConnection by calling
-// SetLocalSessionDescription with the new answer.
-// 8. Start generating Ice candidates by calling StartIce. Once a candidate have
-// been found PeerConnection will call the observer function OnIceCandidate.
-// Send these candidates to the remote peer.
+// 7. Once a candidate have been found PeerConnection will call the observer
+// function OnIceCandidate. Send these candidates to the remote peer.
 
 #ifndef TALK_APP_WEBRTC_PEERCONNECTIONINTERFACE_H_
 #define TALK_APP_WEBRTC_PEERCONNECTIONINTERFACE_H_
@@ -109,16 +104,9 @@ class PeerConnectionObserver : public IceCandidateObserver {
   enum StateType {
     kReadyState,
     kIceState,
-    kSdpState,
   };
 
   virtual void OnError() = 0;
-
-  virtual void OnMessage(const std::string& msg) {}  // Deprecated (jsep00)
-
-  // Serialized signaling message
-  // Deprecated (jsep00)
-  virtual void OnSignalingMessage(const std::string& msg) {}
 
   // Triggered when ReadyState, SdpState or IceState have changed.
   virtual void OnStateChange(StateType state_changed) = 0;
@@ -142,17 +130,10 @@ class PeerConnectionInterface : public JsepInterface,
  public:
   enum ReadyState {
     kNew,
-    kNegotiating,  // Deprecated (jsep00) - use kOpening instead
     kOpening,
     kActive,
     kClosing,
     kClosed,
-  };
-
-  enum SdpState {
-    kSdpNew,
-    kSdpIdle,
-    kSdpWaiting,
   };
 
   enum IceState {
@@ -166,13 +147,6 @@ class PeerConnectionInterface : public JsepInterface,
     kIceClosed,
   };
 
-  // Process a signaling message using the ROAP protocol.
-  // Deprecated (jsep00)
-  virtual void ProcessSignalingMessage(const std::string& msg) = 0;
-
-  // Sends the msg over a data stream.
-  virtual bool Send(const std::string& msg) = 0;  // Deprecated (jsep00)
-
   // Accessor methods to active local streams.
   virtual talk_base::scoped_refptr<StreamCollectionInterface>
       local_streams() = 0;
@@ -182,8 +156,8 @@ class PeerConnectionInterface : public JsepInterface,
       remote_streams() = 0;
 
   // Add a new local stream.
-  // This function does not trigger any changes to the stream until
-  // CommitStreamChanges is called.
+  // Note that a SessionDescription negotiation is needed before the
+  // remote peer can receive the stream.
   // Deprecated (jsep00)
   virtual void AddStream(LocalMediaStreamInterface* stream) = 0;
 
@@ -193,35 +167,13 @@ class PeerConnectionInterface : public JsepInterface,
   virtual bool AddStream(MediaStreamInterface* stream,
                          const MediaConstraintsInterface* constraints) = 0;
 
-  // Remove a local stream and stop sending it.
-  // This function does not trigger any changes to the stream until
-  // CommitStreamChanges is called.
-  // Deprecated (jsep00)
-  virtual void RemoveStream(LocalMediaStreamInterface* stream) = 0;
-
   // Remove a MediaStream from this PeerConnection.
   // Note that a SessionDescription negotiation is need before the
   // remote peer is notified.
   virtual void RemoveStream(MediaStreamInterface* stream) = 0;
 
-  // Remove a local stream and stop sending it.
-  // Returns false if a stream with |label| does not exist.
-  virtual bool RemoveStream(const std::string& label) = 0;
-
-  // Commit Stream changes. This will start sending media on new streams
-  // and stop sending media on removed streams.
-  virtual void CommitStreamChanges() = 0;  // Deprecated (jsep00)
-
-  // Close the current session. This will trigger a Shutdown message
-  // being sent and the readiness state change to Closing.
-  // After calling this function no changes can be made to the sending streams.
-  virtual void Close() = 0;  // Deprecated (jsep00)
-
   // Returns the current ReadyState.
   virtual ReadyState ready_state() = 0;
-
-  // Returns the current SdpState.
-  virtual SdpState sdp_state() = 0;  // Deprecated (jsep00)
 
   // Returns the current IceState.
   virtual IceState ice_state() = 0;
@@ -287,11 +239,6 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
                            PeerConnectionObserver* observer) = 0;
-  // Deprecated (jsep00)
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreateRoapPeerConnection(const std::string& config,
-                               PeerConnectionObserver* observer) = 0;
-
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label) = 0;
 
