@@ -226,7 +226,7 @@ TEST_F(FileMediaEngineTest, TestDefaultImplementation) {
   EXPECT_EQ(0, engine_->GetInputLevel());
   EXPECT_TRUE(engine_->SetLocalMonitor(true));
   EXPECT_TRUE(engine_->SetLocalRenderer(NULL));
-  EXPECT_EQ(CR_SUCCESS, engine_->SetVideoCapture(true));
+  EXPECT_TRUE(engine_->SetVideoCapture(true));
   EXPECT_EQ(0U, engine_->audio_codecs().size());
   EXPECT_EQ(0U, engine_->video_codecs().size());
   AudioCodec voice_codec;

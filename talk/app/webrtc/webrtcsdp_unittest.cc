@@ -269,6 +269,16 @@ static void ReplaceDirection(cricket::MediaContentDirection direction,
   Replace("a=sendrecv", new_direction, message);
 }
 
+static void ReplaceRejected(bool audio_rejected, bool video_rejected,
+                            std::string* message) {
+  if (audio_rejected) {
+    Replace("m=audio 2345", "m=audio 0", message);
+  }
+  if (video_rejected) {
+    Replace("m=video 3457", "m=video 0", message);
+  }
+}
+
 // WebRtcSdpTest
 
 class WebRtcSdpTest : public testing::Test {
@@ -492,6 +502,10 @@ class WebRtcSdpTest : public testing::Test {
     EXPECT_EQ(acd1->direction(), acd2->direction());
     EXPECT_EQ(vcd1->direction(), vcd2->direction());
 
+    // rejected
+    EXPECT_EQ(ac1->rejected, ac2->rejected);
+    EXPECT_EQ(vc1->rejected, vc2->rejected);
+
     // rtcp_mux
     EXPECT_EQ(acd1->rtcp_mux(), acd2->rtcp_mux());
     EXPECT_EQ(vcd1->rtcp_mux(), vcd2->rtcp_mux());
@@ -694,6 +708,30 @@ class WebRtcSdpTest : public testing::Test {
     return true;
   }
 
+  bool TestSerializeRejected(bool audio_rejected, bool video_rejected) {
+    audio_desc_ = static_cast<AudioContentDescription*>(
+        audio_desc_->Copy());
+    video_desc_ = static_cast<VideoContentDescription*>(
+        video_desc_->Copy());
+    desc_.RemoveContentByName(kAudioContentName);
+    desc_.RemoveContentByName(kVideoContentName);
+    desc_.AddContent(kAudioContentName, NS_JINGLE_RTP, audio_rejected,
+                     audio_desc_);
+    desc_.AddContent(kVideoContentName, NS_JINGLE_RTP, video_rejected,
+                     video_desc_);
+    std::string new_sdp = kSdpFullString;
+    ReplaceRejected(audio_rejected, video_rejected, &new_sdp);
+
+    if (!jdesc_.Initialize(desc_.Copy(),
+                           jdesc_.session_id(),
+                           jdesc_.session_version())) {
+      return false;
+    }
+    std::string message = webrtc::SdpSerialize(jdesc_);
+    EXPECT_EQ(new_sdp, message);
+    return true;
+  }
+
   bool TestDeserializeDirection(cricket::MediaContentDirection direction) {
     std::string new_sdp = kSdpFullString;
     ReplaceDirection(direction, &new_sdp);
@@ -704,6 +742,32 @@ class WebRtcSdpTest : public testing::Test {
 
     audio_desc_->set_direction(direction);
     video_desc_->set_direction(direction);
+    if (!jdesc_.Initialize(desc_.Copy(),
+                           jdesc_.session_id(),
+                           jdesc_.session_version())) {
+      return false;
+    }
+    EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, new_jdesc));
+    return true;
+  }
+
+  bool TestDeserializeRejected(bool audio_rejected, bool video_rejected) {
+    std::string new_sdp = kSdpFullString;
+    ReplaceRejected(audio_rejected, video_rejected, &new_sdp);
+    JsepSessionDescription new_jdesc(JsepSessionDescription::kOffer);
+
+    EXPECT_TRUE(webrtc::SdpDeserialize(new_sdp,
+                                       &new_jdesc));
+    audio_desc_ = static_cast<AudioContentDescription*>(
+        audio_desc_->Copy());
+    video_desc_ = static_cast<VideoContentDescription*>(
+        video_desc_->Copy());
+    desc_.RemoveContentByName(kAudioContentName);
+    desc_.RemoveContentByName(kVideoContentName);
+    desc_.AddContent(kAudioContentName, NS_JINGLE_RTP, audio_rejected,
+                     audio_desc_);
+    desc_.AddContent(kVideoContentName, NS_JINGLE_RTP, video_rejected,
+                     video_desc_);
     if (!jdesc_.Initialize(desc_.Copy(),
                            jdesc_.session_id(),
                            jdesc_.session_version())) {
@@ -768,6 +832,18 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithSendOnlyContent) {
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithInactiveContent) {
   EXPECT_TRUE(TestSerializeDirection(cricket::MD_INACTIVE));
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithAudioRejected) {
+  EXPECT_TRUE(TestSerializeRejected(true, false));
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithVideoRejected) {
+  EXPECT_TRUE(TestSerializeRejected(false, true));
+}
+
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithAudioVideoRejected) {
+  EXPECT_TRUE(TestSerializeRejected(true, true));
 }
 
 TEST_F(WebRtcSdpTest, SerializeCandidates) {
@@ -845,6 +921,18 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithSendOnlyContent) {
 
 TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithInactiveContent) {
   EXPECT_TRUE(TestDeserializeDirection(cricket::MD_INACTIVE));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedAudio) {
+  EXPECT_TRUE(TestDeserializeRejected(true, false));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedVideo) {
+  EXPECT_TRUE(TestDeserializeRejected(false, true));
+}
+
+TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedAudioVideo) {
+  EXPECT_TRUE(TestDeserializeRejected(true, true));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidate) {

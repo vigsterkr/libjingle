@@ -227,7 +227,7 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
   bool SetLocalRenderer(VideoRenderer* renderer) {
     return video2_.SetLocalRenderer(renderer);
   }
-  CaptureResult SetCapture(bool capture) {
+  bool SetCapture(bool capture) {
     return video2_.SetCapture(capture);
   }
   sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;

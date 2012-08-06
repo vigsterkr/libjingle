@@ -50,6 +50,7 @@
 
 typedef std::vector<cricket::Candidate> Candidates;
 
+using cricket::MediaContentDescription;
 using cricket::MediaSessionDescriptionFactory;
 using cricket::MediaSessionOptions;
 using cricket::MediaType;
@@ -649,10 +650,12 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswerToVideo) {
   const ContentInfo* ac = answer->GetContentByName("audio");
   const ContentInfo* vc = answer->GetContentByName("video");
   ASSERT_TRUE(ac != NULL);
-  ASSERT_TRUE(vc == NULL);
+  ASSERT_TRUE(vc != NULL);
+  ASSERT_TRUE(vc->description != NULL);
+  EXPECT_TRUE(vc->rejected);
 }
 
-// Create an audio-only answer to a video offer.
+// Create an audio-only answer to an offer with data.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateNoDataAnswerToDataOffer) {
   MediaSessionOptions opts;
   opts.has_data = true;
@@ -664,7 +667,9 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateNoDataAnswerToDataOffer) {
   const ContentInfo* ac = answer->GetContentByName("audio");
   const ContentInfo* dc = answer->GetContentByName("data");
   ASSERT_TRUE(ac != NULL);
-  ASSERT_TRUE(dc == NULL);
+  ASSERT_TRUE(dc != NULL);
+  ASSERT_TRUE(dc->description != NULL);
+  EXPECT_TRUE(dc->rejected);
 }
 
 // Create an audio and video offer with:

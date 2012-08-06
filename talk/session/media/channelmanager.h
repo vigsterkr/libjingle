@@ -147,7 +147,7 @@ class ChannelManager : public talk_base::MessageHandler,
   // (video) stream for which the video capturer should be set.
   bool SetVideoCapturer(VideoCapturer* capturer);
   // Starts and stops the local camera and renders it to the local renderer.
-  CaptureResult SetVideoCapture(bool capture);
+  bool SetVideoCapture(bool capture);
   bool capturing() const { return capturing_; }
 
   // Configures the logging output of the mediaengine(s).
@@ -223,7 +223,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool SetDefaultVideoEncoderConfig_w(const VideoEncoderConfig& config);
   bool SetLocalRenderer_w(VideoRenderer* renderer);
   bool SetVideoCapturer_w(VideoCapturer* capturer);
-  CaptureResult SetVideoCapture_w(bool capture);
+  bool SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);
   void OnVideoCaptureResult(VideoCapturer* capturer,

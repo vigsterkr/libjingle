@@ -41,9 +41,11 @@ class MucRoomDiscoveryListener : public sigslot::has_slots<> {
   MucRoomDiscoveryListener() : error_count(0) {}
 
   void OnResult(buzz::MucRoomDiscoveryTask* task,
+                bool exists,
                 const std::string& name,
                 const std::set<std::string>& features,
                 const std::map<std::string, std::string>& extended_info) {
+    last_exists = exists;
     last_name = name;
     last_features = features;
     last_extended_info = extended_info;
@@ -54,6 +56,7 @@ class MucRoomDiscoveryListener : public sigslot::has_slots<> {
     ++error_count;
   }
 
+  bool last_exists;
   std::string last_name;
   std::set<std::string> last_features;
   std::map<std::string, std::string> last_extended_info;
@@ -121,6 +124,7 @@ TEST_F(MucRoomDiscoveryTaskTest, TestDiscovery) {
 
   xmpp_client->HandleStanza(buzz::XmlElement::ForStr(response_iq));
 
+  EXPECT_EQ(true, listener->last_exists);
   EXPECT_EQ(room_name, listener->last_name);
   EXPECT_EQ(2U, listener->last_features.size());
   EXPECT_EQ(1U, listener->last_features.count("feature1"));
@@ -144,5 +148,5 @@ TEST_F(MucRoomDiscoveryTaskTest, TestMissingName) {
       "</iq>";
   EXPECT_EQ(0, listener->error_count);
   xmpp_client->HandleStanza(buzz::XmlElement::ForStr(error_iq));
-  EXPECT_EQ(1, listener->error_count);
+  EXPECT_EQ(0, listener->error_count);
 }

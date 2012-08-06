@@ -27,7 +27,7 @@
 
 #ifdef POSIX
 #include <sys/time.h>
-#if defined(OSX)
+#if defined(OSX) || defined(IOS)
 #include <mach/mach_time.h>
 #endif
 #endif
@@ -50,7 +50,7 @@ const uint32 HALF = 0x80000000;
 
 uint64 TimeNanos() {
   int64 ticks = 0;
-#if defined(OSX)
+#if defined(OSX) || defined(IOS)
   static mach_timebase_info_data_t timebase;
   if (timebase.denom == 0) {
     // Get the timebase if this is the first time we run.

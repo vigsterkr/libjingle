@@ -25,33 +25,26 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_XMPP_MUCROOMDISCOVERYTASK_H_
-#define TALK_XMPP_MUCROOMDISCOVERYTASK_H_
+#ifndef TALK_EXAMPLES_PEERCONNECTION_CLIENT_FLAGDEFS_H_
+#define TALK_EXAMPLES_PEERCONNECTION_CLIENT_FLAGDEFS_H_
+#pragma once
 
-#include <map>
-#include <string>
-#include "talk/xmpp/iqtask.h"
+#include "talk/base/flags.h"
 
-namespace buzz {
+extern const uint16 kDefaultServerPort;  // From defaults.[h|cc]
 
-// This task requests the feature capabilities of the room. It is based on
-// XEP-0030, and extended using XEP-0004.
-class MucRoomDiscoveryTask : public IqTask {
- public:
-  MucRoomDiscoveryTask(XmppTaskParentInterface* parent,
-                       const Jid& room_jid);
+// Define flags for the peerconnect_client testing tool, in a separate
+// header file so that they can be shared across the different main.cc's
+// for each platform.
 
-  // Signal (exists, name, features, extended_info)
-  sigslot::signal5<MucRoomDiscoveryTask*,
-                   bool,
-                   const std::string&,
-                   const std::set<std::string>&,
-                   const std::map<std::string, std::string>& > SignalResult;
+DEFINE_bool(help, false, "Prints this message");
+DEFINE_bool(autoconnect, false, "Connect to the server without user "
+                                "intervention.");
+DEFINE_string(server, "localhost", "The server to connect to.");
+DEFINE_int(port, kDefaultServerPort,
+           "The port on which the server is listening.");
+DEFINE_bool(autocall, false, "Call the first available other client on "
+  "the server without user intervention.  Note: this flag should only be set "
+  "to true on one of the two clients.");
 
- protected:
-  virtual void HandleResult(const XmlElement* stanza);
-};
-
-}  // namespace buzz
-
-#endif  // TALK_XMPP_MUCROOMDISCOVERYTASK_H_
+#endif  // TALK_EXAMPLES_PEERCONNECTION_CLIENT_FLAGDEFS_H_

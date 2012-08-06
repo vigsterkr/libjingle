@@ -361,6 +361,13 @@ static bool IsSendContentDirection(MediaContentDirection direction) {
   return direction == MD_SENDRECV || direction == MD_SENDONLY;
 }
 
+static const MediaContentDescription* GetContentDescription(
+    const ContentInfo* cinfo) {
+  if (cinfo == NULL)
+    return NULL;
+  return static_cast<const MediaContentDescription*>(cinfo->description);
+}
+
 BaseChannel::BaseChannel(talk_base::Thread* thread,
                          MediaEngineInterface* media_engine,
                          MediaChannel* media_channel, BaseSession* session,
@@ -743,18 +750,23 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
 
 void BaseChannel::OnSessionState(BaseSession* session,
                                  BaseSession::State state) {
-  const MediaContentDescription* content = NULL;
+  const ContentInfo* content_info = NULL;
+  const MediaContentDescription* content_desc = NULL;
   ContentAction action;
   if (LocalStateChanged(state, &action)) {
-    content = GetFirstContent(session->local_description());
-    if (content && !SetLocalContent(content, action)) {
+    content_info = GetFirstContent(session->local_description());
+    content_desc = GetContentDescription(content_info);
+    if (content_desc && content_info && !content_info->rejected &&
+        !SetLocalContent(content_desc, action)) {
       LOG(LS_ERROR) << "Failure in SetLocalContent with action " << action;
       session->SetError(BaseSession::ERROR_CONTENT);
     }
   }
   if (RemoteStateChanged(state, &action)) {
-    content = GetFirstContent(session->remote_description());
-    if (content && !SetRemoteContent(content, action)) {
+    content_info = GetFirstContent(session->remote_description());
+    content_desc = GetContentDescription(content_info);
+    if (content_desc && content_info && !content_info->rejected &&
+        !SetRemoteContent(content_desc, action)) {
       LOG(LS_ERROR) << "Failure in SetRemoteContent with  action " << action;
       session->SetError(BaseSession::ERROR_CONTENT);
     }
@@ -1456,13 +1468,9 @@ void VoiceChannel::ChangeState() {
   LOG(LS_INFO) << "Changing voice state, recv=" << recv << " send=" << send;
 }
 
-const MediaContentDescription* VoiceChannel::GetFirstContent(
+const ContentInfo* VoiceChannel::GetFirstContent(
     const SessionDescription* sdesc) {
-  const ContentInfo* cinfo = GetFirstAudioContent(sdesc);
-  if (cinfo == NULL)
-    return NULL;
-
-  return static_cast<const MediaContentDescription*>(cinfo->description);
+  return GetFirstAudioContent(sdesc);
 }
 
 bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
@@ -1826,13 +1834,9 @@ void VideoChannel::StopMediaMonitor() {
   }
 }
 
-const MediaContentDescription* VideoChannel::GetFirstContent(
+const ContentInfo* VideoChannel::GetFirstContent(
     const SessionDescription* sdesc) {
-  const ContentInfo* cinfo = GetFirstVideoContent(sdesc);
-  if (cinfo == NULL)
-    return NULL;
-
-  return static_cast<const MediaContentDescription*>(cinfo->description);
+  return GetFirstVideoContent(sdesc);
 }
 
 bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
@@ -2240,13 +2244,9 @@ bool DataChannel::SendData(
   return true;
 }
 
-const MediaContentDescription* DataChannel::GetFirstContent(
+const ContentInfo* DataChannel::GetFirstContent(
     const SessionDescription* sdesc) {
-  const ContentInfo* cinfo = GetFirstDataContent(sdesc);
-  if (cinfo == NULL)
-    return NULL;
-
-  return static_cast<const MediaContentDescription*>(cinfo->description);
+  return GetFirstDataContent(sdesc);
 }
 
 bool DataChannel::SetLocalContent_w(const MediaContentDescription* content,

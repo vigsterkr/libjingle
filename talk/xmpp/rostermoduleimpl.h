@@ -35,7 +35,7 @@ namespace buzz {
 
 //! Presence Information
 //! This class stores both presence information for outgoing presence and is
-//! returned by methods in XmppRosterModule to represent recieved incoming
+//! returned by methods in XmppRosterModule to represent received incoming
 //! presence information.  When this class is writeable (non-const) then each
 //! update to any property will set the inner xml.  Setting the raw_xml will
 //! rederive all of the other properties.

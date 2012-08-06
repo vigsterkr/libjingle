@@ -1672,6 +1672,73 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     stanzas_.clear();
   }
 
+  void TestRejectOffer(const std::string &initiate_string,
+                       const cricket::CallOptions& opts,
+                       buzz::XmlElement** element) {
+    *element = NULL;
+
+    buzz::XmlElement* el = buzz::XmlElement::ForStr(initiate_string);
+    client_->session_manager()->OnIncomingMessage(el);
+    ASSERT_TRUE(call_ != NULL);
+    ASSERT_TRUE(call_->sessions()[0] != NULL);
+    ASSERT_EQ(cricket::Session::STATE_RECEIVEDINITIATE,
+              call_->sessions()[0]->state());
+    ASSERT_EQ(1U, stanzas_.size());
+    ASSERT_TRUE(buzz::QN_IQ == stanzas_[0]->Name());
+    ASSERT_TRUE(stanzas_[0]->HasAttr(buzz::QN_TYPE));
+    ASSERT_EQ(std::string(buzz::STR_RESULT), stanzas_[0]->Attr(buzz::QN_TYPE));
+    delete stanzas_[0];
+    stanzas_.clear();
+
+    call_->AcceptSession(call_->sessions()[0], opts);
+    ASSERT_EQ(cricket::Session::STATE_SENTACCEPT,
+              call_->sessions()[0]->state());
+    ASSERT_EQ(1U, stanzas_.size());
+    ASSERT_TRUE(buzz::QN_IQ == stanzas_[0]->Name());
+    ASSERT_TRUE(stanzas_[0]->HasAttr(buzz::QN_TYPE));
+    ASSERT_EQ(std::string(buzz::STR_SET), stanzas_[0]->Attr(buzz::QN_TYPE));
+
+    buzz::XmlElement* e = ActionFromStanza(stanzas_[0]);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(ContentFromAction(e) != NULL);
+    *element = CopyElement(ContentFromAction(e));
+    ASSERT_TRUE(*element != NULL);
+    delete stanzas_[0];
+    stanzas_.clear();
+
+    buzz::XmlElement* content = *element;
+    // The NextContent method actually returns the second content. So we
+    // can't handle the case when audio, video and data are all enabled. But
+    // since we are testing rejection, it won't be the case.
+    if (opts.has_audio) {
+      ASSERT_EQ("test audio", content->Attr(buzz::QName("", "name")));
+      content = parser_->NextContent(content);
+    }
+
+    if (opts.has_video) {
+      ASSERT_EQ("test video", content->Attr(buzz::QName("", "name")));
+      content = parser_->NextContent(content);
+    }
+
+    if (opts.has_data) {
+      ASSERT_EQ("test data", content->Attr(buzz::QName("", "name")));
+      content = parser_->NextContent(content);
+    }
+
+    call_->Terminate();
+    ASSERT_EQ(cricket::Session::STATE_SENTTERMINATE,
+              call_->sessions()[0]->state());
+    ASSERT_EQ(1U, stanzas_.size());
+    ASSERT_TRUE(buzz::QN_IQ == stanzas_[0]->Name());
+    ASSERT_TRUE(stanzas_[0]->HasAttr(buzz::QN_TYPE));
+    ASSERT_EQ(std::string(buzz::STR_SET), stanzas_[0]->Attr(buzz::QN_TYPE));
+    e = ActionFromStanza(stanzas_[0]);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(parser_->ActionIsTerminate(e));
+    delete stanzas_[0];
+    stanzas_.clear();
+  }
+
   void TestBadIncomingInitiate(const std::string& initiate_string) {
     buzz::XmlElement* el = buzz::XmlElement::ForStr(initiate_string);
     client_->session_manager()->OnIncomingMessage(el);
@@ -2633,6 +2700,46 @@ TEST(MediaSessionTest, JingleGoodVideoInitiateWithData) {
   test->TestGoodIncomingInitiate(AddEncryption(kJingleVideoInitiateWithData,
                                                kJingleCryptoOffer),
                                  elem.use());
+}
+
+TEST(MediaSessionTest, JingleRejectAudio) {
+  talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
+  talk_base::scoped_ptr<buzz::XmlElement> elem;
+  cricket::CallOptions opts;
+  opts.has_audio = false;
+  opts.has_video = true;
+  opts.has_data = true;
+  test->TestRejectOffer(kJingleVideoInitiateWithData, opts, elem.use());
+}
+
+TEST(MediaSessionTest, JingleRejectVideo) {
+  talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
+  talk_base::scoped_ptr<buzz::XmlElement> elem;
+  cricket::CallOptions opts;
+  opts.has_audio = true;
+  opts.has_video = false;
+  opts.has_data = true;
+  test->TestRejectOffer(kJingleVideoInitiateWithData, opts, elem.use());
+}
+
+TEST(MediaSessionTest, JingleRejectData) {
+  talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
+  talk_base::scoped_ptr<buzz::XmlElement> elem;
+  cricket::CallOptions opts;
+  opts.has_audio = true;
+  opts.has_video = true;
+  opts.has_data = false;
+  test->TestRejectOffer(kJingleVideoInitiateWithData, opts, elem.use());
+}
+
+TEST(MediaSessionTest, JingleRejectVideoAndData) {
+  talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
+  talk_base::scoped_ptr<buzz::XmlElement> elem;
+  cricket::CallOptions opts;
+  opts.has_audio = true;
+  opts.has_video = false;
+  opts.has_data = false;
+  test->TestRejectOffer(kJingleVideoInitiateWithData, opts, elem.use());
 }
 
 TEST(MediaSessionTest, JingleGoodInitiateAllSupportedAudioCodecs) {

@@ -55,13 +55,9 @@ public:
     allow_plain_(false) {}
 
   virtual ~Private() {
-    if (socket_.get() != NULL) {
-      // We need to disconnect from socket_ before engine_ is destructed (by
-      // the auto-generated destructor code).
-      socket_->SignalConnected.disconnect(this);
-      socket_->SignalRead.disconnect(this);
-      socket_->SignalClosed.disconnect(this);
-    }
+    // We need to disconnect from socket_ before engine_ is destructed (by
+    // the auto-generated destructor code).
+    ResetSocket();
   }
 
   // the owner
@@ -82,6 +78,15 @@ public:
   CaptchaChallenge captcha_challenge_;
   bool signal_closed_;
   bool allow_plain_;
+
+  void ResetSocket() {
+    if (socket_.get() != NULL) {
+      socket_->SignalConnected.disconnect(this);
+      socket_->SignalRead.disconnect(this);
+      socket_->SignalClosed.disconnect(this);
+      socket_.reset(NULL);
+    }
+  }
 
   // implementations of interfaces
   void OnStateChange(int state);
@@ -308,7 +313,7 @@ XmppReturnStatus XmppClient::Disconnect() {
     return XMPP_RETURN_BADSTATE;
   Abort();
   d_->engine_->Disconnect();
-  d_->socket_.reset(NULL);
+  d_->ResetSocket();
   return XMPP_RETURN_OK;
 }
 

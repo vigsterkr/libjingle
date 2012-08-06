@@ -107,6 +107,10 @@ extern const char STR_MUC_ROOMCONFIG_ROOMNAME[];
 extern const char STR_MUC_ROOMCONFIG_FEATURES[];
 extern const char STR_MUC_ROOM_FEATURE_ENTERPRISE[];
 extern const char STR_MUC_ROOMCONFIG[];
+extern const char STR_MUC_ROOM_FEATURE_HANGOUT[];
+extern const char STR_MUC_ROOM_FEATURE_HANGOUT_LITE[];
+extern const char STR_MUC_ROOM_FEATURE_BROADCAST[];
+extern const char STR_MUC_ROOM_FEATURE_MULTI_USER_VC[];
 
 extern const StaticQName QN_STREAM_STREAM;
 extern const StaticQName QN_STREAM_FEATURES;
@@ -303,6 +307,7 @@ extern const char STR_SHOW_OFFLINE[];
 
 extern const char NS_GOOGLE_PSTN_CONFERENCE[];
 extern const StaticQName QN_GOOGLE_PSTN_CONFERENCE_STATUS;
+extern const StaticQName QN_ATTR_STATUS;
 
 // Presence connection status
 extern const char STR_PSTN_CONFERENCE_STATUS_CONNECTING[];
@@ -321,6 +326,22 @@ extern const StaticQName QN_INVITATION;
 extern const StaticQName QN_INVITE_NAME;
 extern const StaticQName QN_INVITE_SUBJECT;
 extern const StaticQName QN_INVITE_MESSAGE;
+
+// Google push
+extern const char NS_GOOGLE_PUSH[];
+extern const StaticQName QN_GOOGLE_PUSH_PUSH;
+extern const StaticQName QN_GOOGLE_PUSH_DATA;
+extern const StaticQName QN_GOOGLE_PUSH_RECIPIENT;
+extern const StaticQName QN_GOOGLE_PUSH_SUBSCRIBE;
+extern const StaticQName QN_GOOGLE_PUSH_ITEM;
+extern const StaticQName QN_ATTR_CHANNEL;
+extern const StaticQName QN_ATTR_DATA;
+
+// Kick
+extern const char NS_GOOGLE_MUC_ADMIN[];
+extern const StaticQName QN_GOOGLE_MUC_ADMIN_QUERY;
+extern const StaticQName QN_GOOGLE_MUC_ADMIN_QUERY_ITEM;
+extern const StaticQName QN_GOOGLE_MUC_ADMIN_QUERY_ITEM_REASON;
 
 // PubSub: http://xmpp.org/extensions/xep-0060.html
 extern const char NS_PUBSUB[];
@@ -381,11 +402,13 @@ extern const StaticQName QN_MUC_X;
 extern const StaticQName QN_MUC_ITEM;
 extern const StaticQName QN_MUC_AFFILIATION;
 extern const StaticQName QN_MUC_ROLE;
+extern const StaticQName QN_CLIENT_VERSION;
 extern const char STR_AFFILIATION_NONE[];
 extern const char STR_ROLE_PARTICIPANT[];
 
 extern const char NS_GOOGLE_SESSION[];
 extern const StaticQName QN_GOOGLE_USER_ID;
+extern const StaticQName QN_GOOGLE_CIRCLE_ID;
 extern const StaticQName QN_GOOGLE_SESSION_BLOCKED;
 extern const StaticQName QN_GOOGLE_SESSION_BLOCKING;
 
@@ -397,6 +420,8 @@ extern const StaticQName QN_MUC_USER_CONTINUE;
 extern const StaticQName QN_MUC_USER_X;
 extern const StaticQName QN_MUC_USER_ITEM;
 extern const StaticQName QN_MUC_USER_STATUS;
+extern const StaticQName QN_MUC_USER_REASON;
+extern const StaticQName QN_MUC_USER_ABUSE_VIOLATION;
 
 // JEP 0055 - Jabber Search
 extern const char NS_SEARCH[];
@@ -406,6 +431,7 @@ extern const StaticQName QN_SEARCH_ROOM_NAME;
 extern const StaticQName QN_SEARCH_ROOM_JID;
 extern const StaticQName QN_SEARCH_ROOM_DOMAIN;
 extern const StaticQName QN_SEARCH_HANGOUT_ID;
+extern const StaticQName QN_SEARCH_EXTERNAL_ID;
 
 // JEP 0115
 extern const char NS_CAPS[];
@@ -522,6 +548,33 @@ extern const StaticQName QN_GOOGLE_MUC_VIDEO_PAUSE;
 extern const StaticQName QN_GOOGLE_MUC_RECORDING;
 extern const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK;
 extern const StaticQName QN_STATE_ATTR;
+
+
+extern const char NS_GOOGLE_MUC_HANGOUT[];
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_OCCUPANTS_QUERY;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITE;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_START_CONTEXT;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITEE;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITE_TYPE;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_PUBLIC;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_NOTIFICATION_STATUS;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_HANGOUT_ID;
+extern const StaticQName QN_GOOGLE_MUC_HANGOUT_NOTIFICATION_TYPE;
+extern const StaticQName QN_ATTR_CREATE_ACTIVITY;
+
+extern const char NS_DEVICE_REGISTRATION[];
+extern const StaticQName QN_DEVICE_REGISTER;
+extern const StaticQName QN_DEVICE_UNREGISTER;
+extern const StaticQName QN_DEVICE_ID;
+extern const StaticQName QN_APP_ID;
+extern const StaticQName QN_LOCALE;
+extern const StaticQName QN_APP_VERSION;
+extern const StaticQName QN_BUILD_TYPE;
+extern const StaticQName QN_DEVICE_HARDWARE;
+extern const StaticQName QN_DEVICE_OS_VERSION;
+extern const StaticQName QN_IOS_RESOURCE;
+extern const StaticQName QN_TOKEN;
+extern const StaticQName QN_IOS_CAPABILITY;
 
 extern const char AUTH_MECHANISM_GOOGLE_COOKIE[];
 extern const char AUTH_MECHANISM_GOOGLE_TOKEN[];

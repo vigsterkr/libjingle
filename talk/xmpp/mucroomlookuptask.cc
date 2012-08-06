@@ -34,26 +34,45 @@
 
 namespace buzz {
 
-MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
+MucRoomLookupTask*
+MucRoomLookupTask::CreateLookupTaskForRoomName(XmppTaskParentInterface* parent,
                                      const Jid& lookup_server_jid,
                                      const std::string& room_name,
-                                     const std::string& room_domain)
-    : IqTask(parent, STR_SET, lookup_server_jid,
-             MakeNameQuery(room_name, room_domain)) {
+                                     const std::string& room_domain) {
+  return new MucRoomLookupTask(parent, lookup_server_jid,
+                               MakeNameQuery(room_name, room_domain));
+}
+
+MucRoomLookupTask*
+MucRoomLookupTask::CreateLookupTaskForRoomJid(XmppTaskParentInterface* parent,
+                                              const Jid& lookup_server_jid,
+                                              const Jid& room_jid) {
+  return new MucRoomLookupTask(parent, lookup_server_jid,
+                               MakeJidQuery(room_jid));
+}
+
+MucRoomLookupTask*
+MucRoomLookupTask::CreateLookupTaskForHangoutId(XmppTaskParentInterface* parent,
+                                                const Jid& lookup_server_jid,
+                                                const std::string& hangout_id) {
+  return new MucRoomLookupTask(parent, lookup_server_jid,
+                               MakeHangoutIdQuery(hangout_id));
+}
+
+MucRoomLookupTask*
+MucRoomLookupTask::CreateLookupTaskForExternalId(
+    XmppTaskParentInterface* parent,
+    const Jid& lookup_server_jid,
+    const std::string& external_id,
+    const std::string& type) {
+  return new MucRoomLookupTask(parent, lookup_server_jid,
+                               MakeExternalIdQuery(external_id, type));
 }
 
 MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
                                      const Jid& lookup_server_jid,
-                                     const Jid& room_jid)
-    : IqTask(parent, STR_SET, lookup_server_jid,
-             MakeJidQuery(room_jid)) {
-}
-
-MucRoomLookupTask::MucRoomLookupTask(XmppTaskParentInterface* parent,
-                                     const Jid& lookup_server_jid,
-                                     const std::string& hangout_id)
-    : IqTask(parent, STR_SET, lookup_server_jid,
-             MakeHangoutIdQuery(hangout_id)) {
+                                     XmlElement* query)
+    : IqTask(parent, STR_SET, lookup_server_jid, query) {
 }
 
 XmlElement* MucRoomLookupTask::MakeNameQuery(
@@ -76,6 +95,17 @@ XmlElement* MucRoomLookupTask::MakeJidQuery(const Jid& room_jid) {
 
   XmlElement* query = new XmlElement(QN_SEARCH_QUERY);
   query->AddElement(jid_elem);
+  return query;
+}
+
+XmlElement* MucRoomLookupTask::MakeExternalIdQuery(
+    const std::string& external_id, const std::string& type) {
+  XmlElement* external_id_elem = new XmlElement(QN_SEARCH_EXTERNAL_ID);
+  external_id_elem->SetAttr(QN_TYPE, type);
+  external_id_elem->SetBodyText(external_id);
+
+  XmlElement* query = new XmlElement(QN_SEARCH_QUERY);
+  query->AddElement(external_id_elem);
   return query;
 }
 
@@ -132,6 +162,12 @@ void MucRoomLookupTask::HandleResult(const XmlElement* stanza) {
       item_elem->FirstNamed(QN_SEARCH_ROOM_DOMAIN);
   if (room_domain_elem != NULL) {
     room.domain = room_domain_elem->BodyText();
+  }
+
+  const XmlElement* hangout_id_elem =
+      item_elem->FirstNamed(QN_SEARCH_HANGOUT_ID);
+  if (hangout_id_elem != NULL) {
+    room.hangout_id = hangout_id_elem->BodyText();
   }
 
   SignalResult(this, room);

@@ -91,8 +91,9 @@ class MucRoomLookupTaskTest : public testing::Test {
 TEST_F(MucRoomLookupTaskTest, TestLookupName) {
   ASSERT_EQ(0U, xmpp_client->sent_stanzas().size());
 
-  buzz::MucRoomLookupTask* task = new buzz::MucRoomLookupTask(
-      xmpp_client, lookup_server_jid, room_name, room_domain);
+  buzz::MucRoomLookupTask* task =
+      buzz::MucRoomLookupTask::CreateLookupTaskForRoomName(
+          xmpp_client, lookup_server_jid, room_name, room_domain);
   task->SignalResult.connect(listener, &MucRoomLookupListener::OnResult);
   task->Start();
 
@@ -132,7 +133,7 @@ TEST_F(MucRoomLookupTaskTest, TestLookupName) {
 TEST_F(MucRoomLookupTaskTest, TestLookupHangoutId) {
   ASSERT_EQ(0U, xmpp_client->sent_stanzas().size());
 
-  buzz::MucRoomLookupTask* task = new buzz::MucRoomLookupTask(
+  buzz::MucRoomLookupTask* task = buzz::MucRoomLookupTask::CreateLookupTaskForHangoutId(
       xmpp_client, lookup_server_jid, hangout_id);
   task->SignalResult.connect(listener, &MucRoomLookupListener::OnResult);
   task->Start();
@@ -169,7 +170,7 @@ TEST_F(MucRoomLookupTaskTest, TestLookupHangoutId) {
 }
 
 TEST_F(MucRoomLookupTaskTest, TestError) {
-  buzz::MucRoomLookupTask* task = new buzz::MucRoomLookupTask(
+  buzz::MucRoomLookupTask* task = buzz::MucRoomLookupTask::CreateLookupTaskForRoomName(
       xmpp_client, lookup_server_jid, room_name, room_domain);
   task->SignalError.connect(listener, &MucRoomLookupListener::OnError);
   task->Start();
@@ -185,7 +186,7 @@ TEST_F(MucRoomLookupTaskTest, TestError) {
 }
 
 TEST_F(MucRoomLookupTaskTest, TestBadJid) {
-  buzz::MucRoomLookupTask* task = new buzz::MucRoomLookupTask(
+  buzz::MucRoomLookupTask* task = buzz::MucRoomLookupTask::CreateLookupTaskForRoomName(
       xmpp_client, lookup_server_jid, room_name, room_domain);
   task->SignalError.connect(listener, &MucRoomLookupListener::OnError);
   task->Start();

@@ -141,7 +141,7 @@ static const char kConnectionNettype[] = "IN";
 static const char kConnectionAddrtype[] = "IP4";
 static const char kMediaTypeVideo[] = "video";
 static const char kMediaTypeAudio[] = "audio";
-static const char kMediaPortPlaceholder = 1;
+static const char kMediaPortRejected[] = "0";
 static const char kMediaProtocolAvpf[] = "RTP/AVPF";
 static const char kMediaProtocolSavpf[] = "RTP/SAVPF";
 static const char kDefaultAddress[] = "0.0.0.0";
@@ -411,9 +411,13 @@ static void UpdateMediaDefaultDestination(
         mline->find(kSdpDelimiterSpace, first_space + 1);
     if (first_space == std::string::npos || second_space == std::string::npos)
       return;
-    mline->replace(first_space + 1,
-                   second_space - first_space -1,
-                   rtp_port);
+    // If this is a m-line with port equal to 0, we don't change it.
+    if (mline->substr(first_space + 1, second_space - first_space - 1) !=
+        kMediaPortRejected) {
+      mline->replace(first_space + 1,
+                     second_space - first_space - 1,
+                     rtp_port);
+    }
     // Add the c line.
     // RFC 4566
     // c=<nettype> <addrtype> <connection-address>
@@ -758,7 +762,11 @@ void BuildMediaDescription(const ContentInfo* content_info,
   }
   // The port number in the m line will be updated later when associate with
   // the candidates.
-  const int port = kMediaPortPlaceholder;
+  // RFC 3264
+  // To reject an offered stream, the port number in the corresponding stream in
+  // the answer MUST be set to zero.
+  const std::string port = content_info->rejected ?
+      kMediaPortRejected : kDefaultPort;
   const char* proto = kMediaProtocolAvpf;
   // RFC 4568
   // SRTP security descriptions MUST only be used with the SRTP transport.
@@ -1109,7 +1117,7 @@ bool ParseMediaDescription(const std::string& message,
   while (GetLineWithType(message, pos, &line, kLineTypeMedia)) {
     ++mline_index;
     MediaType media_type = cricket::MEDIA_TYPE_VIDEO;
-    ContentDescription* content = NULL;
+    MediaContentDescription* content = NULL;
     std::string content_name;
     if (HasAttribute(line, kMediaTypeVideo)) {
       media_type = cricket::MEDIA_TYPE_VIDEO;
@@ -1125,6 +1133,21 @@ bool ParseMediaDescription(const std::string& message,
       LOG(LS_WARNING) << "Unsupported media type: " << line;
       continue;
     }
+    std::vector<std::string> fields;
+    talk_base::split(line.substr(kLinePrefixLength),
+                     kSdpDelimiterSpace, &fields);
+    if (fields.size() < 4) {
+      LOG(LS_ERROR) << "The m line has less fields than it should have: "
+                    << line;
+      return false;
+    }
+    bool rejected = false;
+    // RFC 3264
+    // To reject an offered stream, the port number in the corresponding stream
+    // in the answer MUST be set to zero.
+    if (fields[1] == kMediaPortRejected) {
+      rejected = true;
+    }
 
     // RFC 5245
     // Whether present at the session or media-level, there MUST be an
@@ -1139,7 +1162,7 @@ bool ParseMediaDescription(const std::string& message,
                       candidates))
       return false;
 
-    desc->AddContent(content_name, cricket::NS_JINGLE_RTP, content);
+    desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected, content);
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".
     TransportInfo transport_info(content_name,
                                  TransportDescription(NS_GINGLE_P2P, "",

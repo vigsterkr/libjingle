@@ -304,7 +304,7 @@ XmppPresenceImpl::connection_status() const {
         return XMPP_CONNECTION_STATUS_HANGUP;
   }
 
-  return XMPP_CONNECTION_STATUS_UNKNOWN;
+  return XMPP_CONNECTION_STATUS_CONNECTED;
 }
 
 const std::string

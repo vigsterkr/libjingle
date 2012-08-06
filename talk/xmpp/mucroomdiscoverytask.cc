@@ -45,21 +45,21 @@ void MucRoomDiscoveryTask::HandleResult(const XmlElement* stanza) {
     return;
   }
 
+  std::set<std::string> features;
+  std::map<std::string, std::string> extended_info;
   const XmlElement* identity = query->FirstNamed(QN_DISCO_IDENTITY);
   if (identity == NULL || !identity->HasAttr(QN_NAME)) {
-    SignalError(this, NULL);
+    SignalResult(this, false, "", features, extended_info);
     return;
   }
 
   const std::string name(identity->Attr(QN_NAME));
 
-  std::set<std::string> features;
   for (const XmlElement* feature = query->FirstNamed(QN_DISCO_FEATURE);
        feature != NULL; feature = feature->NextNamed(QN_DISCO_FEATURE)) {
     features.insert(feature->Attr(QN_VAR));
   }
 
-  std::map<std::string, std::string> extended_info;
   const XmlElement* data_x = query->FirstNamed(QN_XDATA_X);
   if (data_x != NULL) {
     for (const XmlElement* field = data_x->FirstNamed(QN_XDATA_FIELD);
@@ -69,7 +69,7 @@ void MucRoomDiscoveryTask::HandleResult(const XmlElement* stanza) {
     }
   }
 
-  SignalResult(this, name, features, extended_info);
+  SignalResult(this, true, name, features, extended_info);
 }
 
 }  // namespace buzz

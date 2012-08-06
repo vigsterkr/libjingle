@@ -627,6 +627,11 @@ struct ResumeEntry {
   SendFlags send;
 };
 
+bool WebRtcVoiceEngine::SetMobileHeadsetMode(bool enable) {
+  // TODO: implement this.
+  return false;
+}
+
 // TODO: Refactor this so that the core logic can be used to set the
 // soundclip device. At that time, reinstate the soundclip pause/resume code.
 bool WebRtcVoiceEngine::SetDevices(const Device* in_device,

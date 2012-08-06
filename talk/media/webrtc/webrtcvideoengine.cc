@@ -719,14 +719,15 @@ bool WebRtcVideoEngine::SetLocalRenderer(VideoRenderer* renderer) {
   return true;
 }
 
-CaptureResult WebRtcVideoEngine::SetCapture(bool capture) {
+bool WebRtcVideoEngine::SetCapture(bool capture) {
   bool old_capture = capture_started_;
   capture_started_ = capture;
   CaptureResult res = UpdateCapturingState();
   if (res != CR_SUCCESS && res != CR_PENDING) {
     capture_started_ = old_capture;
+    return false;
   }
-  return res;
+  return true;
 }
 
 CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
@@ -1072,7 +1073,7 @@ bool WebRtcVideoEngine::RebuildCodecList(const VideoCodec& in_codec) {
 bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer) {
   if (capturer == NULL) {
     // Stop capturing before clearing the capturer.
-    if (SetCapture(false) != CR_SUCCESS) {
+    if (!SetCapture(false)) {
       LOG(LS_WARNING) << "Camera failed to stop";
       return false;
     }

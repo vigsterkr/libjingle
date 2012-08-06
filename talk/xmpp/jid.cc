@@ -148,6 +148,12 @@ bool Jid::BareEquals(const Jid& other) const {
       other.domain_name_ == domain_name_;
 }
 
+void Jid::CopyFrom(const Jid& jid) {
+  this->node_name_ = jid.node_name_;
+  this->domain_name_ = jid.domain_name_;
+  this->resource_name_ = jid.resource_name_;
+}
+
 bool Jid::operator==(const Jid& other) const {
   return other.node_name_ == node_name_ &&
       other.domain_name_ == domain_name_ &&

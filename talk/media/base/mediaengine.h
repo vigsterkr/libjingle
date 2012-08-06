@@ -150,7 +150,7 @@ class MediaEngineInterface {
   // Installs a callback for raw frames from the local camera.
   virtual bool SetLocalRenderer(VideoRenderer* renderer) = 0;
   // Starts/stops local camera.
-  virtual CaptureResult SetVideoCapture(bool capture) = 0;
+  virtual bool SetVideoCapture(bool capture) = 0;
 
   virtual const std::vector<AudioCodec>& audio_codecs() = 0;
   virtual const std::vector<VideoCodec>& video_codecs() = 0;
@@ -254,7 +254,7 @@ class CompositeMediaEngine : public MediaEngineInterface {
   virtual bool SetLocalRenderer(VideoRenderer* renderer) {
     return video_.SetLocalRenderer(renderer);
   }
-  virtual CaptureResult SetVideoCapture(bool capture) {
+  virtual bool SetVideoCapture(bool capture) {
     return video_.SetCapture(capture);
   }
 

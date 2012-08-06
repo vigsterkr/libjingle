@@ -54,9 +54,15 @@ struct ContentInfo {
   ContentInfo(const std::string& name,
               const std::string& type,
               ContentDescription* description) :
-      name(name), type(type), description(description) {}
+      name(name), type(type), rejected(false), description(description) {}
+  ContentInfo(const std::string& name,
+              const std::string& type,
+              bool rejected,
+              ContentDescription* description) :
+      name(name), type(type), rejected(rejected), description(description) {}
   std::string name;
   std::string type;
+  bool rejected;
   ContentDescription* description;
 };
 
@@ -108,6 +114,10 @@ class SessionDescription {
   // Takes ownership of ContentDescription*.
   void AddContent(const std::string& name,
                   const std::string& type,
+                  ContentDescription* description);
+  void AddContent(const std::string& name,
+                  const std::string& type,
+                  bool rejected,
                   ContentDescription* description);
   bool RemoveContentByName(const std::string& name);
   // Adds the TransportInfo.

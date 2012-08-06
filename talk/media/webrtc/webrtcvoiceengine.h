@@ -192,6 +192,8 @@ class WebRtcVoiceEngine
   // and noise suppression modes.
   bool SetConferenceMode(bool enable);
 
+  bool SetMobileHeadsetMode(bool enable);
+
   VoEWrapper* voe() { return voe_wrapper_.get(); }
   VoEWrapper* voe_sc() { return voe_wrapper_sc_.get(); }
   int GetLastEngineError();

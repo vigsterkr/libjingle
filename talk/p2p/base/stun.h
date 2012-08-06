@@ -140,7 +140,7 @@ class StunUInt16ListAttribute;
 class StunMessage {
  public:
   StunMessage();
-  ~StunMessage();
+  virtual ~StunMessage();
 
   int type() const { return type_; }
   size_t length() const { return length_; }

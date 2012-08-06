@@ -937,7 +937,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SetVideoCapturer) {
   EXPECT_TRUE(capturer->Init(vcm));
   EXPECT_TRUE(engine_.SetVideoCapturer(capturer.get()));
   EXPECT_FALSE(engine_.IsCapturing());
-  EXPECT_EQ(cricket::CR_SUCCESS, engine_.SetCapture(true));
+  EXPECT_TRUE(engine_.SetCapture(true));
   cricket::VideoCodec codec(DefaultCodec());
   EXPECT_TRUE(SetOneCodec(codec));
   EXPECT_TRUE(channel_->SetSend(true));

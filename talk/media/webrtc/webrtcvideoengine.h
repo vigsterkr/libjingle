@@ -103,7 +103,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool SetVideoCapturer(VideoCapturer* capturer);
   VideoCapturer* GetVideoCapturer() const;
   bool SetLocalRenderer(VideoRenderer* renderer);
-  CaptureResult SetCapture(bool capture);
+  bool SetCapture(bool capture);
   sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;
   CaptureResult UpdateCapturingState();
   bool IsCapturing() const;

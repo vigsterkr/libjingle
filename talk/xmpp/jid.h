@@ -64,7 +64,7 @@ public:
   bool IsFull() const;
 
   bool BareEquals(const Jid& other) const;
-
+  void CopyFrom(const Jid& jid);
   bool operator==(const Jid& other) const;
   bool operator!=(const Jid& other) const { return !operator==(other); }
 

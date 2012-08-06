@@ -257,8 +257,8 @@ class BaseChannel
 
   virtual void ChangeState() = 0;
 
-  // Gets the content appropriate to the channel (audio or video).
-  virtual const MediaContentDescription* GetFirstContent(
+  // Gets the content info appropriate to the channel (audio or video).
+  virtual const ContentInfo* GetFirstContent(
       const SessionDescription* sdesc) = 0;
   bool UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
                             ContentAction action);
@@ -382,8 +382,7 @@ class VoiceChannel : public BaseChannel {
   virtual void OnChannelRead(TransportChannel* channel,
                              const char* data, size_t len, int flags);
   virtual void ChangeState();
-  virtual const MediaContentDescription* GetFirstContent(
-      const SessionDescription* sdesc);
+  virtual const ContentInfo* GetFirstContent(const SessionDescription* sdesc);
   virtual bool SetLocalContent_w(const MediaContentDescription* content,
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
@@ -471,8 +470,7 @@ class VideoChannel : public BaseChannel {
 
   // overrides from BaseChannel
   virtual void ChangeState();
-  virtual const MediaContentDescription* GetFirstContent(
-      const SessionDescription* sdesc);
+  virtual const ContentInfo* GetFirstContent(const SessionDescription* sdesc);
   virtual bool SetLocalContent_w(const MediaContentDescription* content,
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
@@ -577,8 +575,7 @@ class DataChannel : public BaseChannel {
   };
 
   // overrides from BaseChannel
-  virtual const MediaContentDescription* GetFirstContent(
-      const SessionDescription* sdesc);
+  virtual const ContentInfo* GetFirstContent(const SessionDescription* sdesc);
   virtual bool SetLocalContent_w(const MediaContentDescription* content,
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,

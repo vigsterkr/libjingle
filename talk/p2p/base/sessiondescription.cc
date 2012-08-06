@@ -127,6 +127,13 @@ void SessionDescription::AddContent(const std::string& name,
   contents_.push_back(ContentInfo(name, type, description));
 }
 
+void SessionDescription::AddContent(const std::string& name,
+                                    const std::string& type,
+                                    bool rejected,
+                                    ContentDescription* description) {
+  contents_.push_back(ContentInfo(name, type, rejected, description));
+}
+
 bool SessionDescription::RemoveContentByName(const std::string& name) {
   for (ContentInfos::iterator content = contents_.begin();
        content != contents_.end(); ++content) {

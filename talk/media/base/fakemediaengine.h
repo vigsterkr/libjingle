@@ -636,6 +636,8 @@ class FakeVoiceEngine : public FakeBaseEngine {
         delay_offset_(0),
         rx_processor_(NULL),
         tx_processor_(NULL) {
+    // Add a fake audio codec
+    codecs_.push_back(AudioCodec());
   }
 
   int GetCapabilities() {
@@ -747,6 +749,8 @@ class FakeVideoEngine : public FakeBaseEngine {
       : renderer_(NULL),
         capture_(false),
         processor_(NULL) {
+    // Add a fake video codec
+    codecs_.push_back(VideoCodec());
   }
 
   int GetCapabilities() {
@@ -806,9 +810,9 @@ class FakeVideoEngine : public FakeBaseEngine {
   VideoCapturer* GetVideoCapturer() const {
     return NULL;
   }
-  CaptureResult SetCapture(bool capture) {
+  bool SetCapture(bool capture) {
     capture_ = capture;
-    return CR_SUCCESS;
+    return true;
   }
   bool RegisterProcessor(VideoProcessor* video_processor) {
     processor_ = video_processor;

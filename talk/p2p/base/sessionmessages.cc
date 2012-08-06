@@ -25,9 +25,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/p2p/base/sessionmessages.h"
+
 #include <stdio.h>
 #include <string>
-#include "talk/p2p/base/sessionmessages.h"
 
 #include "talk/base/logging.h"
 #include "talk/base/scoped_ptr.h"
@@ -697,6 +698,10 @@ bool WriteGingleContentInfos(const ContentInfos& contents,
   if (contents.size() == 1 ||
       (contents.size() == 2 &&
        !IsWritable(PROTOCOL_GINGLE, contents.at(1), parsers))) {
+    if (contents.front().rejected) {
+      return BadWrite("Gingle protocol may not reject individual contents.",
+                      error);
+    }
     buzz::XmlElement* elem = WriteContentInfo(
         PROTOCOL_GINGLE, contents.front(), parsers, error);
     if (!elem)
@@ -708,6 +713,10 @@ bool WriteGingleContentInfos(const ContentInfos& contents,
              contents.at(1).type == NS_JINGLE_RTP) {
      // Special-case audio + video contents so that they are "merged"
      // into one "video" content.
+    if (contents.at(0).rejected || contents.at(1).rejected) {
+      return BadWrite("Gingle protocol may not reject individual contents.",
+                      error);
+    }
     buzz::XmlElement* audio = WriteContentInfo(
         PROTOCOL_GINGLE, contents.at(0), parsers, error);
     if (!audio)
@@ -750,6 +759,9 @@ bool WriteJingleContents(const ContentInfos& contents,
                          WriteError* error) {
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); ++content) {
+    if (content->rejected) {
+      continue;
+    }
     const TransportInfo* tinfo =
         GetTransportInfoByContentName(tinfos, content->name);
     if (!tinfo)
@@ -777,6 +789,9 @@ bool WriteJingleContentInfos(const ContentInfos& contents,
                              WriteError* error) {
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); ++content) {
+    if (content->rejected) {
+      continue;
+    }
     XmlElements content_child_elems;
     buzz::XmlElement* elem = WriteContentInfo(
         PROTOCOL_JINGLE, *content, content_parsers, error);

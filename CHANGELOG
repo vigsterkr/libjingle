@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.21 - Aug 2, 2012
+  - Fixed the issue on PeerConnection offer rejection.
+  - Factored out the usage of cricket::CaptureResult.
+
 0.6.20 - Aug 1, 2012
   - Removed ROAP support from PeerConnection.
   - Moved session/phone into session/media, media/base, media/webrtc,

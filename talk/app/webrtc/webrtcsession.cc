@@ -496,10 +496,6 @@ void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
 bool WebRtcSession::SetCaptureDevice(const std::string& name,
                                      cricket::VideoCapturer* camera) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!video_channel_.get()) {
-    LOG(LS_ERROR) << "SetCaptureDevice: No video channel exists.";
-    return false;
-  }
   uint32 ssrc = 0;
   if (!VERIFY(GetVideoSsrcByName(BaseSession::local_description(),
                                  name, &ssrc) || camera == NULL)) {
@@ -514,8 +510,8 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
   }
 
   const bool start_capture = (camera != NULL);
-  cricket::CaptureResult ret = channel_manager_->SetVideoCapture(start_capture);
-  if (ret != cricket::CR_SUCCESS && ret != cricket::CR_PENDING) {
+  bool ret = channel_manager_->SetVideoCapture(start_capture);
+  if (!ret) {
     LOG(LS_ERROR) << "Failed to start the capture device.";
     return false;
   }
@@ -641,7 +637,7 @@ bool WebRtcSession::CreateChannels(const cricket::SessionDescription* desc) {
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
 
-  if (voice && !voice_channel_.get()) {
+  if (voice && !voice->rejected && !voice_channel_.get()) {
     voice_channel_.reset(channel_manager_->CreateVoiceChannel(
         this, voice->name, true));
     if (!voice_channel_.get()) {
@@ -650,7 +646,7 @@ bool WebRtcSession::CreateChannels(const cricket::SessionDescription* desc) {
     }
   }
 
-  if (video && !video_channel_.get()) {
+  if (video && !video->rejected && !video_channel_.get()) {
     video_channel_.reset(channel_manager_->CreateVideoChannel(
         this, video->name, true, voice_channel_.get()));
     if (!video_channel_.get()) {
@@ -763,14 +759,16 @@ void WebRtcSession::RemoveUnusedChannelsAndTransports(
 
   const cricket::ContentInfo* video_info =
       cricket::GetFirstVideoContent(answer);
-  if (!video_info) {
+  if (!video_info || video_info->rejected) {
     channel_manager_->DestroyVideoChannel(video_channel_.release());
+    DestroyTransportProxy(video_info->name);
   }
 
   const cricket::ContentInfo* voice_info =
       cricket::GetFirstAudioContent(answer);
-  if (!voice_info) {
+  if (!voice_info || voice_info->rejected) {
     channel_manager_->DestroyVoiceChannel(voice_channel_.release());
+    DestroyTransportProxy(voice_info->name);
   }
 }
 

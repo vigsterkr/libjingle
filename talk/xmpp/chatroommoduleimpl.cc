@@ -61,10 +61,11 @@ public:
   virtual XmppReturnStatus set_nickname(const std::string& nickname);
   virtual const std::string& nickname() const;
   virtual const Jid member_jid() const;
-  virtual XmppReturnStatus RequestEnterChatroom(const std::string& password);
+  virtual XmppReturnStatus RequestEnterChatroom(const std::string& password,
+      const std::string& client_version);
   virtual XmppReturnStatus RequestExitChatroom();
-  virtual XmppReturnStatus RequestStatusChange(XmppPresenceShow status,
-                                       const std::string& extended_status);
+  virtual XmppReturnStatus RequestConnectionStatusChange(
+      XmppPresenceConnectionStatus connection_status);
   virtual size_t GetChatroomMemberCount();
   virtual XmppReturnStatus CreateMemberEnumerator(XmppChatroomMemberEnumerator** enumerator);
   virtual const std::string subject();
@@ -92,6 +93,7 @@ private:
   void FireExitStatus(XmppChatroomExitedStatus status);
   void FireMessageReceived(const XmlElement& message);
   void FireMemberEntered(const XmppChatroomMember* entered_member);
+  void FireMemberChanged(const XmppChatroomMember* changed_member);
   void FireMemberExited(const XmppChatroomMember* exited_member);
 
 
@@ -256,8 +258,22 @@ XmppChatroomModuleImpl::CheckEnterChatroomStateOk() {
   return true;
 }
 
+std::string GetAttrValueFor(XmppPresenceConnectionStatus connection_status) {
+  switch (connection_status) {
+    default:
+    case XMPP_CONNECTION_STATUS_UNKNOWN:
+      return "";
+    case XMPP_CONNECTION_STATUS_CONNECTING:
+      return STR_PSTN_CONFERENCE_STATUS_CONNECTING;
+    case XMPP_CONNECTION_STATUS_CONNECTED:
+      return STR_PSTN_CONFERENCE_STATUS_CONNECTED;
+  }
+}
+
 XmppReturnStatus
-XmppChatroomModuleImpl::RequestEnterChatroom(const std::string& password) {
+XmppChatroomModuleImpl::RequestEnterChatroom(
+    const std::string& password,
+    const std::string& client_version) {
   UNUSED(password);
   if (!engine())
     return XMPP_RETURN_BADSTATE;
@@ -272,14 +288,23 @@ XmppChatroomModuleImpl::RequestEnterChatroom(const std::string& password) {
   // entering a chatroom is a presence request to the server
   XmlElement element(QN_PRESENCE);
   element.AddAttr(QN_TO, member_jid().Str());
-  element.AddElement(new XmlElement(QN_MUC_X));
+
+  XmlElement* muc_x = new XmlElement(QN_MUC_X);
+  element.AddElement(muc_x);
+
+  if (!client_version.empty()) {
+    XmlElement* client_version_element = new XmlElement(QN_CLIENT_VERSION,
+                                                        false);
+    client_version_element->SetBodyText(client_version);
+    muc_x->AddElement(client_version_element);
+  }
+
   XmppReturnStatus status = engine()->SendStanza(&element);
   if (status == XMPP_RETURN_OK) {
     return ClientChangeMyPresence(XMPP_CHATROOM_STATE_REQUESTED_ENTER);
   }
   return status;
 }
-
 
 XmppReturnStatus
 XmppChatroomModuleImpl::RequestExitChatroom() {
@@ -303,13 +328,34 @@ XmppChatroomModuleImpl::RequestExitChatroom() {
 }
 
 XmppReturnStatus
-XmppChatroomModuleImpl::RequestStatusChange(XmppPresenceShow status,
-                                     const std::string& extended_status) {
-  UNUSED2(status, extended_status);
-  return XMPP_RETURN_BADSTATE; //NYI
+XmppChatroomModuleImpl::RequestConnectionStatusChange(
+    XmppPresenceConnectionStatus connection_status) {
+  if (!engine())
+    return XMPP_RETURN_BADSTATE;
+
+  if (chatroom_state_ != XMPP_CHATROOM_STATE_IN_ROOM) {
+    // $TODO - this isn't a bad state, it's a bad call,  diff error code?
+    return XMPP_RETURN_BADSTATE;
+  }
+
+  if (CheckEnterChatroomStateOk() == false) {
+    return XMPP_RETURN_BADSTATE;
+  }
+
+  // entering a chatroom is a presence request to the server
+  XmlElement element(QN_PRESENCE);
+  element.AddAttr(QN_TO, member_jid().Str());
+  element.AddElement(new XmlElement(QN_MUC_X));
+  if (connection_status != XMPP_CONNECTION_STATUS_UNKNOWN) {
+    XmlElement* con_status_element =
+        new XmlElement(QN_GOOGLE_PSTN_CONFERENCE_STATUS);
+    con_status_element->AddAttr(QN_STATUS, GetAttrValueFor(connection_status));
+    element.AddElement(con_status_element);
+  }
+  XmppReturnStatus status = engine()->SendStanza(&element);
+
+  return status;
 }
-
-
 
 size_t
 XmppChatroomModuleImpl::GetChatroomMemberCount() {
@@ -420,6 +466,13 @@ XmppChatroomModuleImpl::FireMemberEntered(const XmppChatroomMember* entered_memb
 }
 
 void
+XmppChatroomModuleImpl::FireMemberChanged(
+    const XmppChatroomMember* changed_member) {
+  if (chatroom_handler_)
+    chatroom_handler_->MemberChanged(this, changed_member);
+}
+
+void
 XmppChatroomModuleImpl::FireMemberExited(const XmppChatroomMember* exited_member) {
   if (chatroom_handler_)
     chatroom_handler_->MemberExited(this, exited_member);
@@ -448,7 +501,7 @@ XmppChatroomModuleImpl::ServerChangedOtherPresence(const XmlElement&
     if (presence->available() == XMPP_PRESENCE_AVAILABLE) {
       member->SetPresence(presence.get());
       chatroom_jid_members_version_++;
-      // $TODO - fire change
+      FireMemberChanged(member);
     }
     else if (presence->available() == XMPP_PRESENCE_UNAVAILABLE) {
       chatroom_jid_members_.erase(pos);
@@ -509,7 +562,11 @@ XmppChatroomModuleImpl::ChangePresence(XmppChatroomState new_state,
   // we assert for any invalid transition states, and we'll
   if (isServer) {
     // $TODO send original stanza back to server and log an error?
-    ASSERT(transition_desc->is_valid_server_transition);
+    // Disable the assert because of b/6133072
+    // ASSERT(transition_desc->is_valid_server_transition);
+    if (!transition_desc->is_valid_server_transition) {
+      return XMPP_RETURN_BADSTATE;
+    }
   } else {
     if (transition_desc->is_valid_client_transition == false) {
       ASSERT(0);
@@ -557,7 +614,8 @@ XmppChatroomModuleImpl::GetEnterFailureFromXml(const XmlElement* presence) {
         }
         break;
       }
-      case 405: status = XMPP_CHATROOM_ENTERED_FAILURE_MAX_USERS; break;
+      case 405: status = XMPP_CHATROOM_ENTERED_FAILURE_ROOM_LOCKED; break;
+      case 406: status = XMPP_CHATROOM_ENTERED_FAILURE_OUTDATED_CLIENT; break;
       case 407: status = XMPP_CHATROOM_ENTERED_FAILURE_NOT_A_MEMBER; break;
       case 409: status = XMPP_CHATROOM_ENTERED_FAILURE_NICKNAME_CONFLICT; break;
       // http://xmpp.org/extensions/xep-0045.html#enter-maxusers

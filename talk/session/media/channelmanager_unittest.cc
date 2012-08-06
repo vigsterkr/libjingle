@@ -507,13 +507,13 @@ TEST_F(ChannelManagerTest, SetLogging) {
 TEST_F(ChannelManagerTest, SetVideoCapture) {
   // Should fail until we are initialized.
   EXPECT_FALSE(fme_->capture());
-  EXPECT_EQ(cricket::CR_FAILURE, cm_->SetVideoCapture(true));
+  EXPECT_FALSE(cm_->SetVideoCapture(true));
   EXPECT_FALSE(fme_->capture());
   EXPECT_TRUE(cm_->Init());
   EXPECT_FALSE(fme_->capture());
-  EXPECT_EQ(cricket::CR_SUCCESS, cm_->SetVideoCapture(true));
+  EXPECT_TRUE(cm_->SetVideoCapture(true));
   EXPECT_TRUE(fme_->capture());
-  EXPECT_EQ(cricket::CR_SUCCESS, cm_->SetVideoCapture(false));
+  EXPECT_TRUE(cm_->SetVideoCapture(false));
   EXPECT_FALSE(fme_->capture());
 }
 

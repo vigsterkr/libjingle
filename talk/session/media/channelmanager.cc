@@ -148,9 +148,9 @@ struct LoggingOptions : public talk_base::MessageData {
 };
 
 struct CaptureParams : public talk_base::MessageData {
-  explicit CaptureParams(bool c) : capture(c), result(CR_FAILURE) {}
+  explicit CaptureParams(bool c) : capture(c), result(false) {}
   bool capture;
-  CaptureResult result;
+  bool result;
 };
 
 struct VideoProcessorParams : public talk_base::MessageData {
@@ -791,18 +791,18 @@ bool ChannelManager::SetVideoCapturer_w(VideoCapturer* capturer) {
   return media_engine_->SetVideoCapturer(capturer);
 }
 
-CaptureResult ChannelManager::SetVideoCapture(bool capture) {
+bool ChannelManager::SetVideoCapture(bool capture) {
   bool ret;
   CaptureParams capture_params(capture);
   ret = (Send(MSG_SETVIDEOCAPTURE, &capture_params) &&
-         (capture_params.result != CR_FAILURE));
+         capture_params.result);
   if (ret) {
     capturing_ = capture;
   }
   return capture_params.result;
 }
 
-CaptureResult ChannelManager::SetVideoCapture_w(bool capture) {
+bool ChannelManager::SetVideoCapture_w(bool capture) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   ASSERT(initialized_);
   return media_engine_->SetVideoCapture(capture);

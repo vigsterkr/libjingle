@@ -299,6 +299,12 @@ class FakeTransport : public Transport {
 // test purposes. Can be connected to other FakeSessions via Connect().
 class FakeSession : public BaseSession {
  public:
+  explicit FakeSession()
+      : BaseSession(talk_base::Thread::Current(),
+                    talk_base::Thread::Current(),
+                    NULL, "", "", true),
+      fail_create_channel_(false) {
+  }
   explicit FakeSession(bool initiator)
       : BaseSession(talk_base::Thread::Current(),
                     talk_base::Thread::Current(),

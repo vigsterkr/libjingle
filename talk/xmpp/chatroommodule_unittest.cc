@@ -143,8 +143,10 @@ public:
     ss_ << "[MemberExited " << exited_member->member_jid().Str() << "]";
   }
 
-  void MemberChanged(XmppChatroomModule* room, size_t index) {
-    UNUSED2(room, index);
+  void MemberChanged(XmppChatroomModule* room,
+      const XmppChatroomMember* changed_member) {
+    UNUSED(room);
+    ss_ << "[MemberChanged " << changed_member->member_jid().Str() << "]";
   }
 
   virtual void MessageReceived(XmppChatroomModule* room, const XmlElement& message) {
@@ -206,7 +208,7 @@ public:
     TEST_EQ(chatroom->state(), XMPP_CHATROOM_STATE_NOT_IN_ROOM);
     chatroom->set_nickname("thirdwitch");
     chatroom->set_chatroom_jid(Jid("darkcave@my-server"));
-    chatroom->RequestEnterChatroom("");
+    chatroom->RequestEnterChatroom("", XMPP_CONNECTION_STATUS_UNKNOWN);
     TEST_EQ(chatroom_handler.StrClear(), "");
     TEST_EQ(handler.OutputActivity(),
       "<presence to=\"darkcave@my-server/thirdwitch\">"

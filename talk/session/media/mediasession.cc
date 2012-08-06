@@ -678,7 +678,9 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
   }
 
-  if (options.bundle_enabled) {
+  // Only update bundle info if there's at least one content in the
+  // |bundle_group|.
+  if (options.bundle_enabled && bundle_group.FirstContentName()) {
     offer->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, offer.get())) {
       LOG(LS_ERROR) << "CreateOffer Failed to UpdateTransportInfoForBundle.";
@@ -731,8 +733,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   GetCurrentStreamParams(current_description, &current_streams);
 
   const ContentInfo* audio_content = GetFirstAudioContent(offer);
-  if (audio_content && options.has_audio) {
-    scoped_ptr<AudioContentDescription> audio_accept(
+  if (audio_content) {
+    scoped_ptr<AudioContentDescription> audio_answer(
         new AudioContentDescription());
     if (!CreateMediaContentAnswer(
             static_cast<const AudioContentDescription*>(
@@ -743,30 +745,41 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstAudioContentDescription(current_description)),
             &current_streams,
             add_legacy_,
-            audio_accept.get())) {
+            audio_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    accept->AddContent(audio_content->name, audio_content->type,
-                       audio_accept.release());
-    // Add to group info if this content name is part of the BUNDLE.
-    if (received_bundle_group &&
-        received_bundle_group->HasContentName(audio_content->name))
-      bundle_group.AddContentName(audio_content->name);
+    bool rejected = true;
+    if (options.has_audio) {
+      rejected = false;
+      // Add to group info if this content name is part of the BUNDLE.
+      if (received_bundle_group &&
+          received_bundle_group->HasContentName(audio_content->name))
+        bundle_group.AddContentName(audio_content->name);
 
-    TransportInfo info;
-    GetOrCreateTransportInfo(audio_content->name, current_description, &info);
-    if (!accept->AddTransportInfo(info)) {
-      LOG(LS_ERROR)
-          << "CreateAnswer Failed to AddTransportInfo with content name:"
-          << audio_content->name;
+      TransportInfo info;
+      GetOrCreateTransportInfo(audio_content->name, current_description, &info);
+      if (!accept->AddTransportInfo(info)) {
+        LOG(LS_ERROR)
+            << "CreateAnswer Failed to AddTransportInfo with content name:"
+            << audio_content->name;
+      }
+    } else {
+      // RFC 3264
+      // The answer MUST contain exactly the same number of "m=" lines as the
+      // offer.
+      // So even if we want to reject a content type, we should still have an
+      // entry for it.
+      LOG(LS_INFO) << "Audio is not supported in answer.";
     }
+    accept->AddContent(audio_content->name, audio_content->type, rejected,
+                       audio_answer.release());
   } else {
-    LOG(LS_INFO) << "Audio is not supported in answer";
+    LOG(LS_INFO) << "Audio is not available in offer.";
   }
 
   const ContentInfo* video_content = GetFirstVideoContent(offer);
-  if (video_content && options.has_video) {
-    scoped_ptr<VideoContentDescription> video_accept(
+  if (video_content) {
+    scoped_ptr<VideoContentDescription> video_answer(
         new VideoContentDescription());
     if (!CreateMediaContentAnswer(
             static_cast<const VideoContentDescription*>(
@@ -777,29 +790,39 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstVideoContentDescription(current_description)),
             &current_streams,
             add_legacy_,
-            video_accept.get())) {
+            video_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    video_accept->set_bandwidth(options.video_bandwidth);
-    accept->AddContent(video_content->name, video_content->type,
-                       video_accept.release());
-
-    if (received_bundle_group &&
-        received_bundle_group->HasContentName(video_content->name))
-      bundle_group.AddContentName(video_content->name);
-
-    TransportInfo info;
-    GetOrCreateTransportInfo(video_content->name, current_description, &info);
-    if (!accept->AddTransportInfo(info)) {
-      LOG(LS_ERROR)
-          << "CreateAnswer Failed to AddTransportInfo with content name:"
-          << video_content->name;
+    bool rejected = true;
+    if (options.has_video) {
+      rejected = false;
+      if (received_bundle_group &&
+          received_bundle_group->HasContentName(video_content->name))
+        bundle_group.AddContentName(video_content->name);
+      TransportInfo info;
+      GetOrCreateTransportInfo(video_content->name, current_description, &info);
+      if (!accept->AddTransportInfo(info)) {
+        LOG(LS_ERROR)
+            << "CreateAnswer Failed to AddTransportInfo with content name:"
+            << video_content->name;
+      }
+      video_answer->set_bandwidth(options.video_bandwidth);
+    } else {
+      // RFC 3264
+      // The answer MUST contain exactly the same number of "m=" lines as the
+      // offer.
+      LOG(LS_INFO) << "Video is not supported in answer.";
     }
+    accept->AddContent(video_content->name, video_content->type, rejected,
+                       video_answer.release());
   } else {
-    LOG(LS_INFO) << "Video is not supported in answer";
+    LOG(LS_INFO) << "Video is not available in offer.";
   }
 
-  if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE)) {
+  // Only update bundle info if there's at least one content in the
+  // |bundle_group|.
+  if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE) &&
+      bundle_group.FirstContentName()) {
     accept->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, accept.get())) {
       LOG(LS_ERROR) << "CreateAnswer Failed to UpdateTransportInfoForBundle.";
@@ -813,8 +836,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   }
 
   const ContentInfo* data_content = GetFirstDataContent(offer);
-  if (data_content && options.has_data) {
-    scoped_ptr<DataContentDescription> data_accept(
+  if (data_content) {
+    scoped_ptr<DataContentDescription> data_answer(
         new DataContentDescription());
     if (!CreateMediaContentAnswer(
             static_cast<const DataContentDescription*>(
@@ -825,14 +848,23 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstDataContentDescription(current_description)),
             &current_streams,
             add_legacy_,
-            data_accept.get())) {
+            data_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    data_accept->set_bandwidth(options.data_bandwidth);
-    accept->AddContent(data_content->name, data_content->type,
-                       data_accept.release());
+    bool rejected = true;
+    if (options.has_data) {
+      rejected = false;
+      data_answer->set_bandwidth(options.data_bandwidth);
+    } else {
+      // RFC 3264
+      // The answer MUST contain exactly the same number of "m=" lines as the
+      // offer.
+      LOG(LS_INFO) << "Data is not supported in answer.";
+    }
+    accept->AddContent(data_content->name, data_content->type, rejected,
+                       data_answer.release());
   } else {
-    LOG(LS_INFO) << "Data is not supported in answer";
+    LOG(LS_INFO) << "Data is not available in offer.";
   }
 
   return accept.release();
