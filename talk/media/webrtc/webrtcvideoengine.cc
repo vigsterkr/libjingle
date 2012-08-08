@@ -2690,7 +2690,7 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
     // Turn off the VP8 error resilience
     target_codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
 
-    bool enable_denoising = (options_ & OPT_VIDEO_NOISE_REDUCTION) != 0;
+    bool enable_denoising = (0 != (options_ & OPT_VIDEO_NOISE_REDUCTION));
     target_codec.codecSpecific.VP8.denoisingOn = enable_denoising;
   }
 

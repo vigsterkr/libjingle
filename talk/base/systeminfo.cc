@@ -154,9 +154,18 @@ SystemInfo::SystemInfo()
   if (!sysctlbyname("hw.logicalcpu_max", &sysctl_value, &length, NULL, 0)) {
     logical_cpus_ = static_cast<int>(sysctl_value);
   }
-  length = sizeof(sysctl_value);
-  if (!sysctlbyname("hw.l3cachesize", &sysctl_value, &length, NULL, 0)) {
-    cache_size_ = static_cast<int>(sysctl_value) * 1024;
+  uint64_t sysctl_value64;
+  length = sizeof(sysctl_value64);
+  if (!sysctlbyname("hw.l3cachesize", &sysctl_value64, &length, NULL, 0)) {
+    cache_size_ = static_cast<int>(sysctl_value64);
+    LOG(LS_INFO) << "l3cachesize " << cache_size_;
+  }
+  if (!cache_size_) {
+    length = sizeof(sysctl_value64);
+    if (!sysctlbyname("hw.l2cachesize", &sysctl_value64, &length, NULL, 0)) {
+      cache_size_ = static_cast<int>(sysctl_value64);
+      LOG(LS_INFO) << "l2cachesize " << cache_size_;
+    }
   }
   length = sizeof(sysctl_value);
   if (!sysctlbyname("machdep.cpu.family", &sysctl_value, &length, NULL, 0)) {

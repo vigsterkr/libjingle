@@ -38,6 +38,7 @@ class Thread;
 namespace cricket {
 
 class VoiceChannel;
+class BaseChannel;
 
 struct TypingMonitorOptions {
   int cost_per_typing;
@@ -59,6 +60,8 @@ class TypingMonitor
   TypingMonitor(VoiceChannel* channel, talk_base::Thread* worker_thread,
                 const TypingMonitorOptions& params);
   ~TypingMonitor();
+
+  sigslot::signal2<BaseChannel*, bool> SignalMuted;
 
   void OnChannelMuted();
 

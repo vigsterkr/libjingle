@@ -207,7 +207,9 @@ enum VideoMediaChannelOptions {
   // cpu load.
   OPT_ADAPT_INPUT_TO_ENCODER = 0x40000,
   // Enable video noise reduction.
-  OPT_VIDEO_NOISE_REDUCTION = 0x80000
+  OPT_VIDEO_NOISE_REDUCTION = 0x80000,
+  // Enable three spatial layers at less than HD resolutions.
+  OPT_VIDEO_THREE_LAYERS = 0x100000
 };
 
 class MediaChannel : public sigslot::has_slots<> {

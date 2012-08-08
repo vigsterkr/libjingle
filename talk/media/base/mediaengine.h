@@ -350,7 +350,7 @@ class NullVideoEngine {
     return true;
   }
   bool SetLocalRenderer(VideoRenderer* renderer) { return true; }
-  CaptureResult SetCapture(bool capture) { return CR_SUCCESS;  }
+  bool SetCapture(bool capture) { return true;  }
   const std::vector<VideoCodec>& codecs() { return codecs_; }
   void SetLogging(int min_sev, const char* filter) {}
   bool RegisterProcessor(VideoProcessor* video_processor) { return true; }

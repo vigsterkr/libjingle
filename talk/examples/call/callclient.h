@@ -242,6 +242,8 @@ class CallClient: public sigslot::has_slots<> {
   void PrintRoster();
   void MakeCallTo(const std::string& name, const cricket::CallOptions& options);
   void PlaceCall(const buzz::Jid& jid, const cricket::CallOptions& options);
+  void PrintCalls();
+  void SwitchToCall(uint32 call_id);
   void Accept(const cricket::CallOptions& options);
   void Reject();
   void Quit();

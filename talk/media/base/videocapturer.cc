@@ -23,13 +23,15 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Implementartion file of class VideoCapturer.
+// Implementation file of class VideoCapturer.
 
 #include "talk/media/base/videocapturer.h"
 
 #include <algorithm>
 
 #include "talk/base/logging.h"
+#include "talk/media/webrtc/webrtcvideoframe.h"
+
 
 namespace cricket {
 
@@ -64,6 +66,10 @@ bool CapturedFrame::GetDataSize(uint32* size) const {
 /////////////////////////////////////////////////////////////////////
 // Implementation of class VideoCapturer
 /////////////////////////////////////////////////////////////////////
+VideoCapturer::VideoCapturer() {
+  SignalFrameCaptured.connect(this, &VideoCapturer::OnFrameCaptured);
+}
+
 void VideoCapturer::SetSupportedFormats(
     const std::vector<VideoFormat>& formats) {
   if (!supported_formats_.get()) {
@@ -106,6 +112,21 @@ bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
                  << " distance " << best_distance;
   }
   return true;
+}
+
+void VideoCapturer::OnFrameCaptured(VideoCapturer*,
+                                    const CapturedFrame* captured_frame) {
+  if (SignalVideoFrame.is_empty()) {
+    return;
+  }
+  WebRtcVideoFrame i420_frame;
+  if (!i420_frame.Init(captured_frame, captured_frame->width,
+                       captured_frame->height)) {
+    LOG(LS_ERROR) << "Couldn't convert to I420! "
+                  << captured_frame->width << " x " << captured_frame->height;
+    return;
+  }
+  SignalVideoFrame(this, &i420_frame);
 }
 
 // Get the distance between the supported and desired formats.

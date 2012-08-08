@@ -32,9 +32,9 @@ function handlePeerMessage(peer_id, data) {
   str += data + "</blockquote>";
   trace(str);
   if (document.getElementById("loopback").checked) {
-    if (data.search("OFFER") != -1) {
-      // In loopback mode, replace the ROAP OFFER with ROAP ANSWER.
-      data = data.replace("OFFER", "ANSWER");
+    if (data.search("offer") != -1) {
+      // In loopback mode, replace the offer with an answer.
+      data = data.replace("offer", "answer");
       // Keep only the first crypto line for each m line in the answer.
       var mlines = data.split("m=");
       // Start from 1 because the first item in the array is not a m line.
@@ -53,16 +53,6 @@ function handlePeerMessage(peer_id, data) {
           data = data.replace(crypto, "");
           // Search for the the next crypto line.
           cryptoBegin = mline.indexOf("a=crypto:", cryptoBegin + 1);
-        }
-      }
-      var lines = data.split("\n");
-      for (var i = 0; i < lines.length; ++i) {
-        // Look for the offererSessionId and use it as answererSessionId
-        if (lines[i].length > 0 && lines[i].search("offererSessionId") != -1) {
-          var answer_session_id =
-              lines[i].replace("offererSessionId", "answererSessionId");
-          answer_session_id += "\n" + lines[i];
-          data = data.replace(lines[i], answer_session_id);
         }
       }
     }

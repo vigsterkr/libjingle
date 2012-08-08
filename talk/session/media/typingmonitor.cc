@@ -59,6 +59,7 @@ void TypingMonitor::OnVoiceChannelError(uint32 ssrc,
     // the muted signal that comes from this.  This function can be called from
     // any thread.
     channel_->Mute(true);
+    SignalMuted(channel_, true);
     has_pending_unmute_ = true;
 
     worker_thread_->PostDelayed(mute_period_, this);
@@ -96,6 +97,7 @@ void TypingMonitor::OnMessage(talk_base::Message* msg) {
                    << silence_period << "ms, unmuting.";
     has_pending_unmute_ = false;
     channel_->Mute(false);
+    SignalMuted(channel_, false);
   } else {
     LOG_F(LS_INFO) << "Mute timeout hit, silent for " << silence_period
                    << "ms, check again in " << expiry_time << "ms.";

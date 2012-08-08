@@ -299,7 +299,7 @@ class JsepInterface {
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate) = 0;
 
  protected:
-  ~JsepInterface() {}
+  virtual ~JsepInterface() {}
 };
 
 }  // namespace webrtc

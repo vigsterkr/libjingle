@@ -164,6 +164,27 @@ def BuildDebianPackage(env, debian_files, package_files, force_version=None):
       output_dir='$STAGING_DIR', force_version=force_version)
 
 
+def _GetPkgConfigCommand():
+  """Return the pkg-config command line to use.
+
+  Returns:
+    A string specifying the pkg-config command line to use.
+  """
+  return os.environ.get('PKG_CONFIG') or 'pkg-config'
+
+
+def _EscapePosixShellArgument(arg):
+  """Escapes a shell command line argument so that it is interpreted literally.
+
+  Args:
+    arg: The shell argument to escape.
+
+  Returns:
+    The escaped string.
+  """
+  return "'%s'" % arg.replace("'", "'\\''")
+
+
 def _HavePackage(package):
   """Whether the given pkg-config package name is present on the build system.
 
@@ -173,7 +194,9 @@ def _HavePackage(package):
   Returns:
     True if the package is present, else False
   """
-  return subprocess.call(['pkg-config', '--exists', package]) == 0
+  return subprocess.call('%s --exists %s' % (
+      _GetPkgConfigCommand(),
+      _EscapePosixShellArgument(package)), shell=True) == 0
 
 
 def _GetPackageFlags(flag_type, packages):
@@ -188,10 +211,19 @@ def _GetPackageFlags(flag_type, packages):
 
   Returns:
     The flags of the requested type.
+
+  Raises:
+    subprocess.CalledProcessError: The pkg-config command failed.
   """
-  process = subprocess.Popen(['pkg-config', flag_type] + packages,
-                             stdout=subprocess.PIPE)
-  return process.communicate()[0].strip().split(' ')
+  pkg_config = _GetPkgConfigCommand()
+  command = ' '.join([pkg_config] +
+                     [_EscapePosixShellArgument(arg) for arg in
+                      [flag_type] + packages])
+  process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+  output = process.communicate()[0]
+  if process.returncode != 0:
+    raise subprocess.CalledProcessError(process.returncode, pkg_config)
+  return output.strip().split(' ')
 
 
 def GetPackageParams(env, packages):
@@ -259,11 +291,15 @@ def EnableFeatureWherePackagePresent(env, bit, cpp_flag, package):
            'built. To build with this feature, install the package that '
            'provides the \"%s.pc\" file.') % (package, bit, package)
 
-def GetGccVersion(unused_env):
+def GetGccVersion(env):
+  if env.Bit('cross_compile'):
+    gcc_command = env['CXX']
+  else:
+    gcc_command = 'gcc'
   version_string = _OutputFromShellCommand(
-      'gcc --version | head -n 1 |'
-      r'sed "s/.*\([0-9]\{1,\}\.[0-9]*\.[0-9]*\).*/\1/g"')
-  return tuple([int(x) for x in version_string.split('.')])
+      '%s --version | head -n 1 |'
+      r'sed "s/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/g"' % gcc_command)
+  return tuple([int(x or '0') for x in version_string.split('.')])
 
 def generate(env):
   if env.Bit('linux'):

@@ -39,6 +39,8 @@
 
 namespace cricket {
 
+class VideoFrame;
+
 // General capturer events.
 enum CaptureEvent {
   // CE_FAILED = -1
@@ -102,9 +104,9 @@ struct CapturedFrame {
 //   The Start() and Stop() methods are called by a single thread (that is, the
 //   media engine thread). Hence, there is no need to make them thread safe.
 //
-class VideoCapturer {
+class VideoCapturer : public sigslot::has_slots<> {
  public:
-  VideoCapturer() {}
+  VideoCapturer();
   virtual ~VideoCapturer() {}
 
   // Gets the id of the underlying device, which is available after the capturer
@@ -164,12 +166,19 @@ class VideoCapturer {
 
   // Signal the result of Start() if it returned CR_PENDING.
   sigslot::signal2<VideoCapturer*, CaptureResult> SignalStartResult;
+  // TODO: rename |SignalFrameCaptured| to something like
+  //                |SignalRawFrame| or |SignalNativeFrame|.
   // Signal the captured frame to downstream.
   sigslot::signal2<VideoCapturer*, const CapturedFrame*> SignalFrameCaptured;
+  // Signal the captured frame converted to I420 to downstream.
+  sigslot::signal2<VideoCapturer*, const VideoFrame*> SignalVideoFrame;
   // Signals a change in capturer state.
   sigslot::signal2<VideoCapturer*, CaptureEvent> SignalCaptureEvent;
 
  protected:
+  // Callback attached to SignalFrameCaptured where SignalVideoFrames is called.
+  void OnFrameCaptured(VideoCapturer*, const CapturedFrame* captured_frame);
+
   // subclasses override this virtual method to provide a vector of fourccs, in
   // order of preference, that are expected by the media engine.
   virtual bool GetPreferredFourccs(std::vector<uint32>* fourccs) = 0;

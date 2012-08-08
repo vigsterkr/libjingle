@@ -109,6 +109,7 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
   virtual bool IsRunning() { return running_; }
   bool GetPreferredFourccs(std::vector<uint32>* fourccs) {
     fourccs->push_back(cricket::FOURCC_I420);
+    fourccs->push_back(cricket::FOURCC_MJPG);
     return true;
   }
 

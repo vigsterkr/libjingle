@@ -64,6 +64,9 @@ class MediaSessionClient : public SessionClient, public sigslot::has_slots<> {
   SessionManager* session_manager() const { return session_manager_; }
   ChannelManager* channel_manager() const { return channel_manager_; }
 
+  // Return mapping of call ids to Calls.
+  const std::map<uint32, Call *>& calls() const { return calls_; }
+
   SecureMediaPolicy secure() const { return desc_factory_.secure(); }
   void set_secure(SecureMediaPolicy s) { desc_factory_.set_secure(s); }
 

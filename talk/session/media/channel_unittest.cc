@@ -43,6 +43,7 @@
 #include "talk/session/media/mediamessages.h"
 #include "talk/session/media/mediarecorder.h"
 #include "talk/session/media/mediasessionclient.h"
+#include "talk/session/media/typingmonitor.h"
 
 #define MAYBE_SKIP_TEST(feature)                    \
   if (!(talk_base::SSLStreamAdapter::feature())) {  \
@@ -163,6 +164,8 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
         rtcp_packet_(reinterpret_cast<const char*>(rtcp_data), rtcp_len),
         media_info_callbacks1_(),
         media_info_callbacks2_(),
+        mute_callback_recved_(false),
+        mute_callback_value_(false),
         ssrc_(0),
         error_(T::MediaChannel::ERROR_NONE) {
   }
@@ -210,6 +213,8 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
         this, &ChannelTest<T>::OnMediaChannelError);
     channel2_->SignalMediaError.connect(
         this, &ChannelTest<T>::OnMediaChannelError);
+    channel1_->SignalAutoMuted.connect(
+        this, &ChannelTest<T>::OnMediaMuted);
     CreateContent(flags1, kPcmuCodec, kH264Codec,
                   &local_media_content1_);
     CreateContent(flags2, kPcmuCodec, kH264Codec,
@@ -517,6 +522,11 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
                            typename T::MediaChannel::Error error) {
     ssrc_ = ssrc;
     error_ = error;
+  }
+
+  void OnMediaMuted(cricket::BaseChannel* channel, bool muted) {
+    mute_callback_recved_ = true;
+    mute_callback_value_ = muted;
   }
 
   void AddLegacyStreamInContent(uint32 ssrc, int flags,
@@ -1680,6 +1690,9 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
   std::string rtcp_packet_;
   int media_info_callbacks1_;
   int media_info_callbacks2_;
+  bool mute_callback_recved_;
+  bool mute_callback_value_;
+
   uint32 ssrc_;
   typename T::MediaChannel::Error error_;
 };
@@ -1978,17 +1991,20 @@ TEST_F(VoiceChannelTest, TestMediaMonitor) {
   Base::TestMediaMonitor();
 }
 
-// Test that Mute properly forwards to the media channel.
+// Test that Mute properly forwards to the media channel and does not signal.
 TEST_F(VoiceChannelTest, TestMute) {
   CreateChannels(0, 0);
   EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(mute_callback_recved_);
   EXPECT_TRUE(channel1_->Mute(true));
   EXPECT_TRUE(media_channel1_->muted());
+  EXPECT_FALSE(mute_callback_recved_);
   EXPECT_TRUE(channel1_->Mute(false));
   EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(mute_callback_recved_);
 }
 
-// Test that keyboard automute works correctly.
+// Test that keyboard automute works correctly and signals upwards.
 TEST_F(VoiceChannelTest, TestKeyboardMute) {
   CreateChannels(0, 0);
   EXPECT_FALSE(media_channel1_->muted());
@@ -1997,11 +2013,20 @@ TEST_F(VoiceChannelTest, TestKeyboardMute) {
   cricket::VoiceMediaChannel::Error e =
       cricket::VoiceMediaChannel::ERROR_REC_TYPING_NOISE_DETECTED;
 
-  // Typing doesn't mute automatically
+  // Typing doesn't mute automatically unless typing monitor has been installed
   media_channel1_->TriggerError(0, e);
   talk_base::Thread::Current()->ProcessMessages(0);
   EXPECT_EQ(e, error_);
   EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(mute_callback_recved_);
+
+  cricket::TypingMonitorOptions o = {0};
+  o.mute_period = 1500;
+  channel1_->StartTypingMonitor(o);
+  media_channel1_->TriggerError(0, e);
+  talk_base::Thread::Current()->ProcessMessages(0);
+  EXPECT_TRUE(media_channel1_->muted());
+  EXPECT_TRUE(mute_callback_recved_);
 }
 
 // Test that PressDTMF properly forwards to the media channel.

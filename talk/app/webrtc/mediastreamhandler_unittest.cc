@@ -34,7 +34,7 @@
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
-#include "talk/session/phone/fakevideocapturer.h"
+#include "talk/media/base/fakevideocapturer.h"
 #include "testing/base/public/gmock.h"
 
 using ::testing::_;

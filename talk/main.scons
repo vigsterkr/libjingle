@@ -779,7 +779,6 @@ if '-mfloat-abi=hard' in linux_cross_arm_env['CFLAGS'] or \
   print "Building with hard floating point support."
   linux_cross_arm_env.SetBits('arm_hardfp')
 
-
 linux_cross_arm_dbg_env = linux_cross_arm_env.Clone(
   BUILD_TYPE = 'arm-dbg',
   BUILD_TYPE_DESCRIPTION = 'Cross-compiled ARM debug build',

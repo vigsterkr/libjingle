@@ -33,7 +33,7 @@
 #include "talk/base/json.h"
 #include "talk/base/logging.h"
 #include "talk/examples/peerconnection/client/defaults.h"
-#include "talk/session/phone/devicemanager.h"
+#include "talk/media/devices/devicemanager.h"
 
 // Names used for a IceCandidate JSON object.
 const char kCandidateSdpMidName[] = "sdpMid";

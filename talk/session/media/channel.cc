@@ -1415,8 +1415,10 @@ bool VoiceChannel::IsAudioMonitorRunning() const {
 
 void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
   // Don't allow resetting parameters on the fly.
-  if (!typing_monitor_.get())
+  if (!typing_monitor_.get()) {
     typing_monitor_.reset(new TypingMonitor(this, worker_thread(), settings));
+    SignalAutoMuted.repeat(typing_monitor_->SignalMuted);
+  }
 }
 
 void VoiceChannel::MuteMedia_w() {

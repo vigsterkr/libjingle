@@ -96,19 +96,21 @@ int GetInt(const std::vector<std::string>& words, size_t index, int def) {
   }
 }
 
-
 }  // namespace
 
 const char* CALL_COMMANDS =
 "Available commands:\n"
 "\n"
-"  hangup     Ends the call.\n"
-"  mute       Stops sending voice.\n"
-"  unmute     Re-starts sending voice.\n"
-"  vmute      Stops sending video.\n"
-"  vunmute    Re-starts sending video.\n"
-"  dtmf       Sends a DTMF tone.\n"
-"  quit       Quits the application.\n"
+"  hangup            Ends the call.\n"
+"  hold              Puts the current call on hold\n"
+"  calls             Lists the current calls\n"
+"  switch [call_id]  Switch to the specified call\n"
+"  mute              Stops sending voice.\n"
+"  unmute            Re-starts sending voice.\n"
+"  vmute             Stops sending video.\n"
+"  vunmute           Re-starts sending video.\n"
+"  dtmf              Sends a DTMF tone.\n"
+"  quit              Quits the application.\n"
 "";
 
 // TODO: Make present and record really work.
@@ -143,6 +145,8 @@ const char* CONSOLE_COMMANDS =
 "                      given JID and with optional bandwidth.\n"
 "  vcall [jid] [bw]    Initiates a video call to the user[/room] with\n"
 "                      the given JID and with optional bandwidth.\n"
+"  calls               Lists the current calls\n"
+"  switch [call_id]    Switch to the specified call\n"
 "  join [room_jid]     Joins a multi-user-chat with room JID.\n"
 "  ljoin [room_name]   Joins a MUC by looking up JID from room name.\n"
 "  invite user [room]  Invites a friend to a multi-user-chat.\n"
@@ -194,6 +198,13 @@ void CallClient::ParseLine(const std::string& line) {
   } else if (call_) {
     if (command == "hangup") {
       call_->Terminate();
+    } else if (command == "hold") {
+      media_client_->SetFocus(NULL);
+      call_ = NULL;
+    } else if (command == "calls") {
+      PrintCalls();
+    } else if ((words.size() == 2) && (command == "switch")) {
+      SwitchToCall(GetInt(words, 1, -1));
     } else if (command == "mute") {
       call_->Mute(true);
       if (InMuc()) {
@@ -299,6 +310,10 @@ void CallClient::ParseLine(const std::string& line) {
       options.video_bandwidth = bandwidth;
       options.has_data = data_channel_enabled_;
       MakeCallTo(to, options);
+    } else if (command == "calls") {
+      PrintCalls();
+    } else if ((words.size() == 2) && (command == "switch")) {
+      SwitchToCall(GetInt(words, 1, -1));
     } else if (command == "join") {
       JoinMuc(GetWord(words, 1, ""));
     } else if (command == "ljoin") {
@@ -821,6 +836,28 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
     hangout_pubsub_client_->SignalRemoteMuteError.connect(
         this, &CallClient::OnHangoutRemoteMuteError);
     hangout_pubsub_client_->RequestAll();
+  }
+}
+
+void CallClient::PrintCalls() {
+  const std::map<uint32, cricket::Call*>& calls = media_client_->calls();
+  for (std::map<uint32, cricket::Call*>::const_iterator i = calls.begin();
+       i != calls.end(); ++i) {
+    console_->PrintLine("%d: %s",
+                        i->first,
+                        i->second == call_ ? "active" : "on hold");
+  }
+}
+
+void CallClient::SwitchToCall(uint32 call_id) {
+  const std::map<uint32, cricket::Call*>& calls = media_client_->calls();
+  std::map<uint32, cricket::Call*>::const_iterator call_iter =
+      calls.find(call_id);
+  if (call_iter != calls.end()) {
+    media_client_->SetFocus(call_iter->second);
+    call_ = call_iter->second;
+  } else {
+    console_->PrintLine("Unable to find call: %d", call_id);
   }
 }
 

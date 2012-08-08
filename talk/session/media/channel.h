@@ -198,6 +198,9 @@ class BaseChannel
   // Used for latency measurements.
   sigslot::signal1<BaseChannel*> SignalFirstPacketReceived;
 
+  // Used to alert UI when the muted status changes, perhaps autonomously.
+  sigslot::repeater2<BaseChannel*, bool> SignalAutoMuted;
+
  protected:
   MediaEngineInterface* media_engine() const { return media_engine_; }
   virtual MediaChannel* media_channel() const { return media_channel_; }
