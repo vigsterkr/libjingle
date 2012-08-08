@@ -39,7 +39,7 @@
 #ifdef WEBRTC_RELATIVE_PATH
 #include "video_engine/include/vie_base.h"
 #else
-#include "third_party/webrtc/files/include/vie_base.h"
+#include "third_party/webrtc/video_engine/include/vie_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace webrtc {

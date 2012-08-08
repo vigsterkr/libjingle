@@ -42,8 +42,8 @@
 #include "common_types.h"
 #include "modules/video_capture/main/interface/video_capture.h"
 #else
-#include "third_party/webrtc/files/include/common_types.h"
-#include "third_party/webrtc/files/include/video_capture.h"
+#include "third_party/webrtc/common_types.h"
+#include "third_party/webrtc/modules/video_capture/main/interface/video_capture.h"
 #endif
 
 namespace talk_base {

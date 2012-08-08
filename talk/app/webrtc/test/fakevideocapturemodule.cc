@@ -38,8 +38,8 @@
 #include "modules/video_capture/main/interface/video_capture_defines.h"
 #include "modules/video_capture/main/interface/video_capture_factory.h"
 #else
-#include "third_party/webrtc/files/include/video_capture_defines.h"
-#include "third_party/webrtc/files/include/video_capture_factory.h"
+#include "third_party/webrtc/modules/video_capture/main/interface/video_capture_defines.h"
+#include "third_party/webrtc/modules/video_capture/main/interface/video_capture_factory.h"
 #endif
 
 static const int kStartFrameRate = 30;

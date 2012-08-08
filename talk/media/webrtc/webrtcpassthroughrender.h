@@ -33,7 +33,7 @@
 #ifdef WEBRTC_RELATIVE_PATH
 #include "modules/video_render/main/interface/video_render.h"
 #else
-#include "third_party/webrtc/files/include/video_render.h"
+#include "third_party/webrtc/modules/video_render/main/interface/video_render.h"
 #endif
 #include "talk/base/criticalsection.h"
 

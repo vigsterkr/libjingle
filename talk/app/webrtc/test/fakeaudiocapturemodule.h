@@ -45,8 +45,8 @@
 #include "common_types.h"
 #include "modules/audio_device/main/interface/audio_device.h"
 #else
-#include "third_party/webrtc/files/include/audio_device.h"
-#include "third_party/webrtc/files/include/common_types.h"
+#include "third_party/webrtc/common_types.h"
+#include "third_party/webrtc/modules/audio_device/main/interface/audio_device.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace talk_base {

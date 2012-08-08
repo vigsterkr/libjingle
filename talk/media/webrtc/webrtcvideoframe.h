@@ -32,8 +32,8 @@
 #include "common_types.h"
 #include "modules/interface/module_common_types.h"
 #else
-#include "third_party/webrtc/files/include/common_types.h"
-#include "third_party/webrtc/files/include/module_common_types.h"
+#include "third_party/webrtc/common_types.h"
+#include "third_party/webrtc/modules/interface/module_common_types.h"
 #endif
 #include "talk/base/buffer.h"
 #include "talk/base/refcount.h"

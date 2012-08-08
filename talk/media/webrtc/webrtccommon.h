@@ -32,7 +32,7 @@
 #ifdef WEBRTC_RELATIVE_PATH
 #include "common_types.h"
 #else
-#include "third_party/webrtc/files/include/common_types.h"
+#include "third_party/webrtc/common_types.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace cricket {

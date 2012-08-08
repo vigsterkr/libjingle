@@ -45,7 +45,7 @@
 #ifdef WEBRTC_RELATIVE_PATH
 #include "voice_engine/main/interface/voe_base.h"
 #else
-#include "third_party/webrtc/files/include/voe_base.h"
+#include "third_party/webrtc/voice_engine/include/voe_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace cricket {
