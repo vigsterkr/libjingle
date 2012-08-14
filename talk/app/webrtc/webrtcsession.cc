@@ -547,17 +547,7 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       SignalError();
       break;
     case cricket::BaseSession::MSG_STATE:
-      switch (state()) {
-        // Since allocated candidates are not given to the observer if local
-        // description is not set in the session. This below state confirms
-        // session has local description, sending any unsent allocated
-        // candidates to the provider.
-        case STATE_SENTINITIATE:
-        case STATE_SENTACCEPT:
-        case STATE_SENTPRACCEPT:
-          SendAllUnsentCandidates();
-          break;
-      }
+      MaybeSendAllUnsentCandidates();
       BaseSession::OnMessage(msg);
       break;
     default:
@@ -603,7 +593,13 @@ void WebRtcSession::OnTransportProxyCandidatesReady(
   }
 }
 
-void WebRtcSession::SendAllUnsentCandidates() {
+void WebRtcSession::MaybeSendAllUnsentCandidates() {
+  if (state() != STATE_SENTINITIATE &&
+      state() != STATE_SENTACCEPT &&
+      state() != STATE_SENTPRACCEPT) {
+    return;
+  }
+
   for (cricket::TransportMap::const_iterator iter = transport_proxies().begin();
        iter != transport_proxies().end(); ++iter) {
     cricket::TransportProxy* proxy = iter->second;

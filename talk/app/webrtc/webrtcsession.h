@@ -183,9 +183,10 @@ class WebRtcSession : public cricket::BaseSession,
   bool MaybeUpdateChannelsAndTransports(
       const cricket::SessionDescription* sdesc);
 
-  // This method will send all cached candidates in the transport proxies,
-  // after session state changed to STATE_SENTINITIATE or STATE_SENTACCEPT.
-  void SendAllUnsentCandidates();
+  // Allocated candidates are not given to the observer if local
+  // description is not set in the session. This method sends any unsent
+  // allocated candidates to the provider.
+  void MaybeSendAllUnsentCandidates();
   // Allocates media channels based on the |desc|. If |desc| doesn't have
   // the BUNDLE option, this method will disable BUNDLE in PortAllocator.
   // This method will also delete any existing media channels before creating.
