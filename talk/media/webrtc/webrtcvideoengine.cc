@@ -315,6 +315,7 @@ class WebRtcVideoChannelSendInfo  {
       : channel_id_(channel_id),
         capture_id_(capture_id),
         sending_(false),
+        muted_(false),
         video_capturer_(NULL),
         encoder_observer_(channel_id),
         external_capture_(external_capture),
@@ -332,6 +333,8 @@ class WebRtcVideoChannelSendInfo  {
   int capture_id() const { return capture_id_; }
   void set_sending(bool sending) { sending_ = sending; }
   bool sending() const { return sending_; }
+  void set_muted(bool on) { muted_ = on; }
+  bool muted() {return muted_; }
 
   WebRtcEncoderObserver* encoder_observer() { return &encoder_observer_; }
   webrtc::ViEExternalCapture* external_capture() { return external_capture_; }
@@ -439,6 +442,7 @@ class WebRtcVideoChannelSendInfo  {
   int channel_id_;
   int capture_id_;
   bool sending_;
+  bool muted_;
   VideoCapturer* video_capturer_;
   WebRtcEncoderObserver encoder_observer_;
   webrtc::ViEExternalCapture* external_capture_;
@@ -1193,8 +1197,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
       send_min_bitrate_(kMinVideoBitrate),
       send_start_bitrate_(kStartVideoBitrate),
       send_max_bitrate_(kMaxVideoBitrate),
-      sending_(false),
-      muted_(false) {
+      sending_(false) {
   engine->RegisterChannel(this);
 }
 
@@ -2184,10 +2187,16 @@ void WebRtcVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
   }
 }
 
-bool WebRtcVideoMediaChannel::Mute(bool on) {
-  muted_ = on;
+bool WebRtcVideoMediaChannel::MuteStream(uint32 ssrc, bool on) {
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
+  if (!send_channel) {
+    LOG(LS_ERROR) << "The specified ssrc " << ssrc << " is not in use.";
+    return false;
+  }
+  send_channel->set_muted(on);
   return true;
 }
+
 
 bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   LOG(LS_INFO) << "WebRtcVideoMediaChanne::SetSendBandwidth";
@@ -2351,9 +2360,8 @@ bool WebRtcVideoMediaChannel::SendFrame(
   WebRtc_Word64 clocks = 0;
   // Old implementation was to disable muting for screencast. This translate to
   // mute if receiving frames from engines capturer (i.e. the channel doesn't
-  // own the capturer generating the frames) and muted_ is set to true.
-  // TODO: add per stream/channel mute and remove the global mute.
-  const bool mute = muted_ && !owns_capturer;
+  // own the capturer generating the frames) and muted is set to true.
+  const bool mute = (send_channel->muted() && !owns_capturer);
   send_channel->ProcessFrame(*frame_out, mute, processed_frame.use(),
                              &clocks);
   if (processed_frame.get()) {

@@ -106,6 +106,14 @@ class TransportProxy : public sigslot::has_slots<>,
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
+  // Ideally we should never set or update content names. This value should
+  // be set during transport proxy creation time. But in some case we may need
+  // to change from the initial value ( e.g. creating transport proxy before
+  // setLocalDescription in webrtc. Due to this reason method name is
+  // UpdateContentName not set_content_name.
+  void UpdateContentName(const std::string& content_name) {
+    content_name_ = content_name;
+  }
   Transport* impl() const { return transport_->get(); }
 
   std::string type() const;
@@ -191,6 +199,12 @@ typedef std::map<std::string, TransportProxy*> TransportMap;
 class BaseSession : public sigslot::has_slots<>,
                     public talk_base::MessageHandler {
  public:
+  enum {
+    MSG_TIMEOUT = 0,
+    MSG_ERROR,
+    MSG_STATE,
+  };
+
   enum State {
     STATE_INIT = 0,
     STATE_SENTINITIATE,       // sent initiate, waiting for Accept or Reject
@@ -352,6 +366,11 @@ class BaseSession : public sigslot::has_slots<>,
   TransportProxy* GetOrCreateTransportProxy(const std::string& content_name);
   // Creates the actual transport object. Overridable for testing.
   virtual Transport* CreateTransport(const std::string& content_name);
+
+  // Method to update TransportMap entry to a different content name for a
+  // transport proxy.
+  void UpdateContentName(const std::string& old_content_name,
+                         const std::string& new_content_name);
 
   void OnSignalingReady();
   void SpeculativelyConnectAllTransportChannels();

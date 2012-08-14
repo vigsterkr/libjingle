@@ -253,7 +253,7 @@ class MediaChannel : public sigslot::has_slots<> {
   virtual bool RemoveRecvStream(uint32 ssrc) = 0;
 
   // Mutes the channel.
-  virtual bool Mute(bool on) = 0;
+  virtual bool MuteStream(uint32 ssrc, bool on) = 0;
 
   // Sets the RTP extension headers and IDs to use when sending RTP.
   virtual bool SetRecvRtpHeaderExtensions(
@@ -649,7 +649,7 @@ class DataMediaChannel : public MediaChannel {
   virtual bool RemoveSendStream(uint32 ssrc);
   virtual bool AddRecvStream(const StreamParams& sp);
   virtual bool RemoveRecvStream(uint32 ssrc);
-  virtual bool Mute(bool on) { return false; }
+  virtual bool MuteStream(uint32 ssrc, bool on) { return false; }
   // TODO: Implement this.
   virtual bool GetStats(DataMediaInfo* info) { return true; }
 

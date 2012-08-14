@@ -231,7 +231,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
 
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
-  virtual bool Mute(bool on);
+  virtual bool MuteStream(uint32 ssrc, bool on);
   virtual bool SetRecvRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions) {
     return false;
@@ -376,7 +376,6 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   int send_start_bitrate_;
   int send_max_bitrate_;
   bool sending_;
-  bool muted_;  // Flag to tell if we need to mute video.
 };
 
 }  // namespace cricket

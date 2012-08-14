@@ -53,12 +53,16 @@ TypingMonitor::~TypingMonitor() {
 void TypingMonitor::OnVoiceChannelError(uint32 ssrc,
                                         VoiceMediaChannel::Error error) {
   if (error == VoiceMediaChannel::ERROR_REC_TYPING_NOISE_DETECTED &&
-      !channel_->muted()) {
+      !channel_->IsStreamMuted(0)) {
     // Please be careful and cognizant about threading issues when editing this
-    // code.  The Mute() call below is a ::Send and is synchronous as well as
-    // the muted signal that comes from this.  This function can be called from
-    // any thread.
-    channel_->Mute(true);
+    // code.  The MuteStream() call below is a ::Send and is synchronous as well
+    // as the muted signal that comes from this.  This function can be called
+    // from any thread.
+
+    // TODO: Refactor TypingMonitor and the MediaChannel to handle
+    // multiple sending audio streams. SSRC 0 means the default sending audio
+    // channel.
+    channel_->MuteStream(0, true);
     SignalMuted(channel_, true);
     has_pending_unmute_ = true;
 
@@ -89,14 +93,14 @@ void TypingMonitor::OnChannelMuted() {
  * worker thread.
  */
 void TypingMonitor::OnMessage(talk_base::Message* msg) {
-  if (!channel_->muted() || !has_pending_unmute_) return;
+  if (!channel_->IsStreamMuted(0) || !has_pending_unmute_) return;
   int silence_period = channel_->media_channel()->GetTimeSinceLastTyping();
   int expiry_time = mute_period_ - silence_period;
   if (silence_period < 0 || expiry_time < 250) {
     LOG_F(LS_INFO) << "Mute timeout hit, silent for "
                    << silence_period << "ms, unmuting.";
     has_pending_unmute_ = false;
-    channel_->Mute(false);
+    channel_->MuteStream(0, false);
     SignalMuted(channel_, false);
   } else {
     LOG_F(LS_INFO) << "Mute timeout hit, silent for " << silence_period

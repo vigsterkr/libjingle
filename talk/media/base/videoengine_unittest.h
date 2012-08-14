@@ -1529,7 +1529,7 @@ class VideoMediaChannelTest : public testing::Test,
   }
 
   // Tests that we can mute and unmute the channel properly.
-  void Mute() {
+  void MuteStream() {
     int frame_count = 0;
     EXPECT_TRUE(SetDefaultCodec());
     EXPECT_TRUE(SetSend(true));
@@ -1537,18 +1537,34 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_EQ(frame_count, renderer_.num_rendered_frames());
 
     // Mute the channel and expect black output frame.
-    EXPECT_TRUE(channel_->Mute(true));
+    EXPECT_TRUE(channel_->MuteStream(0, true));
     EXPECT_TRUE(SendFrame());
     ++frame_count;
     EXPECT_EQ_WAIT(frame_count, renderer_.num_rendered_frames(), kTimeout);
     EXPECT_TRUE(renderer_.black_frame());
 
     // Unmute the channel and expect non-black output frame.
-    EXPECT_TRUE(channel_->Mute(false));
+    EXPECT_TRUE(channel_->MuteStream(0, false));
     EXPECT_TRUE(WaitAndSendFrame(30));
     ++frame_count;
     EXPECT_EQ_WAIT(frame_count, renderer_.num_rendered_frames(), kTimeout);
     EXPECT_FALSE(renderer_.black_frame());
+
+    // Test that we can also Mute using the correct send stream SSRC.
+    EXPECT_TRUE(channel_->MuteStream(kSsrc, true));
+    EXPECT_TRUE(WaitAndSendFrame(30));
+    ++frame_count;
+    EXPECT_EQ_WAIT(frame_count, renderer_.num_rendered_frames(), kTimeout);
+    EXPECT_TRUE(renderer_.black_frame());
+
+    EXPECT_TRUE(channel_->MuteStream(kSsrc, false));
+    EXPECT_TRUE(WaitAndSendFrame(30));
+    ++frame_count;
+    EXPECT_EQ_WAIT(frame_count, renderer_.num_rendered_frames(), kTimeout);
+    EXPECT_FALSE(renderer_.black_frame());
+
+    // Test that muting an invalid stream fails.
+    EXPECT_FALSE(channel_->MuteStream(kSsrc+1, true));
   }
 
   // Test that multiple send streams can be created and deleted properly.

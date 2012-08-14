@@ -42,14 +42,6 @@
 
 #include "talk/p2p/base/constants.h"
 
-namespace {
-
-const uint32 MSG_TIMEOUT = 1;
-const uint32 MSG_ERROR = 2;
-const uint32 MSG_STATE = 3;
-
-}  // namespace
-
 namespace cricket {
 
 bool BadMessage(const buzz::QName type,
@@ -433,6 +425,24 @@ cricket::Transport* BaseSession::CreateTransport(
   ASSERT(transport_type_ == NS_GINGLE_P2P);
   return new cricket::DtlsTransport<P2PTransport>(
       signaling_thread(), worker_thread(), content_name, port_allocator());
+}
+
+
+void BaseSession::UpdateContentName(
+    const std::string& old_content_name, const std::string& new_content_name) {
+  ASSERT(signaling_thread_->IsCurrent());
+  if (state() != STATE_INIT) {
+    LOG(LS_WARNING) << "Wrong state to update content name.";
+    return;
+  }
+
+  TransportMap::iterator iter = transports_.find(old_content_name);
+  ASSERT(iter != transports_.end());
+  TransportProxy* proxy = iter->second;
+  ASSERT(proxy != NULL);
+  proxy->UpdateContentName(new_content_name);
+  transports_.erase(iter);
+  transports_[new_content_name] = proxy;
 }
 
 void BaseSession::SetState(State state) {

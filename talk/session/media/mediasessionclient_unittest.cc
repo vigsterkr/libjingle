@@ -696,7 +696,7 @@ const std::string kJingleInitiateWrongChannels(
      "  </jingle>                                                       " \
      "</iq>                                                             ");
 
-// Initiate with a dynamic codec not using GIPS default payload id. Should
+// Initiate with a dynamic codec not using webrtc default payload id. Should
 // accept with provided payload id.
 const std::string kGingleInitiateDynamicAudioCodecs(
      "<iq xmlns='jabber:client' from='me@domain.com/resource'         " \

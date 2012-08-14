@@ -128,13 +128,13 @@ bool HybridVideoMediaChannel::SetRender(bool render) {
   return ret;
 }
 
-bool HybridVideoMediaChannel::Mute(bool muted) {
+bool HybridVideoMediaChannel::MuteStream(uint32 ssrc, bool muted) {
   bool ret = true;
   if (channel1_.get()) {
-    ret = channel1_->Mute(muted);
+    ret = channel1_->MuteStream(ssrc, muted);
   }
   if (channel2_.get() && ret) {
-    ret = channel2_->Mute(muted);
+    ret = channel2_->MuteStream(ssrc, muted);
   }
   return ret;
 }

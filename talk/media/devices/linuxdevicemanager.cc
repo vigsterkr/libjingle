@@ -114,7 +114,7 @@ bool LinuxDeviceManager::GetAudioDevices(bool input,
     sound_system_.release();
     return false;
   }
-  // We have to start the index at 1 because GIPS VoiceEngine puts the default
+  // We have to start the index at 1 because webrtc VoiceEngine puts the default
   // device at index 0, but Enumerate(Capture|Playback)Devices does not include
   // a locator for the default device.
   int index = 1;

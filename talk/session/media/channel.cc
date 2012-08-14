@@ -48,8 +48,8 @@ namespace cricket {
 enum {
   MSG_ENABLE = 1,
   MSG_DISABLE = 2,
-  MSG_MUTE = 3,
-  MSG_UNMUTE = 4,
+  MSG_MUTESTREAM = 3,
+  MSG_ISSTREAMMUTED = 4,
   MSG_SETREMOTECONTENT = 6,
   MSG_SETLOCALCONTENT = 7,
   MSG_EARLYMEDIATIMEOUT = 8,
@@ -255,6 +255,14 @@ struct StreamMessageData : public talk_base::MessageData {
   bool result;
 };
 
+struct MuteStreamData : public talk_base::MessageData {
+  MuteStreamData(uint32 ssrc, bool mute)
+      : ssrc(ssrc), mute(mute), result(false) {}
+  uint32 ssrc;
+  bool mute;
+  bool result;
+};
+
 struct AudioOptionsMessageData : public talk_base::MessageData {
   explicit AudioOptionsMessageData(const AudioOptions& options)
       : options(options),
@@ -385,7 +393,6 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       was_ever_writable_(false),
       local_content_direction_(MD_INACTIVE),
       remote_content_direction_(MD_INACTIVE),
-      muted_(false),
       has_received_packet_(false),
       dtls_keyed_(false),
       crypto_required_(false) {
@@ -442,9 +449,16 @@ bool BaseChannel::Enable(bool enable) {
 }
 
 // Can be called from thread other than worker thread
-bool BaseChannel::Mute(bool mute) {
-  Send(mute ? MSG_MUTE : MSG_UNMUTE);
-  return true;
+bool BaseChannel::MuteStream(uint32 ssrc, bool mute) {
+  MuteStreamData data(ssrc, mute);
+  Send(MSG_MUTESTREAM, &data);
+  return data.result;
+}
+
+bool BaseChannel::IsStreamMuted(uint32 ssrc) {
+  SsrcMessageData data(ssrc);
+  Send(MSG_ISSTREAMMUTED, &data);
+  return data.result;
 }
 
 bool BaseChannel::AddRecvStream(const StreamParams& sp) {
@@ -793,26 +807,21 @@ void BaseChannel::DisableMedia_w() {
   ChangeState();
 }
 
-void BaseChannel::MuteMedia_w() {
+bool BaseChannel::MuteStream_w(uint32 ssrc, bool mute) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-  if (muted_)
-    return;
-
-  if (media_channel()->Mute(true)) {
-    LOG(LS_INFO) << "Channel muted";
-    muted_ = true;
+  bool ret = media_channel()->MuteStream(ssrc, mute);
+  if (ret) {
+    if (mute)
+      muted_streams_.insert(ssrc);
+    else
+      muted_streams_.erase(ssrc);
   }
+  return ret;
 }
 
-void BaseChannel::UnmuteMedia_w() {
+bool BaseChannel::IsStreamMuted_w(uint32 ssrc) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-  if (!muted_)
-    return;
-
-  if (media_channel()->Mute(false)) {
-    LOG(LS_INFO) << "Channel unmuted";
-    muted_ = false;
-  }
+  return muted_streams_.find(ssrc) != muted_streams_.end();
 }
 
 void BaseChannel::ChannelWritable_w() {
@@ -1226,12 +1235,16 @@ void BaseChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_DISABLE:
       DisableMedia_w();
       break;
-    case MSG_MUTE:
-      MuteMedia_w();
+    case MSG_MUTESTREAM: {
+      MuteStreamData* data = static_cast<MuteStreamData*>(pmsg->pdata);
+      data->result = MuteStream_w(data->ssrc, data->mute);
       break;
-    case MSG_UNMUTE:
-      UnmuteMedia_w();
+    }
+    case MSG_ISSTREAMMUTED: {
+      SsrcMessageData* data = static_cast<SsrcMessageData*>(pmsg->pdata);
+      data->result = IsStreamMuted_w(data->ssrc);
       break;
+    }
     case MSG_SETLOCALCONTENT: {
       SetContentData* data = static_cast<SetContentData*>(pmsg->pdata);
       data->result = SetLocalContent_w(data->content, data->action);
@@ -1421,10 +1434,11 @@ void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
   }
 }
 
-void VoiceChannel::MuteMedia_w() {
-  BaseChannel::MuteMedia_w();
-  if (typing_monitor_.get())
+bool VoiceChannel::MuteStream_w(uint32 ssrc, bool mute) {
+  bool ret = BaseChannel::MuteStream_w(ssrc, mute);
+  if (typing_monitor_.get() && mute)
     typing_monitor_->OnChannelMuted();
+  return ret;
 }
 
 int VoiceChannel::GetInputLevel_w() {

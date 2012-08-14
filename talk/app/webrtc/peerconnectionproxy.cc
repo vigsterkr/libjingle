@@ -38,7 +38,6 @@ enum {
   MSG_READYSTATE,
   MSG_ICESTATE,
   MSG_TERMINATE,
-  MSG_STARTICE,
   MSG_CREATEOFFER,
   MSG_CREATEOFFERJSEP00,
   MSG_CREATEANSWER,
@@ -68,15 +67,6 @@ struct MediaStreamParams : public talk_base::MessageData {
 
 typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
     LocalMediaStreamParams;
-
-struct IceOptionsParams : public talk_base::MessageData {
-  explicit IceOptionsParams(webrtc::JsepInterface::IceOptions options)
-      : options(options),
-        result(false) {
-  }
-  webrtc::JsepInterface::IceOptions options;
-  bool result;
-};
 
 struct IceConfigurationParams : public talk_base::MessageData {
   IceConfigurationParams()
@@ -237,12 +227,9 @@ PeerConnectionInterface::IceState PeerConnectionProxy::ice_state() {
 }
 
 bool PeerConnectionProxy::StartIce(IceOptions options) {
-  if (!signaling_thread_->IsCurrent()) {
-    IceOptionsParams msg(options);
-    signaling_thread_->Send(this, MSG_STARTICE, &msg);
-    return msg.result;
-  }
-  return peerconnection_->StartIce(options);
+  // Ice will be started by default and will be removed in Jsep01.
+  // TODO: Remove this method once fully migrated to JSEP01.
+  return true;
 }
 
 SessionDescriptionInterface* PeerConnectionProxy::CreateOffer(
@@ -442,12 +429,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
     case MSG_ICESTATE: {
       IceStateMessage* param(static_cast<IceStateMessage*> (data));
       param->state = peerconnection_->ice_state();
-      break;
-    }
-    case MSG_STARTICE: {
-      IceOptionsParams* param(
-          static_cast<IceOptionsParams*> (data));
-      param->result = peerconnection_->StartIce(param->options);
       break;
     }
     case MSG_CREATEOFFERJSEP00: {

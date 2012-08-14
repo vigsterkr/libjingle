@@ -895,6 +895,28 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_TRUE(media_channel1_->sending());
   }
 
+  void TestMuteStream() {
+    CreateChannels(0, 0);
+    // Test that we can Mute the default channel even though the sending SSRC is
+    // unknown.
+    EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
+    EXPECT_TRUE(channel1_->MuteStream(0, true));
+    EXPECT_TRUE(media_channel1_->IsStreamMuted(0));
+    EXPECT_TRUE(channel1_->MuteStream(0, false));
+    EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
+
+    // Test that we can not mute an unknown SSRC.
+    EXPECT_FALSE(channel1_->MuteStream(kSsrc1, true));
+
+    SendInitiate();
+    // After the local session description has been set, we can mute a stream
+    // with its SSRC.
+    EXPECT_TRUE(channel1_->MuteStream(kSsrc1, true));
+    EXPECT_TRUE(media_channel1_->IsStreamMuted(kSsrc1));
+    EXPECT_TRUE(channel1_->MuteStream(kSsrc1, false));
+    EXPECT_FALSE(media_channel1_->IsStreamMuted(kSsrc1));
+  }
+
   // Test that changing the MediaContentDirection in the local and remote
   // session description start playout and sending at the right time.
   void TestMediaContentDirection() {
@@ -1852,7 +1874,7 @@ class VideoChannelTest
 
 TEST_F(VoiceChannelTest, TestInit) {
   Base::TestInit();
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
   EXPECT_TRUE(media_channel1_->dtmf_queue().empty());
 }
 
@@ -1894,6 +1916,10 @@ TEST_F(VoiceChannelTest, TestChangeStreamParamsInContent) {
 
 TEST_F(VoiceChannelTest, TestPlayoutAndSendingStates) {
   Base::TestPlayoutAndSendingStates();
+}
+
+TEST_F(VoiceChannelTest, TestMuteStream) {
+  Base::TestMuteStream();
 }
 
 TEST_F(VoiceChannelTest, TestMediaContentDirection) {
@@ -1991,23 +2017,24 @@ TEST_F(VoiceChannelTest, TestMediaMonitor) {
   Base::TestMediaMonitor();
 }
 
-// Test that Mute properly forwards to the media channel and does not signal.
-TEST_F(VoiceChannelTest, TestMute) {
+// Test that MuteStream properly forwards to the media channel and does
+// not signal.
+TEST_F(VoiceChannelTest, TestVoiceSpecificMuteStream) {
   CreateChannels(0, 0);
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
   EXPECT_FALSE(mute_callback_recved_);
-  EXPECT_TRUE(channel1_->Mute(true));
-  EXPECT_TRUE(media_channel1_->muted());
+  EXPECT_TRUE(channel1_->MuteStream(0, true));
+  EXPECT_TRUE(media_channel1_->IsStreamMuted(0));
   EXPECT_FALSE(mute_callback_recved_);
-  EXPECT_TRUE(channel1_->Mute(false));
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_TRUE(channel1_->MuteStream(0, false));
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
   EXPECT_FALSE(mute_callback_recved_);
 }
 
 // Test that keyboard automute works correctly and signals upwards.
 TEST_F(VoiceChannelTest, TestKeyboardMute) {
   CreateChannels(0, 0);
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
   EXPECT_EQ(cricket::VoiceMediaChannel::ERROR_NONE, error_);
 
   cricket::VoiceMediaChannel::Error e =
@@ -2017,7 +2044,7 @@ TEST_F(VoiceChannelTest, TestKeyboardMute) {
   media_channel1_->TriggerError(0, e);
   talk_base::Thread::Current()->ProcessMessages(0);
   EXPECT_EQ(e, error_);
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
   EXPECT_FALSE(mute_callback_recved_);
 
   cricket::TypingMonitorOptions o = {0};
@@ -2025,7 +2052,7 @@ TEST_F(VoiceChannelTest, TestKeyboardMute) {
   channel1_->StartTypingMonitor(o);
   media_channel1_->TriggerError(0, e);
   talk_base::Thread::Current()->ProcessMessages(0);
-  EXPECT_TRUE(media_channel1_->muted());
+  EXPECT_TRUE(media_channel1_->IsStreamMuted(0));
   EXPECT_TRUE(mute_callback_recved_);
 }
 
@@ -2261,6 +2288,10 @@ TEST_F(VideoChannelTest, TestChangeStreamParamsInContent) {
 
 TEST_F(VideoChannelTest, TestPlayoutAndSendingStates) {
   Base::TestPlayoutAndSendingStates();
+}
+
+TEST_F(VideoChannelTest, TestMuteStream) {
+  Base::TestMuteStream();
 }
 
 TEST_F(VideoChannelTest, TestMediaContentDirection) {
@@ -2506,7 +2537,7 @@ void ChannelTest<DataTraits>::AddLegacyStreamInContent(
 
 TEST_F(DataChannelTest, TestInit) {
   Base::TestInit();
-  EXPECT_FALSE(media_channel1_->muted());
+  EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
 }
 
 TEST_F(DataChannelTest, TestSetContents) {

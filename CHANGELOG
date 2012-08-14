@@ -1,5 +1,9 @@
 Libjingle
 
+0.6.22 - Aug 14, 2012
+  - Start gathering ice candidates before user sets local description.
+  - Support for muting individual streams based on SSRC.
+
 0.6.21 - Aug 2, 2012
   - Fixed the issue on PeerConnection offer rejection.
   - Factored out the usage of cricket::CaptureResult.

@@ -43,6 +43,8 @@
 namespace cricket {
 #if defined(HAVE_WEBRTC_VOICE)
 #define AUDIO_ENG_NAME WebRtcVoiceEngine
+#else
+#define AUDIO_ENG_NAME NullVoiceEngine
 #endif
 
 const int MediaEngineInterface::kDefaultAudioDelayOffset = 0;

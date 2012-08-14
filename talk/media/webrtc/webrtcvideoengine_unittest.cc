@@ -1004,8 +1004,8 @@ TEST_F(WebRtcVideoMediaChannelTest, AdaptResolution4x3) {
   Base::AdaptResolution4x3();
 }
 
-TEST_F(WebRtcVideoMediaChannelTest, Mute) {
-  Base::Mute();
+TEST_F(WebRtcVideoMediaChannelTest, MuteStream) {
+  Base::MuteStream();
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, MultipleSendStreams) {

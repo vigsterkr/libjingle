@@ -385,7 +385,7 @@ class WebRtcVoiceMediaChannel
 
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
-  virtual bool Mute(bool mute);
+  virtual bool MuteStream(uint32 ssrc, bool on);
   virtual bool SetSendBandwidth(bool autobw, int bps) { return false; }
   virtual bool GetStats(VoiceMediaInfo* info);
   // Gets last reported error from WebRtc voice engine.  This should be only

@@ -512,9 +512,9 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
 #if defined(IOS) || defined(ANDROID)
   // Use speakerphone mode with comfort noise generation for mobile.
   options.ec_mode = kEcAecm;
-  // On mobile, GIPS recommends fixed AGC (not adaptive)
+  // On mobile, webrtc recommends fixed AGC (not adaptive)
   options.agc_mode = kAgcFixedDigital;
-  // On mobile, GIPS recommends moderate aggressiveness.
+  // On mobile, webrtc recommends moderate aggressiveness.
   options.noise_suppression.Set(true);
   options.ns_mode = kNsModerateSuppression;
   // No typing detection support on iOS or Android.
@@ -2149,7 +2149,11 @@ void WebRtcVoiceMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
                                                     packet->length());
 }
 
-bool WebRtcVoiceMediaChannel::Mute(bool muted) {
+bool WebRtcVoiceMediaChannel::MuteStream(uint32 ssrc, bool muted) {
+  if (local_ssrc_ != ssrc && ssrc != 0) {
+    LOG(LS_WARNING) << "The specified ssrc " << ssrc << " is not in use.";
+    return false;
+  }
   if (engine()->voe()->volume()->SetInputMute(voe_channel(),
       muted) == -1) {
     LOG_RTCERR2(SetInputMute, voe_channel(), muted);

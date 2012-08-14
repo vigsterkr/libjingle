@@ -96,7 +96,7 @@ class BaseChannel
   bool secure_dtls() const { return dtls_keyed_; }
 
   bool writable() const { return writable_; }
-  bool muted() const { return muted_; }
+  bool IsStreamMuted(uint32 ssrc);
 
   // Channel control
   bool SetLocalContent(const MediaContentDescription* content,
@@ -106,7 +106,9 @@ class BaseChannel
   bool SetMaxSendBandwidth(int max_bandwidth);
 
   bool Enable(bool enable);
-  bool Mute(bool mute);
+  // Mute sending media on the stream with SSRC |ssrc|
+  // If there is only one sending stream SSRC 0 can be used.
+  bool MuteStream(uint32 ssrc, bool mute);
 
   // Multiplexing
   bool AddRecvStream(const StreamParams& sp);
@@ -118,6 +120,17 @@ class BaseChannel
 
   void set_srtp_signal_silent_time(uint32 silent_time) {
     srtp_filter_.set_signal_silent_time(silent_time);
+  }
+
+  void set_content_name(const std::string& content_name) {
+    ASSERT(signaling_thread()->IsCurrent());
+    ASSERT(!writable_);
+    if (session_->state() != BaseSession::STATE_INIT) {
+      LOG(LS_ERROR) << "Content name for a channel can be changed only "
+                    << "when BaseSession is in STATE_INIT state.";
+      return;
+    }
+    content_name_ = content_name;
   }
 
   template <class T>
@@ -246,8 +259,8 @@ class BaseChannel
 
   void EnableMedia_w();
   void DisableMedia_w();
-  virtual void MuteMedia_w();
-  void UnmuteMedia_w();
+  virtual bool MuteStream_w(uint32 ssrc, bool mute);
+  bool IsStreamMuted_w(uint32 ssrc);
   void ChannelWritable_w();
   void ChannelNotWritable_w();
   bool AddRecvStream_w(const StreamParams& sp);
@@ -319,7 +332,7 @@ class BaseChannel
   bool was_ever_writable_;
   MediaContentDirection local_content_direction_;
   MediaContentDirection remote_content_direction_;
-  bool muted_;
+  std::set<uint32> muted_streams_;
   bool has_received_packet_;
   bool dtls_keyed_;
   bool crypto_required_;
@@ -367,7 +380,9 @@ class VoiceChannel : public BaseChannel {
 
   void StartTypingMonitor(const TypingMonitorOptions& settings);
 
-  virtual void MuteMedia_w();
+  // Overrides BaseChannel::MuteStream_w.
+  virtual bool MuteStream_w(uint32 ssrc, bool mute);
+
   int GetInputLevel_w();
   int GetOutputLevel_w();
   void GetActiveStreams_w(AudioInfo::StreamList* actives);

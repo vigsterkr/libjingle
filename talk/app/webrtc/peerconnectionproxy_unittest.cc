@@ -240,15 +240,6 @@ TEST_F(PeerConnectionProxyTest, CreateAnswerJSEP00) {
             pc_proxy_->CreateAnswer(MediaHints(), fake_desc));
 }
 
-TEST_F(PeerConnectionProxyTest, StartIceJSEP00) {
-  EXPECT_CALL(*pc_, StartIce(JsepInterface::kOnlyRelay))
-      .Times(Exactly(1))
-      .WillOnce(
-          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
-                Return(true)));
-  EXPECT_TRUE(pc_proxy_->StartIce(JsepInterface::kOnlyRelay));
-}
-
 TEST_F(PeerConnectionProxyTest, SetLocalDescriptionJSEP00) {
   SessionDescriptionInterface* fake_desc =
       GetFakePointer1<SessionDescriptionInterface>();

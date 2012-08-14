@@ -64,7 +64,7 @@ class HybridVideoMediaChannel : public VideoMediaChannel {
   virtual bool RemoveSendStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   virtual bool SetRender(bool render);
-  virtual bool Mute(bool muted);
+  virtual bool MuteStream(uint32 ssrc, bool muted);
 
   virtual bool SetRecvCodecs(const std::vector<VideoCodec>& codecs);
   virtual bool SetRecvRtpHeaderExtensions(

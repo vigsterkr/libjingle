@@ -382,7 +382,7 @@ void Call::Mute(bool mute) {
   for (it = sessions_.begin(); it != sessions_.end(); it++) {
     VoiceChannel* voice_channel = voice_channel_map_[(*it)->id()];
     if (voice_channel != NULL)
-      voice_channel->Mute(mute);
+      voice_channel->MuteStream(0, mute);
   }
 }
 
@@ -392,7 +392,7 @@ void Call::MuteVideo(bool mute) {
   for (it = sessions_.begin(); it != sessions_.end(); it++) {
     VideoChannel* video_channel = video_channel_map_[(*it)->id()];
     if (video_channel != NULL)
-      video_channel->Mute(mute);
+      video_channel->MuteStream(0, mute);
   }
 }
 
