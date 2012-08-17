@@ -55,6 +55,8 @@
 #include "talk/session/media/srtpfilter.h"
 #include "talk/xmpp/xmppclientsettings.h"
 
+// This is a test comment used only for testing SVN merging.  It
+// should be remove momentarily.
 class DebugLog : public sigslot::has_slots<> {
  public:
   DebugLog() :
