@@ -84,6 +84,13 @@ class Settable {
     val_ = T();
   }
 
+  void SetFrom(Settable<T> o) {
+    T val;
+    if (o.Get(&val)) {
+      Set(val);
+    }
+  }
+
   bool operator==(const Settable<T>& o) const {
     return (set_ == o.set_) && (val_ == o.val_);
   }
@@ -98,6 +105,17 @@ class Settable {
 // We are moving all of the setting of options to structs like this,
 // but some things currently still use flags.
 struct AudioOptions {
+  void SetAll(const AudioOptions& change) {
+    echo_cancellation.SetFrom(change.echo_cancellation);
+    auto_gain_control.SetFrom(change.auto_gain_control);
+    noise_suppression.SetFrom(change.noise_suppression);
+    highpass_filter.SetFrom(change.highpass_filter);
+    stereo_swapping.SetFrom(change.stereo_swapping);
+    typing_detection.SetFrom(change.typing_detection);
+    conference_mode.SetFrom(change.conference_mode);
+    adjust_agc_delta.SetFrom(change.adjust_agc_delta);
+  }
+
   bool operator==(const AudioOptions& o) const {
     return echo_cancellation == o.echo_cancellation &&
         auto_gain_control == o.auto_gain_control &&
@@ -211,6 +229,16 @@ enum VideoMediaChannelOptions {
   // Enable three spatial layers at less than HD resolutions.
   OPT_VIDEO_THREE_LAYERS = 0x100000
 };
+
+// DTMF flags to control if a DTMF tone should be played and/or sent.
+enum DtmfFlags {
+  DF_PLAY = 0x01,
+  DF_SEND = 0x02,
+};
+
+// Special purpose DTMF event code used by the VoiceMediaChannel::InsertDtmf.
+const int kDtmfDelay = -1;  // Insert a delay to the end of the DTMF queue.
+const int kDtmfReset = -2;  // Reset the DTMF queue.
 
 class MediaChannel : public sigslot::has_slots<> {
  public:
@@ -528,8 +556,14 @@ class VoiceMediaChannel : public MediaChannel {
   virtual bool SetRingbackTone(const char *buf, int len) = 0;
   // Plays or stops the aforementioned ringback tone
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) = 0;
-  // Sends a out-of-band DTMF signal using the specified event.
-  virtual bool PressDTMF(int event, bool playout) = 0;
+  // Send and/or play a DTMF |event| according to the |flags|.
+  // The DTMF out-of-band signal will be used on sending.
+  // The |ssrc| should be either 0 or a valid send stream ssrc.
+  // The valid value for the |event| are -2 to 15.
+  // kDtmfReset(-2) is used to reset the DTMF.
+  // kDtmfDelay(-1) is used to insert a delay to the end of the DTMF queue.
+  // 0 to 15 which corresponding to DTMF event 0-9, *, #, A-D.
+  virtual bool InsertDtmf(uint32 ssrc, int event, int duration, int flags) = 0;
   // Gets quality stats for the channel.
   virtual bool GetStats(VoiceMediaInfo* info) = 0;
   // Gets last reported error for this media channel.
@@ -566,9 +600,11 @@ class VideoMediaChannel : public MediaChannel {
   VideoMediaChannel() : renderer_(NULL) {}
   virtual ~VideoMediaChannel() {}
   // Sets the codecs/payload types to be used for incoming media.
-  virtual bool SetRecvCodecs(const std::vector<VideoCodec> &codecs) = 0;
+  virtual bool SetRecvCodecs(const std::vector<VideoCodec>& codecs) = 0;
   // Sets the codecs/payload types to be used for outgoing media.
-  virtual bool SetSendCodecs(const std::vector<VideoCodec> &codecs) = 0;
+  virtual bool SetSendCodecs(const std::vector<VideoCodec>& codecs) = 0;
+  // Gets the currently set codecs/payload types to be used for outgoing media.
+  virtual bool GetSendCodec(VideoCodec* send_codec) = 0;
   // Sets the format of a specified outgoing stream.
   virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format) = 0;
   // Starts or stops playout of received video.
@@ -603,20 +639,21 @@ class VideoMediaChannel : public MediaChannel {
 // DataMediaChannel::SignalDataReceived and in all of the signals that
 // signal fires, on up the chain.
 struct ReceiveDataParams {
+  // TODO: Should we change this to non-ssrc for non-rtp
+  // data engines?
   uint32 ssrc;
   int seq_num;
   int timestamp;
 };
 
-// Implemented in datamediaengine.cc.
-// TODO: Should we make this abstract and make a
-// DataMediaChannelImpl in datamediaengine.cc to avoid dependencies?
+struct SendDataParams {
+  // TODO: Should we change this to non-ssrc for non-rtp
+  // data engines?
+  uint32 ssrc;
+};
+
 class DataMediaChannel : public MediaChannel {
  public:
-  struct SendDataParams {
-    uint32 ssrc;
-  };
-
   enum Error {
     ERROR_NONE = 0,                       // No error.
     ERROR_OTHER,                          // Other errors.
@@ -627,45 +664,30 @@ class DataMediaChannel : public MediaChannel {
     ERROR_RECV_SRTP_REPLAY,               // Packet replay detected.
   };
 
-  // Timing* Used for the RtpClock
-  explicit DataMediaChannel(talk_base::Timing* timing);
-  // Sets Timing == NULL, so you'll need to call set_timer() before
-  // using it.  This is needed by FakeMediaEngine.
-  DataMediaChannel();
-  virtual ~DataMediaChannel();
+  virtual ~DataMediaChannel() {}
 
-  void set_timing(talk_base::Timing* timing) {
-    timing_ = timing;
-  }
-
-  virtual bool SetSendBandwidth(bool autobw, int bps);
-  virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs);
-  virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs);
+  virtual bool SetSendBandwidth(bool autobw, int bps) = 0;
+  virtual bool SetSendCodecs(const std::vector<DataCodec>& codecs) = 0;
+  virtual bool SetRecvCodecs(const std::vector<DataCodec>& codecs) = 0;
   virtual bool SetRecvRtpHeaderExtensions(
-      const std::vector<RtpHeaderExtension>& extensions) { return true; }
+      const std::vector<RtpHeaderExtension>& extensions) = 0;
   virtual bool SetSendRtpHeaderExtensions(
-      const std::vector<RtpHeaderExtension>& extensions) { return true; }
-  virtual bool AddSendStream(const StreamParams& sp);
-  virtual bool RemoveSendStream(uint32 ssrc);
-  virtual bool AddRecvStream(const StreamParams& sp);
-  virtual bool RemoveRecvStream(uint32 ssrc);
+      const std::vector<RtpHeaderExtension>& extensions) = 0;
+  virtual bool AddSendStream(const StreamParams& sp) = 0;
+  virtual bool RemoveSendStream(uint32 ssrc) = 0;
+  virtual bool AddRecvStream(const StreamParams& sp) = 0;
+  virtual bool RemoveRecvStream(uint32 ssrc) = 0;
   virtual bool MuteStream(uint32 ssrc, bool on) { return false; }
   // TODO: Implement this.
   virtual bool GetStats(DataMediaInfo* info) { return true; }
 
-  virtual bool SetSend(bool send) {
-    sending_ = send;
-    return true;
-  }
-  virtual bool SetReceive(bool receive) {
-    receiving_ = receive;
-    return true;
-  }
-  virtual void OnPacketReceived(talk_base::Buffer* packet);
-  virtual void OnRtcpReceived(talk_base::Buffer* packet) {}
+  virtual bool SetSend(bool send) = 0;
+  virtual bool SetReceive(bool receive) = 0;
+  virtual void OnPacketReceived(talk_base::Buffer* packet) = 0;
+  virtual void OnRtcpReceived(talk_base::Buffer* packet) = 0;
 
   virtual bool SendData(
-      const SendDataParams& params, const std::string& data);
+      const SendDataParams& params, const std::string& data) = 0;
   // Signals when data is received (params, data, len)
   sigslot::signal3<const ReceiveDataParams&,
                    const char*,
@@ -673,21 +695,6 @@ class DataMediaChannel : public MediaChannel {
   // Signal errors from MediaChannel.  Arguments are:
   //     ssrc(uint32), and error(DataMediaChannel::Error).
   sigslot::signal2<uint32, DataMediaChannel::Error> SignalMediaError;
-
- private:
-  class RtpClock;
-
-  void Construct(talk_base::Timing* timing);
-
-  bool sending_;
-  bool receiving_;
-  talk_base::Timing* timing_;
-  std::vector<DataCodec> send_codecs_;
-  std::vector<DataCodec> recv_codecs_;
-  std::vector<StreamParams> send_streams_;
-  std::vector<StreamParams> recv_streams_;
-  std::map<uint32, RtpClock*> rtp_clock_by_send_ssrc_;
-  talk_base::scoped_ptr<talk_base::RateLimiter> send_limiter_;
 };
 
 }  // namespace cricket

@@ -191,11 +191,16 @@ void ByteBuffer::WriteString(const std::string& val) {
 }
 
 void ByteBuffer::WriteBytes(const char* val, size_t len) {
+  memcpy(ReserveWriteBuffer(len), val, len);
+}
+
+char* ByteBuffer::ReserveWriteBuffer(size_t len) {
   if (Length() + len > Capacity())
     Resize(Length() + len);
 
-  memcpy(bytes_ + end_, val, len);
+  char* start = bytes_ + end_;
   end_ += len;
+  return start;
 }
 
 void ByteBuffer::Resize(size_t size) {
@@ -233,6 +238,11 @@ bool ByteBuffer::Shift(size_t size) {
 
 void ByteBuffer::Reset() {
   start_ = 0;
+}
+
+void ByteBuffer::Clear() {
+  memset(bytes_, 0, size_);
+  start_ = end_ = 0;
 }
 
 }  // namespace talk_base

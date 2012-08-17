@@ -946,7 +946,7 @@ bool WebRtcVideoEngine::CanSendCodec(const VideoCodec& requested,
   return false;
 }
 
-void WebRtcVideoEngine::ConvertToCricketVideoCodec(
+static void ConvertToCricketVideoCodec(
     const webrtc::VideoCodec& in_codec, VideoCodec* out_codec) {
   out_codec->id = in_codec.plType;
   out_codec->name = in_codec.plName;
@@ -1261,7 +1261,7 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
   VideoCodec checked_codec;
   VideoCodec current;  // defaults to 0x0
   if (sending_) {
-    engine()->ConvertToCricketVideoCodec(*send_codec_, &current);
+    ConvertToCricketVideoCodec(*send_codec_, &current);
   }
   for (std::vector<VideoCodec>::const_iterator iter = codecs.begin();
       iter != codecs.end(); ++iter) {
@@ -1305,6 +1305,14 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
 
   LogSendCodecChange("SetSendCodecs()");
 
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::GetSendCodec(VideoCodec* send_codec) {
+  if (!send_codec_.get()) {
+    return false;
+  }
+  ConvertToCricketVideoCodec(*send_codec_, send_codec);
   return true;
 }
 

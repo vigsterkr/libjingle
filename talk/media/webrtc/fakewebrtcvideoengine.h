@@ -616,6 +616,8 @@ class FakeWebRtcVideoEngine
     channels_[channel]->tmmbr_ = enable;
     return 0;
   }
+  WEBRTC_STUB(SetSendTimestampOffsetStatus, (int, bool, int));
+  WEBRTC_STUB(SetReceiveTimestampOffsetStatus, (int, bool, int));
   WEBRTC_STUB_CONST(GetReceivedRTCPStatistics, (const int, unsigned short&,
       unsigned int&, unsigned int&, unsigned int&, int&));
   WEBRTC_STUB_CONST(GetSentRTCPStatistics, (const int, unsigned short&,
@@ -626,6 +628,8 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&, unsigned int&));
   WEBRTC_STUB_CONST(GetEstimatedSendBandwidth, (const int, unsigned int*));
   WEBRTC_STUB_CONST(GetEstimatedReceiveBandwidth, (const int, unsigned int*));
+  WEBRTC_STUB_CONST(SetOverUseDetectorOptions,
+      (const webrtc::OverUseDetectorOptions&));
 
   WEBRTC_STUB(SetRTPKeepAliveStatus, (const int, bool, const int,
       const unsigned int));

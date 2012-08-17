@@ -195,7 +195,7 @@ talk_base::AsyncPacketSocket* TCPPort::GetIncoming(
 void TCPPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
                            const char* data, size_t size,
                            const talk_base::SocketAddress& remote_addr) {
-  Port::OnReadPacket(data, size, remote_addr);
+  Port::OnReadPacket(data, size, remote_addr, PROTO_TCP);
 }
 
 void TCPPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,

@@ -130,8 +130,10 @@ class P2PTransportChannel : public TransportChannelImpl,
   void OnCandidatesAllocationDone(PortAllocatorSession* session);
   void OnUnknownAddress(PortInterface* port,
                         const talk_base::SocketAddress& addr,
+                        ProtocolType proto,
                         IceMessage* stun_msg,
-                        const std::string &remote_username, bool port_muxed);
+                        const std::string &remote_username,
+                        bool port_muxed);
   void OnPortDestroyed(PortInterface* port);
 
   void OnConnectionStateChange(Connection *connection);

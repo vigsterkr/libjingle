@@ -149,8 +149,26 @@ bool HybridVideoMediaChannel::SetSendCodecs(
   // Only give the active channel the codecs it knows about.
   std::vector<VideoCodec> codecs1, codecs2;
   SplitCodecs(codecs, &codecs1, &codecs2);
-  return active_channel_->SetSendCodecs(
-      (active_channel_ == channel1_.get()) ? codecs1 : codecs2);
+  const std::vector<VideoCodec>& codecs_to_set =
+      (active_channel_ == channel1_.get()) ? codecs1 : codecs2;
+  bool return_value = active_channel_->SetSendCodecs(codecs_to_set);
+  if (!return_value) {
+    return false;
+  }
+  VideoCodec send_codec;
+  return_value = active_channel_->GetSendCodec(&send_codec);
+  if (!return_value) {
+    return false;
+  }
+  engine_->OnNewSendResolution(send_codec.width, send_codec.height);
+  return true;
+}
+
+bool HybridVideoMediaChannel::GetSendCodec(VideoCodec* send_codec) {
+  if (!active_channel_) {
+    return false;
+  }
+  return active_channel_->GetSendCodec(send_codec);
 }
 
 bool HybridVideoMediaChannel::SetSendStreamFormat(uint32 ssrc,

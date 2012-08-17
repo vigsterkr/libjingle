@@ -10,18 +10,18 @@
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -52,6 +52,7 @@ namespace sigslot {
 
     void reemit() { signal0<mt_policy>::emit(); }
     void repeat(base_type &s) { s.connect(this, &this_type::reemit); }
+    void stop(base_type &s) { s.disconnect(this); }
   };
 
   template<class arg1_type, class mt_policy = SIGSLOT_DEFAULT_MT_POLICY>
@@ -67,6 +68,7 @@ namespace sigslot {
 
     void reemit(arg1_type a1) { signal1<arg1_type, mt_policy>::emit(a1); }
     void repeat(base_type& s) { s.connect(this, &this_type::reemit); }
+    void stop(base_type &s) { s.disconnect(this); }
   };
 
   template<class arg1_type, class arg2_type, class mt_policy = SIGSLOT_DEFAULT_MT_POLICY>
@@ -82,9 +84,10 @@ namespace sigslot {
 
     void reemit(arg1_type a1, arg2_type a2) { signal2<arg1_type, arg2_type, mt_policy>::emit(a1,a2); }
     void repeat(base_type& s) { s.connect(this, &this_type::reemit); }
+    void stop(base_type &s) { s.disconnect(this); }
   };
 
-  template<class arg1_type, class arg2_type, class arg3_type, 
+  template<class arg1_type, class arg2_type, class arg3_type,
            class mt_policy = SIGSLOT_DEFAULT_MT_POLICY>
   class repeater3 : public signal3<arg1_type, arg2_type, arg3_type, mt_policy>,
                     public has_slots<mt_policy>
@@ -96,10 +99,11 @@ namespace sigslot {
     repeater3() { }
     repeater3(const this_type& s) : base_type(s) { }
 
-    void reemit(arg1_type a1, arg2_type a2, arg3_type a3) { 
+    void reemit(arg1_type a1, arg2_type a2, arg3_type a3) {
             signal3<arg1_type, arg2_type, arg3_type, mt_policy>::emit(a1,a2,a3);
     }
     void repeat(base_type& s) { s.connect(this, &this_type::reemit); }
+    void stop(base_type &s) { s.disconnect(this); }
   };
 
 }  // namespace sigslot

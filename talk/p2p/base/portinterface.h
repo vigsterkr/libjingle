@@ -43,6 +43,13 @@ class Connection;
 class IceMessage;
 class StunMessage;
 
+enum ProtocolType {
+  PROTO_UDP,
+  PROTO_TCP,
+  PROTO_SSLTCP,
+  PROTO_LAST = PROTO_SSLTCP
+};
+
 // Defines the interface for a port, which represents a local communication
 // mechanism that can be used to create connections to similar mechanisms of
 // the other client. Various types of ports will implement this interface.
@@ -96,8 +103,9 @@ class PortInterface {
   // Indicates that we received a successful STUN binding request from an
   // address that doesn't correspond to any current connection.  To turn this
   // into a real connection, call CreateConnection.
-  sigslot::signal5<PortInterface*, const talk_base::SocketAddress&, IceMessage*,
-                   const std::string&, bool> SignalUnknownAddress;
+  sigslot::signal6<PortInterface*, const talk_base::SocketAddress&,
+                   ProtocolType, IceMessage*, const std::string&,
+                   bool> SignalUnknownAddress;
 
   // Sends a response message (normal or error) to the given request.  One of
   // these methods should be called as a response to SignalUnknownAddress.

@@ -44,9 +44,9 @@
 #include "talk/examples/call/mucinvitesendtask.h"
 #include "talk/examples/call/presenceouttask.h"
 #include "talk/examples/call/presencepushtask.h"
-#include "talk/media/base/dataengine.h"
 #include "talk/media/base/mediacommon.h"
 #include "talk/media/base/mediaengine.h"
+#include "talk/media/base/rtpdataengine.h"
 #include "talk/media/base/screencastid.h"
 #include "talk/media/devices/devicemanager.h"
 #include "talk/media/devices/videorendererfactory.h"
@@ -484,7 +484,9 @@ void CallClient::InitMedia() {
   }
 
   if (!data_engine_) {
-    data_engine_ = new cricket::DataEngine();
+    // TODO: Make it easy to make other types of data
+    // engines.
+    data_engine_ = new cricket::RtpDataEngine();
   }
 
   media_client_ = new cricket::MediaSessionClient(
@@ -713,7 +715,7 @@ void CallClient::SendData(const std::string& stream_name,
     return;
   }
 
-  cricket::DataMediaChannel::SendDataParams params;
+  cricket::SendDataParams params;
   params.ssrc = stream.first_ssrc();
   call_->SendData(session_, params, text);
 }

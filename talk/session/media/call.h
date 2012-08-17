@@ -28,12 +28,13 @@
 #ifndef TALK_SESSION_MEDIA_CALL_H_
 #define TALK_SESSION_MEDIA_CALL_H_
 
-#include <string>
-#include <map>
-#include <vector>
 #include <deque>
+#include <map>
+#include <string>
+#include <vector>
+
 #include "talk/base/messagequeue.h"
-#include "talk/media/base/dataengine.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/media/base/screencastid.h"
 #include "talk/media/base/streamparams.h"
 #include "talk/p2p/base/session.h"
@@ -81,7 +82,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void Mute(bool mute);
   void MuteVideo(bool mute);
   void SendData(Session* session,
-                const DataMediaChannel::SendDataParams& params,
+                const SendDataParams& params,
                 const std::string& data);
   void PressDTMF(int event);
   void AddScreencast(Session* session,
@@ -91,7 +92,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                         const std::string& stream_name, uint32 ssrc);
   void SendStreamUpdate(Session* session, const StreamParams& stream);
 
-  const std::vector<Session*> &sessions();
+  std::vector<Session*> sessions();
   uint32 id();
   bool has_video() const { return has_video_; }
   bool has_data() const { return has_data_; }
@@ -156,6 +157,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   bool AddSession(Session* session, const SessionDescription* offer);
   void RemoveSession(Session* session);
   void EnableChannels(bool enable);
+  void EnableSessionChannels(Session* session, bool enable);
   void Join(Call* call, bool enable);
   void OnConnectionMonitor(VoiceChannel* channel,
                            const std::vector<ConnectionInfo> &infos);
@@ -198,11 +200,19 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
 
   uint32 id_;
   MediaSessionClient* session_client_;
-  std::vector<Session*> sessions_;
+
+  struct MediaSession {
+    Session* session;
+    VoiceChannel* voice_channel;
+    VideoChannel* video_channel;
+    DataChannel* data_channel;
+  };
+
+  // Create a map of media sessions, keyed off session->id().
+  typedef std::map<std::string, MediaSession> MediaSessionMap;
+  MediaSessionMap media_session_map_;
+
   MediaStreams recv_streams_;
-  std::map<std::string, VoiceChannel*> voice_channel_map_;
-  std::map<std::string, VideoChannel*> video_channel_map_;
-  std::map<std::string, DataChannel*> data_channel_map_;
   std::map<std::string, CurrentSpeakerMonitor*> speaker_monitor_map_;
   VideoRenderer* local_renderer_;
   bool has_video_;

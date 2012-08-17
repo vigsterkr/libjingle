@@ -58,11 +58,23 @@ class FakeWebRtcVoiceEngine
       public webrtc::VoENetwork, public webrtc::VoERTP_RTCP,
       public webrtc::VoEVideoSync, public webrtc::VoEVolumeControl {
  public:
+  struct DtmfInfo {
+    DtmfInfo()
+      : dtmf_event_code(-1),
+        dtmf_out_of_band(false),
+        dtmf_length_ms(-1) {}
+    int dtmf_event_code;
+    bool dtmf_out_of_band;
+    int dtmf_length_ms;
+  };
   struct Channel {
     Channel()
         : external_transport(false),
           send(false),
           playout(false),
+          volume_scale(1.0),
+          volume_pan_left(1.0),
+          volume_pan_right(1.0),
           file(false),
           vad(false),
           fec(false),
@@ -78,6 +90,9 @@ class FakeWebRtcVoiceEngine
     bool external_transport;
     bool send;
     bool playout;
+    float volume_scale;
+    float volume_pan_left;
+    float volume_pan_right;
     bool file;
     bool vad;
     bool fec;
@@ -88,6 +103,7 @@ class FakeWebRtcVoiceEngine
     int fec_type;
     uint32 send_ssrc;
     int level_header_ext_;
+    DtmfInfo dtmf_info;
     std::vector<webrtc::CodecInst> recv_codecs;
     webrtc::CodecInst send_codec;
     std::list<std::string> packets;
@@ -386,6 +402,10 @@ class FakeWebRtcVoiceEngine
   WEBRTC_FUNC(SetVADStatus, (int channel, bool enable, webrtc::VadModes mode,
                              bool disableDTX)) {
     WEBRTC_CHECK_CHANNEL(channel);
+    if (channels_[channel]->send_codec.channels == 2) {
+      // Replicating VoE behavior; VAD cannot be enabled for stereo.
+      return -1;
+    }
     channels_[channel]->vad = enable;
     return 0;
   }
@@ -393,8 +413,13 @@ class FakeWebRtcVoiceEngine
                              webrtc::VadModes& mode, bool& disabledDTX));
 
   // webrtc::VoEDtmf
-  WEBRTC_STUB(SendTelephoneEvent, (int channel, int eventCode,
-      bool outOfBand = true, int lengthMs = 160, int attenuationDb = 10));
+  WEBRTC_FUNC(SendTelephoneEvent, (int channel, int event_code,
+      bool out_of_band = true, int length_ms = 160, int attenuation_db = 10)) {
+    channels_[channel]->dtmf_info.dtmf_event_code = event_code;
+    channels_[channel]->dtmf_info.dtmf_out_of_band = out_of_band;
+    channels_[channel]->dtmf_info.dtmf_length_ms = length_ms;
+    return 0;
+  }
 
   WEBRTC_FUNC(SetSendTelephoneEventPayloadType,
       (int channel, unsigned char type)) {
@@ -414,8 +439,12 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(GetDtmfPlayoutStatus, (int channel, bool& enabled));
 
 
-  WEBRTC_STUB(PlayDtmfTone,
-      (int eventCode, int lengthMs = 200, int attenuationDb = 10));
+  WEBRTC_FUNC(PlayDtmfTone,
+      (int event_code, int length_ms = 200, int attenuation_db = 10)) {
+    dtmf_info_.dtmf_event_code = event_code;
+    dtmf_info_.dtmf_length_ms = length_ms;
+    return 0;
+  }
   WEBRTC_STUB(StartPlayingDtmfTone,
       (int eventCode, int attenuationDb = 10));
   WEBRTC_STUB(StopPlayingDtmfTone, ());
@@ -720,10 +749,28 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(GetSpeechOutputLevel, (int, unsigned int&));
   WEBRTC_STUB(GetSpeechInputLevelFullRange, (unsigned int&));
   WEBRTC_STUB(GetSpeechOutputLevelFullRange, (int, unsigned int&));
-  WEBRTC_STUB(SetChannelOutputVolumeScaling, (int, float));
-  WEBRTC_STUB(GetChannelOutputVolumeScaling, (int, float&));
-  WEBRTC_STUB(SetOutputVolumePan, (int, float, float));
-  WEBRTC_STUB(GetOutputVolumePan, (int, float&, float&));
+  WEBRTC_FUNC(SetChannelOutputVolumeScaling, (int channel, float scale)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->volume_scale= scale;
+    return 0;
+  }
+  WEBRTC_FUNC(GetChannelOutputVolumeScaling, (int channel, float& scale)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    scale = channels_[channel]->volume_scale;
+    return 0;
+  }
+  WEBRTC_FUNC(SetOutputVolumePan, (int channel, float left, float right)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->volume_pan_left = left;
+    channels_[channel]->volume_pan_right = right;
+    return 0;
+  }
+  WEBRTC_FUNC(GetOutputVolumePan, (int channel, float& left, float& right)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    left = channels_[channel]->volume_pan_left;
+    right = channels_[channel]->volume_pan_right;
+    return 0;
+  }
 
   // webrtc::VoEAudioProcessing
   WEBRTC_FUNC(SetNsStatus, (bool enable, webrtc::NsModes mode)) {
@@ -833,6 +880,15 @@ class FakeWebRtcVoiceEngine
   void EnableStereoChannelSwapping(bool enable) {
     stereo_swapping_enabled_ = enable;
   }
+  bool WasSendTelephoneEventCalled(int channel, int event_code, int length_ms) {
+    return (channels_[channel]->dtmf_info.dtmf_event_code == event_code &&
+            channels_[channel]->dtmf_info.dtmf_out_of_band == true &&
+            channels_[channel]->dtmf_info.dtmf_length_ms == length_ms);
+  }
+  bool WasPlayDtmfToneCalled(int event_code, int length_ms) {
+    return (dtmf_info_.dtmf_event_code == event_code &&
+            dtmf_info_.dtmf_length_ms == length_ms);
+  }
   // webrtc::VoEExternalMedia
   WEBRTC_FUNC(RegisterExternalMediaProcessing,
               (int channel, webrtc::ProcessingTypes type,
@@ -924,6 +980,7 @@ class FakeWebRtcVoiceEngine
   int send_fail_channel_;
   bool fail_start_recording_microphone_;
   bool recording_microphone_;
+  DtmfInfo dtmf_info_;
   webrtc::VoEMediaProcess* media_processor_;
 };
 

@@ -201,8 +201,6 @@ struct PortConfiguration : public talk_base::MessageData {
   typedef std::vector<RelayServer> RelayList;
   RelayList relays;
 
-  explicit PortConfiguration(const talk_base::SocketAddress& stun_address);
-
   PortConfiguration(const talk_base::SocketAddress& stun_address,
                     const std::string& username,
                     const std::string& password);

@@ -128,8 +128,6 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
                     VideoCodec* out);
   void RegisterChannel(WebRtcVideoMediaChannel* channel);
   void UnregisterChannel(WebRtcVideoMediaChannel* channel);
-  void ConvertToCricketVideoCodec(const webrtc::VideoCodec& in_codec,
-                                  VideoCodec*  out_codec);
   bool ConvertFromCricketVideoCodec(const VideoCodec& in_codec,
                                     webrtc::VideoCodec* out_codec);
   // Check whether the supplied trace should be ignored.
@@ -215,6 +213,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   // VideoMediaChannel implementation
   virtual bool SetRecvCodecs(const std::vector<VideoCodec> &codecs);
   virtual bool SetSendCodecs(const std::vector<VideoCodec> &codecs);
+  virtual bool GetSendCodec(VideoCodec* send_codec);
   virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format);
   virtual bool SetRender(bool render);
   virtual bool SetSend(bool send);

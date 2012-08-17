@@ -86,6 +86,7 @@ class PortProxy : public PortInterface, public sigslot::has_slots<> {
  private:
   void OnUnknownAddress(PortInterface *port,
                         const talk_base::SocketAddress &addr,
+                        ProtocolType proto,
                         IceMessage *stun_msg,
                         const std::string &remote_username,
                         bool port_muxed);

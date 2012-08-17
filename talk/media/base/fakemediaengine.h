@@ -228,7 +228,17 @@ class RtpHelper : public Base {
 
 class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
  public:
-  typedef std::pair<int, bool> DtmfEvent;
+  struct DtmfInfo {
+    DtmfInfo(uint32 ssrc, int event_code, int duration, int flags)
+      : ssrc(ssrc),
+        event_code(event_code),
+        duration(duration),
+        flags(flags) {}
+    uint32 ssrc;
+    int event_code;
+    int duration;
+    int flags;
+  };
   explicit FakeVoiceMediaChannel(FakeVoiceEngine* engine)
       : engine_(engine),
         fail_set_send_(false),
@@ -243,7 +253,9 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   const std::vector<AudioCodec>& recv_codecs() const { return recv_codecs_; }
   const std::vector<AudioCodec>& send_codecs() const { return send_codecs_; }
   const std::vector<AudioCodec>& codecs() const { return send_codecs(); }
-  const std::vector<DtmfEvent>& dtmf_queue() const { return dtmf_queue_; }
+  const std::vector<DtmfInfo>& dtmf_info_queue() const {
+    return dtmf_info_queue_;
+  }
   const AudioOptions& options() const { return options_; }
 
   uint32 ringback_tone_ssrc() const { return ringback_tone_ssrc_; }
@@ -309,8 +321,9 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
     return true;
   }
 
-  virtual bool PressDTMF(int event, bool playout) {
-    dtmf_queue_.push_back(std::make_pair(event, playout));
+  virtual bool InsertDtmf(uint32 ssrc, int event_code, int duration,
+                          int flags) {
+    dtmf_info_queue_.push_back(DtmfInfo(ssrc, event_code, duration, flags));
     return true;
   }
 
@@ -350,7 +363,8 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   }
 
   virtual bool SetOptions(const AudioOptions& options) {
-    options_ = options;
+    // Does a "merge" of current options and set options.
+    options_.SetAll(options);
     return true;
   }
   virtual bool GetOptions(AudioOptions* options) const {
@@ -368,7 +382,7 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   std::vector<AudioCodec> recv_codecs_;
   std::vector<AudioCodec> send_codecs_;
   std::map<uint32, OutputScaling> output_scalings_;
-  std::vector<DtmfEvent> dtmf_queue_;
+  std::vector<DtmfInfo> dtmf_info_queue_;
   bool fail_set_send_;
   uint32 ringback_tone_ssrc_;
   bool ringback_tone_play_;
@@ -376,6 +390,13 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   int time_since_last_typing_;
   AudioOptions options_;
 };
+
+// A helper function to compare the FakeVoiceMediaChannel::DtmfInfo.
+inline bool CompareDtmfInfo(const FakeVoiceMediaChannel::DtmfInfo& info,
+    uint32 ssrc, int event_code, int duration, int flags) {
+  return (info.duration == duration && info.event_code == event_code &&
+          info.flags == flags && info.ssrc == ssrc);
+}
 
 class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
  public:
@@ -441,6 +462,13 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
         it != send_streams().end(); ++it) {
       SetSendStreamDefaultFormat(it->first_ssrc());
     }
+    return true;
+  }
+  virtual bool GetSendCodec(VideoCodec* send_codec) {
+    if (send_codecs_.empty()) {
+      return false;
+    }
+    *send_codec = send_codecs_[0];
     return true;
   }
   virtual bool SetRender(bool render) {

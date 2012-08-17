@@ -57,6 +57,7 @@ class ByteBuffer {
   const char* Data() const { return bytes_ + start_; }
   size_t Length() const { return end_ - start_; }
   size_t Capacity() const { return size_ - start_; }
+  ByteOrder Order() const { return byte_order_; }
 
   // Read a next value from the buffer. Return false if there isn't
   // enough data left for the specified type.
@@ -81,6 +82,11 @@ class ByteBuffer {
   void WriteString(const std::string& val);
   void WriteBytes(const char* val, size_t len);
 
+  // Reserves the given number of bytes and returns a char* that can be written
+  // into. Useful for functions that require a char* buffer and not a
+  // ByteBuffer.
+  char* ReserveWriteBuffer(size_t len);
+
   // Resize the buffer to the specified |size|.
   void Resize(size_t size);
 
@@ -96,6 +102,9 @@ class ByteBuffer {
   // operation will delete consumed buffer space, so this is only useful after
   // Read operations but before any modifying operations.
   void Reset();
+
+  // Clears the contents of the buffer. After this, Length() will be 0.
+  void Clear();
 
  private:
   void Construct(const char* bytes, size_t size, ByteOrder byte_order);

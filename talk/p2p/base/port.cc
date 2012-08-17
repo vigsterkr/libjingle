@@ -266,7 +266,8 @@ void Port::AddConnection(Connection* conn) {
 }
 
 void Port::OnReadPacket(
-    const char* data, size_t size, const talk_base::SocketAddress& addr) {
+    const char* data, size_t size, const talk_base::SocketAddress& addr,
+    ProtocolType proto) {
   // If the user has enabled port packets, just hand this over.
   if (enable_port_packets_) {
     SignalReadPacket(this, data, size, addr);
@@ -290,7 +291,7 @@ void Port::OnReadPacket(
       return;
     }
 
-    SignalUnknownAddress(this, addr, msg.get(), remote_username, false);
+    SignalUnknownAddress(this, addr, proto, msg.get(), remote_username, false);
   } else {
     // NOTE(tschmelcher): STUN_BINDING_RESPONSE is benign. It occurs if we
     // pruned a connection for this port while it had STUN requests in flight,

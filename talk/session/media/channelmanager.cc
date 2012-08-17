@@ -37,7 +37,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/sigslotrepeater.h"
 #include "talk/base/stringencode.h"
-#include "talk/media/base/dataengine.h"
+#include "talk/media/base/rtpdataengine.h"
 #include "talk/media/base/videocapturer.h"
 #include "talk/session/media/soundclip.h"
 
@@ -172,7 +172,7 @@ struct VoiceProcessorParams : public talk_base::MessageData {
 
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread) {
   Construct(MediaEngineFactory::Create(),
-            new DataEngine(),
+            new RtpDataEngine(),
             cricket::DeviceManagerFactory::Create(),
             worker_thread);
 }
@@ -187,7 +187,7 @@ ChannelManager::ChannelManager(MediaEngineInterface* me,
 ChannelManager::ChannelManager(MediaEngineInterface* me,
                                DeviceManagerInterface* dm,
                                talk_base::Thread* worker_thread) {
-  Construct(me, new DataEngine(), dm, worker_thread);
+  Construct(me, new RtpDataEngine(), dm, worker_thread);
 }
 
 void ChannelManager::Construct(MediaEngineInterface* me,

@@ -53,7 +53,7 @@ enum {
   MSG_SETREMOTECONTENT = 6,
   MSG_SETLOCALCONTENT = 7,
   MSG_EARLYMEDIATIMEOUT = 8,
-  MSG_PRESSDTMF = 9,
+  MSG_INSERTDTMF = 9,
   MSG_SETRENDERER = 10,
   MSG_ADDRECVSTREAM = 11,
   MSG_REMOVERECVSTREAM = 12,
@@ -78,7 +78,7 @@ enum {
   MSG_SCREENCASTFPS = 33,
   MSG_SETSCREENCASTFACTORY = 34,
   MSG_FIRSTPACKETRECEIVED = 35,
-  MSG_SESSION_ERROR = 36
+  MSG_SESSION_ERROR = 36,
 };
 
 // Value specified in RFC 5764.
@@ -141,13 +141,17 @@ struct PlayRingbackToneMessageData : public talk_base::MessageData {
   bool result;
 };
 struct DtmfMessageData : public talk_base::MessageData {
-  DtmfMessageData(int d, bool p)
-      : digit(d),
-        playout(p),
+  DtmfMessageData(uint32 ssrc, int event, int duration, int flags)
+      : ssrc(ssrc),
+        event(event),
+        duration(duration),
+        flags(flags),
         result(false) {
   }
-  int digit;
-  bool playout;
+  uint32 ssrc;
+  int event;
+  int duration;
+  int flags;
   bool result;
 };
 struct ScaleVolumeMessageData : public talk_base::MessageData {
@@ -1381,8 +1385,18 @@ bool VoiceChannel::PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
 }
 
 bool VoiceChannel::PressDTMF(int digit, bool playout) {
-  DtmfMessageData data(digit, playout);
-  Send(MSG_PRESSDTMF, &data);
+  int flags = DF_SEND;
+  if (playout) {
+    flags |= DF_PLAY;
+  }
+  int duration_ms = 160;
+  return InsertDtmf(0, digit, duration_ms, flags);
+}
+
+bool VoiceChannel::InsertDtmf(uint32 ssrc, int event_code, int duration,
+                              int flags) {
+  DtmfMessageData data(ssrc, event_code, duration, flags);
+  Send(MSG_INSERTDTMF, &data);
   return data.result;
 }
 
@@ -1585,12 +1599,13 @@ void VoiceChannel::HandleEarlyMediaTimeout() {
   }
 }
 
-bool VoiceChannel::PressDTMF_w(int digit, bool playout) {
+bool VoiceChannel::InsertDtmf_w(uint32 ssrc, int event, int duration,
+                                int flags) {
   if (!enabled() || !writable()) {
     return false;
   }
 
-  return media_channel()->PressDTMF(digit, playout);
+  return media_channel()->InsertDtmf(ssrc, event, duration, flags);
 }
 
 bool VoiceChannel::SetOutputScaling_w(uint32 ssrc, double left, double right) {
@@ -1624,9 +1639,11 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_EARLYMEDIATIMEOUT:
       HandleEarlyMediaTimeout();
       break;
-    case MSG_PRESSDTMF: {
-      DtmfMessageData* data = static_cast<DtmfMessageData*>(pmsg->pdata);
-      data->result = PressDTMF_w(data->digit, data->playout);
+    case MSG_INSERTDTMF: {
+      DtmfMessageData* data =
+          static_cast<DtmfMessageData*>(pmsg->pdata);
+      data->result = InsertDtmf_w(data->ssrc, data->event, data->duration,
+                                  data->flags);
       break;
     }
     case MSG_SCALEVOLUME: {
@@ -2253,7 +2270,7 @@ bool DataChannel::Init() {
 }
 
 bool DataChannel::SendData(
-    const DataMediaChannel::SendDataParams& params,
+    const SendDataParams& params,
     const std::string& data) {
   SendDataMessageData message_data(params, data);
   Send(MSG_SENDDATA, &message_data);

@@ -331,24 +331,40 @@ void P2PTransportChannel::OnCandidatesAllocationDone(
 
 // Handle stun packets
 void P2PTransportChannel::OnUnknownAddress(
-    PortInterface* port, const talk_base::SocketAddress& address,
-    IceMessage* stun_msg, const std::string &remote_username, bool port_muxed) {
+    PortInterface* port,
+    const talk_base::SocketAddress& address, ProtocolType proto,
+    IceMessage* stun_msg, const std::string &remote_username,
+    bool port_muxed) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
 
   // Port has received a valid stun packet from an address that no Connection
   // is currently available for. See if we already have a candidate with the
   // address. If it isn't we need to create new candidate for it.
-  bool ufrag_per_port =
-      !(allocator_->flags() & PORTALLOCATOR_ENABLE_SHARED_UFRAG);
+
+  // Determine if the remote candidates use shared ufrag.
+  bool ufrag_per_port = false;
+  std::vector<RemoteCandidate>::iterator it;
+  if (remote_candidates_.size() > 0) {
+    it = remote_candidates_.begin();
+    std::string username = it->username();
+    for (; it != remote_candidates_.end(); ++it) {
+      if (it->username() != username) {
+        ufrag_per_port = true;
+        break;
+      }
+    }
+  }
+
   const Candidate* candidate = NULL;
   bool known_username = false;
   std::string remote_password;
-  std::vector<RemoteCandidate>::iterator it;
   for (it = remote_candidates_.begin(); it != remote_candidates_.end(); ++it) {
-    if ((*it).username() == remote_username) {
-      remote_password = (*it).password();
+    if (it->username() == remote_username) {
+      remote_password = it->password();
       known_username = true;
-      if (ufrag_per_port || ((*it).address() == address)) {
+      if (ufrag_per_port ||
+          (it->address() == address &&
+           it->protocol() == ProtoToString(proto))) {
         candidate = &(*it);
         break;
       }
@@ -391,17 +407,12 @@ void P2PTransportChannel::OnUnknownAddress(
     if (type == RELAY_PORT_TYPE) {
       type = STUN_PORT_TYPE;
     }
-    // TODO: Figure out the proper way to determine the protocol.
-    ProtocolType protocol = PROTO_UDP;
-    if (port->Priority() == PRIORITY_LOCAL_TCP) {
-      protocol = PROTO_TCP;
-    }
     // TODO: Change the preference to the preference of
     // the peer-reflexive candidate when it's ready.
     // For now just default to a STUN preference.
     std::string id = talk_base::CreateRandomString(8);
     new_remote_candidate = Candidate(
-        id, component(), ProtoToString(protocol),
+        id, component(), ProtoToString(proto),
         address, PRIORITY_LOCAL_STUN, remote_username, remote_password, type,
         port->Network()->name(), 0U, talk_base::ComputeCrc32(id));
   }

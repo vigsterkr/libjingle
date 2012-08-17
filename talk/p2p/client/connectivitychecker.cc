@@ -413,7 +413,7 @@ void ConnectivityChecker::CreateRelayPorts(
 void ConnectivityChecker::AllocatePorts() {
   const std::string username = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
   const std::string password = talk_base::CreateRandomString(ICE_PWD_LENGTH);
-  PortConfiguration config(stun_address_);
+  PortConfiguration config(stun_address_, username, password);
   std::vector<talk_base::Network*> networks;
   network_manager_->GetNetworks(&networks);
   if (networks.empty()) {
@@ -425,17 +425,19 @@ void ConnectivityChecker::AllocatePorts() {
   for (uint32 i = 0; i < networks.size(); ++i) {
     if (AddNic(networks[i]->ip(), proxy_info.address)) {
       Port* port = CreateStunPort(username, password, &config, networks[i]);
+      if (port) {
 
-      // Listen to network events.
-      port->SignalAddressReady.connect(
-          this, &ConnectivityChecker::OnStunAddressReady);
-      port->SignalAddressError.connect(
-          this, &ConnectivityChecker::OnStunAddressError);
+        // Listen to network events.
+        port->SignalAddressReady.connect(
+            this, &ConnectivityChecker::OnStunAddressReady);
+        port->SignalAddressError.connect(
+            this, &ConnectivityChecker::OnStunAddressError);
 
-      port->set_proxy(user_agent_, proxy_info);
-      port->PrepareAddress();
-      ports_.push_back(port);
-      allocate_relay_ports = true;
+        port->set_proxy(user_agent_, proxy_info);
+        port->PrepareAddress();
+        ports_.push_back(port);
+        allocate_relay_ports = true;
+      }
     }
   }
 

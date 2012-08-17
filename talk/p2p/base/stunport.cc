@@ -239,7 +239,7 @@ void StunPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   if (Connection* conn = GetConnection(remote_addr)) {
     conn->OnReadPacket(data, size);
   } else {
-    Port::OnReadPacket(data, size, remote_addr);
+    Port::OnReadPacket(data, size, remote_addr, PROTO_UDP);
   }
 }
 

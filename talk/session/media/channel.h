@@ -361,9 +361,17 @@ class VoiceChannel : public BaseChannel {
   sigslot::signal1<VoiceChannel*> SignalEarlyMediaTimeout;
 
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
+  // TODO: Replace PressDTMF with InsertDtmf.
   bool PressDTMF(int digit, bool playout);
+  // Send and/or play a DTMF |event| according to the |flags|.
+  // The DTMF out-of-band signal will be used on sending.
+  // The |ssrc| should be either 0 or a valid send stream ssrc.
+  // The valid value for the |event| are -2 to 15.
+  // kDtmfReset(-2) is used to reset the DTMF.
+  // kDtmfDelay(-1) is used to insert a delay to the end of the DTMF queue.
+  // 0 to 15 which corresponding to DTMF event 0-9, *, #, A-D.
+  bool InsertDtmf(uint32 ssrc, int event_code, int duration, int flags);
   bool SetOutputScaling(uint32 ssrc, double left, double right);
-
 
   // Monitoring functions
   sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo>&>
@@ -408,7 +416,7 @@ class VoiceChannel : public BaseChannel {
   bool SetRingbackTone_w(const void* buf, int len);
   bool PlayRingbackTone_w(uint32 ssrc, bool play, bool loop);
   void HandleEarlyMediaTimeout();
-  bool PressDTMF_w(int digit, bool playout);
+  bool InsertDtmf_w(uint32 ssrc, int event, int duration, int flags);
   bool SetOutputScaling_w(uint32 ssrc, double left, double right);
 
   virtual void OnMessage(talk_base::Message* pmsg);
@@ -552,8 +560,7 @@ class DataChannel : public BaseChannel {
     return static_cast<DataMediaChannel*>(BaseChannel::media_channel());
   }
 
-  bool SendData(const DataMediaChannel::SendDataParams& params,
-                const std::string& data);
+  bool SendData(const SendDataParams& params, const std::string& data);
 
   void StartMediaMonitor(int cms);
   void StopMediaMonitor();
@@ -570,12 +577,11 @@ class DataChannel : public BaseChannel {
 
  private:
   struct SendDataMessageData : public talk_base::MessageData {
-    SendDataMessageData(const DataMediaChannel::SendDataParams& params,
-                        const std::string& data)
+    SendDataMessageData(const SendDataParams& params, const std::string& data)
         : params(params),
           data(data) {
     }
-    const DataMediaChannel::SendDataParams params;
+    const SendDataParams params;
     const std::string data;
   };
 

@@ -55,6 +55,9 @@ using cricket::CA_OFFER;
 using cricket::CA_PRANSWER;
 using cricket::CA_ANSWER;
 using cricket::CA_UPDATE;
+using cricket::FakeVoiceMediaChannel;
+using cricket::kDtmfDelay;
+using cricket::kDtmfReset;
 using cricket::ScreencastId;
 using cricket::StreamParams;
 using talk_base::WindowId;
@@ -1770,7 +1773,7 @@ class VoiceChannelTest
     cricket::AudioOptions options1;
     options1.echo_cancellation.Set(false);
     cricket::AudioOptions options2;
-    options1.echo_cancellation.Set(true);
+    options2.echo_cancellation.Set(true);
 
     channel1_->SetChannelOptions(options1);
     channel2_->SetChannelOptions(options1);
@@ -1875,7 +1878,7 @@ class VideoChannelTest
 TEST_F(VoiceChannelTest, TestInit) {
   Base::TestInit();
   EXPECT_FALSE(media_channel1_->IsStreamMuted(0));
-  EXPECT_TRUE(media_channel1_->dtmf_queue().empty());
+  EXPECT_TRUE(media_channel1_->dtmf_info_queue().empty());
 }
 
 TEST_F(VoiceChannelTest, TestSetContents) {
@@ -2061,14 +2064,43 @@ TEST_F(VoiceChannelTest, TestDtmf) {
   CreateChannels(0, 0);
   EXPECT_TRUE(SendInitiate());
   EXPECT_TRUE(SendAccept());
-  EXPECT_EQ(0U, media_channel1_->dtmf_queue().size());
+  EXPECT_EQ(0U, media_channel1_->dtmf_info_queue().size());
+
   EXPECT_TRUE(channel1_->PressDTMF(1, true));
   EXPECT_TRUE(channel1_->PressDTMF(8, false));
-  ASSERT_EQ(2U, media_channel1_->dtmf_queue().size());
-  EXPECT_EQ(1, media_channel1_->dtmf_queue()[0].first);
-  EXPECT_EQ(true, media_channel1_->dtmf_queue()[0].second);
-  EXPECT_EQ(8, media_channel1_->dtmf_queue()[1].first);
-  EXPECT_FALSE(media_channel1_->dtmf_queue()[1].second);
+
+  ASSERT_EQ(2U, media_channel1_->dtmf_info_queue().size());
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[0],
+                              0, 1, 160, cricket::DF_PLAY | cricket::DF_SEND));
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[1],
+                              0, 8, 160, cricket::DF_SEND));
+}
+
+// Test that InsertDtmf properly forwards to the media channel.
+TEST_F(VoiceChannelTest, TestInsertDtmf) {
+  CreateChannels(0, 0);
+  EXPECT_TRUE(SendInitiate());
+  EXPECT_TRUE(SendAccept());
+  EXPECT_EQ(0U, media_channel1_->dtmf_info_queue().size());
+
+  EXPECT_TRUE(channel1_->InsertDtmf(-1, kDtmfReset, -1, cricket::DF_SEND));
+  EXPECT_TRUE(channel1_->InsertDtmf(0, kDtmfDelay, 90, cricket::DF_PLAY));
+  EXPECT_TRUE(channel1_->InsertDtmf(1, 3, 100, cricket::DF_SEND));
+  EXPECT_TRUE(channel1_->InsertDtmf(2, 5, 110, cricket::DF_PLAY));
+  EXPECT_TRUE(channel1_->InsertDtmf(3, 7, 120,
+                                    cricket::DF_PLAY | cricket::DF_SEND));
+
+  ASSERT_EQ(5U, media_channel1_->dtmf_info_queue().size());
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[0],
+                              -1, kDtmfReset, -1, cricket::DF_SEND));
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[1],
+                              0, kDtmfDelay, 90, cricket::DF_PLAY));
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[2],
+                              1, 3, 100, cricket::DF_SEND));
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[3],
+                              2, 5, 110, cricket::DF_PLAY));
+  EXPECT_TRUE(CompareDtmfInfo(media_channel1_->dtmf_info_queue()[4],
+                              3, 7, 120, cricket::DF_PLAY | cricket::DF_SEND));
 }
 
 TEST_F(VoiceChannelTest, TestMediaSinks) {
@@ -2657,7 +2689,7 @@ TEST_F(DataChannelTest, TestSendData) {
   EXPECT_TRUE(SendInitiate());
   EXPECT_TRUE(SendAccept());
 
-  cricket::DataMediaChannel::SendDataParams params;
+  cricket::SendDataParams params;
   params.ssrc = 42;
   std::string data = "foo";
   ASSERT_TRUE(media_channel1_->SendData(params, data));

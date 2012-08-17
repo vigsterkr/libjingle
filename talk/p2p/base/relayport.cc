@@ -360,11 +360,11 @@ int RelayPort::GetError() {
 
 void RelayPort::OnReadPacket(
     const char* data, size_t size,
-    const talk_base::SocketAddress& remote_addr) {
+    const talk_base::SocketAddress& remote_addr, ProtocolType proto) {
   if (Connection* conn = GetConnection(remote_addr)) {
     conn->OnReadPacket(data, size);
   } else {
-    Port::OnReadPacket(data, size, remote_addr);
+    Port::OnReadPacket(data, size, remote_addr, proto);
   }
 }
 
@@ -657,7 +657,7 @@ void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   // by the server,  The actual remote address is the one we recorded.
   if (!port_->HasMagicCookie(data, size)) {
     if (locked_) {
-      port_->OnReadPacket(data, size, ext_addr_);
+      port_->OnReadPacket(data, size, ext_addr_, PROTO_UDP);
     } else {
       LOG(WARNING) << "Dropping packet: entry not locked";
     }
@@ -709,7 +709,8 @@ void RelayEntry::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   }
 
   // Process the actual data and remote address in the normal manner.
-  port_->OnReadPacket(data_attr->bytes(), data_attr->length(), remote_addr2);
+  port_->OnReadPacket(data_attr->bytes(), data_attr->length(), remote_addr2,
+                      PROTO_UDP);
 }
 
 int RelayEntry::SendPacket(const void* data, size_t size) {

@@ -235,6 +235,7 @@ class TestChannel : public sigslot::has_slots<> {
   }
 
   void OnUnknownAddress(PortInterface* port, const SocketAddress& addr,
+                        ProtocolType proto,
                         IceMessage* msg, const std::string& rf,
                         bool /*port_muxed*/) {
     ASSERT_EQ(src_.get(), port);

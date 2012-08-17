@@ -111,6 +111,7 @@ TEST(ByteBufferTest, TestReadWriteBuffer) {
                                       ByteBuffer::ORDER_NETWORK };
   for (size_t i = 0; i < ARRAY_SIZE(orders); i++) {
     ByteBuffer buffer(orders[i]);
+    EXPECT_EQ(orders[i], buffer.Order());
     uint8 ru8;
     EXPECT_FALSE(buffer.ReadUInt8(&ru8));
 
@@ -160,6 +161,26 @@ TEST(ByteBufferTest, TestReadWriteBuffer) {
     std::string read_string;
     EXPECT_TRUE(buffer.ReadString(&read_string, write_string.size()));
     EXPECT_EQ(write_string, read_string);
+    EXPECT_EQ(0U, buffer.Length());
+
+    // Write and read bytes
+    char write_bytes[] = "foo";
+    buffer.WriteBytes(write_bytes, 3);
+    char read_bytes[3];
+    EXPECT_TRUE(buffer.ReadBytes(read_bytes, 3));
+    for (int i = 0; i < 3; ++i) {
+      EXPECT_EQ(write_bytes[i], read_bytes[i]);
+    }
+    EXPECT_EQ(0U, buffer.Length());
+
+    // Write and read reserved buffer space
+    char* write_dst = buffer.ReserveWriteBuffer(3);
+    memcpy(write_dst, write_bytes, 3);
+    memset(read_bytes, 0, 3);
+    EXPECT_TRUE(buffer.ReadBytes(read_bytes, 3));
+    for (int i = 0; i < 3; ++i) {
+      EXPECT_EQ(write_bytes[i], read_bytes[i]);
+    }
     EXPECT_EQ(0U, buffer.Length());
 
     // Write and read in order.

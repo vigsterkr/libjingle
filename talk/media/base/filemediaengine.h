@@ -188,7 +188,9 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
     return true;
   }
-  virtual bool PressDTMF(int event, bool playout) { return true; }
+  virtual bool InsertDtmf(uint32 ssrc, int event, int duration, int flags) {
+    return false;
+  }
   virtual bool GetStats(VoiceMediaInfo* info) { return true; }
 
   // Implement pure virtual methods of MediaChannel.
@@ -228,6 +230,10 @@ class FileVideoChannel : public VideoMediaChannel {
     return true;
   }
   virtual bool SetSendCodecs(const std::vector<VideoCodec>& codecs);
+  virtual bool GetSendCodec(VideoCodec* send_codec) {
+    *send_codec = VideoCodec();
+    return true;
+  }
   virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format) {
     return true;
   }

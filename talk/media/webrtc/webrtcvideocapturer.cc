@@ -179,8 +179,8 @@ bool WebRtcVideoCapturer::Init(const Device& device) {
   // Enumerate the supported formats.
   // TODO: Find out why this starts/stops the camera...
   std::vector<VideoFormat> supported;
-  WebRtc_UWord32 num_caps = info->NumberOfCapabilities(vcm_id);
-  for (WebRtc_UWord8 i = 0; i < num_caps; ++i) {
+  WebRtc_Word32 num_caps = info->NumberOfCapabilities(vcm_id);
+  for (WebRtc_Word32 i = 0; i < num_caps; ++i) {
     webrtc::VideoCaptureCapability cap;
     if (info->GetCapability(vcm_id, i, cap) != -1) {
       VideoFormat format;

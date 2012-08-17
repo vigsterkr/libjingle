@@ -149,12 +149,13 @@ std::string PortProxy::ToString() const {
 void PortProxy::OnUnknownAddress(
     PortInterface *port,
     const talk_base::SocketAddress &addr,
+    ProtocolType proto,
     IceMessage *stun_msg,
     const std::string &remote_username,
     bool port_muxed) {
   ASSERT(port == impl_);
   ASSERT(!port_muxed);
-  SignalUnknownAddress(this, addr, stun_msg, remote_username, true);
+  SignalUnknownAddress(this, addr, proto, stun_msg, remote_username, true);
 }
 
 void PortProxy::OnPortDestroyed(PortInterface* port) {

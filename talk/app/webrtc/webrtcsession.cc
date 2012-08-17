@@ -459,10 +459,7 @@ void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {
     LOG(LS_ERROR) << "Trying to enable/disable an unexisting audio SSRC.";
     return;
   }
-  // TODO: Change the SSRC in the call to SetOutputScaling() to the
-  // proper SSRC once the voice engine bug is fixed.
-  // Currently this will mute all received audio tracks in this session.
-  voice_channel_->SetOutputScaling(0, enable ? 1 : 0, enable ? 1 : 0);
+  voice_channel_->SetOutputScaling(ssrc, enable ? 1 : 0, enable ? 1 : 0);
 }
 
 void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {

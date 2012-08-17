@@ -208,6 +208,9 @@ win_env.Append(
     # Some of the third-party libraries we link in don't have public symbols, so
     # ignore that linker warning.
     '/ignore:4221',
+    '/nxcompat',    # Binary was tested to be be compatible with Windows DEP.
+    '/dynamicbase', # Use ASLR to dynamically rebase at load-time.
+    '/fixed:no',    # Binary can be loaded at any base-address.
   ],
   MIDLFLAGS = [
     '/win32',
@@ -296,7 +299,6 @@ win_dbg64_env.SetBits('host_platform_64bit')
 
 envs.append(win_dbg64_env)
 
-
 win_coverage_env = win_dbg_env.Clone(
   tools = ['code_coverage'],
   BUILD_TYPE = 'coverage',
@@ -328,8 +330,8 @@ win_opt_env.Prepend(
       '/GS',       # enable security checks
   ],
   LINKFLAGS = [
-    '/safeseh',  # protect against attacks against exception handlers
-    '/opt:ref',  # Remove unused references (functions/data).
+    '/safeseh',     # protect against attacks against exception handlers
+    '/opt:ref',     # Remove unused references (functions/data).
   ],
 )
 

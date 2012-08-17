@@ -43,7 +43,7 @@
 #include "talk/media/webrtc/webrtcvoe.h"
 #include "talk/session/media/channel.h"
 #ifdef WEBRTC_RELATIVE_PATH
-#include "voice_engine/main/interface/voe_base.h"
+#include "voice_engine/include/voe_base.h"
 #else
 #include "third_party/webrtc/voice_engine/include/voe_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
@@ -381,7 +381,7 @@ class WebRtcVoiceMediaChannel
 
   virtual bool SetRingbackTone(const char *buf, int len);
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
-  virtual bool PressDTMF(int event, bool playout);
+  virtual bool InsertDtmf(uint32 ssrc, int event, int duration, int flags);
 
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
@@ -396,7 +396,8 @@ class WebRtcVoiceMediaChannel
   void OnError(uint32 ssrc, int error);
 
   bool sending() const { return send_ != SEND_NOTHING; }
-  int GetChannelNum(uint32 ssrc);
+  int GetReceiveChannelNum(uint32 ssrc);
+  int GetSendChannelNum(uint32 ssrc);
 
  protected:
   int GetLastEngineError() { return engine()->GetLastEngineError(); }
@@ -411,6 +412,7 @@ class WebRtcVoiceMediaChannel
   static Error WebRtcErrorToChannelError(int err_code);
 
  private:
+  bool SetSendCodec(const webrtc::CodecInst& send_codec);
   bool ChangePlayout(bool playout);
   bool ChangeSend(SendFlags send);
 
@@ -426,7 +428,8 @@ class WebRtcVoiceMediaChannel
   SendFlags desired_send_;
   SendFlags send_;
 
-  uint32 local_ssrc_;
+  uint32 send_ssrc_;
+  uint32 default_receive_ssrc_;
   ChannelMap mux_channels_;  // for multiple sources
   // mux_channels_ can be read from WebRtc callback thread.  Accesses off the
   // WebRtc thread must be synchronized with edits on the worker thread.  Reads

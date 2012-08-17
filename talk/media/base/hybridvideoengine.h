@@ -71,6 +71,7 @@ class HybridVideoMediaChannel : public VideoMediaChannel {
       const std::vector<RtpHeaderExtension>& extensions);
 
   virtual bool SetSendCodecs(const std::vector<VideoCodec>& codecs);
+  virtual bool GetSendCodec(VideoCodec* codec);
   virtual bool SetSendStreamFormat(uint32 ssrc, const VideoFormat& format);
   virtual bool SetSendRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions);
@@ -117,6 +118,7 @@ class HybridVideoEngineInterface {
   virtual bool HasCodec2(const VideoCodec& codec) = 0;
   virtual void OnSendChange1(VideoMediaChannel* channel1, bool send) = 0;
   virtual void OnSendChange2(VideoMediaChannel* channel1, bool send) = 0;
+  virtual void OnNewSendResolution(int width, int height) = 0;
 };
 
 // The HybridVideoEngine class combines two unrelated VideoEngine impls
@@ -252,6 +254,8 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
   virtual void OnSendChange1(VideoMediaChannel* channel1, bool send) {
   }
   virtual void OnSendChange2(VideoMediaChannel* channel2, bool send) {
+  }
+  virtual void OnNewSendResolution(int width, int height) {
   }
 
  protected:

@@ -73,8 +73,8 @@ Call::Call(MediaSessionClient* session_client)
 }
 
 Call::~Call() {
-  while (sessions_.begin() != sessions_.end()) {
-    Session* session = sessions_[0];
+  while (media_session_map_.begin() != media_session_map_.end()) {
+    Session* session = media_session_map_.begin()->second.session;
     RemoveSession(session);
     session_client_->session_manager()->DestroySession(session);
   }
@@ -110,41 +110,35 @@ void Call::IncomingSession(
 
 void Call::AcceptSession(Session* session,
                          const cricket::CallOptions& options) {
-  std::vector<Session*>::iterator it;
-  it = std::find(sessions_.begin(), sessions_.end(), session);
-  ASSERT(it != sessions_.end());
-  if (it != sessions_.end()) {
-    session->Accept(
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it != media_session_map_.end()) {
+    it->second.session->Accept(
         session_client_->CreateAnswer(session->remote_description(), options));
   }
 }
 
 void Call::RejectSession(Session* session) {
-  std::vector<Session*>::iterator it;
-  it = std::find(sessions_.begin(), sessions_.end(), session);
-  ASSERT(it != sessions_.end());
   // Assume polite decline.
-  if (it != sessions_.end())
-    session->Reject(STR_TERMINATE_DECLINE);
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it != media_session_map_.end())
+    it->second.session->Reject(STR_TERMINATE_DECLINE);
 }
 
 void Call::TerminateSession(Session* session) {
-  ASSERT(std::find(sessions_.begin(), sessions_.end(), session)
-         != sessions_.end());
-  std::vector<Session*>::iterator it;
-  it = std::find(sessions_.begin(), sessions_.end(), session);
-  // Assume polite terminations.
-  if (it != sessions_.end())
-    (*it)->Terminate();
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it != media_session_map_.end()) {
+    // Assume polite terminations.
+    it->second.session->Terminate();
+  }
 }
 
 void Call::Terminate() {
   // Copy the list so that we can iterate over it in a stable way
-  std::vector<Session*> sessions = sessions_;
+  std::vector<Session*> sessions = this->sessions();
 
   // There may be more than one session to terminate
   std::vector<Session*>::iterator it;
-  for (it = sessions.begin(); it != sessions.end(); it++)
+  for (it = sessions.begin(); it != sessions.end(); ++it)
     TerminateSession(*it);
 }
 
@@ -195,7 +189,7 @@ void Call::OnMessage(talk_base::Message* message) {
   switch (message->message_id) {
   case MSG_CHECKAUTODESTROY:
     // If no more sessions for this call, delete it
-    if (sessions_.size() == 0)
+    if (media_session_map_.empty())
       session_client_->DestroyCall(this);
     break;
   case MSG_TERMINATECALL:
@@ -213,15 +207,22 @@ void Call::OnMessage(talk_base::Message* message) {
   }
 }
 
-const std::vector<Session*> &Call::sessions() {
-  return sessions_;
+std::vector<Session*> Call::sessions() {
+  std::vector<Session*> sessions;
+  MediaSessionMap::iterator it;
+  for (it = media_session_map_.begin(); it != media_session_map_.end(); ++it)
+    sessions.push_back(it->second.session);
+
+  return sessions;
 }
 
 bool Call::AddSession(Session* session, const SessionDescription* offer) {
   bool succeeded = true;
-  VoiceChannel* voice_channel = NULL;
-  VideoChannel* video_channel = NULL;
-  DataChannel* data_channel = NULL;
+  MediaSession media_session;
+  media_session.session = session;
+  media_session.voice_channel = NULL;
+  media_session.video_channel = NULL;
+  media_session.data_channel = NULL;
 
   const ContentInfo* audio_offer = GetFirstAudioContent(offer);
   const ContentInfo* video_offer = GetFirstVideoContent(offer);
@@ -231,26 +232,28 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
 
   ASSERT(audio_offer != NULL);
   // Create voice channel and start a media monitor.
-  voice_channel = session_client_->channel_manager()->CreateVoiceChannel(
-      session, audio_offer->name, has_video_);
+  media_session.voice_channel =
+      session_client_->channel_manager()->CreateVoiceChannel(
+          session, audio_offer->name, has_video_);
   // voice_channel can be NULL in case of NullVoiceEngine.
-  if (voice_channel) {
-    voice_channel_map_[session->id()] = voice_channel;
-    voice_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
-    voice_channel->StartMediaMonitor(kMediaMonitorInterval);
+  if (media_session.voice_channel) {
+    media_session.voice_channel->SignalMediaMonitor.connect(
+        this, &Call::OnMediaMonitor);
+    media_session.voice_channel->StartMediaMonitor(kMediaMonitorInterval);
   } else {
     succeeded = false;
   }
 
   // If desired, create video channel and start a media monitor.
   if (has_video_ && succeeded) {
-    video_channel = session_client_->channel_manager()->CreateVideoChannel(
-        session, video_offer->name, true, voice_channel);
+    media_session.video_channel =
+        session_client_->channel_manager()->CreateVideoChannel(
+            session, video_offer->name, true, media_session.voice_channel);
     // video_channel can be NULL in case of NullVideoEngine.
-    if (video_channel) {
-      video_channel_map_[session->id()] = video_channel;
-      video_channel->SignalMediaMonitor.connect(this, &Call::OnMediaMonitor);
-      video_channel->StartMediaMonitor(kMediaMonitorInterval);
+    if (media_session.video_channel) {
+      media_session.video_channel->SignalMediaMonitor.connect(
+          this, &Call::OnMediaMonitor);
+      media_session.video_channel->StartMediaMonitor(kMediaMonitorInterval);
     } else {
       succeeded = false;
     }
@@ -259,11 +262,12 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
   // If desired, create data channel
   if (has_data_ && succeeded) {
     bool rtcp = false;
-    data_channel = session_client_->channel_manager()->CreateDataChannel(
-        session, data_offer->name, rtcp);
-    if (data_channel) {
-      data_channel_map_[session->id()] = data_channel;
-      data_channel->SignalDataReceived.connect(this, &Call::OnDataReceived);
+    media_session.data_channel =
+        session_client_->channel_manager()->CreateDataChannel(
+            session, data_offer->name, rtcp);
+    if (media_session.data_channel) {
+      media_session.data_channel->SignalDataReceived.connect(
+          this, &Call::OnDataReceived);
     } else {
       succeeded = false;
     }
@@ -271,7 +275,7 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
 
   if (succeeded) {
     // Add session to list, create channels for this session.
-    sessions_.push_back(session);
+    media_session_map_[session->id()] = media_session;
     session->SignalState.connect(this, &Call::OnSessionState);
     session->SignalError.connect(this, &Call::OnSessionError);
     session->SignalInfoMessage.connect(
@@ -281,12 +285,9 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
     session->SignalReceivedTerminateReason
       .connect(this, &Call::OnReceivedTerminateReason);
 
-    // If this call has the focus, enable this channel.
+    // If this call has the focus, enable this session's channels.
     if (session_client_->GetFocus() == this) {
-      voice_channel->Enable(true);
-      if (video_channel) {
-        video_channel->Enable(true);
-      }
+      EnableSessionChannels(session, true);
     }
 
     // Signal client.
@@ -297,39 +298,27 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
 }
 
 void Call::RemoveSession(Session* session) {
-  // Remove session from list
-  std::vector<Session*>::iterator it_session;
-  it_session = std::find(sessions_.begin(), sessions_.end(), session);
-  if (it_session == sessions_.end())
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it == media_session_map_.end())
     return;
-  sessions_.erase(it_session);
 
   // Destroy video channel
-  std::map<std::string, VideoChannel*>::iterator it_vchannel;
-  it_vchannel = video_channel_map_.find(session->id());
-  if (it_vchannel != video_channel_map_.end()) {
-    VideoChannel* video_channel = it_vchannel->second;
-    video_channel_map_.erase(it_vchannel);
+  VideoChannel* video_channel = it->second.video_channel;
+  if (video_channel != NULL)
     session_client_->channel_manager()->DestroyVideoChannel(video_channel);
-  }
 
   // Destroy voice channel
-  std::map<std::string, VoiceChannel*>::iterator it_channel;
-  it_channel = voice_channel_map_.find(session->id());
-  if (it_channel != voice_channel_map_.end()) {
-    VoiceChannel* voice_channel = it_channel->second;
-    voice_channel_map_.erase(it_channel);
+  VoiceChannel* voice_channel = it->second.voice_channel;
+  if (voice_channel != NULL)
     session_client_->channel_manager()->DestroyVoiceChannel(voice_channel);
-  }
 
   // Destroy data channel
-  std::map<std::string, DataChannel*>::iterator it_dchannel;
-  it_dchannel = data_channel_map_.find(session->id());
-  if (it_dchannel != data_channel_map_.end()) {
-    DataChannel* data_channel = it_dchannel->second;
-    data_channel_map_.erase(it_dchannel);
+  DataChannel* data_channel = it->second.data_channel;
+  if (data_channel != NULL)
     session_client_->channel_manager()->DestroyDataChannel(data_channel);
-  }
+
+  // Remove session from list
+  media_session_map_.erase(it);
 
   // Destroy speaker monitor
   StopSpeakerMonitor(session);
@@ -342,62 +331,65 @@ void Call::RemoveSession(Session* session) {
 }
 
 VoiceChannel* Call::GetVoiceChannel(Session* session) {
-  std::map<std::string, VoiceChannel*>::iterator it
-    = voice_channel_map_.find(session->id());
-  return (it != voice_channel_map_.end()) ? it->second : NULL;
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  return (it != media_session_map_.end()) ? it->second.voice_channel : NULL;
 }
 
 VideoChannel* Call::GetVideoChannel(Session* session) {
-  std::map<std::string, VideoChannel*>::iterator it
-    = video_channel_map_.find(session->id());
-  return (it != video_channel_map_.end()) ? it->second : NULL;
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  return (it != media_session_map_.end()) ? it->second.video_channel : NULL;
 }
 
 DataChannel* Call::GetDataChannel(Session* session) {
-  std::map<std::string, DataChannel*>::iterator it =
-      data_channel_map_.find(session->id());
-  return (it != data_channel_map_.end()) ? it->second : NULL;
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  return (it != media_session_map_.end()) ? it->second.data_channel : NULL;
 }
 
 void Call::EnableChannels(bool enable) {
-  std::vector<Session*>::iterator it;
-  for (it = sessions_.begin(); it != sessions_.end(); it++) {
-    VoiceChannel* voice_channel = GetVoiceChannel(*it);
-    VideoChannel* video_channel = GetVideoChannel(*it);
-    DataChannel* data_channel = GetDataChannel(*it);
-    if (voice_channel != NULL)
-      voice_channel->Enable(enable);
-    if (video_channel != NULL)
-      video_channel->Enable(enable);
-    if (data_channel != NULL)
-      data_channel->Enable(enable);
+  MediaSessionMap::iterator it;
+  for (it = media_session_map_.begin(); it != media_session_map_.end(); ++it) {
+    EnableSessionChannels(it->second.session, enable);
   }
   session_client_->channel_manager()->SetLocalRenderer(
       (enable) ? local_renderer_ : NULL);
 }
 
+void Call::EnableSessionChannels(Session* session, bool enable) {
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it == media_session_map_.end())
+    return;
+
+  VoiceChannel* voice_channel = it->second.voice_channel;
+  VideoChannel* video_channel = it->second.video_channel;
+  DataChannel* data_channel = it->second.data_channel;
+  if (voice_channel != NULL)
+    voice_channel->Enable(enable);
+  if (video_channel != NULL)
+    video_channel->Enable(enable);
+  if (data_channel != NULL)
+    data_channel->Enable(enable);
+}
+
 void Call::Mute(bool mute) {
   muted_ = mute;
-  std::vector<Session*>::iterator it;
-  for (it = sessions_.begin(); it != sessions_.end(); it++) {
-    VoiceChannel* voice_channel = voice_channel_map_[(*it)->id()];
-    if (voice_channel != NULL)
-      voice_channel->MuteStream(0, mute);
+  MediaSessionMap::iterator it;
+  for (it = media_session_map_.begin(); it != media_session_map_.end(); ++it) {
+    if (it->second.voice_channel != NULL)
+      it->second.voice_channel->MuteStream(0, mute);
   }
 }
 
 void Call::MuteVideo(bool mute) {
   video_muted_ = mute;
-  std::vector<Session*>::iterator it;
-  for (it = sessions_.begin(); it != sessions_.end(); it++) {
-    VideoChannel* video_channel = video_channel_map_[(*it)->id()];
-    if (video_channel != NULL)
-      video_channel->MuteStream(0, mute);
+  MediaSessionMap::iterator it;
+  for (it = media_session_map_.begin(); it != media_session_map_.end(); ++it) {
+    if (it->second.video_channel != NULL)
+      it->second.video_channel->MuteStream(0, mute);
   }
 }
 
 void Call::SendData(Session* session,
-                    const DataMediaChannel::SendDataParams& params,
+                    const SendDataParams& params,
                     const std::string& data) {
   DataChannel* data_channel = GetDataChannel(session);
   if (!data_channel) {
@@ -491,11 +483,10 @@ void Call::ContinuePlayDTMF() {
     queued_dtmf_.pop_front();
 
     LOG(LS_INFO) << "Call::ContinuePlayDTMF(" << tone << ")";
-    std::vector<Session*>::iterator it;
-    for (it = sessions_.begin(); it != sessions_.end(); it++) {
-      VoiceChannel* voice_channel = voice_channel_map_[(*it)->id()];
-      if (voice_channel != NULL) {
-        voice_channel->PressDTMF(tone, true);
+    for (MediaSessionMap::iterator it = media_session_map_.begin();
+         it != media_session_map_.end(); ++it) {
+      if (it->second.voice_channel != NULL) {
+        it->second.voice_channel->PressDTMF(tone, true);
       }
     }
 
@@ -506,38 +497,22 @@ void Call::ContinuePlayDTMF() {
 }
 
 void Call::Join(Call* call, bool enable) {
-  while (call->sessions_.size() != 0) {
-    // Move session
-    Session* session = call->sessions_[0];
-    call->sessions_.erase(call->sessions_.begin());
-    sessions_.push_back(session);
-    session->SignalState.connect(this, &Call::OnSessionState);
-    session->SignalError.connect(this, &Call::OnSessionError);
-    session->SignalReceivedTerminateReason
+  for (MediaSessionMap::iterator it = call->media_session_map_.begin();
+       it != call->media_session_map_.end(); ++it) {
+    // Shouldn't already exist.
+    ASSERT(media_session_map_.find(it->first) == media_session_map_.end());
+    media_session_map_[it->first] = it->second;
+
+    it->second.session->SignalState.connect(this, &Call::OnSessionState);
+    it->second.session->SignalError.connect(this, &Call::OnSessionError);
+    it->second.session->SignalReceivedTerminateReason
       .connect(this, &Call::OnReceivedTerminateReason);
 
-    // Move voice channel
-    std::map<std::string, VoiceChannel*>::iterator it_channel;
-    it_channel = call->voice_channel_map_.find(session->id());
-    if (it_channel != call->voice_channel_map_.end()) {
-      VoiceChannel* voice_channel = (*it_channel).second;
-      call->voice_channel_map_.erase(it_channel);
-      voice_channel_map_[session->id()] = voice_channel;
-      voice_channel->Enable(enable);
-    }
-
-    // Move video channel
-    std::map<std::string, VideoChannel*>::iterator it_vchannel;
-    it_vchannel = call->video_channel_map_.find(session->id());
-    if (it_vchannel != call->video_channel_map_.end()) {
-      VideoChannel* video_channel = (*it_vchannel).second;
-      call->video_channel_map_.erase(it_vchannel);
-      video_channel_map_[session->id()] = video_channel;
-      video_channel->Enable(enable);
-    }
-
-    // TODO: Move data channel?
+    EnableSessionChannels(it->second.session, enable);
   }
+
+  // Moved all the sessions over, so the other call should no longer have any.
+  call->media_session_map_.clear();
 }
 
 void Call::StartConnectionMonitor(Session* session, int cms) {
