@@ -30,8 +30,10 @@
 
 #if defined(LINUX)
 #include "talk/media/devices/gtkvideorenderer.h"
-#elif defined(OSX)
+#elif defined(OSX) && !defined(CARBON_DEPRECATED)
 #include "talk/media/devices/carbonvideorenderer.h"
+#elif defined(OSX)
+#include "talk/media/base/videorenderer.h"  // for base VideoRenderer decl.
 #elif defined(WIN32)
 #include "talk/media/devices/gdivideorenderer.h"
 #endif
@@ -43,7 +45,7 @@ class VideoRendererFactory {
   static VideoRenderer* CreateGuiVideoRenderer(int x, int y) {
   #if defined(LINUX)
     return new GtkVideoRenderer(x, y);
-  #elif defined(OSX)
+  #elif defined(OSX) && !defined(CARBON_DEPRECATED)
     CarbonVideoRenderer* renderer = new CarbonVideoRenderer(x, y);
     // Needs to be initialized on the main thread.
     if (renderer->Initialize()) {

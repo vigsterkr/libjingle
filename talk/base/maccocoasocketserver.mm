@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2007, Google Inc.
+ * Copyright 2012, Google Inc
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -24,48 +24,45 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#import <assert.h>
-
 #import "talk/base/maccocoasocketserver.h"
-#import "talk/base/logging.h"
-#import "talk/base/macasyncsocket.h"
 
-static const double kTimerIntervalSecs = 0.1;
+#import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
+#include <assert.h>
+
+#include "talk/base/scoped_autorelease_pool.h"
+
+// MacCocoaSocketServerHelper serves as a delegate to NSMachPort or a target for
+// a timeout.
+@interface MacCocoaSocketServerHelper : NSObject {
+  // This is a weak reference. This works fine since the
+  // talk_base::MacCocoaSocketServer owns this object.
+  talk_base::MacCocoaSocketServer* socketServer_;  // Weak.
+}
+@end
 
 @implementation MacCocoaSocketServerHelper
-
 - (id)initWithSocketServer:(talk_base::MacCocoaSocketServer*)ss {
   self = [super init];
   if (self) {
-    socketServer = ss;
+    socketServer_ = ss;
   }
   return self;
 }
 
 - (void)timerFired:(NSTimer*)timer {
-  socketServer->Pump();
+  socketServer_->WakeUp();
 }
-
-- (void)wakeUp {
-  socketServer->Pump();
-}
-
 @end
 
 namespace talk_base {
 
-MacCocoaSocketServer::MacCocoaSocketServer(MessageQueue* message_queue) :
-    message_queue_(message_queue) {
+MacCocoaSocketServer::MacCocoaSocketServer() {
   helper_ = [[MacCocoaSocketServerHelper alloc] initWithSocketServer:this];
+  timer_ = nil;
 
-  NSTimer* timer =
-      [NSTimer scheduledTimerWithTimeInterval:kTimerIntervalSecs
-                                       target:helper_
-                                     selector:@selector(timerFired:)
-                                     userInfo:nil
-                                      repeats:YES];
-  timer_ = [timer retain];
+  // Initialize the shared NSApplication
+  [NSApplication sharedApplication];
 }
 
 MacCocoaSocketServer::~MacCocoaSocketServer() {
@@ -74,58 +71,64 @@ MacCocoaSocketServer::~MacCocoaSocketServer() {
   [helper_ release];
 }
 
-AsyncSocket* MacCocoaSocketServer::CreateAsyncSocket(int type) {
-  return CreateAsyncSocket(AF_INET, type);
-}
-
-AsyncSocket* MacCocoaSocketServer::CreateAsyncSocket(int family, int type) {
-  assert(type == SOCK_STREAM);
-  return new MacAsyncSocket(family);
-}
-
 bool MacCocoaSocketServer::Wait(int cms, bool process_io) {
-  // Ideally we would have some way to run the UI loop for |cms| milliSeconds,
-  // or until WakeUp() is called (whichever is earlier).
-  // But there is no good solution for that - stopping/restarting the
-  // NSApp run loop or calling nextEventMatchingTask both have significant
-  // overhead, resulting in high CPU utilization when there are a lot of
-  // libjingle messages (hence WakeUp and Wait calls) floating around.
+  talk_base::ScopedAutoreleasePool pool;
+  if (!process_io && cms == 0) {
+    // No op.
+    return true;
+  }
 
-  // Simply calling "usleep" will block the UI, which is OK when |process_io|
-  // is false.
+  if (!process_io) {
+    // No way to listen to common modes and not get socket events, unless
+    // we disable each one's callbacks.
+    EnableSocketCallbacks(false);
+  }
 
-  if (cms != 0) {
-    assert(cms > 0 && !process_io);
-    if (cms < 0 || process_io) {
-      return false;
-    }
-    usleep(cms * 1000);
+  if (kForever != cms) {
+    // Install a timer that fires wakeup after cms has elapsed.
+    timer_ =
+        [NSTimer scheduledTimerWithTimeInterval:cms / 1000.0
+                                         target:helper_
+                                       selector:@selector(timerFired:)
+                                       userInfo:nil
+                                        repeats:NO];
+    [timer_ retain];
+  }
+
+  // Run until WakeUp is called, which will call stop and exit this loop.
+  [NSApp run];
+
+  if (!process_io) {
+    // Reenable them.  Hopefully this won't cause spurious callbacks or
+    // missing ones while they were disabled.
+    EnableSocketCallbacks(true);
   }
 
   return true;
 }
 
 void MacCocoaSocketServer::WakeUp() {
-  [helper_ performSelectorOnMainThread:@selector(wakeUp)
-                            withObject:nil
-                         waitUntilDone:NO];
-}
+  // Timer has either fired or shortcutted.
+  [timer_ invalidate];
+  [timer_ release];
+  timer_ = nil;
+  [NSApp stop:nil];
 
-void MacCocoaSocketServer::Pump() {
-  // Process messages.
-
-  Message msg;
-  // We don't want to process an unbounded number of messages - while we do that
-  // the UI remains blocked. So we only process as many messages as are in the
-  // queue when we start.
-  //
-  // max(1,..) ensures we run Get() at least once, this is needed to check
-  // for "sent" messages that otherwise are not included into size() result.
-  for (size_t max_messages_to_process = _max<size_t>(1, message_queue_->size());
-       max_messages_to_process > 0 && message_queue_->Get(&msg, 0);
-       --max_messages_to_process) {
-    message_queue_->Dispatch(&msg);
-  }
+  // NSApp stop only exits after finishing processing of the
+  // current event.  Since we're potentially in a timer callback
+  //  and not an NSEvent handler, we need to trigger a dummy one
+  // and turn the loop over.  We may be able to skip this if we're
+  // on the ss' thread and not inside the app loop already.
+  NSEvent *event = [NSEvent otherEventWithType:NSApplicationDefined
+                                      location:NSMakePoint(0,0)
+                                 modifierFlags:0
+                                     timestamp:0
+                                  windowNumber:0
+                                       context:nil
+                                       subtype:1
+                                         data1:1
+                                         data2:1];
+  [NSApp postEvent:event atStart:YES];
 }
 
 }  // namespace talk_base

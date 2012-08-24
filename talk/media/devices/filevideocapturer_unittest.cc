@@ -147,7 +147,7 @@ TEST_F(FileVideoCapturerTest, TestNoRepeat) {
       &listener, &VideoCapturerListener::OnFrameCaptured);
   capturer_->set_repeat(0);
   capture_format_ = capturer_->GetSupportedFormats()->at(0);
-  EXPECT_EQ(cricket::CR_SUCCESS, capturer_->Start(capture_format_));
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_->Start(capture_format_));
   EXPECT_TRUE_WAIT(!capturer_->IsRunning(), 20000);
   EXPECT_EQ(48, listener.frame_count());
 }
@@ -161,7 +161,7 @@ TEST_F(FileVideoCapturerTest, TestRepeatForever) {
   capturer_->set_repeat(talk_base::kForever);
   capture_format_ = capturer_->GetSupportedFormats()->at(0);
   capture_format_.interval = cricket::VideoFormat::FpsToInterval(50);
-  EXPECT_EQ(cricket::CR_SUCCESS, capturer_->Start(capture_format_));
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_->Start(capture_format_));
   EXPECT_TRUE(NULL != capturer_->GetCaptureFormat());
   EXPECT_TRUE(capture_format_ == *capturer_->GetCaptureFormat());
   EXPECT_TRUE_WAIT(!capturer_->IsRunning() ||
@@ -181,7 +181,7 @@ TEST_F(FileVideoCapturerTest, TestPartialFrameHeader) {
       &listener, &VideoCapturerListener::OnFrameCaptured);
   capturer_->set_repeat(0);
   capture_format_ = capturer_->GetSupportedFormats()->at(0);
-  EXPECT_EQ(cricket::CR_SUCCESS, capturer_->Start(capture_format_));
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_->Start(capture_format_));
   EXPECT_TRUE_WAIT(!capturer_->IsRunning(), 1000);
   EXPECT_EQ(1, listener.frame_count());
 }

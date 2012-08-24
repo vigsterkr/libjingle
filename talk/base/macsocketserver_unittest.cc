@@ -44,6 +44,8 @@ class WakeThread : public Thread {
   SocketServer* ss_;
 };
 
+#ifndef CARBON_DEPRECATED
+
 // Test that MacCFSocketServer::Wait works as expected.
 TEST(MacCFSocketServerTest, TestWait) {
   MacCFSocketServer server;
@@ -97,6 +99,8 @@ TEST(MacCarbonAppSocketServerTest, TestWakeup) {
   server.Wait(10000, true);
   EXPECT_LT(TimeSince(start), 10000);
 }
+
+#endif
 
 // Test that MacAsyncSocket passes all the generic Socket tests.
 class MacAsyncSocketTest : public SocketTest {
@@ -228,6 +232,7 @@ TEST_F(MacAsyncSocketTest, DISABLED_TestGetSetOptionsIPv6) {
   SocketTest::TestGetSetOptionsIPv6();
 }
 
+#ifndef CARBON_DEPRECATED
 class MacCarbonAppAsyncSocketTest : public MacAsyncSocketTest {
   virtual MacBaseSocketServer* CreateSocketServer() {
     return new MacCarbonAppSocketServer();
@@ -241,5 +246,5 @@ TEST_F(MacCarbonAppAsyncSocketTest, TestSocketServerWaitIPv4) {
 TEST_F(MacCarbonAppAsyncSocketTest, TestSocketServerWaitIPv6) {
   SocketTest::TestSocketServerWaitIPv6();
 }
-
+#endif
 }  // namespace talk_base

@@ -38,10 +38,6 @@
 #include "talk/session/media/rtcpmuxfilter.h"
 #include "talk/session/media/typingmonitor.h"
 
-#ifdef HAVE_LMI
-#include "talk/media/lmi/lmidesktopcapturer.h"
-#include "talk/media/lmi/lmiwindowcapturer.h"
-#endif
 
 namespace cricket {
 
@@ -86,7 +82,7 @@ static const char kDtlsSrtpExporterLabel[] = "EXTRACTOR-dtls_srtp";
 
 static const int kAgcMinus10db = -10;
 
-// TODO: use the device manager for creation of screen capturers when
+// TODO(hellner): use the device manager for creation of screen capturers when
 // the cl enabling it has landed.
 class NullScreenCapturerFactory : public VideoChannel::ScreenCapturerFactory {
  public:
@@ -521,7 +517,7 @@ void BaseChannel::set_rtcp_transport_channel(TransportChannel* channel) {
     }
     rtcp_transport_channel_ = channel;
     if (rtcp_transport_channel_) {
-      // TODO: Propagate this error code
+      // TODO(juberti): Propagate this error code
       VERIFY(SetDtlsSrtpCiphers(rtcp_transport_channel_, true));
       rtcp_transport_channel_->SignalWritableState.connect(
           this, &BaseChannel::OnWritableState);
@@ -1363,7 +1359,7 @@ bool VoiceChannel::SetRingbackTone(const void* buf, int len) {
   return data.result;
 }
 
-// TODO: Handle early media the right way. We should get an explicit
+// TODO(juberti): Handle early media the right way. We should get an explicit
 // ringing message telling us to start playing local ringback, which we cancel
 // if any early media actually arrives. For now, we do the opposite, which is
 // to wait 1 second for early media, and start playing local ringback if none
@@ -1515,7 +1511,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
 
   bool ret = SetBaseLocalContent_w(content, action);
   // Set local audio codecs (what we want to receive).
-  // TODO: Change action != CA_UPDATE to !audio->partial() when partial
+  // TODO(whyuan): Change action != CA_UPDATE to !audio->partial() when partial
   // is set properly.
   if (action != CA_UPDATE || audio->has_codecs()) {
     ret &= media_channel()->SetRecvCodecs(audio->codecs());
@@ -1732,7 +1728,8 @@ VideoChannel::VideoChannel(talk_base::Thread* thread,
                   rtcp),
       voice_channel_(voice_channel),
       renderer_(NULL),
-      screencapture_factory_(CreateScreenCapturerFactory()) {
+      screencapture_factory_(CreateScreenCapturerFactory()),
+      previous_we_(talk_base::WE_CLOSE) {
 }
 
 bool VideoChannel::Init() {
@@ -1838,7 +1835,7 @@ void VideoChannel::ChangeState() {
   bool recv = IsReadyToReceive();
   if (!media_channel()->SetRender(recv)) {
     LOG(LS_ERROR) << "Failed to SetRender on video channel";
-    // TODO: Report error back to server.
+    // TODO(gangji): Report error back to server.
   }
 
   // Send outgoing data if we're the active call, we have the remote content,
@@ -1846,7 +1843,7 @@ void VideoChannel::ChangeState() {
   bool send = IsReadyToSend();
   if (!media_channel()->SetSend(send)) {
     LOG(LS_ERROR) << "Failed to SetSend on video channel";
-    // TODO: Report error back to server.
+    // TODO(gangji): Report error back to server.
   }
 
   LOG(LS_INFO) << "Changing video state, recv=" << recv << " send=" << send;
@@ -1954,7 +1951,7 @@ bool VideoChannel::ApplyViewRequest_w(const ViewRequest& request) {
     for (view = request.static_video_views.begin();
         view != request.static_video_views.end(); ++view) {
       // Sender view request from Reflector has SSRC 0 (b/5977302). Here we hack
-      // the client to apply the view request with SSRC 0. TODO: Remove
+      // the client to apply the view request with SSRC 0. TODO(whyuan): Remove
       // 0 == view->SSRC once Reflector uses the correct SSRC in view request.
       if (it->has_ssrc(view->ssrc) || 0 == view->ssrc) {
         format.width = view->width;
@@ -1993,11 +1990,11 @@ bool VideoChannel::AddScreencast_w(uint32 ssrc, const ScreencastId& id,
   if (!screen_capturer) {
     return false;
   }
-  screen_capturer->SignalCaptureEvent.connect(this,
-                                              &VideoChannel::OnCaptureEvent);
+  screen_capturer->SignalStateChange.connect(this,
+                                             &VideoChannel::OnStateChange);
   VideoFormat format;  // default format
   format.interval = VideoFormat::FpsToInterval(fps);
-  if (screen_capturer->Start(format) != CR_SUCCESS ||
+  if (screen_capturer->Start(format) != CS_RUNNING ||
       !SetCapturer_w(ssrc, screen_capturer)) {
     delete screen_capturer;
     return false;
@@ -2150,7 +2147,7 @@ void VideoChannel::OnConnectionMonitorUpdate(
   SignalConnectionMonitor(this, infos);
 }
 
-// TODO: Look into removing duplicate code between
+// TODO(pthatcher): Look into removing duplicate code between
 // audio, video, and data, perhaps by using templates.
 void VideoChannel::OnMediaMonitorUpdate(
     VideoMediaChannel* media_channel, const VideoMediaInfo &info) {
@@ -2165,19 +2162,20 @@ void VideoChannel::OnScreencastWindowEvent(uint32 ssrc,
   signaling_thread()->Post(this, MSG_SCREENCASTWINDOWEVENT, pdata);
 }
 
-void VideoChannel::OnCaptureEvent(VideoCapturer* capturer, CaptureEvent ev) {
+void VideoChannel::OnStateChange(VideoCapturer* capturer, CaptureState ev) {
   // Map capturer events to window events. In the future we may want to simply
   // pass these events up directly.
   talk_base::WindowEvent we;
-  if (ev == CE_STOPPED) {
+  if (ev == CS_STOPPED) {
     we = talk_base::WE_CLOSE;
-  } else if (ev == CE_PAUSED) {
+  } else if (ev == CS_PAUSED) {
     we = talk_base::WE_MINIMIZE;
-  } else if (ev == CE_RESUMED) {
+  } else if (ev == CS_RUNNING && previous_we_ == talk_base::WE_MINIMIZE) {
     we = talk_base::WE_RESTORE;
   } else {
     return;
   }
+  previous_we_ = we;
 
   uint32 ssrc = 0;
   if (!GetLocalSsrc(capturer, &ssrc)) {
@@ -2223,7 +2221,7 @@ void VideoChannel::OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode,
     case SrtpFilter::ERROR_REPLAY:
       // Only receving channel should have this error.
       ASSERT(mode == SrtpFilter::UNPROTECT);
-      // TODO: Turn on the signaling of replay error once we have
+      // TODO(gangji): Turn on the signaling of replay error once we have
       // switched to the new mechanism for doing video retransmissions.
       // OnVideoChannelError(ssrc, VideoMediaChannel::ERROR_PLAY_SRTP_REPLAY);
       break;
@@ -2280,6 +2278,12 @@ bool DataChannel::SendData(
 const ContentInfo* DataChannel::GetFirstContent(
     const SessionDescription* sdesc) {
   return GetFirstDataContent(sdesc);
+}
+
+// Sets the maximum bandwidth.  Anything over this will be dropped.
+bool DataChannel::SetMaxSendBandwidth_w(int max_bps) {
+  LOG(LS_INFO) << "DataChannel: Setting max bandwidth to " << max_bps;
+  return media_channel()->SetSendBandwidth(false, max_bps);
 }
 
 bool DataChannel::SetLocalContent_w(const MediaContentDescription* content,
@@ -2371,7 +2375,7 @@ void DataChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_SENDDATA: {
       SendDataMessageData* data =
           static_cast<SendDataMessageData*>(pmsg->pdata);
-      // TODO: use return value?
+      // TODO(pthatcher): use return value?
       media_channel()->SendData(data->params, data->data);
       break;
     }

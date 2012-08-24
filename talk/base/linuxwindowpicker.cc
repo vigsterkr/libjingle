@@ -579,7 +579,7 @@ class XWindowEnumerator {
     for (unsigned int i = 0; i < num_children; ++i) {
       // Iterate in reverse order to display windows from front to back.
 #ifdef CHROMEOS
-      // TODO: Short-term fix for crbug.com/120229: Don't need to
+      // TODO(jhorwich): Short-term fix for crbug.com/120229: Don't need to
       // filter, just return all windows and let the picker scan through them.
       Window app_window = children[num_children - 1 - i];
 #else

@@ -175,7 +175,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool GetAudioOutputDevices(std::vector<std::string>* names);
   bool GetVideoCaptureDevices(std::vector<std::string>* names);
   sigslot::repeater0<> SignalDevicesChange;
-  sigslot::signal1<CaptureResult> SignalVideoCaptureResult;
+  sigslot::signal1<CaptureState> SignalVideoCaptureStateChange;
 
   // Returns the current selected device. Note: Subtly different from
   // GetVideoOptions(). See member video_device_ for more details.
@@ -226,8 +226,8 @@ class ChannelManager : public talk_base::MessageHandler,
   bool SetVideoCapture_w(bool capture);
   void SetMediaLogging(bool video, int level, const char* filter);
   void SetMediaLogging_w(bool video, int level, const char* filter);
-  void OnVideoCaptureResult(VideoCapturer* capturer,
-                            CaptureResult result);
+  void OnVideoCaptureStateChange(VideoCapturer* capturer,
+                                 CaptureState result);
   bool RegisterVideoProcessor_w(uint32 ssrc,
                                 VideoProcessor* processor);
   bool UnregisterVideoProcessor_w(uint32 ssrc,
@@ -271,7 +271,7 @@ class ChannelManager : public talk_base::MessageHandler,
   // different from camera_device_. E.g. camera_device_ will list unplugged
   // but selected devices while this sting will be empty or contain current
   // selected device.
-  // TODO: refactor the code such that there is no need to keep two
+  // TODO(hellner): refactor the code such that there is no need to keep two
   // strings for video devices that have subtle differences in behavior.
   std::string video_device_name_;
 };

@@ -17,7 +17,9 @@ TEST(Win32SocketServerTest, TestWait) {
 }
 
 // Test that Win32Socket::Pump does not touch general Windows messages.
-TEST(Win32SocketServerTest, TestPump) {
+
+// TODO(fbarchard): Fix flakey unittest on Windows. b/7021063.
+TEST(Win32SocketServerTest, DISABLED_TestPump) {
   Win32SocketServer server(NULL);
   SocketServerScope scope(&server);
   EXPECT_EQ(TRUE, PostMessage(NULL, WM_USER, 999, 0));

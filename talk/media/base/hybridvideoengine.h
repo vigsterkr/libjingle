@@ -35,6 +35,7 @@
 #include "talk/base/sigslotrepeater.h"
 #include "talk/media/base/codec.h"
 #include "talk/media/base/mediachannel.h"
+#include "talk/media/base/videocapturer.h"
 #include "talk/media/base/videocommon.h"
 
 namespace cricket {
@@ -134,7 +135,7 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
     codecs_ = video1_.codecs();
     codecs_.insert(codecs_.end(), video2_.codecs().begin(),
                    video2_.codecs().end());
-    SignalCaptureResult.repeat(video2_.SignalCaptureResult);
+    SignalCaptureStateChange.repeat(video2_.SignalCaptureStateChange);
   }
 
   bool Init() {
@@ -214,7 +215,7 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
         video2_.UnregisterProcessor(video_processor);
   }
 
-  // TODO: Remove these functions after we do the capturer refactoring.
+  // TODO(juberti): Remove these functions after we do the capturer refactoring.
   // For now they are set to always use the second engine for capturing, which
   // is convenient given our intended use case.
   bool SetCaptureDevice(const Device* device) {
@@ -232,7 +233,7 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
   bool SetCapture(bool capture) {
     return video2_.SetCapture(capture);
   }
-  sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;
+  sigslot::repeater2<VideoCapturer*, CaptureState> SignalCaptureStateChange;
 
   virtual bool HasCodec1(const VideoCodec& codec) {
     return HasCodec(video1_, codec);

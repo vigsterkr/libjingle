@@ -49,7 +49,7 @@ enum RtpDumpPacketFilter {
   PF_NONE = 0x0,
   PF_RTPHEADER = 0x1,
   PF_RTPPACKET = 0x3,  // includes header
-  // PF_RTCPHEADER = 0x4,  // TODO
+  // PF_RTCPHEADER = 0x4,  // TODO(juberti)
   PF_RTCPPACKET = 0xC,  // includes header
   PF_ALL = 0xF
 };

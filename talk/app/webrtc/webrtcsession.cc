@@ -487,7 +487,7 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
     return false;
   }
 
-  // TODO: Refactor this when there is support for multiple cameras.
+  // TODO(perkj): Refactor this when there is support for multiple cameras.
   if (!channel_manager_->SetVideoCapturer(camera)) {
     LOG(LS_ERROR) << "Failed to set capture device.";
     return false;

@@ -203,7 +203,7 @@ Session *MediaSessionClient::CreateSession(Call *call) {
   return session;
 }
 
-// TODO: Move all of the parsing and writing functions into
+// TODO(pthatcher): Move all of the parsing and writing functions into
 // mediamessages.cc, with unit tests.
 bool ParseGingleAudioCodec(const buzz::XmlElement* element, AudioCodec* out) {
   int id = GetXmlAttr(element, QN_ID, -1);

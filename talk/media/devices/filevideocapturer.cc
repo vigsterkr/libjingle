@@ -206,18 +206,18 @@ bool FileVideoCapturer::Init(const std::string& filename) {
   return true;
 }
 
-CaptureResult FileVideoCapturer::Start(const VideoFormat& capture_format) {
+CaptureState FileVideoCapturer::Start(const VideoFormat& capture_format) {
   if (IsRunning()) {
     LOG(LS_ERROR) << "The file video capturer is already running";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 
   if (talk_base::SS_CLOSED == video_file_.GetState()) {
     LOG(LS_ERROR) << "File not opened yet";
-    return CR_NO_DEVICE;
+    return CS_NO_DEVICE;
   } else if (!video_file_.SetPosition(0)) {
     LOG(LS_ERROR) << "Failed to seek back to beginning of the file";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 
   SetCaptureFormat(&capture_format);
@@ -228,10 +228,10 @@ CaptureResult FileVideoCapturer::Start(const VideoFormat& capture_format) {
       static_cast<int64>(talk_base::Time());
   if (ret) {
     LOG(LS_INFO) << "File video capturer '" << GetId() << "' started";
-    return CR_SUCCESS;
+    return CS_RUNNING;
   } else {
     LOG(LS_ERROR) << "File video capturer '" << GetId() << "' failed to start";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 }
 

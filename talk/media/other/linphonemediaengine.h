@@ -83,7 +83,7 @@ class LinphoneMediaEngine : public MediaEngineInterface {
   virtual bool SetLocalMonitor(bool enable) { return true; }
   virtual bool SetLocalRenderer(VideoRenderer* renderer) { return true; }
   // TODO: control channel send?
-  virtual CaptureResult SetVideoCapture(bool capture) { return CR_SUCCESS; }
+  virtual bool SetVideoCapture(bool capture) { return true; }
   virtual const std::vector<AudioCodec>& audio_codecs() {
     return voice_codecs_;
   }

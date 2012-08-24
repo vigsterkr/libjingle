@@ -293,7 +293,7 @@ class BaseChannel
                  ContentSource src);
   bool SetRtcpMux_w(bool enable, ContentAction action, ContentSource src);
 
-  bool SetMaxSendBandwidth_w(int max_bandwidth);
+  virtual bool SetMaxSendBandwidth_w(int max_bandwidth);
 
   // From MessageHandler
   virtual void OnMessage(talk_base::Message* pmsg);
@@ -361,7 +361,7 @@ class VoiceChannel : public BaseChannel {
   sigslot::signal1<VoiceChannel*> SignalEarlyMediaTimeout;
 
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
-  // TODO: Replace PressDTMF with InsertDtmf.
+  // TODO(ronghuawu): Replace PressDTMF with InsertDtmf.
   bool PressDTMF(int digit, bool playout);
   // Send and/or play a DTMF |event| according to the |flags|.
   // The DTMF out-of-band signal will be used on sending.
@@ -529,7 +529,7 @@ class VideoChannel : public BaseChannel {
       VideoMediaChannel* media_channel, const VideoMediaInfo& info);
   virtual void OnScreencastWindowEvent(uint32 ssrc,
                                        talk_base::WindowEvent event);
-  virtual void OnCaptureEvent(VideoCapturer* capturer, CaptureEvent ev);
+  virtual void OnStateChange(VideoCapturer* capturer, CaptureState ev);
   bool GetLocalSsrc(const VideoCapturer* capturer, uint32* ssrc);
 
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
@@ -542,6 +542,8 @@ class VideoChannel : public BaseChannel {
   talk_base::scoped_ptr<ScreenCapturerFactory> screencapture_factory_;
   ScreencastMap screencast_capturers_;
   talk_base::scoped_ptr<VideoMediaMonitor> media_monitor_;
+
+  talk_base::WindowEvent previous_we_;
 };
 
 // DataChannel is a specialization for data.
@@ -600,6 +602,7 @@ class DataChannel : public BaseChannel {
 
   // overrides from BaseChannel
   virtual const ContentInfo* GetFirstContent(const SessionDescription* sdesc);
+  virtual bool SetMaxSendBandwidth_w(int max_bandwidth);
   virtual bool SetLocalContent_w(const MediaContentDescription* content,
                                  ContentAction action);
   virtual bool SetRemoteContent_w(const MediaContentDescription* content,

@@ -92,6 +92,6 @@ class SystemInfo {
   std::string machine_model_;
 };
 
-}
+}  // namespace talk_base
 
 #endif  // TALK_BASE_SYSTEMINFO_H__

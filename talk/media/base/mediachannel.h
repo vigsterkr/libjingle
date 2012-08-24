@@ -37,7 +37,7 @@
 #include "talk/base/window.h"
 #include "talk/media/base/codec.h"
 #include "talk/media/base/streamparams.h"
-// TODO: re-evaluate this include
+// TODO(juberti): re-evaluate this include
 #include "talk/session/media/audiomonitor.h"
 
 namespace talk_base {
@@ -203,8 +203,21 @@ struct RtpHeaderExtension {
   RtpHeaderExtension(const std::string& u, int i) : uri(u), id(i) {}
   std::string uri;
   int id;
-  // TODO: SendRecv direction;
+  // TODO(juberti): SendRecv direction;
 };
+
+// Returns the named header extension if found among all extensions, NULL
+// otherwise.
+inline const RtpHeaderExtension* FindHeaderExtension(
+    const std::vector<RtpHeaderExtension>& extensions,
+    const std::string& name) {
+  for (std::vector<RtpHeaderExtension>::const_iterator it = extensions.begin();
+       it != extensions.end(); ++it) {
+    if (it->uri == name)
+      return &(*it);
+  }
+  return NULL;
+}
 
 enum MediaChannelOptions {
   // Tune the stream for conference mode.
@@ -226,8 +239,6 @@ enum VideoMediaChannelOptions {
   OPT_ADAPT_INPUT_TO_ENCODER = 0x40000,
   // Enable video noise reduction.
   OPT_VIDEO_NOISE_REDUCTION = 0x80000,
-  // Enable three spatial layers at less than HD resolutions.
-  OPT_VIDEO_THREE_LAYERS = 0x100000
 };
 
 // DTMF flags to control if a DTMF tone should be played and/or sent.
@@ -547,7 +558,8 @@ class VoiceMediaChannel : public MediaChannel {
   virtual int GetTimeSinceLastTyping() = 0;
   // Temporarily exposed field for tuning typing detect options.
   virtual void SetTypingDetectionParameters(int time_window,
-    int cost_per_typing, int reporting_threshold, int penalty_decay) = 0;
+    int cost_per_typing, int reporting_threshold, int penalty_decay,
+    int type_event_delay) = 0;
   // Set left and right scale for speaker output volume of the specified ssrc.
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right) = 0;
   // Get left and right scale for speaker output volume of the specified ssrc.
@@ -639,7 +651,7 @@ class VideoMediaChannel : public MediaChannel {
 // DataMediaChannel::SignalDataReceived and in all of the signals that
 // signal fires, on up the chain.
 struct ReceiveDataParams {
-  // TODO: Should we change this to non-ssrc for non-rtp
+  // TODO(pthatcher): Should we change this to non-ssrc for non-rtp
   // data engines?
   uint32 ssrc;
   int seq_num;
@@ -647,7 +659,7 @@ struct ReceiveDataParams {
 };
 
 struct SendDataParams {
-  // TODO: Should we change this to non-ssrc for non-rtp
+  // TODO(pthatcher): Should we change this to non-ssrc for non-rtp
   // data engines?
   uint32 ssrc;
 };
@@ -678,7 +690,7 @@ class DataMediaChannel : public MediaChannel {
   virtual bool AddRecvStream(const StreamParams& sp) = 0;
   virtual bool RemoveRecvStream(uint32 ssrc) = 0;
   virtual bool MuteStream(uint32 ssrc, bool on) { return false; }
-  // TODO: Implement this.
+  // TODO(pthatcher): Implement this.
   virtual bool GetStats(DataMediaInfo* info) { return true; }
 
   virtual bool SetSend(bool send) = 0;

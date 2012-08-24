@@ -67,7 +67,7 @@ class FakeMediaProcessor : public VoiceProcessor, public VideoProcessor {
   int dropped_frame_count() const { return dropped_frame_count_; }
 
  private:
-  // TODO: make is a map so that we can multiple ssrcs
+  // TODO(janahan): make is a map so that we can multiple ssrcs
   int voice_frame_count_;
   int video_frame_count_;
   bool drop_frames_;

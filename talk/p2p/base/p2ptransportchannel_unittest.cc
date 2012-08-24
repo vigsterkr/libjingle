@@ -689,7 +689,7 @@ class P2PTransportChannelTest : public P2PTransportChannelTestBase {
 // TODO: Fix NULLs caused by lack of TCP support in NATSocket.
 // TODO: Fix NULLs caused by no HTTP proxy support.
 // TODO: Rearrange rows/columns from best to worst.
-// TODO: Keep only one test matrix once the shared ufrag is enabled.
+// TODO(ronghuawu): Keep only one test matrix once the shared ufrag is enabled.
 const P2PTransportChannelTest::Result*
     P2PTransportChannelTest::kMatrix[NUM_CONFIGS][NUM_CONFIGS] = {
 //      OPEN  CONE  ADDR  PORT  SYMM  2CON  SCON  !UDP  !TCP  HTTP  PRXH  PRXS
@@ -776,7 +776,7 @@ const P2PTransportChannelTest::Result*
 #define P2P_TEST(x, y) \
   P2P_TEST_DECLARATION(x, y,)
 
-// TODO: Figure out why those tests are flaky.
+// TODO(ronghuawu): Figure out why those tests are flaky.
 #define FLAKY_P2P_TEST(x, y) \
   P2P_TEST_DECLARATION(x, y, DISABLED_)
 

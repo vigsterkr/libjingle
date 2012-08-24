@@ -61,7 +61,7 @@ DataMediaChannel* RtpDataEngine::CreateChannel() {
   return new RtpDataMediaChannel(timing_.get());
 }
 
-// TODO: Should we move these find/get functions somewhere
+// TODO(pthatcher): Should we move these find/get functions somewhere
 // common?
 bool FindCodecById(const std::vector<cricket::DataCodec>& codecs,
                    int id, cricket::DataCodec* codec_out) {
@@ -176,7 +176,7 @@ bool RtpDataMediaChannel::AddSendStream(const StreamParams& stream) {
   }
 
   send_streams_.push_back(stream);
-  // TODO: This should be per-stream, not per-ssrc.
+  // TODO(pthatcher): This should be per-stream, not per-ssrc.
   // And we should probably allow more than one per stream.
   rtp_clock_by_send_ssrc_[stream.first_ssrc()] = new RtpClock(
       kDataCodecClockrate,
@@ -319,8 +319,14 @@ bool RtpDataMediaChannel::SendData(
   double now = timing_->TimerNow();
 
   if (!send_limiter_->CanUse(packet_len, now)) {
-    // TODO: Should we log something?
+    LOG(LS_VERBOSE) << "Dropped data packet of len=" << packet_len
+                    << "; already sent " << send_limiter_->used_in_period()
+                    << "/" << send_limiter_->max_per_period();
     return false;
+  } else {
+    LOG(LS_VERBOSE) << "Sending data packet of len=" << packet_len
+                    << "; already sent " << send_limiter_->used_in_period()
+                    << "/" << send_limiter_->max_per_period();
   }
 
   RtpHeader header;

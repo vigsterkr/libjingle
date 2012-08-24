@@ -192,7 +192,7 @@ class MediaContentDescription : public ContentDescription {
   const StreamParamsVec& streams() const {
     return streams_;
   }
-  // TODO: Remove this by giving mediamessage.cc access
+  // TODO(pthatcher): Remove this by giving mediamessage.cc access
   // to MediaContentDescription
   StreamParamsVec& mutable_streams() {
     return streams_;

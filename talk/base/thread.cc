@@ -38,10 +38,7 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/timeutils.h"
 
-#ifdef USE_COCOA_THREADING
-#if !defined(OSX) && !defined(IOS)
-#error USE_COCOA_THREADING is defined but not OSX nor IOS
-#endif
+#if defined(OSX) || defined(IOS)
 #include "talk/base/maccocoathreadhelper.h"
 #include "talk/base/scoped_autorelease_pool.h"
 #endif
@@ -59,13 +56,13 @@ ThreadManager::ThreadManager() {
 #ifndef NO_MAIN_THREAD_WRAPPING
   WrapCurrentThread();
 #endif
-#ifdef USE_COCOA_THREADING
+#if defined(OSX) || defined(IOS)
   InitCocoaMultiThreading();
 #endif
 }
 
 ThreadManager::~ThreadManager() {
-#ifdef USE_COCOA_THREADING
+#if defined(OSX) || defined(IOS)
   // This is called during exit, at which point apparently no NSAutoreleasePools
   // are available; but we might still need them to do cleanup (or we get the
   // "no autoreleasepool in place, just leaking" warning when exiting).
@@ -325,7 +322,7 @@ void* Thread::PreRun(void* pv) {
 #elif defined(POSIX)
   // TODO: See if naming exists for pthreads.
 #endif
-#ifdef USE_COCOA_THREADING
+#if defined(OSX) || defined(IOS)
   // Make sure the new thread has an autoreleasepool
   ScopedAutoreleasePool pool;
 #endif
@@ -473,7 +470,7 @@ bool Thread::ProcessMessages(int cmsLoop) {
   int cmsNext = cmsLoop;
 
   while (true) {
-#ifdef USE_COCOA_THREADING
+#if defined(OSX) || defined(IOS)
     // see: http://developer.apple.com/library/mac/#documentation/Cocoa/Reference/Foundation/Classes/NSAutoreleasePool_Class/Reference/Reference.html
     // Each thread is supposed to have an autorelease pool. Also for event loops
     // like this, autorelease pool needs to be created and drained/released

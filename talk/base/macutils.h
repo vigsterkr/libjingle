@@ -46,7 +46,6 @@ bool ToUtf16(const std::string& str8, CFStringRef* str16);
 
 #ifdef OSX
 void DecodeFourChar(UInt32 fc, std::string* out);
-std::string DecodeEvent(EventRef event);
 
 enum MacOSVersionName {
   kMacOSUnknown,       // ???

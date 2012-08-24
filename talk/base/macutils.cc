@@ -85,14 +85,6 @@ void DecodeFourChar(UInt32 fc, std::string* out) {
   out->append(ss.str());
 }
 
-std::string DecodeEvent(EventRef event) {
-  std::string str;
-  DecodeFourChar(::GetEventClass(event), &str);
-  str.push_back(':');
-  DecodeFourChar(::GetEventKind(event), &str);
-  return str;
-}
-
 static bool GetGestalt(OSType ostype, int* value) {
   ASSERT(NULL != value);
   SInt32 native_value;
@@ -161,6 +153,13 @@ bool GetQuickTimeVersion(std::string* out) {
 }
 
 bool RunAppleScript(const std::string& script) {
+  // TODO(thaloun): Add a .mm file that contains something like this:
+  // NSString source from script
+  // NSAppleScript* appleScript = [[NSAppleScript alloc] initWithSource:&source]
+  // if (appleScript != nil) {
+  //   [appleScript executeAndReturnError:nil]
+  //   [appleScript release]
+#ifndef CARBON_DEPRECATED
   ComponentInstance component = NULL;
   AEDesc script_desc;
   AEDesc result_data;
@@ -221,8 +220,12 @@ bool RunAppleScript(const std::string& script) {
   }
   CloseComponent(component);
   return true;
+#else
+  // TODO(thaloun): Support applescripts with the NSAppleScript API.
+  return false;
+#endif  // CARBON_DEPRECATED
 }
-#endif
+#endif  // OSX
 
 ///////////////////////////////////////////////////////////////////////////////
 

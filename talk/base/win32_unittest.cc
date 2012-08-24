@@ -56,6 +56,8 @@ TEST_F(Win32Test, FileTimeToUInt64Test) {
 TEST_F(Win32Test, WinPingTest) {
   WinPing ping;
   ASSERT_TRUE(ping.IsValid());
+
+  // Test valid ping cases.
   WinPing::PingResult result = ping.Ping(IPAddress(INADDR_LOOPBACK), 20, 50, 1,
                                          false);
   ASSERT_EQ(WinPing::PING_SUCCESS, result);
@@ -64,6 +66,14 @@ TEST_F(Win32Test, WinPingTest) {
                                              50, 1, false);
     ASSERT_EQ(WinPing::PING_SUCCESS, v6result);
   }
+
+  // Test invalid parameter cases.
+  ASSERT_EQ(WinPing::PING_INVALID_PARAMS, ping.Ping(
+            IPAddress(INADDR_LOOPBACK), 0, 50, 1, false));
+  ASSERT_EQ(WinPing::PING_INVALID_PARAMS, ping.Ping(
+            IPAddress(INADDR_LOOPBACK), 20, 0, 1, false));
+  ASSERT_EQ(WinPing::PING_INVALID_PARAMS, ping.Ping(
+            IPAddress(INADDR_LOOPBACK), 20, 50, 0, false));
 }
 
 }  // namespace talk_base

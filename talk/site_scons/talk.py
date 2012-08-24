@@ -588,7 +588,7 @@ def AddToDict(dictionary, key, values, append=True):
     return
 
   cur = dictionary[key]
-  # TODO: Make sure that there are no duplicates
+  # TODO(dape): Make sure that there are no duplicates
   # in the list. I can't use python set for this since
   # the nodes that are returned by the SCONS builders
   # are not hashable.

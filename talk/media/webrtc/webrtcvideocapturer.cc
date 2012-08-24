@@ -156,7 +156,7 @@ bool WebRtcVideoCapturer::Init(const Device& device) {
 
   // Find the desired camera, by name.
   // In the future, comparing IDs will be more robust.
-  // TODO: Figure what's needed to allow this.
+  // TODO(juberti): Figure what's needed to allow this.
   int num_cams = info->NumberOfDevices();
   char vcm_id[256] = "";
   bool found = false;
@@ -177,7 +177,7 @@ bool WebRtcVideoCapturer::Init(const Device& device) {
   }
 
   // Enumerate the supported formats.
-  // TODO: Find out why this starts/stops the camera...
+  // TODO(juberti): Find out why this starts/stops the camera...
   std::vector<VideoFormat> supported;
   WebRtc_Word32 num_caps = info->NumberOfCapabilities(vcm_id);
   for (WebRtc_Word32 i = 0; i < num_caps; ++i) {
@@ -220,7 +220,7 @@ bool WebRtcVideoCapturer::Init(webrtc::VideoCaptureModule* module) {
     LOG(LS_ERROR) << "Invalid VCM supplied";
     return false;
   }
-  // TODO: Set id and formats.
+  // TODO(juberti): Set id and formats.
   (module_ = module)->AddRef();
   return true;
 }
@@ -251,15 +251,16 @@ bool WebRtcVideoCapturer::GetBestCaptureFormat(const VideoFormat& desired,
   return true;
 }
 
-CaptureResult WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
+CaptureState WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
   if (!module_) {
     LOG(LS_ERROR) << "The capturer has not been initialized";
-    return CR_NO_DEVICE;
+    return CS_NO_DEVICE;
   }
 
+  // TODO(hellner): weird to return failure when it is in fact actually running.
   if (IsRunning()) {
     LOG(LS_ERROR) << "The capturer is already running";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 
   SetCaptureFormat(&capture_format);
@@ -267,7 +268,7 @@ CaptureResult WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
   webrtc::VideoCaptureCapability cap;
   if (!FormatToCapability(capture_format, &cap)) {
     LOG(LS_ERROR) << "Invalid capture format specified";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 
   std::string camera_id(GetId());
@@ -275,7 +276,7 @@ CaptureResult WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
   if (module_->RegisterCaptureDataCallback(*this) != 0 ||
       module_->StartCapture(cap) != 0) {
     LOG(LS_ERROR) << "Camera '" << camera_id << "' failed to start";
-    return CR_FAILURE;
+    return CS_FAILED;
   }
 
   LOG(LS_INFO) << "Camera '" << camera_id << "' started with format "
@@ -284,7 +285,7 @@ CaptureResult WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
 
   captured_frames_ = 0;
   talk_base::Thread::Current()->Post(this);
-  return CR_PENDING;
+  return CS_STARTING;
 }
 
 void WebRtcVideoCapturer::Stop() {
@@ -293,7 +294,7 @@ void WebRtcVideoCapturer::Stop() {
     module_->StopCapture();
     module_->DeRegisterCaptureDataCallback();
 
-    // TODO: Determine if the VCM exposes any drop stats we can use.
+    // TODO(juberti): Determine if the VCM exposes any drop stats we can use.
     double drop_ratio = 0.0;
     std::string camera_id(GetId());
     LOG(LS_INFO) << "Camera '" << camera_id << "' stopped after capturing "
@@ -321,8 +322,8 @@ bool WebRtcVideoCapturer::GetPreferredFourccs(
 }
 
 void WebRtcVideoCapturer::OnMessage(talk_base::Message* message) {
-  // TODO: Fire SignalCaptureEvent appropriately.
-  SignalStartResult(this, CR_SUCCESS);
+  // TODO(juberti): Fire SignalStateChange appropriately.
+  SignalStateChange(this, CS_RUNNING);
 }
 
 void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
@@ -353,7 +354,7 @@ WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
   width = sample.Width();
   height = sample.Height();
   fourcc = FOURCC_I420;
-  // TODO: Support pixel aspect ratio (for OSX).
+  // TODO(fbarchard): Support pixel aspect ratio (for OSX).
   pixel_width = 1;
   pixel_height = 1;
   // Convert units from VideoFrame RenderTimeMs to CapturedFrame (nanoseconds).

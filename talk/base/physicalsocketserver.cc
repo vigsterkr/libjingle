@@ -101,9 +101,10 @@ const uint16 PACKET_MAXIMUMS[] = {
   0,        // End of list marker
 };
 
-const uint32 IP_HEADER_SIZE = 20;
-const uint32 IPV6_HEADER_SIZE = 40;
-const uint32 ICMP_HEADER_SIZE = 8;
+static const int IP_HEADER_SIZE = 20u;
+static const int IPV6_HEADER_SIZE = 40u;
+static const int ICMP_HEADER_SIZE = 8u;
+static const int ICMP_PING_TIMEOUT_MILLIS = 10000u;
 
 class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
  public:
@@ -425,7 +426,9 @@ class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
 
     for (int level = 0; PACKET_MAXIMUMS[level + 1] > 0; ++level) {
       int32 size = PACKET_MAXIMUMS[level] - header_size;
-      WinPing::PingResult result = ping.Ping(addr.ipaddr(), size, 0, 1, false);
+      WinPing::PingResult result = ping.Ping(addr.ipaddr(), size,
+                                             ICMP_PING_TIMEOUT_MILLIS,
+                                             1, false);
       if (result == WinPing::PING_FAIL) {
         error_ = EINVAL; // can't think of a better error ID
         return -1;

@@ -107,7 +107,7 @@ class FileVideoCapturer : public VideoCapturer {
   bool Init(const Device& device);
 
   // Override virtual methods of parent class VideoCapturer.
-  virtual CaptureResult Start(const VideoFormat& capture_format);
+  virtual CaptureState Start(const VideoFormat& capture_format);
   virtual void Stop();
   virtual bool IsRunning();
 

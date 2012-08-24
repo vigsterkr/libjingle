@@ -57,7 +57,7 @@ bool AudioCodec::Matches(const AudioCodec& codec) const {
   // unless the codec is VBR (0), where we just force the supplied value.
   // The number of channels must match exactly.
   // Preference is ignored.
-  // TODO: Treat a zero clockrate as 8000Hz, the RTP default clockrate.
+  // TODO(juberti): Treat a zero clockrate as 8000Hz, the RTP default clockrate.
   return Matches(codec.id, codec.name) &&
       ((codec.clockrate == 0 /*&& clockrate == 8000*/) ||
           clockrate == codec.clockrate) &&

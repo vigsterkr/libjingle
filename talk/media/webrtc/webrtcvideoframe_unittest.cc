@@ -125,16 +125,16 @@ TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate180)
 TEST_WEBRTCVIDEOFRAME(ConstructYUY2Rotate270)
 TEST_WEBRTCVIDEOFRAME(ConstructI4201Pixel)
 TEST_WEBRTCVIDEOFRAME(ConstructI4205Pixel)
-// TODO: WebRtcVideoFrame does not support horizontal crop.
+// TODO(juberti): WebRtcVideoFrame does not support horizontal crop.
 // Re-evaluate once it supports 3 independent planes, since we might want to
 // just Init normally and then crop by adjusting pointers.
 // TEST_WEBRTCVIDEOFRAME(ConstructI420CropHorizontal)
 TEST_WEBRTCVIDEOFRAME(ConstructI420CropVertical)
-// TODO: WebRtcVideoFrame is not currently refcounted.
+// TODO(juberti): WebRtcVideoFrame is not currently refcounted.
 // TEST_WEBRTCVIDEOFRAME(ConstructCopy)
 // TEST_WEBRTCVIDEOFRAME(ConstructCopyIsRef)
 TEST_WEBRTCVIDEOFRAME(ConstructBlack)
-// TODO: Implement Jpeg
+// TODO(fbarchard): Implement Jpeg
 // TEST_WEBRTCVIDEOFRAME(ConstructMjpgI420)
 // TEST_WEBRTCVIDEOFRAME(ConstructMjpgI422)
 // TEST_WEBRTCVIDEOFRAME(ConstructMjpgI444)
@@ -152,7 +152,7 @@ TEST_WEBRTCVIDEOFRAME(ValidateI420HugeSize)
 // TEST_WEBRTCVIDEOFRAME(ValidateMjpgI420InvalidSize)
 // TEST_WEBRTCVIDEOFRAME(ValidateI420InvalidSize)
 
-// TODO: WebRtcVideoFrame does not support odd sizes.
+// TODO(fbarchard): WebRtcVideoFrame does not support odd sizes.
 // Re-evaluate once WebRTC switches to libyuv
 // TEST_WEBRTCVIDEOFRAME(ConstructYuy2AllSizes)
 // TEST_WEBRTCVIDEOFRAME(ConstructARGBAllSizes)

@@ -373,27 +373,27 @@ CallClient::~CallClient() {
 
 const std::string CallClient::strerror(buzz::XmppEngine::Error err) {
   switch (err) {
-    case  buzz::XmppEngine::ERROR_NONE:
+    case buzz::XmppEngine::ERROR_NONE:
       return "";
-    case  buzz::XmppEngine::ERROR_XML:
+    case buzz::XmppEngine::ERROR_XML:
       return "Malformed XML or encoding error";
-    case  buzz::XmppEngine::ERROR_STREAM:
+    case buzz::XmppEngine::ERROR_STREAM:
       return "XMPP stream error";
-    case  buzz::XmppEngine::ERROR_VERSION:
+    case buzz::XmppEngine::ERROR_VERSION:
       return "XMPP version error";
-    case  buzz::XmppEngine::ERROR_UNAUTHORIZED:
+    case buzz::XmppEngine::ERROR_UNAUTHORIZED:
       return "User is not authorized (Check your username and password)";
-    case  buzz::XmppEngine::ERROR_TLS:
+    case buzz::XmppEngine::ERROR_TLS:
       return "TLS could not be negotiated";
-    case  buzz::XmppEngine::ERROR_AUTH:
+    case buzz::XmppEngine::ERROR_AUTH:
       return "Authentication could not be negotiated";
-    case  buzz::XmppEngine::ERROR_BIND:
+    case buzz::XmppEngine::ERROR_BIND:
       return "Resource or session binding could not be negotiated";
-    case  buzz::XmppEngine::ERROR_CONNECTION_CLOSED:
+    case buzz::XmppEngine::ERROR_CONNECTION_CLOSED:
       return "Connection closed by output handler.";
-    case  buzz::XmppEngine::ERROR_DOCUMENT_CLOSED:
+    case buzz::XmppEngine::ERROR_DOCUMENT_CLOSED:
       return "Closed by </stream:stream>";
-    case  buzz::XmppEngine::ERROR_SOCKET:
+    case buzz::XmppEngine::ERROR_SOCKET:
       return "Socket error";
     default:
       return "Unknown error";
@@ -484,7 +484,7 @@ void CallClient::InitMedia() {
   }
 
   if (!data_engine_) {
-    // TODO: Make it easy to make other types of data
+    // TODO(pthatcher): Make it easy to make other types of data
     // engines.
     data_engine_ = new cricket::RtpDataEngine();
   }
@@ -788,7 +788,9 @@ void CallClient::OnDataReceived(cricket::Call*,
                                 const cricket::ReceiveDataParams& params,
                                 const std::string& data) {
   cricket::StreamParams stream;
-  if (GetStreamBySsrc(call_->data_recv_streams(), params.ssrc, &stream)) {
+  const std::vector<cricket::StreamParams>* data_streams =
+      call_->GetDataRecvStreams(session_);
+  if (data_streams && GetStreamBySsrc(*data_streams, params.ssrc, &stream)) {
     console_->PrintLine(
         "Received data from '%s' on stream '%s' (ssrc=%u): %s",
         stream.nick.c_str(), stream.name.c_str(),
@@ -988,7 +990,7 @@ void CallClient::LookupAndJoinMuc(const std::string& room_name) {
   }
 
   std::string room = room_name;
-  std::string domain =  xmpp_client_->jid().domain();
+  std::string domain = xmpp_client_->jid().domain();
   if (room_name.find("@") != std::string::npos) {
     // Assume the room_name is a fully qualified room name.
     // We'll find the room name string and domain name string from it.

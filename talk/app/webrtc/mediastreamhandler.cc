@@ -64,7 +64,7 @@ LocalAudioTrackHandler::~LocalAudioTrackHandler() {
 }
 
 void LocalAudioTrackHandler::OnStateChanged() {
-  // TODO: What should happen when the state change?
+  // TODO(perkj): What should happen when the state change?
 }
 
 void LocalAudioTrackHandler::OnEnabledChanged() {
@@ -84,7 +84,7 @@ RemoteAudioTrackHandler::~RemoteAudioTrackHandler() {
 }
 
 void RemoteAudioTrackHandler::OnStateChanged() {
-  // TODO: What should happen when the state change?
+  // TODO(perkj): What should happen when the state change?
 }
 
 void RemoteAudioTrackHandler::OnEnabledChanged() {
@@ -111,7 +111,7 @@ LocalVideoTrackHandler::~LocalVideoTrackHandler() {
 }
 
 void LocalVideoTrackHandler::OnStateChanged() {
-  // TODO: What should happen when the state change?
+  // TODO(perkj): What should happen when the state change?
 }
 
 void LocalVideoTrackHandler::OnEnabledChanged() {
@@ -135,7 +135,7 @@ RemoteVideoTrackHandler::~RemoteVideoTrackHandler() {
 }
 
 void RemoteVideoTrackHandler::OnStateChanged() {
-  // TODO: What should happen when the state change?
+  // TODO(perkj): What should happen when the state change?
 }
 
 void RemoteVideoTrackHandler::OnEnabledChanged() {

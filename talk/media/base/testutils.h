@@ -127,7 +127,7 @@ class VideoCapturerListener : public sigslot::has_slots<> {
  public:
   explicit VideoCapturerListener(VideoCapturer* cap);
 
-  CaptureResult start_result() const { return start_result_; }
+  CaptureState last_capture_state() const { return last_capture_state_; }
   int frame_count() const { return frame_count_; }
   uint32 frame_fourcc() const { return frame_fourcc_; }
   int frame_width() const { return frame_width_; }
@@ -135,12 +135,11 @@ class VideoCapturerListener : public sigslot::has_slots<> {
   uint32 frame_size() const { return frame_size_; }
   bool resolution_changed() const { return resolution_changed_; }
 
-  void OnStartResult(VideoCapturer* capturer, CaptureResult result);
+  void OnStateChange(VideoCapturer* capturer, CaptureState state);
   void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
-  void OnCaptureEvent(VideoCapturer* capturer, CaptureEvent ev);
 
  private:
-  CaptureResult start_result_;
+  CaptureState last_capture_state_;
   int frame_count_;
   uint32 frame_fourcc_;
   int frame_width_;

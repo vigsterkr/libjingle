@@ -84,7 +84,7 @@ void RtpDumpSink::OnPacket(const void* data, size_t size, bool rtcp) {
       if (!rtcp) {
         writer_->WriteRtpPacket(data, size);
       } else {
-        // TODO: Enable recording RTCP.
+        // TODO(whyuan): Enable recording RTCP.
       }
     }
   }

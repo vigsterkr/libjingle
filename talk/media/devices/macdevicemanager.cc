@@ -58,7 +58,7 @@ class MacDeviceWatcher : public DeviceWatcher {
 static const char* kFilteredAudioDevicesName[] = {
     NULL,
 };
-// TODO: Try to get hold of a copy of Final Cut to understand why we
+// TODO(tommyw): Try to get hold of a copy of Final Cut to understand why we
 //               crash while scanning their components on OS X.
 static const char* const kFilteredVideoDevicesName[] =  {
     "DVCPRO HD",               // Final cut
@@ -68,7 +68,7 @@ static const char* const kFilteredVideoDevicesName[] =  {
 static const int kVideoDeviceOpenAttempts = 3;
 static const UInt32 kAudioDeviceNameLength = 64;
 // Obj-C functions defined in macdevicemanagermm.mm
-// TODO: have a shared header for these function defines.
+// TODO(ronghuawu): have a shared header for these function defines.
 extern DeviceWatcherImpl* CreateDeviceWatcherCallback(
     DeviceManagerInterface* dm);
 extern void ReleaseDeviceWatcherCallback(DeviceWatcherImpl* impl);

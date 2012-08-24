@@ -63,8 +63,8 @@ uint32 CanonicalFourCC(uint32 fourcc) {
   return fourcc;
 }
 
-// TODO: Remove kMaxPixels when encoder has no limit.
-// TODO: Consider clamping dimensions to max independently,
+// TODO(fbarchard): Remove kMaxPixels when encoder has no limit.
+// TODO(fbarchard): Consider clamping dimensions to max independently,
 //     adjusting pixel width and pixel height.
 // Limit as of 7/16/12 is 21000 macroblocks (16 x 16 each). b/6726828
 // Compute a size to scale frames to that is below maximum compression
@@ -137,7 +137,7 @@ void ComputeCrop(int cropped_format_width,
   // kAspectThresh is the maximum aspect ratio difference that we'll accept
   // for cropping.  The value 1.33 is based on 4:3 being cropped to 16:9.
   // Set to zero to disable cropping entirely.
-  // TODO: crop to multiple of 16 width for better performance.
+  // TODO(fbarchard): crop to multiple of 16 width for better performance.
   const float kAspectThresh = 16.f / 9.f / (4.f / 3.f) + 0.01f;  // 1.33
   // Wide aspect - crop horizontally
   if (frame_aspect > crop_aspect &&

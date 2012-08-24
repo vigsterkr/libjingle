@@ -71,7 +71,7 @@ class MacCFSocketServer : public MacBaseSocketServer {
   CFRunLoopSourceRef wake_up_;
 };
 
-#ifdef OSX
+#ifndef CARBON_DEPRECATED
 
 ///////////////////////////////////////////////////////////////////////////////
 // MacCarbonSocketServer
@@ -125,46 +125,6 @@ class MacCarbonAppSocketServer : public MacBaseSocketServer {
 };
 
 #endif
-
-///////////////////////////////////////////////////////////////////////////////
-// MacNotificationsSocketServer
-///////////////////////////////////////////////////////////////////////////////
-
-// The name "SocketServer" is misleading for this class. This class inherits
-// from SocketServer, some variants of which create/use physical sockets
-// (specifically, PhysicalSocketServer). But generally, this class is a way for
-// a thread to schedule tasks (see task.h, thread.h and taskrunner.h).
-//
-// Since we don't want to write a custom Cocoa event loop, we will use this
-// in a non-standard way. The "Wait" method will never actually wait - it will
-// return false if cms > 0. Whenever a task needs to be woken up, the WakeUp
-// method here will get called, and will cause the thread to cycle through all
-// messages currently available.
-
-class MacNotificationsSocketServer : public SocketServer {
- public:
-  MacNotificationsSocketServer();
-  virtual ~MacNotificationsSocketServer();
-
-  // SocketServer Interface
-  virtual Socket* CreateSocket(int type) { return NULL; }
-  virtual AsyncSocket* CreateAsyncSocket(int type) { return NULL; }
-  // process_io argument is ignored.
-  virtual bool Wait(int cms, bool process_io);
-  virtual void WakeUp();
-
- private:
-  static void NotificationCallBack(CFNotificationCenterRef center,
-                                   void* observer,
-                                   CFStringRef name,
-                                   const void* object,
-                                   CFDictionaryRef userInfo);
-
-  bool sent_notification_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 } // namespace talk_base
 
 #endif  // TALK_BASE_MACSOCKETSERVER_H__

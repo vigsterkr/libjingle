@@ -1569,7 +1569,7 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
       content = parser_->NextContent(content);
       buzz::XmlElement* encryption = EncryptionFromContent(content);
       ASSERT_TRUE(encryption != NULL);
-      // TODO: Check encryption parameters?
+      // TODO(pthatcher): Check encryption parameters?
     }
   }
 
@@ -1627,7 +1627,7 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
       CheckCryptoFromGoodIncomingInitiate(call_->sessions()[0]);
     }
 
-    // TODO: Add tests for sending <bandwidth> in accept.
+    // TODO(pthatcher): Add tests for sending <bandwidth> in accept.
     cricket::CallOptions opts;
     opts.has_video = (GetFirstVideoContentDescription(
         call_->sessions()[0]->remote_description()) != NULL);
@@ -1655,7 +1655,7 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     if (opts.has_data) {
       CheckDataRtcpMux(true, call_->sessions()[0]->local_description());
       CheckDataRtcpMux(true, call_->sessions()[0]->remote_description());
-      // TODO: Check rtcpmux and crypto?
+      // TODO(pthatcher): Check rtcpmux and crypto?
     }
 
     call_->Terminate();
@@ -2450,7 +2450,7 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     client_->session_manager()->OnIncomingMessage(streams_stanza.get());
     // First one is ignored because of bad syntax.
     ASSERT_EQ(1U, stanzas_.size());
-    // TODO: Figure out how to make this an ERROR rather than RESULT.
+    // TODO(pthatcher): Figure out how to make this an ERROR rather than RESULT.
     ASSERT_EQ(std::string(buzz::STR_ERROR), stanzas_[0]->Attr(buzz::QN_TYPE));
     ClearStanzas();
     ASSERT_EQ(0U, last_streams_added_.audio().size());

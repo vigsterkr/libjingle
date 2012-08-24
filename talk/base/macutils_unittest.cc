@@ -48,7 +48,11 @@ TEST(MacUtilsTest, RunAppleScriptRuntimeError) {
   EXPECT_FALSE(talk_base::RunAppleScript(script));
 }
 
+#ifdef CARBON_DEPRECATED
+TEST(MacUtilsTest, DISABLED_RunAppleScriptSuccess) {
+#else
 TEST(MacUtilsTest, RunAppleScriptSuccess) {
+#endif
   std::string script("set value to 5");
   EXPECT_TRUE(talk_base::RunAppleScript(script));
 }

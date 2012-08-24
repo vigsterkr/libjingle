@@ -94,7 +94,7 @@ static void GetProcessorInformation(int &physical_cpus, int &cache_size) {
   return;
 }
 #else
-// TODO: Use gcc 4.4 provided cpuid intrinsic
+// TODO(fbarchard): Use gcc 4.4 provided cpuid intrinsic
 // 32 bit fpic requires ebx be preserved
 #if (defined(__pic__) || defined(__APPLE__)) && defined(__i386__)
 static inline void __cpuid(int cpu_info[4], int info_type) {
@@ -124,10 +124,11 @@ SystemInfo::SystemInfo()
       cpu_family_(0), cpu_model_(0), cpu_stepping_(0),
       cpu_speed_(0), memory_(0) {
   // Initialize the basic information.
-
-#if defined(__arm__)
+#if defined(CPU_ARM)
   cpu_arch_ = SI_ARCH_ARM;
-#elif defined(CPU_X86)
+#elif defined(__x86_64__) || defined(_M_X64)
+  cpu_arch_ = SI_ARCH_X64;
+#elif defined(__i386__) || defined(_M_IX86)
   cpu_arch_ = SI_ARCH_X86;
 #else
 #error "Unknown architecture."
@@ -185,7 +186,7 @@ SystemInfo::SystemInfo()
     proc_info.GetNumCpus(&logical_cpus_);
     proc_info.GetNumPhysicalCpus(&physical_cpus_);
     proc_info.GetCpuFamily(&cpu_family_);
-#if !defined(__arm__)
+#if !defined(CPU_ARM)
     // These values aren't found on ARM systems.
     proc_info.GetSectionIntValue(0, "model", &cpu_model_);
     proc_info.GetSectionIntValue(0, "stepping", &cpu_stepping_);
@@ -268,7 +269,7 @@ SystemInfo::Architecture SystemInfo::GetCpuArchitecture() {
 // (Intel document number: 241618)
 std::string SystemInfo::GetCpuVendor() {
   if (cpu_vendor_.empty()) {
-#ifdef CPU_X86
+#if defined(CPU_X86)
     int cpu_info[4];
     __cpuid(cpu_info, 0);
     cpu_info[0] = cpu_info[1];  // Reorder output
@@ -276,6 +277,8 @@ std::string SystemInfo::GetCpuVendor() {
     cpu_info[2] = cpu_info[2];
     cpu_info[3] = 0;
     cpu_vendor_ = std::string(reinterpret_cast<char*>(&cpu_info[0]));
+#elif defined(CPU_ARM)
+    cpu_vendor_ = std::string("ARM");
 #else
     cpu_vendor_ = std::string("Undefined");
 #endif
@@ -335,10 +338,11 @@ int SystemInfo::GetMaxCpuSpeed() {
 #elif defined(IOS) || defined(OSX)
   uint64_t sysctl_value;
   size_t length = sizeof(sysctl_value);
-  int error = sysctlbyname("hw.cpufrequency_max", &sysctl_value, &length, NULL, 0);
+  int error = sysctlbyname("hw.cpufrequency_max", &sysctl_value, &length,
+                           NULL, 0);
   cpu_speed_ = !error ? static_cast<int>(sysctl_value/1000000) : -1;
 #else
-  // TODO: Implement using proc/cpuinfo
+  // TODO(fbarchard): Implement using proc/cpuinfo
   cpu_speed_ = 0;
 #endif
   return cpu_speed_;
@@ -349,7 +353,7 @@ int SystemInfo::GetMaxCpuSpeed() {
 // root\WMI::ProcessorPerformance.InstanceName="Processor_Number_0".frequency
 int SystemInfo::GetCurCpuSpeed() {
 #ifdef WIN32
-  // TODO: Add WMI check, requires COM initialization
+  // TODO(fbarchard): Add WMI check, requires COM initialization
   // NOTE(fbarchard): Testable on Sandy Bridge.
   return GetMaxCpuSpeed();
 #elif defined(IOS) || defined(OSX)
@@ -358,7 +362,7 @@ int SystemInfo::GetCurCpuSpeed() {
   int error = sysctlbyname("hw.cpufrequency", &sysctl_value, &length, NULL, 0);
   return !error ? static_cast<int>(sysctl_value/1000000) : GetMaxCpuSpeed();
 #else // LINUX || ANDROID
-  // TODO: Use proc/cpuinfo for Cur speed on Linux.
+  // TODO(fbarchard): Use proc/cpuinfo for Cur speed on Linux.
   return GetMaxCpuSpeed();
 #endif
 }
@@ -522,7 +526,7 @@ bool SystemInfo::GetGpuInfo(GpuInfo *info) {
   GetProperty(display_service_port, CFSTR("model"), &info->description);
   return true;
 #else // LINUX || ANDROID
-  // TODO: Implement this on Linux
+  // TODO(fbarchard): Implement this on Linux
   return false;
 #endif
 }

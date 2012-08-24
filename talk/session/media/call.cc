@@ -148,7 +148,10 @@ bool Call::SendViewRequest(Session* session,
   for (it = view_request.static_video_views.begin();
        it != view_request.static_video_views.end(); ++it) {
     StreamParams found_stream;
-    bool found = recv_streams_.GetVideoStreamBySsrc(it->ssrc, &found_stream);
+    bool found = false;
+    MediaStreams* recv_streams = GetMediaStreams(session);
+    if (recv_streams)
+      found = recv_streams->GetVideoStreamBySsrc(it->ssrc, &found_stream);
     if (!found) {
       LOG(LS_WARNING) <<
           "Tried sending view request for bad ssrc: " << it->ssrc;
@@ -223,6 +226,7 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
   media_session.voice_channel = NULL;
   media_session.video_channel = NULL;
   media_session.data_channel = NULL;
+  media_session.recv_streams = NULL;
 
   const ContentInfo* audio_offer = GetFirstAudioContent(offer);
   const ContentInfo* video_offer = GetFirstVideoContent(offer);
@@ -275,6 +279,7 @@ bool Call::AddSession(Session* session, const SessionDescription* offer) {
 
   if (succeeded) {
     // Add session to list, create channels for this session.
+    media_session.recv_streams = new MediaStreams;
     media_session_map_[session->id()] = media_session;
     session->SignalState.connect(this, &Call::OnSessionState);
     session->SignalError.connect(this, &Call::OnSessionError);
@@ -317,7 +322,7 @@ void Call::RemoveSession(Session* session) {
   if (data_channel != NULL)
     session_client_->channel_manager()->DestroyDataChannel(data_channel);
 
-  // Remove session from list
+  delete it->second.recv_streams;
   media_session_map_.erase(it);
 
   // Destroy speaker monitor
@@ -330,19 +335,24 @@ void Call::RemoveSession(Session* session) {
   talk_base::Thread::Current()->Post(this, MSG_CHECKAUTODESTROY);
 }
 
-VoiceChannel* Call::GetVoiceChannel(Session* session) {
-  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+VoiceChannel* Call::GetVoiceChannel(Session* session) const {
+  MediaSessionMap::const_iterator it = media_session_map_.find(session->id());
   return (it != media_session_map_.end()) ? it->second.voice_channel : NULL;
 }
 
-VideoChannel* Call::GetVideoChannel(Session* session) {
-  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+VideoChannel* Call::GetVideoChannel(Session* session) const {
+  MediaSessionMap::const_iterator it = media_session_map_.find(session->id());
   return (it != media_session_map_.end()) ? it->second.video_channel : NULL;
 }
 
-DataChannel* Call::GetDataChannel(Session* session) {
-  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+DataChannel* Call::GetDataChannel(Session* session) const {
+  MediaSessionMap::const_iterator it = media_session_map_.find(session->id());
   return (it != media_session_map_.end()) ? it->second.data_channel : NULL;
+}
+
+MediaStreams* Call::GetMediaStreams(Session* session) const {
+  MediaSessionMap::const_iterator it = media_session_map_.find(session->id());
+  return (it != media_session_map_.end()) ? it->second.recv_streams : NULL;
 }
 
 void Call::EnableChannels(bool enable) {
@@ -423,13 +433,13 @@ void Call::AddScreencast(Session* session,
     return;
   }
 
-  // TODO: Verify we aren't re-using an existing name or
+  // TODO(pthatcher): Verify we aren't re-using an existing name or
   // ssrc.
   StreamParams stream;
   stream.name = stream_name;
   stream.ssrcs.push_back(ssrc);
   SendStreamUpdate(session, stream);
-  // TODO: Wait for view request to send screencast.
+  // TODO(pthatcher): Wait for view request to send screencast.
   video_channel->AddScreencast(ssrc, screencastid, fps);
 }
 
@@ -612,10 +622,13 @@ void Call::OnAudioMonitor(VoiceChannel* channel, const AudioInfo& info) {
 }
 
 void Call::OnSpeakerMonitor(CurrentSpeakerMonitor* monitor, uint32 ssrc) {
-  StreamParams stream;
-  recv_streams_.GetAudioStreamBySsrc(ssrc, &stream);
-  SignalSpeakerMonitor(this, static_cast<Session*>(monitor->session()),
-                       stream);
+  Session* session = static_cast<Session*>(monitor->session());
+  MediaStreams* recv_streams = GetMediaStreams(session);
+  if (recv_streams) {
+    StreamParams stream;
+    recv_streams->GetAudioStreamBySsrc(ssrc, &stream);
+    SignalSpeakerMonitor(this, session, stream);
+  }
 }
 
 void Call::OnConnectionMonitor(VideoChannel* channel,
@@ -752,7 +765,7 @@ void Call::RemoveRecvStream(const StreamParams& stream,
                             BaseChannel* channel,
                             std::vector<StreamParams>* recv_streams) {
   if (channel && stream.has_ssrcs()) {
-    // TODO: Change RemoveRecvStream to take a stream argument.
+    // TODO(pthatcher): Change RemoveRecvStream to take a stream argument.
     channel->RemoveRecvStream(stream.first_ssrc());
   }
   RemoveStreamByNickAndName(recv_streams, stream.nick, stream.name);
@@ -767,17 +780,19 @@ void Call::OnRemoteDescriptionUpdate(BaseSession* base_session,
   std::vector<StreamParams>::const_iterator stream;
 
   const ContentInfo* audio_content = GetFirstAudioContent(updated_contents);
+  MediaStreams* recv_streams = GetMediaStreams(session);
   if (audio_content) {
     const AudioContentDescription* audio_update =
         static_cast<const AudioContentDescription*>(audio_content->description);
     if (!audio_update->codecs().empty()) {
       UpdateVoiceChannelRemoteContent(session, audio_update);
     }
-    UpdateRecvStreams(audio_update->streams(),
-                      GetVoiceChannel(session),
-                      recv_streams_.mutable_audio(),
-                      added_streams.mutable_audio(),
-                      removed_streams.mutable_audio());
+    if (recv_streams)
+      UpdateRecvStreams(audio_update->streams(),
+                        GetVoiceChannel(session),
+                        recv_streams->mutable_audio(),
+                        added_streams.mutable_audio(),
+                        removed_streams.mutable_audio());
   }
 
   const ContentInfo* video_content = GetFirstVideoContent(updated_contents);
@@ -787,11 +802,12 @@ void Call::OnRemoteDescriptionUpdate(BaseSession* base_session,
     if (!video_update->codecs().empty()) {
       UpdateVideoChannelRemoteContent(session, video_update);
     }
-    UpdateRecvStreams(video_update->streams(),
-                      GetVideoChannel(session),
-                      recv_streams_.mutable_video(),
-                      added_streams.mutable_video(),
-                      removed_streams.mutable_video());
+    if (recv_streams)
+      UpdateRecvStreams(video_update->streams(),
+                        GetVideoChannel(session),
+                        recv_streams->mutable_video(),
+                        added_streams.mutable_video(),
+                        removed_streams.mutable_video());
   }
 
   const ContentInfo* data_content = GetFirstDataContent(updated_contents);
@@ -801,11 +817,12 @@ void Call::OnRemoteDescriptionUpdate(BaseSession* base_session,
     if (!data_update->codecs().empty()) {
       UpdateDataChannelRemoteContent(session, data_update);
     }
-    UpdateRecvStreams(data_update->streams(),
-                      GetDataChannel(session),
-                      recv_streams_.mutable_data(),
-                      added_streams.mutable_data(),
-                      removed_streams.mutable_data());
+    if (recv_streams)
+      UpdateRecvStreams(data_update->streams(),
+                        GetDataChannel(session),
+                        recv_streams->mutable_data(),
+                        added_streams.mutable_data(),
+                        removed_streams.mutable_data());
   }
 
   if (!added_streams.empty() || !removed_streams.empty()) {

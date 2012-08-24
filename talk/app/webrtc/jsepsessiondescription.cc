@@ -56,7 +56,7 @@ const char SessionDescriptionInterface::kOffer[] = "offer";
 const char SessionDescriptionInterface::kPrAnswer[] = "pranswer";
 const char SessionDescriptionInterface::kAnswer[] = "answer";
 
-// TODO: Remove CreateSessionDescription(const std::string& sdp) once
+// TODO(perkj): Remove CreateSessionDescription(const std::string& sdp) once
 // JSEP00 is removed.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
   return CreateSessionDescription(JsepSessionDescription::kOffer, sdp);
@@ -178,7 +178,7 @@ bool JsepSessionDescription::GetMediasectionIndex(
   return true;
 }
 
-// TODO: Remove this once webrtcsession is updated to jsep01.
+// TODO(perkj): Remove this once webrtcsession is updated to jsep01.
 JsepInterface::Action
 JsepSessionDescription::GetAction(const std::string& type) {
   bool known_type = false;

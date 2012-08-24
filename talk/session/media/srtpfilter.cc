@@ -357,7 +357,7 @@ bool SrtpFilter::NegotiateParams(const std::vector<CryptoParams>& answer_params,
 
 bool SrtpFilter::ApplyParams(const CryptoParams& send_params,
                              const CryptoParams& recv_params) {
-  // TODO: Zero these buffers after use.
+  // TODO(juberti): Zero these buffers after use.
   bool ret;
   uint8 send_key[SRTP_MASTER_KEY_LEN], recv_key[SRTP_MASTER_KEY_LEN];
   ret = (ParseKeyParams(send_params.key_params, send_key, sizeof(send_key)) &&
@@ -567,7 +567,7 @@ bool SrtpSession::SetKey(int type, const std::string& cs,
   policy.ssrc.type = static_cast<ssrc_type_t>(type);
   policy.ssrc.value = 0;
   policy.key = const_cast<uint8*>(key);
-  // TODO parse window size from WSH session-param
+  // TODO(astor) parse window size from WSH session-param
   policy.window_size = 1024;
   policy.allow_repeat_tx = 1;
   policy.next = NULL;

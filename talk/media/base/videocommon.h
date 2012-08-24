@@ -208,14 +208,6 @@ struct VideoFormat : VideoFormatPod {
   std::string ToString() const;
 };
 
-// Result of video capturer start.
-enum CaptureResult {
-  CR_SUCCESS,    // The capturer starts successfully.
-  CR_PENDING,    // The capturer is pending to start the capture device.
-  CR_FAILURE,    // The capturer fails to start.
-  CR_NO_DEVICE,  // The capturer has no device and fails to start.
-};
-
 }  // namespace cricket
 
 #endif  // TALK_MEDIA_BASE_VIDEOCOMMON_H_

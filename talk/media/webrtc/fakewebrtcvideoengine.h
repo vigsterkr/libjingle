@@ -87,6 +87,8 @@ class FakeWebRtcVideoEngine
           tmmbr_(false),
           remb_send_(false),
           remb_receive_(false),
+          rtp_offset_send_id_(0),
+          rtp_offset_receive_id_(0),
           nack_(false),
           hybrid_nack_fec_(false) {
       ssrcs_[0] = 0;  // default ssrc.
@@ -104,6 +106,8 @@ class FakeWebRtcVideoEngine
     bool tmmbr_;
     bool remb_send_;  // This channel sends video packets.
     bool remb_receive_;  // This channel receives video packets.
+    int rtp_offset_send_id_;
+    int rtp_offset_receive_id_;
     bool nack_;
     bool hybrid_nack_fec_;
     std::vector<webrtc::VideoCodec> recv_codecs;
@@ -229,6 +233,14 @@ class FakeWebRtcVideoEngine
   bool GetRembStatusSend(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->remb_send_;
+  }
+  int GetSendRtpTimestampOffsetExtensionId(int channel) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->rtp_offset_send_id_;
+  }
+  int GetReceiveRtpTimestampOffsetExtensionId(int channel) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->rtp_offset_receive_id_;
   }
   bool GetNackStatus(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -616,8 +628,18 @@ class FakeWebRtcVideoEngine
     channels_[channel]->tmmbr_ = enable;
     return 0;
   }
-  WEBRTC_STUB(SetSendTimestampOffsetStatus, (int, bool, int));
-  WEBRTC_STUB(SetReceiveTimestampOffsetStatus, (int, bool, int));
+  WEBRTC_FUNC(SetSendTimestampOffsetStatus, (int channel, bool enable,
+      int id)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->rtp_offset_send_id_ = (enable) ? id : 0;
+    return 0;
+  }
+  WEBRTC_FUNC(SetReceiveTimestampOffsetStatus, (int channel, bool enable,
+      int id)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->rtp_offset_receive_id_ = (enable) ? id : 0;
+    return 0;
+  }
   WEBRTC_STUB_CONST(GetReceivedRTCPStatistics, (const int, unsigned short&,
       unsigned int&, unsigned int&, unsigned int&, int&));
   WEBRTC_STUB_CONST(GetSentRTCPStatistics, (const int, unsigned short&,

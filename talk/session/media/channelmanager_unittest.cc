@@ -311,7 +311,7 @@ TEST_F(ChannelManagerTest, SetVideoOptions) {
   // Test setting specific values.
   EXPECT_TRUE(cm_->SetVideoOptions("video-in2"));
   EXPECT_EQ("video-in2", cm_->video_device_name());
-  // TODO: Add test for invalid value here.
+  // TODO(juberti): Add test for invalid value here.
 }
 
 // Test unplugging and plugging back the preferred devices. When the preferred

@@ -104,7 +104,7 @@ class WebRtcSession : public cricket::BaseSession,
     return remote_desc_.get();
   }
 
-  // TODO: Implement below functions to replace the deprecated ones.
+  // TODO(ronghuawu): Implement below functions to replace the deprecated ones.
   virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
                            const MediaConstraintsInterface* constraints) {}
   virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,

@@ -98,8 +98,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   bool has_data() const { return has_data_; }
   bool muted() const { return muted_; }
   bool video_muted() const { return video_muted_; }
-  const std::vector<StreamParams>& data_recv_streams() const {
-    return recv_streams_.data();
+  const std::vector<StreamParams>* GetDataRecvStreams(Session* session) const {
+    MediaStreams* recv_streams = GetMediaStreams(session);
+    return recv_streams ? &recv_streams->data() : NULL;
   }
 
   // Setting this to false will cause the call to have a longer timeout and
@@ -170,9 +171,10 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   void OnDataReceived(DataChannel* channel,
                       const ReceiveDataParams& params,
                       const std::string& data);
-  VoiceChannel* GetVoiceChannel(Session* session);
-  VideoChannel* GetVideoChannel(Session* session);
-  DataChannel* GetDataChannel(Session* session);
+  VoiceChannel* GetVoiceChannel(Session* session) const;
+  VideoChannel* GetVideoChannel(Session* session) const;
+  DataChannel* GetDataChannel(Session* session) const;
+  MediaStreams* GetMediaStreams(Session* session) const;
   bool UpdateVoiceChannelRemoteContent(Session* session,
                                        const AudioContentDescription* audio);
   bool UpdateVideoChannelRemoteContent(Session* session,
@@ -206,13 +208,13 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
     VoiceChannel* voice_channel;
     VideoChannel* video_channel;
     DataChannel* data_channel;
+    MediaStreams* recv_streams;
   };
 
   // Create a map of media sessions, keyed off session->id().
   typedef std::map<std::string, MediaSession> MediaSessionMap;
   MediaSessionMap media_session_map_;
 
-  MediaStreams recv_streams_;
   std::map<std::string, CurrentSpeakerMonitor*> speaker_monitor_map_;
   VideoRenderer* local_renderer_;
   bool has_video_;

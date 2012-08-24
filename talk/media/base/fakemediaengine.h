@@ -175,7 +175,7 @@ class RtpHelper : public Base {
   bool HasSendStream(uint32 ssrc) const {
     return GetStreamBySsrc(send_streams_, ssrc, NULL);
   }
-  // TODO: This is to support legacy unit test that only check one
+  // TODO(perkj): This is to support legacy unit test that only check one
   // sending stream.
   const uint32 send_ssrc() {
     if (send_streams_.empty())
@@ -183,7 +183,7 @@ class RtpHelper : public Base {
     return send_streams_[0].first_ssrc();
   }
 
-  // TODO: This is to support legacy unit test that only check one
+  // TODO(perkj): This is to support legacy unit test that only check one
   // sending stream.
   const std::string rtcp_cname() {
     if (send_streams_.empty())
@@ -311,7 +311,8 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
   }
   virtual int GetTimeSinceLastTyping() { return time_since_last_typing_; }
   virtual void SetTypingDetectionParameters(int time_window,
-    int cost_per_typing, int reporting_threshold, int penalty_decay) {}
+    int cost_per_typing, int reporting_threshold, int penalty_decay,
+    int type_event_delay) {}
 
   virtual bool SetRingbackTone(const char *buf, int len) { return true; }
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) {
@@ -557,12 +558,16 @@ class FakeSoundclipMedia : public SoundclipMedia {
 
 class FakeDataMediaChannel : public RtpHelper<DataMediaChannel> {
  public:
-  explicit FakeDataMediaChannel(void* unused) {
+  explicit FakeDataMediaChannel(void* unused)
+      : auto_bandwidth_(false),
+        max_bps_(-1) {
   }
   ~FakeDataMediaChannel() {}
   const std::vector<DataCodec>& recv_codecs() const { return recv_codecs_; }
   const std::vector<DataCodec>& send_codecs() const { return send_codecs_; }
   const std::vector<DataCodec>& codecs() const { return send_codecs(); }
+  bool auto_bandwidth() const { return auto_bandwidth_; }
+  int max_bps() const { return max_bps_; }
 
   virtual bool SetRecvCodecs(const std::vector<DataCodec> &codecs) {
     if (fail_set_recv_codecs()) {
@@ -587,7 +592,11 @@ class FakeDataMediaChannel : public RtpHelper<DataMediaChannel> {
     set_playout(receive);
     return true;
   }
-  virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
+  virtual bool SetSendBandwidth(bool autobw, int bps) {
+    auto_bandwidth_ = autobw;
+    max_bps_ = bps;
+    return true;
+  }
   virtual bool AddRecvStream(const StreamParams& sp) {
     if (!RtpHelper<DataMediaChannel>::AddRecvStream(sp))
       return false;
@@ -614,6 +623,8 @@ class FakeDataMediaChannel : public RtpHelper<DataMediaChannel> {
   std::vector<DataCodec> send_codecs_;
   SendDataParams last_sent_data_params_;
   std::string last_sent_data_;
+  bool auto_bandwidth_;
+  int max_bps_;
 };
 
 // A base class for all of the shared parts between FakeVoiceEngine
@@ -649,7 +660,7 @@ class FakeBaseEngine {
   int options_;
   // Flag used by optionsmessagehandler_unittest for checking whether any
   // relevant setting has been updated.
-  // TODO: Replace with explicit checks of before & after values.
+  // TODO(thaloun): Replace with explicit checks of before & after values.
   bool options_changed_;
   bool fail_create_channel_;
 };
@@ -849,7 +860,7 @@ class FakeVideoEngine : public FakeBaseEngine {
     return true;
   }
 
-  sigslot::signal2<VideoCapturer*, CaptureResult> SignalCaptureResult;
+  sigslot::signal2<VideoCapturer*, CaptureState> SignalCaptureStateChange;
 
  private:
   std::vector<FakeVideoMediaChannel*> channels_;

@@ -51,7 +51,7 @@ class AudioFrame {
   bool GetStereo() const { return stereo_; }
 
  private:
-  // TODO: currently the data is not owned by this class.
+  // TODO(janahan): currently the data is not owned by this class.
   // add ownership when we come up with the first use case that requires it.
   int16* audio10ms_;
   size_t length_;

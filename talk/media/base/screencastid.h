@@ -1,5 +1,5 @@
 // Copyright 2012 Google Inc.
-
+// Author: thorcarpenter@google.com (Thor Carpenter)
 //
 // Defines variant class ScreencastId that combines WindowId and DesktopId.
 

@@ -175,7 +175,8 @@ class Socket {
   virtual ConnState GetState() const = 0;
 
   // Fills in the given uint16 with the current estimate of the MTU along the
-  // path to the address to which this socket is connected.
+  // path to the address to which this socket is connected. NOTE: This method
+  // can block for up to 10 seconds on Windows.
   virtual int EstimateMTU(uint16* mtu) = 0;
 
   enum Option {

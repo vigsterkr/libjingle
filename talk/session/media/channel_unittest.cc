@@ -2293,14 +2293,14 @@ TEST_F(VideoChannelTest, TestScreencastEvents) {
       &cricket::ScreencastEventCatcher::OnEvent);
   EXPECT_TRUE(channel1_->AddScreencast(0, ScreencastId(WindowId(0)), 5));
   ASSERT_TRUE(screencapture_factory->window_capturer() != NULL);
-  screencapture_factory->window_capturer()->SignalCaptureEvent(
-      screencapture_factory->window_capturer(), cricket::CE_PAUSED);
+  screencapture_factory->window_capturer()->SignalStateChange(
+      screencapture_factory->window_capturer(), cricket::CS_PAUSED);
   EXPECT_EQ_WAIT(talk_base::WE_MINIMIZE, catcher.event(), kTimeoutMs);
-  screencapture_factory->window_capturer()->SignalCaptureEvent(
-      screencapture_factory->window_capturer(), cricket::CE_RESUMED);
+  screencapture_factory->window_capturer()->SignalStateChange(
+      screencapture_factory->window_capturer(), cricket::CS_RUNNING);
   EXPECT_EQ_WAIT(talk_base::WE_RESTORE, catcher.event(), kTimeoutMs);
-  screencapture_factory->window_capturer()->SignalCaptureEvent(
-      screencapture_factory->window_capturer(), cricket::CE_STOPPED);
+  screencapture_factory->window_capturer()->SignalStateChange(
+      screencapture_factory->window_capturer(), cricket::CS_STOPPED);
   EXPECT_EQ_WAIT(talk_base::WE_CLOSE, catcher.event(), kTimeoutMs);
   EXPECT_TRUE(channel1_->RemoveScreencast(0));
   ASSERT_TRUE(screencapture_factory->window_capturer() == NULL);
@@ -2457,7 +2457,7 @@ TEST_F(VideoChannelTest, SendSsrcMuxToSsrcMuxWithRtcpMux) {
   Base::SendSsrcMuxToSsrcMuxWithRtcpMux();
 }
 
-// TODO: Add VideoChannelTest.TestChangeStateError.
+// TODO(gangji): Add VideoChannelTest.TestChangeStateError.
 
 TEST_F(VideoChannelTest, TestSrtpError) {
   Base::TestSrtpError();
@@ -2483,7 +2483,7 @@ TEST_F(VideoChannelTest, TestApplyViewRequest) {
   EXPECT_EQ(200, send_format.height);
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(15), send_format.interval);
 
-  // Short term hack for view request with SSRC 0. TODO: Remove this
+  // Short term hack for view request with SSRC 0. TODO(whyuan): Remove this
   // once Reflector uses the correct SSRC in view request (b/5977302).
   request.static_video_views.clear();
   request.static_video_views.push_back(
@@ -2698,4 +2698,4 @@ TEST_F(DataChannelTest, TestSendData) {
   EXPECT_EQ(data, media_channel1_->last_sent_data());
 }
 
-// TODO: TestSetReceiver?
+// TODO(pthatcher): TestSetReceiver?

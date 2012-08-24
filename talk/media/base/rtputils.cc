@@ -157,7 +157,7 @@ bool GetRtcpType(const void* data, size_t len, int* value) {
 }
 
 // This method returns SSRC first of RTCP packet, except if packet is SDES.
-// TODO - Fully implement RFC 5506. This standard doesn't restrict
+// TODO(mallinath) - Fully implement RFC 5506. This standard doesn't restrict
 // to send non-compound packets only to feedback messages.
 bool GetRtcpSsrc(const void* data, size_t len, uint32* value) {
   // Packet should be at least of 8 bytes, to get SSRC from a RTCP packet.

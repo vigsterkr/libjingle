@@ -164,7 +164,7 @@ WebRtc_Word32 WebRtcPassthroughRender::StopRender(
   return stream->StopRender();
 }
 
-// TODO: Is it ok to return non-const pointer to PassthroughStream
+// TODO(ronghuawu): Is it ok to return non-const pointer to PassthroughStream
 // from this const function FindStream.
 PassthroughStream* WebRtcPassthroughRender::FindStream(
     const WebRtc_UWord32 stream_id) const {

@@ -159,7 +159,7 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
   // turn-host     = IP-literal / IPv4address / reg-name
   // turn-port     = *DIGIT
 
-  // TODO: Handle IPV6 address
+  // TODO(ronghuawu): Handle IPV6 address
   for (size_t i = 0; i < configuration.size(); ++i) {
     webrtc::JsepInterface::IceServer server = configuration[i];
     if (server.uri.empty()) {
@@ -168,7 +168,7 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
     }
     std::vector<std::string> tokens;
     talk_base::tokenize(server.uri, '?', &tokens);
-    // TODO: Handle [ "?transport=" transport ].
+    // TODO(ronghuawu): Handle [ "?transport=" transport ].
     std::string uri_without_transport = tokens[0];
     tokens.clear();
     talk_base::tokenize(uri_without_transport, ':', &tokens);
@@ -282,7 +282,7 @@ bool PeerConnection::Initialize(const JsepInterface::IceServers& configuration,
   std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
   std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
   ParseIceServers(configuration, &stun_config, &turn_config);
-  // TODO: Take |constraints| into consideration.
+  // TODO(perkj): Take |constraints| into consideration.
   return DoInitialize(stun_config, turn_config, observer);
 }
 
@@ -342,7 +342,7 @@ bool PeerConnection::AddStream(MediaStreamInterface* local_stream,
   if (!CanAddLocalMediaStream(local_media_streams_, local_stream))
     return false;
 
-  // TODO: Implement support for MediaConstraints in AddStream.
+  // TODO(perkj): Implement support for MediaConstraints in AddStream.
   local_media_streams_->AddStream(local_stream);
   mediastream_signaling_->SetLocalStreams(local_media_streams_);
   observer_->OnRenegotiationNeeded();
@@ -382,7 +382,7 @@ void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
   }
   talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
       observer;
-  // TODO: Take |constraints| into consideration.
+  // TODO(perkj): Take |constraints| into consideration.
   SessionDescriptionInterface* desc =
       CreateOffer(MediaHints(true, true));
   if (!desc) {
@@ -419,7 +419,7 @@ void PeerConnection::CreateAnswer(
     observer_copy->OnFailure(error);
     return;
   }
-  // TODO: Take |constraints| into consideration.
+  // TODO(perkj): Take |constraints| into consideration.
   SessionDescriptionInterface* desc =
       CreateAnswer(MediaHints(true, true), offer);
   if (!desc) {
@@ -492,7 +492,7 @@ void PeerConnection::SetRemoteDescription(
 
 bool PeerConnection::UpdateIce(const IceServers& configuration,
                                const MediaConstraintsInterface* constraints) {
-  // TODO: Implement UpdateIce.
+  // TODO(ronghuawu): Implement UpdateIce.
   LOG(LS_ERROR) << "UpdateIce is not implemented.";
   return false;
 }

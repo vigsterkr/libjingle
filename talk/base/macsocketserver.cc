@@ -199,12 +199,21 @@ void MacCFSocketServer::OnWakeUpCallback() {
 ///////////////////////////////////////////////////////////////////////////////
 // MacCarbonSocketServer
 ///////////////////////////////////////////////////////////////////////////////
+#ifndef CARBON_DEPRECATED
 
 const UInt32 kEventClassSocketServer = 'MCSS';
 const UInt32 kEventWakeUp = 'WAKE';
 const EventTypeSpec kEventWakeUpSpec[] = {
   { kEventClassSocketServer, kEventWakeUp }
 };
+
+std::string DecodeEvent(EventRef event) {
+  std::string str;
+  DecodeFourChar(::GetEventClass(event), &str);
+  str.push_back(':');
+  DecodeFourChar(::GetEventKind(event), &str);
+  return str;
+}
 
 MacCarbonSocketServer::MacCarbonSocketServer()
     : event_queue_(GetCurrentEventQueue()), wake_up_(NULL) {
@@ -284,9 +293,6 @@ void MacCarbonSocketServer::WakeUp() {
 // MacCarbonAppSocketServer
 ///////////////////////////////////////////////////////////////////////////////
 
-// Carbon is deprecated for x64.  Switch to Cocoa
-#if !defined(__x86_64__)
-
 MacCarbonAppSocketServer::MacCarbonAppSocketServer()
     : event_queue_(GetCurrentEventQueue()) {
   // Install event handler
@@ -358,65 +364,6 @@ void MacCarbonAppSocketServer::WakeUp() {
   }
   ReleaseEvent(wake_up);
 }
+
 #endif
-
-///////////////////////////////////////////////////////////////////////////////
-// MacNotificationsSocketServer
-///////////////////////////////////////////////////////////////////////////////
-
-static const CFStringRef kNotificationName =
-  CFSTR("MacNotificationsSocketServer");
-
-MacNotificationsSocketServer::MacNotificationsSocketServer()
-    : sent_notification_(false) {
-  CFNotificationCenterRef nc = CFNotificationCenterGetLocalCenter();
-
-  // Passing NULL for the observed object
-  CFNotificationCenterAddObserver(
-      nc, this, NotificationCallBack, kNotificationName, NULL,
-      CFNotificationSuspensionBehaviorDeliverImmediately);
-}
-
-MacNotificationsSocketServer::~MacNotificationsSocketServer() {
-  CFNotificationCenterRef nc = CFNotificationCenterGetLocalCenter();
-  CFNotificationCenterRemoveObserver(nc, this, kNotificationName, NULL);
-}
-
-bool MacNotificationsSocketServer::Wait(int cms, bool process_io) {
-  return cms == 0;
-}
-
-void MacNotificationsSocketServer::WakeUp() {
-  // We could be invoked recursively, so this stops the infinite loop
-  if (!sent_notification_) {
-    sent_notification_ = true;
-    CFNotificationCenterRef nc = CFNotificationCenterGetLocalCenter();
-    CFNotificationCenterPostNotification(nc, kNotificationName, this, NULL,
-                                         true);
-    sent_notification_ = false;
-  }
-}
-
-void MacNotificationsSocketServer::NotificationCallBack(
-    CFNotificationCenterRef center, void* observer, CFStringRef name,
-    const void* object, CFDictionaryRef userInfo) {
-
-  ASSERT(CFStringCompare(name, kNotificationName, 0) == kCFCompareEqualTo);
-  ASSERT(userInfo == NULL);
-
-  // We have thread messages to process.
-  Thread* thread = Thread::Current();
-  if (thread == NULL) {
-    // We're shutting down
-    return;
-  }
-
-  Message msg;
-  while (thread->Get(&msg, 0)) {
-    thread->Dispatch(&msg);
-  }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 } // namespace talk_base

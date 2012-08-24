@@ -42,7 +42,7 @@ namespace cricket {
 // Round to 2 pixels because Chroma channels are half size.
 #define ROUNDTO2(v) (v & ~1)
 
-// TODO: Handle odd width/height with rounding.
+// TODO(fbarchard): Handle odd width/height with rounding.
 void VideoFrame::StretchToPlanes(
     uint8* y, uint8* u, uint8* v,
     int32 dst_pitch_y, int32 dst_pitch_u, int32 dst_pitch_v,

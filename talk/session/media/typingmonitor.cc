@@ -44,7 +44,8 @@ TypingMonitor::TypingMonitor(VoiceChannel* channel,
       this, &TypingMonitor::OnVoiceChannelError);
   channel_->media_channel()->SetTypingDetectionParameters(
       settings.time_window, settings.cost_per_typing,
-      settings.reporting_threshold, settings.penalty_decay);
+      settings.reporting_threshold, settings.penalty_decay,
+      settings.type_event_delay);
 }
 
 TypingMonitor::~TypingMonitor() {
@@ -59,7 +60,7 @@ void TypingMonitor::OnVoiceChannelError(uint32 ssrc,
     // as the muted signal that comes from this.  This function can be called
     // from any thread.
 
-    // TODO: Refactor TypingMonitor and the MediaChannel to handle
+    // TODO(perkj): Refactor TypingMonitor and the MediaChannel to handle
     // multiple sending audio streams. SSRC 0 means the default sending audio
     // channel.
     channel_->MuteStream(0, true);
@@ -68,7 +69,7 @@ void TypingMonitor::OnVoiceChannelError(uint32 ssrc,
 
     worker_thread_->PostDelayed(mute_period_, this);
     LOG(LS_INFO) << "Muted for " << mute_period_ << "ms.";
-    // TODO: Either here or in VoiceChannel signal up a mutechanged
+    // TODO(thaloun): Either here or in VoiceChannel signal up a mutechanged
     // type message so that the FE can keep in sync with the actual mute status.
   }
 }

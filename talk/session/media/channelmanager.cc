@@ -59,7 +59,7 @@ enum {
   MSG_SETVIDEOLOGGING = 16,
   MSG_CREATESOUNDCLIP = 17,
   MSG_DESTROYSOUNDCLIP = 18,
-  MSG_CAMERASTARTED = 19,
+  MSG_VIDEOCAPTURESTATE = 19,
   MSG_SETVIDEOCAPTURE = 20,
   MSG_TERMINATE = 21,
   MSG_REGISTERVIDEOPROCESSOR = 22,
@@ -215,8 +215,8 @@ void ChannelManager::Construct(MediaEngineInterface* me,
 
   // Camera is started asynchronously, request callbacks when startup
   // completes to be able to forward them to the rendering manager.
-  media_engine_->SignalVideoCaptureResult.connect(
-      this, &ChannelManager::OnVideoCaptureResult);
+  media_engine_->SignalVideoCaptureStateChange.connect(
+      this, &ChannelManager::OnVideoCaptureStateChange);
 }
 
 ChannelManager::~ChannelManager() {
@@ -839,7 +839,7 @@ void ChannelManager::SetMediaLogging_w(bool video, int level,
   }
 }
 
-// TODO: For now pass this request through the mediaengine to the
+// TODO(janahan): For now pass this request through the mediaengine to the
 // voice and video engines to do the real work. Once the capturer refactoring
 // is done, we will access the capturer using the ssrc (similar to how the
 // renderer is accessed today) and register with it directly.
@@ -901,13 +901,13 @@ bool ChannelManager::Send(uint32 id, talk_base::MessageData* data) {
   return true;
 }
 
-void ChannelManager::OnVideoCaptureResult(VideoCapturer* capturer,
-                                          CaptureResult result) {
-  // TODO: Check capturer and signal failure only for camera video, not
+void ChannelManager::OnVideoCaptureStateChange(VideoCapturer* capturer,
+                                               CaptureState result) {
+  // TODO(whyuan): Check capturer and signal failure only for camera video, not
   // screencast.
-  capturing_ = result == CR_SUCCESS;
-  main_thread_->Post(this, MSG_CAMERASTARTED,
-                     new talk_base::TypedMessageData<CaptureResult>(result));
+  capturing_ = result == CS_RUNNING;
+  main_thread_->Post(this, MSG_VIDEOCAPTURESTATE,
+                     new talk_base::TypedMessageData<CaptureState>(result));
 }
 
 void ChannelManager::OnMessage(talk_base::Message* message) {
@@ -1015,11 +1015,11 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
       SetMediaLogging_w(video, p->level, p->filter.c_str());
       break;
     }
-    case MSG_CAMERASTARTED: {
-      talk_base::TypedMessageData<CaptureResult>* data =
-          static_cast<talk_base::TypedMessageData<CaptureResult>*>(
+    case MSG_VIDEOCAPTURESTATE: {
+      talk_base::TypedMessageData<CaptureState>* data =
+          static_cast<talk_base::TypedMessageData<CaptureState>*>(
               message->pdata);
-      SignalVideoCaptureResult(data->data());
+      SignalVideoCaptureStateChange(data->data());
       delete data;
       break;
     }

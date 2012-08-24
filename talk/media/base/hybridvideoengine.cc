@@ -198,7 +198,7 @@ bool HybridVideoMediaChannel::SetSend(bool send) {
   // Returns error and don't connect the signal if starting up.
   // Disconnects the signal anyway if shutting down.
   if (ret || !send) {
-    // TODO: Remove this hack that connects the WebRTC channel
+    // TODO(juberti): Remove this hack that connects the WebRTC channel
     // to the capturer.
     if (active_channel_ == channel1_.get()) {
       engine_->OnSendChange1(channel1_.get(), send);
@@ -264,7 +264,7 @@ bool HybridVideoMediaChannel::RequestIntraFrame() {
 }
 
 bool HybridVideoMediaChannel::GetStats(VideoMediaInfo* info) {
-  // TODO: Ensure that returning no stats until SetSendCodecs is OK.
+  // TODO(juberti): Ensure that returning no stats until SetSendCodecs is OK.
   return active_channel_ &&
       active_channel_->GetStats(info);
 }

@@ -226,7 +226,7 @@ size_t WebRtcVideoFrame::CopyToBuffer(uint8* buffer, size_t size) const {
   return needed;
 }
 
-// TODO: Refactor into base class and share with lmi
+// TODO(fbarchard): Refactor into base class and share with lmi
 size_t WebRtcVideoFrame::ConvertToRgbBuffer(uint32 to_fourcc,
                                             uint8* buffer,
                                             size_t size,
@@ -310,7 +310,7 @@ bool WebRtcVideoFrame::Reset(uint32 format, int w, int h, int dw, int dh,
   dh = (dh > 4) ? (dh & ~3) : dh;
 
   // Set up a new buffer.
-  // TODO: Support lazy allocation.
+  // TODO(fbarchard): Support lazy allocation.
   int new_width = dw;
   int new_height = dh;
   if (rotation == 90 || rotation == 270) {  // If rotated swap width, height.

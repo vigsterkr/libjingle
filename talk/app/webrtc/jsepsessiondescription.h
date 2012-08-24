@@ -73,7 +73,7 @@ class JsepSessionDescription : public SessionDescriptionInterface {
       size_t mediasection_index) const;
   virtual bool ToString(std::string* out) const;
 
-  // TODO: Remove this once webrtcsession is updated to jsep01.
+  // TODO(perkj): Remove this once webrtcsession is updated to jsep01.
   static JsepInterface::Action GetAction(const std::string& type);
 
  private:

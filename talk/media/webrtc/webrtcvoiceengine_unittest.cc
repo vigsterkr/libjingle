@@ -489,7 +489,7 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCNandDTMF) {
   std::vector<cricket::AudioCodec> codecs;
   codecs.push_back(kIsacCodec);
   codecs.push_back(kPcmuCodec);
-  // TODO: cn 32000
+  // TODO(juberti): cn 32000
   codecs.push_back(kCn16000Codec);
   codecs.push_back(kCn8000Codec);
   codecs.push_back(kTelephoneEventCodec);

@@ -52,7 +52,7 @@ root_env = Environment(
   DESTINATION_ROOT = '$MAIN_DIR/build',
   CPPPATH = [
     '$OBJ_ROOT',     # generated headers are relative to here
-    '$MAIN_DIR/..',  # TODO: how can we use GOOGLECLIENT instead?
+    '$MAIN_DIR/..',  # TODO(dape): how can we use GOOGLECLIENT instead?
   ],
   CPPDEFINES = [
     'LOGGING=1',
@@ -172,17 +172,16 @@ win_env.Append(
   ],
   CPPDEFINES = [
     '_ATL_CSTRING_EXPLICIT_CONSTRUCTORS',
-    # TODO: encapsulate all string operations that are not based
+    # TODO(dape): encapsulate all string operations that are not based
     # on std::string/std::wstring and make sure we use the safest versions
     # available on all platforms.
     '_CRT_SECURE_NO_WARNINGS',
-    '_SCL_SECURE_NO_WARNINGS',
     '_USE_32BIT_TIME_T',
     '_UNICODE',
     'UNICODE',
     '_HAS_EXCEPTIONS=0',
     'WIN32',
-    # TODO: remove this from logging.cc and enable here instead.
+    # TODO(dape): remove this from logging.cc and enable here instead.
     #'WIN32_LEAN_AND_MEAN',
 
     'WINVER=0x0500',
@@ -204,7 +203,7 @@ win_env.Append(
     '$PLATFORM_SDK_VISTA_6_0_DIR/Lib'
   ],
   LINKFLAGS = [
-    '-manifest', # TODO: Why do we need this?
+    '-manifest', # TODO(thaloun): Why do we need this?
     # Some of the third-party libraries we link in don't have public symbols, so
     # ignore that linker warning.
     '/ignore:4221',
@@ -218,7 +217,7 @@ win_env.Append(
   ]
 )
 
-# TODO: Figure out what this does; found it in
+# TODO(dape): Figure out what this does; found it in
 # omaha/main.scons. This fixes the problem with redefinition
 # of OS_WINDOWS symbol.
 win_env.FilterOut(CPPDEFINES = ['OS_WINDOWS=OS_WINDOWS'])
@@ -263,7 +262,7 @@ win_dbg64_env.FilterOut(CCFLAGS = ['/ZI'])
 win_dbg64_env.Append(
   CCFLAGS = [
     '/Zi',     # enable debugging that is 64 bit compatible.
-    # TODO: fix warnings and remove these disables.
+    # TODO(fbarchard): fix warnings and remove these disables.
     '/wd4244', # disable cast warning
     '/wd4267', # disable cast warning
   ],
@@ -406,20 +405,18 @@ mac_env.Append(
     # This flag makes all members of a static library be included in the
     # final exe - that increases the size of the exe, but without it
     # Obj-C categories aren't properly included in the exe.
-    # TODO: consider only defining for libs that actually have objc.
+    # TODO(thaloun): consider only defining for libs that actually have objc.
     '-ObjC',
     '-arch', 'i386',
     '-dead_strip',
   ],
   FRAMEWORKS = [
     'CoreServices',
-    'Carbon',
     'Security',
     'SystemConfiguration',
     'OpenGL',
     'CoreAudio',
     'Quartz',
-    'QuickTime',
     'Cocoa',
     'QTKit',
   ]
@@ -447,6 +444,10 @@ def mac_common_include_x86_32(env):
     LINKFLAGS = [
       '-m32',
     ],
+    FRAMEWORKS = [
+      'Carbon',
+      'QuickTime',
+    ],
   )
   envs.append(env)
 
@@ -456,11 +457,15 @@ def mac_common_include_x86_64(env):
       '-m64',
       '-fPIC',
     ],
+    CPPDEFINES = [
+      'ARCH_CPU_64_BITS',
+      'CARBON_DEPRECATED',
+    ],
     LINKFLAGS = [
       '-m64',
     ],
-    CPPDEFINES = [
-      'ARCH_CPU_64_BITS',
+    FRAMEWORKS = [
+      'AppKit',
     ],
   )
   env.SetBits('host_platform_64bit')
@@ -747,7 +752,7 @@ gen_linux_hermetic(linux_hermetic_x86_64_env, '64', '64-bit')
 #-------------------------------------------------------------------------------
 # L I N U X -- C R O S S -- B U I L D -- A R M
 
-# TODO: All the following Linux builds are running against a sysroot
+# TODO(noahric): All the following Linux builds are running against a sysroot
 # but improperly using the host machine's pkg-config environment. The ChromeOS
 # ones should probably be using
 # https://cs.corp.google.com/#chrome/src/build/linux/pkg-config-wrapper.

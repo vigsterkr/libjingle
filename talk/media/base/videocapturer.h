@@ -39,16 +39,21 @@
 
 namespace cricket {
 
-class VideoFrame;
-
-// General capturer events.
-enum CaptureEvent {
-  // CE_FAILED = -1
-  // CE_STARTED = 0
-  CE_STOPPED = 1,
-  CE_PAUSED = 2,
-  CE_RESUMED = 3
+// Current state of the capturer.
+// TODO(hellner): CS_NO_DEVICE is an error code not a capture state. Separate
+//                error codes and states.
+enum CaptureState {
+  CS_STOPPED,    // The capturer has been stopped or hasn't started yet.
+  CS_STARTING,   // The capturer is in the process of starting. Note, it may
+                 // still fail to start.
+  CS_RUNNING,    // The capturer has been started successfully and is now
+                 // capturing.
+  CS_PAUSED,     // The capturer has been paused.
+  CS_FAILED,     // The capturer failed to start.
+  CS_NO_DEVICE,  // The capturer has no device and consequently failed to start.
 };
+
+class VideoFrame;
 
 struct CapturedFrame {
   static const uint32 kFrameHeaderSize = 40;  // Size from width to data_size.
@@ -92,7 +97,7 @@ struct CapturedFrame {
 //
 // Programming model:
 //   Create and initialize an object of a subclass of VideoCapturer
-//   SignalStartResult.connect()
+//   SignalStateChange.connect()
 //   SignalFrameCaptured.connect()
 //   Find the capture format for Start() by either calling GetSupportedFormats()
 //   and selecting one of the supported or calling GetBestCaptureFormat().
@@ -144,12 +149,13 @@ class VideoCapturer : public sigslot::has_slots<> {
   //                   GetSupportedFormats() and selecting one of the supported
   //                   or calling GetBestCaptureFormat().
   // Return
-  //   CR_SUCCESS:   if the capturer starts successfully.
-  //   CR_PENDING:   if the capturer is pending to start. SignalStartResult
-  //                 below will signal the result after the pending.
-  //   CR_NO_DEVICE: if the capturer has no device and fails to start.
-  //   CR_FAILURE:   otherwise.
-  virtual CaptureResult Start(const VideoFormat& capture_format) = 0;
+  //   CS_STARTING:  The capturer is trying to start. Success or failure will
+  //                 be notified via the |SignalStateChange| callback.
+  //   CS_RUNNING:   if the capturer is started and capturing.
+  //   CS_PAUSED:    Will never be returned.
+  //   CS_FAILED:    if the capturer failes to start..
+  //   CS_NO_DEVICE: if the capturer has no device and fails to start.
+  virtual CaptureState Start(const VideoFormat& capture_format) = 0;
 
   // Get the current capture format, which is set by the Start() call.
   // Note that the width and height of the captured frames may differ from the
@@ -164,16 +170,16 @@ class VideoCapturer : public sigslot::has_slots<> {
   // Check if the video capturer is running.
   virtual bool IsRunning() = 0;
 
-  // Signal the result of Start() if it returned CR_PENDING.
-  sigslot::signal2<VideoCapturer*, CaptureResult> SignalStartResult;
-  // TODO: rename |SignalFrameCaptured| to something like
+  // Signal all capture state changes that are not a direct result of calling
+  // Start().
+  sigslot::signal2<VideoCapturer*, CaptureState> SignalStateChange;
+  // TODO(hellner): rename |SignalFrameCaptured| to something like
   //                |SignalRawFrame| or |SignalNativeFrame|.
   // Signal the captured frame to downstream.
   sigslot::signal2<VideoCapturer*, const CapturedFrame*> SignalFrameCaptured;
   // Signal the captured frame converted to I420 to downstream.
   sigslot::signal2<VideoCapturer*, const VideoFrame*> SignalVideoFrame;
   // Signals a change in capturer state.
-  sigslot::signal2<VideoCapturer*, CaptureEvent> SignalCaptureEvent;
 
  protected:
   // Callback attached to SignalFrameCaptured where SignalVideoFrames is called.

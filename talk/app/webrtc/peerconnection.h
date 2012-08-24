@@ -70,7 +70,7 @@ class PeerConnection : public PeerConnectionInterface,
   virtual ReadyState ready_state();
   virtual IceState ice_state();
 
-  // TODO: Remove deprecated Jsep functions.
+  // TODO(ronghuawu): Remove deprecated Jsep functions.
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
@@ -127,7 +127,7 @@ class PeerConnection : public PeerConnectionInterface,
   talk_base::scoped_refptr<PeerConnectionFactory> factory_;
   PeerConnectionObserver* observer_;
   ReadyState ready_state_;
-  // TODO: Implement ice_state.
+  // TODO(ronghuawu): Implement ice_state.
   IceState ice_state_;
   talk_base::scoped_refptr<StreamCollection> local_media_streams_;
 

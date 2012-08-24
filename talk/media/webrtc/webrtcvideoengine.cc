@@ -76,7 +76,7 @@ static const int kDefaultNumberOfTemporalLayers = 1;  // 1:1
 
 static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   const char* delim = "\r\n";
-  // TODO: Fix strtok lint warning.
+  // TODO(fbarchard): Fix strtok lint warning.
   for (char* tok = strtok(text, delim); tok; tok = strtok(NULL, delim)) {
     LOG_V(sev) << tok;
   }
@@ -86,6 +86,11 @@ static const bool kRembNotSending = false;
 static const bool kRembSending = true;
 // static const bool kRembNotReceiving = false;  // Not used for now.
 static const bool kRembReceiving = true;
+
+// Extension header for RTP timestamp offset, see RFC 5450 for details:
+// http://tools.ietf.org/html/rfc5450
+static const char kRtpTimestampOffsetHeaderExtension[] =
+    "urn:ietf:params:rtp-hdrext:toffset";
 
 struct FlushBlackFrameData : public talk_base::MessageData {
   FlushBlackFrameData(uint32 s, int64 t) : ssrc(s), timestamp(t) {
@@ -97,17 +102,20 @@ struct FlushBlackFrameData : public talk_base::MessageData {
 class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
  public:
   explicit WebRtcRenderAdapter(VideoRenderer* renderer)
-      : renderer_(renderer), width_(0), height_(0) {
+      : renderer_(renderer), width_(0), height_(0), watermark_enabled_(false) {
   }
   virtual ~WebRtcRenderAdapter() {
   }
-
+  void set_watermark_enabled(bool enable) {
+    talk_base::CritScope cs(&crit_);
+    watermark_enabled_ = enable;
+  }
   void SetRenderer(VideoRenderer* renderer) {
     talk_base::CritScope cs(&crit_);
     renderer_ = renderer;
     // FrameSizeChange may have already been called when renderer was not set.
     // If so we should call SetSize here.
-    // TODO: Add unit test for this case. Didn't do it now
+    // TODO(ronghuawu): Add unit test for this case. Didn't do it now
     // because the WebRtcRenderAdapter is currently hiding in cc file. No
     // good way to get access to it from the unit test.
     if (width_ > 0 && height_ > 0 && renderer_ != NULL) {
@@ -190,6 +198,7 @@ class WebRtcRenderAdapter : public webrtc::ExternalRenderer {
   unsigned int width_;
   unsigned int height_;
   talk_base::RateTracker frame_rate_tracker_;
+  bool watermark_enabled_;
 };
 
 class WebRtcDecoderObserver : public webrtc::ViEDecoderObserver {
@@ -396,7 +405,7 @@ class WebRtcVideoChannelSendInfo  {
       reference_timestamp_ = frame->GetTimeStamp();
       ASSERT(!timestamp_delta_);
     }
-    // TODO: compensate for wrapparound.
+    // TODO(hellner): compensate for wrapparound.
     if (capturer_updated_) {
       capturer_updated_ = false;
       // A new capturer has been added. The new and old capturer will most
@@ -410,7 +419,7 @@ class WebRtcVideoChannelSendInfo  {
     // It's better to let webrtc estimate the timestamp than trying to do it
     // here since webrtc knows better how it wants the timestamp to be
     // estimated.
-    // TODO: revisit setting *clocks to 0 when BWE is not dependent on
+    // TODO(hellner): revisit setting *clocks to 0 when BWE is not dependent on
     // RTP timestamp.
     *clocks = 0;
     // Calculate next expected timestamp in case next frame is provided by a new
@@ -726,20 +735,20 @@ bool WebRtcVideoEngine::SetLocalRenderer(VideoRenderer* renderer) {
 bool WebRtcVideoEngine::SetCapture(bool capture) {
   bool old_capture = capture_started_;
   capture_started_ = capture;
-  CaptureResult res = UpdateCapturingState();
-  if (res != CR_SUCCESS && res != CR_PENDING) {
+  CaptureState result = UpdateCapturingState();
+  if (result == CS_FAILED || result == CS_NO_DEVICE) {
     capture_started_ = old_capture;
     return false;
   }
   return true;
 }
 
-CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
+CaptureState WebRtcVideoEngine::UpdateCapturingState() {
   bool capture = capture_started_ && frame_listeners_;
-  CaptureResult result = CR_SUCCESS;
+  CaptureState result = CS_RUNNING;
   if (!IsCapturing() && capture) {  // Start capturing.
     if (video_capturer_ == NULL) {
-      return CR_NO_DEVICE;
+      return CS_NO_DEVICE;
     }
 
     VideoFormat capture_format;
@@ -760,17 +769,18 @@ CaptureResult WebRtcVideoEngine::UpdateCapturingState() {
                           << format.framerate();
         }
       }
-      return CR_FAILURE;
+      return CS_FAILED;
     }
 
     // Start the video capturer.
     result = video_capturer_->Start(capture_format);
-    if (CR_SUCCESS != result && CR_PENDING != result) {
+    if (CS_RUNNING != result && CS_STARTING != result) {
       LOG(LS_ERROR) << "Failed to start the video capturer";
       return result;
     }
   } else if (IsCapturing() && !capture) {  // Stop capturing.
     video_capturer_->Stop();
+    result = CS_STOPPED;
   }
 
   return result;
@@ -799,7 +809,7 @@ void WebRtcVideoEngine::OnFrameCaptured(VideoCapturer* capturer,
     return;
   }
 
-  // TODO: This is the trigger point for Tx video processing.
+  // TODO(janahan): This is the trigger point for Tx video processing.
   // Once the capturer refactoring is done, we will move this into the
   // capturer...it's not there right now because that image is in not in the
   // I420 color space.
@@ -1085,14 +1095,14 @@ bool WebRtcVideoEngine::SetCapturer(VideoCapturer* capturer) {
     return true;
   }
   // Hook up signals and install the supplied capturer.
-  SignalCaptureResult.repeat(capturer->SignalStartResult);
+  SignalCaptureStateChange.repeat(capturer->SignalStateChange);
   capturer->SignalFrameCaptured.connect(this,
       &WebRtcVideoEngine::OnFrameCaptured);
   ClearCapturer();
   video_capturer_ = capturer;
   // Possibly restart the capturer if it is supposed to be running.
-  CaptureResult result = UpdateCapturingState();
-  if (result != CR_SUCCESS && result != CR_PENDING) {
+  CaptureState result = UpdateCapturingState();
+  if (result == CS_FAILED || result == CS_NO_DEVICE) {
     LOG(LS_WARNING) << "Camera failed to restart";
     return false;
   }
@@ -1508,7 +1518,7 @@ bool WebRtcVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
 }
 
 bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
-  // TODO Remove this once BWE works properly across different send
+  // TODO(zhurunz) Remove this once BWE works properly across different send
   // and receive channels.
   // Reuse default channel for recv stream in 1:1 call.
   if (!InConferenceMode() && first_receive_ssrc_ == 0) {
@@ -1530,7 +1540,7 @@ bool WebRtcVideoMediaChannel::AddRecvStream(const StreamParams& sp) {
     return false;
   }
 
-  // TODO: Implement recv media from multiple SSRCs per stream.
+  // TODO(perkj): Implement recv media from multiple SSRCs per stream.
   if (sp.ssrcs.size() != 1) {
     LOG(LS_ERROR) << "WebRtcVideoMediaChannel supports one receiving SSRC per"
                   << " stream";
@@ -1576,7 +1586,7 @@ bool WebRtcVideoMediaChannel::RemoveRecvStream(uint32 ssrc) {
   RecvChannelMap::iterator it = recv_channels_.find(ssrc);
 
   if (it == recv_channels_.end()) {
-    // TODO: Remove this once BWE works properly across different send
+    // TODO(perkj): Remove this once BWE works properly across different send
     // and receive channels.
     // The default channel is reused for recv stream in 1:1 call.
     if (first_receive_ssrc_ == ssrc) {
@@ -1838,7 +1848,7 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
   return true;
 }
 
-// TODO: Remove kMaxCapturePixels when encoder has no limit.
+// TODO(fbarchard): Remove kMaxCapturePixels when encoder has no limit.
 // Limit as of 7/16/12 is 21000 macroblocks (16 x 16 each). b/6726828
 void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
                                               const CapturedFrame* frame) {
@@ -1894,7 +1904,7 @@ bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
 bool WebRtcVideoMediaChannel::SetRenderer(uint32 ssrc,
                                           VideoRenderer* renderer) {
   if (recv_channels_.find(ssrc) == recv_channels_.end()) {
-    // TODO: Remove this once BWE works properly across different send
+    // TODO(perkj): Remove this once BWE works properly across different send
     // and receive channels.
     // The default channel is reused for recv stream in 1:1 call.
     if (first_receive_ssrc_ == ssrc &&
@@ -1903,12 +1913,18 @@ bool WebRtcVideoMediaChannel::SetRenderer(uint32 ssrc,
                    << " reuse default channel #"
                    << vie_channel_;
       recv_channels_[0]->SetRenderer(renderer);
+      bool watermark_enabled = (0 != (options_ & OPT_VIDEO_WATERMARK));
+      recv_channels_[0]->render_adapter()->set_watermark_enabled(
+          watermark_enabled);
       return true;
     }
     return false;
   }
 
   recv_channels_[ssrc]->SetRenderer(renderer);
+  bool watermark_enabled = (0 != (options_ & OPT_VIDEO_WATERMARK));
+  recv_channels_[ssrc]->render_adapter()->set_watermark_enabled(
+      watermark_enabled);
   return true;
 }
 
@@ -2038,7 +2054,7 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   }
 
   // Build BandwidthEstimationInfo.
-  // TODO: Add real unittest for this.
+  // TODO(zhurunz): Add real unittest for this.
   BandwidthEstimationInfo bwe;
   unsigned int total_bitrate_sent;
   unsigned int video_bitrate_sent;
@@ -2205,6 +2221,62 @@ bool WebRtcVideoMediaChannel::MuteStream(uint32 ssrc, bool on) {
   return true;
 }
 
+bool WebRtcVideoMediaChannel::SetRecvRtpHeaderExtensions(
+    const std::vector<RtpHeaderExtension>& extensions) {
+  // Enable RTP timestamp offset extension if requested.
+  receive_extensions_ = extensions;
+
+  bool enable = false;
+  int id = 0;
+  const RtpHeaderExtension* offset_extension = FindHeaderExtension(
+      extensions, kRtpTimestampOffsetHeaderExtension);
+  if (offset_extension) {
+    enable = true;
+    id = offset_extension->id;
+  }
+
+  // Loop through all receive channels and enable/disable the extension.
+  for (RecvChannelMap::iterator channel_it = recv_channels_.begin();
+       channel_it != recv_channels_.end(); ++channel_it) {
+    WebRtcVideoChannelRecvInfo* recv_channel = channel_it->second;
+    int channel_id = recv_channel->channel_id();
+    if (engine_->vie()->rtp()->SetReceiveTimestampOffsetStatus(channel_id,
+                                                               enable,
+                                                               id) != 0) {
+      LOG_RTCERR3(SetReceiveTimestampOffsetStatus, channel_id, true, id);
+      return false;
+    }
+  }
+  return true;
+}
+
+bool WebRtcVideoMediaChannel::SetSendRtpHeaderExtensions(
+    const std::vector<RtpHeaderExtension>& extensions) {
+  // Enable RTP timestamp offset extension if requested.
+  send_extensions_ = extensions;
+
+  bool enable = false;
+  int id = 0;
+  const RtpHeaderExtension* offset_extension = FindHeaderExtension(
+      extensions, kRtpTimestampOffsetHeaderExtension);
+  if (offset_extension) {
+    enable = true;
+    id = offset_extension->id;
+  }
+
+  // Loop through all send channels and enable the extension.
+  for (SendChannelMap::iterator channel_it = send_channels_.begin();
+       channel_it != send_channels_.end(); ++channel_it) {
+    WebRtcVideoChannelSendInfo* send_channel = channel_it->second;
+    int channel_id = send_channel->channel_id();
+    if (engine_->vie()->rtp()->SetSendTimestampOffsetStatus(channel_id, enable,
+                                                            id) != 0) {
+      LOG_RTCERR3(SetSendTimestampOffsetStatus, channel_id, enable, id);
+      return false;
+    }
+  }
+  return true;
+}
 
 bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   LOG(LS_INFO) << "WebRtcVideoMediaChanne::SetSendBandwidth";
@@ -2281,6 +2353,11 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
     }
     LogSendCodecChange("SetOptions()");
   }
+  bool watermark_enabled = (0 != (options_ & OPT_VIDEO_WATERMARK));
+  for (RecvChannelMap::iterator it = recv_channels_.begin();
+       it != recv_channels_.end(); ++it) {
+    it->second->render_adapter()->set_watermark_enabled(watermark_enabled);
+  }
   return true;
 }
 
@@ -2316,12 +2393,12 @@ bool WebRtcVideoMediaChannel::GetRenderer(uint32 ssrc,
   return true;
 }
 
-// TODO: Add unittests to test this function.
+// TODO(zhurunz): Add unittests to test this function.
 bool WebRtcVideoMediaChannel::SendFrame(uint32 ssrc, const VideoFrame* frame) {
   // If the ssrc is 0 it signifies that the frame is generated by the
   // WebRtcVideoEngine. Send this frame on all streams who do not have their
   // own capturer.
-  // TODO: move the capturer from WebRtcVideoEngine to
+  // TODO(hellner): move the capturer from WebRtcVideoEngine to
   // WebRtcVideoMediaChannel. This is not done in the current cl to prevent this
   // from becoming very large (opening up this functionality would require
   // changes to WebRtcVideoEngine, LmiVideoEngine and LmiVideoMediaChannel).
@@ -2377,7 +2454,7 @@ bool WebRtcVideoMediaChannel::SendFrame(
   }
 
   webrtc::ViEVideoFrameI420 frame_i420;
-  // TODO: Update the webrtc::ViEVideoFrameI420
+  // TODO(ronghuawu): Update the webrtc::ViEVideoFrameI420
   // to use const unsigned char*
   frame_i420.y_plane = const_cast<unsigned char*>(frame_out->GetYPlane());
   frame_i420.u_plane = const_cast<unsigned char*>(frame_out->GetUPlane());
@@ -2492,7 +2569,7 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
     return false;
   }
   // Connect the voice channel, if there is one.
-  // TODO: The A/V is synched by the receiving channel. So we need to
+  // TODO(perkj): The A/V is synched by the receiving channel. So we need to
   // know the SSRC of the remote audio channel in order to fetch the correct
   // webrtc VoiceEngine channel. For now- only sync the default channel used
   // in 1-1 calls.
@@ -2524,6 +2601,17 @@ bool WebRtcVideoMediaChannel::ConfigureReceiving(int channel_id,
                                            kRembReceiving) != 0) {
     LOG_RTCERR3(SetRembStatus, channel_id, kRembNotSending, kRembReceiving);
     return false;
+  }
+
+  const RtpHeaderExtension* offset_extension = FindHeaderExtension(
+      receive_extensions_, kRtpTimestampOffsetHeaderExtension);
+  if (offset_extension) {
+    if (engine_->vie()->rtp()->SetReceiveTimestampOffsetStatus(
+        channel_id, true, offset_extension->id) != 0) {
+      LOG_RTCERR3(SetReceiveTimestampOffsetStatus, channel_id, true,
+                  offset_extension->id);
+      return false;
+    }
   }
 
   if (remote_ssrc_key != 0) {
@@ -2606,6 +2694,17 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
       channel_id, *send_channel->encoder_observer()) != 0) {
     LOG_RTCERR1(RegisterEncoderObserver, send_channel->encoder_observer());
     return false;
+  }
+
+  const RtpHeaderExtension* offset_extension = FindHeaderExtension(
+      send_extensions_, kRtpTimestampOffsetHeaderExtension);
+  if (offset_extension) {
+      if (engine_->vie()->rtp()->SetSendTimestampOffsetStatus(
+          channel_id, true, offset_extension->id) != 0) {
+      LOG_RTCERR3(SetSendTimestampOffsetStatus, channel_id, true,
+                  offset_extension->id);
+      return false;
+    }
   }
 
   if (!SetNackFec(channel_id, send_red_type_, send_fec_type_)) {
@@ -2835,13 +2934,27 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
   const int cur_width = vie_codec.width;
   const int cur_height = vie_codec.height;
 
-  // Only reset send codec when there is a size change.
-  if (target_width != cur_width || target_height != cur_height) {
+  // Only reset send codec when there is a size change. Additionally,
+  // automatic resize needs to be turned of when screencasting and on when
+  // not screencasting.
+  const bool screen_share = owns_capturer;
+  // Don't allow automatic resizing for screencasting.
+  bool automatic_resize = !screen_share;
+  // Disable denoising for screencasting.
+  bool denoising = !screen_share &&
+      (0 != (options_ & OPT_VIDEO_NOISE_REDUCTION));
+  bool reset_send_codec =
+      target_width != cur_width || target_height != cur_height ||
+      automatic_resize != vie_codec.codecSpecific.VP8.automaticResizeOn;
+
+  if (reset_send_codec) {
     // Set the new codec on vie.
     vie_codec.width = target_width;
     vie_codec.height = target_height;
     vie_codec.maxFramerate = target_codec.maxFramerate;
     vie_codec.startBitrate = target_codec.startBitrate;
+    vie_codec.codecSpecific.VP8.automaticResizeOn = automatic_resize;
+    vie_codec.codecSpecific.VP8.denoisingOn = denoising;
 
     // Make sure startBitrate is less or equal to maxBitrate;
     vie_codec.startBitrate = talk_base::_min(vie_codec.startBitrate,

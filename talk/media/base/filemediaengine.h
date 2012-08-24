@@ -47,7 +47,7 @@ namespace cricket {
 // stream and simulates the decoder and the renderer via an output RTP dump
 // stream. Depending on the parameters of the constructor, FileMediaEngine can
 // act as file voice engine, file video engine, or both. Currently, we use
-// only the RTP dump packets. TODO: Enable RTCP packets.
+// only the RTP dump packets. TODO(whyuan): Enable RTCP packets.
 class FileMediaEngine : public MediaEngineInterface {
  public:
   FileMediaEngine() {}
@@ -108,7 +108,7 @@ class FileMediaEngine : public MediaEngineInterface {
   virtual int GetInputLevel() { return 0; }
   virtual bool SetLocalMonitor(bool enable) { return true; }
   virtual bool SetLocalRenderer(VideoRenderer* renderer) { return true; }
-  // TODO: control channel send?
+  // TODO(whyuan): control channel send?
   virtual bool SetVideoCapture(bool capture) { return true; }
   virtual const std::vector<AudioCodec>& audio_codecs() {
     return voice_codecs_;
@@ -176,7 +176,8 @@ class FileVoiceChannel : public VoiceMediaChannel {
   virtual int GetOutputLevel() { return 0; }
   virtual int GetTimeSinceLastTyping() { return -1; }
   virtual void SetTypingDetectionParameters(int time_window,
-    int cost_per_typing, int reporting_threshold, int penalty_decay) {}
+    int cost_per_typing, int reporting_threshold, int penalty_decay,
+    int type_event_delay) {}
 
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right) {
     return false;

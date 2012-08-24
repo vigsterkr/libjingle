@@ -220,7 +220,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecs) {
   VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
   EXPECT_TRUE(vie_.GetHybridNackFecStatus(channel_num));
   EXPECT_FALSE(vie_.GetNackStatus(channel_num));
-  // TODO: Check RTCP, PLI, TMMBR.
+  // TODO(juberti): Check RTCP, PLI, TMMBR.
 }
 
 
@@ -404,6 +404,47 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(vie_.GetRembStatusSend(channel_num));
   EXPECT_TRUE(vie_.GetRembStatusReceive(new_channel_num));
   EXPECT_FALSE(vie_.GetRembStatusSend(new_channel_num));
+}
+
+// Test support for RTP timestamp offset header extension.
+TEST_F(WebRtcVideoEngineTestFake, RtpTimestampOffsetHeaderExtensions) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = vie_.GetLastChannel();
+  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+
+  // Verify extensions are off by default.
+  EXPECT_EQ(0, vie_.GetSendRtpTimestampOffsetExtensionId(channel_num));
+  EXPECT_EQ(0, vie_.GetReceiveRtpTimestampOffsetExtensionId(channel_num));
+
+  // Enable RTP timestamp extension.
+  const int id = 14;
+  std::vector<cricket::RtpHeaderExtension> extensions;
+  extensions.push_back(cricket::RtpHeaderExtension(
+      "urn:ietf:params:rtp-hdrext:toffset", id));
+
+  // Verify the send extension id.
+  EXPECT_TRUE(channel_->SetSendRtpHeaderExtensions(extensions));
+  EXPECT_EQ(id, vie_.GetSendRtpTimestampOffsetExtensionId(channel_num));
+
+  // Remove the extension id.
+  std::vector<cricket::RtpHeaderExtension> emtpy_extensions;
+  EXPECT_TRUE(channel_->SetSendRtpHeaderExtensions(emtpy_extensions));
+  EXPECT_EQ(0, vie_.GetSendRtpTimestampOffsetExtensionId(channel_num));
+
+  // Verify receive extension id.
+  EXPECT_TRUE(channel_->SetRecvRtpHeaderExtensions(extensions));
+  EXPECT_EQ(id, vie_.GetReceiveRtpTimestampOffsetExtensionId(channel_num));
+
+  // Add a new receive stream and verify the extension is set.
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
+  int new_channel_num = vie_.GetLastChannel();
+  EXPECT_NE(channel_num, new_channel_num);
+  EXPECT_EQ(id, vie_.GetReceiveRtpTimestampOffsetExtensionId(new_channel_num));
+
+  // Remove the extension id.
+  EXPECT_TRUE(channel_->SetRecvRtpHeaderExtensions(emtpy_extensions));
+  EXPECT_EQ(0, vie_.GetReceiveRtpTimestampOffsetExtensionId(channel_num));
+  EXPECT_EQ(0, vie_.GetReceiveRtpTimestampOffsetExtensionId(new_channel_num));
 }
 
 // Test that AddRecvStream doesn't create new channel for 1:1 call.
@@ -791,7 +832,7 @@ TEST_POST_VIDEOENGINE_INIT(WebRtcVideoEngineTest, ConstrainNewCodec)
 TEST_PRE_VIDEOENGINE_INIT(WebRtcVideoEngineTest, ConstrainRunningCodec)
 TEST_POST_VIDEOENGINE_INIT(WebRtcVideoEngineTest, ConstrainRunningCodec)
 
-// TODO: Figure out why ViE is munging the COM refcount.
+// TODO(juberti): Figure out why ViE is munging the COM refcount.
 #ifdef WIN32
 TEST_F(WebRtcVideoEngineTest, DISABLED_CheckCoInitialize) {
   Base::CheckCoInitialize();
@@ -884,12 +925,12 @@ TEST_F(WebRtcVideoMediaChannelTest, SendManyResizeOnce) {
   SendManyResizeOnce();
 }
 
-// TODO: Fix this test to tolerate missing stats.
+// TODO(juberti): Fix this test to tolerate missing stats.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStats) {
   Base::GetStats();
 }
 
-// TODO: Fix this test to tolerate missing stats.
+// TODO(juberti): Fix this test to tolerate missing stats.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_GetStatsMultipleRecvStreams) {
   Base::GetStatsMultipleRecvStreams();
 }
@@ -1012,16 +1053,16 @@ TEST_F(WebRtcVideoMediaChannelTest, MultipleSendStreams) {
   Base::MultipleSendStreams();
 }
 
-// TODO: Restore this test once we support sending 0 fps.
+// TODO(juberti): Restore this test once we support sending 0 fps.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptDropAllFrames) {
   Base::AdaptDropAllFrames();
 }
-// TODO: Understand why we get decode errors on this test.
+// TODO(juberti): Understand why we get decode errors on this test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
   Base::AdaptFramerate();
 }
 
-// TODO: Fix the flakey test.
+// TODO(zhurunz): Fix the flakey test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
   Base::SetSendStreamFormat();
 }

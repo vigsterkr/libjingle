@@ -127,7 +127,7 @@ class WebRtcVoiceEngine
 
   SoundclipMedia* CreateSoundclip();
 
-  // TODO: Rename to SetOptions and replace the old
+  // TODO(pthatcher): Rename to SetOptions and replace the old
   // flags-based SetOptions.
   bool SetAudioOptions(const AudioOptions& options);
   // Eventually, we will replace them with AudioOptions.
@@ -288,6 +288,14 @@ class WebRtcVoiceEngine
   AudioOptions options_;
   AudioOptions option_overrides_;
 
+  // When the media processor registers with the engine, the ssrc is cached
+  // here so that a look up need not be made when the callback is invoked.
+  // This is necessary because the lookup results in mux_channels_cs lock being
+  // held and if a remote participant leaves the hangout at the same time
+  // we hit a deadlock.
+  uint32 tx_processor_ssrc_;
+  uint32 rx_processor_ssrc_;
+
   talk_base::CriticalSection signal_media_critical_;
 };
 
@@ -311,7 +319,7 @@ class WebRtcMediaChannel : public T, public webrtc::Transport {
 
     // We need to store the sequence number to be able to pick up
     // the same sequence when the device is restarted.
-    // TODO: Remove when WebRtc has fixed the problem.
+    // TODO(oja): Remove when WebRtc has fixed the problem.
     int seq_num;
     if (!GetRtpSeqNum(data, len, &seq_num)) {
       return -1;
@@ -375,7 +383,8 @@ class WebRtcVoiceMediaChannel
   virtual int GetOutputLevel();
   virtual int GetTimeSinceLastTyping();
   virtual void SetTypingDetectionParameters(int time_window,
-    int cost_per_typing, int reporting_threshold, int penalty_decay);
+      int cost_per_typing, int reporting_threshold, int penalty_decay,
+      int type_event_delay);
   virtual bool SetOutputScaling(uint32 ssrc, double left, double right);
   virtual bool GetOutputScaling(uint32 ssrc, double* left, double* right);
 

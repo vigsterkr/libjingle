@@ -91,7 +91,8 @@ public:
     bool IsValid() { return valid_; }
 
     // Attempts to send a ping with the given parameters.
-    enum PingResult { PING_FAIL, PING_TOO_LARGE, PING_TIMEOUT, PING_SUCCESS };
+    enum PingResult { PING_FAIL, PING_INVALID_PARAMS,
+                      PING_TOO_LARGE, PING_TIMEOUT, PING_SUCCESS };
     PingResult Ping(
         IPAddress ip, uint32 data_size, uint32 timeout_millis, uint8 ttl,
         bool allow_fragments);

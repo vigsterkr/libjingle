@@ -87,20 +87,20 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     talk_base::scoped_array<char> data(new char[size]);
     memset(data.get(), 0, size);
     frame.data = data.get();
-    // TODO: SignalFrameCaptured carry returned value to be able to
+    // TODO(zhurunz): SignalFrameCaptured carry returned value to be able to
     // capture results from downstream.
     SignalFrameCaptured(this, &frame);
     return true;
   }
   sigslot::signal1<FakeVideoCapturer*> SignalDestroyed;
 
-  virtual cricket::CaptureResult Start(const cricket::VideoFormat& format) {
+  virtual cricket::CaptureState Start(const cricket::VideoFormat& format) {
     cricket::VideoFormat supported;
     if (GetBestCaptureFormat(format, &supported)) {
       SetCaptureFormat(&supported);
     }
     running_ = true;
-    return cricket::CR_SUCCESS;
+    return cricket::CS_RUNNING;
   }
   virtual void Stop() {
     running_ = false;

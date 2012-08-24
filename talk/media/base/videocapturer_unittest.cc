@@ -35,7 +35,7 @@ class VideoCapturerTest
 };
 
 TEST_F(VideoCapturerTest, VideoFrame) {
-  EXPECT_EQ(cricket::CR_SUCCESS, capturer_.Start(cricket::VideoFormat(
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_.Start(cricket::VideoFormat(
       640,
       480,
       cricket::VideoFormat::FpsToInterval(30),

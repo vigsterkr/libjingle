@@ -29,9 +29,7 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/systeminfo.h"
 
-#ifdef CPU_X86
-// CPUID-based tests only work on X86
-// Tests CPUID instruction for Vendor identification.
+#if defined(CPU_X86) || defined(CPU_ARM)
 TEST(SystemInfoTest, CpuVendorNonEmpty) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuVendor: " << info.GetCpuVendor();
@@ -40,12 +38,35 @@ TEST(SystemInfoTest, CpuVendorNonEmpty) {
 
 // Tests Vendor identification is Intel or AMD.
 // See Also http://en.wikipedia.org/wiki/CPUID
-TEST(SystemInfoTest, CpuVendorIntelAMD) {
+TEST(SystemInfoTest, CpuVendorIntelAMDARM) {
   talk_base::SystemInfo info;
+#if defined(CPU_X86)
   EXPECT_TRUE(talk_base::string_match(info.GetCpuVendor().c_str(),
                                       "GenuineIntel") ||
               talk_base::string_match(info.GetCpuVendor().c_str(),
                                       "AuthenticAMD"));
+#elif defined(CPU_ARM)
+  EXPECT_TRUE(talk_base::string_match(info.GetCpuVendor().c_str(), "ARM"));
+#endif
+}
+#endif  // defined(CPU_X86) || defined(CPU_ARM)
+
+// Tests CpuArchitecture matches expectations.
+TEST(SystemInfoTest, GetCpuArchitecture) {
+  talk_base::SystemInfo info;
+  LOG(LS_INFO) << "CpuArchitecture: " << info.GetCpuArchitecture();
+  talk_base::SystemInfo::Architecture architecture = info.GetCpuArchitecture();
+#if defined(CPU_X86) || defined(CPU_ARM)
+  if (sizeof(intptr_t) == 8) {
+    EXPECT_EQ(talk_base::SystemInfo::SI_ARCH_X64, architecture);
+  } else if (sizeof(intptr_t) == 4) {
+#if defined(CPU_ARM)
+    EXPECT_EQ(talk_base::SystemInfo::SI_ARCH_ARM, architecture);
+#else
+    EXPECT_EQ(talk_base::SystemInfo::SI_ARCH_X86, architecture);
+#endif
+  }
+#endif
 }
 
 // Tests Cpu Cache Size
@@ -55,7 +76,6 @@ TEST(SystemInfoTest, CpuCacheSize) {
   EXPECT_GE(info.GetCpuCacheSize(), 8192);  // 8 KB min cache
   EXPECT_LE(info.GetCpuCacheSize(), 1024 * 1024 * 1024);  // 1 GB max cache
 }
-#endif // CPU_X86
 
 // Tests MachineModel is set.  On Mac test machine model is known.
 TEST(SystemInfoTest, MachineModelKnown) {
@@ -130,7 +150,6 @@ TEST(SystemInfoTest, CurCpus) {
 }
 
 #ifdef CPU_X86
-
 // CPU family/model/steeping is only available on X86
 
 // Tests Intel CPU Family identification.
@@ -153,8 +172,28 @@ TEST(SystemInfoTest, CpuSteppingNonZero) {
   LOG(LS_INFO) << "CpuStepping: " << info.GetCpuStepping();
   EXPECT_GT(info.GetCpuStepping(), 0);
 }
+#else  // CPU_X86
+// Tests Intel CPU Family identification.
+TEST(SystemInfoTest, CpuFamilyNonZero) {
+  talk_base::SystemInfo info;
+  LOG(LS_INFO) << "CpuFamily: " << info.GetCpuFamily();
+  EXPECT_EQ(0, info.GetCpuFamily());
+}
 
-#endif // CPU_X86
+// Tests Intel CPU Model identification.
+TEST(SystemInfoTest, CpuModelNonZero) {
+  talk_base::SystemInfo info;
+  LOG(LS_INFO) << "CpuModel: " << info.GetCpuModel();
+  EXPECT_EQ(0, info.GetCpuModel());
+}
+
+// Tests Intel CPU Stepping identification.
+TEST(SystemInfoTest, CpuSteppingNonZero) {
+  talk_base::SystemInfo info;
+  LOG(LS_INFO) << "CpuStepping: " << info.GetCpuStepping();
+  EXPECT_EQ(0, info.GetCpuStepping());
+}
+#endif  // CPU_X86
 
 #if WIN32 && !defined(EXCLUDE_D3D9)
 TEST(SystemInfoTest, GpuInfo) {

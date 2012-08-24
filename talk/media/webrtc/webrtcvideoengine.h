@@ -77,7 +77,7 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   WebRtcVideoEngine();
   // For testing purposes. Allows the WebRtcVoiceEngine and
   // ViEWrapper to be mocks.
-  // TODO: Remove the 2-arg ctor once fake tracing is implemented.
+  // TODO(juberti): Remove the 2-arg ctor once fake tracing is implemented.
   WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
                     ViEWrapper* vie_wrapper);
   WebRtcVideoEngine(WebRtcVoiceEngine* voice_engine,
@@ -104,8 +104,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   VideoCapturer* GetVideoCapturer() const;
   bool SetLocalRenderer(VideoRenderer* renderer);
   bool SetCapture(bool capture);
-  sigslot::repeater2<VideoCapturer*, CaptureResult> SignalCaptureResult;
-  CaptureResult UpdateCapturingState();
+  sigslot::repeater2<VideoCapturer*, CaptureState> SignalCaptureStateChange;
+  CaptureState UpdateCapturingState();
   bool IsCapturing() const;
   void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
 
@@ -232,13 +232,9 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
   virtual bool MuteStream(uint32 ssrc, bool on);
   virtual bool SetRecvRtpHeaderExtensions(
-      const std::vector<RtpHeaderExtension>& extensions) {
-    return false;
-  }
+      const std::vector<RtpHeaderExtension>& extensions);
   virtual bool SetSendRtpHeaderExtensions(
-      const std::vector<RtpHeaderExtension>& extensions) {
-    return false;
-  }
+      const std::vector<RtpHeaderExtension>& extensions);
   virtual bool SetSendBandwidth(bool autobw, int bps);
   virtual bool SetOptions(int options);
   virtual int GetOptions() const { return options_; }
@@ -365,6 +361,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   std::vector<webrtc::VideoCodec> receive_codecs_;
   bool render_started_;
   uint32 first_receive_ssrc_;
+  std::vector<RtpHeaderExtension> receive_extensions_;
 
   // Global send side state.
   SendChannelMap send_channels_;
@@ -375,6 +372,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   int send_start_bitrate_;
   int send_max_bitrate_;
   bool sending_;
+  std::vector<RtpHeaderExtension> send_extensions_;
 };
 
 }  // namespace cricket

@@ -228,6 +228,11 @@ WinPing::PingResult WinPing::Ping(
     IPAddress ip, uint32 data_size, uint32 timeout, uint8 ttl,
     bool allow_fragments) {
 
+  if (data_size == 0 || timeout == 0 || ttl == 0) {
+    LOG(LERROR) << "IcmpSendEcho: data_size/timeout/ttl is 0.";
+    return PING_INVALID_PARAMS;
+  }
+
   assert(IsValid());
 
   IP_OPTION_INFORMATION ipopt;

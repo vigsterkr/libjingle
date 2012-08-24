@@ -46,6 +46,7 @@ struct TypingMonitorOptions {
   int penalty_decay;
   int reporting_threshold;
   int time_window;
+  int type_event_delay;
 };
 
 /**

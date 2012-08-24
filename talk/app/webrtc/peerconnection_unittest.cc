@@ -778,7 +778,7 @@ class P2PTestConductor : public testing::Test {
     int kEndAudioFrameCount = 10;
     int kEndVideoFrameCount = 10;
     const int kMaxWaitForFramesMs = 5000;
-    // TODO: Add test to covert the case of sendonly and recvonly.
+    // TODO(ronghuawu): Add test to covert the case of sendonly and recvonly.
     if (!hints0.has_audio() || !hints1.has_audio()) {
       kEndAudioFrameCount = -1;
     }
@@ -812,7 +812,7 @@ TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {
 
 // This test sets up a Jsep call between two parties, and the callee only
 // has video.
-// TODO: Add these tests for Jsep01 once the
+// TODO(ronghuawu): Add these tests for Jsep01 once the
 // MediaConstraintsInterface is ready.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerVideo) {
   LocalP2PTest(MediaHints(), MediaHints(false, true));

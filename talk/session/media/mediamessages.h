@@ -142,7 +142,7 @@ bool WriteJingleViewRequest(const std::string& content_name,
                             XmlElements* elems,
                             WriteError* error);
 
-// TODO: Get rid of legacy source notify and replace with
+// TODO(pthatcher): Get rid of legacy source notify and replace with
 // description-info as soon as reflector is capable of sending it.
 bool IsSourcesNotify(const buzz::XmlElement* action_elem);
 

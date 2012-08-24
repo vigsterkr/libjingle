@@ -33,11 +33,6 @@
 #ifndef TALK_BASE_MACCOCOATHREADHELPER_H__
 #define TALK_BASE_MACCOCOATHREADHELPER_H__
 
-#if !defined(USE_COCOA_THREADING) || (!defined(OSX) && !defined(IOS))
-#error You can only include this file on OSX or IOS, and must also define
-#error USE_COCOA_THREADING.
-#endif
-
 namespace talk_base {
 
 // Cocoa must be "put into multithreading mode" before Cocoa functionality can

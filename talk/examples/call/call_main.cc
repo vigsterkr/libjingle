@@ -35,7 +35,7 @@
 #include "talk/base/flags.h"
 #include "talk/base/logging.h"
 #ifdef OSX
-#include "talk/base/macsocketserver.h"
+#include "talk/base/maccocoasocketserver.h"
 #endif
 #include "talk/base/pathutils.h"
 #include "talk/base/ssladapter.h"
@@ -55,8 +55,6 @@
 #include "talk/session/media/srtpfilter.h"
 #include "talk/xmpp/xmppclientsettings.h"
 
-// This is a test comment used only for testing SVN merging.  It
-// should be remove momentarily.
 class DebugLog : public sigslot::has_slots<> {
  public:
   DebugLog() :
@@ -394,7 +392,7 @@ int main(int argc, char **argv) {
 #endif
   talk_base::Thread* main_thread = talk_base::Thread::Current();
 #ifdef OSX
-  talk_base::MacCarbonAppSocketServer ss;
+  talk_base::MacCocoaSocketServer ss;
   talk_base::SocketServerScope ss_scope(&ss);
 #endif
 

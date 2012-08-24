@@ -59,6 +59,14 @@ class RateLimiter {
   // period, a new period is started.
   void Use(size_t used, double time);
 
+  size_t used_in_period() const {
+    return used_in_period_;
+  }
+
+  size_t max_per_period() const {
+    return max_per_period_;
+  }
+
  private:
   size_t max_per_period_;
   double period_length_;

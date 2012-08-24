@@ -497,7 +497,7 @@ class VideoMediaChannelTest : public testing::Test,
     bool black_frame() const { return black_frame_; }
 
     virtual bool RenderFrame(const cricket::VideoFrame* frame) {
-      // TODO Check with VP8 team to see if we can remove this
+      // TODO(zhurunz) Check with VP8 team to see if we can remove this
       // tolerance on Y values.
       black_frame_ = Renderer::CheckFrameColorYuv(6, 48,
                                                   128, 128,
@@ -855,7 +855,7 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_TRUE(channel_->GetStats(&info));
 
     ASSERT_EQ(1U, info.senders.size());
-    // TODO: bytes_sent and bytes_rcvd are different. Are both payload?
+    // TODO(whyuan): bytes_sent and bytes_rcvd are different. Are both payload?
     EXPECT_GT(info.senders[0].bytes_sent, 0);
     EXPECT_EQ(NumRtpPackets(), info.senders[0].packets_sent);
     EXPECT_EQ(0.0, info.senders[0].fraction_lost);
@@ -911,7 +911,7 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_TRUE(channel_->GetStats(&info));
 
     ASSERT_EQ(1U, info.senders.size());
-    // TODO: bytes_sent and bytes_rcvd are different. Are both payload?
+    // TODO(whyuan): bytes_sent and bytes_rcvd are different. Are both payload?
     EXPECT_GT(info.senders[0].bytes_sent, 0);
     EXPECT_EQ(NumRtpPackets(), info.senders[0].packets_sent);
     EXPECT_EQ(0.0, info.senders[0].fraction_lost);
@@ -958,7 +958,7 @@ class VideoMediaChannelTest : public testing::Test,
       new cricket::FakeVideoCapturer);
     cricket::VideoFormat format(1024, 768,
                                 cricket::VideoFormat::FpsToInterval(5), 0);
-    EXPECT_EQ(cricket::CR_SUCCESS, capturer->Start(format));
+    EXPECT_EQ(cricket::CS_RUNNING, capturer->Start(format));
     EXPECT_TRUE(channel_->AddSendStream(
         cricket::StreamParams::CreateLegacy(5678)));
     EXPECT_TRUE(channel_->SetCapturer(5678, capturer.get()));
@@ -1282,7 +1282,7 @@ class VideoMediaChannelTest : public testing::Test,
         new cricket::FakeVideoCapturer);
     cricket::VideoFormat format(1024, 768,
                                 cricket::VideoFormat::FpsToInterval(30), 0);
-    EXPECT_EQ(cricket::CR_SUCCESS, capturer->Start(format));
+    EXPECT_EQ(cricket::CS_RUNNING, capturer->Start(format));
     // All capturers start generating frames with the same timestamp. ViE does
     // not allow the same timestamp to be used. Capture one frame before
     // associating the capturer with the channel.
@@ -1363,7 +1363,7 @@ class VideoMediaChannelTest : public testing::Test,
         cricket::StreamParams::CreateLegacy(1)));
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer1(
         new cricket::FakeVideoCapturer);
-    EXPECT_EQ(cricket::CR_SUCCESS, capturer1->Start(capture_format));
+    EXPECT_EQ(cricket::CS_RUNNING, capturer1->Start(capture_format));
     // Set up additional stream 2.
     Renderer renderer2;
     EXPECT_FALSE(channel_->SetRenderer(2, &renderer2));
@@ -1374,12 +1374,12 @@ class VideoMediaChannelTest : public testing::Test,
         cricket::StreamParams::CreateLegacy(2)));
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer2(
         new cricket::FakeVideoCapturer);
-    EXPECT_EQ(cricket::CR_SUCCESS, capturer2->Start(capture_format));
+    EXPECT_EQ(cricket::CS_RUNNING, capturer2->Start(capture_format));
     // State for all the streams.
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
     // A limitation in the lmi implementation requires that SetCapturer() is
     // called after SetOneCodec().
-    // TODO: this seems like an unnecessary constraint, fix it.
+    // TODO(hellner): this seems like an unnecessary constraint, fix it.
     EXPECT_TRUE(channel_->SetCapturer(1, capturer1.get()));
     EXPECT_TRUE(channel_->SetCapturer(2, capturer2.get()));
     EXPECT_TRUE(SetSend(true));
@@ -1449,7 +1449,7 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_EQ(0, renderer_.num_rendered_frames());
   }
   // Tests that we can reduce the frame rate on demand properly.
-  // TODO: This test is flakey on pulse.  Fix and re-enable
+  // TODO(fbarchard): This test is flakey on pulse.  Fix and re-enable
   void AdaptFramerate() {
     cricket::VideoCodec codec(DefaultCodec());
     int frame_count = 0;

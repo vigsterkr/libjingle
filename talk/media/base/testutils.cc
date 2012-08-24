@@ -222,24 +222,22 @@ bool RtpTestUtility::VerifyPacket(const RtpDumpPacket* dump,
 
 // Implementation of VideoCaptureListener.
 VideoCapturerListener::VideoCapturerListener(VideoCapturer* capturer)
-    : start_result_(CR_PENDING),
+    : last_capture_state_(CS_STARTING),
       frame_count_(0),
       frame_fourcc_(0),
       frame_width_(0),
       frame_height_(0),
       frame_size_(0),
       resolution_changed_(false) {
-  capturer->SignalStartResult.connect(this,
-      &VideoCapturerListener::OnStartResult);
+  capturer->SignalStateChange.connect(this,
+      &VideoCapturerListener::OnStateChange);
   capturer->SignalFrameCaptured.connect(this,
       &VideoCapturerListener::OnFrameCaptured);
-  capturer->SignalCaptureEvent.connect(this,
-      &VideoCapturerListener::OnCaptureEvent);
 }
 
-void VideoCapturerListener::OnStartResult(VideoCapturer* capturer,
-                                          CaptureResult result) {
-  start_result_ = result;
+void VideoCapturerListener::OnStateChange(VideoCapturer* capturer,
+                                          CaptureState result) {
+  last_capture_state_ = result;
 }
 
 void VideoCapturerListener::OnFrameCaptured(VideoCapturer* capturer,
@@ -254,11 +252,6 @@ void VideoCapturerListener::OnFrameCaptured(VideoCapturer* capturer,
     resolution_changed_ = true;
   }
 }
-
-void VideoCapturerListener::OnCaptureEvent(VideoCapturer* capturer,
-                                           CaptureEvent ev) {
-}
-
 
 // Returns the absolute path to a file in the testdata/ directory.
 std::string GetTestFilePath(const std::string& filename) {

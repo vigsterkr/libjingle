@@ -40,6 +40,7 @@
 #include "talk/media/base/codec.h"
 #include "talk/media/base/mediachannel.h"
 #include "talk/media/base/mediacommon.h"
+#include "talk/media/base/videocapturer.h"
 #include "talk/media/base/videocommon.h"
 #include "talk/media/base/videoprocessor.h"
 #include "talk/media/base/voiceprocessor.h"
@@ -47,7 +48,7 @@
 
 namespace cricket {
 
-// TODO: For now, a hard-coded ssrc is used as the video ssrc.
+// TODO(janahan): For now, a hard-coded ssrc is used as the video ssrc.
 // This is because when the video frame is passed to the mediaprocessor for
 // processing, it doesn't have the correct ssrc. Since currently only Tx
 // Video processing is supported, this is ok. When we switch over to trigger
@@ -126,7 +127,7 @@ class MediaEngineInterface {
       = 0;
 
   // Device selection
-  // TODO: Add method for selecting the soundclip device.
+  // TODO(tschmelcher): Add method for selecting the soundclip device.
   virtual bool SetSoundDevices(const Device* in_device,
                                const Device* out_device) = 0;
   // Sets the externally provided video capturer. The ssrc is the ssrc of the
@@ -169,8 +170,8 @@ class MediaEngineInterface {
                                         VoiceProcessor* video_processor,
                                         MediaProcessorDirection direction) = 0;
 
-  sigslot::repeater2<VideoCapturer*, CaptureResult>
-      SignalVideoCaptureResult;
+  sigslot::repeater2<VideoCapturer*, CaptureState>
+      SignalVideoCaptureStateChange;
 };
 
 
@@ -193,7 +194,7 @@ class CompositeMediaEngine : public MediaEngineInterface {
       voice_.Terminate();
       return false;
     }
-    SignalVideoCaptureResult.repeat(video_.SignalCaptureResult);
+    SignalVideoCaptureStateChange.repeat(video_.SignalCaptureStateChange);
     return true;
   }
   virtual void Terminate() {
@@ -358,7 +359,7 @@ class NullVideoEngine {
   bool SetVideoCapturer(VideoCapturer* capturer) { return true; }
   VideoCapturer* GetVideoCapturer() const { return NULL; }
 
-  sigslot::signal2<VideoCapturer*, CaptureResult> SignalCaptureResult;
+  sigslot::signal2<VideoCapturer*, CaptureState> SignalCaptureStateChange;
  private:
   std::vector<VideoCodec> codecs_;
 };

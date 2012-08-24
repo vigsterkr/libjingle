@@ -266,7 +266,7 @@ FileVoiceChannel::FileVoiceChannel(
 FileVoiceChannel::~FileVoiceChannel() {}
 
 bool FileVoiceChannel::SetSendCodecs(const std::vector<AudioCodec>& codecs) {
-  // TODO: Check the format of RTP dump input.
+  // TODO(whyuan): Check the format of RTP dump input.
   return true;
 }
 
@@ -309,7 +309,7 @@ FileVideoChannel::FileVideoChannel(
 FileVideoChannel::~FileVideoChannel() {}
 
 bool FileVideoChannel::SetSendCodecs(const std::vector<VideoCodec>& codecs) {
-  // TODO: Check the format of RTP dump input.
+  // TODO(whyuan): Check the format of RTP dump input.
   return true;
 }
 

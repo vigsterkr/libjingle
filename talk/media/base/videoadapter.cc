@@ -33,16 +33,16 @@
 
 namespace cricket {
 
-// TODO: Make downgrades settable
+// TODO(fbarchard): Make downgrades settable
 static const int kMaxCpuDowngrades = 4;  // Downgrade at most 4 times for CPU.
 static const int kDefaultDowngradeWaitTimeMs = 2000;
 
 // Default CPU thresholds.
 static const float kHighSystemThreshold = 0.85f;
 static const float kLowSystemThreshold = 0.65f;
-static const float kMediumProcessThreshold = 0.35f;
+static const float kMediumProcessThreshold = 0.10f;
 
-// TODO: Consider making scale factor table settable, to allow
+// TODO(fbarchard): Consider making scale factor table settable, to allow
 // application to select quality vs performance tradeoff.
 // List of scale factors that adapter will scale by.
 #if defined(IOS) || defined(ANDROID)
@@ -125,7 +125,7 @@ VideoAdapter::VideoAdapter()
 VideoAdapter::~VideoAdapter() {
 }
 
-// TODO: Consider SetInputFormat and SetOutputFormat without
+// TODO(fbarchard): Consider SetInputFormat and SetOutputFormat without
 // VideoFormat.
 void VideoAdapter::SetInputFormat(const VideoFormat& format) {
   talk_base::CritScope cs(&critical_section_);
@@ -166,7 +166,7 @@ int VideoAdapter::GetOutputNumPixels() const {
   return output_num_pixels_;
 }
 
-// TODO: Add AdaptFrameRate function that only drops frames but
+// TODO(fbarchard): Add AdaptFrameRate function that only drops frames but
 // not resolution.
 bool VideoAdapter::AdaptFrame(const VideoFrame* in_frame,
                               const VideoFrame** out_frame) {
@@ -184,7 +184,7 @@ bool VideoAdapter::AdaptFrame(const VideoFrame* in_frame,
   } else {
     // Drop some frames based on input fps and output fps.
     // Normally output fps is less than input fps.
-    // TODO: Consider adjusting interval to reflect the adjusted
+    // TODO(fbarchard): Consider adjusting interval to reflect the adjusted
     // interval between frames after dropping some frames.
     interval_next_frame_ += input_format_.interval;
     if (interval_next_frame_ >= output_format_.interval) {
@@ -403,7 +403,7 @@ void CoordinatedVideoAdapter::OnCpuLoadUpdated(
       break;
   }
   if (KEEP != request) {
-    // TODO: compute stepping up/down from OutputNumPixels but
+    // TODO(fbarchard): compute stepping up/down from OutputNumPixels but
     // clamp to inputpixels / 4 (2 steps)
     cpu_desired_num_pixels_ = static_cast<int>(
         input_format().width * input_format().height >> cpu_downgrade_count_);

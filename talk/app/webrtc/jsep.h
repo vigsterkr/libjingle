@@ -26,7 +26,7 @@
  */
 
 // Interfaces matching the draft-ietf-rtcweb-jsep-00.
-// TODO: Remove all the jsep-00 APIs (marked as deprecated) once
+// TODO(ronghuawu): Remove all the jsep-00 APIs (marked as deprecated) once
 // chromium (WebKit and glue code) is ready. And update the comment above to
 // jsep-01.
 
@@ -159,7 +159,7 @@ SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
 // methods to be notified of new local candidates.
 class IceCandidateObserver {
  public:
-  // TODO: Implement OnIceChange.
+  // TODO(ronghuawu): Implement OnIceChange.
   // Called any time the iceState changes.
   virtual void OnIceChange() {}
   // New Ice candidate have been found.
@@ -294,7 +294,7 @@ class JsepInterface {
   // A copy of the |candidate| will be created and added to the remote
   // description. So the caller of this method still has the ownership of the
   // |candidate|.
-  // TODO: Consider to change this so that the AddIceCandidate will
+  // TODO(ronghuawu): Consider to change this so that the AddIceCandidate will
   // take the ownership of the |candidate|.
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate) = 0;
 

@@ -266,7 +266,7 @@ static bool AddStreamParams(
         return false;
       }
       uint32 ssrc = GenerateSsrc(*current_streams);
-      // TODO: Generate the more complex types of stream_params.
+      // TODO(perkj): Generate the more complex types of stream_params.
 
       StreamParams stream_param;
       stream_param.name = stream_it->name;
@@ -474,7 +474,7 @@ static bool CreateMediaContentOffer(
   }
 
   if (options.streams.empty() && add_legacy_stream) {
-    // TODO: Remove this legacy stream when all apps use StreamParams.
+    // TODO(perkj): Remove this legacy stream when all apps use StreamParams.
     offer->AddLegacyStream(talk_base::CreateRandomNonZeroId());
   }
 
@@ -564,7 +564,7 @@ static bool CreateMediaContentAnswer(
   }
 
   if (options.streams.empty() && add_legacy_stream) {
-    // TODO: Remove this legacy stream when all apps use StreamParams.
+    // TODO(perkj): Remove this legacy stream when all apps use StreamParams.
     answer->AddLegacyStream(talk_base::CreateRandomNonZeroId());
   }
 

@@ -220,7 +220,9 @@ WebRtcVoiceEngine::WebRtcVoiceEngine()
       adm_sc_(NULL),
       log_level_(kDefaultLogSeverity),
       is_dumping_aec_(false),
-      desired_local_monitor_enable_(false) {
+      desired_local_monitor_enable_(false),
+      tx_processor_ssrc_(0),
+      rx_processor_ssrc_(0) {
   Construct();
 }
 
@@ -234,7 +236,9 @@ WebRtcVoiceEngine::WebRtcVoiceEngine(VoEWrapper* voe_wrapper,
       adm_sc_(NULL),
       log_level_(kDefaultLogSeverity),
       is_dumping_aec_(false),
-      desired_local_monitor_enable_(false) {
+      desired_local_monitor_enable_(false),
+      tx_processor_ssrc_(0),
+      rx_processor_ssrc_(0) {
   Construct();
 }
 
@@ -388,10 +392,10 @@ bool WebRtcVoiceEngine::InitInternal() {
 
   // On Windows, tell it to use the default sound (not communication) devices.
   // First check whether there is a valid sound device for playback.
-  // TODO: Clean this up when we support setting the soundclip device.
+  // TODO(juberti): Clean this up when we support setting the soundclip device.
 #ifdef WIN32
   // The SetPlayoutDevice may not be implemented in the case of external ADM.
-  // TODO: We should only check the adm_sc_ here, but current
+  // TODO(ronghuawu): We should only check the adm_sc_ here, but current
   // PeerConnection interface never set the adm_sc_, so need to check both
   // in order to determine if the external adm is used.
   if (!adm_ && !adm_sc_) {
@@ -452,7 +456,7 @@ SoundclipMedia *WebRtcVoiceEngine::CreateSoundclip() {
   return soundclip;
 }
 
-// TODO: Add a comprehensive unittests for SetOptions().
+// TODO(zhurunz): Add a comprehensive unittests for SetOptions().
 bool WebRtcVoiceEngine::SetOptions(int flags) {
   AudioOptions options;
 
@@ -499,6 +503,12 @@ bool WebRtcVoiceEngine::SetOptionOverrides(const AudioOptions& overrides) {
 bool WebRtcVoiceEngine::ClearOptionOverrides() {
   LOG(LS_INFO) << "Clearing option overrides.";
   AudioOptions options = options_;
+  // Only call ApplyOptions if |options_overrides_| contains overrided options.
+  // ApplyOptions affects NS, AGC other options that is shared between
+  // all WebRtcVoiceEngineChannels.
+  if (option_overrides_ == AudioOptions()) {
+    return true;
+  }
 
   if (!ApplyOptions(options)) {
     return false;
@@ -511,12 +521,12 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
   WebRtcAudioOptions options = WebRtcAudioOptions(options_in);
 #if defined(IOS) || defined(ANDROID)
   // Use speakerphone mode with comfort noise generation for mobile.
-  options.ec_mode = kEcAecm;
+  options.ec_mode = webrtc::kEcAecm;
   // On mobile, webrtc recommends fixed AGC (not adaptive)
-  options.agc_mode = kAgcFixedDigital;
+  options.agc_mode = webrtc::kAgcFixedDigital;
   // On mobile, webrtc recommends moderate aggressiveness.
   options.noise_suppression.Set(true);
-  options.ns_mode = kNsModerateSuppression;
+  options.ns_mode = webrtc::kNsModerateSuppression;
   // No typing detection support on iOS or Android.
   options.typing_detection.Set(false);
 #elif CHROMEOS  // IOS || ANDROID
@@ -534,10 +544,13 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
       LOG_RTCERR2(SetEcStatus, echo_cancellation, options.ec_mode);
       return false;
     }
+#if !defined(IOS) && !defined(ANDROID)
+// SetEcMetricsStatus is currently disabled on mobile.
     if (voep->SetEcMetricsStatus(echo_cancellation) == -1) {
       LOG_RTCERR1(SetEcMetricsStatus, echo_cancellation);
       return false;
     }
+#endif
     if (options.ec_mode == webrtc::kEcAecm) {
       if (voep->SetAecmMode(options.aecm_mode, true) != 0) {
         LOG_RTCERR2(SetAecmMode, options.aecm_mode, true);
@@ -628,11 +641,11 @@ struct ResumeEntry {
 };
 
 bool WebRtcVoiceEngine::SetMobileHeadsetMode(bool enable) {
-  // TODO: implement this.
+  // TODO(kundaji): implement this.
   return false;
 }
 
-// TODO: Refactor this so that the core logic can be used to set the
+// TODO(juberti): Refactor this so that the core logic can be used to set the
 // soundclip device. At that time, reinstate the soundclip pause/resume code.
 bool WebRtcVoiceEngine::SetDevices(const Device* in_device,
                                    const Device* out_device) {
@@ -1192,6 +1205,7 @@ bool WebRtcVoiceEngine::RegisterProcessor(
   bool register_with_webrtc = false;
   int channel_id = -1;
   bool success = false;
+  uint32* processor_ssrc = NULL;
   bool found_channel = FindChannelNumFromSsrc(ssrc, direction, &channel_id);
   if (voice_processor == NULL || !found_channel) {
     LOG(LS_WARNING) << "Media Processing Registration Failed. ssrc: " << ssrc
@@ -1203,9 +1217,10 @@ bool WebRtcVoiceEngine::RegisterProcessor(
   {
     talk_base::CritScope cs(&signal_media_critical_);
     if (direction == MPD_RX) {
-      processing_type = webrtc::kPlaybackPerChannel;
+      processing_type = webrtc::kPlaybackAllChannelsMixed;
       if (SignalRxMediaFrame.is_empty()) {
         register_with_webrtc = true;
+        processor_ssrc = &rx_processor_ssrc_;
       }
       SignalRxMediaFrame.connect(voice_processor,
                                  &VoiceProcessor::OnFrame);
@@ -1213,18 +1228,22 @@ bool WebRtcVoiceEngine::RegisterProcessor(
       processing_type = webrtc::kRecordingPerChannel;
       if (SignalTxMediaFrame.is_empty()) {
         register_with_webrtc = true;
+        processor_ssrc = &tx_processor_ssrc_;
       }
       SignalTxMediaFrame.connect(voice_processor,
                                  &VoiceProcessor::OnFrame);
     }
   }
   if (register_with_webrtc) {
+    // TODO(janahan): when registering consider instantiating a
+    // a VoeMediaProcess object and not make the engine extend the interface.
     if (voe()->media() && voe()->media()->
         RegisterExternalMediaProcessing(channel_id,
                                         processing_type,
                                         *this) != -1) {
       LOG(LS_INFO) << "Media Processing Registration Succeeded. channel:"
                    << channel_id;
+      *processor_ssrc = ssrc;
       success = true;
     } else {
       LOG_RTCERR2(RegisterExternalMediaProcessing,
@@ -1248,12 +1267,15 @@ bool WebRtcVoiceEngine::UnregisterProcessorChannel(
   bool success = true;
   FrameSignal* signal;
   webrtc::ProcessingTypes processing_type;
+  uint32* processor_ssrc = NULL;
   if (channel_direction == MPD_RX) {
     signal = &SignalRxMediaFrame;
-    processing_type = webrtc::kPlaybackPerChannel;
+    processing_type = webrtc::kPlaybackAllChannelsMixed;
+    processor_ssrc = &rx_processor_ssrc_;
   } else {
     signal = &SignalTxMediaFrame;
     processing_type = webrtc::kRecordingPerChannel;
+    processor_ssrc = &tx_processor_ssrc_;
   }
 
   int deregister_id = -1;
@@ -1274,6 +1296,7 @@ bool WebRtcVoiceEngine::UnregisterProcessorChannel(
     if (voe()->media() &&
         voe()->media()->DeRegisterExternalMediaProcessing(deregister_id,
         processing_type) != -1) {
+      *processor_ssrc = 0;
       LOG(LS_INFO) << "Media Processing DeRegistration Succeeded. channel:"
                    << deregister_id;
     } else {
@@ -1312,21 +1335,18 @@ void WebRtcVoiceEngine::Process(const int channel,
                                 const int length,
                                 const int sampling_freq,
                                 const bool is_stereo) {
-  uint32 ssrc;
-  WebRtcVoiceMediaChannel* media_channel;
-
-  if (FindChannelAndSsrc(channel, &media_channel, &ssrc)) {
     talk_base::CritScope cs(&signal_media_critical_);
     AudioFrame frame(audio10ms, length, sampling_freq, is_stereo);
-    if (type == webrtc::kPlaybackPerChannel) {
-      SignalRxMediaFrame(ssrc, MPD_RX, &frame);
+    if (type == webrtc::kPlaybackAllChannelsMixed) {
+      SignalRxMediaFrame(rx_processor_ssrc_, MPD_RX, &frame);
     } else if (type == webrtc::kRecordingPerChannel) {
-      SignalTxMediaFrame(ssrc, MPD_TX, &frame);
+      SignalTxMediaFrame(tx_processor_ssrc_, MPD_TX, &frame);
+    } else {
+      LOG(LS_WARNING) << "Media Processing invoked unexpectedly."
+                      << " channel: " << channel << " type: " << type
+                      << " tx_ssrc: " << tx_processor_ssrc_
+                      << " rx_ssrc: " << rx_processor_ssrc_;
     }
-  } else {
-    LOG(LS_WARNING) << "MediaProcess Callback invoked with unexpected channel: "
-                    << channel;
-  }
 }
 
 // WebRtcVoiceMediaChannel
@@ -1514,7 +1534,7 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
         if (engine()->voe()->codec()->SetSendCNPayloadType(voe_channel(),
             it->id, cn_freq) == -1) {
           LOG_RTCERR3(SetSendCNPayloadType, voe_channel(), it->id, cn_freq);
-          // TODO: This failure condition will be removed from VoE.
+          // TODO(ajm): This failure condition will be removed from VoE.
           // Restore the return here when we update to a new enough webrtc.
           //
           // Not returning false because the SetSendCNPayloadType will fail if
@@ -1887,7 +1907,7 @@ bool WebRtcVoiceMediaChannel::AddRecvStream(const StreamParams& sp) {
 
   mux_channels_[ssrc] = channel;
 
-  // TODO: We should rollback the add if SetPlayout fails.
+  // TODO(juberti): We should rollback the add if SetPlayout fails.
   LOG(LS_INFO) << "New audio stream " << ssrc
             << " registered to VoiceEngine channel #"
             << channel << ".";
@@ -1917,7 +1937,7 @@ bool WebRtcVoiceMediaChannel::RemoveRecvStream(uint32 ssrc) {
       // The last stream was removed. We can now enable the default
       // channel for new channels to be played out immediately without
       // waiting for AddStream messages.
-      // TODO: Does the default channel still have it's CN state?
+      // TODO(oja): Does the default channel still have it's CN state?
       LOG(LS_INFO) << "Enabling playback on the default voice channel";
       SetPlayout(voe_channel(), true);
     }
@@ -1962,13 +1982,15 @@ int WebRtcVoiceMediaChannel::GetTimeSinceLastTyping() {
 }
 
 void WebRtcVoiceMediaChannel::SetTypingDetectionParameters(int time_window,
-    int cost_per_typing, int reporting_threshold, int penalty_decay) {
+    int cost_per_typing, int reporting_threshold, int penalty_decay,
+    int type_event_delay) {
   if (engine()->voe()->processing()->SetTypingDetectionParameters(
           time_window, cost_per_typing,
-          reporting_threshold, penalty_decay) == -1) {
+          reporting_threshold, penalty_decay, type_event_delay) == -1) {
     // In case of error, log the info and continue
-    LOG_RTCERR4(SetTypingDetectionParameters, time_window,
-                cost_per_typing, reporting_threshold, penalty_decay);
+    LOG_RTCERR5(SetTypingDetectionParameters, time_window,
+                cost_per_typing, reporting_threshold, penalty_decay,
+                type_event_delay);
   }
 }
 
@@ -2106,7 +2128,7 @@ bool WebRtcVoiceMediaChannel::InsertDtmf(uint32 ssrc, int event,
     return false;
   }
 
-  // TODO: Remove this once the reset and delay are supported by VoE.
+  // TODO(ronghuawu): Remove this once the reset and delay are supported by VoE.
   // https://code.google.com/p/webrtc/issues/detail?id=747
   if (event == kDtmfReset || event == kDtmfDelay) {
     return true;
@@ -2201,7 +2223,7 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
   // In VoiceEngine 3.5, GetRTCPStatistics will return 0 even when it fails,
   // causing the stats to contain garbage information. To prevent this, we
   // zero the stats structure before calling this API.
-  // TODO: Remove this workaround.
+  // TODO(juberti): Remove this workaround.
   webrtc::CallStatistics cs;
   unsigned int ssrc;
   webrtc::CodecInst codec;
@@ -2243,7 +2265,7 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
     sinfo.fraction_lost = -1;
     sinfo.jitter_ms = -1;
   }
-  // TODO: Figure out how to get remote packets_lost, ext_seqnum
+  // TODO(juberti): Figure out how to get remote packets_lost, ext_seqnum
   sinfo.packets_lost = -1;
   sinfo.ext_seqnum = -1;
 
@@ -2262,7 +2284,7 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
   sinfo.echo_delay_std_ms = -1;
   if (engine()->voe()->processing()->GetEcMetricsStatus(echo_metrics_on) !=
       -1 && echo_metrics_on) {
-    // TODO: we may want to use VoECallReport::GetEchoMetricsSummary
+    // TODO(andrew): we may want to use VoECallReport::GetEchoMetricsSummary
     // here, but it appears to be unsuitable currently. Revisit after this is
     // investigated: http://b/issue?id=5666755
     int erl, erle, rerl, anlp;
@@ -2448,7 +2470,7 @@ bool WebRtcVoiceMediaChannel::EnableRtcp(int channel) {
     LOG_RTCERR2(SetRTCPStatus, voe_channel(), 1);
     return false;
   }
-  // TODO: Enable VQMon and RTCP XR reports, once we know what
+  // TODO(juberti): Enable VQMon and RTCP XR reports, once we know what
   // what we want to do with them.
   // engine()->voe().EnableVQMon(voe_channel(), true);
   // engine()->voe().EnableRTCP_XR(voe_channel(), true);
