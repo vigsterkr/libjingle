@@ -64,6 +64,28 @@ bool GetBoolFromJsonArray(const Json::Value& in, size_t n,
 bool GetDoubleFromJsonArray(const Json::Value& in, size_t n,
                             double* out);
 
+// Convert json arrays to std::vector
+bool JsonArrayToValueVector(const Json::Value& in,
+                            std::vector<Json::Value>* out);
+bool JsonArrayToIntVector(const Json::Value& in,
+                          std::vector<int>* out);
+bool JsonArrayToUIntVector(const Json::Value& in,
+                           std::vector<unsigned int>* out);
+bool JsonArrayToStringVector(const Json::Value& in,
+                             std::vector<std::string>* out);
+bool JsonArrayToBoolVector(const Json::Value& in,
+                           std::vector<bool>* out);
+bool JsonArrayToDoubleVector(const Json::Value& in,
+                             std::vector<double>* out);
+
+// Convert std::vector to json array
+Json::Value ValueVectorToJsonArray(const std::vector<Json::Value>& in);
+Json::Value IntVectorToJsonArray(const std::vector<int>& in);
+Json::Value UIntVectorToJsonArray(const std::vector<unsigned int>& in);
+Json::Value StringVectorToJsonArray(const std::vector<std::string>& in);
+Json::Value BoolVectorToJsonArray(const std::vector<bool>& in);
+Json::Value DoubleVectorToJsonArray(const std::vector<double>& in);
+
 // Pull values out of a JSON object.
 bool GetValueFromJsonObject(const Json::Value& in, const std::string& k,
                             Json::Value* out);
@@ -77,11 +99,6 @@ bool GetBoolFromJsonObject(const Json::Value& in, const std::string& k,
                            bool* out);
 bool GetDoubleFromJsonObject(const Json::Value& in, const std::string& k,
                              double* out);
-
-// Converts vectors of strings to/from JSON arrays.
-Json::Value StringVectorToJsonValue(const std::vector<std::string>& strings);
-bool JsonValueToStringVector(const Json::Value& value,
-                             std::vector<std::string> *strings);
 
 // Writes out a Json value as a string.
 std::string JsonValueToString(const Json::Value& json);

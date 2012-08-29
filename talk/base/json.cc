@@ -134,6 +134,98 @@ bool GetDoubleFromJson(const Json::Value& in, double* out) {
   return ret;
 }
 
+namespace {
+template<typename T>
+bool JsonArrayToVector(const Json::Value& value,
+                       bool (*getter)(const Json::Value& in, T* out),
+                       std::vector<T> *vec) {
+  vec->clear();
+  if (!value.isArray()) {
+    return false;
+  }
+
+  for (Json::Value::ArrayIndex i = 0; i < value.size(); ++i) {
+    T val;
+    if (!getter(value[i], &val)) {
+      return false;
+    }
+    vec->push_back(val);
+  }
+
+  return true;
+}
+// Trivial getter helper
+bool GetValueFromJson(const Json::Value& in, Json::Value* out) {
+  *out = in;
+  return true;
+}
+}  // unnamed namespace
+
+bool JsonArrayToValueVector(const Json::Value& in,
+                            std::vector<Json::Value>* out) {
+  return JsonArrayToVector(in, GetValueFromJson, out);
+}
+
+bool JsonArrayToIntVector(const Json::Value& in,
+                          std::vector<int>* out) {
+  return JsonArrayToVector(in, GetIntFromJson, out);
+}
+
+bool JsonArrayToUIntVector(const Json::Value& in,
+                           std::vector<unsigned int>* out) {
+  return JsonArrayToVector(in, GetUIntFromJson, out);
+}
+
+bool JsonArrayToStringVector(const Json::Value& in,
+                             std::vector<std::string>* out) {
+  return JsonArrayToVector(in, GetStringFromJson, out);
+}
+
+bool JsonArrayToBoolVector(const Json::Value& in,
+                           std::vector<bool>* out) {
+  return JsonArrayToVector(in, GetBoolFromJson, out);
+}
+
+bool JsonArrayToDoubleVector(const Json::Value& in,
+                             std::vector<double>* out) {
+  return JsonArrayToVector(in, GetDoubleFromJson, out);
+}
+
+namespace {
+template<typename T>
+Json::Value VectorToJsonArray(const std::vector<T>& vec) {
+  Json::Value result(Json::arrayValue);
+  for (size_t i = 0; i < vec.size(); ++i) {
+    result.append(Json::Value(vec[i]));
+  }
+  return result;
+}
+}  // unnamed namespace
+
+Json::Value ValueVectorToJsonArray(const std::vector<Json::Value>& in) {
+  return VectorToJsonArray(in);
+}
+
+Json::Value IntVectorToJsonArray(const std::vector<int>& in) {
+  return VectorToJsonArray(in);
+}
+
+Json::Value UIntVectorToJsonArray(const std::vector<unsigned int>& in) {
+  return VectorToJsonArray(in);
+}
+
+Json::Value StringVectorToJsonArray(const std::vector<std::string>& in) {
+  return VectorToJsonArray(in);
+}
+
+Json::Value BoolVectorToJsonArray(const std::vector<bool>& in) {
+  return VectorToJsonArray(in);
+}
+
+Json::Value DoubleVectorToJsonArray(const std::vector<double>& in) {
+  return VectorToJsonArray(in);
+}
+
 bool GetValueFromJsonArray(const Json::Value& in, size_t n,
                            Json::Value* out) {
   if (!in.isArray() || !in.isValidIndex(static_cast<int>(n))) {
@@ -212,32 +304,6 @@ bool GetDoubleFromJsonObject(const Json::Value& in, const std::string& k,
                              double* out) {
   Json::Value x;
   return GetValueFromJsonObject(in, k, &x) && GetDoubleFromJson(x, out);
-}
-
-Json::Value StringVectorToJsonValue(const std::vector<std::string>& strings) {
-  Json::Value result(Json::arrayValue);
-  for (size_t i = 0; i < strings.size(); ++i) {
-    result.append(Json::Value(strings[i]));
-  }
-  return result;
-}
-
-bool JsonValueToStringVector(const Json::Value& value,
-                             std::vector<std::string> *strings) {
-  strings->clear();
-  if (!value.isArray()) {
-    return false;
-  }
-
-  for (Json::Value::ArrayIndex i = 0; i < value.size(); ++i) {
-    if (value[i].isString()) {
-      strings->push_back(value[i].asString());
-    } else {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 std::string JsonValueToString(const Json::Value& json) {

@@ -150,45 +150,48 @@ TEST(SystemInfoTest, CurCpus) {
 }
 
 #ifdef CPU_X86
-// CPU family/model/steeping is only available on X86
+// CPU family/model/stepping is only available on X86. The following tests
+// that they are set when running on x86 CPUs. Valid Family/Model/Stepping
+// values are non-zero on known CPUs.
 
 // Tests Intel CPU Family identification.
-TEST(SystemInfoTest, CpuFamilyNonZero) {
+TEST(SystemInfoTest, CpuFamily) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuFamily: " << info.GetCpuFamily();
   EXPECT_GT(info.GetCpuFamily(), 0);
 }
 
 // Tests Intel CPU Model identification.
-TEST(SystemInfoTest, CpuModelNonZero) {
+TEST(SystemInfoTest, CpuModel) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuModel: " << info.GetCpuModel();
   EXPECT_GT(info.GetCpuModel(), 0);
 }
 
 // Tests Intel CPU Stepping identification.
-TEST(SystemInfoTest, CpuSteppingNonZero) {
+TEST(SystemInfoTest, CpuStepping) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuStepping: " << info.GetCpuStepping();
   EXPECT_GT(info.GetCpuStepping(), 0);
 }
 #else  // CPU_X86
-// Tests Intel CPU Family identification.
-TEST(SystemInfoTest, CpuFamilyNonZero) {
+// If not running on x86 CPU the following tests expect the functions to
+// return 0.
+TEST(SystemInfoTest, CpuFamily) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuFamily: " << info.GetCpuFamily();
   EXPECT_EQ(0, info.GetCpuFamily());
 }
 
 // Tests Intel CPU Model identification.
-TEST(SystemInfoTest, CpuModelNonZero) {
+TEST(SystemInfoTest, CpuModel) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuModel: " << info.GetCpuModel();
   EXPECT_EQ(0, info.GetCpuModel());
 }
 
 // Tests Intel CPU Stepping identification.
-TEST(SystemInfoTest, CpuSteppingNonZero) {
+TEST(SystemInfoTest, CpuStepping) {
   talk_base::SystemInfo info;
   LOG(LS_INFO) << "CpuStepping: " << info.GetCpuStepping();
   EXPECT_EQ(0, info.GetCpuStepping());

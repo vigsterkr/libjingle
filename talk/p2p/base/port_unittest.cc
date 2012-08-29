@@ -167,12 +167,13 @@ class TestPort : public Port {
     if (!payload) {
       IceMessage* msg = new IceMessage;
       ByteBuffer* buf = new ByteBuffer(static_cast<const char*>(data), size);
+      ByteBuffer::ReadPosition pos(buf->GetReadPosition());
       if (!msg->Read(buf)) {
         delete msg;
         delete buf;
         return -1;
       }
-      buf->Reset();  // rewind it
+      buf->SetReadPosition(pos);
       last_stun_buf_.reset(buf);
       last_stun_msg_.reset(msg);
     }

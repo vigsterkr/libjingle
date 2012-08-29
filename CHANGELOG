@@ -1,5 +1,10 @@
 Libjingle
 
+0.6.23 - Aug 29, 2012
+  - MessageQueue threading fixes.
+  - ByteBuffer cleanups.
+  - Updates in the JSON parser.
+
 0.6.22 - Aug 14, 2012
   - Start gathering ice candidates before user sets local description.
   - Support for muting individual streams based on SSRC.

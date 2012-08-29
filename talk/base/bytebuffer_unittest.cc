@@ -100,10 +100,32 @@ TEST(ByteBufferTest, TestBufferLength) {
   EXPECT_TRUE(buffer.Consume(4));
   size -= 4;
   EXPECT_EQ(size, buffer.Length());
+}
 
-  EXPECT_TRUE(buffer.Shift(4));
-  size -= 4;
-  EXPECT_EQ(size, buffer.Length());
+TEST(ByteBufferTest, TestGetSetReadPosition) {
+  ByteBuffer buffer("ABCDEF", 6);
+  EXPECT_EQ(6U, buffer.Length());
+  ByteBuffer::ReadPosition pos(buffer.GetReadPosition());
+  EXPECT_TRUE(buffer.SetReadPosition(pos));
+  EXPECT_EQ(6U, buffer.Length());
+  std::string read;
+  EXPECT_TRUE(buffer.ReadString(&read, 3));
+  EXPECT_EQ("ABC", read);
+  EXPECT_EQ(3U, buffer.Length());
+  EXPECT_TRUE(buffer.SetReadPosition(pos));
+  EXPECT_EQ(6U, buffer.Length());
+  read.clear();
+  EXPECT_TRUE(buffer.ReadString(&read, 3));
+  EXPECT_EQ("ABC", read);
+  EXPECT_EQ(3U, buffer.Length());
+  // For a resize by writing Capacity() number of bytes.
+  size_t capacity = buffer.Capacity();
+  buffer.ReserveWriteBuffer(buffer.Capacity());
+  EXPECT_EQ(capacity + 3U, buffer.Length());
+  EXPECT_FALSE(buffer.SetReadPosition(pos));
+  read.clear();
+  EXPECT_TRUE(buffer.ReadString(&read, 3));
+  EXPECT_EQ("DEF", read);
 }
 
 TEST(ByteBufferTest, TestReadWriteBuffer) {

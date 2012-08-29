@@ -27,6 +27,10 @@
 
 #include "talk/base/thread.h"
 
+#ifndef __has_feature
+#define __has_feature(x) 0  // Compatibility with non-clang or LLVM compilers.
+#endif  // __has_feature
+
 #if defined(WIN32)
 #include <comdef.h>
 #elif defined(POSIX)
@@ -38,7 +42,7 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/timeutils.h"
 
-#if defined(OSX) || defined(IOS)
+#if !__has_feature(objc_arc) && (defined(OSX) || defined(IOS))
 #include "talk/base/maccocoathreadhelper.h"
 #include "talk/base/scoped_autorelease_pool.h"
 #endif
@@ -56,20 +60,28 @@ ThreadManager::ThreadManager() {
 #ifndef NO_MAIN_THREAD_WRAPPING
   WrapCurrentThread();
 #endif
-#if defined(OSX) || defined(IOS)
+#if !__has_feature(objc_arc) && (defined(OSX) || defined(IOS))
+  // Under Automatic Reference Counting (ARC), you cannot use autorelease pools
+  // directly. Instead, you use @autoreleasepool blocks instead.  Also, we are
+  // maintaining thread safety using immutability within context of GCD dispatch
+  // queues in this case.
   InitCocoaMultiThreading();
 #endif
 }
 
 ThreadManager::~ThreadManager() {
-#if defined(OSX) || defined(IOS)
+#if __has_feature(objc_arc)
+  @autoreleasepool
+#elif defined(OSX) || defined(IOS)
   // This is called during exit, at which point apparently no NSAutoreleasePools
   // are available; but we might still need them to do cleanup (or we get the
   // "no autoreleasepool in place, just leaking" warning when exiting).
   ScopedAutoreleasePool pool;
 #endif
-  UnwrapCurrentThread();
-  pthread_key_delete(key_);
+  {
+    UnwrapCurrentThread();
+    pthread_key_delete(key_);
+  }
 }
 
 Thread *ThreadManager::CurrentThread() {
@@ -322,21 +334,25 @@ void* Thread::PreRun(void* pv) {
 #elif defined(POSIX)
   // TODO: See if naming exists for pthreads.
 #endif
-#if defined(OSX) || defined(IOS)
+#if __has_feature(objc_arc)
+  @autoreleasepool
+#elif defined(OSX) || defined(IOS)
   // Make sure the new thread has an autoreleasepool
   ScopedAutoreleasePool pool;
 #endif
-  if (init->runnable) {
-    init->runnable->Run(init->thread);
-  } else {
-    init->thread->Run();
+  {
+    if (init->runnable) {
+      init->runnable->Run(init->thread);
+    } else {
+      init->thread->Run();
+    }
+    if (init->thread->delete_self_when_complete_) {
+      init->thread->started_ = false;
+      delete init->thread;
+    }
+    delete init;
+    return NULL;
   }
-  if (init->thread->delete_self_when_complete_) {
-    init->thread->started_ = false;
-    delete init->thread;
-  }
-  delete init;
-  return NULL;
 }
 
 void Thread::Run() {
@@ -470,22 +486,26 @@ bool Thread::ProcessMessages(int cmsLoop) {
   int cmsNext = cmsLoop;
 
   while (true) {
-#if defined(OSX) || defined(IOS)
+#if __has_feature(objc_arc)
+    @autoreleasepool
+#elif defined(OSX) || defined(IOS)
     // see: http://developer.apple.com/library/mac/#documentation/Cocoa/Reference/Foundation/Classes/NSAutoreleasePool_Class/Reference/Reference.html
     // Each thread is supposed to have an autorelease pool. Also for event loops
     // like this, autorelease pool needs to be created and drained/released
     // for each cycle.
     ScopedAutoreleasePool pool;
 #endif
-    Message msg;
-    if (!Get(&msg, cmsNext))
-      return !IsQuitting();
-    Dispatch(&msg);
+    {
+      Message msg;
+      if (!Get(&msg, cmsNext))
+        return !IsQuitting();
+      Dispatch(&msg);
 
-    if (cmsLoop != kForever) {
-      cmsNext = TimeUntil(msEnd);
-      if (cmsNext < 0)
-        return true;
+      if (cmsLoop != kForever) {
+        cmsNext = TimeUntil(msEnd);
+        if (cmsNext < 0)
+          return true;
+      }
     }
   }
 }

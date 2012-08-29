@@ -76,8 +76,8 @@ inline void SetBE64(void* memory, uint64 v) {
 }
 
 inline uint16 GetBE16(const void* memory) {
-  return (static_cast<uint16>(Get8(memory, 0)) << 8) |
-      (static_cast<uint16>(Get8(memory, 1)) << 0);
+  return static_cast<uint16>((Get8(memory, 0) << 8) |
+                             (Get8(memory, 1) << 0));
 }
 
 inline uint32 GetBE32(const void* memory) {
@@ -122,8 +122,8 @@ inline void SetLE64(void* memory, uint64 v) {
 }
 
 inline uint16 GetLE16(const void* memory) {
-  return (static_cast<uint16>(Get8(memory, 0)) << 0) |
-      (static_cast<uint16>(Get8(memory, 1)) << 8);
+  return static_cast<uint16>((Get8(memory, 0) << 0) |
+                             (Get8(memory, 1) << 8));
 }
 
 inline uint32 GetLE32(const void* memory) {

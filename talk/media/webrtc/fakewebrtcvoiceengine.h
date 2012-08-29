@@ -685,6 +685,10 @@ class FakeWebRtcVoiceEngine
                                   unsigned int& playoutTimestamp,
                                   unsigned int* jitter,
                                   unsigned short* fractionLost));
+  WEBRTC_STUB(GetRemoteRTCPSenderInfo, (int channel,
+                                        webrtc::SenderInfo* sender_info));
+  WEBRTC_STUB(GetRemoteRTCPReportBlocks,
+              (int channel, std::vector<webrtc::ReportBlock>* receive_blocks));
   WEBRTC_STUB(SendApplicationDefinedRTCPPacket, (int channel,
                                                  const unsigned char subType,
                                                  unsigned int name,

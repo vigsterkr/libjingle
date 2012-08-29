@@ -212,8 +212,11 @@ class MessageQueue {
   // Amount of time until the next message can be retrieved
   virtual int GetDelay();
 
-  bool empty() const { return msgq_.empty() && dmsgq_.empty() && !fPeekKeep_; }
-  size_t size() const { return msgq_.size() + dmsgq_.size() + fPeekKeep_; }
+  bool empty() const { return size() == 0u; }
+  size_t size() const {
+    CritScope cs(&crit_);  // msgq_.size() is not thread safe.
+    return msgq_.size() + dmsgq_.size() + (fPeekKeep_ ? 1u : 0u);
+  }
 
   // Internally posts a message which causes the doomed object to be deleted
   template<class T> void Dispose(T* doomed) {
@@ -250,7 +253,7 @@ class MessageQueue {
   MessageList msgq_;
   PriorityQueue dmsgq_;
   uint32 dmsgq_next_num_;
-  CriticalSection crit_;
+  mutable CriticalSection crit_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MessageQueue);

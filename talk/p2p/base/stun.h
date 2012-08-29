@@ -153,7 +153,7 @@ class StunMessage {
   // is determined by the lengths of the transaction ID.
   bool IsLegacy() const;
 
-  void SetType(int type) { type_ = type; }
+  void SetType(int type) { type_ = static_cast<uint16>(type); }
   bool SetTransactionID(const std::string& str);
 
   // Gets the desired attribute value, or NULL if no such attribute type exists.

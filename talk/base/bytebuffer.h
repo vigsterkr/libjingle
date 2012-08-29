@@ -87,24 +87,34 @@ class ByteBuffer {
   // ByteBuffer.
   char* ReserveWriteBuffer(size_t len);
 
-  // Resize the buffer to the specified |size|.
+  // Resize the buffer to the specified |size|. This invalidates any remembered
+  // seek positions.
   void Resize(size_t size);
 
   // Moves current position |size| bytes forward. Returns false if
-  // there is less than |size| bytes left in the buffer.
+  // there is less than |size| bytes left in the buffer. Consume doesn't
+  // permanently remove data, so remembered read positions are still valid
+  // after this call.
   bool Consume(size_t size);
-
-  // Drops |size| bytes from the front of the buffer. Returns false if
-  // there is less than |size| bytes left in the buffer.
-  bool Shift(size_t size);
-
-  // Resets the current seek position to 0. Note that a Resize or Shift
-  // operation will delete consumed buffer space, so this is only useful after
-  // Read operations but before any modifying operations.
-  void Reset();
 
   // Clears the contents of the buffer. After this, Length() will be 0.
   void Clear();
+
+  // Used with GetReadPosition/SetReadPosition.
+  class ReadPosition {
+    friend class ByteBuffer;
+    ReadPosition(size_t start, int version)
+        : start_(start), version_(version) { }
+    size_t start_;
+    int version_;
+  };
+
+  // Remembers the current read position for a future SetReadPosition. Any
+  // calls to Shift or Resize in the interim will invalidate the position.
+  ReadPosition GetReadPosition() const;
+
+  // If the given position is still valid, restores that read position.
+  bool SetReadPosition(const ReadPosition &position);
 
  private:
   void Construct(const char* bytes, size_t size, ByteOrder byte_order);
@@ -113,6 +123,7 @@ class ByteBuffer {
   size_t size_;
   size_t start_;
   size_t end_;
+  int version_;
   ByteOrder byte_order_;
 
   // There are sensible ways to define these, but they aren't needed in our code

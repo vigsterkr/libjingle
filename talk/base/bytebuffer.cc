@@ -60,10 +60,11 @@ ByteBuffer::ByteBuffer(const char* bytes) {
 
 void ByteBuffer::Construct(const char* bytes, size_t len,
                            ByteOrder byte_order) {
-  start_      = 0;
-  size_       = len;
+  version_ = 0;
+  start_ = 0;
+  size_ = len;
   byte_order_ = byte_order;
-  bytes_      = new char[size_];
+  bytes_ = new char[size_];
 
   if (bytes) {
     end_ = len;
@@ -204,45 +205,46 @@ char* ByteBuffer::ReserveWriteBuffer(size_t len) {
 }
 
 void ByteBuffer::Resize(size_t size) {
-  if (size > size_)
-    size = _max(size, 3 * size_ / 2);
-
   size_t len = _min(end_ - start_, size);
-  char* new_bytes = new char[size];
-  memcpy(new_bytes, bytes_ + start_, len);
-  delete [] bytes_;
-
+  if (size <= size_) {
+    // Don't reallocate, just move data backwards
+    memmove(bytes_, bytes_ + start_, len);
+  } else {
+    // Reallocate a larger buffer.
+    size_ = _max(size, 3 * size_ / 2);
+    char* new_bytes = new char[size_];
+    memcpy(new_bytes, bytes_ + start_, len);
+    delete [] bytes_;
+    bytes_ = new_bytes;
+  }
   start_ = 0;
-  end_   = len;
-  size_  = size;
-  bytes_ = new_bytes;
+  end_ = len;
+  ++version_;
 }
 
 bool ByteBuffer::Consume(size_t size) {
   if (size > Length())
     return false;
-
   start_ += size;
   return true;
 }
 
-bool ByteBuffer::Shift(size_t size) {
-  if (size > Length())
-    return false;
-
-  end_ = Length() - size;
-  memmove(bytes_, bytes_ + start_ + size, end_);
-  start_ = 0;
-  return true;
+ByteBuffer::ReadPosition ByteBuffer::GetReadPosition() const {
+  return ReadPosition(start_, version_);
 }
 
-void ByteBuffer::Reset() {
-  start_ = 0;
+bool ByteBuffer::SetReadPosition(const ReadPosition &position) {
+  if (position.version_ != version_) {
+    return false;
+  }
+  start_ = position.start_;
+  return true;
 }
 
 void ByteBuffer::Clear() {
   memset(bytes_, 0, size_);
   start_ = end_ = 0;
+  ++version_;
 }
 
 }  // namespace talk_base

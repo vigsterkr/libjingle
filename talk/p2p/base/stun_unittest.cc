@@ -649,7 +649,7 @@ TEST_F(StunTest, SetIPv6XorAddressAttributeOwner) {
   // Try writing with no owner at all, should fail and write nothing.
   addr2.SetOwner(NULL);
   ASSERT_EQ(addr2.ipaddr(), addr->ipaddr());
-  wrong_buf.Shift(wrong_buf.Length());
+  wrong_buf.Consume(wrong_buf.Length());
   EXPECT_FALSE(addr2.Write(&wrong_buf));
   ASSERT_EQ(0U, wrong_buf.Length());
 }
@@ -697,7 +697,7 @@ TEST_F(StunTest, SetIPv4XorAddressAttributeOwner) {
   // However, no owner is still an error, should fail and write nothing.
   addr2.SetOwner(NULL);
   ASSERT_EQ(addr2.ipaddr(), addr->ipaddr());
-  wrong_buf.Shift(wrong_buf.Length());
+  wrong_buf.Consume(wrong_buf.Length());
   EXPECT_FALSE(addr2.Write(&wrong_buf));
 }
 
