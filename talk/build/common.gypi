@@ -25,38 +25,42 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+# This file contains common settings for building libjingle components.
+
 {
-  'includes': ['build/common.gypi'],
-  'targets': [
-    {
-      # TODO(ronghuawu): Use gtest.gyp from chromium.
-      'target_name': 'gunit',
-      'type': 'static_library',
-      'sources': [
-        'third_party/gtest/src/gtest-all.cc',
-      ],
-      'include_dirs': [
-        'third_party/gtest/include',
-        'third_party/gtest',
-      ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          'third_party/gtest/include',
+  'target_defaults': {
+    'include_dirs': [
+      '../..',
+    ],
+    'defines': [
+      'EXPAT_RELATIVE_PATH',
+      'FEATURE_ENABLE_VOICEMAIL',
+      'GTEST_RELATIVE_PATH',
+      'LOGGING=1',
+      'SRTP_RELATIVE_PATH',
+
+      # Feature selection
+      'FEATURE_ENABLE_SSL',
+      'FEATURE_ENABLE_VOICEMAIL',
+      'FEATURE_ENABLE_PSTN',
+      'HAVE_SRTP',
+    ],
+    'conditions': [
+      ['OS=="linux"', {
+        'defines': [
+          'LINUX',
         ],
-      },
-    },  # target gunit
-    {
-      'target_name': 'All',
-      'type': 'none',
-      'dependencies': [
-        'base/base.gyp:*',
-        'gunit',
-        'media/media.gyp:*',
-        # TODO(ronghuawu): third_party targets don't need to be here once they
-        # are all used by the libjingle targets.
-        'third_party/expat/expat.gyp:*',
-        'third_party/libsrtp/libsrtp.gyp:*',
-      ],
-    },
-  ],
+      }],
+      ['OS=="mac"', {
+        'defines': [
+          'OSX',
+        ],
+      }],
+      ['os_posix==1', {
+        'defines': [
+          'POSIX',
+        ],
+      }],
+    ],
+  }, # target_defaults
 }
