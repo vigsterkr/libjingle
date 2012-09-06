@@ -52,6 +52,9 @@
       ],
       'conditions': [
         ['OS=="linux"', {
+          'include_dirs': [
+            '../third_party/libudev',
+          ],
           'sources': [
             'devices/gtkvideorenderer.cc',
             'devices/libudevsymboltable.cc',
