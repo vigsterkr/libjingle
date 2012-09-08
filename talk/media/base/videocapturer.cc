@@ -134,6 +134,8 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
     return;
   }
   SignalVideoFrame(this, &i420_frame);
+#else
+  SignalVideoFrame(this, NULL);
 #endif  // VIDEO_FRAME_NAME
 }
 

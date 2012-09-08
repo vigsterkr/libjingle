@@ -67,7 +67,11 @@ void XmppTestHandler::OnStateChange(int state) {
     case XmppEngine::ERROR_DOCUMENT_CLOSED:
       session_ << "[ERROR-DOCUMENT-CLOSED]";
       break;
+    default:
+      break;
     }
+    break;
+  default:
     break;
   }
 }

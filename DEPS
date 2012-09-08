@@ -8,7 +8,7 @@ vars = {
 
   "googlecode_url": "http://%s.googlecode.com/svn",
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
-  "chromium_revision": "143348",
+  "chromium_revision": "155188",
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
@@ -20,13 +20,13 @@ deps = {
   "build":
     Var("chromium_trunk") + "/src/build@" + Var("chromium_revision"),
 
-  "talk/third_party/gtest":
+  "third_party/gtest":
     From("chromium_deps", "src/testing/gtest"),
 
-  "talk/third_party/expat":
+  "third_party/expat":
     Var("chromium_trunk") + "/src/third_party/expat@" + Var("chromium_revision"),
   
-  "talk/third_party/libsrtp/":
+  "third_party/libsrtp/":
     From("chromium_deps", "src/third_party/libsrtp"),
 
   "tools/clang":
@@ -80,7 +80,7 @@ hooks = [
     "pattern": ".",
     "action": ["python", Var("root_dir") + "/build/gyp_chromium",
                "--depth=" + Var("root_dir"), Var("root_dir") +
-               "/talk/libjingle.gyp", Var("extra_gyp_flag")],
+               "/talk/libjingle_all.gyp", Var("extra_gyp_flag")],
   },
 ]
 

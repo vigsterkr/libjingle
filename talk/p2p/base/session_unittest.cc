@@ -593,6 +593,8 @@ std::string RedirectXml(SignalingProtocol protocol,
       return JingleRedirectXml(initiate, target);
     case PROTOCOL_GINGLE:
       return GingleRedirectXml(initiate, target);
+    default:
+      break;
   }
   return "";
 }

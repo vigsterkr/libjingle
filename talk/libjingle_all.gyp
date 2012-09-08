@@ -25,54 +25,16 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# This file contains common settings for building libjingle components.
-
 {
-  'variables': {
-    # TODO(ronghuawu): Chromium build will need a different libjingle_root.
-    'libjingle_root%': '<(DEPTH)',
-    # TODO(ronghuawu): For now, disable the Chrome plugins, which causes a
-    # flood of chromium-style warnings.
-    'clang_use_chrome_plugins%': 0,
-  },
-  'target_defaults': {
-    'include_dirs': [
-      '../..',
-    ],
-    'defines': [
-      'EXPAT_RELATIVE_PATH',
-      'FEATURE_ENABLE_VOICEMAIL',
-      'GTEST_RELATIVE_PATH',
-      'LOGGING=1',
-      'SRTP_RELATIVE_PATH',
-
-      # Feature selection
-      'FEATURE_ENABLE_SSL',
-      'FEATURE_ENABLE_VOICEMAIL',
-      'FEATURE_ENABLE_PSTN',
-      'HAVE_SRTP',
-    ],
-    'conditions': [
-      ['OS=="linux"', {
-        'defines': [
-          'LINUX',
-        ],
-      }],
-      ['OS=="mac"', {
-        'defines': [
-          'OSX',
-        ],
-      }],
-      ['os_posix==1', {
-        'defines': [
-          'HASH_NAMESPACE=__gnu_cxx',
-          'POSIX',
-          'DISABLE_DYNAMIC_CAST',
-          'HAVE_OPENSSL_SSL_H=1',
-          # The POSIX standard says we have to define this.
-          '_REENTRANT',
-        ],
-      }],
-    ],
-  }, # target_defaults
+  'targets': [
+    {   
+      'target_name': 'All', 
+      'type': 'none',   
+      'dependencies': [ 
+        'libjingle.gyp:*',  
+        'libjingle_examples.gyp:*',  
+        'libjingle_tests.gyp:*',  
+      ],
+    },
+  ],
 }

@@ -65,10 +65,12 @@ static const char kIceUfrag0[] = "TESTICEUFRAG0000";
 // Based on ICE_PWD_LENGTH
 static const char kIcePwd0[] = "TESTICEPWD00000000000000";
 
+namespace cricket {
 // Helper for dumping candidates
 std::ostream& operator<<(std::ostream& os, const cricket::Candidate& c) {
   os << c.ToString();
   return os;
+}
 }
 
 class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {

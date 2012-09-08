@@ -421,24 +421,26 @@ void CallClient::OnCallDestroy(cricket::Call* call) {
 
 void CallClient::OnStateChange(buzz::XmppEngine::State state) {
   switch (state) {
-  case buzz::XmppEngine::STATE_START:
-    console_->PrintLine("connecting...");
-    break;
-
-  case buzz::XmppEngine::STATE_OPENING:
-    console_->PrintLine("logging in...");
-    break;
-
-  case buzz::XmppEngine::STATE_OPEN:
-    console_->PrintLine("logged in...");
-    InitMedia();
-    InitPresence();
-    break;
-
-  case buzz::XmppEngine::STATE_CLOSED:
-    buzz::XmppEngine::Error error = xmpp_client_->GetError(NULL);
-    console_->PrintLine("logged out... %s", strerror(error).c_str());
-    Quit();
+    case buzz::XmppEngine::STATE_START:
+      console_->PrintLine("connecting...");
+      break;
+    case buzz::XmppEngine::STATE_OPENING:
+      console_->PrintLine("logging in...");
+      break;
+    case buzz::XmppEngine::STATE_OPEN:
+      console_->PrintLine("logged in...");
+      InitMedia();
+      InitPresence();
+      break;
+    case buzz::XmppEngine::STATE_CLOSED:
+      {
+        buzz::XmppEngine::Error error = xmpp_client_->GetError(NULL);
+        console_->PrintLine("logged out... %s", strerror(error).c_str());
+        Quit();
+      }
+      break;
+    default:
+      break;
   }
 }
 
