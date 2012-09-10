@@ -218,8 +218,20 @@ void Transport::ConnectChannels_w() {
   connect_requested_ = true;
   signaling_thread()->Post(
       this, MSG_CANDIDATEREADY, NULL);
-  if (!local_transport_description_.ice_ufrag.empty() &&
-      !local_transport_description_.ice_pwd.empty()) {
+  if (local_transport_description_.ice_ufrag.empty() ||
+      local_transport_description_.ice_pwd.empty()) {
+    // This can happen if there's no transport info in the local session
+    // description. For example, when the application doesn't generate local
+    // description from the CreateOffer/CreatAnswer.
+    // TODO(ronghuawu): Fix all the cases that reach here and return error.
+    LOG(LS_WARNING) << "Transport::ConnectChannels_w: The ice_ufrag and the "
+                    << "ice_pwd are not ready. Will generate one.";
+    local_transport_description_.ice_ufrag =
+        talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
+    local_transport_description_.ice_pwd =
+        talk_base::CreateRandomString(ICE_PWD_LENGTH);
+  }
+  {
     // Set ufrag and pwd before Connect.
     talk_base::CritScope cs(&crit_);
     for (ChannelMap::iterator iter = channels_.begin();
@@ -228,11 +240,8 @@ void Transport::ConnectChannels_w() {
       (iter->second.get())->SetIceUfrag(local_transport_description_.ice_ufrag);
       (iter->second.get())->SetIcePwd(local_transport_description_.ice_pwd);
     }
-  } else {
-    // TODO: Maybe ASSERT here.
-    LOG(LS_WARNING) << "Transport::ConnectChannels_w: The ice_ufrag and the "
-                    << "ice_pwd were not ready.";
   }
+
   CallChannels_w(&TransportChannelImpl::Connect);
   if (!channels_.empty()) {
     signaling_thread()->Post(this, MSG_CONNECTING, NULL);

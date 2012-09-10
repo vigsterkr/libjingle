@@ -1,5 +1,6 @@
 # -*- Python -*-
 #
+#
 # All the helper functions are defined in:
 #  - site_scons/talk.py
 # Use 'import talk' in any .scons file to get access to it.

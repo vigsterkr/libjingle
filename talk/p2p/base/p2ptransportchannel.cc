@@ -223,11 +223,10 @@ void P2PTransportChannel::SetIcePwd(const std::string& ice_pwd) {
 void P2PTransportChannel::Connect() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   if (ice_ufrag_.empty() || ice_pwd_.empty()) {
-    // TODO: Fix all the cases that reach here and return error.
-    LOG(LS_WARNING) << "P2PTransportChannel::Connect: The ice_ufrag_ and the "
-                    << "ice_pwd_ were not set. Will generate one.";
-    ice_ufrag_ = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
-    ice_pwd_ = talk_base::CreateRandomString(ICE_PWD_LENGTH);
+    ASSERT(false);
+    LOG(LS_ERROR) << "P2PTransportChannel::Connect: The ice_ufrag_ and the "
+                  << "ice_pwd_ are not set.";
+    return;
   }
   // Kick off an allocator session
   Allocate();
