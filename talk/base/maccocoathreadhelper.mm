@@ -31,23 +31,6 @@
 
 #import "talk/base/maccocoathreadhelper.h"
 
-// A dummy thread object which essentially does nothing.
-// This is used in InitCocoaMultiThreading method.
-@interface DummyThreadObject : NSObject {
-}
-
-+ (void)dummyFunc:(NSObject*)obj;
-
-@end
-
-@implementation DummyThreadObject
-
-+ (void)dummyFunc:(NSObject*)obj {
-  // nothing to do
-}
-
-@end
-
 namespace talk_base {
 
 // Cocoa must be "put into multithreading mode" before Cocoa functionality can
@@ -67,8 +50,8 @@ void InitCocoaMultiThreading() {
     // causes unused variable error.
     NSAutoreleasePool* hack;
     hack = [[NSAutoreleasePool alloc] init];
-    [NSThread detachNewThreadSelector:@selector(dummyFunc:)
-                             toTarget:[DummyThreadObject class]
+    [NSThread detachNewThreadSelector:@selector(class)
+                             toTarget:[NSObject class]
                            withObject:nil];
   }
 
