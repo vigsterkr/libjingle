@@ -100,7 +100,7 @@
         ['OS=="linux"', {
           'link_settings': {
             'libraries': [
-              '<!@(pkg-config --libs-only-l gtk+-2.0)',
+              '<!@(pkg-config --libs-only-l gtk+-2.0 gthread-2.0)',
             ],
           },
         }],
