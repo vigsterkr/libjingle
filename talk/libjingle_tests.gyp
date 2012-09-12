@@ -192,6 +192,16 @@
         'libjingle.gyp:libjingle_media',
         'libjingle_unittest_main',
       ],
+      # TODO(ronghuawu): Avoid the copies.
+      # https://code.google.com/p/libjingle/issues/detail?id=398
+      'copies': [
+        {
+          'destination': '<(PRODUCT_DIR)/talk/media',
+          'files': [
+            'media/testdata/',
+          ],
+        },
+      ],
       'sources': [
         'media/base/codec_unittest.cc',
         'media/base/filemediaengine_unittest.cc',
