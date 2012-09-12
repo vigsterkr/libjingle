@@ -321,6 +321,13 @@
             'media/devices/macdevicemanager.cc',
             'media/devices/macdevicemanagermm.mm',
           ],
+          'xcode_settings': {
+            'WARNING_CFLAGS': [
+              # TODO(ronghuawu): Update macdevicemanager.cc to stop using
+              # deprecated functions and remove this flag.
+              '-Wno-deprecated-declarations',
+            ],
+          },
           'link_settings': {
             'xcode_settings': {
               'OTHER_LDFLAGS': [

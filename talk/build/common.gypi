@@ -57,6 +57,16 @@
         'defines': [
           'LINUX',
         ],
+        'conditions': [
+          ['clang==1', {
+            'cflags': [
+              # TODO(ronghuawu): Fix the warning caused by
+              # LateBindingSymbolTable::TableInfo from
+              # latebindingsymboltable.cc.def and remove below flag.
+              '-Wno-address-of-array-temporary',
+            ],
+          }],
+        ],
       }],
       ['OS=="mac"', {
         'defines': [

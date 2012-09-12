@@ -37,7 +37,7 @@ bool V4LLookup::CheckIsV4L2Device(const std::string& device_path) {
   // check major/minur device numbers are in range for video device
   if (major(s.st_rdev) == 81) {
     dev_t num = minor(s.st_rdev);
-    if (num <= 63 && num >= 0) {
+    if (num <= 63) {
       video_fd = ::open(device_path.c_str(), O_RDONLY | O_NONBLOCK);
       if ((video_fd >= 0) || (errno == EBUSY)) {
         ::v4l2_capability video_caps;
