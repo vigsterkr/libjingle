@@ -8,7 +8,7 @@ vars = {
 
   "googlecode_url": "http://%s.googlecode.com/svn",
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
-  "chromium_revision": "155188",
+  "chromium_revision": "156439",
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
