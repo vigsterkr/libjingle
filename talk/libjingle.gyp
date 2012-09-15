@@ -210,6 +210,8 @@
             'base/winfirewall.cc',
             'base/winping.cc',
           ],
+          # Suppress warnings about WIN32_LEAN_AND_MEAN.
+          'msvs_disabled_warnings': [4005],
           'msvs_settings': {
             'VCLibrarianTool': {
               'AdditionalDependencies': [
