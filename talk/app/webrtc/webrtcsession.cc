@@ -170,7 +170,6 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                            cricket::NS_JINGLE_RTP, false),
       channel_manager_(channel_manager),
       session_desc_factory_(channel_manager, &transport_desc_factory_),
-      allocation_complete_(false),
       mediastream_signaling_(mediastream_signaling),
       ice_observer_(NULL),
       // RFC 4566 suggested a Network Time Protocol (NTP) format timestamp
@@ -188,6 +187,9 @@ WebRtcSession::~WebRtcSession() {
   if (video_channel_.get()) {
     channel_manager_->DestroyVideoChannel(video_channel_.release());
   }
+  for (size_t i = 0; i < saved_candidates_.size(); ++i) {
+    delete saved_candidates_[i];
+  }
 }
 
 bool WebRtcSession::Initialize() {
@@ -201,22 +203,10 @@ bool WebRtcSession::Initialize() {
       kDefaultVideoCodecFramerate, 0);
   channel_manager_->SetDefaultVideoEncoderConfig(
       cricket::VideoEncoderConfig(default_codec));
-
-  if (!CreateDefaultLocalDescription() ||
-      !CreateChannels(BaseSession::local_description())) {
-    return false;
-  }
-
-  return StartCandidatesAllocation();
+  return true;
 }
 
 bool WebRtcSession::StartCandidatesAllocation() {
-  // Flushing any unsent candidates from the transports.
-  for (cricket::TransportMap::const_iterator iter = transport_proxies().begin();
-       iter != transport_proxies().end(); ++iter) {
-    iter->second->ClearUnsentCandidates();
-  }
-
   // SpeculativelyConnectTransportChannels, will call ConnectChannels method
   // from TransportProxy to start gathering ice candidates.
   SpeculativelyConnectAllTransportChannels();
@@ -320,40 +310,28 @@ bool WebRtcSession::SetLocalDescription(Action action,
     set_initiator(true);
   }
 
-  if (state() == STATE_INIT &&
-      !desc->description()->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
-    // Our default transport channels are created with BUNDLE flag on.
-    // So easiest way to handle this scenario is to delete all existing
-    // transport proxies and channels and recreate.
-    // DisableBundleAndCreateChannels also disables this BUNDLE in
-    // PortAllocator.
-    CreateChannels(desc->description());
-  }
-
-  // Remove channel and transport proxies, if MediaContentDescription is
-  // not present in local session description.
-  RemoveUnusedChannelsAndTransports(desc->description());
-  // Updating the content names for channels, if it differs from default.
-  if (!MaybeUpdateChannelsAndTransports(desc->description())) {
-    LOG(LS_ERROR) << "Failed to update content names from the description.";
-    return false;
-  }
-
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
 
-  if (state() == STATE_INIT) {
-    // Creating a dummy remote session description for parking remote candidates
-    // if happen to arrive before remote session description.
-    remote_desc_.reset(CreateAnswer(MediaHints(), local_desc_.get()));
-    set_remote_description(remote_desc_->description()->Copy());
+  // Transport and Media channels will be created only when local description is
+  // set.
+  if (!CreateChannels(action, desc->description())) {
+    // TODO(mallinath) - Handle CreateChannel failure, as new local description
+    // is applied. Restore back to old description.
+    return false;
   }
+
+  // Kick starting the ice candidates allocation.
+  StartCandidatesAllocation();
 
   switch (action) {
     case kOffer:
       SetState(STATE_SENTINITIATE);
       break;
     case kAnswer:
+      // Remove channel and transport proxies, if MediaContentDescription is
+      // rejected in local session description.
+      RemoveUnusedChannelsAndTransports(desc->description());
       if (!transport_muxed()) {
         MaybeEnableMuxingSupport();
       }
@@ -390,21 +368,27 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     return false;
   }
 
-  // Remove channel and transport proxies, if MediaContentDescription is
-  // not present in remote session description.
-  RemoveUnusedChannelsAndTransports(desc->description());
-  // Updating the content names for channels, if it differs from default.
-  if (!MaybeUpdateChannelsAndTransports(desc->description())) {
-    LOG(LS_ERROR) << "Failed to update content names from the description.";
+  // Transport and Media channels will be created only when local description is
+  // set.
+  if (!CreateChannels(action, desc->description())) {
+    // TODO(mallinath) - Handle CreateChannel failure, as new local description
+    // is applied. Restore back to old description.
     return false;
   }
 
+  // NOTE: Candidates allocation will be initiated only when SetLocalDescription
+  // is called.
+
   set_remote_description(desc->description()->Copy());
+
   switch (action) {
     case kOffer:
       SetState(STATE_RECEIVEDINITIATE);
       break;
     case kAnswer:
+      // Remove channel and transport proxies, if MediaContentDescription is
+      // rejected in remote session description.
+      RemoveUnusedChannelsAndTransports(desc->description());
       if (!transport_muxed()) {
         MaybeEnableMuxingSupport();
       }
@@ -417,6 +401,7 @@ bool WebRtcSession::SetRemoteDescription(Action action,
       break;
   }
 
+
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
   // Use all candidates in this new session description.
@@ -427,6 +412,8 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     return false;
   }
 
+  // Copy all saved candidates.
+  CopySavedCandidates(desc);
   // We retain all received candidates.
   CopyCandidatesFromSessionDescription(remote_desc_.get(), desc);
   remote_desc_.reset(desc);
@@ -435,14 +422,23 @@ bool WebRtcSession::SetRemoteDescription(Action action,
 
 bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   if (state() == STATE_INIT) {
-    LOG(LS_INFO) << "ProcessIceMessage: ICE candidates can't be added "
-                 << "without any offer (local or remote) session description.";
-    return false;
+     LOG(LS_ERROR) << "ProcessIceMessage: ICE candidates can't be added "
+                   << "without any offer (local or remote) session description.";
+     return false;
   }
 
   if (!candidate) {
     LOG(LS_ERROR) << "ProcessIceMessage: Candidate is NULL";
     return false;
+  }
+
+  if (!remote_description()) {
+    LOG(LS_INFO) << "ProcessIceMessage: Remote description not set, "
+                 << "save the candidate for later use.";
+    saved_candidates_.push_back(
+        new JsepIceCandidate(candidate->sdp_mid(), candidate->sdp_mline_index(),
+                             candidate->candidate()));
+    return true;
   }
 
   // Add this candidate to the remote session description.
@@ -550,15 +546,10 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       LOG(LS_ERROR) << "Transport is not in writable state.";
       SignalError();
       break;
-    case cricket::BaseSession::MSG_STATE:
-      MaybeSendAllUnsentCandidates();
-      BaseSession::OnMessage(msg);
-      break;
     default:
       break;
   }
 }
-
 
 void WebRtcSession::OnTransportRequestSignaling(
     cricket::Transport* transport) {
@@ -587,36 +578,7 @@ void WebRtcSession::OnTransportWritable(cricket::Transport* transport) {
 void WebRtcSession::OnTransportProxyCandidatesReady(
     cricket::TransportProxy* proxy, const cricket::Candidates& candidates) {
   ASSERT(signaling_thread()->IsCurrent());
-  // If local description is not set yet, push these allocated candidates
-  // back to the transport proxy, in unsent vector. These will be removed
-  // once initiator of the session is ready to accept.
-  if (!local_desc_.get()) {
-    proxy->AddUnsentCandidates(candidates);
-  } else {
-    ProcessNewLocalCandidate(proxy->content_name(), candidates);
-  }
-}
-
-void WebRtcSession::MaybeSendAllUnsentCandidates() {
-  if (state() != STATE_SENTINITIATE &&
-      state() != STATE_SENTACCEPT &&
-      state() != STATE_SENTPRACCEPT) {
-    return;
-  }
-
-  for (cricket::TransportMap::const_iterator iter = transport_proxies().begin();
-       iter != transport_proxies().end(); ++iter) {
-    cricket::TransportProxy* proxy = iter->second;
-    if (proxy->unsent_candidates().size() > 0) {
-      ProcessNewLocalCandidate(
-          proxy->content_name(), proxy->unsent_candidates());
-      proxy->ClearUnsentCandidates();
-    }
-  }
-  // If |allocation_complete_| flag is true, we should send allocation complete
-  // signal to the provider.
-  if (allocation_complete_)
-    OnCandidatesAllocationDone();
+  ProcessNewLocalCandidate(proxy->content_name(), candidates);
 }
 
 bool WebRtcSession::ExpectSetLocalDescription(Action action) {
@@ -651,30 +613,9 @@ bool WebRtcSession::ExpectSetRemoteDescription(Action action) {
 
 void WebRtcSession::OnCandidatesAllocationDone() {
   ASSERT(signaling_thread()->IsCurrent());
-  allocation_complete_ = true;
-  if (ice_observer_ && local_desc_.get()) {
+  if (ice_observer_) {
     ice_observer_->OnIceComplete();
   }
-}
-
-bool WebRtcSession::CreateDefaultLocalDescription() {
-  ASSERT(state() == cricket::BaseSession::STATE_INIT);
-
-  // Creating a default initial offer with audio and video support.
-  cricket::MediaSessionOptions options;
-  options.has_video = true;
-  options.has_audio = true;
-  // Enable BUNDLE feature by default.
-  options.bundle_enabled = true;
-
-  cricket::SessionDescription* desc(
-      session_desc_factory_.CreateOffer(options, NULL));
-  if (!desc) {
-    LOG(LS_ERROR) << "Failed to create default initial offer.";
-    return false;
-  }
-  set_local_description(desc);
-  return true;
 }
 
 // Enabling voice and video channel.
@@ -791,78 +732,20 @@ void WebRtcSession::RemoveUnusedChannelsAndTransports(
   }
 }
 
-bool WebRtcSession::MaybeUpdateChannelsAndTransports(
-    const cricket::SessionDescription* sdesc) {
-  // Creating or updating content name for voice transport proxy.
-  const cricket::ContentInfo* voice_info = cricket::GetFirstAudioContent(sdesc);
-  if (voice_info && !voice_info->rejected && !voice_channel_.get()) {
-    CreateVoiceChannel(sdesc);
-  } else if (voice_info && voice_channel_.get() &&
-             (voice_channel_->content_name() != voice_info->name)) {
-    // Update content name if the description has different from
-    // default CN_AUDIO(default value). This is allowed only in the INIT state.
-    if (state() == cricket::BaseSession::STATE_INIT) {
-      voice_channel_->set_content_name(voice_info->name);
-      UpdateContentName(voice_channel_->content_name(), voice_info->name);
-    } else {
-      LOG(LS_ERROR) << "Content names can be updated only in STATE."
-                    << " Current state : "
-                    << cricket::BaseSession::StateToString(state());
-      return false;
-    }
-  }
+bool WebRtcSession::CreateChannels(
+    Action action,
+    const cricket::SessionDescription* desc) {
 
-  // Creating or updating content name for video transport proxy.
-  const cricket::ContentInfo* video_info = cricket::GetFirstVideoContent(sdesc);
-  if (video_info && !video_info->rejected && !video_channel_.get()) {
-    CreateVideoChannel(sdesc);
-  } else if (video_info && video_channel_.get() &&
-             (video_channel_->content_name() != video_info->name)) {
-    // Update content name if the description has different from
-    // default CN_VIDEO (default value). This is allowed only in the INIT state.
-    if (state() == cricket::BaseSession::STATE_INIT) {
-      video_channel_->set_content_name(video_info->name);
-      UpdateContentName(video_channel_->content_name(), video_info->name);
-    } else {
-      LOG(LS_ERROR) << "Content names can be updated only in STATE."
-                    << " Current state : "
-                    << cricket::BaseSession::StateToString(state());
-      return false;
-    }
-  }
-  return true;
-}
-
-bool WebRtcSession::CreateChannels(const cricket::SessionDescription* desc) {
-  if (state() != cricket::BaseSession::STATE_INIT)
-    return false;
-
-  if (!desc->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
-    // Disabling the BUNDLE flag in PortAllocator.
+  // Disabling the BUNDLE flag in PortAllocator if offer disabled it.
+  if (state() == STATE_INIT && action == kOffer &&
+      !desc->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
     port_allocator()->set_flags(port_allocator()->flags() &
                                 ~cricket::PORTALLOCATOR_ENABLE_BUNDLE);
   }
 
-  allocation_complete_ = false;
-  // Our default transport channels are created with BUNDLE flag on.
-  // So easiest way to handle this scenario is to delete all existing
-  // transport proxies and channels and recreate.
-  // Destroying existing media channel and transport proxies.
-  if (voice_channel_.get()) {
-    const std::string content_name = voice_channel_->content_name();
-    channel_manager_->DestroyVoiceChannel(voice_channel_.release());
-    DestroyTransportProxy(content_name);
-  }
-
-  if (video_channel_.get()) {
-    const std::string content_name = video_channel_->content_name();
-    channel_manager_->DestroyVideoChannel(video_channel_.release());
-    DestroyTransportProxy(content_name);
-  }
-
   // Creating the media channels and transport proxies.
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
-  if (voice && !voice->rejected) {
+  if (voice && !voice->rejected && !voice_channel_.get()) {
     if (!CreateVoiceChannel(desc)) {
       LOG(LS_ERROR) << "Failed to create voice channel.";
       return false;
@@ -870,24 +753,19 @@ bool WebRtcSession::CreateChannels(const cricket::SessionDescription* desc) {
   }
 
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
-  if (video && !video->rejected) {
+  if (video && !video->rejected && !video_channel_.get()) {
     if (!CreateVideoChannel(desc)) {
       LOG(LS_ERROR) << "Failed to create video channel.";
       return false;
     }
   }
 
-  // Kick starting the ice candidates allocation.
-  StartCandidatesAllocation();
   return true;
 }
 
 bool WebRtcSession::CreateVoiceChannel(
     const cricket::SessionDescription* desc) {
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
-  if (voice_channel_.get() || !voice)
-    return false;
-
   voice_channel_.reset(channel_manager_->CreateVoiceChannel(
       this, voice->name, true));
   return voice_channel_.get() ? true : false;
@@ -896,12 +774,22 @@ bool WebRtcSession::CreateVoiceChannel(
 bool WebRtcSession::CreateVideoChannel(
     const cricket::SessionDescription* desc) {
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
-  if (video_channel_.get() || !video)
-    return false;
-
   video_channel_.reset(channel_manager_->CreateVideoChannel(
       this, video->name, true, voice_channel_.get()));
   return video_channel_.get() ? true : false;
+}
+
+void WebRtcSession::CopySavedCandidates(
+    SessionDescriptionInterface* dest_desc) {
+  if (!dest_desc) {
+    ASSERT(false);
+    return;
+  }
+  for (size_t i = 0; i < saved_candidates_.size(); ++i) {
+    dest_desc->AddCandidate(saved_candidates_[i]);
+    delete saved_candidates_[i];
+  }
+  saved_candidates_.clear();
 }
 
 }  // namespace webrtc

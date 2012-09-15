@@ -371,9 +371,9 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
 
   transproxy = new TransportProxy(sid_, content_name,
                                   new TransportWrapper(transport));
-  TransportInfo info;
-  if (GetLocalTransportInfo(content_name, &info)) {
-    transproxy->SetLocalTransportDescription(info.description);
+  TransportDescription tdesc;
+  if (GetLocalTransportDescription(content_name, &tdesc)) {
+    transproxy->SetLocalTransportDescription(tdesc);
   }
   transproxy->SignalCandidatesReady.connect(
       this, &BaseSession::OnTransportProxyCandidatesReady);
@@ -622,17 +622,18 @@ void BaseSession::LogState(State old_state, State new_state) {
                << " Transport:" << transport_type();
 }
 
-bool BaseSession::GetLocalTransportInfo(const std::string& content_name,
-                                        TransportInfo* info) {
-  if (!local_description_ || !info) {
+bool BaseSession::GetTransportDescription(const SessionDescription* description,
+                                          const std::string& content_name,
+                                          TransportDescription* tdesc) {
+  if (!description || !tdesc) {
     return false;
   }
   const TransportInfo* transport_info =
-      local_description_->GetTransportInfoByName(content_name);
+      description->GetTransportInfoByName(content_name);
   if (!transport_info) {
     return false;
   }
-  *info = *transport_info;
+  *tdesc = transport_info->description;
   return true;
 }
 
@@ -645,8 +646,14 @@ void BaseSession::OnMessage(talk_base::Message *pmsg) {
 
   case MSG_STATE:
     switch (state_) {
+    case STATE_RECEIVEDINITIATE:
+      PushdownRemoteTransportDescription();
+      break;
     case STATE_SENTACCEPT:
+      SetState(STATE_INPROGRESS);
+      break;
     case STATE_RECEIVEDACCEPT:
+      PushdownRemoteTransportDescription();
       SetState(STATE_INPROGRESS);
       break;
 

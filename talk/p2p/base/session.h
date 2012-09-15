@@ -141,6 +141,9 @@ class TransportProxy : public sigslot::has_slots<>,
   void SetLocalTransportDescription(const TransportDescription& description) {
     transport_->get()->SetLocalTransportDescription(description);
   }
+  void SetRemoteTransportDescription(const TransportDescription& description) {
+    transport_->get()->SetRemoteTransportDescription(description);
+  }
 
   void OnRemoteCandidates(const Candidates& candidates) {
     transport_->get()->OnRemoteCandidates(candidates);
@@ -284,9 +287,9 @@ class BaseSession : public sigslot::has_slots<>,
     // Update the TransportInfo to all the TransportProxy.
     for (TransportMap::iterator iter = transports_.begin();
          iter != transports_.end(); ++iter) {
-      TransportInfo info;
-      if (GetLocalTransportInfo(iter->second->content_name(), &info)) {
-        iter->second->SetLocalTransportDescription(info.description);
+      TransportDescription tdesc;
+      if (GetLocalTransportDescription(iter->second->content_name(), &tdesc)) {
+        iter->second->SetLocalTransportDescription(tdesc);
       }
     }
     return true;
@@ -299,6 +302,22 @@ class BaseSession : public sigslot::has_slots<>,
       remote_description_ = sdesc;
     }
     return true;
+  }
+
+  void PushdownRemoteTransportDescription() {
+    // Update the Transports with the right information
+    for (TransportMap::iterator iter = transports_.begin();
+         iter != transports_.end(); ++iter) {
+      TransportDescription tdesc;
+
+      // If no transport info was in this session description, ret == false
+      // and we just skip this one.
+      bool ret = GetRemoteTransportDescription(
+          iter->second->content_name(), &tdesc);
+      if (ret) {
+        iter->second->SetRemoteTransportDescription(tdesc);
+      }
+    }
   }
 
   const SessionDescription* initiator_description() const {
@@ -461,10 +480,24 @@ class BaseSession : public sigslot::has_slots<>,
   void LogState(State old_state, State new_state);
 
   // Returns true and the TransportInfo of the given |content_name|
+  // from |description|. Returns false if it's not available.
+  bool GetTransportDescription(const SessionDescription* description,
+                               const std::string& content_name,
+                               TransportDescription* info);
+
+  // Returns true and the TransportInfo of the given |content_name|
   // from |local_description_|.
-  // Returns false if it's not available.
-  bool GetLocalTransportInfo(const std::string& content_name,
-                             TransportInfo* info);
+  bool GetLocalTransportDescription(const std::string& content_name,
+                                    TransportDescription* tdesc) {
+    return GetTransportDescription(local_description_, content_name, tdesc);
+  }
+
+  // Returns true and the TransportInfo of the given |content_name|
+  // from |remote_description|.
+  bool GetRemoteTransportDescription(const std::string& content_name,
+                                     TransportDescription* tdesc) {
+    return GetTransportDescription(remote_description_, content_name, tdesc);
+  }
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;

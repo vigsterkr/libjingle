@@ -176,37 +176,30 @@ class WebRtcSession : public cricket::BaseSession,
   void RemoveUnusedChannelsAndTransports(
       const cricket::SessionDescription* desc);
 
-  // This method will create media channel and transport proxy when a local
-  // or remote session description is applied. It also updates the content
-  // name for channel and transport proxy if session description has different
-  // from the original. But update "MUST" happen only when session is in INIT
-  // state.
-  bool MaybeUpdateChannelsAndTransports(
-      const cricket::SessionDescription* sdesc);
-
-  // Allocated candidates are not given to the observer if local
-  // description is not set in the session. This method sends any unsent
-  // allocated candidates to the provider.
-  void MaybeSendAllUnsentCandidates();
   // Allocates media channels based on the |desc|. If |desc| doesn't have
   // the BUNDLE option, this method will disable BUNDLE in PortAllocator.
   // This method will also delete any existing media channels before creating.
-  bool CreateChannels(const cricket::SessionDescription* desc);
+  bool CreateChannels(Action action,
+                      const cricket::SessionDescription* desc);
 
   // Helper methods to create media channels.
   bool CreateVoiceChannel(const cricket::SessionDescription* desc);
   bool CreateVideoChannel(const cricket::SessionDescription* desc);
+  // Copy the candidates from |saved_candidates_| to |dest_desc|.
+  // The |saved_candidates_| will be cleared after this function call.
+  void CopySavedCandidates(SessionDescriptionInterface* dest_desc);
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
   cricket::TransportDescriptionFactory transport_desc_factory_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
-  bool allocation_complete_;
   MediaStreamSignaling* mediastream_signaling_;
   IceCandidateObserver * ice_observer_;
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
   talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
+  // Candidates that arrived before the remote description was set.
+  std::vector<IceCandidateInterface*> saved_candidates_;
   std::string session_id_;
   uint64 session_version_;
 };
