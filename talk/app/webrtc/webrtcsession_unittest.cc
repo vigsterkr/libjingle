@@ -206,10 +206,11 @@ class WebRtcSessionTest : public testing::Test {
   WebRtcSessionTest()
     : media_engine_(new cricket::FakeMediaEngine()),
       device_manager_(new cricket::FakeDeviceManager()),
-     channel_manager_(new cricket::ChannelManager(
+      channel_manager_(new cricket::ChannelManager(
          media_engine_, device_manager_, talk_base::Thread::Current())),
+      tdesc_factory_(new cricket::TransportDescriptionFactory()),
       desc_factory_(new cricket::MediaSessionDescriptionFactory(
-          channel_manager_.get())),
+          channel_manager_.get(), tdesc_factory_.get())),
       pss_(new talk_base::PhysicalSocketServer),
       vss_(new talk_base::VirtualSocketServer(pss_.get())),
       fss_(new talk_base::FirewallSocketServer(vss_.get())),
@@ -469,6 +470,7 @@ class WebRtcSessionTest : public testing::Test {
   cricket::FakeMediaEngine* media_engine_;
   cricket::FakeDeviceManager* device_manager_;
   talk_base::scoped_ptr<cricket::ChannelManager> channel_manager_;
+  talk_base::scoped_ptr<cricket::TransportDescriptionFactory> tdesc_factory_;
   talk_base::scoped_ptr<cricket::MediaSessionDescriptionFactory> desc_factory_;
   talk_base::scoped_ptr<talk_base::PhysicalSocketServer> pss_;
   talk_base::scoped_ptr<talk_base::VirtualSocketServer> vss_;
@@ -928,6 +930,33 @@ TEST_F(WebRtcSessionTest, TestLocalCandidatesAddedToSessionDescription) {
   EXPECT_LT(0u, candidates->count());
 }
 
+// Test that we can remove a media content from the local description even if it
+// has candidates.
+TEST_F(WebRtcSessionTest, TestRemoveMediaContentFromLocalSessionDesctription) {
+  WebRtcSessionTest::Init();
+  AddInterface(kClientAddr1);
+  mediastream_signaling_.UseOptionsWithStream1(true);
+
+  SetRemoteAndLocalSessionDescription();
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+
+  const SessionDescriptionInterface* local_desc = session_->local_description();
+  ASSERT_EQ(2u, local_desc->number_of_mediasections());
+  ASSERT_TRUE(local_desc->candidates(kMediaContentIndex0) != NULL);
+  EXPECT_LT(0u, local_desc->candidates(kMediaContentIndex0)->count());
+  ASSERT_TRUE(local_desc->candidates(kMediaContentIndex1) != NULL);
+  EXPECT_LT(0u, local_desc->candidates(kMediaContentIndex1)->count());
+
+  mediastream_signaling_.UseOptionsAudioOnly();
+  SetRemoteAndLocalSessionDescription();
+
+  // TODO(perkj): What can we expect here? Currently we only have one media
+  // section. Shouldn't we keep the old one?
+  // local_description has been updated in SetRemoteAndLocalSessionDescription.
+  local_desc = session_->local_description();
+  EXPECT_EQ(1u, local_desc->number_of_mediasections());
+}
+
 // Test that we can set a remote session description with remote candidates.
 TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
   WebRtcSessionTest::Init();
@@ -1277,4 +1306,28 @@ TEST_F(WebRtcSessionTest, SetVideoSend) {
   EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
   session_->SetVideoSend(kVideoTrack1, true);
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
+}
+
+TEST_F(WebRtcSessionTest, TestInitiatorFlagAsOriginator) {
+  WebRtcSessionTest::Init();
+  EXPECT_FALSE(session_->initiator());
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                                   offer);
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->initiator());
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->initiator());
+}
+
+TEST_F(WebRtcSessionTest, TestInitiatorFlagAsReceiver) {
+  WebRtcSessionTest::Init();
+  EXPECT_FALSE(session_->initiator());
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_FALSE(session_->initiator());
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_FALSE(session_->initiator());
 }

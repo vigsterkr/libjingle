@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2011, Google Inc.
+ * Copyright 2004, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -32,7 +32,7 @@
 
 namespace talk_base {
 
-TEST(utf8_encode, EncodeDecode) {
+TEST(Utf8EncodeTest, EncodeDecode) {
   const struct Utf8Test {
     const char* encoded;
     size_t encsize, enclen;
@@ -51,7 +51,7 @@ TEST(utf8_encode, EncodeDecode) {
     { "\x90\x80\x80  ",    5, 0, 0 },
     { NULL, 0, 0 },
   };
-  for (size_t i=0; kTests[i].encoded; ++i) {
+  for (size_t i = 0; kTests[i].encoded; ++i) {
     unsigned long val = 0;
     ASSERT_EQ(kTests[i].enclen, utf8_decode(kTests[i].encoded,
                                             kTests[i].encsize,
@@ -77,10 +77,160 @@ TEST(utf8_encode, EncodeDecode) {
   }
 }
 
-// TODO: hex_encode unittest
+class HexEncodeTest : public testing::Test {
+ public:
+  HexEncodeTest() : enc_res_(0), dec_res_(0) {
+    for (size_t i = 0; i < sizeof(data_); ++i) {
+      data_[i] = (i + 128) & 0xff;
+    }
+    memset(decoded_, 0x7f, sizeof(decoded_));
+  }
+
+  char data_[10];
+  char encoded_[31];
+  char decoded_[11];
+  size_t enc_res_;
+  size_t dec_res_;
+};
+
+// Test that we can convert to/from hex with no delimiter.
+TEST_F(HexEncodeTest, TestWithNoDelimiter) {
+  enc_res_ = hex_encode(encoded_, sizeof(encoded_), data_, sizeof(data_));
+  ASSERT_EQ(sizeof(data_) * 2, enc_res_);
+  ASSERT_STREQ("80818283848586878889", encoded_);
+  dec_res_ = hex_decode(decoded_, sizeof(decoded_), encoded_, enc_res_);
+  ASSERT_EQ(sizeof(data_), dec_res_);
+  ASSERT_EQ(0, memcmp(data_, decoded_, dec_res_));
+}
+
+// Test that we can convert to/from hex with a colon delimiter.
+TEST_F(HexEncodeTest, TestWithDelimiter) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(encoded_),
+                                       data_, sizeof(data_), ':');
+  ASSERT_EQ(sizeof(data_) * 3 - 1, enc_res_);
+  ASSERT_STREQ("80:81:82:83:84:85:86:87:88:89", encoded_);
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_),
+                                       encoded_, enc_res_, ':');
+  ASSERT_EQ(sizeof(data_), dec_res_);
+  ASSERT_EQ(0, memcmp(data_, decoded_, dec_res_));
+}
+
+// Test that encoding with one delimiter and decoding with another fails.
+TEST_F(HexEncodeTest, TestWithWrongDelimiter) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(encoded_),
+                                       data_, sizeof(data_), ':');
+  ASSERT_EQ(sizeof(data_) * 3 - 1, enc_res_);
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_),
+                                       encoded_, enc_res_, '/');
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that encoding without a delimiter and decoding with one fails.
+TEST_F(HexEncodeTest, TestExpectedDelimiter) {
+  enc_res_ = hex_encode(encoded_, sizeof(encoded_), data_, sizeof(data_));
+  ASSERT_EQ(sizeof(data_) * 2, enc_res_);
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_),
+                                       encoded_, enc_res_, ':');
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that encoding with a delimiter and decoding without one fails.
+TEST_F(HexEncodeTest, TestExpectedNoDelimiter) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(encoded_),
+                                       data_, sizeof(data_), ':');
+  ASSERT_EQ(sizeof(data_) * 3 - 1, enc_res_);
+  dec_res_ = hex_decode(decoded_, sizeof(decoded_), encoded_, enc_res_);
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that we handle a zero-length buffer with no delimiter.
+TEST_F(HexEncodeTest, TestZeroLengthNoDelimiter) {
+  enc_res_ = hex_encode(encoded_, sizeof(encoded_), "", 0);
+  ASSERT_EQ(0U, enc_res_);
+  dec_res_ = hex_decode(decoded_, sizeof(decoded_), encoded_, enc_res_);
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that we handle a zero-length buffer with a delimiter.
+TEST_F(HexEncodeTest, TestZeroLengthWithDelimiter) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(encoded_), "", 0, ':');
+  ASSERT_EQ(0U, enc_res_);
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_),
+                                       encoded_, enc_res_, ':');
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test the std::string variants that take no delimiter.
+TEST_F(HexEncodeTest, TestHelpersNoDelimiter) {
+  std::string result = hex_encode(data_, sizeof(data_));
+  ASSERT_EQ("80818283848586878889", result);
+  dec_res_ = hex_decode(decoded_, sizeof(decoded_), result);
+  ASSERT_EQ(sizeof(data_), dec_res_);
+  ASSERT_EQ(0, memcmp(data_, decoded_, dec_res_));
+}
+
+// Test the std::string variants that use a delimiter.
+TEST_F(HexEncodeTest, TestHelpersWithDelimiter) {
+  std::string result = hex_encode_with_delimiter(data_, sizeof(data_), ':');
+  ASSERT_EQ("80:81:82:83:84:85:86:87:88:89", result);
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_), result, ':');
+  ASSERT_EQ(sizeof(data_), dec_res_);
+  ASSERT_EQ(0, memcmp(data_, decoded_, dec_res_));
+}
+
+// Test that encoding into a too-small output buffer (without delimiter) fails.
+TEST_F(HexEncodeTest, TestEncodeTooShort) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(data_) * 2,
+                                       data_, sizeof(data_), 0);
+  ASSERT_EQ(0U, enc_res_);
+}
+
+// Test that encoding into a too-small output buffer (with delimiter) fails.
+TEST_F(HexEncodeTest, TestEncodeWithDelimiterTooShort) {
+  enc_res_ = hex_encode_with_delimiter(encoded_, sizeof(data_) * 3 - 1,
+                                       data_, sizeof(data_), ':');
+  ASSERT_EQ(0U, enc_res_);
+}
+
+// Test that decoding into a too-small output buffer fails.
+TEST_F(HexEncodeTest, TestDecodeTooShort) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, 4, "0123456789", 10, 0);
+  ASSERT_EQ(0U, dec_res_);
+  ASSERT_EQ(0x7f, decoded_[4]);
+}
+
+// Test that decoding non-hex data fails.
+TEST_F(HexEncodeTest, TestDecodeBogusData) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_), "xyz", 3, 0);
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that decoding an odd number of hex characters fails.
+TEST_F(HexEncodeTest, TestDecodeOddHexDigits) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, sizeof(decoded_), "012", 3, 0);
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that decoding a string with too many delimiters fails.
+TEST_F(HexEncodeTest, TestDecodeWithDelimiterTooManyDelimiters) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, 4, "01::23::45::67", 14, ':');
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that decoding a string with a leading delimiter fails.
+TEST_F(HexEncodeTest, TestDecodeWithDelimiterLeadingDelimiter) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, 4, ":01:23:45:67", 12, ':');
+  ASSERT_EQ(0U, dec_res_);
+}
+
+// Test that decoding a string with a trailing delimiter fails.
+TEST_F(HexEncodeTest, TestDecodeWithDelimiterTrailingDelimiter) {
+  dec_res_ = hex_decode_with_delimiter(decoded_, 4, "01:23:45:67:", 12, ':');
+  ASSERT_EQ(0U, dec_res_);
+}
 
 // Tests counting substrings.
-TEST(tokenizeTest, CountSubstrings) {
+TEST(TokenizeTest, CountSubstrings) {
   std::vector<std::string> fields;
 
   EXPECT_EQ(5ul, tokenize("one two three four five", ' ', &fields));
@@ -97,7 +247,7 @@ TEST(tokenizeTest, CountSubstrings) {
 }
 
 // Tests comparing substrings.
-TEST(tokenizeTest, CompareSubstrings) {
+TEST(TokenizeTest, CompareSubstrings) {
   std::vector<std::string> fields;
 
   tokenize("find middle one", ' ', &fields);
@@ -114,7 +264,7 @@ TEST(tokenizeTest, CompareSubstrings) {
   ASSERT_EQ(0ul, fields.size());
 }
 
-TEST(tokenizeTest, TokenizeAppend) {
+TEST(TokenizeTest, TokenizeAppend) {
   ASSERT_EQ(0ul, tokenize_append("A B C", ' ', NULL));
 
   std::vector<std::string> fields;
@@ -129,7 +279,7 @@ TEST(tokenizeTest, TokenizeAppend) {
   ASSERT_STREQ("E", fields.at(4).c_str());
 }
 
-TEST(tokenizeTest, TokenizeWithMarks) {
+TEST(TokenizeTest, TokenizeWithMarks) {
   ASSERT_EQ(0ul, tokenize("D \"A B", ' ', '(', ')', NULL));
 
   std::vector<std::string> fields;
@@ -166,7 +316,7 @@ TEST(tokenizeTest, TokenizeWithMarks) {
 }
 
 // Tests counting substrings.
-TEST(splitTest, CountSubstrings) {
+TEST(SplitTest, CountSubstrings) {
   std::vector<std::string> fields;
 
   EXPECT_EQ(5ul, split("one,two,three,four,five", ',', &fields));
@@ -183,7 +333,7 @@ TEST(splitTest, CountSubstrings) {
 }
 
 // Tests comparing substrings.
-TEST(splitTest, CompareSubstrings) {
+TEST(SplitTest, CompareSubstrings) {
   std::vector<std::string> fields;
 
   split("find,middle,one", ',', &fields);
@@ -201,4 +351,4 @@ TEST(splitTest, CompareSubstrings) {
   ASSERT_STREQ("", fields.at(0).c_str());
 }
 
-} // namespace talk_base
+}  // namespace talk_base

@@ -77,11 +77,6 @@ uint64 PortProxy::Tiebreaker() const {
   return impl_->Tiebreaker();
 }
 
-uint32 PortProxy::Priority() const {
-  ASSERT(impl_ != NULL);
-  return impl_->Priority();
-}
-
 void PortProxy::PrepareAddress() {
   ASSERT(impl_ != NULL);
   impl_->PrepareAddress();

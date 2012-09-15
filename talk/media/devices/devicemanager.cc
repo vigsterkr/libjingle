@@ -32,8 +32,12 @@
 #include "talk/base/pathutils.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
+#include "talk/base/windowpicker.h"
+#include "talk/base/windowpickerfactory.h"
 #include "talk/media/base/mediacommon.h"
 #include "talk/media/devices/filevideocapturer.h"
+
+#if !(defined(IOS) || defined(ANDROID))
 
 #if defined(HAVE_WEBRTC_VIDEO)
 #include "talk/media/webrtc/webrtcvideocapturer.h"
@@ -44,12 +48,17 @@
 #define VIDEO_CAPTURER_NAME WebRtcVideoCapturer
 #endif
 
+
+#endif
+
 namespace cricket {
+
 // Initialize to empty string.
 const char DeviceManagerInterface::kDefaultDeviceName[] = "";
 
 DeviceManager::DeviceManager()
-    : initialized_(false) {
+    : initialized_(false),
+      window_picker_(talk_base::WindowPickerFactory::CreateWindowPicker()) {
 }
 
 DeviceManager::~DeviceManager() {
@@ -108,7 +117,7 @@ bool DeviceManager::GetAudioOutputDevice(const std::string& name, Device* out) {
 
 bool DeviceManager::GetVideoCaptureDevices(std::vector<Device>* devices) {
   devices->clear();
-#if defined(ANDROID)
+#if defined(IOS) || defined(ANDROID)
   // On Android, we treat the camera(s) as a single device. Even if there are
   // multiple cameras, that's abstracted away at a higher level.
   Device dev("camera", "1");    // name and ID
@@ -141,9 +150,7 @@ bool DeviceManager::GetVideoCaptureDevice(const std::string& name,
     }
   }
 
-  // If the name is a valid path to a file, then we'll create a simulated device
-  // with the filename. The LmiMediaEngine will know to use a FileVideoCapturer
-  // for these devices.
+  // If |name| is a valid name for a file, return a file video capturer device.
   if (talk_base::Filesystem::IsFile(name)) {
     LOG(LS_INFO) << "Creating FileVideoCapturer";
     *out = FileVideoCapturer::CreateFileVideoCapturerDevice(name);
@@ -182,10 +189,53 @@ VideoCapturer* DeviceManager::CreateVideoCapturer(const Device& device) const {
 #endif
 }
 
+bool DeviceManager::GetWindows(
+    std::vector<talk_base::WindowDescription>* descriptions) {
+  if (!window_picker_.get()) {
+    return false;
+  }
+  return window_picker_->GetWindowList(descriptions);
+}
+
+VideoCapturer* DeviceManager::CreateWindowCapturer(talk_base::WindowId window) {
+#if defined(WINDOW_CAPTURER_NAME)
+  WINDOW_CAPTURER_NAME* window_capturer = new WINDOW_CAPTURER_NAME();
+  if (!window_capturer->Init(window)) {
+    delete window_capturer;
+    return NULL;
+  }
+  return window_capturer;
+#else
+  return NULL;
+#endif
+}
+
+bool DeviceManager::GetDesktops(
+    std::vector<talk_base::DesktopDescription>* descriptions) {
+  if (!window_picker_.get()) {
+    return false;
+  }
+  return window_picker_->GetDesktopList(descriptions);
+}
+
+VideoCapturer* DeviceManager::CreateDesktopCapturer(
+    talk_base::DesktopId desktop) {
+#if defined(DESKTOP_CAPTURER_NAME)
+  DESKTOP_CAPTURER_NAME* desktop_capturer = new DESKTOP_CAPTURER_NAME();
+  if (!desktop_capturer->Init(desktop.index())) {
+    delete desktop_capturer;
+    return NULL;
+  }
+  return desktop_capturer;
+#else
+  return NULL;
+#endif
+}
+
 bool DeviceManager::GetAudioDevices(bool input,
                                     std::vector<Device>* devs) {
   devs->clear();
-#ifdef ANDROID
+#if defined(IOS) || defined(ANDROID)
   // Under Android, we don't access the device file directly.
   // Arbitrary use 0 for the mic and 1 for the output.
   // These ids are used in MediaEngine::SetSoundDevices(in, out);

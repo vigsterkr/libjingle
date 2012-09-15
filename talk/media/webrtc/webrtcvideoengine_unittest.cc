@@ -1062,6 +1062,10 @@ TEST_F(WebRtcVideoMediaChannelTest, DISABLED_AdaptFramerate) {
   Base::AdaptFramerate();
 }
 
+TEST_F(WebRtcVideoMediaChannelTest, SetSendStreamFormat0x0) {
+  Base::SetSendStreamFormat0x0();
+}
+
 // TODO(zhurunz): Fix the flakey test.
 TEST_F(WebRtcVideoMediaChannelTest, DISABLED_SetSendStreamFormat) {
   Base::SetSendStreamFormat();

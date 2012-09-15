@@ -291,6 +291,7 @@ BaseSession::BaseSession(talk_base::Thread* signaling_thread,
       content_type_(content_type),
       transport_type_(NS_GINGLE_P2P),
       initiator_(initiator),
+      identity_(NULL),
       local_description_(NULL),
       remote_description_(NULL),
       transport_muxed_(false),
@@ -424,9 +425,9 @@ cricket::Transport* BaseSession::CreateTransport(
     const std::string& content_name) {
   ASSERT(transport_type_ == NS_GINGLE_P2P);
   return new cricket::DtlsTransport<P2PTransport>(
-      signaling_thread(), worker_thread(), content_name, port_allocator());
+      signaling_thread(), worker_thread(), content_name,
+      port_allocator(), identity_);
 }
-
 
 void BaseSession::UpdateContentName(
     const std::string& old_content_name, const std::string& new_content_name) {
@@ -814,7 +815,7 @@ TransportInfos Session::GetEmptyTransportInfos(
        content != contents.end(); ++content) {
     tinfos.push_back(
         TransportInfo(content->name,
-          TransportDescription(transport_type(), Candidates())));
+            TransportDescription(transport_type(), Candidates())));
   }
   return tinfos;
 }
@@ -1096,6 +1097,7 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
   }
 
   set_remote_name(msg.from);
+  set_initiator_name(msg.initiator);
   set_remote_description(new SessionDescription(init.ClearContents(),
                                                 init.groups));
   SetState(STATE_RECEIVEDINITIATE);

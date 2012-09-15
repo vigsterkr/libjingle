@@ -132,13 +132,11 @@ const uint32 MSG_DELETE = 1;
 
 namespace cricket {
 
-static const char* const PROTO_NAMES[] = { "udp", "tcp", "ssltcp" };
+const char LOCAL_PORT_TYPE[] = "local";
+const char STUN_PORT_TYPE[] = "stun";
+const char RELAY_PORT_TYPE[] = "relay";
 
-// TODO: Use the priority values from RFC 5245.
-const uint32 PRIORITY_LOCAL_UDP = 2130706432U;  // pref = 1.0
-const uint32 PRIORITY_LOCAL_STUN = 1912602624U;  // pref = 0.9
-const uint32 PRIORITY_LOCAL_TCP = 1694498816U;  // pref = 0.8
-const uint32 PRIORITY_RELAY = 1056964608U;  // pref = 0.5
+static const char* const PROTO_NAMES[] = { "udp", "tcp", "ssltcp" };
 
 const char* ProtoToString(ProtocolType proto) {
   return PROTO_NAMES[proto];
@@ -155,18 +153,19 @@ bool StringToProto(const char* value, ProtocolType* proto) {
 }
 
 Port::Port(talk_base::Thread* thread, const std::string& type,
-           talk_base::PacketSocketFactory* factory, talk_base::Network* network,
-           const talk_base::IPAddress& ip, int min_port, int max_port,
+           const uint32 preference, talk_base::PacketSocketFactory* factory,
+           talk_base::Network* network, const talk_base::IPAddress& ip,
+           int min_port, int max_port,
            const std::string& username_fragment, const std::string& password)
     : thread_(thread),
       factory_(factory),
       type_(type),
+      type_preference_(preference),
       network_(network),
       ip_(ip),
       min_port_(min_port),
       max_port_(max_port),
       component_(ICE_CANDIDATE_COMPONENT_DEFAULT),
-      priority_(0),
       generation_(0),
       ice_username_fragment_(username_fragment),
       password_(password),
@@ -209,13 +208,6 @@ Connection* Port::GetConnection(const talk_base::SocketAddress& remote_addr) {
     return NULL;
 }
 
-int Port::ComputeCandidatePriority(const talk_base::SocketAddress& address,
-                                   int type_preference) const {
-  int addr_preference = IPAddressPrecedence(address.ipaddr());
-  int p = (type_preference << 24) | (addr_preference << 8) | (256 - component_);
-  return p;
-}
-
 // Foundation:  An arbitrary string that is the same for two candidates
 //   that have the same type, base IP address, protocol (UDP, TCP,
 //   etc.), and STUN or TURN server.  If any of these are different,
@@ -240,7 +232,7 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_type(type_);
   c.set_protocol(protocol);
   c.set_address(address);
-  c.set_priority(ComputeCandidatePriority(address, priority_ >> 24));
+  c.set_priority(c.GetPriority(type_preference_));
   c.set_username(username_fragment());
   c.set_password(password_);
   c.set_network_name(network_->name());
@@ -669,14 +661,11 @@ class ConnectionRequest : public StunRequest {
  public:
   explicit ConnectionRequest(Connection* connection)
       : StunRequest(new IceMessage()),
-        connection_(connection),
-        use_candidate_(false) {
+        connection_(connection) {
   }
 
   virtual ~ConnectionRequest() {
   }
-
-  void set_use_candidate(bool use_candidate) { use_candidate_ = use_candidate; }
 
   virtual void Prepare(StunMessage* request) {
     request->SetType(STUN_BINDING_REQUEST);
@@ -692,17 +681,16 @@ class ConnectionRequest : public StunRequest {
       if (connection_->port()->Role() == ROLE_CONTROLLING) {
         request->AddAttribute(new StunUInt64Attribute(
             STUN_ATTR_ICE_CONTROLLING, connection_->port()->Tiebreaker()));
+        // Since we are trying aggressive nomination, sending USE-CANDIDATE
+        // attribute in every ping.
+        // Adding USE-CANDIDATE attribute, if the flag is set to true.
+        request->AddAttribute(new StunByteStringAttribute(
+            STUN_ATTR_USE_CANDIDATE));
       } else if (connection_->port()->Role() == ROLE_CONTROLLED) {
         request->AddAttribute(new StunUInt64Attribute(
             STUN_ATTR_ICE_CONTROLLED, connection_->port()->Tiebreaker()));
       } else {
         ASSERT(false);
-      }
-
-      // Adding USE-CANDIDATE attribute, if the flag is set to true.
-      if (use_candidate_) {
-        request->AddAttribute(new StunByteStringAttribute(
-            STUN_ATTR_USE_CANDIDATE));
       }
 
       // Adding PRIORITY Attribute.
@@ -758,7 +746,10 @@ Connection::Connection(Port* port, size_t index,
     write_state_(STATE_WRITE_CONNECT), connected_(true), pruned_(false),
     requests_(port->thread()), rtt_(DEFAULT_RTT),
     last_ping_sent_(0), last_ping_received_(0), last_data_received_(0),
-    last_ping_response_received_(0), reported_(false), nominated_(false) {
+    last_ping_response_received_(0), reported_(false), nominated_(false),
+    state_(STATE_WAITING) {
+  // All of our connections start in WAITING state.
+  // TODO(mallinath) - Start connections from STATE_FROZEN.
   // Wire up to send stun packets
   requests_.SignalSendPacket.connect(this, &Connection::OnSendStunPacket);
   LOG_J(LS_INFO, this) << "Connection created";
@@ -770,6 +761,31 @@ Connection::~Connection() {
 const Candidate& Connection::local_candidate() const {
   ASSERT(local_candidate_index_ < port_->Candidates().size());
   return port_->Candidates()[local_candidate_index_];
+}
+
+uint64 Connection::priority() const {
+  uint64 priority = 0;
+  // RFC 5245 - 5.7.2.  Computing Pair Priority and Ordering Pairs
+  // Let G be the priority for the candidate provided by the controlling
+  // agent.  Let D be the priority for the candidate provided by the
+  // controlled agent.
+  // pair priority = 2^32*MIN(G,D) + 2*MAX(G,D) + (G>D?1:0)
+  TransportRole role = port_->Role();
+  if (role != ROLE_UNKNOWN) {
+    uint32 g = 0;
+    uint32 d = 0;
+    if (role == ROLE_CONTROLLING) {
+      g = local_candidate().priority();
+      d = remote_candidate_.priority();
+    } else {
+      g = remote_candidate_.priority();
+      d = local_candidate().priority();
+    }
+    priority = talk_base::_min(g, d);
+    priority = priority << 32;
+    priority += 2 * talk_base::_max(g, d) + (g > d ? 1 : 0);
+  }
+  return priority;
 }
 
 void Connection::set_read_state(ReadState value) {
@@ -789,6 +805,14 @@ void Connection::set_write_state(WriteState value) {
     LOG_J(LS_VERBOSE, this) << "set_write_state";
     SignalStateChange(this);
     CheckTimeout();
+  }
+}
+
+void Connection::set_state(State state) {
+  State old_state = state_;
+  state_ = state;
+  if (state != old_state) {
+    LOG_J(LS_VERBOSE, this) << "set_state";
   }
 }
 
@@ -888,7 +912,6 @@ void Connection::OnReadPacket(const char* data, size_t size) {
             msg->ValidateMessageIntegrity(
                 data, size, remote_candidate().password())) {
           requests_.CheckResponse(msg.get());
-          nominated_ = false;
         }
         // Otherwise silently discard the response message.
         break;
@@ -932,7 +955,6 @@ void Connection::UpdateState(uint32 now) {
   //
   // Since we don't know how many pings the other side has attempted, the best
   // test we can do is a simple window.
-
   if ((read_state_ == STATE_READABLE) &&
       (last_ping_received_ + CONNECTION_READ_TIMEOUT <= now)) {
     LOG_J(LS_INFO, this) << "Unreadable after "
@@ -992,11 +1014,9 @@ void Connection::Ping(uint32 now) {
   last_ping_sent_ = now;
   pings_since_last_response_.push_back(now);
   ConnectionRequest *req = new ConnectionRequest(this);
-  if (nominated_) {
-    req->set_use_candidate(true);
-  }
   LOG_J(LS_VERBOSE, this) << "Sending STUN ping " << req->id() << " at " << now;
   requests_.Send(req);
+  state_ = STATE_INPROGRESS;
 }
 
 void Connection::ReceivedPing() {
@@ -1018,6 +1038,12 @@ std::string Connection::ToString() const {
     'w',  // STATE_WRITE_CONNECT
     '-',  // STATE_WRITE_TIMEOUT
   };
+  const std::string ICESTATE[4] = {
+    "W",  // STATE_WAITING
+    "I",  // STATE_INPROGRESS
+    "S",  // STATE_SUCCEEDED
+    "F"   // STATE_FAILED
+  };
   const Candidate& local = local_candidate();
   const Candidate& remote = remote_candidate();
   std::stringstream ss;
@@ -1034,6 +1060,7 @@ std::string Connection::ToString() const {
      << CONNECT_STATE_ABBREV[connected()]
      << READ_STATE_ABBREV[read_state()]
      << WRITE_STATE_ABBREV[write_state()]
+     << ICESTATE[state()]
      << "|";
   if (rtt_ < DEFAULT_RTT) {
     ss << rtt_ << "]";
@@ -1052,6 +1079,7 @@ void Connection::OnConnectionRequestResponse(ConnectionRequest* request,
   // prune it again.
   uint32 rtt = request->Elapsed();
   set_write_state(STATE_WRITABLE);
+  set_state(STATE_SUCCEEDED);
 
   std::string pings;
   for (size_t i = 0; i < pings_since_last_response_.size(); ++i) {
@@ -1096,6 +1124,7 @@ void Connection::OnConnectionRequestErrorResponse(ConnectionRequest* request,
     // This is not a valid connection.
     LOG_J(LS_ERROR, this) << "Received STUN error response, code="
                           << error_code << "; killing connection";
+    set_state(STATE_FAILED);
     set_write_state(STATE_WRITE_TIMEOUT);
   }
 }

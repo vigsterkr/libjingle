@@ -69,13 +69,14 @@ static void CopyCandidatesFromSessionDescription(
     SessionDescriptionInterface* dest_desc) {
   if (!source_desc)
     return;
-  for (size_t m = 0; m < source_desc->number_of_mediasections(); ++m) {
+  for (size_t m = 0; m < source_desc->number_of_mediasections() &&
+                     m < dest_desc->number_of_mediasections(); ++m) {
     const IceCandidateCollection* source_candidates =
         source_desc->candidates(m);
-    const IceCandidateCollection* desc_candidates = dest_desc->candidates(m);
+    const IceCandidateCollection* dest_candidates = dest_desc->candidates(m);
     for  (size_t n = 0; n < source_candidates->count(); ++n) {
       const IceCandidateInterface* new_candidate = source_candidates->at(n);
-      if (!desc_candidates->HasCandidate(new_candidate))
+      if (!dest_candidates->HasCandidate(new_candidate))
         dest_desc->AddCandidate(source_candidates->at(n));
     }
   }
@@ -166,9 +167,9 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              MediaStreamSignaling* mediastream_signaling)
     : cricket::BaseSession(signaling_thread, worker_thread, port_allocator,
                            talk_base::ToString(talk_base::CreateRandomId()),
-                           cricket::NS_JINGLE_RTP, true),
+                           cricket::NS_JINGLE_RTP, false),
       channel_manager_(channel_manager),
-      session_desc_factory_(channel_manager),
+      session_desc_factory_(channel_manager, &transport_desc_factory_),
       allocation_complete_(false),
       mediastream_signaling_(mediastream_signaling),
       ice_observer_(NULL),
@@ -177,6 +178,7 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
       // to just use a random number as session id and start version from 0.
       session_id_(talk_base::ToString(talk_base::CreateRandomId())),
       session_version_(0) {
+  transport_desc_factory_.set_protocol(cricket::ICEPROTO_HYBRID);
 }
 
 WebRtcSession::~WebRtcSession() {
@@ -311,6 +313,11 @@ bool WebRtcSession::SetLocalDescription(Action action,
                   <<" description without crypto enabled";
     delete desc;
     return false;
+  }
+
+  // Update the initiator flag if this session is the initiator.
+  if (state() == STATE_INIT && action == kOffer) {
+    set_initiator(true);
   }
 
   if (state() == STATE_INIT &&

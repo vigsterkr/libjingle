@@ -37,7 +37,10 @@
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 
 static const char kStunIceServer[] = "stun:stun.l.google.com:19302";
-static const char kTurnIceServer[] = "turn:test.com:1234";
+static const char kTurnIceServer[] = "turn:test@test.com:1234";
+static const char kInvalidTurnIceServer[] = "turn:test.com:1234";
+static const char kTurnPassword[] = "turnpassword";
+
 
 namespace webrtc {
 
@@ -78,11 +81,29 @@ TEST(PeerConnectionFactory, CreatePCUsingIceServers) {
   ice_server.uri = kStunIceServer;
   ice_servers.push_back(ice_server);
   ice_server.uri = kTurnIceServer;
+  ice_server.password = kTurnPassword;
   ice_servers.push_back(ice_server);
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
       factory->CreatePeerConnection(ice_servers, NULL, &observer));
 
   EXPECT_TRUE(pc.get() != NULL);
+}
+
+TEST(PeerConnectionFactory, CreatePCUsingInvalidTurnUrl) {
+  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
+      CreatePeerConnectionFactory());
+  ASSERT_TRUE(factory.get() != NULL);
+
+  NullPeerConnectionObserver observer;
+  webrtc::JsepInterface::IceServers ice_servers;
+  webrtc::JsepInterface::IceServer ice_server;
+  ice_server.uri = kInvalidTurnIceServer;
+  ice_server.password = kTurnPassword;
+  ice_servers.push_back(ice_server);
+  talk_base::scoped_refptr<PeerConnectionInterface> pc(
+      factory->CreatePeerConnection(ice_servers, NULL, &observer));
+
+  EXPECT_TRUE(pc.get() == NULL);
 }
 
 TEST(PeerConnectionFactory, CreatePCUsingExternalModules) {

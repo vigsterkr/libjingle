@@ -54,14 +54,14 @@ namespace cricket {
 class Connection;
 class ConnectionRequest;
 
-// TODO: Use the priority values from RFC 5245.
-extern const uint32 PRIORITY_LOCAL_UDP;
-extern const uint32 PRIORITY_LOCAL_STUN;
-extern const uint32 PRIORITY_LOCAL_TCP;
-extern const uint32 PRIORITY_RELAY;
+extern const char LOCAL_PORT_TYPE[];
+extern const char STUN_PORT_TYPE[];
+extern const char RELAY_PORT_TYPE[];
+
 
 enum IcePriorityValue {
   ICE_TYPE_PREFERENCE_RELAY = 0,
+  ICE_TYPE_PREFERENCE_HOST_TCP = 90,
   ICE_TYPE_PREFERENCE_SRFLX = 100,
   ICE_TYPE_PREFERENCE_PRFLX = 110,
   ICE_TYPE_PREFERENCE_HOST = 126
@@ -85,9 +85,10 @@ class Port : public PortInterface, public talk_base::MessageHandler,
              public sigslot::has_slots<> {
  public:
   Port(talk_base::Thread* thread, const std::string& type,
-       talk_base::PacketSocketFactory* factory, talk_base::Network* network,
-       const talk_base::IPAddress& ip, int min_port, int max_port,
-       const std::string& username_fragment, const std::string& password);
+       const uint32 preference, talk_base::PacketSocketFactory* factory,
+       talk_base::Network* network, const talk_base::IPAddress& ip,
+       int min_port, int max_port, const std::string& username_fragment,
+       const std::string& password);
   virtual ~Port();
 
   virtual const std::string& Type() const { return type_; }
@@ -128,12 +129,10 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   int component() const { return component_; }
   void set_component(int component) { component_ = component; }
 
-  // A value in [0,2**32-1] that indicates the priority for this port
-  // versus other ports on this client.  (Larger indicates more
-  // priorty.)
-  // Note: These methods will be removed after priority CL commited.
-  virtual uint32 Priority() const { return priority_; }
-  void SetPriority(uint32 priority) { priority_ = priority; }
+
+  void set_type_preference(uint32 preference) {
+    type_preference_ = preference;
+  }
 
   void set_related_address(const talk_base::SocketAddress& address) {
     related_address_ = address;
@@ -269,22 +268,19 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   // Checks if this port is useless, and hence, should be destroyed.
   void CheckTimeout();
 
-  // Called when a new address is added, to figure out its candidate's priority.
-  int ComputeCandidatePriority(const talk_base::SocketAddress& address,
-                               int type_preference) const;
   uint32 ComputeFoundation(const std::string& protocol,
                            const talk_base::SocketAddress& base_address) const;
 
   talk_base::Thread* thread_;
   talk_base::PacketSocketFactory* factory_;
   std::string type_;
+  uint32 type_preference_;
   talk_base::Network* network_;
   talk_base::IPAddress ip_;
   int min_port_;
   int max_port_;
   std::string content_name_;
   int component_;
-  uint32 priority_;
   uint32 generation_;
   talk_base::SocketAddress related_address_;
   // In order to establish a connection to this Port (so that real data can be
@@ -317,6 +313,14 @@ class Port : public PortInterface, public talk_base::MessageHandler,
 class Connection : public talk_base::MessageHandler,
     public sigslot::has_slots<> {
  public:
+  // States are from RFC 5245. http://tools.ietf.org/html/rfc5245#section-5.7.4
+  enum State {
+    STATE_WAITING = 0,  // Check has not been performed, Waiting pair on CL.
+    STATE_INPROGRESS,   // Check has been sent, transaction is in progress.
+    STATE_SUCCEEDED,    // Check already done, produced a successful result.
+    STATE_FAILED        // Check for this connection failed.
+  };
+
   virtual ~Connection();
 
   // The local port where this connection sends and receives packets.
@@ -328,6 +332,9 @@ class Connection : public talk_base::MessageHandler,
 
   // Returns the description of the remote port to which we communicate.
   const Candidate& remote_candidate() const { return remote_candidate_; }
+
+  // Returns the pair priority.
+  uint64 priority() const;
 
   enum ReadState {
     STATE_READABLE     = 0,  // we have received pings recently
@@ -406,11 +413,12 @@ class Connection : public talk_base::MessageHandler,
   // transmission. This connection will send STUN ping with USE-CANDIDATE
   // attribute.
   sigslot::signal1<Connection*> SignalUseCandidate;
-  // TODO - Change names below two methods to suit RFC 5245 spec.
   void set_nominated(bool nominated) { nominated_ = nominated; }
   bool nominated() const { return nominated_; }
   // Invoked when Connection receives STUN error response with 487 code.
   void HandleRoleConflictFromPeer();
+
+  State state() const { return state_; }
 
  protected:
   // Constructs a new connection to the given remote port.
@@ -429,6 +437,7 @@ class Connection : public talk_base::MessageHandler,
   // Changes the state and signals if necessary.
   void set_read_state(ReadState value);
   void set_write_state(WriteState value);
+  void set_state(State state);
   void set_connected(bool value);
 
   // Checks if this connection is useless, and hence, should be destroyed.
@@ -458,6 +467,7 @@ class Connection : public talk_base::MessageHandler,
  private:
   bool reported_;
   bool nominated_;
+  State state_;
 
   friend class Port;
   friend class ConnectionRequest;

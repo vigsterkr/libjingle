@@ -81,13 +81,16 @@ Call::~Call() {
   talk_base::Thread::Current()->Clear(this);
 }
 
-Session* Call::InitiateSession(const buzz::Jid &jid,
+Session* Call::InitiateSession(const buzz::Jid& to,
+                               const buzz::Jid& initiator,
                                const CallOptions& options) {
   const SessionDescription* offer = session_client_->CreateOffer(options);
 
   Session* session = session_client_->CreateSession(this);
+  session->set_initiator_name(initiator.Str());
+
   AddSession(session, offer);
-  session->Initiate(jid.Str(), offer);
+  session->Initiate(to.Str(), offer);
 
   // After this timeout, terminate the call because the callee isn't
   // answering
@@ -99,9 +102,13 @@ Session* Call::InitiateSession(const buzz::Jid &jid,
   return session;
 }
 
-void Call::IncomingSession(
-    Session* session, const SessionDescription* offer) {
+void Call::IncomingSession(Session* session, const SessionDescription* offer) {
   AddSession(session, offer);
+
+  // Make sure the session knows about the incoming ssrcs. This needs to be done
+  // prior to the SignalSessionState call, because that may trigger handling of
+  // these new SSRCs, so they need to be registered before then.
+  UpdateRemoteMediaStreams(session, offer->contents(), false);
 
   // Missed the first state, the initiate, which is needed by
   // call_client.
@@ -438,9 +445,12 @@ void Call::AddScreencast(Session* session,
   StreamParams stream;
   stream.name = stream_name;
   stream.ssrcs.push_back(ssrc);
-  SendStreamUpdate(session, stream);
-  // TODO(pthatcher): Wait for view request to send screencast.
+  VideoContentDescription* video = CreateVideoStreamUpdate(stream);
+
+  // TODO(pthatcher): Wait until view request before sending video.
+  video_channel->SetLocalContent(video, CA_UPDATE);
   video_channel->AddScreencast(ssrc, screencastid, fps);
+  SendVideoStreamUpdate(session, video);
 }
 
 void Call::RemoveScreencast(Session* session,
@@ -455,29 +465,35 @@ void Call::RemoveScreencast(Session* session,
   StreamParams stream;
   stream.name = stream_name;
   // No ssrcs
+  VideoContentDescription* video = CreateVideoStreamUpdate(stream);
+
   video_channel->RemoveScreencast(ssrc);
-  SendStreamUpdate(session, stream);
+  video_channel->SetLocalContent(video, CA_UPDATE);
+  SendVideoStreamUpdate(session, video);
 }
 
-void Call::SendStreamUpdate(Session* session, const StreamParams& stream) {
+VideoContentDescription* Call::CreateVideoStreamUpdate(
+    const StreamParams& stream) {
+  VideoContentDescription* video = new VideoContentDescription();
+  video->set_multistream(true);
+  video->set_partial(true);
+  video->AddStream(stream);
+  return video;
+}
+
+void Call::SendVideoStreamUpdate(
+    Session* session, VideoContentDescription* video) {
   const ContentInfo* video_info =
       GetFirstVideoContent(session->local_description());
   if (video_info == NULL) {
     LOG(LS_WARNING) << "Cannot send stream update for video.";
+    delete video;
     return;
   }
 
-  // A "stream update" is a partial content update (a
-  // "description-info") that new stream info and nothing else.
-  talk_base::scoped_ptr<VideoContentDescription> video(
-      new VideoContentDescription());
-  video->set_multistream(true);
-  video->set_partial(true);
-  video->AddStream(stream);
-
   std::vector<ContentInfo> contents;
   contents.push_back(
-      ContentInfo(video_info->name, video_info->type, video.get()));
+      ContentInfo(video_info->name, video_info->type, video));
 
   session->SendDescriptionInfoMessage(contents);
 }
@@ -650,9 +666,15 @@ uint32 Call::id() {
   return id_;
 }
 
-void Call::OnSessionState(BaseSession* session, BaseSession::State state) {
+void Call::OnSessionState(BaseSession* base_session, BaseSession::State state) {
+  Session* session = static_cast<Session*>(base_session);
   switch (state) {
     case Session::STATE_RECEIVEDACCEPT:
+      UpdateRemoteMediaStreams(session,
+          session->remote_description()->contents(), false);
+      session_client_->session_manager()->signaling_thread()->Clear(this,
+          MSG_TERMINATECALL);
+      break;
     case Session::STATE_RECEIVEDREJECT:
     case Session::STATE_RECEIVEDTERMINATE:
       session_client_->session_manager()->signaling_thread()->Clear(this,
@@ -661,13 +683,13 @@ void Call::OnSessionState(BaseSession* session, BaseSession::State state) {
     default:
       break;
   }
-  SignalSessionState(this, static_cast<Session*>(session), state);
+  SignalSessionState(this, session, state);
 }
 
-void Call::OnSessionError(BaseSession* session, Session::Error error) {
+void Call::OnSessionError(BaseSession* base_session, Session::Error error) {
   session_client_->session_manager()->signaling_thread()->Clear(this,
       MSG_TERMINATECALL);
-  SignalSessionError(this, static_cast<Session*>(session), error);
+  SignalSessionError(this, static_cast<Session*>(base_session), error);
 }
 
 void Call::OnSessionInfoMessage(Session* session,
@@ -691,6 +713,121 @@ void Call::OnSessionInfoMessage(Session* session,
 
   if (!video_channel->ApplyViewRequest(view_request)) {
     LOG(LS_WARNING) << "Failed to ApplyViewRequest.";
+  }
+}
+
+void Call::OnRemoteDescriptionUpdate(BaseSession* base_session,
+                                     const ContentInfos& updated_contents) {
+  Session* session = static_cast<Session*>(base_session);
+
+  const ContentInfo* audio_content = GetFirstAudioContent(updated_contents);
+  if (audio_content) {
+    const AudioContentDescription* audio_update =
+        static_cast<const AudioContentDescription*>(audio_content->description);
+    if (!audio_update->codecs().empty()) {
+      UpdateVoiceChannelRemoteContent(session, audio_update);
+    }
+  }
+
+  const ContentInfo* video_content = GetFirstVideoContent(updated_contents);
+  if (video_content) {
+    const VideoContentDescription* video_update =
+        static_cast<const VideoContentDescription*>(video_content->description);
+    if (!video_update->codecs().empty()) {
+      UpdateVideoChannelRemoteContent(session, video_update);
+    }
+  }
+
+  const ContentInfo* data_content = GetFirstDataContent(updated_contents);
+  if (data_content) {
+    const DataContentDescription* data_update =
+        static_cast<const DataContentDescription*>(data_content->description);
+    if (!data_update->codecs().empty()) {
+      UpdateDataChannelRemoteContent(session, data_update);
+    }
+  }
+
+  UpdateRemoteMediaStreams(session, updated_contents, true);
+}
+
+bool Call::UpdateVoiceChannelRemoteContent(
+    Session* session, const AudioContentDescription* audio) {
+  VoiceChannel* voice_channel = GetVoiceChannel(session);
+  if (!voice_channel->SetRemoteContent(audio, CA_UPDATE)) {
+    LOG(LS_ERROR) << "Failure in audio SetRemoteContent with CA_UPDATE";
+    session->SetError(BaseSession::ERROR_CONTENT);
+    return false;
+  }
+  return true;
+}
+
+bool Call::UpdateVideoChannelRemoteContent(
+    Session* session, const VideoContentDescription* video) {
+  VideoChannel* video_channel = GetVideoChannel(session);
+  if (!video_channel->SetRemoteContent(video, CA_UPDATE)) {
+    LOG(LS_ERROR) << "Failure in video SetRemoteContent with CA_UPDATE";
+    session->SetError(BaseSession::ERROR_CONTENT);
+    return false;
+  }
+  return true;
+}
+
+bool Call::UpdateDataChannelRemoteContent(
+    Session* session, const DataContentDescription* data) {
+  DataChannel* data_channel = GetDataChannel(session);
+  if (!data_channel->SetRemoteContent(data, CA_UPDATE)) {
+    LOG(LS_ERROR) << "Failure in data SetRemoteContent with CA_UPDATE";
+    session->SetError(BaseSession::ERROR_CONTENT);
+    return false;
+  }
+  return true;
+}
+
+void Call::UpdateRemoteMediaStreams(Session* session,
+                                    const ContentInfos& updated_contents,
+                                    bool update_channels) {
+  MediaStreams* recv_streams = GetMediaStreams(session);
+  if (!recv_streams)
+    return;
+
+  cricket::MediaStreams added_streams;
+  cricket::MediaStreams removed_streams;
+
+  const ContentInfo* audio_content = GetFirstAudioContent(updated_contents);
+  if (audio_content) {
+    const AudioContentDescription* audio_update =
+        static_cast<const AudioContentDescription*>(audio_content->description);
+    UpdateRecvStreams(audio_update->streams(),
+                      update_channels ? GetVoiceChannel(session) : NULL,
+                      recv_streams->mutable_audio(),
+                      added_streams.mutable_audio(),
+                      removed_streams.mutable_audio());
+  }
+
+  const ContentInfo* video_content = GetFirstVideoContent(updated_contents);
+  if (video_content) {
+    const VideoContentDescription* video_update =
+        static_cast<const VideoContentDescription*>(video_content->description);
+    UpdateRecvStreams(video_update->streams(),
+                      update_channels ? GetVideoChannel(session) : NULL,
+                      recv_streams->mutable_video(),
+                      added_streams.mutable_video(),
+                      removed_streams.mutable_video());
+  }
+
+  const ContentInfo* data_content = GetFirstDataContent(updated_contents);
+  if (data_content) {
+    const DataContentDescription* data_update =
+        static_cast<const DataContentDescription*>(data_content->description);
+    UpdateRecvStreams(data_update->streams(),
+                      update_channels ? GetDataChannel(session) : NULL,
+                      recv_streams->mutable_data(),
+                      added_streams.mutable_data(),
+                      removed_streams.mutable_data());
+  }
+
+  if (!added_streams.empty() || !removed_streams.empty()) {
+    SignalMediaStreamsUpdate(this, session, added_streams, removed_streams);
   }
 }
 
@@ -769,98 +906,6 @@ void Call::RemoveRecvStream(const StreamParams& stream,
     channel->RemoveRecvStream(stream.first_ssrc());
   }
   RemoveStreamByNickAndName(recv_streams, stream.nick, stream.name);
-}
-
-void Call::OnRemoteDescriptionUpdate(BaseSession* base_session,
-                                     const ContentInfos& updated_contents) {
-  Session* session = static_cast<Session*>(base_session);
-
-  cricket::MediaStreams added_streams;
-  cricket::MediaStreams removed_streams;
-  std::vector<StreamParams>::const_iterator stream;
-
-  const ContentInfo* audio_content = GetFirstAudioContent(updated_contents);
-  MediaStreams* recv_streams = GetMediaStreams(session);
-  if (audio_content) {
-    const AudioContentDescription* audio_update =
-        static_cast<const AudioContentDescription*>(audio_content->description);
-    if (!audio_update->codecs().empty()) {
-      UpdateVoiceChannelRemoteContent(session, audio_update);
-    }
-    if (recv_streams)
-      UpdateRecvStreams(audio_update->streams(),
-                        GetVoiceChannel(session),
-                        recv_streams->mutable_audio(),
-                        added_streams.mutable_audio(),
-                        removed_streams.mutable_audio());
-  }
-
-  const ContentInfo* video_content = GetFirstVideoContent(updated_contents);
-  if (video_content) {
-    const VideoContentDescription* video_update =
-        static_cast<const VideoContentDescription*>(video_content->description);
-    if (!video_update->codecs().empty()) {
-      UpdateVideoChannelRemoteContent(session, video_update);
-    }
-    if (recv_streams)
-      UpdateRecvStreams(video_update->streams(),
-                        GetVideoChannel(session),
-                        recv_streams->mutable_video(),
-                        added_streams.mutable_video(),
-                        removed_streams.mutable_video());
-  }
-
-  const ContentInfo* data_content = GetFirstDataContent(updated_contents);
-  if (data_content) {
-    const DataContentDescription* data_update =
-        static_cast<const DataContentDescription*>(data_content->description);
-    if (!data_update->codecs().empty()) {
-      UpdateDataChannelRemoteContent(session, data_update);
-    }
-    if (recv_streams)
-      UpdateRecvStreams(data_update->streams(),
-                        GetDataChannel(session),
-                        recv_streams->mutable_data(),
-                        added_streams.mutable_data(),
-                        removed_streams.mutable_data());
-  }
-
-  if (!added_streams.empty() || !removed_streams.empty()) {
-    SignalMediaStreamsUpdate(this, session, added_streams, removed_streams);
-  }
-}
-
-bool Call::UpdateVoiceChannelRemoteContent(
-    Session* session, const AudioContentDescription* audio) {
-  VoiceChannel* voice_channel = GetVoiceChannel(session);
-  if (!voice_channel->SetRemoteContent(audio, CA_UPDATE)) {
-    LOG(LS_ERROR) << "Failure in audio SetRemoteContent with CA_UPDATE";
-    session->SetError(BaseSession::ERROR_CONTENT);
-    return false;
-  }
-  return true;
-}
-
-bool Call::UpdateVideoChannelRemoteContent(
-    Session* session, const VideoContentDescription* video) {
-  VideoChannel* video_channel = GetVideoChannel(session);
-  if (!video_channel->SetRemoteContent(video, CA_UPDATE)) {
-    LOG(LS_ERROR) << "Failure in video SetRemoteContent with CA_UPDATE";
-    session->SetError(BaseSession::ERROR_CONTENT);
-    return false;
-  }
-  return true;
-}
-
-bool Call::UpdateDataChannelRemoteContent(
-    Session* session, const DataContentDescription* data) {
-  DataChannel* data_channel = GetDataChannel(session);
-  if (!data_channel->SetRemoteContent(data, CA_UPDATE)) {
-    LOG(LS_ERROR) << "Failure in data SetRemoteContent with CA_UPDATE";
-    session->SetError(BaseSession::ERROR_CONTENT);
-    return false;
-  }
-  return true;
 }
 
 void Call::OnReceivedTerminateReason(Session* session,

@@ -34,6 +34,7 @@
 
 #include "talk/base/buffer.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/sslfingerprint.h"
 #include "talk/base/messagequeue.h"
 #include "talk/p2p/base/session.h"
 #include "talk/p2p/base/transport.h"
@@ -65,10 +66,23 @@ class FakeTransportChannel : public TransportChannelImpl,
         state_(STATE_INIT),
         async_(false),
         identity_(NULL),
-        do_dtls_(false) {
+        do_dtls_(false),
+        role_(ROLE_UNKNOWN),
+        tiebreaker_(0),
+        ice_proto_(ICEPROTO_GOOGLE),
+        dtls_fingerprint_("", NULL, 0) {
   }
   ~FakeTransportChannel() {
     Reset();
+  }
+
+  TransportRole role() const { return role_; }
+  uint64 tiebreaker() const { return tiebreaker_; }
+  TransportProtocol protocol() const { return ice_proto_; }
+  const std::string& ice_ufrag() const { return ice_ufrag_; }
+  const std::string& ice_pwd() const { return ice_pwd_; }
+  const talk_base::SSLFingerprint& dtls_fingerprint() const {
+    return dtls_fingerprint_;
   }
 
   void SetAsync(bool async) {
@@ -78,6 +92,18 @@ class FakeTransportChannel : public TransportChannelImpl,
   virtual Transport* GetTransport() {
     return transport_;
   }
+
+  virtual void SetRole(TransportRole role) { role_ = role; }
+  virtual void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
+  virtual void SetIceProtocolType(IceProtocolType type) { ice_proto_ = type; }
+  virtual void SetIceUfrag(const std::string& ufrag) { ice_ufrag_ = ufrag; }
+  virtual void SetIcePwd(const std::string& pwd) { ice_pwd_ = pwd; }
+  virtual bool SetRemoteFingerprint(const std::string& alg, const uint8* digest,
+                                    size_t digest_len) {
+    dtls_fingerprint_ = talk_base::SSLFingerprint(alg, digest, digest_len);
+    return true;
+  }
+
   virtual void Connect() {
     if (state_ == STATE_INIT) {
       state_ = STATE_CONNECTING;
@@ -215,6 +241,12 @@ class FakeTransportChannel : public TransportChannelImpl,
   bool do_dtls_;
   std::vector<std::string> srtp_ciphers_;
   std::string chosen_srtp_cipher_;
+  TransportRole role_;
+  uint64 tiebreaker_;
+  IceProtocolType ice_proto_;
+  std::string ice_ufrag_;
+  std::string ice_pwd_;
+  talk_base::SSLFingerprint dtls_fingerprint_;
 };
 
 // Fake transport class, which can be passed to anything that needs a Transport.
@@ -328,7 +360,7 @@ class FakeSession : public BaseSession {
     }
   }
 
-  virtual cricket::TransportChannel* CreateChannel(
+  virtual TransportChannel* CreateChannel(
       const std::string& content_name,
       const std::string& channel_name,
       int component) {

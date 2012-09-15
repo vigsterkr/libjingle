@@ -49,7 +49,7 @@ using cricket::ContentGroup;
 using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
 using cricket::ICE_CANDIDATE_COMPONENT_RTP;
 using cricket::LOCAL_PORT_TYPE;
-using cricket::NS_GINGLE_P2P;
+using cricket::NS_JINGLE_ICE_UDP;
 using cricket::NS_JINGLE_RTP;
 using cricket::RELAY_PORT_TYPE;
 using cricket::SessionDescription;
@@ -57,6 +57,7 @@ using cricket::StreamParams;
 using cricket::STUN_PORT_TYPE;
 using cricket::TransportDescription;
 using cricket::TransportInfo;
+using cricket::TransportOptions;
 using cricket::VideoCodec;
 using cricket::VideoContentDescription;
 using webrtc::IceCandidateCollection;
@@ -201,6 +202,11 @@ static const char kSdpOneCandidateOldFormat[] =
 static const char kSessionId[] = "18446744069414584320";
 static const char kSessionVersion[] = "18446462598732840960";
 
+// Ice options
+static const char kIceOption1[] = "iceoption1";
+static const char kIceOption2[] = "iceoption2";
+static const char kIceOption3[] = "iceoption3";
+
 // Content name
 static const char kAudioContentName[] = "audio_content_name";
 static const char kVideoContentName[] = "video_content_name";
@@ -341,13 +347,15 @@ class WebRtcSdpTest : public testing::Test {
     // TransportInfo
     EXPECT_TRUE(desc_.AddTransportInfo(
         TransportInfo(kAudioContentName,
-                      TransportDescription(NS_GINGLE_P2P, "",
+                      TransportDescription(NS_JINGLE_ICE_UDP,
+                                           TransportOptions(),
                                            kCandidateUfragVoice,
                                            kCandidatePwdVoice,
                                            NULL, Candidates()))));
     EXPECT_TRUE(desc_.AddTransportInfo(
         TransportInfo(kVideoContentName,
-                      TransportDescription(NS_GINGLE_P2P, "",
+                      TransportDescription(NS_JINGLE_ICE_UDP,
+                                           TransportOptions(),
                                            kCandidateUfragVideo,
                                            kCandidatePwdVideo,
                                            NULL, Candidates()))));
@@ -602,6 +610,8 @@ class WebRtcSdpTest : public testing::Test {
         EXPECT_EQ(transport1.description.identity_fingerprint.get(),
                   transport2.description.identity_fingerprint.get());
       }
+      EXPECT_EQ(transport1.description.transport_options,
+                transport2.description.transport_options);
       EXPECT_TRUE(CompareCandidates(transport1.description.candidates,
                                     transport2.description.candidates));
     }
@@ -671,7 +681,8 @@ class WebRtcSdpTest : public testing::Test {
       ASSERT(false);
     }
     TransportInfo transport_info(content_name,
-                                 TransportDescription(NS_GINGLE_P2P, "",
+                                 TransportDescription(NS_JINGLE_ICE_UDP,
+                                                      TransportOptions(),
                                                       ufrag, pwd, NULL,
                                                       Candidates()));
     SessionDescription* desc =
@@ -690,6 +701,16 @@ class WebRtcSdpTest : public testing::Test {
       }
     }
     return true;
+  }
+
+  void AddIceOptions(std::string content_name,
+                     const TransportOptions& transport_options) {
+    ASSERT_TRUE(desc_.GetTransportInfoByName(content_name) != NULL);
+    cricket::TransportInfo transport_info =
+        *(desc_.GetTransportInfoByName(content_name));
+    desc_.RemoveTransportInfoByName(content_name);
+    transport_info.description.transport_options = transport_options;
+    desc_.AddTransportInfo(transport_info);
   }
 
   bool TestSerializeDirection(cricket::MediaContentDirection direction) {
@@ -822,6 +843,29 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBundle) {
   EXPECT_EQ(sdp_with_bundle, message);
 }
 
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithIceOptions) {
+  TransportOptions transport_options;
+  transport_options.push_back(kIceOption1);
+  transport_options.push_back(kIceOption3);
+  AddIceOptions(kAudioContentName, transport_options);
+  transport_options.clear();
+  transport_options.push_back(kIceOption2);
+  transport_options.push_back(kIceOption3);
+  AddIceOptions(kVideoContentName, transport_options);
+  ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
+                                jdesc_.session_id(),
+                                jdesc_.session_version()));
+  std::string message = webrtc::SdpSerialize(jdesc_);
+  std::string sdp_with_ice_options = kSdpFullString;
+  InjectAfter("a=ice-pwd:pwd_voice\r\n",
+              "a=ice-options:iceoption1 iceoption3\r\n",
+              &sdp_with_ice_options);
+  InjectAfter("a=ice-pwd:pwd_video\r\n",
+              "a=ice-options:iceoption2 iceoption3\r\n",
+              &sdp_with_ice_options);
+  EXPECT_EQ(sdp_with_ice_options, message);
+}
+
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithRecvOnlyContent) {
   EXPECT_TRUE(TestSerializeDirection(cricket::MD_RECVONLY));
 }
@@ -885,6 +929,34 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
                                 jdesc_.session_id(),
                                 jdesc_.session_version()));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_bundle));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithIceOptions) {
+  JsepSessionDescription jdesc_with_ice_options("dummy");
+  std::string sdp_with_ice_options = kSdpFullString;
+  InjectAfter("t=0 0\r\n",
+              "a=ice-options:iceoption3\r\n",
+              &sdp_with_ice_options);
+  InjectAfter("a=ice-pwd:pwd_voice\r\n",
+              "a=ice-options:iceoption1\r\n",
+              &sdp_with_ice_options);
+  InjectAfter("a=ice-pwd:pwd_video\r\n",
+              "a=ice-options:iceoption2\r\n",
+              &sdp_with_ice_options);
+  EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_ice_options,
+                                     &jdesc_with_ice_options));
+  TransportOptions transport_options;
+  transport_options.push_back(kIceOption3);
+  transport_options.push_back(kIceOption1);
+  AddIceOptions(kAudioContentName, transport_options);
+  transport_options.clear();
+  transport_options.push_back(kIceOption3);
+  transport_options.push_back(kIceOption2);
+  AddIceOptions(kVideoContentName, transport_options);
+  ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
+                                jdesc_.session_id(),
+                                jdesc_.session_version()));
+  EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_ice_options));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithUfragPwd) {

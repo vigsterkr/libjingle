@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2011, Google Inc.
+ * Copyright 2004, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_BASE_STRINGENCODE_H__
-#define TALK_BASE_STRINGENCODE_H__
+#ifndef TALK_BASE_STRINGENCODE_H_
+#define TALK_BASE_STRINGENCODE_H_
 
 #include <string>
 #include <sstream>
@@ -37,11 +37,6 @@ namespace talk_base {
 //////////////////////////////////////////////////////////////////////
 // String Encoding Utilities
 //////////////////////////////////////////////////////////////////////
-
-// Convert an unsigned value from 0 to 15 to the hex character equivalent...
-char hex_encode(unsigned char val);
-// ...and vice-versa.
-bool hex_decode(char ch, unsigned char* val);
 
 // Convert an unsigned value to it's utf8 representation.  Returns the length
 // of the encoded string, or 0 if the encoding is longer than buflen - 1.
@@ -98,13 +93,43 @@ size_t xml_encode(char * buffer, size_t buflen,
 size_t xml_decode(char * buffer, size_t buflen,
                   const char * source, size_t srclen);
 
+// Convert an unsigned value from 0 to 15 to the hex character equivalent...
+char hex_encode(unsigned char val);
+// ...and vice-versa.
+bool hex_decode(char ch, unsigned char* val);
+
 // hex_encode shows the hex representation of binary data in ascii.
-size_t hex_encode(char * buffer, size_t buflen,
-                  const char * source, size_t srclen);
-size_t hex_decode(char * buffer, size_t buflen,
-                  const char * source, size_t srclen);
-// helper funtion for hex_encode
-std::string hex_encode(const char * source, size_t srclen);
+size_t hex_encode(char* buffer, size_t buflen,
+                  const char* source, size_t srclen);
+
+// hex_encode, but separate each byte representation with a delimiter.
+// |delimiter| == 0 means no delimiter
+// If the buffer is too short, we return 0
+size_t hex_encode_with_delimiter(char* buffer, size_t buflen,
+                                 const char* source, size_t srclen,
+                                 char delimiter);
+
+// Helper functions for hex_encode.
+std::string hex_encode(const char* source, size_t srclen);
+std::string hex_encode_with_delimiter(const char* source, size_t srclen,
+                                      char delimiter);
+
+// hex_decode converts ascii hex to binary.
+size_t hex_decode(char* buffer, size_t buflen,
+                  const char* source, size_t srclen);
+
+// hex_decode, assuming that there is a delimiter between every byte
+// pair.
+// |delimiter| == 0 means no delimiter
+// If the buffer is too short or the data is invalid, we return 0.
+size_t hex_decode_with_delimiter(char* buffer, size_t buflen,
+                                 const char* source, size_t srclen,
+                                 char delimiter);
+
+// Helper functions for hex_decode.
+size_t hex_decode(char* buffer, size_t buflen, const std::string& source);
+size_t hex_decode_with_delimiter(char* buffer, size_t buflen,
+                                 const std::string& source, char delimiter);
 
 // Apply any suitable string transform (including the ones above) to an STL
 // string.  Stack-allocated temporary space is used for the transformation,
@@ -117,7 +142,7 @@ size_t transform(std::string& value, size_t maxlen, const std::string& source,
 // Return the result of applying transform t to source.
 std::string s_transform(const std::string& source, Transform t);
 
-// Convenience wrappers
+// Convenience wrappers.
 inline std::string s_url_encode(const std::string& source) {
   return s_transform(source, url_encode);
 }

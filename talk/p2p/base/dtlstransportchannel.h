@@ -178,6 +178,12 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   virtual Transport* GetTransport() {
     return transport_;
   }
+  virtual void SetTiebreaker(uint64 tiebreaker) {
+    channel_->SetTiebreaker(tiebreaker);
+  }
+  virtual void SetIceProtocolType(IceProtocolType type) {
+    channel_->SetIceProtocolType(type);
+  }
   virtual void SetIceUfrag(const std::string& ice_ufrag) {
     channel_->SetIceUfrag(ice_ufrag);
   }

@@ -25,9 +25,11 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/base/fakesslidentity.h"
 #include "talk/base/gunit.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/constants.h"
+#include "talk/p2p/base/fakesession.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/p2p/base/p2ptransport.h"
 #include "talk/p2p/base/rawtransport.h"
@@ -36,6 +38,14 @@
 #include "talk/xmpp/constants.h"
 
 using cricket::Candidate;
+using cricket::Candidates;
+using cricket::Transport;
+using cricket::FakeTransport;
+using cricket::TransportChannel;
+using cricket::FakeTransportChannel;
+using cricket::TransportRole;
+using cricket::TransportDescription;
+using cricket::TransportOptions;
 using cricket::WriteError;
 using cricket::ParseError;
 using talk_base::SocketAddress;
@@ -45,19 +55,32 @@ class TransportTest : public testing::Test,
  public:
   TransportTest()
       : thread_(talk_base::Thread::Current()),
-        transport_(new cricket::P2PTransport(
+        transport_(new FakeTransport(
             thread_, thread_, "test content name", NULL)),
+        channel_(NULL),
         connecting_signalled_(false) {
     transport_->SignalConnecting.connect(this, &TransportTest::OnConnecting);
   }
+  ~TransportTest() {
+    transport_->DestroyAllChannels();
+  }
+  bool SetupChannel() {
+    channel_ = CreateChannel(1);
+    return (channel_ != NULL);
+  }
+  FakeTransportChannel* CreateChannel(int component) {
+    return static_cast<FakeTransportChannel*>(
+        transport_->CreateChannel(component));
+  }
 
  protected:
-  void OnConnecting(cricket::Transport* transport) {
+  void OnConnecting(Transport* transport) {
     connecting_signalled_ = true;
   }
 
   talk_base::Thread* thread_;
-  talk_base::scoped_ptr<cricket::P2PTransport> transport_;
+  talk_base::scoped_ptr<FakeTransport> transport_;
+  FakeTransportChannel* channel_;
   bool connecting_signalled_;
 };
 
@@ -89,6 +112,16 @@ class FakeCandidateTranslator : public cricket::CandidateTranslator {
   std::map<int, std::string> component_to_name;
 };
 
+// Test that calling ConnectChannels triggers an OnConnecting signal.
+TEST_F(TransportTest, TestConnectChannelsDoesSignal) {
+  EXPECT_TRUE(SetupChannel());
+  transport_->ConnectChannels();
+  EXPECT_FALSE(connecting_signalled_);
+
+  EXPECT_TRUE_WAIT(connecting_signalled_, 100);
+}
+
+// Test that DestroyAllChannels kills any pending OnConnecting signals.
 TEST_F(TransportTest, TestDestroyAllClearsPosts) {
   EXPECT_TRUE(transport_->CreateChannel(1) != NULL);
 
@@ -99,14 +132,77 @@ TEST_F(TransportTest, TestDestroyAllClearsPosts) {
   EXPECT_FALSE(connecting_signalled_);
 }
 
-TEST_F(TransportTest, TestConnectChannelsDoesSignal) {
-  EXPECT_TRUE(transport_->CreateChannel(1) != NULL);
-  transport_->ConnectChannels();
-  EXPECT_FALSE(connecting_signalled_);
-
-  EXPECT_TRUE_WAIT(connecting_signalled_, 100);
+// Tests that SetRole and SetTiebreaker are properly passed down to channels.
+TEST_F(TransportTest, TestSetRoleAndTiebreaker) {
+  transport_->SetRole(cricket::ROLE_CONTROLLED);
+  transport_->SetTiebreaker(99U);
+  EXPECT_TRUE(SetupChannel());
+  EXPECT_EQ(cricket::ROLE_CONTROLLED, channel_->role());
+  EXPECT_EQ(99U, channel_->tiebreaker());
+  transport_->SetRole(cricket::ROLE_CONTROLLING);
+  EXPECT_EQ(cricket::ROLE_CONTROLLING, channel_->role());
 }
 
+// Tests that SetLocalDesc/RemoteDesc with ICE and DTLS is passed down properly.
+TEST_F(TransportTest, TestSetDescriptionsIceDtls) {
+  TransportDescription local(cricket::NS_JINGLE_ICE_UDP, TransportOptions(),
+                             "ABCDABCD", "abcdabcd", NULL, Candidates());
+  talk_base::FakeSSLIdentity remote_identity("remote");
+  TransportDescription remote(cricket::NS_JINGLE_ICE_UDP, TransportOptions(),
+                              "DEFGDEFG", "defgdefg",
+                              talk_base::SSLFingerprint::Create(
+                                  talk_base::DIGEST_SHA_1, &remote_identity),
+                              Candidates());
+  EXPECT_TRUE(SetupChannel());
+  EXPECT_TRUE(transport_->SetLocalTransportDescription(local));
+  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote));
+  transport_->ConnectChannels();
+  FakeTransportChannel* channel2 = CreateChannel(2);
+  ASSERT_TRUE(channel2 != NULL);
+  // channel_ was created before SetLocal/SetRemote; channel2 was created after.
+  EXPECT_EQ(cricket::ICEPROTO_RFC5245, channel_->protocol());
+  EXPECT_EQ(local.ice_ufrag, channel_->ice_ufrag());
+  EXPECT_EQ(local.ice_pwd, channel_->ice_pwd());
+  EXPECT_EQ(*remote.identity_fingerprint, channel_->dtls_fingerprint());
+  EXPECT_EQ(cricket::ICEPROTO_RFC5245, channel2->protocol());
+  EXPECT_EQ(local.ice_ufrag, channel2->ice_ufrag());
+  EXPECT_EQ(local.ice_pwd, channel2->ice_pwd());
+  EXPECT_EQ(*remote.identity_fingerprint, channel2->dtls_fingerprint());
+}
+
+// Tests that SetLocalDesc/RemoteDesc with GICE is passed down properly.
+TEST_F(TransportTest, TestSetDescriptionsGiceDtls) {
+  TransportDescription local(cricket::NS_GINGLE_P2P, TransportOptions(),
+                             "ABCDABCD", "abcdabcd", NULL, Candidates());
+  TransportDescription remote(cricket::NS_GINGLE_P2P, TransportOptions(),
+                              "DEFGDEFG", "defgdefg", NULL, Candidates());
+  EXPECT_TRUE(SetupChannel());
+  EXPECT_TRUE(transport_->SetLocalTransportDescription(local));
+  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote));
+  transport_->ConnectChannels();
+  FakeTransportChannel* channel2 = CreateChannel(2);
+  ASSERT_TRUE(channel2 != NULL);
+  // channel_ was created before SetLocal/SetRemote; channel2 was created after.
+  EXPECT_EQ(cricket::ICEPROTO_GOOGLE, channel_->protocol());
+  EXPECT_EQ(local.ice_ufrag, channel_->ice_ufrag());
+  EXPECT_EQ(local.ice_pwd, channel_->ice_pwd());
+  EXPECT_EQ("", channel_->dtls_fingerprint().algorithm);
+  EXPECT_EQ(cricket::ICEPROTO_GOOGLE, channel2->protocol());
+  EXPECT_EQ(local.ice_ufrag, channel2->ice_ufrag());
+  EXPECT_EQ(local.ice_pwd, channel2->ice_pwd());
+  EXPECT_EQ("", channel2->dtls_fingerprint().algorithm);
+}
+
+// Tests that an implicit local description is used if none is supplied.
+TEST_F(TransportTest, TestImplicitDescriptions) {
+  EXPECT_TRUE(SetupChannel());
+  transport_->ConnectChannels();
+  EXPECT_EQ(cricket::ICEPROTO_GOOGLE, channel_->protocol());
+  EXPECT_NE("", channel_->ice_ufrag());
+  EXPECT_NE("", channel_->ice_pwd());
+}
+
+// Tests that we can properly serialize/deserialize candidates.
 TEST_F(TransportTest, TestP2PTransportWriteAndParseCandidate) {
   Candidate test_candidate(
       "", 1, "udp",
@@ -142,7 +238,7 @@ TEST_F(TransportTest, TestP2PTransportWriteAndParseCandidate) {
   EXPECT_EQ("udp", elem->Attr(cricket::QN_PROTOCOL));
   EXPECT_EQ("2001:db8:fefe::1", elem->Attr(cricket::QN_ADDRESS));
   EXPECT_EQ("9999", elem->Attr(cricket::QN_PORT));
-  EXPECT_EQ("0.346457", elem->Attr(cricket::QN_PREFERENCE));
+  EXPECT_EQ("0.34", elem->Attr(cricket::QN_PREFERENCE));
   EXPECT_EQ("abcdef", elem->Attr(cricket::QN_USERNAME));
   EXPECT_EQ("ghijkl", elem->Attr(cricket::QN_PASSWORD));
   EXPECT_EQ("foo", elem->Attr(cricket::QN_TYPE));
@@ -154,7 +250,7 @@ TEST_F(TransportTest, TestP2PTransportWriteAndParseCandidate) {
   EXPECT_EQ("tcp", elem->Attr(cricket::QN_PROTOCOL));
   EXPECT_EQ("192.168.7.1", elem->Attr(cricket::QN_ADDRESS));
   EXPECT_EQ("9999", elem->Attr(cricket::QN_PORT));
-  EXPECT_EQ("0.519685", elem->Attr(cricket::QN_PREFERENCE));
+  EXPECT_EQ("0.51", elem->Attr(cricket::QN_PREFERENCE));
   EXPECT_EQ("mnopqr", elem->Attr(cricket::QN_USERNAME));
   EXPECT_EQ("stuvwx", elem->Attr(cricket::QN_PASSWORD));
   EXPECT_EQ("bar", elem->Attr(cricket::QN_TYPE));
@@ -167,7 +263,7 @@ TEST_F(TransportTest, TestP2PTransportWriteAndParseCandidate) {
   EXPECT_EQ("spdy", elem->Attr(cricket::QN_PROTOCOL));
   EXPECT_EQ("10.0.0.1", elem->Attr(cricket::QN_ADDRESS));
   EXPECT_EQ("24601", elem->Attr(cricket::QN_PORT));
-  EXPECT_EQ("0.692913", elem->Attr(cricket::QN_PREFERENCE));
+  EXPECT_EQ("0.69", elem->Attr(cricket::QN_PREFERENCE));
   EXPECT_EQ("yzabcd", elem->Attr(cricket::QN_USERNAME));
   EXPECT_EQ("efghij", elem->Attr(cricket::QN_PASSWORD));
   EXPECT_EQ("baz", elem->Attr(cricket::QN_TYPE));

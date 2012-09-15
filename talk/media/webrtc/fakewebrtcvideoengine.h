@@ -640,6 +640,9 @@ class FakeWebRtcVideoEngine
     channels_[channel]->rtp_offset_receive_id_ = (enable) ? id : 0;
     return 0;
   }
+#ifdef USE_WEBRTC_DEV_BRANCH
+  WEBRTC_STUB(SetTransmissionSmoothingStatus, (int video_channel, bool enable));
+#endif
   WEBRTC_STUB_CONST(GetReceivedRTCPStatistics, (const int, unsigned short&,
       unsigned int&, unsigned int&, unsigned int&, int&));
   WEBRTC_STUB_CONST(GetSentRTCPStatistics, (const int, unsigned short&,

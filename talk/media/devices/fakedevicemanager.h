@@ -31,6 +31,8 @@
 #include <string>
 #include <vector>
 
+#include "talk/base/window.h"
+#include "talk/base/windowpicker.h"
 #include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/base/mediacommon.h"
 #include "talk/media/devices/devicemanager.h"
@@ -79,6 +81,41 @@ class FakeDeviceManager : public DeviceManagerInterface {
   }
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const {
     return new FakeVideoCapturer();
+  }
+  virtual bool GetWindows(
+      std::vector<talk_base::WindowDescription>* descriptions) {
+    descriptions->clear();
+    const int id = 1; // Note that 0 is not a valid ID.
+    const talk_base::WindowId window_id =
+        talk_base::WindowId::Cast(id);
+    std::string title = "FakeWindow";
+    talk_base::WindowDescription window_description(window_id, title);
+    descriptions->push_back(window_description);
+    return true;
+  }
+  virtual VideoCapturer* CreateWindowCapturer(talk_base::WindowId window) {
+    if (!window.IsValid()) {
+      return NULL;
+    }
+    return new FakeVideoCapturer;
+  }
+  virtual bool GetDesktops(
+      std::vector<talk_base::DesktopDescription>* descriptions) {
+    descriptions->clear();
+    const int id = 0;
+    const int valid_index = 0;
+    const talk_base::DesktopId desktop_id =
+        talk_base::DesktopId::Cast(id, valid_index);
+    std::string title = "FakeDesktop";
+    talk_base::DesktopDescription desktop_description(desktop_id, title);
+    descriptions->push_back(desktop_description);
+    return true;
+  }
+  virtual VideoCapturer* CreateDesktopCapturer(talk_base::DesktopId desktop) {
+    if (!desktop.IsValid()) {
+      return NULL;
+    }
+    return new FakeVideoCapturer;
   }
 
   virtual bool GetDefaultVideoCaptureDevice(Device* device) {
@@ -154,6 +191,7 @@ class FakeDeviceManager : public DeviceManagerInterface {
     }
     return false;
   }
+
  private:
   std::vector<Device> input_devices_;
   std::vector<Device> output_devices_;

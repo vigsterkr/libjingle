@@ -920,7 +920,6 @@ bool BaseChannel::SetupDtlsSrtp(bool rtcp_channel) {
   offset += SRTP_MASTER_KEY_SALT_LEN;
   memcpy(&server_write_key[SRTP_MASTER_KEY_KEY_LEN],
     &dtls_buffer[offset], SRTP_MASTER_KEY_SALT_LEN);
-  offset += SRTP_MASTER_KEY_SALT_LEN;
 
   std::vector<unsigned char> *send_key, *recv_key;
 
@@ -1154,10 +1153,10 @@ bool BaseChannel::UpdateRemoteStreams_w(
         }
         RemoveStreamBySsrc(&remote_streams_, existing_stream.first_ssrc());
       } else {
-        LOG(LS_WARNING) << "Ignore unsupported stream update"
-                        << " stream name = " << it->name
-                        << " stream exists? " << stream_exists
-                        << " has ssrcs? " << it->has_ssrcs();
+        LOG(LS_WARNING) << "Ignore unsupported stream update."
+                        << " Stream exists? " << stream_exists
+                        << " existing stream = " << existing_stream.ToString()
+                        << " new stream = " << it->ToString();
       }
     }
     return true;

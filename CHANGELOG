@@ -1,5 +1,8 @@
 Libjingle
 
+0.7.0 - Sep 14, 2012
+  - Enable RFC 5245 ICE for PeerConnection.
+
 0.6.23 - Aug 29, 2012
   - MessageQueue threading fixes.
   - ByteBuffer cleanups.

@@ -34,12 +34,15 @@
 #include <vector>
 #include <algorithm>
 
+#include "talk/base/scoped_ptr.h"
 #include "talk/media/base/codec.h"
 #include "talk/media/base/constants.h"
 #include "talk/media/base/cryptoparams.h"
 #include "talk/media/base/mediachannel.h"
 #include "talk/media/base/streamparams.h"
 #include "talk/p2p/base/sessiondescription.h"
+#include "talk/p2p/base/transport.h"
+#include "talk/p2p/base/transportdescriptionfactory.h"
 
 namespace cricket {
 
@@ -49,23 +52,8 @@ typedef std::vector<VideoCodec> VideoCodecs;
 typedef std::vector<DataCodec> DataCodecs;
 typedef std::vector<CryptoParams> CryptoParamsVec;
 
-// SEC_ENABLED and SEC_REQUIRED should only be used if the session
-// was negotiated over TLS, to protect the inline crypto material
-// exchange.
-// SEC_DISABLED: No crypto in outgoing offer and answer. Fail any
-//               offer with crypto required.
-// SEC_ENABLED: Crypto in outgoing offer and answer. Fail any offer
-//              with unsupported required crypto. Crypto set but not
-//              required in outgoing offer.
-// SEC_REQUIRED: Crypto in outgoing offer and answer with
-//               required='true'. Fail any offer with no or
-//               unsupported crypto (implicit crypto required='true'
-//               in the offer.)
-enum SecureMediaPolicy {
-  SEC_DISABLED,
-  SEC_ENABLED,
-  SEC_REQUIRED
-};
+// TODO(juberti): Replace SecureMediaPolicy with SecurePolicy everywhere.
+typedef SecurePolicy SecureMediaPolicy;
 
 enum MediaType {
   MEDIA_TYPE_AUDIO,
@@ -321,9 +309,14 @@ class DataContentDescription : public MediaContentDescriptionImpl<DataCodec> {
 class MediaSessionDescriptionFactory {
  public:
   // Default ctor; use methods below to set configuration.
-  MediaSessionDescriptionFactory();
-  // Helper, to allow configuration to be loaded from a ChannelManager.
-  explicit MediaSessionDescriptionFactory(ChannelManager* manager);
+  // The TransportDescriptionFactory is not owned by MediaSessionDescFactory,
+  // so it must be kept alive by the user of this class.
+  explicit MediaSessionDescriptionFactory(
+      const TransportDescriptionFactory* factory);
+  // This helper automatically sets up the factory to get its configuration
+  // from the specified ChannelManager.
+  MediaSessionDescriptionFactory(ChannelManager* cmanager,
+                                 const TransportDescriptionFactory* factory);
 
   const AudioCodecs& audio_codecs() const { return audio_codecs_; }
   void set_audio_codecs(const AudioCodecs& codecs) { audio_codecs_ = codecs; }
@@ -331,8 +324,8 @@ class MediaSessionDescriptionFactory {
   void set_video_codecs(const VideoCodecs& codecs) { video_codecs_ = codecs; }
   const DataCodecs& data_codecs() const { return data_codecs_; }
   void set_data_codecs(const DataCodecs& codecs) { data_codecs_ = codecs; }
-  SecureMediaPolicy secure() const { return secure_; }
-  void set_secure(SecureMediaPolicy s) { secure_ = s; }
+  SecurePolicy secure() const { return secure_; }
+  void set_secure(SecurePolicy s) { secure_ = s; }
   // Decides if a StreamParams shall be added to the audio and video media
   // content in SessionDescription when CreateOffer and CreateAnswer is called
   // even if |options| don't include a Stream. This is needed to support legacy
@@ -341,20 +334,30 @@ class MediaSessionDescriptionFactory {
 
   SessionDescription* CreateOffer(
       const MediaSessionOptions& options,
-      const SessionDescription* current_description);
-
+      const SessionDescription* current_description) const;
   SessionDescription* CreateAnswer(
         const SessionDescription* offer,
         const MediaSessionOptions& options,
-        const SessionDescription* current_description);
+        const SessionDescription* current_description) const;
 
  private:
+  bool AddTransportOffer(
+      const std::string& content_name,
+      const SessionDescription* current_desc,
+      SessionDescription* offer) const;
+  bool AddTransportAnswer(
+      const std::string& content_name,
+      const SessionDescription* offer,
+      const SessionDescription* current_desc,
+      SessionDescription* answer) const;
+
   AudioCodecs audio_codecs_;
   VideoCodecs video_codecs_;
   DataCodecs data_codecs_;
-  SecureMediaPolicy secure_;
+  SecurePolicy secure_;
   bool add_legacy_;
   std::string lang_;
+  const TransportDescriptionFactory* transport_desc_factory_;
 };
 
 // Convenience functions.

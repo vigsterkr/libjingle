@@ -152,7 +152,7 @@ extern const buzz::StaticQName QN_CRYPTO_KEY_PARAMS;
 extern const buzz::StaticQName QN_CRYPTO_TAG;
 extern const buzz::StaticQName QN_CRYPTO_SESSION_PARAMS;
 
-// transports and candidates
+// Transports and candidates.
 extern const char LN_TRANSPORT[];
 extern const char LN_CANDIDATE[];
 extern const buzz::StaticQName QN_JINGLE_P2P_TRANSPORT;
@@ -173,6 +173,12 @@ extern const int ICE_PWD_LENGTH;
 extern const int ICE_CANDIDATE_COMPONENT_RTP;
 extern const int ICE_CANDIDATE_COMPONENT_RTCP;
 extern const int ICE_CANDIDATE_COMPONENT_DEFAULT;
+
+extern const buzz::StaticQName QN_FINGERPRINT;
+extern const buzz::StaticQName QN_FINGERPRINT_ALGORITHM;
+extern const buzz::StaticQName QN_FINGERPRINT_DIGEST;
+
+extern const char NS_JINGLE_ICE_UDP[];
 
 extern const char NS_GINGLE_P2P[];
 extern const buzz::StaticQName QN_GINGLE_P2P_TRANSPORT;

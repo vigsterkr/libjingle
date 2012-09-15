@@ -37,8 +37,6 @@ namespace cricket {
 
 class TCPConnection;
 
-extern const char LOCAL_PORT_TYPE[];  // type of TCP ports
-
 // Communicates using a local TCP port.
 //
 // This class is designed to allow subclasses to take advantage of the

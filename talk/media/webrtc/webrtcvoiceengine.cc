@@ -1329,6 +1329,7 @@ bool WebRtcVoiceEngine::UnregisterProcessor(
 }
 
 // Implementing method from WebRtc VoEMediaProcess interface
+// Do not lock mux_channel_cs_ in this callback.
 void WebRtcVoiceEngine::Process(const int channel,
                                 const webrtc::ProcessingTypes type,
                                 WebRtc_Word16 audio10ms[],

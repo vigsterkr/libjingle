@@ -59,7 +59,6 @@ class FakePortAllocatorSession : public PortAllocatorSession {
 
   void AddPort(cricket::Port* port) {
     port->set_component(component_);
-    port->SetPriority(2130706432U);  // pref = 1.0
     port->set_generation(0);
     port->SignalAddressReady.connect(
         this, &FakePortAllocatorSession::OnAddressReady);

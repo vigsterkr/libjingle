@@ -2,26 +2,26 @@
  * libjingle
  * Copyright 2004--2005, Google Inc.
  *
- * Redistribution and use in source and binary forms, with or without 
+ * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- *  1. Redistributions of source code must retain the above copyright notice, 
+ *  1. Redistributions of source code must retain the above copyright notice,
  *     this list of conditions and the following disclaimer.
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  3. The name of the author may not be used to endorse or promote products 
+ *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
- * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
@@ -113,11 +113,7 @@ class TransportParser {
   virtual ~TransportParser() {}
 };
 
-enum IceProtocolType {
-  ICEPROTO_GOOGLE,  // Google version of ICE protocol.
-  ICEPROTO_RFC5245  // Standard RFC 5245 version of ICE>
-};
-
+// Whether our side of the call is driving the negotiation, or the other side.
 enum TransportRole {
   ROLE_CONTROLLING = 0,
   ROLE_CONTROLLED,
@@ -200,11 +196,12 @@ class Transport : public talk_base::MessageHandler,
   bool HasChannels();
   void DestroyChannel(int component);
 
-  // Set the TransportDescription to be used by the TransportChannel.
+  // Set the local TransportDescription to be used by TransportChannels.
   // This should be called before ConnectChannels().
-  void SetLocalTransportDescription(const TransportDescription& description) {
-    local_transport_description_ = description;
-  }
+  bool SetLocalTransportDescription(const TransportDescription& description);
+
+  // Set the remote TransportDescription to be used by TransportChannels.
+  bool SetRemoteTransportDescription(const TransportDescription& description);
 
   // Tells all current and future channels to start connecting.  When the first
   // channel begins connecting, the following signal is raised.
@@ -336,7 +333,6 @@ class Transport : public talk_base::MessageHandler,
   void OnChannelRouteChange_s(const TransportChannel* channel,
                               const Candidate& remote_candidate);
 
-
   // Helper function that invokes the given function on every channel.
   typedef void (TransportChannelImpl::* TransportChannelFunc)();
   void CallChannels_w(TransportChannelFunc func);
@@ -347,6 +343,10 @@ class Transport : public talk_base::MessageHandler,
   void OnChannelCandidateReady_s();
 
   void SetRole_w();
+  bool SetLocalTransportDescription_w(const TransportDescription& desc);
+  bool SetRemoteTransportDescription_w(const TransportDescription& desc);
+  bool ApplyLocalTransportDescription_w(TransportChannelImpl* channel);
+  bool ApplyRemoteTransportDescription_w(TransportChannelImpl* channel);
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;
@@ -359,6 +359,8 @@ class Transport : public talk_base::MessageHandler,
   bool connect_requested_;
   TransportRole role_;
   uint64 tiebreaker_;
+  talk_base::scoped_ptr<TransportDescription> local_description_;
+  talk_base::scoped_ptr<TransportDescription> remote_description_;
 
   ChannelMap channels_;
   // Buffers the ready_candidates so that SignalCanidatesReady can
@@ -366,7 +368,6 @@ class Transport : public talk_base::MessageHandler,
   std::vector<Candidate> ready_candidates_;
   // Protects changes to channels and messages
   talk_base::CriticalSection crit_;
-  TransportDescription local_transport_description_;
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);
 };

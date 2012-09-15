@@ -1762,7 +1762,8 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
   void TestGoodOutgoingInitiate(const cricket::CallOptions& options) {
     client_->CreateCall();
     ASSERT_TRUE(call_ != NULL);
-    call_->InitiateSession(buzz::Jid("me@mydomain.com"), options);
+    call_->InitiateSession(buzz::Jid("me@mydomain.com"),
+                           buzz::Jid("me@mydomain.com"), options);
     ASSERT_TRUE(call_->sessions()[0] != NULL);
     ASSERT_EQ(cricket::Session::STATE_SENTINITIATE,
               call_->sessions()[0]->state());
@@ -2318,7 +2319,8 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     options.has_data = has_data;
     options.is_muc = true;
 
-    call_->InitiateSession(buzz::Jid("me@mydomain.com"), options);
+    call_->InitiateSession(buzz::Jid("me@mydomain.com"),
+                           buzz::Jid("me@mydomain.com"), options);
     ASSERT_TRUE(call_->sessions()[0] != NULL);
     ASSERT_EQ(cricket::Session::STATE_SENTINITIATE,
               call_->sessions()[0]->state());
@@ -2384,13 +2386,14 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     return stanza;
   }
 
-  void TestSendStreamUpdate() {
+  void TestSendVideoStreamUpdate() {
     cricket::CallOptions options;
     options.has_video = true;
     options.is_muc = true;
 
     client_->CreateCall();
-    call_->InitiateSession(buzz::Jid("me@mydomain.com"), options);
+    call_->InitiateSession(buzz::Jid("me@mydomain.com"),
+                           buzz::Jid("me@mydomain.com"), options);
     ClearStanzas();
 
     cricket::StreamParams stream;
@@ -2407,13 +2410,15 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
                 call_->sessions()[0]->id(),
                 "video", stream.name)));
 
-    call_->SendStreamUpdate(call_->sessions()[0], stream);
+    call_->SendVideoStreamUpdate(call_->sessions()[0],
+                                 call_->CreateVideoStreamUpdate(stream));
     ASSERT_EQ(1U, stanzas_.size());
     EXPECT_EQ(expected_stream_add->Str(), stanzas_[0]->Str());
     ClearStanzas();
 
     stream.ssrcs.clear();
-    call_->SendStreamUpdate(call_->sessions()[0], stream);
+    call_->SendVideoStreamUpdate(call_->sessions()[0],
+                                 call_->CreateVideoStreamUpdate(stream));
     ASSERT_EQ(1U, stanzas_.size());
     EXPECT_EQ(expected_stream_remove->Str(), stanzas_[0]->Str());
     ClearStanzas();
@@ -2425,7 +2430,8 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     options.is_muc = true;
 
     client_->CreateCall();
-    call_->InitiateSession(buzz::Jid("me@mydomain.com"), options);
+    call_->InitiateSession(buzz::Jid("me@mydomain.com"),
+                           buzz::Jid("me@mydomain.com"), options);
     ASSERT_EQ(1U, ClearStanzas());
     ASSERT_EQ(0U, last_streams_added_.audio().size());
     ASSERT_EQ(0U, last_streams_added_.video().size());
@@ -2441,6 +2447,11 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     ASSERT_EQ(1U, stanzas_.size());
     ASSERT_EQ(std::string(buzz::STR_RESULT), stanzas_[0]->Attr(buzz::QN_TYPE));
     ClearStanzas();
+    // Need to clear the added streams, because they are populated when
+    // receiving an accept message now.
+    last_streams_added_.mutable_video()->clear();
+    last_streams_added_.mutable_audio()->clear();
+
     call_->sessions()[0]->SetState(cricket::Session::STATE_INPROGRESS);
 
     talk_base::scoped_ptr<buzz::XmlElement> streams_stanza(
@@ -2943,9 +2954,9 @@ TEST(MediaSessionTest, JingleStreamsUpdateAndView) {
   test->TestStreamsUpdateAndViewRequests();
 }
 
-TEST(MediaSessionTest, JingleSendStreamUpdate) {
+TEST(MediaSessionTest, JingleSendVideoStreamUpdate) {
   talk_base::scoped_ptr<MediaSessionClientTest> test(JingleTest());
-  test->TestSendStreamUpdate();
+  test->TestSendVideoStreamUpdate();
 }
 
 // Gingle tests

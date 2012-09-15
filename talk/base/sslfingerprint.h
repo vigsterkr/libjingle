@@ -38,25 +38,26 @@
 namespace talk_base {
 
 struct SSLFingerprint {
+  static SSLFingerprint* Create(const std::string& algorithm,
+                                const talk_base::SSLIdentity* identity) {
+    if (!identity) {
+      return NULL;
+    }
+
+    uint8 digest_val[64];
+    size_t digest_len;
+    bool ret = identity->certificate().ComputeDigest(
+        algorithm, digest_val, sizeof(digest_val), &digest_len);
+    if (!ret) {
+      return NULL;
+    }
+
+    return new SSLFingerprint(algorithm, digest_val, digest_len);
+  }
+
   SSLFingerprint(const std::string& algorithm, const uint8* digest_in,
                  size_t digest_len) : algorithm(algorithm) {
     digest.SetData(digest_in, digest_len);
-  }
-  SSLFingerprint(const std::string& algorithm,
-                 const talk_base::SSLIdentity* identity)
-      : algorithm(algorithm) {
-    ASSERT(identity != NULL);
-
-    unsigned char digest_val[32];
-    bool retval;
-    size_t digest_len;
-
-    retval = identity->certificate().ComputeDigest(
-        algorithm, digest_val, sizeof(digest_val), &digest_len);
-    ASSERT(retval);
-    if (retval) {
-      digest.SetData(digest_val, digest_len);
-    }
   }
   SSLFingerprint(const SSLFingerprint& from)
       : algorithm(from.algorithm), digest(from.digest) {}

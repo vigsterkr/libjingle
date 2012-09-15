@@ -76,13 +76,15 @@ static cricket::SessionDescription* CreateCricketSessionDescription() {
       cricket::TransportInfo(
                              cricket::CN_AUDIO,
                              cricket::TransportDescription(
-                                 cricket::NS_GINGLE_P2P, "",
+                                 cricket::NS_GINGLE_P2P,
+                                 cricket::TransportOptions(),
                                  kCandidateUfragVoice, kCandidatePwdVoice,
                                  NULL, cricket::Candidates()))));
   EXPECT_TRUE(desc->AddTransportInfo(
       cricket::TransportInfo(cricket::CN_VIDEO,
                              cricket::TransportDescription(
-                                 cricket::NS_GINGLE_P2P, "",
+                                 cricket::NS_GINGLE_P2P,
+                                 cricket::TransportOptions(),
                                  kCandidateUfragVideo, kCandidatePwdVideo,
                                  NULL, cricket::Candidates()))));
   return desc;

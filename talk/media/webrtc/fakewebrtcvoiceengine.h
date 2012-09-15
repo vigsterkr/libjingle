@@ -817,7 +817,11 @@ class FakeWebRtcVoiceEngine
     mode = ec_mode_;
     return 0;
   }
-  virtual void SetDelayOffsetMs(int offset) {}
+#ifdef USE_WEBRTC_DEV_BRANCH
+  WEBRTC_STUB(EnableDriftCompensation, (bool enable))
+  WEBRTC_BOOL_STUB(DriftCompensationEnabled, ())
+#endif
+  WEBRTC_VOID_STUB(SetDelayOffsetMs, (int offset))
   WEBRTC_STUB(DelayOffsetMs, ());
   WEBRTC_FUNC(SetAecmMode, (webrtc::AecmModes mode, bool enableCNG)) {
     aecm_mode_ = mode;

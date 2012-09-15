@@ -34,6 +34,15 @@
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/stringencode.h"
+#include "talk/base/window.h"
+
+namespace talk_base {
+
+class DesktopDescription;
+class WindowDescription;
+class WindowPicker;
+
+}
 
 namespace cricket {
 
@@ -79,6 +88,15 @@ class DeviceManagerInterface {
   // Device creation
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const = 0;
 
+  virtual bool GetWindows(
+      std::vector<talk_base::WindowDescription>* descriptions) = 0;
+  virtual VideoCapturer* CreateWindowCapturer(talk_base::WindowId window) = 0;
+
+  virtual bool GetDesktops(
+      std::vector<talk_base::DesktopDescription>* descriptions) = 0;
+  virtual VideoCapturer* CreateDesktopCapturer(
+      talk_base::DesktopId desktop) = 0;
+
   sigslot::signal0<> SignalDevicesChange;
 
   static const char kDefaultDeviceName[];
@@ -123,6 +141,14 @@ class DeviceManager : public DeviceManagerInterface {
 
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const;
 
+  virtual bool GetWindows(
+      std::vector<talk_base::WindowDescription>* descriptions);
+  virtual VideoCapturer* CreateWindowCapturer(talk_base::WindowId window);
+
+  virtual bool GetDesktops(
+      std::vector<talk_base::DesktopDescription>* descriptions);
+  virtual VideoCapturer* CreateDesktopCapturer(talk_base::DesktopId desktop);
+
   // The exclusion_list MUST be a NULL terminated list.
   static bool FilterDevices(std::vector<Device>* devices,
       const char* const exclusion_list[]);
@@ -143,8 +169,10 @@ class DeviceManager : public DeviceManagerInterface {
   // The exclusion_list MUST be a NULL terminated list.
   static bool ShouldDeviceBeIgnored(const std::string& device_name,
       const char* const exclusion_list[]);
+
   bool initialized_;
   talk_base::scoped_ptr<DeviceWatcher> watcher_;
+  talk_base::scoped_ptr<talk_base::WindowPicker> window_picker_;
 };
 
 }  // namespace cricket

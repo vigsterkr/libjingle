@@ -6,32 +6,57 @@
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
 #include "talk/base/thread.h"
+#include "talk/media/base/fakemediaprocessor.h"
 #include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/base/testutils.h"
 #include "talk/media/base/videocapturer.h"
+#include "talk/media/base/videoprocessor.h"
 
 using cricket::FakeVideoCapturer;
+
+// Sets the elapsed time in the video frame to 0.
+class VideoProcessor0 : public cricket::VideoProcessor {
+ public:
+  virtual void OnFrame(uint32 /*ssrc*/, cricket::VideoFrame* frame,
+                       bool* drop_frame) {
+    frame->SetElapsedTime(0u);
+  }
+};
+
+// Adds one to the video frame's elapsed time. Note that VideoProcessor0 and
+// VideoProcessor1 are not commutative.
+class VideoProcessor1 : public cricket::VideoProcessor {
+ public:
+  virtual void OnFrame(uint32 /*ssrc*/, cricket::VideoFrame* frame,
+                       bool* drop_frame) {
+    int64 elapsed_time = frame->GetElapsedTime();
+    frame->SetElapsedTime(elapsed_time + 1);
+  }
+};
 
 class VideoCapturerTest
     : public sigslot::has_slots<>,
       public testing::Test {
  public:
-  VideoCapturerTest() : video_frame_received_(false) {
+  VideoCapturerTest()
+      : video_frames_received_(0),
+        last_frame_elapsed_time_(0) {
     capturer_.SignalVideoFrame.connect(this, &VideoCapturerTest::OnVideoFrame);
   }
 
  protected:
-  void OnVideoFrame(cricket::VideoCapturer*, const cricket::VideoFrame*) {
-    video_frame_received_ = true;
+  void OnVideoFrame(cricket::VideoCapturer*, const cricket::VideoFrame* frame) {
+    ++video_frames_received_;
+    last_frame_elapsed_time_ = frame->GetElapsedTime();
   }
-  bool video_frame_received() {
-    const bool ret_val = video_frame_received_;
-    video_frame_received_ = false;
-    return ret_val;
+  int video_frames_received() const {
+    return video_frames_received_;
   }
+  int64 last_frame_elapsed_time() const { return last_frame_elapsed_time_; }
 
   cricket::FakeVideoCapturer capturer_;
-  bool video_frame_received_;
+  int video_frames_received_;
+  int64 last_frame_elapsed_time_;
 };
 
 TEST_F(VideoCapturerTest, VideoFrame) {
@@ -41,9 +66,9 @@ TEST_F(VideoCapturerTest, VideoFrame) {
       cricket::VideoFormat::FpsToInterval(30),
       cricket::FOURCC_I420)));
   EXPECT_TRUE(capturer_.IsRunning());
-  EXPECT_FALSE(video_frame_received());
+  EXPECT_EQ(0, video_frames_received());
   EXPECT_TRUE(capturer_.CaptureFrame());
-  EXPECT_TRUE(video_frame_received());
+  EXPECT_EQ(1, video_frames_received());
 }
 
 TEST_F(VideoCapturerTest, TestFourccMatch) {
@@ -417,4 +442,45 @@ TEST_F(VideoCapturerTest, TestRequest16x10_9) {
   EXPECT_TRUE(capturer_.GetBestCaptureFormat(required_formats[2], &best));
   EXPECT_EQ(640, best.width);
   EXPECT_EQ(360, best.height);
+}
+
+TEST_F(VideoCapturerTest, ProcessorChainTest) {
+  VideoProcessor0 processor0;
+  VideoProcessor1 processor1;
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_.Start(cricket::VideoFormat(
+      640,
+      480,
+      cricket::VideoFormat::FpsToInterval(30),
+      cricket::FOURCC_I420)));
+  EXPECT_TRUE(capturer_.IsRunning());
+  EXPECT_EQ(0, video_frames_received());
+  // First processor sets elapsed time to 0.
+  capturer_.AddVideoProcessor(&processor0);
+  // Second processor adds 1 to the elapsed time. I.e. a frames elapsed time
+  // should now always be 1 (and not 0).
+  capturer_.AddVideoProcessor(&processor1);
+  EXPECT_TRUE(capturer_.CaptureFrame());
+  EXPECT_EQ(1, video_frames_received());
+  EXPECT_EQ(1u, last_frame_elapsed_time());
+  capturer_.RemoveVideoProcessor(&processor1);
+  EXPECT_TRUE(capturer_.CaptureFrame());
+  // Since processor1 has been removed the elapsed time should now be 0.
+  EXPECT_EQ(2, video_frames_received());
+  EXPECT_EQ(0u, last_frame_elapsed_time());
+}
+
+TEST_F(VideoCapturerTest, ProcessorDropFrame) {
+  cricket::FakeMediaProcessor dropping_processor_;
+  dropping_processor_.set_drop_frames(true);
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_.Start(cricket::VideoFormat(
+      640,
+      480,
+      cricket::VideoFormat::FpsToInterval(30),
+      cricket::FOURCC_I420)));
+  EXPECT_TRUE(capturer_.IsRunning());
+  EXPECT_EQ(0, video_frames_received());
+  // Install a processor that always drop frames.
+  capturer_.AddVideoProcessor(&dropping_processor_);
+  EXPECT_TRUE(capturer_.CaptureFrame());
+  EXPECT_EQ(0, video_frames_received());
 }

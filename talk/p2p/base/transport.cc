@@ -39,26 +39,6 @@
 
 namespace cricket {
 
-struct ChannelParams {
-  ChannelParams() : channel(NULL), candidate(NULL) {}
-  explicit ChannelParams(int component)
-      : component(component), channel(NULL), candidate(NULL) {}
-  explicit ChannelParams(cricket::Candidate* candidate) :
-      channel(NULL), candidate(candidate) {
-  }
-
-  ~ChannelParams() {
-    delete candidate;
-  }
-
-  std::string name;
-  int component;
-  cricket::TransportChannelImpl* channel;
-  cricket::Candidate* candidate;
-};
-// TODO: Merge ChannelParams and ChannelMessage.
-typedef talk_base::ScopedMessageData<ChannelParams> ChannelMessage;
-
 enum {
   MSG_CREATECHANNEL = 1,
   MSG_DESTROYCHANNEL = 2,
@@ -76,6 +56,33 @@ enum {
   MSG_CANDIDATEALLOCATIONCOMPLETE = 14,
   MSG_ROLECONFLICT = 15,
   MSG_SETROLE = 16,
+  MSG_SETLOCALDESCRIPTION = 17,
+  MSG_SETREMOTEDESCRIPTION = 18
+};
+
+struct ChannelParams : public talk_base::MessageData {
+  ChannelParams() : channel(NULL), candidate(NULL) {}
+  explicit ChannelParams(int component)
+      : component(component), channel(NULL), candidate(NULL) {}
+  explicit ChannelParams(Candidate* candidate) :
+      channel(NULL), candidate(candidate) {
+  }
+
+  ~ChannelParams() {
+    delete candidate;
+  }
+
+  std::string name;
+  int component;
+  TransportChannelImpl* channel;
+  Candidate* candidate;
+};
+
+struct TransportDescriptionParams : public talk_base::MessageData {
+  explicit TransportDescriptionParams(const TransportDescription& desc)
+      : desc(desc), result(false) {}
+  const TransportDescription& desc;
+  bool result;
 };
 
 Transport::Transport(talk_base::Thread* signaling_thread,
@@ -106,10 +113,24 @@ void Transport::SetRole(TransportRole role) {
   worker_thread()->Send(this, MSG_SETROLE);
 }
 
+bool Transport::SetLocalTransportDescription(
+    const TransportDescription& description) {
+  TransportDescriptionParams params(description);
+  worker_thread()->Send(this, MSG_SETLOCALDESCRIPTION, &params);
+  return params.result;
+}
+
+bool Transport::SetRemoteTransportDescription(
+    const TransportDescription& description) {
+  TransportDescriptionParams params(description);
+  worker_thread()->Send(this, MSG_SETREMOTEDESCRIPTION, &params);
+  return params.result;
+}
+
 TransportChannelImpl* Transport::CreateChannel(int component) {
-  ChannelMessage msg(new ChannelParams(component));
-  worker_thread()->Send(this, MSG_CREATECHANNEL, &msg);
-  return msg.data()->channel;
+  ChannelParams params(component);
+  worker_thread()->Send(this, MSG_CREATECHANNEL, &params);
+  return params.channel;
 }
 
 TransportChannelImpl* Transport::CreateChannel_w(int component) {
@@ -117,7 +138,7 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
   TransportChannelImpl *impl;
   talk_base::CritScope cs(&crit_);
 
-  // Create the entry if it does not exist
+  // Create the entry if it does not exist.
   bool impl_exists = false;
   if (channels_.find(component) == channels_.end()) {
     impl = CreateTransportChannel(component);
@@ -127,7 +148,7 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
     impl_exists = true;
   }
 
-  // Increase the ref count
+  // Increase the ref count.
   channels_[component].AddRef();
   destroyed_ = false;
 
@@ -137,8 +158,15 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
     return impl;
   }
 
+  // Push down our transport state to the new channel.
   impl->SetRole(role_);
   impl->SetTiebreaker(tiebreaker_);
+  if (local_description_.get()) {
+    ApplyLocalTransportDescription_w(impl);
+  }
+  if (remote_description_.get()) {
+    ApplyRemoteTransportDescription_w(impl);
+  }
 
   impl->SignalReadableState.connect(this, &Transport::OnChannelReadableState);
   impl->SignalWritableState.connect(this, &Transport::OnChannelWritableState);
@@ -173,8 +201,8 @@ bool Transport::HasChannels() {
 }
 
 void Transport::DestroyChannel(int component) {
-  ChannelMessage msg(new ChannelParams(component));
-  worker_thread()->Send(this, MSG_DESTROYCHANNEL, &msg);
+  ChannelParams params(component);
+  worker_thread()->Send(this, MSG_DESTROYCHANNEL, &params);
 }
 
 void Transport::DestroyChannel_w(int component) {
@@ -218,28 +246,18 @@ void Transport::ConnectChannels_w() {
   connect_requested_ = true;
   signaling_thread()->Post(
       this, MSG_CANDIDATEREADY, NULL);
-  if (local_transport_description_.ice_ufrag.empty() ||
-      local_transport_description_.ice_pwd.empty()) {
+  if (!local_description_.get()) {
     // This can happen if there's no transport info in the local session
     // description. For example, when the application doesn't generate local
     // description from the CreateOffer/CreatAnswer.
     // TODO(ronghuawu): Fix all the cases that reach here and return error.
-    LOG(LS_WARNING) << "Transport::ConnectChannels_w: The ice_ufrag and the "
-                    << "ice_pwd are not ready. Will generate one.";
-    local_transport_description_.ice_ufrag =
-        talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
-    local_transport_description_.ice_pwd =
-        talk_base::CreateRandomString(ICE_PWD_LENGTH);
-  }
-  {
-    // Set ufrag and pwd before Connect.
-    talk_base::CritScope cs(&crit_);
-    for (ChannelMap::iterator iter = channels_.begin();
-         iter != channels_.end();
-         ++iter) {
-      (iter->second.get())->SetIceUfrag(local_transport_description_.ice_ufrag);
-      (iter->second.get())->SetIcePwd(local_transport_description_.ice_pwd);
-    }
+    LOG(LS_WARNING) << "Transport::ConnectChannels_w: No local description has "
+                    << "been set. Will generate one.";
+    TransportDescription desc(NS_GINGLE_P2P, TransportOptions(),
+                              talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
+                              talk_base::CreateRandomString(ICE_PWD_LENGTH),
+                              NULL, Candidates());
+    SetLocalTransportDescription_w(desc);
   }
 
   CallChannels_w(&TransportChannelImpl::Connect);
@@ -362,9 +380,8 @@ void Transport::OnRemoteCandidate(const Candidate& candidate) {
     return;
   }
 
-  ChannelMessage* msg = new ChannelMessage(
-      new ChannelParams(new Candidate(candidate)));
-  worker_thread()->Post(this, MSG_ONREMOTECANDIDATE, msg);
+  ChannelParams* params = new ChannelParams(new Candidate(candidate));
+  worker_thread()->Post(this, MSG_ONREMOTECANDIDATE, params);
 }
 
 void Transport::OnRemoteCandidate_w(const Candidate& candidate) {
@@ -428,9 +445,8 @@ TransportState Transport::GetTransportState_s(bool read) {
 
 void Transport::OnChannelRequestSignaling(TransportChannelImpl* channel) {
   ASSERT(worker_thread()->IsCurrent());
-  ChannelMessage* msg = new ChannelMessage(
-      new ChannelParams(channel->component()));
-  signaling_thread()->Post(this, MSG_REQUESTSIGNALING, msg);
+  ChannelParams* params = new ChannelParams(channel->component());
+  signaling_thread()->Post(this, MSG_REQUESTSIGNALING, params);
 }
 
 void Transport::OnChannelRequestSignaling_s(int component) {
@@ -480,7 +496,7 @@ void Transport::OnChannelRouteChange(TransportChannel* channel,
   ASSERT(worker_thread()->IsCurrent());
   ChannelParams* params = new ChannelParams(new Candidate(remote_candidate));
   params->channel = static_cast<cricket::TransportChannelImpl*>(channel);
-  signaling_thread()->Post(this, MSG_ROUTECHANGE, new ChannelMessage(params));
+  signaling_thread()->Post(this, MSG_ROUTECHANGE, params);
 }
 
 void Transport::OnChannelRouteChange_s(const TransportChannel* channel,
@@ -518,78 +534,129 @@ void Transport::SetRole_w() {
   }
 }
 
+bool Transport::SetLocalTransportDescription_w(
+    const TransportDescription& desc) {
+  bool ret = true;
+  talk_base::CritScope cs(&crit_);
+  local_description_.reset(new TransportDescription(desc));
+  for (ChannelMap::iterator iter = channels_.begin();
+       iter != channels_.end(); ++iter) {
+    ret &= ApplyLocalTransportDescription_w(iter->second.get());
+  }
+  return ret;
+}
+
+bool Transport::SetRemoteTransportDescription_w(
+    const TransportDescription& desc) {
+  bool ret = true;
+  talk_base::CritScope cs(&crit_);
+  remote_description_.reset(new TransportDescription(desc));
+  for (ChannelMap::iterator iter = channels_.begin();
+       iter != channels_.end(); ++iter) {
+    ret &= ApplyRemoteTransportDescription_w(iter->second.get());
+  }
+  return ret;
+}
+
+bool Transport::ApplyLocalTransportDescription_w(TransportChannelImpl* ch) {
+  ch->SetIceUfrag(local_description_->ice_ufrag);
+  ch->SetIcePwd(local_description_->ice_pwd);
+  return true;
+}
+
+bool Transport::ApplyRemoteTransportDescription_w(TransportChannelImpl* ch) {
+  bool ret;
+  TransportProtocol proto =
+      (remote_description_->transport_type == NS_JINGLE_ICE_UDP) ?
+          ICEPROTO_RFC5245 : ICEPROTO_GOOGLE;
+  ch->SetIceProtocolType(proto);
+  talk_base::SSLFingerprint* fp =
+      remote_description_->identity_fingerprint.get();
+  if (fp) {
+    ret = ch->SetRemoteFingerprint(fp->algorithm,
+        reinterpret_cast<uint8*>(fp->digest.data()), fp->digest.length());
+  } else {
+    // Inform the channel that no fingerprint is coming.
+    ret = ch->SetRemoteFingerprint("", NULL, 0);
+  }
+  return ret;
+}
+
 void Transport::OnMessage(talk_base::Message* msg) {
   switch (msg->message_id) {
-  case MSG_CREATECHANNEL:
-    {
-      ChannelParams* params =
-          static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      params->channel = CreateChannel_w(params->component);
-    }
-    break;
-  case MSG_DESTROYCHANNEL:
-    {
-      ChannelParams* params =
-          static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      DestroyChannel_w(params->component);
-    }
-    break;
-  case MSG_CONNECTCHANNELS:
-    ConnectChannels_w();
-    break;
-  case MSG_RESETCHANNELS:
-    ResetChannels_w();
-    break;
-  case MSG_DESTROYALLCHANNELS:
-    DestroyAllChannels_w();
-    break;
-  case MSG_ONSIGNALINGREADY:
-    CallChannels_w(&TransportChannelImpl::OnSignalingReady);
-    break;
-  case MSG_ONREMOTECANDIDATE:
-    {
-      ChannelMessage* channel_msg = static_cast<ChannelMessage*>(msg->pdata);
-      OnRemoteCandidate_w(*(channel_msg->data()->candidate));
-      delete channel_msg;
-    }
-    break;
-  case MSG_CONNECTING:
-    OnConnecting_s();
-    break;
-  case MSG_READSTATE:
-    OnChannelReadableState_s();
-    break;
-  case MSG_WRITESTATE:
-    OnChannelWritableState_s();
-    break;
-  case MSG_REQUESTSIGNALING:
-    {
-      ChannelParams* params =
-          static_cast<ChannelMessage*>(msg->pdata)->data().get();
-      OnChannelRequestSignaling_s(params->component);
-      delete params;
-    }
-    break;
-  case MSG_CANDIDATEREADY:
-    OnChannelCandidateReady_s();
-    break;
-  case MSG_ROUTECHANGE:
-    {
-      ChannelMessage* channel_msg = static_cast<ChannelMessage*>(msg->pdata);
-      ChannelParams* params = channel_msg->data().get();
-      OnChannelRouteChange_s(params->channel, *params->candidate);
-      delete channel_msg;
-    }
-    break;
-  case MSG_CANDIDATEALLOCATIONCOMPLETE:
-    SignalCandidatesAllocationDone(this);
-    break;
-  case MSG_ROLECONFLICT:
-    SignalRoleConflict();
-    break;
-  case MSG_SETROLE:
-    SetRole_w();
-    break;
+    case MSG_CREATECHANNEL: {
+        ChannelParams* params = static_cast<ChannelParams*>(msg->pdata);
+        params->channel = CreateChannel_w(params->component);
+      }
+      break;
+    case MSG_DESTROYCHANNEL: {
+        ChannelParams* params = static_cast<ChannelParams*>(msg->pdata);
+        DestroyChannel_w(params->component);
+      }
+      break;
+    case MSG_CONNECTCHANNELS:
+      ConnectChannels_w();
+      break;
+    case MSG_RESETCHANNELS:
+      ResetChannels_w();
+      break;
+    case MSG_DESTROYALLCHANNELS:
+      DestroyAllChannels_w();
+      break;
+    case MSG_ONSIGNALINGREADY:
+      CallChannels_w(&TransportChannelImpl::OnSignalingReady);
+      break;
+    case MSG_ONREMOTECANDIDATE: {
+        ChannelParams* params = static_cast<ChannelParams*>(msg->pdata);
+        OnRemoteCandidate_w(*params->candidate);
+        delete params;
+      }
+      break;
+    case MSG_CONNECTING:
+      OnConnecting_s();
+      break;
+    case MSG_READSTATE:
+      OnChannelReadableState_s();
+      break;
+    case MSG_WRITESTATE:
+      OnChannelWritableState_s();
+      break;
+    case MSG_REQUESTSIGNALING: {
+        ChannelParams* params = static_cast<ChannelParams*>(msg->pdata);
+        OnChannelRequestSignaling_s(params->component);
+        delete params;
+      }
+      break;
+    case MSG_CANDIDATEREADY:
+      OnChannelCandidateReady_s();
+      break;
+    case MSG_ROUTECHANGE: {
+        ChannelParams* params = static_cast<ChannelParams*>(msg->pdata);
+        OnChannelRouteChange_s(params->channel, *params->candidate);
+        delete params;
+      }
+      break;
+    case MSG_CANDIDATEALLOCATIONCOMPLETE:
+      SignalCandidatesAllocationDone(this);
+      break;
+    case MSG_ROLECONFLICT:
+      SignalRoleConflict();
+      break;
+    case MSG_SETROLE:
+      SetRole_w();
+      break;
+    case MSG_SETLOCALDESCRIPTION: {
+        TransportDescriptionParams* params =
+            static_cast<TransportDescriptionParams*>(msg->pdata);
+        params->result = SetLocalTransportDescription_w(params->desc);
+      }
+      break;
+    case MSG_SETREMOTEDESCRIPTION: {
+        TransportDescriptionParams* params =
+            static_cast<TransportDescriptionParams*>(msg->pdata);
+        params->result = SetRemoteTransportDescription_w(params->desc);
+      }
+      break;
   }
 }
 

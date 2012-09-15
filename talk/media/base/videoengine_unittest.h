@@ -1,5 +1,5 @@
 // libjingle
-// Copyright 2004 Google Inc.
+// Copyright 2004 Google Inc. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -31,6 +31,7 @@
 
 #include "talk/base/bytebuffer.h"
 #include "talk/base/gunit.h"
+#include "talk/base/timeutils.h"
 #include "talk/media/base/fakenetworkinterface.h"
 #include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/base/fakevideorenderer.h"
@@ -1510,7 +1511,7 @@ class VideoMediaChannelTest : public testing::Test,
         cricket::FOURCC_I420);
     // The SSRC differs from the send SSRC.
     EXPECT_FALSE(channel_->SetSendStreamFormat(kSsrc - 1, format));
-    EXPECT_TRUE(channel_->SetSendStreamFormat(0, format));
+    EXPECT_TRUE(channel_->SetSendStreamFormat(kSsrc, format));
 
     EXPECT_TRUE(WaitAndSendFrame(30));  // Should be dropped.
     EXPECT_TRUE(WaitAndSendFrame(30));  // Should be rendered.
@@ -1521,11 +1522,35 @@ class VideoMediaChannelTest : public testing::Test,
     // Adapt the resolution to 0x0, which should drop all frames.
     format.width = 0;
     format.height = 0;
-    EXPECT_TRUE(channel_->SetSendStreamFormat(0, format));
+    EXPECT_TRUE(channel_->SetSendStreamFormat(kSsrc, format));
     EXPECT_TRUE(SendFrame());
     EXPECT_TRUE(SendFrame());
     talk_base::Thread::Current()->ProcessMessages(500);
     EXPECT_EQ(frame_count, renderer_.num_rendered_frames());
+  }
+  // Test that setting send stream format to 0x0 resolution will result in
+  // frames being dropped.
+  void SetSendStreamFormat0x0() {
+    EXPECT_TRUE(SetOneCodec(DefaultCodec()));
+    EXPECT_TRUE(SetSend(true));
+    EXPECT_TRUE(channel_->SetRender(true));
+    EXPECT_EQ(0, renderer_.num_rendered_frames());
+    // This frame should be received.
+    EXPECT_TRUE(SendFrame());
+    EXPECT_FRAME_WAIT(1, DefaultCodec().width, DefaultCodec().height, kTimeout);
+    const int64 interval = cricket::VideoFormat::FpsToInterval(
+        DefaultCodec().framerate);
+    cricket::VideoFormat format(
+        0,
+        0,
+        interval,
+        cricket::FOURCC_I420);
+    EXPECT_TRUE(channel_->SetSendStreamFormat(kSsrc, format));
+    // This frame should not be received.
+    EXPECT_TRUE(WaitAndSendFrame(
+        static_cast<int>(interval/talk_base::kNumNanosecsPerMillisec)));
+    talk_base::Thread::Current()->ProcessMessages(500);
+    EXPECT_EQ(1, renderer_.num_rendered_frames());
   }
 
   // Tests that we can mute and unmute the channel properly.

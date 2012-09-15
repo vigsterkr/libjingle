@@ -58,8 +58,6 @@ class PortProxy : public PortInterface, public sigslot::has_slots<> {
   virtual void SetTiebreaker(uint64 tiebreaker);
   virtual uint64 Tiebreaker() const;
 
-  virtual uint32 Priority() const;
-
   // Forwards call to the actual Port.
   virtual void PrepareAddress();
   virtual Connection* CreateConnection(const Candidate& remote_candidate,

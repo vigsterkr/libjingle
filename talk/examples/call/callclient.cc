@@ -103,8 +103,10 @@ const char* CALL_COMMANDS =
 "\n"
 "  hangup            Ends the call.\n"
 "  hold              Puts the current call on hold\n"
-"  calls             Lists the current calls\n"
+"  calls             Lists the current calls and their sessions\n"
 "  switch [call_id]  Switch to the specified call\n"
+"  addsession [jid]  Add a new session to the current call.\n"
+"  rmsession [sid]   Remove specified session.\n"
 "  mute              Stops sending voice.\n"
 "  unmute            Re-starts sending voice.\n"
 "  vmute             Stops sending video.\n"
@@ -201,6 +203,19 @@ void CallClient::ParseLine(const std::string& line) {
     } else if (command == "hold") {
       media_client_->SetFocus(NULL);
       call_ = NULL;
+    } else if (command == "addsession") {
+      std::string to = GetWord(words, 1, "");
+      cricket::CallOptions options;
+      options.has_video = call_->has_video();
+      options.video_bandwidth = cricket::kAutoBandwidth;
+      options.has_data = data_channel_enabled_;
+      options.AddStream(cricket::MEDIA_TYPE_VIDEO, "", "");
+      if (!InitiateAdditionalSession(to, options)) {
+        console_->PrintLine("Failed to initiate additional session.");
+      }
+    } else if (command == "rmsession") {
+      std::string id = GetWord(words, 1, "");
+      TerminateAndRemoveSession(call_, id);
     } else if (command == "calls") {
       PrintCalls();
     } else if ((words.size() == 2) && (command == "switch")) {
@@ -226,22 +241,28 @@ void CallClient::ParseLine(const std::string& line) {
         hangout_pubsub_client_->PublishVideoMuteState(false);
       }
     } else if (command == "screencast") {
-      // TODO: Use a random ssrc
-      std::string stream_name = "screencast";
-      uint32 ssrc = 1001;
-      int fps = GetInt(words, 1, 5);  // Default to 5 fps.
+      if (screencast_ssrc_ != 0) {
+        console_->PrintLine("Can't screencast twice.  Unscreencast first.");
+      } else {
+        std::string stream_name = "screencast";
+        screencast_ssrc_ = talk_base::CreateRandomId();
+        int fps = GetInt(words, 1, 5);  // Default to 5 fps.
 
-      cricket::ScreencastId screencastid;
-      if (session_ && SelectFirstDesktopScreencastId(&screencastid)) {
-        call_->AddScreencast(session_, stream_name, ssrc, screencastid, fps);
+        cricket::ScreencastId screencastid;
+        cricket::Session* session = GetFirstSession();
+        if (session && SelectFirstDesktopScreencastId(&screencastid)) {
+          call_->AddScreencast(
+              session, stream_name, screencast_ssrc_, screencastid, fps);
+        }
       }
     } else if (command == "unscreencast") {
       // TODO: Use a random ssrc
       std::string stream_name = "screencast";
-      uint32 ssrc = 1001;
 
-      if (session_) {
-        call_->RemoveScreencast(session_, stream_name, ssrc);
+      cricket::Session* session = GetFirstSession();
+      if (session) {
+        call_->RemoveScreencast(session, stream_name, screencast_ssrc_);
+        screencast_ssrc_ = 0;
       }
     } else if (command == "present") {
       if (InMuc()) {
@@ -301,7 +322,9 @@ void CallClient::ParseLine(const std::string& line) {
       std::string to = GetWord(words, 1, "");
       cricket::CallOptions options;
       options.has_data = data_channel_enabled_;
-      MakeCallTo(to, options);
+      if (!PlaceCall(to, options)) {
+        console_->PrintLine("Failed to initiate call.");
+      }
     } else if (command == "vcall") {
       std::string to = GetWord(words, 1, "");
       int bandwidth = GetInt(words, 2, cricket::kAutoBandwidth);
@@ -309,7 +332,9 @@ void CallClient::ParseLine(const std::string& line) {
       options.has_video = true;
       options.video_bandwidth = bandwidth;
       options.has_data = data_channel_enabled_;
-      MakeCallTo(to, options);
+      if (!PlaceCall(to, options)) {
+        console_->PrintLine("Failed to initiate call.");
+      }
     } else if (command == "calls") {
       PrintCalls();
     } else if ((words.size() == 2) && (command == "switch")) {
@@ -352,14 +377,18 @@ CallClient::CallClient(buzz::XmppClient* xmpp_client,
       pmuc_domain_("groupchat.google.com"),
       render_(true),
       data_channel_enabled_(false),
+      multisession_enabled_(false),
       local_renderer_(NULL),
-      remote_renderer_(NULL),
       static_views_accumulated_count_(0),
+      screencast_ssrc_(0),
       roster_(new RosterMap),
       portallocator_flags_(0),
       allow_local_ips_(false),
-      initial_protocol_(cricket::PROTOCOL_HYBRID),
-      secure_policy_(cricket::SEC_DISABLED) {
+      signaling_protocol_(cricket::PROTOCOL_HYBRID),
+      transport_protocol_(cricket::ICEPROTO_HYBRID),
+      sdes_policy_(cricket::SEC_DISABLED),
+      dtls_policy_(cricket::SEC_DISABLED),
+      ssl_identity_(NULL) {
   xmpp_client_->SignalStateChange.connect(this, &CallClient::OnStateChange);
   my_status_.set_caps_node(caps_node);
   my_status_.set_version(version);
@@ -401,19 +430,14 @@ const std::string CallClient::strerror(buzz::XmppEngine::Error err) {
 }
 
 void CallClient::OnCallDestroy(cricket::Call* call) {
+  RemoveCallsStaticRenderedViews(call);
   if (call == call_) {
-    if (remote_renderer_) {
-      delete remote_renderer_;
-      remote_renderer_ = NULL;
-    }
     if (local_renderer_) {
       delete local_renderer_;
       local_renderer_ = NULL;
     }
-    RemoveAllStaticRenderedViews();
     console_->PrintLine("call destroyed");
     call_ = NULL;
-    session_ = NULL;
     delete hangout_pubsub_client_;
     hangout_pubsub_client_ = NULL;
   }
@@ -445,9 +469,6 @@ void CallClient::OnStateChange(buzz::XmppEngine::State state) {
 }
 
 void CallClient::InitMedia() {
-  std::string client_unique = xmpp_client_->jid().Str();
-  talk_base::InitRandom(client_unique.c_str(), client_unique.size());
-
   worker_thread_ = new talk_base::Thread();
   // The worker thread must be started here since initialization of
   // the ChannelManager will generate messages that need to be
@@ -456,7 +477,6 @@ void CallClient::InitMedia() {
 
   // TODO: It looks like we are leaking many objects. E.g.
   // |network_manager_| is never deleted.
-
   network_manager_ = new talk_base::BasicNetworkManager();
 
   // TODO: Decide if the relay address should be specified here.
@@ -470,6 +490,9 @@ void CallClient::InitMedia() {
   }
   session_manager_ = new cricket::SessionManager(
       port_allocator_, worker_thread_);
+  session_manager_->set_secure(dtls_policy_);
+  session_manager_->set_identity(ssl_identity_.get());
+  session_manager_->set_transport_protocol(transport_protocol_);
   session_manager_->SignalRequestSignaling.connect(
       this, &CallClient::OnRequestSignaling);
   session_manager_->SignalSessionCreate.connect(
@@ -501,7 +524,8 @@ void CallClient::InitMedia() {
   media_client_->SignalCallDestroy.connect(this, &CallClient::OnCallDestroy);
   media_client_->SignalDevicesChange.connect(this,
                                              &CallClient::OnDevicesChange);
-  media_client_->set_secure(secure_policy_);
+  media_client_->set_secure(sdes_policy_);
+  media_client_->set_multisession_enabled(multisession_enabled_);
 }
 
 void CallClient::OnRequestSignaling() {
@@ -509,7 +533,7 @@ void CallClient::OnRequestSignaling() {
 }
 
 void CallClient::OnSessionCreate(cricket::Session* session, bool initiate) {
-  session->set_current_protocol(initial_protocol_);
+  session->set_current_protocol(signaling_protocol_);
 }
 
 void CallClient::OnCallCreate(cricket::Call* call) {
@@ -523,27 +547,39 @@ void CallClient::OnSessionState(cricket::Call* call,
                                 cricket::Session::State state) {
   if (state == cricket::Session::STATE_RECEIVEDINITIATE) {
     buzz::Jid jid(session->remote_name());
-    console_->PrintLine("Incoming call from '%s'", jid.Str().c_str());
-    call_ = call;
-    session_ = session;
-    incoming_call_ = true;
-    if (call->has_video() && render_) {
-      local_renderer_ =
-          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
-      remote_renderer_ =
-          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
-    }
-    cricket::CallOptions options;
-    if (auto_accept_) {
-      options.has_video = true;
+    if (call_ == call && multisession_enabled_) {
+      // We've received an initiate for an existing call. This is actually a
+      // new session for that call.
+      console_->PrintLine("Incoming session from '%s'", jid.Str().c_str());
+      AddSession(session);
+
+      cricket::CallOptions options;
+      options.has_video = call_->has_video();
       options.has_data = data_channel_enabled_;
-      Accept(options);
+      call_->AcceptSession(session, options);
+
+      if (call_->has_video() && render_) {
+        RenderAllStreams(session, true);
+      }
+    } else {
+      console_->PrintLine("Incoming call from '%s'", jid.Str().c_str());
+      call_ = call;
+      AddSession(session);
+      incoming_call_ = true;
+      if (call->has_video() && render_) {
+        local_renderer_ =
+            cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
+      }
+      if (auto_accept_) {
+        cricket::CallOptions options;
+        options.has_video = true;
+        options.has_data = data_channel_enabled_;
+        Accept(options);
+      }
     }
   } else if (state == cricket::Session::STATE_SENTINITIATE) {
     if (call->has_video() && render_) {
       local_renderer_ =
-          cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
-      remote_renderer_ =
           cricket::VideoRendererFactory::CreateGuiVideoRenderer(160, 100);
     }
     console_->PrintLine("calling...");
@@ -559,7 +595,8 @@ void CallClient::OnSessionState(cricket::Call* call,
     call->SignalSpeakerMonitor.connect(this, &CallClient::OnSpeakerChanged);
     call->StartSpeakerMonitor(session);
   } else if (state == cricket::Session::STATE_RECEIVEDTERMINATE) {
-    console_->PrintLine("other side hung up");
+    console_->PrintLine("other side terminated");
+    TerminateAndRemoveSession(call, session->id());
   }
 }
 
@@ -693,7 +730,9 @@ void CallClient::SendChat(const std::string& to, const std::string msg) {
 
 void CallClient::SendData(const std::string& stream_name,
                           const std::string& text) {
-  if (!call_ || !session_) {
+  // TODO(mylesj): Support sending data over sessions other than the first.
+  cricket::Session* session = GetFirstSession();
+  if (!call_ || !session) {
     console_->PrintLine("Must be in a call to send data.");
     return;
   }
@@ -703,7 +742,7 @@ void CallClient::SendData(const std::string& stream_name,
   }
 
   const cricket::DataContentDescription* data =
-      cricket::GetFirstDataContentDescription(session_->local_description());
+      cricket::GetFirstDataContentDescription(session->local_description());
   if (!data) {
     console_->PrintLine("This call doesn't have a data content.");
     return;
@@ -719,7 +758,7 @@ void CallClient::SendData(const std::string& stream_name,
 
   cricket::SendDataParams params;
   params.ssrc = stream.first_ssrc();
-  call_->SendData(session_, params, text);
+  call_->SendData(session, params, text);
 }
 
 void CallClient::InviteFriend(const std::string& name) {
@@ -737,23 +776,19 @@ void CallClient::InviteFriend(const std::string& name) {
   console_->PrintLine("Requesting to befriend %s.", name.c_str());
 }
 
-void CallClient::MakeCallTo(const std::string& name,
-                            const cricket::CallOptions& given_options) {
-  // Copy so we can change .is_muc.
-  cricket::CallOptions options = given_options;
-
+bool CallClient::FindJid(const std::string& name, buzz::Jid* found_jid,
+                         cricket::CallOptions* options) {
   bool found = false;
-  options.is_muc = false;
+  options->is_muc = false;
   buzz::Jid callto_jid(name);
-  buzz::Jid found_jid;
   if (name.length() == 0 && mucs_.size() > 0) {
     // if no name, and in a MUC, establish audio with the MUC
-    found_jid = mucs_.begin()->first;
+    *found_jid = mucs_.begin()->first;
     found = true;
-    options.is_muc = true;
+    options->is_muc = true;
   } else if (name[0] == '+') {
     // if the first character is a +, assume it's a phone number
-    found_jid = callto_jid;
+    *found_jid = callto_jid;
     found = true;
   } else {
     // otherwise, it's a friend
@@ -761,7 +796,7 @@ void CallClient::MakeCallTo(const std::string& name,
          iter != roster_->end(); ++iter) {
       if (iter->second.jid.BareEquals(callto_jid)) {
         found = true;
-        found_jid = iter->second.jid;
+        *found_jid = iter->second.jid;
         break;
       }
     }
@@ -770,28 +805,34 @@ void CallClient::MakeCallTo(const std::string& name,
       if (mucs_.count(callto_jid) == 1 &&
           mucs_[callto_jid]->state() == buzz::Muc::MUC_JOINED) {
         found = true;
-        found_jid = callto_jid;
-        options.is_muc = true;
+        *found_jid = callto_jid;
+        options->is_muc = true;
       }
     }
   }
 
   if (found) {
     console_->PrintLine("Found %s '%s'",
-                        options.is_muc ? "room" : "online friend",
-                        found_jid.Str().c_str());
-    PlaceCall(found_jid, options);
+                        options->is_muc ? "room" : "online friend",
+                        found_jid->Str().c_str());
   } else {
     console_->PrintLine("Could not find online friend '%s'", name.c_str());
   }
+
+  return found;
 }
 
 void CallClient::OnDataReceived(cricket::Call*,
                                 const cricket::ReceiveDataParams& params,
                                 const std::string& data) {
+  // TODO(mylesj): Support receiving data on sessions other than the first.
+  cricket::Session* session = GetFirstSession();
+  if (!session)
+    return;
+
   cricket::StreamParams stream;
   const std::vector<cricket::StreamParams>* data_streams =
-      call_->GetDataRecvStreams(session_);
+      call_->GetDataRecvStreams(session);
   if (data_streams && GetStreamBySsrc(*data_streams, params.ssrc, &stream)) {
     console_->PrintLine(
         "Received data from '%s' on stream '%s' (ssrc=%u): %s",
@@ -804,17 +845,20 @@ void CallClient::OnDataReceived(cricket::Call*,
   }
 }
 
-void CallClient::PlaceCall(const buzz::Jid& jid,
-                           const cricket::CallOptions& options) {
+bool CallClient::PlaceCall(const std::string& name,
+                           cricket::CallOptions options) {
+  buzz::Jid jid;
+  if (!FindJid(name, &jid, &options))
+    return false;
+
   if (!call_) {
     call_ = media_client_->CreateCall();
-    session_ = call_->InitiateSession(jid, options);
+    AddSession(call_->InitiateSession(jid, media_client_->jid(), options));
   }
   media_client_->SetFocus(call_);
   if (call_->has_video() && render_) {
     if (!options.is_muc) {
       call_->SetLocalRenderer(local_renderer_);
-      call_->SetVideoRenderer(session_, 0, remote_renderer_);
     }
   }
   if (options.is_muc) {
@@ -843,15 +887,74 @@ void CallClient::PlaceCall(const buzz::Jid& jid,
         this, &CallClient::OnHangoutRemoteMuteError);
     hangout_pubsub_client_->RequestAll();
   }
+
+  return true;
+}
+
+bool CallClient::InitiateAdditionalSession(const std::string& name,
+                                           cricket::CallOptions options) {
+  // Can't add a session if there is no call yet.
+  if (!call_)
+    return false;
+
+  buzz::Jid jid;
+  if (!FindJid(name, &jid, &options))
+    return false;
+
+  std::vector<cricket::Session*>& call_sessions = sessions_[call_->id()];
+  call_sessions.push_back(
+      call_->InitiateSession(jid,
+                             buzz::Jid(call_sessions[0]->remote_name()),
+                             options));
+
+  return true;
+}
+
+void CallClient::TerminateAndRemoveSession(cricket::Call* call,
+                                           const std::string& id) {
+  std::vector<cricket::Session*>& call_sessions = sessions_[call->id()];
+  for (std::vector<cricket::Session*>::iterator iter = call_sessions.begin();
+       iter != call_sessions.end(); ++iter) {
+    if ((*iter)->id() == id) {
+      RenderAllStreams(*iter, false);
+      call_->TerminateSession(*iter);
+      call_sessions.erase(iter);
+      break;
+    }
+  }
 }
 
 void CallClient::PrintCalls() {
   const std::map<uint32, cricket::Call*>& calls = media_client_->calls();
   for (std::map<uint32, cricket::Call*>::const_iterator i = calls.begin();
        i != calls.end(); ++i) {
-    console_->PrintLine("%d: %s",
+    console_->PrintLine("Call (id:%d), is %s",
                         i->first,
                         i->second == call_ ? "active" : "on hold");
+    std::vector<cricket::Session *>& sessions = sessions_[call_->id()];
+    for (std::vector<cricket::Session *>::const_iterator j = sessions.begin();
+         j != sessions.end(); ++j) {
+      console_->PrintLine("|--Session (id:%s), to %s", (*j)->id().c_str(),
+                          (*j)->remote_name().c_str());
+
+      std::vector<cricket::StreamParams>::const_iterator k;
+      const std::vector<cricket::StreamParams>* streams =
+          i->second->GetAudioRecvStreams(*j);
+      if (streams)
+        for (k = streams->begin(); k != streams->end(); ++k) {
+          console_->PrintLine("|----Audio Stream: %s", k->ToString().c_str());
+        }
+      streams = i->second->GetVideoRecvStreams(*j);
+      if (streams)
+        for (k = streams->begin(); k != streams->end(); ++k) {
+          console_->PrintLine("|----Video Stream: %s", k->ToString().c_str());
+        }
+      streams = i->second->GetDataRecvStreams(*j);
+      if (streams)
+        for (k = streams->begin(); k != streams->end(); ++k) {
+          console_->PrintLine("|----Data Stream: %s", k->ToString().c_str());
+        }
+    }
   }
 }
 
@@ -945,14 +1048,13 @@ void CallClient::OnHangoutRemoteMuteError(const std::string& task_id,
 
 void CallClient::Accept(const cricket::CallOptions& options) {
   ASSERT(call_ && incoming_call_);
-  ASSERT(call_->sessions().size() == 1);
-  call_->AcceptSession(call_->sessions()[0], options);
+  ASSERT(sessions_[call_->id()].size() == 1);
+  cricket::Session* session = GetFirstSession();
+  call_->AcceptSession(session, options);
   media_client_->SetFocus(call_);
   if (call_->has_video() && render_) {
     call_->SetLocalRenderer(local_renderer_);
-    // The client never does an accept for multiway, so this must be 1:1,
-    // so there's no SSRC.
-    call_->SetVideoRenderer(session_, 0, remote_renderer_);
+    RenderAllStreams(session, true);
   }
   if (call_->has_data()) {
     call_->SignalDataReceived.connect(this, &CallClient::OnDataReceived);
@@ -1290,22 +1392,64 @@ void CallClient::OnMediaStreamsUpdate(cricket::Call* call,
                                       cricket::Session* session,
                                       const cricket::MediaStreams& added,
                                       const cricket::MediaStreams& removed) {
-  if (call->has_video()) {
+  if (call && call->has_video()) {
     for (std::vector<cricket::StreamParams>::const_iterator
          it = removed.video().begin(); it != removed.video().end(); ++it) {
       RemoveStaticRenderedView(it->first_ssrc());
     }
 
     if (render_) {
-      for (std::vector<cricket::StreamParams>::const_iterator
-           it = added.video().begin(); it != added.video().end(); ++it) {
-        // TODO: Make dimensions and positions more configurable.
-        int offset = (50 * static_views_accumulated_count_) % 300;
-        AddStaticRenderedView(session, it->first_ssrc(), 640, 400, 30,
-                              offset, offset);
-      }
+      RenderStreams(session, added.video(), true);
     }
-    SendViewRequest(session);
+    SendViewRequest(call, session);
+  }
+}
+
+void CallClient::RenderAllStreams(cricket::Session* session, bool enable) {
+  const std::vector<cricket::StreamParams>* video_streams =
+      call_->GetVideoRecvStreams(session);
+  if (video_streams) {
+    RenderStreams(session, *video_streams, enable);
+  }
+}
+
+void CallClient::RenderStreams(
+    cricket::Session* session,
+    const std::vector<cricket::StreamParams>& video_streams,
+    bool enable) {
+  std::vector<cricket::StreamParams>::const_iterator stream;
+  for (stream = video_streams.begin(); stream != video_streams.end();
+       ++stream) {
+    RenderStream(session, *stream, enable);
+  }
+}
+
+void CallClient::RenderStream(cricket::Session* session,
+                              const cricket::StreamParams& stream,
+                              bool enable) {
+  if (!stream.has_ssrcs()) {
+    // Nothing to see here; move along.
+    return;
+  }
+
+  uint32 ssrc = stream.first_ssrc();
+  StaticRenderedViews::iterator iter =
+      static_rendered_views_.find(std::make_pair(session, ssrc));
+  if (enable) {
+    if (iter == static_rendered_views_.end()) {
+      // TODO(pthatcher): Make dimensions and positions more configurable.
+      int offset = (50 * static_views_accumulated_count_) % 300;
+      AddStaticRenderedView(session, ssrc, 640, 400, 30,
+                            offset, offset);
+      // Should have it now.
+      iter = static_rendered_views_.find(std::make_pair(session, ssrc));
+    }
+    call_->SetVideoRenderer(session, ssrc, iter->second.renderer);
+  } else {
+    if (iter != static_rendered_views_.end()) {
+      call_->SetVideoRenderer(session, ssrc, NULL);
+      RemoveStaticRenderedView(ssrc);
+    }
   }
 }
 
@@ -1320,8 +1464,8 @@ void CallClient::AddStaticRenderedView(
       cricket::VideoRendererFactory::CreateGuiVideoRenderer(
           x_offset, y_offset));
   rendered_view.renderer->SetSize(width, height, 0);
-  call_->SetVideoRenderer(session, ssrc, rendered_view.renderer);
-  static_rendered_views_.push_back(rendered_view);
+  static_rendered_views_.insert(std::make_pair(std::make_pair(session, ssrc),
+                                               rendered_view));
   ++static_views_accumulated_count_;
   console_->PrintLine("Added renderer for ssrc %d", ssrc);
 }
@@ -1329,8 +1473,8 @@ void CallClient::AddStaticRenderedView(
 bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
   for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
        it != static_rendered_views_.end(); ++it) {
-    if (it->view.ssrc == ssrc) {
-      delete it->renderer;
+    if (it->second.view.ssrc == ssrc) {
+      delete it->second.renderer;
       static_rendered_views_.erase(it);
       console_->PrintLine("Removed renderer for ssrc %d", ssrc);
       return true;
@@ -1339,21 +1483,30 @@ bool CallClient::RemoveStaticRenderedView(uint32 ssrc) {
   return false;
 }
 
-void CallClient::RemoveAllStaticRenderedViews() {
+void CallClient::RemoveCallsStaticRenderedViews(cricket::Call* call) {
+  std::vector<cricket::Session*>& sessions = sessions_[call->id()];
+  std::set<cricket::Session*> call_sessions(sessions.begin(), sessions.end());
   for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
-       it != static_rendered_views_.end(); ++it) {
-    delete it->renderer;
+       it != static_rendered_views_.end(); ) {
+    if (call_sessions.find(it->first.first) != call_sessions.end()) {
+      delete it->second.renderer;
+      static_rendered_views_.erase(it++);
+    } else {
+      ++it;
+    }
   }
-  static_rendered_views_.clear();
 }
 
-void CallClient::SendViewRequest(cricket::Session* session) {
+void CallClient::SendViewRequest(cricket::Call* call,
+                                 cricket::Session* session) {
   cricket::ViewRequest request;
   for (StaticRenderedViews::iterator it = static_rendered_views_.begin();
        it != static_rendered_views_.end(); ++it) {
-    request.static_video_views.push_back(it->view);
+    if (it->first.first == session) {
+      request.static_video_views.push_back(it->second.view);
+    }
   }
-  call_->SendViewRequest(session, request);
+  call->SendViewRequest(session, request);
 }
 
 buzz::Jid CallClient::GenerateRandomMucJid() {

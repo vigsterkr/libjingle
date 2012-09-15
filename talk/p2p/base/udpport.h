@@ -40,8 +40,6 @@ class SocketAddress;
 
 namespace cricket {
 
-extern const char LOCAL_PORT_TYPE[];  // type of UDP ports
-
 // Communicates using a local UDP port.
 class UDPPort : public Port {
  public:

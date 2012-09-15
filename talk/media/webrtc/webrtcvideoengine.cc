@@ -528,10 +528,10 @@ static void UpdateVideoCodec(const cricket::VideoFormat& video_format,
   if (target_codec->width & 0x1) {
     target_codec->width -= 1;
   }
+  target_codec->height = video_format.height;
   if (target_codec->height & 0x1) {
     target_codec->height -= 1;
   }
-  target_codec->height = video_format.height;
   target_codec->maxFramerate = cricket::VideoFormat::IntervalToFps(
       video_format.interval);
 }
@@ -1334,7 +1334,6 @@ bool WebRtcVideoMediaChannel::SetSendStreamFormat(uint32 ssrc,
     LOG(LS_ERROR) << "The send codec has not been set yet.";
     return false;
   }
-
   WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
   if (!send_channel) {
     LOG(LS_ERROR) << "The specified ssrc " << ssrc << " is not in use.";
@@ -1349,13 +1348,13 @@ bool WebRtcVideoMediaChannel::SetSendStreamFormat(uint32 ssrc,
   const bool ret_val = SetSendCodec(send_channel, *send_codec_.get(),
                                     send_min_bitrate_, send_start_bitrate_,
                                     send_max_bitrate_);
-  if (ret_val) {
-    LogSendCodecChange("SetSendStreamFormat()");
+  if (!ret_val) {
     // Rollback
-  } else {
     send_channel->set_video_format(old_format);
+    return false;
   }
-  return ret_val;
+  LogSendCodecChange("SetSendStreamFormat()");
+  return true;
 }
 
 bool WebRtcVideoMediaChannel::SetRender(bool render) {
@@ -1878,6 +1877,7 @@ void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
                       libyuv::kFilterBilinear);
     scaled_frame->width = scaled_width;
     scaled_frame->height = scaled_height;
+    scaled_frame->data_size = scaled_width * 4 * scaled_height;
   }
   if (!i420_frame.Init(frame, frame->width, frame->height)) {
     LOG(LS_ERROR) << "Couldn't convert to I420!";
@@ -2413,16 +2413,19 @@ bool WebRtcVideoMediaChannel::SendFrame(
   if (!send_channel) {
     return false;
   }
+  const VideoFormat& video_format = send_channel->video_format();
+  // If the frame should be dropped.
+  const bool video_format_set = video_format != cricket::VideoFormat();
+  if (video_format_set &&
+      (video_format.width == 0 && video_format.height == 0)) {
+    return true;
+  }
+
   WebRtcLocalStreamInfo* channel_stream_info =
       send_channel->local_stream_info();
 
   // Update local stream statistics.
   channel_stream_info->UpdateFrame(frame->GetWidth(), frame->GetHeight());
-
-  // If we want to drop the frame.
-  if (DropFrame()) {
-    return true;
-  }
 
   // Checks if we need to reset vie send codec.
   if (!MaybeResetVieSendCodec(send_channel, frame->GetWidth(),
@@ -2804,8 +2807,10 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
   const VideoFormat& video_format = send_channel->video_format();
   UpdateVideoCodec(video_format, &target_codec);
 
-  if (codec.width == 0 && codec.height == 0) {
-    LOG(LS_INFO) << "0x0 resolution selected. We will drop all the frames.";
+  if (target_codec.width == 0 && target_codec.height == 0) {
+    const uint32 ssrc = send_channel->stream_params()->first_ssrc();
+    LOG(LS_INFO) << "0x0 resolution selected. Captured frames will be dropped "
+                 << "for ssrc: " << ssrc << ".";
   } else {
     // Make sure startBitrate is less or equal to maxBitrate;
     target_codec.startBitrate = talk_base::_min(target_codec.startBitrate,

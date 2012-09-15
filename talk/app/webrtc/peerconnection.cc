@@ -43,6 +43,9 @@ namespace {
 static const size_t kConfigTokens = 2;
 // The min number of tokens in the ice uri.
 static const size_t kMinIceUriTokens = 2;
+// The min number of tokens must present in Turn host uri.
+// e.g. user@turn.example.org
+static const size_t kTurnHostTokensNum = 2;
 // Only the STUN or TURN server address appears in the config string.
 static const size_t kConfigAddress = 1;
 // Both of the STUN or TURN server address and port appear in the config string.
@@ -204,10 +207,21 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
         stun_config->push_back(StunConfiguration(address, port));
         break;
       case TURN:
-      case TURNS:
+      case TURNS: {
+        // Turn url example from the spec |url:"turn:user@turn.example.org"|.
+        std::vector<std::string> turn_tokens;
+        talk_base::tokenize(address, '@', &turn_tokens);
+        if (turn_tokens.size() != kTurnHostTokensNum) {
+          LOG(LS_ERROR) << "Invalid TURN configuration : "
+                        << address << " can't proceed.";
+          return false;
+        }
+        std::string username = turn_tokens[0];
+        address = turn_tokens[1];
         turn_config->push_back(TurnConfiguration(address, port,
-                                                 "", server.password));
+                                                 username, server.password));
         break;
+      }
       case INVALID:
       default:
         LOG(WARNING) << "Configuration not supported: " << server.uri;
@@ -281,7 +295,9 @@ bool PeerConnection::Initialize(const JsepInterface::IceServers& configuration,
                                 PeerConnectionObserver* observer) {
   std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
   std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
-  ParseIceServers(configuration, &stun_config, &turn_config);
+  if (!ParseIceServers(configuration, &stun_config, &turn_config)) {
+    return false;
+  }
   // TODO(perkj): Take |constraints| into consideration.
   return DoInitialize(stun_config, turn_config, observer);
 }

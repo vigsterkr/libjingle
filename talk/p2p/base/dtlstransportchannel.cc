@@ -144,6 +144,7 @@ bool DtlsTransportChannelWrapper::SetLocalIdentity(talk_base::SSLIdentity*
     return false;
   }
 
+  ASSERT(identity != NULL);
   local_identity_ = identity;
   dtls_state_ = STATE_OFFERED;
 
@@ -164,15 +165,17 @@ bool DtlsTransportChannelWrapper::SetRemoteFingerprint(const std::string&
                                                        digest_alg,
                                                        const uint8* digest,
                                                        size_t digest_len) {
-  if (dtls_state_ != STATE_OFFERED) {
+  // Allow SetRemoteFingerprint with a NULL digest even if SetLocalIdentity
+  // hasn't been called.
+  if (dtls_state_ > STATE_OFFERED ||
+      (dtls_state_ == STATE_NONE && !digest_alg.empty())) {
     LOG(LS_ERROR) << "Can't set DTLS remote settings in this state";
     return false;
   }
 
-  if (digest_alg.empty()) {
-    LOG(LS_INFO) << "Other side didn't offer DTLS";
+   if (digest_alg.empty()) {
+    LOG(LS_INFO) << "Other side didn't support DTLS";
     dtls_state_ = STATE_NONE;
-
     return true;
   }
 
@@ -362,7 +365,8 @@ void DtlsTransportChannelWrapper::OnReadPacket(TransportChannel* channel,
       // decide to take this as evidence that the other
       // side is ready to do DTLS and start the handshake
       // on our end
-      LOG(LS_WARNING) << "Received packet before DTLS started";
+      LOG(LS_WARNING) << "Received packet before we know if we are doing "
+                      << "DTLS or not; dropping";
       break;
 
     case STATE_ACCEPTED:

@@ -26,23 +26,15 @@
  */
 
 // Handling of certificates and keypairs for SSLStreamAdapter's peer mode.
-
-#include <string>
-
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif  // HAVE_CONFIG_H
 
-// Decide which (if any) implementation of SSL we will use.
-#if !defined(SSL_USE_SCHANNEL) && !defined(SSL_USE_OPENSSL)
-#ifdef WIN32
-#define SSL_USE_SCHANNEL 1
-#else  // !WIN32
-#define SSL_USE_OPENSSL HAVE_OPENSSL_SSL_H
-#endif  // !WIN32
-#endif
-
 #include "talk/base/sslidentity.h"
+
+#include <string>
+
+#include "talk/base/sslconfig.h"
 
 #if SSL_USE_SCHANNEL
 

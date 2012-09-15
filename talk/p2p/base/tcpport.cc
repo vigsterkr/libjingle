@@ -38,12 +38,15 @@ TCPPort::TCPPort(talk_base::Thread* thread,
                  talk_base::Network* network, const talk_base::IPAddress& ip,
                  int min_port, int max_port, const std::string& username,
                  const std::string& password, bool allow_listen)
-    : Port(thread, LOCAL_PORT_TYPE, factory, network, ip, min_port, max_port,
+    : Port(thread, LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST_TCP,
+           factory, network, ip, min_port, max_port,
            username, password),
       incoming_only_(false),
       allow_listen_(allow_listen),
       socket_(NULL),
       error_(0) {
+  // TODO(mallinath) - Set preference value as per RFC 6544.
+  // http://b/issue?id=7141794
 }
 
 bool TCPPort::Init() {

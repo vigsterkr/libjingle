@@ -29,8 +29,10 @@
 #define TALK_P2P_BASE_CANDIDATE_H_
 
 #include <climits>
+#include <cmath>
 #include <string>
 #include <sstream>
+#include <iomanip>
 #include "talk/base/basictypes.h"
 #include "talk/base/socketaddress.h"
 #include "talk/p2p/base/constants.h"
@@ -52,7 +54,8 @@ class Candidate {
       : id_(id), component_(component), protocol_(protocol), address_(address),
         priority_(priority), username_(username), password_(password),
         type_(type), network_name_(network_name), generation_(generation),
-        foundation_(foundation) {}
+        foundation_(foundation) {
+  }
 
   const std::string & id() const { return id_; }
   void set_id(const std::string & id) { id_ = id; }
@@ -71,13 +74,19 @@ class Candidate {
   uint32 priority() const { return priority_; }
   void set_priority(const uint32 priority) { priority_ = priority; }
 
+//  void set_type_preference(uint32 type_preference) {
+//    priority_ = GetPriority(type_preference);
+//  }
+
   // Maps old preference (which was 0.0-1.0) to match priority (which
   // is 0-2^32-1) to to match RFC 5245, section 4.1.2.1.  Also see
   // https://docs.google.com/a/google.com/document/d/
   // 1iNQDiwDKMh0NQOrCqbj3DKKRT0Dn5_5UJYhmZO-t7Uc/edit
   float preference() const {
-    return static_cast<float>(priority_ >> 24) / 127;
+    // The preference value is clamped to two decimal precision.
+    return static_cast<float>(((priority_ >> 24) * 100 / 127) / 100.0);
   }
+
   void set_preference(float preference) {
     // Limiting priority to UINT_MAX when value exceeds uint32 max.
     // This can happen for e.g. when preference = 3.
@@ -153,6 +162,15 @@ class Candidate {
         << network_name_ << ":" << address_.ToString() << ":"
         << username_ << ":" << password_ << "]";
     return ost.str();
+  }
+
+  uint32 GetPriority(uint32 type_preference) const {
+    // RFC 5245 - 4.1.2.1.
+    // priority = (2^24)*(type preference) +
+    //            (2^8)*(local preference) +
+    //            (2^0)*(256 - component ID)
+    int addr_pref = IPAddressPrecedence(address_.ipaddr());
+    return (type_preference << 24) | (addr_pref << 8) | (256 - component_);
   }
 
  private:

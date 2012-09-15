@@ -29,6 +29,7 @@
 
 #include <string.h>
 
+#include "talk/base/sslconfig.h"
 #if SSL_USE_OPENSSL
 #include "talk/base/openssldigest.h"
 #else

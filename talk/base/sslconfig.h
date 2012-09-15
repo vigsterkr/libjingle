@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011 Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,40 +25,17 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
-#define TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
+#ifndef TALK_BASE_SSLCONFIG_H_
+#define TALK_BASE_SSLCONFIG_H_
 
-namespace cricket {
+// If no preference has been indicated, default to SChannel on Windows and
+// OpenSSL everywhere else, if it is available.
+#if !defined(SSL_USE_SCHANNEL) && !defined(SSL_USE_OPENSSL)
+#ifdef WIN32
+#define SSL_USE_SCHANNEL 1
+#else  // !WIN32
+#define SSL_USE_OPENSSL HAVE_OPENSSL_SSL_H
+#endif  // !WIN32
+#endif
 
-#define WEBRTC_STUB(method, args) \
-  virtual int method args { return 0; }
-
-#define WEBRTC_STUB_CONST(method, args) \
-  virtual int method args const { return 0; }
-
-#define WEBRTC_BOOL_STUB(method, args) \
-  virtual bool method args { return true; }
-
-#define WEBRTC_VOID_STUB(method, args) \
-  virtual void method args {}
-
-#define WEBRTC_FUNC(method, args) \
-  virtual int method args
-
-#define WEBRTC_FUNC_CONST(method, args) \
-  virtual int method args const
-
-#define WEBRTC_BOOL_FUNC(method, args) \
-  virtual bool method args
-
-#define WEBRTC_VOID_FUNC(method, args) \
-  virtual void method args
-
-#define WEBRTC_CHECK_CHANNEL(channel) \
-  if (channels_.find(channel) == channels_.end()) return -1;
-
-#define WEBRTC_ASSERT_CHANNEL(channel) \
-  ASSERT(channels_.find(channel) != channels_.end());
-}  // namespace cricket
-
-#endif  // TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
+#endif  // TALK_BASE_SSLCONFIG_H_

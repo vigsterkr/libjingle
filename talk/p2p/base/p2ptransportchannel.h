@@ -132,7 +132,7 @@ class P2PTransportChannel : public TransportChannelImpl,
                         const talk_base::SocketAddress& addr,
                         ProtocolType proto,
                         IceMessage* stun_msg,
-                        const std::string &remote_username,
+                        const std::string& remote_username,
                         bool port_muxed);
   void OnPortDestroyed(PortInterface* port);
 
@@ -141,6 +141,8 @@ class P2PTransportChannel : public TransportChannelImpl,
   void OnConnectionDestroyed(Connection *connection);
   void NominateBestConnection();
   void OnRoleConflict();
+
+  void OnUseCandidate(Connection* conn);
 
   virtual void OnMessage(talk_base::Message *pmsg);
   void OnSort();

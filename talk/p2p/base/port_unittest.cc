@@ -78,8 +78,6 @@ static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
 // TODO: Update these when RFC5245 is completely supported.
 // Magic value of 30 is from RFC3484, for IPv4 addresses.
-static const uint32 kDefaultHostPriority = ICE_TYPE_PREFERENCE_HOST << 24 |
-             30 << 8 | (256 - ICE_CANDIDATE_COMPONENT_DEFAULT);
 static const uint32 kDefaultPrflxPriority = ICE_TYPE_PREFERENCE_PRFLX << 24 |
              30 << 8 | (256 - ICE_CANDIDATE_COMPONENT_DEFAULT);
 static const int STUN_ERROR_BAD_REQUEST_AS_GICE =
@@ -121,9 +119,8 @@ class TestPort : public Port {
            talk_base::PacketSocketFactory* factory, talk_base::Network* network,
            const talk_base::IPAddress& ip, int min_port, int max_port,
            const std::string& username_fragment, const std::string& password)
-      : Port(thread, type, factory, network, ip, min_port, max_port,
-             username_fragment, password) {
-    SetPriority(kDefaultHostPriority);
+      : Port(thread, type, ICE_TYPE_PREFERENCE_HOST, factory, network, ip,
+             min_port, max_port, username_fragment, password) {
   }
   ~TestPort() {}
 
@@ -1133,7 +1130,7 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   ASSERT_TRUE(ice_controlling_attr != NULL);
   EXPECT_EQ(lport->Tiebreaker(), ice_controlling_attr->value());
   EXPECT_TRUE(msg->GetByteString(STUN_ATTR_ICE_CONTROLLED) == NULL);
-  EXPECT_TRUE(msg->GetByteString(STUN_ATTR_USE_CANDIDATE) == NULL);
+  EXPECT_TRUE(msg->GetByteString(STUN_ATTR_USE_CANDIDATE) != NULL);
   EXPECT_TRUE(msg->GetUInt32(STUN_ATTR_FINGERPRINT) != NULL);
   EXPECT_TRUE(StunMessage::ValidateFingerprint(
       lport->last_stun_buf()->Data(), lport->last_stun_buf()->Length()));
@@ -1596,7 +1593,7 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadFingerprint) {
 TEST_F(PortTest, TestComputeCandidatePriority) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr1, "name", "pass"));
-  port->SetPriority((90 << 24));
+  port->set_type_preference(90);
   port->set_component(177);
   port->AddCandidateAddress(SocketAddress("192.168.1.4", 1234));
   port->AddCandidateAddress(SocketAddress("2001:db8::1234", 1234));
@@ -1632,7 +1629,6 @@ TEST_F(PortTest, TestComputeCandidatePriority) {
 TEST_F(PortTest, TestPortProxyProperties) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr1, "name", "pass"));
-  port->SetPriority(126);
   port->SetRole(cricket::ROLE_CONTROLLING);
   port->SetTiebreaker(kTiebreaker1);
 
@@ -1640,7 +1636,6 @@ TEST_F(PortTest, TestPortProxyProperties) {
   talk_base::scoped_ptr<PortProxy> proxy(new PortProxy());
   proxy->set_impl(port.get());
   EXPECT_EQ(port->Type(), proxy->Type());
-  EXPECT_EQ(port->Priority(), proxy->Priority());
   EXPECT_EQ(port->Network(), proxy->Network());
   EXPECT_EQ(port->Role(), proxy->Role());
   EXPECT_EQ(port->Tiebreaker(), proxy->Tiebreaker());
@@ -1703,8 +1698,47 @@ TEST_F(PortTest, TestCandidatePreference) {
   cricket::Candidate cand1;
   cand1.set_preference(3);
   cricket::Candidate cand2;
-  cand2.set_preference(2);
+  cand2.set_preference(1);
   EXPECT_TRUE(cand1.preference() > cand2.preference());
 }
 
-// TODO: Add unit tests to verify the RelayEntry::OnConnect.
+// Test the Connection priority is calculated correctly.
+TEST_F(PortTest, TestConnectionPriority) {
+  talk_base::scoped_ptr<TestPort> lport(
+      CreateTestPort(kLocalAddr1, "lfrag", "lpass"));
+  lport->set_type_preference(cricket::ICE_TYPE_PREFERENCE_HOST);
+  talk_base::scoped_ptr<TestPort> rport(
+      CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
+  rport->set_type_preference(cricket::ICE_TYPE_PREFERENCE_RELAY);
+  lport->set_component(123);
+  lport->AddCandidateAddress(SocketAddress("192.168.1.4", 1234));
+  rport->set_component(23);
+  rport->AddCandidateAddress(SocketAddress("10.1.1.100", 1234));
+
+  EXPECT_EQ(0x7E001E85U, lport->Candidates()[0].priority());
+  EXPECT_EQ(0x1EE9U, rport->Candidates()[0].priority());
+
+  // RFC 5245
+  // pair priority = 2^32*MIN(G,D) + 2*MAX(G,D) + (G>D?1:0)
+  lport->SetRole(cricket::ROLE_CONTROLLING);
+  rport->SetRole(cricket::ROLE_CONTROLLED);
+  Connection* lconn = lport->CreateConnection(
+      rport->Candidates()[0], Port::ORIGIN_MESSAGE);
+#if defined(WIN32)
+  EXPECT_EQ(0x1EE9FC003D0BU, lconn->priority());
+#else
+  EXPECT_EQ(0x1EE9FC003D0BLLU, lconn->priority());
+#endif
+
+  lport->SetRole(cricket::ROLE_CONTROLLED);
+  rport->SetRole(cricket::ROLE_CONTROLLING);
+  Connection* rconn = rport->CreateConnection(
+      lport->Candidates()[0], Port::ORIGIN_MESSAGE);
+#if defined(WIN32)
+  EXPECT_EQ(0x1EE9FC003D0AU, rconn->priority());
+#else
+  EXPECT_EQ(0x1EE9FC003D0ALLU, rconn->priority());
+#endif
+}
+
+// TODO(ronghuawu): Add unit tests to verify the RelayEntry::OnConnect.

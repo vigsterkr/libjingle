@@ -106,8 +106,17 @@ class SessionDescription {
                      const ContentGroups& groups) :
       contents_(contents),
       content_groups_(groups) {}
+  SessionDescription(const ContentInfos& contents,
+                     const TransportInfos& transports,
+                     const ContentGroups& groups) :
+      contents_(contents),
+      transport_infos_(transports),
+      content_groups_(groups) {}
+
   SessionDescription* Copy() const;
   const ContentInfo* GetContentByName(const std::string& name) const;
+  const ContentDescription* GetContentDescriptionByName(
+      const std::string& name) const;
   ContentDescription* GetContentDescriptionByName(const std::string& name);
   const ContentInfo* FirstContentByType(const std::string& type) const;
   const ContentInfo* FirstContent() const;
@@ -149,8 +158,8 @@ class SessionDescription {
 
  private:
   ContentInfos contents_;
-  ContentGroups content_groups_;
   TransportInfos transport_infos_;
+  ContentGroups content_groups_;
 };
 
 // Indicates whether a ContentDescription was an offer or an answer, as

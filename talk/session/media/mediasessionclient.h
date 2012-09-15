@@ -67,8 +67,26 @@ class MediaSessionClient : public SessionClient, public sigslot::has_slots<> {
   // Return mapping of call ids to Calls.
   const std::map<uint32, Call *>& calls() const { return calls_; }
 
-  SecureMediaPolicy secure() const { return desc_factory_.secure(); }
-  void set_secure(SecureMediaPolicy s) { desc_factory_.set_secure(s); }
+  // The settings below combine with the settings on SessionManager to choose
+  // whether SDES-SRTP, DTLS-SRTP, or no security should be used. The possible
+  // combinations are shown in the following table. Note that where either DTLS
+  // or SDES is possible, DTLS is preferred. Thus to require either SDES or
+  // DTLS, but not mandate DTLS, set SDES to require and DTLS to enable.
+  //
+  //              | SDES:Disable   | SDES:Enable    | SDES:Require   |
+  // ----------------------------------------------------------------|
+  // DTLS:Disable | No SRTP        | SDES Optional  | SDES Mandatory |
+  // DTLS:Enable  | DTLS Optional  | DTLS/SDES Opt  | DTLS/SDES Mand |
+  // DTLS:Require | DTLS Mandatory | DTLS Mandatory | DTLS Mandatory |
+
+  // Control use of SDES-SRTP.
+  SecurePolicy secure() const { return desc_factory_.secure(); }
+  void set_secure(SecurePolicy s) { desc_factory_.set_secure(s); }
+
+  // Control use of multiple sessions in a call.
+  void set_multisession_enabled(bool multisession_enabled) {
+    multisession_enabled_ = multisession_enabled;
+  }
 
   int GetCapabilities() { return channel_manager_->GetCapabilities(); }
 
@@ -131,14 +149,20 @@ class MediaSessionClient : public SessionClient, public sigslot::has_slots<> {
   void OnSessionState(BaseSession *session, BaseSession::State state);
   void OnSessionDestroy(Session *session);
   Session *CreateSession(Call *call);
+  Call *FindCallByRemoteName(const std::string &remote_name);
 
   buzz::Jid jid_;
   SessionManager* session_manager_;
   Call *focus_call_;
   ChannelManager *channel_manager_;
   MediaSessionDescriptionFactory desc_factory_;
+  bool multisession_enabled_;
   std::map<uint32, Call *> calls_;
-  std::map<std::string, Call *> session_map_;
+
+  // Maintain a mapping of session id to call.
+  typedef std::map<std::string, Call *> SessionMap;
+  SessionMap session_map_;
+
   friend class Call;
 };
 

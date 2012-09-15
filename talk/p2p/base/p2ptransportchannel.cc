@@ -72,16 +72,10 @@ cricket::PortInterface::CandidateOrigin GetOrigin(cricket::PortInterface* port,
 // Compares two connections based only on static information about them.
 int CompareConnectionCandidates(cricket::Connection* a,
                                 cricket::Connection* b) {
-  // Combine local and remote preferences
-  double a_pref = a->local_candidate().preference()
-                * a->remote_candidate().preference();
-  double b_pref = b->local_candidate().preference()
-                * b->remote_candidate().preference();
-
-  // Now check combined preferences. Lower values get sorted last.
-  if (a_pref > b_pref)
+  // Compare connection priority. Lower values get sorted last.
+  if (a->priority() > b->priority())
     return 1;
-  if (a_pref < b_pref)
+  if (a->priority() < b->priority())
     return -1;
 
   // If we're still tied at this point, prefer a younger generation.
@@ -109,6 +103,8 @@ class ConnectionCompare {
                   const cricket::Connection *cb) {
     cricket::Connection* a = const_cast<cricket::Connection*>(ca);
     cricket::Connection* b = const_cast<cricket::Connection*>(cb);
+
+    ASSERT(a->port()->IceProtocol() == b->port()->IceProtocol());
 
     // Compare first on writability and static preferences.
     int cmp = CompareConnections(a, b);
@@ -411,9 +407,11 @@ void P2PTransportChannel::OnUnknownAddress(
     // For now just default to a STUN preference.
     std::string id = talk_base::CreateRandomString(8);
     new_remote_candidate = Candidate(
-        id, component(), ProtoToString(proto),
-        address, PRIORITY_LOCAL_STUN, remote_username, remote_password, type,
+        id, component(), ProtoToString(proto), address,
+        0, remote_username, remote_password, type,
         port->Network()->name(), 0U, talk_base::ComputeCrc32(id));
+    new_remote_candidate.set_priority(
+        new_remote_candidate.GetPriority(ICE_TYPE_PREFERENCE_SRFLX));
   }
 
   // Check for connectivity to this address. Create connections
@@ -448,6 +446,15 @@ void P2PTransportChannel::OnSignalingReady() {
     waiting_for_signaling_ = false;
     AddAllocatorSession(allocator_->CreateSession(
         SessionId(), content_name(), component(), ice_ufrag_, ice_pwd_));
+  }
+}
+
+void P2PTransportChannel::OnUseCandidate(Connection* conn) {
+  ASSERT(role_ == ROLE_CONTROLLED);
+  if (conn->state() == Connection::STATE_SUCCEEDED) {
+    // Set the nominated flag.
+    conn->set_nominated(true);
+    SwitchBestConnectionTo(conn);
   }
 }
 
@@ -532,6 +539,8 @@ bool P2PTransportChannel::CreateConnection(PortInterface* port,
         this, &P2PTransportChannel::OnConnectionStateChange);
     connection->SignalDestroyed.connect(
         this, &P2PTransportChannel::OnConnectionDestroyed);
+    connection->SignalUseCandidate.connect(
+        this, &P2PTransportChannel::OnUseCandidate);
 
     LOG_J(LS_INFO, this) << "Created connection with origin=" << origin << ", ("
                          << connections_.size() << " total)";

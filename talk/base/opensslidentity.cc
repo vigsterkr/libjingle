@@ -274,7 +274,7 @@ std::string OpenSSLCertificate::ToPEMString() const {
   return ret;
 }
 
-void OpenSSLCertificate::AddReference() {
+void OpenSSLCertificate::AddReference() const {
   CRYPTO_add(&x509_->references, 1, CRYPTO_LOCK_X509);
 }
 

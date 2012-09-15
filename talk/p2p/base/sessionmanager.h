@@ -36,6 +36,7 @@
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/portallocator.h"
+#include "talk/p2p/base/transportdescriptionfactory.h"
 
 namespace buzz {
 class QName;
@@ -48,8 +49,7 @@ class Session;
 class BaseSession;
 class SessionClient;
 
-// SessionManager manages session instances
-
+// SessionManager manages session instances.
 class SessionManager : public sigslot::has_slots<> {
  public:
   SessionManager(PortAllocator *allocator,
@@ -62,6 +62,22 @@ class SessionManager : public sigslot::has_slots<> {
 
   int session_timeout() const { return timeout_; }
   void set_session_timeout(int timeout) { timeout_ = timeout; }
+
+  // Set what transport protocol we want to default to.
+  void set_transport_protocol(TransportProtocol proto) {
+     transport_desc_factory_.set_protocol(proto);
+  }
+
+  // Control use of DTLS. An identity must be supplied if DTLS is enabled.
+  void set_secure(SecurePolicy policy) {
+    transport_desc_factory_.set_secure(policy);
+  }
+  void set_identity(talk_base::SSLIdentity* identity) {
+    transport_desc_factory_.set_identity(identity);
+  }
+  const TransportDescriptionFactory* transport_desc_factory() const {
+    return &transport_desc_factory_;
+  }
 
   // Registers support for the given client.  If we receive an initiate
   // describing a session of the given type, we will automatically create a
@@ -131,13 +147,6 @@ class SessionManager : public sigslot::has_slots<> {
   typedef std::map<std::string, Session*> SessionMap;
   typedef std::map<std::string, SessionClient*> ClientMap;
 
-  PortAllocator *allocator_;
-  talk_base::Thread *signaling_thread_;
-  talk_base::Thread *worker_thread_;
-  int timeout_;
-  SessionMap session_map_;
-  ClientMap client_map_;
-
   // Helper function for CreateSession.  This is also invoked when we receive
   // a message attempting to initiate a session with this client.
   Session *CreateSession(const std::string& local_name,
@@ -183,6 +192,14 @@ class SessionManager : public sigslot::has_slots<> {
                       const std::string& type,
                       const std::string& text,
                       const buzz::XmlElement* extra_info);
+
+  PortAllocator *allocator_;
+  talk_base::Thread *signaling_thread_;
+  talk_base::Thread *worker_thread_;
+  int timeout_;
+  TransportDescriptionFactory transport_desc_factory_;
+  SessionMap session_map_;
+  ClientMap client_map_;
 };
 
 }  // namespace cricket

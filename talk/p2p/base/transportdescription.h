@@ -28,25 +28,54 @@
 #ifndef TALK_P2P_BASE_TRANSPORTDESCRIPTION_H_
 #define TALK_P2P_BASE_TRANSPORTDESCRIPTION_H_
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "talk/base/scoped_ptr.h"
 #include "talk/base/sslfingerprint.h"
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 
 namespace cricket {
 
+// SEC_ENABLED and SEC_REQUIRED should only be used if the session
+// was negotiated over TLS, to protect the inline crypto material
+// exchange.
+// SEC_DISABLED: No crypto in outgoing offer, ignore any supplied crypto.
+// SEC_ENABLED:  Crypto in outgoing offer and answer (if supplied in offer).
+// SEC_REQUIRED: Crypto in outgoing offer and answer. Fail any offer with absent
+//               or unsupported crypto.
+enum SecurePolicy {
+  SEC_DISABLED,
+  SEC_ENABLED,
+  SEC_REQUIRED
+};
+
+// The transport protocol we've elected to use.
+enum TransportProtocol {
+  ICEPROTO_GOOGLE,  // Google version of ICE protocol.
+  ICEPROTO_HYBRID,  // ICE, but can fall back to the Google version.
+  ICEPROTO_RFC5245  // Standard RFC 5245 version of ICE.
+};
+// The old name for TransportProtocol.
+// TODO(juberti): remove this.
+typedef TransportProtocol IceProtocolType;
+
+typedef std::vector<std::string> TransportOptions;
 typedef std::vector<Candidate> Candidates;
 
 struct TransportDescription {
   TransportDescription() {}
 
   TransportDescription(const std::string& transport_type,
-                       const std::string& ice_options,
+                       const TransportOptions& transport_options,
                        const std::string& ice_ufrag,
                        const std::string& ice_pwd,
                        const talk_base::SSLFingerprint* identity_fingerprint,
                        const Candidates& candidates)
       : transport_type(transport_type),
-        ice_options(ice_options),
+        transport_options(transport_options),
         ice_ufrag(ice_ufrag),
         ice_pwd(ice_pwd),
         identity_fingerprint(CopyFingerprint(identity_fingerprint)),
@@ -57,25 +86,34 @@ struct TransportDescription {
         candidates(candidates) {}
   TransportDescription(const TransportDescription& from)
       : transport_type(from.transport_type),
-        ice_options(from.ice_options),
+        transport_options(from.transport_options),
         ice_ufrag(from.ice_ufrag),
         ice_pwd(from.ice_pwd),
         identity_fingerprint(CopyFingerprint(from.identity_fingerprint.get())),
         candidates(from.candidates) {}
 
-  void operator=(const TransportDescription& from) {
+  TransportDescription& operator=(const TransportDescription& from) {
     // Self-assignment
     if (this == &from)
-      return;
+      return *this;
 
     transport_type = from.transport_type;
-    ice_options = from.ice_options;
+    transport_options = from.transport_options;
     ice_ufrag = from.ice_ufrag;
     ice_pwd = from.ice_pwd;
 
     identity_fingerprint.reset(CopyFingerprint(
         from.identity_fingerprint.get()));
     candidates = from.candidates;
+    return *this;
+  }
+
+  bool HasOption(const std::string& option) const {
+    return (std::find(transport_options.begin(), transport_options.end(),
+                      option) != transport_options.end());
+  }
+  void AddOption(const std::string& option) {
+    transport_options.push_back(option);
   }
 
   static talk_base::SSLFingerprint* CopyFingerprint(
@@ -87,7 +125,7 @@ struct TransportDescription {
   }
 
   std::string transport_type;  // xmlns of <transport>
-  std::string ice_options;
+  TransportOptions transport_options;
   std::string ice_ufrag;
   std::string ice_pwd;
 

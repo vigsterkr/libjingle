@@ -30,6 +30,7 @@
 #include <algorithm>
 
 #include "talk/base/logging.h"
+#include "talk/media/base/videoprocessor.h"
 
 #if defined(HAVE_WEBRTC_VIDEO)
 #include "talk/media/webrtc/webrtcvideoframe.h"
@@ -117,6 +118,23 @@ bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
   return true;
 }
 
+void VideoCapturer::AddVideoProcessor(VideoProcessor* video_processor) {
+  talk_base::CritScope cs(&crit_);
+  video_processors_.push_back(video_processor);
+}
+
+bool VideoCapturer::RemoveVideoProcessor(VideoProcessor* video_processor) {
+  talk_base::CritScope cs(&crit_);
+  VideoProcessors::iterator found = std::find(video_processors_.begin(),
+                                              video_processors_.end(),
+                                              video_processor);
+  if (found == video_processors_.end()) {
+    return false;
+  }
+  video_processors_.erase(found);
+  return true;
+}
+
 void VideoCapturer::OnFrameCaptured(VideoCapturer*,
                                     const CapturedFrame* captured_frame) {
   if (SignalVideoFrame.is_empty()) {
@@ -131,6 +149,10 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
                        captured_frame->height)) {
     LOG(LS_ERROR) << "Couldn't convert to I420! "
                   << captured_frame->width << " x " << captured_frame->height;
+    return;
+  }
+  if (!ApplyProcessors(&i420_frame)) {
+    // Processor dropped the frame.
     return;
   }
   SignalVideoFrame(this, &i420_frame);
@@ -218,6 +240,21 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
       (delta_fps << 8) | delta_fourcc;
 
   return distance;
+}
+
+bool VideoCapturer::ApplyProcessors(VideoFrame* video_frame) {
+  const uint32 dummy_ssrc = 0;
+  bool drop_frame = false;
+  talk_base::CritScope cs(&crit_);
+  for (VideoProcessors::iterator iter = video_processors_.begin();
+       iter != video_processors_.end();
+       ++iter) {
+    (*iter)->OnFrame(dummy_ssrc, video_frame, &drop_frame);
+    if (drop_frame) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace cricket

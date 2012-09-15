@@ -124,15 +124,14 @@ class StunPortBindingRequest : public StunRequest {
   uint32 start_time_;
 };
 
-const char STUN_PORT_TYPE[] = "stun";
-
 StunPort::StunPort(talk_base::Thread* thread,
                    talk_base::PacketSocketFactory* factory,
                    talk_base::Network* network,
                    const talk_base::IPAddress& ip, int min_port, int max_port,
                    const std::string& username, const std::string& password,
                    const talk_base::SocketAddress& server_addr)
-    : Port(thread, STUN_PORT_TYPE, factory, network, ip, min_port, max_port,
+    : Port(thread, STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_SRFLX,
+           factory, network, ip, min_port, max_port,
            username, password),
       server_addr_(server_addr),
       requests_(thread),

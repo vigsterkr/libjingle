@@ -97,9 +97,20 @@ SessionDescription* SessionDescription::Copy() const {
   }
   return copy;
 }
+
 const ContentInfo* SessionDescription::GetContentByName(
     const std::string& name) const {
   return FindContentInfoByName(contents_, name);
+}
+
+const ContentDescription* SessionDescription::GetContentDescriptionByName(
+    const std::string& name) const {
+  const ContentInfo* cinfo = FindContentInfoByName(contents_, name);
+  if (cinfo == NULL) {
+    return NULL;
+  }
+
+  return cinfo->description;
 }
 
 ContentDescription* SessionDescription::GetContentDescriptionByName(

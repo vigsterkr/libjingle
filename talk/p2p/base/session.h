@@ -251,9 +251,10 @@ class BaseSession : public sigslot::has_slots<>,
   // The ID of this session.
   const std::string& id() const { return sid_; }
 
+  // TODO(juberti): This data is largely redundant, as it can now be obtained
+  // from local/remote_description(). Remove these functions and members.
   // Returns the XML namespace identifying the type of this session.
   const std::string& content_type() const { return content_type_; }
-
   // Returns the XML namespace identifying the transport used for this session.
   const std::string& transport_type() const { return transport_type_; }
 
@@ -355,8 +356,12 @@ class BaseSession : public sigslot::has_slots<>,
                               int component);
 
  protected:
-  const TransportMap& transport_proxies() const { return transports_; }
+  void set_initiator(bool initiator) { initiator_ = initiator; }
 
+  // Specifies the identity to use in this session.
+  void set_identity(talk_base::SSLIdentity* identity) { identity_ = identity; }
+
+  const TransportMap& transport_proxies() const { return transports_; }
   // Get a TransportProxy by content_name or transport. NULL if not found.
   TransportProxy* GetTransportProxy(const std::string& content_name);
   TransportProxy* GetTransportProxy(const Transport* transport);
@@ -468,6 +473,7 @@ class BaseSession : public sigslot::has_slots<>,
   std::string content_type_;
   std::string transport_type_;
   bool initiator_;
+  talk_base::SSLIdentity* identity_;
   const SessionDescription* local_description_;
   SessionDescription* remote_description_;
   bool transport_muxed_;
@@ -499,6 +505,11 @@ class Session : public BaseSession {
   // known after the BaseSession has been initiated and it must be updated
   // explicitly.
   void set_remote_name(const std::string& name) { remote_name_ = name; }
+
+  // Set the JID of the initiator of this session. Allows for the overriding
+  // of the initiator to be a third-party, eg. the MUC JID when creating p2p
+  // sessions.
+  void set_initiator_name(const std::string& name) { initiator_name_ = name; }
 
   // Indicates the JID of the entity who initiated this session.
   // In special cases, may be different than both local_name and remote_name.

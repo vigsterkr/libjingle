@@ -37,6 +37,7 @@
 #include "talk/base/sslidentity.h"
 #include "talk/base/sslstreamadapter.h"
 #include "talk/p2p/base/candidate.h"
+#include "talk/p2p/base/transportdescription.h"
 
 namespace cricket {
 

@@ -183,19 +183,19 @@ class AllocateRequest : public StunRequest {
   uint32 start_time_;
 };
 
-const char RELAY_PORT_TYPE[] = "relay";
-
 RelayPort::RelayPort(
     talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
     talk_base::Network* network, const talk_base::IPAddress& ip,
     int min_port, int max_port, const std::string& username,
     const std::string& password)
-    : Port(thread, RELAY_PORT_TYPE, factory, network, ip, min_port, max_port,
+    : Port(thread, RELAY_PORT_TYPE, ICE_TYPE_PREFERENCE_RELAY,
+           factory, network, ip, min_port, max_port,
            username, password),
       ready_(false),
       error_(0) {
   entries_.push_back(
       new RelayEntry(this, talk_base::SocketAddress()));
+  // TODO: set local preference value for TCP based candidates.
 }
 
 RelayPort::~RelayPort() {

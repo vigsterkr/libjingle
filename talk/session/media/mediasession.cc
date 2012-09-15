@@ -285,29 +285,6 @@ static bool AddStreamParams(
   return true;
 }
 
-// Gets the TransportInfo of the given |content_name| from the
-// |current_description|. If doesn't exist, returns a new one.
-static void GetOrCreateTransportInfo(const std::string& content_name,
-    const SessionDescription* current_description, TransportInfo* info) {
-  const TransportInfo* transport_info = NULL;
-  if (current_description) {
-    transport_info = current_description->GetTransportInfoByName(content_name);
-  }
-  if (transport_info) {
-    *info = *transport_info;
-  } else {
-    *info =
-        TransportInfo(content_name,
-                      TransportDescription(NS_GINGLE_P2P,
-                                           "",
-                                           talk_base::CreateRandomString(
-                                               ICE_UFRAG_LENGTH),
-                                           talk_base::CreateRandomString(
-                                               ICE_PWD_LENGTH),
-                                           NULL, Candidates()));
-  }
-}
-
 // Updates the transport infos of the |description| according to the given
 // |bundle_group|. The transport infos of the content names within the
 // |bundle_group| should be updated to use the ufrag and pwd of the first
@@ -347,14 +324,14 @@ static bool UpdateTransportInfoForBundle(const ContentGroup& bundle_group,
 
 // Gets the CryptoParamsVec of the given |content_name| from |description|, and
 // sets it to |cryptos|.
-static bool GetCryptosByName(SessionDescription* description,
+static bool GetCryptosByName(const SessionDescription* description,
                              const std::string& content_name,
                              CryptoParamsVec* cryptos) {
   if (!description || !cryptos) {
     return false;
   }
   const MediaContentDescription* media_desc =
-      static_cast<MediaContentDescription*> (
+      static_cast<const MediaContentDescription*> (
           description->GetContentDescriptionByName(content_name));
   if (!media_desc) {
     return false;
@@ -596,15 +573,19 @@ void MediaSessionOptions::RemoveStream(MediaType type,
   ASSERT(false);
 }
 
-MediaSessionDescriptionFactory::MediaSessionDescriptionFactory()
+MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
+    const TransportDescriptionFactory* transport_desc_factory)
     : secure_(SEC_DISABLED),
-      add_legacy_(true) {
+      add_legacy_(true),
+      transport_desc_factory_(transport_desc_factory) {
 }
 
 MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
-    ChannelManager* channel_manager)
+    ChannelManager* channel_manager,
+    const TransportDescriptionFactory* transport_desc_factory)
     : secure_(SEC_DISABLED),
-      add_legacy_(true) {
+      add_legacy_(true),
+      transport_desc_factory_(transport_desc_factory) {
   channel_manager->GetSupportedAudioCodecs(&audio_codecs_);
   channel_manager->GetSupportedVideoCodecs(&video_codecs_);
   channel_manager->GetSupportedDataCodecs(&data_codecs_);
@@ -612,7 +593,7 @@ MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
 
 SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const MediaSessionOptions& options,
-    const SessionDescription* current_description) {
+    const SessionDescription* current_description) const {
   scoped_ptr<SessionDescription> offer(new SessionDescription());
 
   ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
@@ -638,11 +619,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     audio->set_lang(lang_);
     offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio.release());
     bundle_group.AddContentName(CN_AUDIO);
-    TransportInfo info;
-    GetOrCreateTransportInfo(CN_AUDIO, current_description, &info);
-    if (!offer->AddTransportInfo(info)) {
+
+    if (!AddTransportOffer(CN_AUDIO, current_description, offer.get())) {
       LOG(LS_ERROR)
-          << "CreateOffer Failed to AddTransportInfo with content name:"
+          << "CreateOffer failed to AddTransportOffer, content name="
           << CN_AUDIO;
       return NULL;
     }
@@ -668,11 +648,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     video->set_bandwidth(options.video_bandwidth);
     offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video.release());
     bundle_group.AddContentName(CN_VIDEO);
-    TransportInfo info;
-    GetOrCreateTransportInfo(CN_VIDEO, current_description, &info);
-    if (!offer->AddTransportInfo(info)) {
+
+    if (!AddTransportOffer(CN_VIDEO, current_description, offer.get())) {
       LOG(LS_ERROR)
-          << "CreateOffer Failed to AddTransportInfo with content name:"
+          << "CreateOffer failed to AddTransportOffer, content name="
           << CN_VIDEO;
       return NULL;
     }
@@ -683,11 +662,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
   if (options.bundle_enabled && bundle_group.FirstContentName()) {
     offer->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, offer.get())) {
-      LOG(LS_ERROR) << "CreateOffer Failed to UpdateTransportInfoForBundle.";
+      LOG(LS_ERROR) << "CreateOffer failed to UpdateTransportInfoForBundle.";
       return NULL;
     }
     if (!UpdateCryptoParamsForBundle(bundle_group, offer.get())) {
-      LOG(LS_ERROR) << "CreateOffer Failed to UpdateCryptoParamsForBundle.";
+      LOG(LS_ERROR) << "CreateOffer failed to UpdateCryptoParamsForBundle.";
       return NULL;
     }
   }
@@ -718,7 +697,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
 
 SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     const SessionDescription* offer, const MediaSessionOptions& options,
-    const SessionDescription* current_description) {
+    const SessionDescription* current_description) const {
   // The answer contains the intersection of the codecs in the offer with the
   // codecs we support, ordered by our local preference. As indicated by
   // XEP-0167, we retain the same payload ids from the offer in the answer.
@@ -756,12 +735,12 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
           received_bundle_group->HasContentName(audio_content->name))
         bundle_group.AddContentName(audio_content->name);
 
-      TransportInfo info;
-      GetOrCreateTransportInfo(audio_content->name, current_description, &info);
-      if (!accept->AddTransportInfo(info)) {
+      if (!AddTransportAnswer(audio_content->name, offer,
+                              current_description, accept.get())) {
         LOG(LS_ERROR)
-            << "CreateAnswer Failed to AddTransportInfo with content name:"
+            << "CreateAnswer failed to AddTransportAnswer, content name="
             << audio_content->name;
+        return NULL;
       }
     } else {
       // RFC 3264
@@ -769,12 +748,12 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       // offer.
       // So even if we want to reject a content type, we should still have an
       // entry for it.
-      LOG(LS_INFO) << "Audio is not supported in answer.";
+      LOG(LS_INFO) << "Audio is not supported in the answer.";
     }
     accept->AddContent(audio_content->name, audio_content->type, rejected,
                        audio_answer.release());
   } else {
-    LOG(LS_INFO) << "Audio is not available in offer.";
+    LOG(LS_INFO) << "Audio is not available in the offer.";
   }
 
   const ContentInfo* video_content = GetFirstVideoContent(offer);
@@ -799,24 +778,25 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       if (received_bundle_group &&
           received_bundle_group->HasContentName(video_content->name))
         bundle_group.AddContentName(video_content->name);
-      TransportInfo info;
-      GetOrCreateTransportInfo(video_content->name, current_description, &info);
-      if (!accept->AddTransportInfo(info)) {
+
+      if (!AddTransportAnswer(video_content->name, offer,
+                              current_description, accept.get())) {
         LOG(LS_ERROR)
-            << "CreateAnswer Failed to AddTransportInfo with content name:"
+            << "CreateAnswer failed to AddTransportAnswer, content name="
             << video_content->name;
+        return NULL;
       }
       video_answer->set_bandwidth(options.video_bandwidth);
     } else {
       // RFC 3264
       // The answer MUST contain exactly the same number of "m=" lines as the
       // offer.
-      LOG(LS_INFO) << "Video is not supported in answer.";
+      LOG(LS_INFO) << "Video is not supported in the answer.";
     }
     accept->AddContent(video_content->name, video_content->type, rejected,
                        video_answer.release());
   } else {
-    LOG(LS_INFO) << "Video is not available in offer.";
+    LOG(LS_INFO) << "Video is not available in the offer.";
   }
 
   // Only update bundle info if there's at least one content in the
@@ -825,12 +805,12 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       bundle_group.FirstContentName()) {
     accept->AddGroup(bundle_group);
     if (!UpdateTransportInfoForBundle(bundle_group, accept.get())) {
-      LOG(LS_ERROR) << "CreateAnswer Failed to UpdateTransportInfoForBundle.";
+      LOG(LS_ERROR) << "CreateAnswer failed to UpdateTransportInfoForBundle.";
       return NULL;
     }
 
     if (!UpdateCryptoParamsForBundle(bundle_group, accept.get())) {
-      LOG(LS_ERROR) << "CreateAnswer Failed to UpdateCryptoParamsForBundle.";
+      LOG(LS_ERROR) << "CreateAnswer failed to UpdateCryptoParamsForBundle.";
       return NULL;
     }
   }
@@ -859,15 +839,62 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       // RFC 3264
       // The answer MUST contain exactly the same number of "m=" lines as the
       // offer.
-      LOG(LS_INFO) << "Data is not supported in answer.";
+      LOG(LS_INFO) << "Data is not supported in the answer.";
     }
     accept->AddContent(data_content->name, data_content->type, rejected,
                        data_answer.release());
   } else {
-    LOG(LS_INFO) << "Data is not available in offer.";
+    LOG(LS_INFO) << "Data is not available in the offer.";
   }
 
   return accept.release();
+}
+
+// Gets the TransportInfo of the given |content_name| from the
+// |current_description|. If doesn't exist, returns a new one.
+static const TransportDescription* GetTransportDescription(
+    const std::string& content_name,
+    const SessionDescription* current_description) {
+  const TransportDescription* desc = NULL;
+  if (current_description) {
+    const TransportInfo* info =
+        current_description->GetTransportInfoByName(content_name);
+    if (info) {
+      desc = &info->description;
+    }
+  }
+  return desc;
+}
+
+bool MediaSessionDescriptionFactory::AddTransportOffer(
+  const std::string& content_name,
+  const SessionDescription* current_desc,
+  SessionDescription* offer_desc) const {
+   if (!transport_desc_factory_)
+     return false;
+  const TransportDescription* current_tdesc =
+      GetTransportDescription(content_name, current_desc);
+  talk_base::scoped_ptr<TransportDescription> new_tdesc(
+      transport_desc_factory_->CreateOffer(current_tdesc));
+  return (new_tdesc.get() != NULL &&
+      offer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
+}
+
+bool MediaSessionDescriptionFactory::AddTransportAnswer(
+    const std::string& content_name,
+    const SessionDescription* offer_desc,
+    const SessionDescription* current_desc,
+    SessionDescription* answer_desc) const {
+  if (!transport_desc_factory_)
+    return false;
+  const TransportDescription* offer_tdesc =
+      GetTransportDescription(content_name, offer_desc);
+  const TransportDescription* current_tdesc =
+      GetTransportDescription(content_name, current_desc);
+  talk_base::scoped_ptr<TransportDescription> new_tdesc(
+      transport_desc_factory_->CreateAnswer(offer_tdesc, current_tdesc));
+  return (new_tdesc.get() != NULL &&
+      answer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
 }
 
 static bool IsMediaContent(const ContentInfo* content, MediaType media_type) {

@@ -200,6 +200,19 @@ void Print(const char* chars) {
   fflush(stdout);
 }
 
+bool GetSecurePolicy(const std::string& in, cricket::SecurePolicy* out) {
+  if (in == "disable") {
+    *out = cricket::SEC_DISABLED;
+  } else if (in == "enable") {
+    *out = cricket::SEC_ENABLED;
+  } else if (in == "require") {
+    *out = cricket::SEC_REQUIRED;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 int main(int argc, char **argv) {
   // This app has three threads. The main thread will run the XMPP client,
   // which will print to the screen in its own thread. A second thread
@@ -208,22 +221,23 @@ int main(int argc, char **argv) {
   // by MediaSessionClient as its worker thread.
 
   // define options
-  DEFINE_bool(a, false, "Turn on auto accept.");
-  DEFINE_bool(d, false, "Turn on debugging.");
-  DEFINE_string(log, "", "Turn on debugging to a file.");
-  DEFINE_string(protocol, "hybrid",
-      "Initial signaling protocol to use: jingle, gingle, or hybrid.");
-  DEFINE_string(secure, "enable",
-      "Disable or enable encryption: disable, enable, require.");
-  DEFINE_string(tls, "enable",
-      "Disable or enable tls: disable, enable, require.");
-  DEFINE_bool(allowplain, false, "Allow plain authentication");
-  DEFINE_bool(testserver, false, "Use test server");
-  DEFINE_string(oauth, "", "OAuth2 access token.");
-  DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
-  DEFINE_string(filterhost, NULL, "Filter out the host from all candidates.");
-  DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
   DEFINE_string(s, "talk.google.com", "The connection server to use.");
+  DEFINE_string(tls, "require",
+      "Select connection encryption: disable, enable, require.");
+  DEFINE_bool(allowplain, false, "Allow plain authentication.");
+  DEFINE_bool(testserver, false, "Use test server.");
+  DEFINE_string(oauth, "", "OAuth2 access token.");
+  DEFINE_bool(a, false, "Turn on auto accept for incoming calls.");
+  DEFINE_string(signaling, "hybrid",
+      "Initial signaling protocol to use: jingle, gingle, or hybrid.");
+  DEFINE_string(transport, "hybrid",
+      "Initial transport protocol to use: ice, gice, or hybrid.");
+  DEFINE_string(sdes, "enable",
+      "Select SDES media encryption: disable, enable, require.");
+  DEFINE_string(dtls, "disable",
+      "Select DTLS transport encryption: disable, enable, require.");
+  DEFINE_int(portallocator, 0, "Filter out unwanted connection types.");
+  DEFINE_string(pmuc, "groupchat.google.com", "The persistant muc domain.");
   DEFINE_string(capsnode, "http://code.google.com/p/libjingle/call",
                 "Caps node: A URI identifying the app.");
   DEFINE_string(capsver, "0.6",
@@ -234,8 +248,12 @@ int main(int argc, char **argv) {
   DEFINE_string(videooutput, NULL, "RTP dump file for video output.");
   DEFINE_bool(render, true, "Renders the video.");
   DEFINE_bool(datachannel, false, "Enable an RTP data channel.");
+  DEFINE_bool(d, false, "Turn on debugging.");
+  DEFINE_string(log, "", "Turn on debugging to a file.");
   DEFINE_bool(debugsrtp, false, "Enable debugging for srtp.");
   DEFINE_bool(help, false, "Prints this message");
+  DEFINE_bool(multisession, false,
+              "Enable support for multiple sessions in calls.");
 
   // parse options
   FlagList::SetFlagsFromCommandLine(&argc, argv, true);
@@ -247,7 +265,8 @@ int main(int argc, char **argv) {
   bool auto_accept = FLAG_a;
   bool debug = FLAG_d;
   std::string log = FLAG_log;
-  std::string protocol = FLAG_protocol;
+  std::string signaling = FLAG_signaling;
+  std::string transport = FLAG_transport;
   bool test_server = FLAG_testserver;
   bool allow_plain = FLAG_allowplain;
   std::string tls = FLAG_tls;
@@ -255,52 +274,17 @@ int main(int argc, char **argv) {
   int32 portallocator_flags = FLAG_portallocator;
   std::string pmuc_domain = FLAG_pmuc;
   std::string server = FLAG_s;
-  std::string secure = FLAG_secure;
+  std::string sdes = FLAG_sdes;
+  std::string dtls = FLAG_dtls;
   std::string caps_node = FLAG_capsnode;
   std::string caps_ver = FLAG_capsver;
   bool debugsrtp = FLAG_debugsrtp;
   bool render = FLAG_render;
   bool data_channel_enabled = FLAG_datachannel;
+  bool multisession_enabled = FLAG_multisession;
+  talk_base::SSLIdentity* ssl_identity = NULL;
 
-  if (debugsrtp) {
-    cricket::EnableSrtpDebugging();
-  }
-
-  cricket::SignalingProtocol initial_protocol = cricket::PROTOCOL_HYBRID;
-  if (protocol == "jingle") {
-    initial_protocol = cricket::PROTOCOL_JINGLE;
-  } else if (protocol == "gingle") {
-    initial_protocol = cricket::PROTOCOL_GINGLE;
-  } else if (protocol == "hybrid") {
-    initial_protocol = cricket::PROTOCOL_HYBRID;
-  } else {
-    Print("Invalid protocol.  Must be jingle, gingle, or hybrid.\n");
-    return 1;
-  }
-
-  cricket::SecureMediaPolicy secure_policy = cricket::SEC_ENABLED;
-  if (secure == "disable") {
-    secure_policy = cricket::SEC_DISABLED;
-  } else if (secure == "enable") {
-    secure_policy = cricket::SEC_ENABLED;
-  } else if (secure == "require") {
-    secure_policy = cricket::SEC_REQUIRED;
-  } else {
-    Print("Invalid encryption.  Must be enable, disable, or require.\n");
-    return 1;
-  }
-
-  // parse username and password, if present
-  buzz::Jid jid;
-  std::string username;
-  talk_base::InsecureCryptStringImpl pass;
-  if (argc > 1) {
-    username = argv[1];
-    if (argc > 2) {
-      pass.password() = argv[2];
-    }
-  }
-
+  // Set up debugging.
   if (debug) {
     talk_base::LogMessage::LogToDebug(talk_base::LS_VERBOSE);
   }
@@ -313,6 +297,24 @@ int main(int argc, char **argv) {
     } else {
       Print(("Cannot open debug log " + log + "\n").c_str());
       return 1;
+    }
+  }
+
+  if (debugsrtp) {
+    cricket::EnableSrtpDebugging();
+  }
+
+  // Set up the crypto subsystem.
+  talk_base::InitializeSSL();
+
+  // Parse username and password, if present.
+  buzz::Jid jid;
+  std::string username;
+  talk_base::InsecureCryptStringImpl pass;
+  if (argc > 1) {
+    username = argv[1];
+    if (argc > 2) {
+      pass.password() = argv[2];
     }
   }
 
@@ -336,13 +338,14 @@ int main(int argc, char **argv) {
     Print("\n");
   }
 
+  // Decide on the connection settings.
   buzz::XmppClientSettings xcs;
   xcs.set_user(jid.node());
   xcs.set_resource("call");
   xcs.set_host(jid.domain());
   xcs.set_allow_plain(allow_plain);
 
-  if(tls == "disable") {
+  if (tls == "disable") {
     xcs.set_use_tls(buzz::TLS_DISABLED);
   } else if (tls == "enable") {
     xcs.set_use_tls(buzz::TLS_ENABLED);
@@ -377,9 +380,48 @@ int main(int argc, char **argv) {
   }
 
   xcs.set_server(talk_base::SocketAddress(host, port));
-  Print(("Logging in to " + server + " as " + jid.Str() + "\n").c_str());
 
-  talk_base::InitializeSSL();
+  // Decide on the signaling and crypto settings.
+  cricket::SignalingProtocol signaling_protocol = cricket::PROTOCOL_HYBRID;
+  if (signaling == "jingle") {
+    signaling_protocol = cricket::PROTOCOL_JINGLE;
+  } else if (signaling == "gingle") {
+    signaling_protocol = cricket::PROTOCOL_GINGLE;
+  } else if (signaling == "hybrid") {
+    signaling_protocol = cricket::PROTOCOL_HYBRID;
+  } else {
+    Print("Invalid signaling protocol.  Must be jingle, gingle, or hybrid.\n");
+    return 1;
+  }
+
+  cricket::TransportProtocol transport_protocol = cricket::ICEPROTO_HYBRID;
+  if (transport == "ice") {
+    transport_protocol = cricket::ICEPROTO_RFC5245;
+  } else if (transport == "gice") {
+    transport_protocol = cricket::ICEPROTO_GOOGLE;
+  } else if (transport == "hybrid") {
+    transport_protocol = cricket::ICEPROTO_HYBRID;
+  } else {
+    Print("Invalid transport protocol.  Must be ice, gice, or hybrid.\n");
+    return 1;
+  }
+
+  cricket::SecurePolicy sdes_policy, dtls_policy;
+  if (!GetSecurePolicy(sdes, &sdes_policy)) {
+    Print("Invalid SDES policy. Must be enable, disable, or require.\n");
+    return 1;
+  }
+  if (!GetSecurePolicy(dtls, &dtls_policy)) {
+    Print("Invalid DTLS policy. Must be enable, disable, or require.\n");
+    return 1;
+  }
+  if (dtls_policy != cricket::SEC_DISABLED) {
+    ssl_identity = talk_base::SSLIdentity::Generate(jid.Str());
+    if (!ssl_identity) {
+      Print("Failed to generate identity for DTLS.\n");
+      return 1;
+    }
+  }
 
 #ifdef ANDROID
   InitAndroidMediaEngineFactory(AndroidMediaEngineFactory);
@@ -415,10 +457,13 @@ int main(int argc, char **argv) {
   client->SetPmucDomain(pmuc_domain);
   client->SetPortAllocatorFlags(portallocator_flags);
   client->SetAllowLocalIps(true);
-  client->SetInitialProtocol(initial_protocol);
-  client->SetSecurePolicy(secure_policy);
+  client->SetSignalingProtocol(signaling_protocol);
+  client->SetTransportProtocol(transport_protocol);
+  client->SetSecurePolicy(sdes_policy, dtls_policy);
+  client->SetSslIdentity(ssl_identity);
   client->SetRender(render);
   client->SetDataChannelEnabled(data_channel_enabled);
+  client->SetMultiSessionEnabled(multisession_enabled);
   console->Start();
 
   if (debug) {
@@ -426,6 +471,7 @@ int main(int argc, char **argv) {
     pump.client()->SignalLogOutput.connect(&debug_log_, &DebugLog::Output);
   }
 
+  Print(("Logging in to " + server + " as " + jid.Str() + "\n").c_str());
   pump.DoLogin(xcs, new XmppSocket(buzz::TLS_REQUIRED), new XmppAuth());
   main_thread->Run();
   pump.DoDisconnect();

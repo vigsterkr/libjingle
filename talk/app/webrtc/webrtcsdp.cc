@@ -55,9 +55,10 @@ using cricket::ICE_CANDIDATE_COMPONENT_RTP;
 using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
 using cricket::MediaContentDescription;
 using cricket::MediaType;
-using cricket::NS_GINGLE_P2P;
+using cricket::NS_JINGLE_ICE_UDP;
 using cricket::StreamParams;
 using cricket::TransportDescription;
+using cricket::TransportOptions;
 using cricket::TransportInfo;
 using cricket::VideoContentDescription;
 using talk_base::SocketAddress;
@@ -107,6 +108,7 @@ static const char kAttributeRtpmap[] = "rtpmap";
 static const char kAttributeRtcp[] = "rtcp";
 static const char kAttributeIceUfrag[] = "ice-ufrag";
 static const char kAttributeIcePwd[] = "ice-pwd";
+static const char kAttributeIceOption[] = "ice-options";
 static const char kAttributeSendOnly[] ="sendonly";
 static const char kAttributeRecvOnly[] ="recvonly";
 static const char kAttributeSendRecv[] ="sendrecv";
@@ -169,21 +171,23 @@ static void BuildRtpMap(const MediaContentDescription* media_desc,
                         std::string* message);
 static void BuildCandidate(const std::vector<Candidate>& candidates,
                            std::string* message);
+static void BuildIceOptions(const TransportOptions& transport_options,
+                            std::string* message);
 
 static bool ParseSessionDescription(const std::string& message, size_t* pos,
                                     std::string* session_id,
                                     std::string* session_version,
                                     std::string* session_ice_ufrag,
                                     std::string* session_ice_pwd,
+                                    TransportOptions* session_transport_options,
                                     cricket::SessionDescription* desc);
 static bool ParseGroupAttribute(const std::string& line,
                                 cricket::SessionDescription* desc);
 static bool ParseMediaDescription(const std::string& message,
-                                  const std::string& session_ice_ufrag,
-                                  const std::string& session_ice_pwd,
-                                  size_t* pos,
-                                  cricket::SessionDescription* desc,
-                                  std::vector<JsepIceCandidate*>* candidates);
+    const std::string& session_ice_ufrag, const std::string& session_ice_pwd,
+    const TransportOptions& session_transport_options,
+    size_t* pos, cricket::SessionDescription* desc,
+    std::vector<JsepIceCandidate*>* candidates);
 static bool ParseContent(const std::string& message,
                          const MediaType media_type,
                          int mline_index,
@@ -192,6 +196,7 @@ static bool ParseContent(const std::string& message,
                          std::string* content_name,
                          std::string* media_ice_ufrag,
                          std::string* media_ice_pwd,
+                         TransportOptions* media_transport_options,
                          std::vector<JsepIceCandidate*>* candidates);
 static bool ParseSsrcAttribute(const std::string& line,
                                MediaContentDescription* media_desc);
@@ -201,6 +206,8 @@ static bool ParseRtpmapAttribute(const std::string& line,
                                  const MediaType media_type,
                                  MediaContentDescription* media_desc);
 static bool ParseCandidate(const std::string& message, Candidate* candidate);
+static bool ParseIceOptions(const std::string& line,
+                            TransportOptions* transport_options);
 
 // Helper functions
 #define LOG_PREFIX_PARSING_ERROR(line_type) LOG(LS_ERROR) \
@@ -570,6 +577,7 @@ bool SdpDeserialize(const std::string& message,
   std::string session_version;
   std::string session_ice_ufrag;
   std::string session_ice_pwd;
+  TransportOptions session_transport_options;
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
   size_t current_pos = 0;
@@ -577,13 +585,15 @@ bool SdpDeserialize(const std::string& message,
   // Session Description
   if (!ParseSessionDescription(message, &current_pos,
                                &session_id, &session_version,
-                               &session_ice_ufrag, &session_ice_pwd, desc)) {
+                               &session_ice_ufrag, &session_ice_pwd,
+                               &session_transport_options, desc)) {
     delete desc;
     return false;
   }
 
   // Media Description
   if (!ParseMediaDescription(message, session_ice_ufrag, session_ice_pwd,
+                             session_transport_options,
                              &current_pos, desc, &candidates)) {
     delete desc;
     for (std::vector<JsepIceCandidate*>::const_iterator
@@ -711,6 +721,20 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   return true;
 }
 
+bool ParseIceOptions(const std::string& line,
+                     TransportOptions* transport_options) {
+  std::string ice_options;
+  if (!GetValue(line, kAttributeIceOption, &ice_options)) {
+    return false;
+  }
+  std::vector<std::string> fields;
+  talk_base::split(ice_options, kSdpDelimiterSpace, &fields);
+  for (size_t i = 0; i < fields.size(); ++i) {
+    transport_options->push_back(fields[i]);
+  }
+  return true;
+}
+
 void BuildMediaDescription(const ContentInfo* content_info,
                            const TransportInfo* transport_info,
                            const MediaType media_type,
@@ -790,6 +814,9 @@ void BuildMediaDescription(const ContentInfo* content_info,
     InitAttrLine(kAttributeIcePwd, &os);
     os << kSdpDelimiterColon << transport_info->description.ice_pwd;
     AddLine(os.str(), message);
+
+    // draft-petithuguenin-mmusic-ice-attributes-level-03
+    BuildIceOptions(transport_info->description.transport_options, message);
   }
 
   // RFC 3264
@@ -909,8 +936,8 @@ void BuildRtpMap(const MediaContentDescription* media_desc,
   }
 }
 
-static void BuildCandidate(const std::vector<Candidate>& candidates,
-                           std::string* message) {
+void BuildCandidate(const std::vector<Candidate>& candidates,
+                    std::string* message) {
   std::ostringstream os;
 
   for (std::vector<Candidate>::const_iterator it = candidates.begin();
@@ -955,11 +982,25 @@ static void BuildCandidate(const std::vector<Candidate>& candidates,
   }
 }
 
+void BuildIceOptions(const TransportOptions& transport_options,
+                     std::string* message) {
+  if (!transport_options.empty()) {
+    std::ostringstream os;
+    InitAttrLine(kAttributeIceOption, &os);
+    os << kSdpDelimiterColon << transport_options[0];
+    for (size_t i = 1; i < transport_options.size(); ++i) {
+      os << kSdpDelimiterSpace << transport_options[i];
+    }
+    AddLine(os.str(), message);
+  }
+}
+
 bool ParseSessionDescription(const std::string& message, size_t* pos,
                              std::string* session_id,
                              std::string* session_version,
                              std::string* session_ice_ufrag,
                              std::string* session_ice_pwd,
+                             TransportOptions* session_transport_options,
                              cricket::SessionDescription* desc) {
   std::string line;
 
@@ -1068,6 +1109,11 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
+    } else if (HasAttribute(line, kAttributeIceOption)) {
+      if (!ParseIceOptions(line, session_transport_options)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
     }
   }
 
@@ -1101,6 +1147,7 @@ bool ParseGroupAttribute(const std::string& line,
 bool ParseMediaDescription(const std::string& message,
                            const std::string& session_ice_ufrag,
                            const std::string& session_ice_pwd,
+                           const TransportOptions& session_transport_options,
                            size_t* pos,
                            cricket::SessionDescription* desc,
                            std::vector<JsepIceCandidate*>* candidates) {
@@ -1108,6 +1155,7 @@ bool ParseMediaDescription(const std::string& message,
 
   std::string media_ice_ufrag;
   std::string media_ice_pwd;
+  TransportOptions media_transport_options;
   std::string line;
   int mline_index = -1;
 
@@ -1157,15 +1205,20 @@ bool ParseMediaDescription(const std::string& message,
     media_ice_ufrag = session_ice_ufrag;
     media_ice_pwd = session_ice_pwd;
 
+    // Use the session level ice options as the base of media level ice options.
+    media_transport_options = session_transport_options;
+
     if (!ParseContent(message, media_type, mline_index, pos, content,
                       &content_name, &media_ice_ufrag, &media_ice_pwd,
+                      &media_transport_options,
                       candidates))
       return false;
 
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected, content);
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".
     TransportInfo transport_info(content_name,
-                                 TransportDescription(NS_GINGLE_P2P, "",
+                                 TransportDescription(NS_JINGLE_ICE_UDP,
+                                                      media_transport_options,
                                                       media_ice_ufrag,
                                                       media_ice_pwd,
                                                       NULL,
@@ -1187,6 +1240,7 @@ bool ParseContent(const std::string& message,
                   std::string* content_name,
                   std::string* media_ice_ufrag,
                   std::string* media_ice_pwd,
+                  TransportOptions* media_transport_options,
                   std::vector<JsepIceCandidate*>* candidates) {
   ASSERT(content != NULL);
   ASSERT(content_name != NULL);
@@ -1260,6 +1314,11 @@ bool ParseContent(const std::string& message,
       }
     } else if (HasAttribute(line, kAttributeIcePwd)) {
       if (!GetValue(line, kAttributeIcePwd, media_ice_pwd)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+    } else if (HasAttribute(line, kAttributeIceOption)) {
+      if (!ParseIceOptions(line, media_transport_options)) {
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }

@@ -478,7 +478,6 @@ void BasicPortAllocatorSession::DisableEquivalentPhases(
 
 void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
                                                  AllocationSequence * seq,
-                                                 uint32 priority,
                                                  bool prepare_address) {
   if (!port)
     return;
@@ -486,7 +485,6 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
   port->set_content_name(content_name());
   port->set_component(component_);
   port->set_generation(generation());
-  port->SetPriority(priority);
   if (allocator_->proxy().type != talk_base::PROXY_NONE)
     port->set_proxy(allocator_->user_agent(), allocator_->proxy());
 
@@ -835,7 +833,7 @@ void AllocationSequence::CreateUDPPorts() {
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_UDP);
+    session_->AddAllocatedPort(port, this);
   }
 }
 
@@ -855,7 +853,7 @@ void AllocationSequence::CreateTCPPorts() {
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_TCP);
+    session_->AddAllocatedPort(port, this);
   }
 }
 
@@ -884,7 +882,7 @@ void AllocationSequence::CreateStunPorts() {
   if (port) {
     // Increment expected candidate count.
     ++expected_candidates_;
-    session_->AddAllocatedPort(port, this, PRIORITY_LOCAL_STUN);
+    session_->AddAllocatedPort(port, this);
   }
 }
 
@@ -918,8 +916,7 @@ void AllocationSequence::CreateRelayPorts() {
       //       settings.  However, we also can't prepare the address (normally
       //       done by AddAllocatedPort) until we have these addresses.  So we
       //       wait to do that until below.
-      int priority = PRIORITY_RELAY + relay->priority_modifier;
-      session_->AddAllocatedPort(port, this, priority, false);
+      session_->AddAllocatedPort(port, this, false);
 
       // Add the addresses of this protocol.
       PortConfiguration::PortList::const_iterator relay_port;

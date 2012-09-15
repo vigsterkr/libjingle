@@ -289,10 +289,6 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
                     const webrtc::VideoCodec& codec, int min_bitrate,
                     int start_bitrate, int max_bitrate);
   void LogSendCodecChange(const std::string& reason);
-  bool DropFrame() const {
-    return (send_codec_.get() == NULL ||
-            (send_codec_->width == 0 && send_codec_->height == 0));
-  }
   // Prepares the channel with channel id |channel_id| to receive all codecs in
   // |receive_codecs_| and start receive packets.
   bool SetReceiveCodecs(int channel_id);

@@ -62,7 +62,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   explicit Call(MediaSessionClient* session_client);
   ~Call();
 
-  Session* InitiateSession(const buzz::Jid &jid, const CallOptions& options);
+  // |initiator| can be empty.
+  Session* InitiateSession(const buzz::Jid& to, const buzz::Jid& initiator,
+                           const CallOptions& options);
   void AcceptSession(Session* session, const CallOptions& options);
   void RejectSession(Session* session);
   void TerminateSession(Session* session);
@@ -90,7 +92,6 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                      const ScreencastId& screencastid, int fps);
   void RemoveScreencast(Session* session,
                         const std::string& stream_name, uint32 ssrc);
-  void SendStreamUpdate(Session* session, const StreamParams& stream);
 
   std::vector<Session*> sessions();
   uint32 id();
@@ -102,6 +103,18 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
     MediaStreams* recv_streams = GetMediaStreams(session);
     return recv_streams ? &recv_streams->data() : NULL;
   }
+  const std::vector<StreamParams>* GetVideoRecvStreams(Session* session) const {
+    MediaStreams* recv_streams = GetMediaStreams(session);
+    return recv_streams ? &recv_streams->video() : NULL;
+  }
+  const std::vector<StreamParams>* GetAudioRecvStreams(Session* session) const {
+    MediaStreams* recv_streams = GetMediaStreams(session);
+    return recv_streams ? &recv_streams->audio() : NULL;
+  }
+  // Public just for unit tests
+  VideoContentDescription* CreateVideoStreamUpdate(const StreamParams& stream);
+  // Takes ownership of video.
+  void SendVideoStreamUpdate(Session* session, VideoContentDescription* video);
 
   // Setting this to false will cause the call to have a longer timeout and
   // for the SignalSetupToCallVoicemail to never fire.
@@ -144,14 +157,14 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
 
  private:
   void OnMessage(talk_base::Message* message);
-  void OnSessionState(BaseSession* session, BaseSession::State state);
-  void OnSessionError(BaseSession* session, Session::Error error);
+  void OnSessionState(BaseSession* base_session, BaseSession::State state);
+  void OnSessionError(BaseSession* base_session, Session::Error error);
   void OnSessionInfoMessage(
       Session* session, const buzz::XmlElement* action_elem);
   void OnViewRequest(
       Session* session, const ViewRequest& view_request);
   void OnRemoteDescriptionUpdate(
-      BaseSession* session, const ContentInfos& updated_contents);
+      BaseSession* base_session, const ContentInfos& updated_contents);
   void OnReceivedTerminateReason(Session* session, const std::string &reason);
   void IncomingSession(Session* session, const SessionDescription* offer);
   // Returns true on success.
@@ -175,6 +188,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   VideoChannel* GetVideoChannel(Session* session) const;
   DataChannel* GetDataChannel(Session* session) const;
   MediaStreams* GetMediaStreams(Session* session) const;
+  void UpdateRemoteMediaStreams(Session* session,
+                                const ContentInfos& updated_contents,
+                                bool update_channels);
   bool UpdateVoiceChannelRemoteContent(Session* session,
                                        const AudioContentDescription* audio);
   bool UpdateVideoChannelRemoteContent(Session* session,

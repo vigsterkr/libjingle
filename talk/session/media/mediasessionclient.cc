@@ -50,7 +50,8 @@ MediaSessionClient::MediaSessionClient(
       session_manager_(manager),
       focus_call_(NULL),
       channel_manager_(new ChannelManager(session_manager_->worker_thread())),
-      desc_factory_(channel_manager_) {
+      desc_factory_(channel_manager_,
+          session_manager_->transport_desc_factory()) {
   Construct();
 }
 
@@ -65,7 +66,8 @@ MediaSessionClient::MediaSessionClient(
       channel_manager_(new ChannelManager(
           media_engine, data_media_engine,
           device_manager, session_manager_->worker_thread())),
-      desc_factory_(channel_manager_) {
+      desc_factory_(channel_manager_,
+                    session_manager_->transport_desc_factory()) {
   Construct();
 }
 
@@ -129,9 +131,25 @@ void MediaSessionClient::OnSessionState(BaseSession* base_session,
     const AudioContentDescription* audio_desc = (!audio_content) ? NULL :
         static_cast<const AudioContentDescription*>(audio_content->description);
 
-    // For some reason, we need to create the call even when we
-    // reject.
-    Call *call = CreateCall();
+    // For some reason, we need a call even if we reject. So, either find a
+    // matching call or create a new one.
+    // The matching of existing calls is used to support the multi-session mode
+    // required for p2p handoffs: ie. once a MUC call is established, a new
+    // session may be established for the same call but is direct between the
+    // clients. To indicate that this is the case, the initiator of the incoming
+    // session is set to be the same as the remote name of the MUC for the
+    // existing session, thus the client can know that this is a new session for
+    // the existing call, rather than a whole new call.
+    Call* call = NULL;
+    if (multisession_enabled_) {
+      call = FindCallByRemoteName(session->initiator_name());
+    }
+
+    if (call == NULL) {
+      // Could not find a matching call, so create a new one.
+      call = CreateCall();
+    }
+
     session_map_[session->id()] = call;
     call->IncomingSession(session, offer);
 
@@ -160,8 +178,7 @@ void MediaSessionClient::DestroyCall(Call *call) {
 
 void MediaSessionClient::OnSessionDestroy(Session *session) {
   // Find the call this session is in, remove it
-
-  std::map<std::string, Call *>::iterator it = session_map_.find(session->id());
+  SessionMap::iterator it = session_map_.find(session->id());
   ASSERT(it != session_map_.end());
   if (it != session_map_.end()) {
     Call *call = (*it).second;
@@ -201,6 +218,21 @@ Session *MediaSessionClient::CreateSession(Call *call) {
   Session *session = session_manager_->CreateSession(jid().Str(), type);
   session_map_[session->id()] = call;
   return session;
+}
+
+Call *MediaSessionClient::FindCallByRemoteName(const std::string &remote_name) {
+  SessionMap::const_iterator call;
+  for (call = session_map_.begin(); call != session_map_.end(); ++call) {
+    std::vector<Session *> sessions = call->second->sessions();
+    std::vector<Session *>::const_iterator session;
+    for (session = sessions.begin(); session != sessions.end(); ++session) {
+      if (remote_name == (*session)->remote_name()) {
+        return call->second;
+      }
+    }
+  }
+
+  return NULL;
 }
 
 // TODO(pthatcher): Move all of the parsing and writing functions into

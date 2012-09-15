@@ -25,6 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "talk/media/devices/devicemanager.h"
+
 #ifdef WIN32
 #include "talk/base/win32.h"
 #include <objbase.h>
@@ -37,8 +39,8 @@
 #include "talk/base/pathutils.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stream.h"
+#include "talk/base/windowpickerfactory.h"
 #include "talk/media/base/testutils.h"
-#include "talk/media/devices/devicemanager.h"
 #include "talk/media/devices/filevideocapturer.h"
 #include "talk/media/devices/v4llookup.h"
 
@@ -322,3 +324,47 @@ TEST(DeviceManagerTest, GetVideoCaptureDevices_KUnknown) {
   EXPECT_EQ("/dev/video5", video_ins.at(1).name);
 }
 #endif  // LINUX
+
+TEST(DeviceManagerTest, GetWindows) {
+  if (!talk_base::WindowPickerFactory::IsSupported()) {
+    LOG(LS_INFO) << "skipping test: window capturing is not supported with "
+                 << "current configuration.";
+    return;
+  }
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
+  std::vector<talk_base::WindowDescription> descriptions;
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetWindows(&descriptions));
+  if (descriptions.empty()) {
+    LOG(LS_INFO) << "skipping test: window capturing. Does not have any "
+                 << "windows to capture.";
+    return;
+  }
+  scoped_ptr<cricket::VideoCapturer> capturer(dm->CreateWindowCapturer(
+      descriptions.front().id()));
+  EXPECT_FALSE(capturer.get() == NULL);
+  // TODO(hellner): creating a window capturer and immediately deleting it
+  // results in "Continuous Build and Test Mainline - Mac opt" failure (crash).
+  // Remove the following line as soon as this has been resolved.
+  talk_base::Thread::Current()->ProcessMessages(1);
+}
+
+TEST(DeviceManagerTest, GetDesktops) {
+  if (!talk_base::WindowPickerFactory::IsSupported()) {
+    LOG(LS_INFO) << "skipping test: desktop capturing is not supported with "
+                 << "current configuration.";
+    return;
+  }
+  scoped_ptr<DeviceManagerInterface> dm(DeviceManagerFactory::Create());
+  std::vector<talk_base::DesktopDescription> descriptions;
+  EXPECT_TRUE(dm->Init());
+  EXPECT_TRUE(dm->GetDesktops(&descriptions));
+  if (descriptions.empty()) {
+    LOG(LS_INFO) << "skipping test: desktop capturing. Does not have any "
+                 << "desktops to capture.";
+    return;
+  }
+  scoped_ptr<cricket::VideoCapturer> capturer(dm->CreateDesktopCapturer(
+      descriptions.front().id()));
+  EXPECT_FALSE(capturer.get() == NULL);
+}

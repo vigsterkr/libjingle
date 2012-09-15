@@ -149,8 +149,8 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   void OnAllocationSequenceObjectsCreated();
   void DisableEquivalentPhases(talk_base::Network* network,
       PortConfiguration* config, uint32* flags);
-  void AddAllocatedPort(Port* port, AllocationSequence* seq, uint32 priority,
-      bool prepare_address = true);
+  void AddAllocatedPort(Port* port, AllocationSequence* seq,
+                        bool prepare_address = true);
   void OnAddressReady(Port* port);
   void OnProtocolEnabled(AllocationSequence* seq, ProtocolType proto);
   void OnPortDestroyed(PortInterface* port);

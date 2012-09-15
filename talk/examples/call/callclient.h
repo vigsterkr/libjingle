@@ -32,6 +32,8 @@
 #include <string>
 #include <vector>
 
+#include "talk/base/scoped_ptr.h"
+#include "talk/base/sslidentity.h"
 #include "talk/examples/call/console.h"
 #include "talk/examples/call/status.h"
 #include "talk/media/base/mediachannel.h"
@@ -93,7 +95,9 @@ struct StaticRenderedView {
   cricket::VideoRenderer* renderer;
 };
 
-typedef std::vector<StaticRenderedView> StaticRenderedViews;
+// Maintain a mapping of (session, ssrc) to rendered view.
+typedef std::map<std::pair<cricket::Session*, uint32>,
+                 StaticRenderedView> StaticRenderedViews;
 
 class CallClient: public sigslot::has_slots<> {
  public:
@@ -117,6 +121,9 @@ class CallClient: public sigslot::has_slots<> {
   }
   void SetDataChannelEnabled(bool data_channel_enabled) {
     data_channel_enabled_ = data_channel_enabled;
+  }
+  void SetMultiSessionEnabled(bool multisession_enabled) {
+    multisession_enabled_ = multisession_enabled;
   }
   void SetConsole(Console *console) {
     console_ = console;
@@ -148,14 +155,20 @@ class CallClient: public sigslot::has_slots<> {
     allow_local_ips_ = allow_local_ips;
   }
 
-  void SetInitialProtocol(cricket::SignalingProtocol initial_protocol) {
-    initial_protocol_ = initial_protocol;
+  void SetSignalingProtocol(cricket::SignalingProtocol protocol) {
+    signaling_protocol_ = protocol;
   }
-
-  void SetSecurePolicy(cricket::SecureMediaPolicy secure_policy) {
-    secure_policy_ = secure_policy;
+  void SetTransportProtocol(cricket::TransportProtocol protocol) {
+    transport_protocol_ = protocol;
   }
-
+  void SetSecurePolicy(cricket::SecurePolicy sdes_policy,
+                       cricket::SecurePolicy dtls_policy) {
+    sdes_policy_ = sdes_policy;
+    dtls_policy_ = dtls_policy;
+  }
+  void SetSslIdentity(talk_base::SSLIdentity* identity) {
+    ssl_identity_.reset(identity);
+  }
 
   typedef std::map<buzz::Jid, buzz::Muc*> MucMap;
 
@@ -227,21 +240,36 @@ class CallClient: public sigslot::has_slots<> {
                       const std::string& data);
   buzz::Jid GenerateRandomMucJid();
 
+  // Depending on |enable|, render (or don't) all the streams in |session|.
+  void RenderAllStreams(cricket::Session* session, bool enable);
+
+  // Depending on |enable|, render (or don't) the streams in |video_streams|.
+  void RenderStreams(cricket::Session* session,
+                     const std::vector<cricket::StreamParams>& video_streams,
+                     bool enable);
+
+  // Depending on |enable|, render (or don't) the supplied |stream|.
+  void RenderStream(cricket::Session* session,
+                    const cricket::StreamParams& stream, bool enable);
   void AddStaticRenderedView(
       cricket::Session* session,
       uint32 ssrc, int width, int height, int framerate,
       int x_offset, int y_offset);
   bool RemoveStaticRenderedView(uint32 ssrc);
-  void RemoveAllStaticRenderedViews();
-  void SendViewRequest(cricket::Session* session);
+  void RemoveCallsStaticRenderedViews(cricket::Call* call);
+  void SendViewRequest(cricket::Call* call, cricket::Session* session);
   bool SelectFirstDesktopScreencastId(cricket::ScreencastId* screencastid);
-
 
   static const std::string strerror(buzz::XmppEngine::Error err);
 
   void PrintRoster();
-  void MakeCallTo(const std::string& name, const cricket::CallOptions& options);
-  void PlaceCall(const buzz::Jid& jid, const cricket::CallOptions& options);
+  bool FindJid(const std::string& name,
+               buzz::Jid* found_jid,
+               cricket::CallOptions* options);
+  bool PlaceCall(const std::string& name, cricket::CallOptions options);
+  bool InitiateAdditionalSession(const std::string& name,
+                                 cricket::CallOptions options);
+  void TerminateAndRemoveSession(cricket::Call* call, const std::string& id);
   void PrintCalls();
   void SwitchToCall(uint32 call_id);
   void Accept(const cricket::CallOptions& options);
@@ -252,6 +280,11 @@ class CallClient: public sigslot::has_slots<> {
   void PrintDevices(const std::vector<std::string>& names);
 
   void SetVolume(const std::string& level);
+
+  cricket::Session* GetFirstSession() { return sessions_[call_->id()][0]; }
+  void AddSession(cricket::Session* session) {
+    sessions_[call_->id()].push_back(session);
+  }
 
   typedef std::map<std::string, RosterItem> RosterMap;
 
@@ -268,17 +301,20 @@ class CallClient: public sigslot::has_slots<> {
   MucMap mucs_;
 
   cricket::Call* call_;
-  cricket::Session *session_;
+  typedef std::map<uint32, std::vector<cricket::Session *> > SessionMap;
+  SessionMap sessions_;
+
   buzz::HangoutPubSubClient* hangout_pubsub_client_;
   bool incoming_call_;
   bool auto_accept_;
   std::string pmuc_domain_;
   bool render_;
   bool data_channel_enabled_;
+  bool multisession_enabled_;
   cricket::VideoRenderer* local_renderer_;
-  cricket::VideoRenderer* remote_renderer_;
   StaticRenderedViews static_rendered_views_;
   uint32 static_views_accumulated_count_;
+  uint32 screencast_ssrc_;
 
   buzz::Status my_status_;
   buzz::PresencePushTask* presence_push_;
@@ -290,8 +326,11 @@ class CallClient: public sigslot::has_slots<> {
   uint32 portallocator_flags_;
 
   bool allow_local_ips_;
-  cricket::SignalingProtocol initial_protocol_;
-  cricket::SecureMediaPolicy secure_policy_;
+  cricket::SignalingProtocol signaling_protocol_;
+  cricket::TransportProtocol transport_protocol_;
+  cricket::SecurePolicy sdes_policy_;
+  cricket::SecurePolicy dtls_policy_;
+  talk_base::scoped_ptr<talk_base::SSLIdentity> ssl_identity_;
   std::string last_sent_to_;
 };
 

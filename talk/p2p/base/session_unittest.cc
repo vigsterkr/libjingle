@@ -184,7 +184,7 @@ std::string P2pCandidateXml(const std::string& name, int port_index) {
       " name=\"" + name + "\""
       " address=\"127.0.0.1\""
       " port=\"" + GetPortString(port_index) + "\""
-      " preference=\"1\""
+      " preference=\"0.99\""
       " username=\"" + username + "\""
       " protocol=\"udp\""
       " generation=\"0\""
@@ -641,7 +641,6 @@ class TestPortAllocatorSession : public cricket::PortAllocatorSession {
 
   void AddPort(cricket::Port* port) {
     port->set_component(component_);
-    port->SetPriority(2130706432U);  // pref = 1.0
     port->set_generation(0);
     port->SignalDestroyed.connect(
         this, &TestPortAllocatorSession::OnPortDestroyed);

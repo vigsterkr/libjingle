@@ -35,6 +35,7 @@
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/session.h"
+#include "talk/p2p/base/transportdescriptionfactory.h"
 #include "talk/session/media/mediasession.h"
 
 namespace cricket {
@@ -199,6 +200,7 @@ class WebRtcSession : public cricket::BaseSession,
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
+  cricket::TransportDescriptionFactory transport_desc_factory_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
   bool allocation_complete_;
   MediaStreamSignaling* mediastream_signaling_;

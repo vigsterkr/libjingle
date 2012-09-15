@@ -30,6 +30,10 @@
 
 #include "talk/p2p/base/dtlstransportchannel.h"
 
+namespace talk_base {
+class SSLIdentity;
+}
+
 namespace cricket {
 
 class PortAllocator;
@@ -41,16 +45,28 @@ class DtlsTransport : public Base {
   DtlsTransport(talk_base::Thread* signaling_thread,
                 talk_base::Thread* worker_thread,
                 const std::string& content_name,
-                PortAllocator* allocator)
-      : Base(signaling_thread, worker_thread, content_name, allocator) {
+                PortAllocator* allocator,
+                talk_base::SSLIdentity* identity)
+      : Base(signaling_thread, worker_thread, content_name, allocator),
+        identity_(identity) {
   }
   ~DtlsTransport() {
     Base::DestroyAllChannels();
   }
 
   virtual DtlsTransportChannelWrapper* CreateTransportChannel(int component) {
-    return new DtlsTransportChannelWrapper(this,
-        Base::CreateTransportChannel(component));
+    DtlsTransportChannelWrapper* dtls_channel = new
+        DtlsTransportChannelWrapper(this,
+                                    Base::CreateTransportChannel(component));
+    // Push down the identity, if one exists, to the transport channel.
+    if (identity_) {
+      bool ret = dtls_channel->SetLocalIdentity(identity_);
+      if (!ret) {
+        DestroyTransportChannel(dtls_channel);
+        dtls_channel = NULL;
+      }
+    }
+    return dtls_channel;
   }
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) {
     // Kind of ugly, but this lets us do the exact inverse of the create.
@@ -60,6 +76,9 @@ class DtlsTransport : public Base {
     delete dtls_channel;
     Base::DestroyTransportChannel(base_channel);
   }
+
+ private:
+  talk_base::SSLIdentity *identity_;
 };
 
 }  // namespace cricket

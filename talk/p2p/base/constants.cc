@@ -145,7 +145,7 @@ const buzz::StaticQName QN_CRYPTO_TAG = { NS_EMPTY, "tag" };
 const buzz::StaticQName QN_CRYPTO_SESSION_PARAMS =
     { NS_EMPTY, "session-params" };
 
-// transports and candidates
+// Transports and candidates.
 const char LN_TRANSPORT[] = "transport";
 const char LN_CANDIDATE[] = "candidate";
 const buzz::StaticQName QN_UFRAG = { cricket::NS_EMPTY, "ufrag" };
@@ -171,9 +171,13 @@ const int ICE_CANDIDATE_COMPONENT_RTP = 1;
 const int ICE_CANDIDATE_COMPONENT_RTCP = 2;
 const int ICE_CANDIDATE_COMPONENT_DEFAULT = 1;
 
-// TODO Once we are full ICE-UDP compliant, use this namespace.
-// For now, just use the same as NS_GINGLE_P2P.
-// const char NS_JINGLE_ICE_UDP[] = "urn:xmpp:jingle:transports:ice-udp:1";
+const buzz::StaticQName QN_FINGERPRINT = { cricket::NS_EMPTY, "fingerprint" };
+const buzz::StaticQName QN_FINGERPRINT_ALGORITHM =
+    { cricket::NS_EMPTY, "algorithm" };
+const buzz::StaticQName QN_FINGERPRINT_DIGEST = { cricket::NS_EMPTY, "digest" };
+
+const char NS_JINGLE_ICE_UDP[] = "urn:xmpp:jingle:transports:ice-udp:1";
+
 const char NS_GINGLE_P2P[] = "http://www.google.com/transport/p2p";
 const buzz::StaticQName QN_GINGLE_P2P_TRANSPORT =
     { NS_GINGLE_P2P, LN_TRANSPORT };

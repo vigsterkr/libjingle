@@ -29,10 +29,10 @@
 
 #include <limits>
 
+// TODO(juberti): Re-enable this once the OpenSSL build issues are fixed.
+//#include "talk/base/sslconfig.h"
 #ifdef WIN32
-#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#endif
 #include <windows.h>
 #include <ntsecapi.h>
 #else

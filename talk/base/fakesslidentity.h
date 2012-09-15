@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2011 Google Inc.
+ * Copyright 2012, The Libjingle Authors.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,40 +25,45 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
-#define TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
+#ifndef TALK_BASE_FAKESSLIDENTITY_H_
+#define TALK_BASE_FAKESSLIDENTITY_H_
 
-namespace cricket {
+#include "talk/base/messagedigest.h"
+#include "talk/base/sslidentity.h"
 
-#define WEBRTC_STUB(method, args) \
-  virtual int method args { return 0; }
+namespace talk_base {
 
-#define WEBRTC_STUB_CONST(method, args) \
-  virtual int method args const { return 0; }
+class FakeSSLCertificate : public talk_base::SSLCertificate {
+ public:
+  explicit FakeSSLCertificate(const std::string& data) : data_(data) {}
+  virtual FakeSSLCertificate* GetReference() const {
+    return new FakeSSLCertificate(*this);
+  }
+  virtual std::string ToPEMString() const {
+    return data_;
+  }
+  virtual bool ComputeDigest(const std::string &algorithm,
+                             unsigned char *digest, std::size_t size,
+                             std::size_t *length) const {
+    *length = talk_base::ComputeDigest(algorithm, data_.c_str(), data_.size(),
+                                       digest, size);
+    return (*length != 0);
+  }
+ private:
+  std::string data_;
+};
 
-#define WEBRTC_BOOL_STUB(method, args) \
-  virtual bool method args { return true; }
+class FakeSSLIdentity : public talk_base::SSLIdentity {
+ public:
+  explicit FakeSSLIdentity(const std::string& data) : cert_(data) {}
+  virtual FakeSSLIdentity* GetReference() const {
+    return new FakeSSLIdentity(*this);
+  }
+  virtual const FakeSSLCertificate& certificate() const { return cert_; }
+ private:
+  FakeSSLCertificate cert_;
+};
 
-#define WEBRTC_VOID_STUB(method, args) \
-  virtual void method args {}
+}  // namespace talk_base
 
-#define WEBRTC_FUNC(method, args) \
-  virtual int method args
-
-#define WEBRTC_FUNC_CONST(method, args) \
-  virtual int method args const
-
-#define WEBRTC_BOOL_FUNC(method, args) \
-  virtual bool method args
-
-#define WEBRTC_VOID_FUNC(method, args) \
-  virtual void method args
-
-#define WEBRTC_CHECK_CHANNEL(channel) \
-  if (channels_.find(channel) == channels_.end()) return -1;
-
-#define WEBRTC_ASSERT_CHANNEL(channel) \
-  ASSERT(channels_.find(channel) != channels_.end());
-}  // namespace cricket
-
-#endif  // TALK_SESSION_PHONE_FAKEWEBRTCCOMMON_H_
+#endif  // TALK_BASE_FAKESSLIDENTITY_H_

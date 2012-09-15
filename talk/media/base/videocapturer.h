@@ -32,12 +32,15 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/criticalsection.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
 #include "talk/media/base/videocommon.h"
 #include "talk/media/devices/devicemanager.h"
 
 namespace cricket {
+
+class VideoProcessor;
 
 // Current state of the capturer.
 // TODO(hellner): CS_NO_DEVICE is an error code not a capture state. Separate
@@ -170,6 +173,14 @@ class VideoCapturer : public sigslot::has_slots<> {
   // Check if the video capturer is running.
   virtual bool IsRunning() = 0;
 
+  // Adds a video processor that will be applied on VideoFrames returned by
+  // |SignalVideoFrame|. Multiple video processors can be added. The video
+  // processors will be applied in the order they were added.
+  void AddVideoProcessor(VideoProcessor* video_processor);
+  // Removes the |video_processor| from the list of video processors or
+  // returns false.
+  bool RemoveVideoProcessor(VideoProcessor* video_processor);
+
   // Signal all capture state changes that are not a direct result of calling
   // Start().
   sigslot::signal2<VideoCapturer*, CaptureState> SignalStateChange;
@@ -201,15 +212,25 @@ class VideoCapturer : public sigslot::has_slots<> {
   void SetSupportedFormats(const std::vector<VideoFormat>& formats);
 
  private:
+  typedef std::vector<VideoProcessor*> VideoProcessors;
+
   // Get the distance between the desired format and the supported format.
   // Return the max distance if they mismatch. See the implementation for
   // details.
   int64 GetFormatDistance(const VideoFormat& desired,
                           const VideoFormat& supported);
 
+  // Applies all registered processors. If any of the processors signal that
+  // the frame should be dropped the return value will be false. Note that
+  // this frame should be dropped as it has not applied all processors.
+  bool ApplyProcessors(VideoFrame* video_frame);
+
   std::string id_;
   talk_base::scoped_ptr<VideoFormat> capture_format_;
   talk_base::scoped_ptr<std::vector<VideoFormat> > supported_formats_;
+
+  talk_base::CriticalSection crit_;
+  VideoProcessors video_processors_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoCapturer);
 };

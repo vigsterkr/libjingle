@@ -73,9 +73,20 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     if (!running_) {
       return false;
     }
+    // Currently, |fourcc| is always I420 or ARGB.
+    // TODO(fbarchard): Extend SizeOf to take fourcc.
+    uint32 size = 0u;
+    if (fourcc == cricket::FOURCC_ARGB) {
+      size = width * 4 * height;
+    } else if (fourcc == cricket::FOURCC_I420) {
+      size = cricket::VideoFrame::SizeOf(width, height);
+    } else {
+      return false;  // Unsupported FOURCC.
+    }
+    if (size == 0u) {
+      return false;  // Width and/or Height were zero.
+    }
 
-    // Currently, |fourcc| is always I420.
-    uint32 size = cricket::VideoFrame::SizeOf(width, height);
     cricket::CapturedFrame frame;
     frame.width = width;
     frame.height = height;
@@ -85,13 +96,19 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     next_timestamp_ += 33333333;  // 30 fps
 
     talk_base::scoped_array<char> data(new char[size]);
-    memset(data.get(), 0, size);
     frame.data = data.get();
+    // Copy something non-zero into the buffer so Validate wont complain that
+    // the frame is all duplicate.
+    memset(frame.data, 1, size / 2);
+    memset(reinterpret_cast<uint8*>(frame.data) + (size / 2), 2,
+         size - (size / 2));
+    memcpy(frame.data, &(GetCaptureFormat()->fourcc), 4);
     // TODO(zhurunz): SignalFrameCaptured carry returned value to be able to
     // capture results from downstream.
     SignalFrameCaptured(this, &frame);
     return true;
   }
+
   sigslot::signal1<FakeVideoCapturer*> SignalDestroyed;
 
   virtual cricket::CaptureState Start(const cricket::VideoFormat& format) {

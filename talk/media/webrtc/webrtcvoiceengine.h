@@ -443,6 +443,9 @@ class WebRtcVoiceMediaChannel
   // mux_channels_ can be read from WebRtc callback thread.  Accesses off the
   // WebRtc thread must be synchronized with edits on the worker thread.  Reads
   // on the worker thread are ok.
+  //
+  // Do not lock this on the VoE media processor thread; potential for deadlock
+  // exists.
   mutable talk_base::CriticalSection mux_channels_cs_;
 };
 

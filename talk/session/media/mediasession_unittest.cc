@@ -59,7 +59,9 @@ using cricket::SsrcGroup;
 using cricket::StreamParams;
 using cricket::StreamParamsVec;
 using cricket::TransportDescription;
+using cricket::TransportDescriptionFactory;
 using cricket::TransportInfo;
+using cricket::TransportOptions;
 using cricket::ContentInfo;
 using cricket::CryptoParamsVec;
 using cricket::AudioContentDescription;
@@ -146,7 +148,7 @@ static const char kDataTrack3[] = "data_3";
 
 class MediaSessionDescriptionFactoryTest : public testing::Test {
  public:
-  MediaSessionDescriptionFactoryTest() {
+  MediaSessionDescriptionFactoryTest() : f1_(&tdf1_), f2_(&tdf2_) {
     f1_.set_audio_codecs(MAKE_VECTOR(kAudioCodecs1));
     f1_.set_video_codecs(MAKE_VECTOR(kVideoCodecs1));
     f1_.set_data_codecs(MAKE_VECTOR(kDataCodecs1));
@@ -180,14 +182,16 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
       current_desc.reset(new SessionDescription());
       EXPECT_TRUE(current_desc->AddTransportInfo(
           TransportInfo("audio",
-                        TransportDescription("", "", current_audio_ufrag,
-                                             current_audio_pwd, NULL,
-                                             Candidates()))));
+                        TransportDescription("", TransportOptions(),
+                                             current_audio_ufrag,
+                                             current_audio_pwd,
+                                             NULL, Candidates()))));
       EXPECT_TRUE(current_desc->AddTransportInfo(
           TransportInfo("video",
-                        TransportDescription("", "", current_video_ufrag,
-                                             current_video_pwd, NULL,
-                                             Candidates()))));
+                        TransportDescription("", TransportOptions(),
+                                             current_video_ufrag,
+                                             current_video_pwd,
+                                             NULL, Candidates()))));
     }
     if (offer) {
       desc.reset(f1_.CreateOffer(options, current_desc.get()));
@@ -288,6 +292,8 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
  protected:
   MediaSessionDescriptionFactory f1_;
   MediaSessionDescriptionFactory f2_;
+  TransportDescriptionFactory tdf1_;
+  TransportDescriptionFactory tdf2_;
 };
 
 // Create a typical audio offer, and ensure it matches what we expect.
