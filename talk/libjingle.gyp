@@ -181,8 +181,8 @@
           ],
           'link_settings': {
             'libraries': [
-              '-lcrypto',
-              '-lssl',
+             '$(SDKROOT)/usr/lib/libcrypto.dylib',
+             '$(SDKROOT)/usr/lib/libssl.dylib',
             ],
             'xcode_settings': {
               'OTHER_LDFLAGS': [
