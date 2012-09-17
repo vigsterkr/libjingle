@@ -56,7 +56,7 @@ enum {
   MSG_CANDIDATE_TIMEOUT = 101,
 };
 
-static const uint64 kInitSessionVersion = 1;
+static const uint64 kInitSessionVersion = 2;
 
 // We allow 30 seconds to establish a connection, otherwise it's an error.
 static const int kCallSetupTimeout = 30 * 1000;
@@ -247,7 +247,7 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   JsepSessionDescription* offer(new JsepSessionDescription(
       JsepSessionDescription::kOffer));
   if (!offer->Initialize(desc, session_id_,
-                         talk_base::ToString(++session_version_))) {
+                         talk_base::ToString(session_version_++))) {
     delete offer;
     return NULL;
   }
@@ -279,7 +279,7 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   JsepSessionDescription* answer(new JsepSessionDescription(
       JsepSessionDescription::kAnswer));
   if (!answer->Initialize(desc, session_id_,
-                          talk_base::ToString(++session_version_))) {
+                          talk_base::ToString(session_version_++))) {
     delete answer;
     return NULL;
   }
