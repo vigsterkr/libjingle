@@ -93,8 +93,8 @@ static const char* kIcePwd[4] = {"TESTICEPWD00000000000000",
                                  "TESTICEPWD00000000000002",
                                  "TESTICEPWD00000000000003"};
 
-static const int kTiebreaker1 = 11111;
-static const int kTiebreaker2 = 22222;
+static const uint64 kTiebreaker1 = 11111;
+static const uint64 kTiebreaker2 = 22222;
 
 // This test simulates 2 P2P endpoints that want to establish connectivity
 // with each other over various network topologies and conditions, which can be
@@ -1130,6 +1130,55 @@ TEST_F(P2PTransportChannelTest, TestIceRoleConflict) {
   // Since both the channels initiated with controlling state and channel2
   // has higher tiebreaker value, channel1 should receive SignalRoleConflict.
   EXPECT_TRUE_WAIT(GetRoleConflict(0), 1000);
+
+  EXPECT_TRUE_WAIT(ep1_ch1()->readable() &&
+                   ep1_ch1()->writable() &&
+                   ep2_ch1()->readable() &&
+                   ep2_ch1()->writable(),
+                   1000);
+
+  EXPECT_TRUE(ep1_ch1()->best_connection() &&
+              ep2_ch1()->best_connection());
+
+  TestSendRecv(1);
+}
+
+// Tests that the ice configs (protocol, tiebreaker and role can be passed down
+// to ports.
+TEST_F(P2PTransportChannelTest, TestIceConfigWillPassDownToPort) {
+  AddAddress(0, kPublicAddrs[0]);
+  AddAddress(1, kPublicAddrs[1]);
+
+  SetIceRole(0, cricket::ROLE_CONTROLLING);
+  SetIceProtocol(0, cricket::ICEPROTO_GOOGLE);
+  SetTiebreaker(0, kTiebreaker1);
+  SetIceRole(1, cricket::ROLE_CONTROLLING);
+  SetIceProtocol(1, cricket::ICEPROTO_RFC5245);
+  SetTiebreaker(1, kTiebreaker2);
+
+  CreateChannels(1);
+
+  EXPECT_EQ_WAIT(2u, ep1_ch1()->ports().size(), 1000);
+
+  const std::vector<cricket::PortInterface *> ports_before = ep1_ch1()->ports();
+  for (size_t i = 0; i < ports_before.size(); ++i) {
+    EXPECT_EQ(cricket::ROLE_CONTROLLING, ports_before[i]->Role());
+    EXPECT_EQ(cricket::ICEPROTO_GOOGLE, ports_before[i]->IceProtocol());
+    EXPECT_EQ(kTiebreaker1, ports_before[i]->Tiebreaker());
+  }
+
+  ep1_ch1()->SetRole(cricket::ROLE_CONTROLLED);
+  ep1_ch1()->SetIceProtocolType(cricket::ICEPROTO_RFC5245);
+  ep1_ch1()->SetTiebreaker(kTiebreaker2);
+
+  const std::vector<cricket::PortInterface *> ports_after = ep1_ch1()->ports();
+  for (size_t i = 0; i < ports_after.size(); ++i) {
+    EXPECT_EQ(cricket::ROLE_CONTROLLED, ports_before[i]->Role());
+    EXPECT_EQ(cricket::ICEPROTO_RFC5245, ports_before[i]->IceProtocol());
+    // SetTiebreaker after Connect() has been called will fail. So expect the
+    // original value.
+    EXPECT_EQ(kTiebreaker1, ports_before[i]->Tiebreaker());
+  }
 
   EXPECT_TRUE_WAIT(ep1_ch1()->readable() &&
                    ep1_ch1()->writable() &&

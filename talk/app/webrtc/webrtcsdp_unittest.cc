@@ -703,7 +703,7 @@ class WebRtcSdpTest : public testing::Test {
     return true;
   }
 
-  void AddIceOptions(std::string content_name,
+  void AddIceOptions(const std::string& content_name,
                      const TransportOptions& transport_options) {
     ASSERT_TRUE(desc_.GetTransportInfoByName(content_name) != NULL);
     cricket::TransportInfo transport_info =

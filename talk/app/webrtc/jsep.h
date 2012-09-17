@@ -128,6 +128,7 @@ class SessionDescriptionInterface {
   static const char kAnswer[];
 
   virtual ~SessionDescriptionInterface() {}
+  virtual cricket::SessionDescription* description() = 0;
   virtual const cricket::SessionDescription* description() const = 0;
   // Get the session id and session version, which are defined based on
   // RFC 4566 for the SDP o= line.

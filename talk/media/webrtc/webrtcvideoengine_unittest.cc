@@ -1012,6 +1012,12 @@ TEST_F(WebRtcVideoMediaChannelTest, AddRemoveCapturerMultipleSources) {
   Base::AddRemoveCapturerMultipleSources();
 }
 
+// TODO(hellner): Crashes in libyuv, in the function ScaleARGBFilterRows_SSSE3.
+//                Please see b/7145771.
+TEST_F(WebRtcVideoMediaChannelTest, DISABLED_HighAspectHighHeightCapturer) {
+  Base::HighAspectHighHeightCapturer();
+}
+
 TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
   EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
 

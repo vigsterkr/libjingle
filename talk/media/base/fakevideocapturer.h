@@ -28,9 +28,9 @@
 #ifndef TALK_MEDIA_BASE_FAKEVIDEOCAPTURER_H_
 #define TALK_MEDIA_BASE_FAKEVIDEOCAPTURER_H_
 
-#include <vector>
-
 #include <string.h>
+
+#include <vector>
 
 #include "talk/media/base/videocapturer.h"
 #include "talk/media/base/videocommon.h"
@@ -102,7 +102,7 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     memset(frame.data, 1, size / 2);
     memset(reinterpret_cast<uint8*>(frame.data) + (size / 2), 2,
          size - (size / 2));
-    memcpy(frame.data, &(GetCaptureFormat()->fourcc), 4);
+    memcpy(frame.data, reinterpret_cast<const uint8*>(&fourcc), 4);
     // TODO(zhurunz): SignalFrameCaptured carry returned value to be able to
     // capture results from downstream.
     SignalFrameCaptured(this, &frame);

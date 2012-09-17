@@ -119,18 +119,18 @@ TEST(VideoCommonTest, TestComputeScale) {
 
   // Request too wide. (two 30 inch monitors). Expect width scaled to max.
   ComputeScale(5120, 1600, &scaled_width, &scaled_height);
-  EXPECT_EQ(4072, scaled_width);
-  EXPECT_EQ(1272, scaled_height);
+  EXPECT_EQ(4048, scaled_width);
+  EXPECT_EQ(1264, scaled_height);
 
   // Request too wide but not too many pixels.  Expect width scaled to max.
   ComputeScale(8192, 1024, &scaled_width, &scaled_height);
-  EXPECT_EQ(4096, scaled_width);
-  EXPECT_EQ(512, scaled_height);
+  EXPECT_EQ(4048, scaled_width);
+  EXPECT_EQ(506, scaled_height);
 
   // Request too tall.  Expect height scaled to max.
   ComputeScale(1024, 8192, &scaled_width, &scaled_height);
-  EXPECT_EQ(512, scaled_width);
-  EXPECT_EQ(4096, scaled_height);
+  EXPECT_EQ(380, scaled_width);
+  EXPECT_EQ(3040, scaled_height);
 }
 
 TEST(VideoCommonTest, TestComputeCrop) {

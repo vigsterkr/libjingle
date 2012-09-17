@@ -646,14 +646,8 @@ void BaseSession::OnMessage(talk_base::Message *pmsg) {
 
   case MSG_STATE:
     switch (state_) {
-    case STATE_RECEIVEDINITIATE:
-      PushdownRemoteTransportDescription();
-      break;
     case STATE_SENTACCEPT:
-      SetState(STATE_INPROGRESS);
-      break;
     case STATE_RECEIVEDACCEPT:
-      PushdownRemoteTransportDescription();
       SetState(STATE_INPROGRESS);
       break;
 

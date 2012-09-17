@@ -76,10 +76,8 @@ class P2PTransportChannel : public TransportChannelImpl,
   // From TransportChannelImpl:
   virtual Transport* GetTransport() { return transport_; }
   virtual void SetRole(TransportRole role);
-  virtual void SetTiebreaker(uint64 tiebreaker) { tiebreaker_ = tiebreaker; }
-  virtual void SetIceProtocolType(IceProtocolType type) {
-    protocol_type_ = type;
-  }
+  virtual void SetTiebreaker(uint64 tiebreaker);
+  virtual void SetIceProtocolType(IceProtocolType type);
   virtual void SetIceUfrag(const std::string& ice_ufrag);
   virtual void SetIcePwd(const std::string& ice_pwd);
   virtual void Connect();
@@ -95,6 +93,10 @@ class P2PTransportChannel : public TransportChannelImpl,
 
   const Connection* best_connection() const { return best_connection_; }
   void set_incoming_only(bool value) { incoming_only_ = value; }
+
+  // Note: This is only for testing purpose.
+  // |ports_| should not be changed from outside.
+  const std::vector<PortInterface *>& ports() { return ports_; }
 
  private:
   talk_base::Thread* thread() { return worker_thread_; }

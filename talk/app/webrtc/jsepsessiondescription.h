@@ -55,6 +55,9 @@ class JsepSessionDescription : public SessionDescriptionInterface {
       const std::string& session_id,
       const std::string& session_version);
 
+  virtual cricket::SessionDescription* description() {
+    return description_.get();
+  }
   virtual const cricket::SessionDescription* description() const {
     return description_.get();
   }

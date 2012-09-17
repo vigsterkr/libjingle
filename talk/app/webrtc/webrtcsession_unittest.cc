@@ -48,19 +48,23 @@
 #include "talk/session/media/mediasession.h"
 
 using cricket::BaseSession;
+using cricket::NS_JINGLE_ICE_UDP;
+using cricket::NS_GINGLE_P2P;
+using cricket::TransportInfo;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
 using webrtc::IceCandidateCollection;
 using webrtc::JsepInterface;
 using webrtc::JsepSessionDescription;
 using webrtc::JsepIceCandidate;
-using webrtc::SessionDescriptionInterface;
-
 using webrtc::MediaHints;
+using webrtc::SessionDescriptionInterface;
 
 static const SocketAddress kClientAddr1("11.11.11.11", 0);
 static const SocketAddress kClientAddr2("22.22.22.22", 0);
 static const SocketAddress kStunAddr("99.99.99.1", cricket::STUN_SERVER_PORT);
+
+static const char kSessionVersion[] = "1";
 
 static const char kStream1[] = "stream1";
 static const char kVideoTrack1[] = "video1";
@@ -218,6 +222,7 @@ class WebRtcSessionTest : public testing::Test {
       stun_server_(talk_base::Thread::Current(), kStunAddr),
       allocator_(&network_manager_, kStunAddr,
                  SocketAddress(), SocketAddress(), SocketAddress()) {
+    tdesc_factory_->set_protocol(cricket::ICEPROTO_HYBRID);
     allocator_.set_flags(cricket::PORTALLOCATOR_DISABLE_TCP |
                          cricket::PORTALLOCATOR_DISABLE_RELAY |
                          cricket::PORTALLOCATOR_ENABLE_BUNDLE);
@@ -389,11 +394,10 @@ class WebRtcSessionTest : public testing::Test {
         new JsepSessionDescription(JsepSessionDescription::kAnswer);
     EXPECT_TRUE((*nocrypto_answer)->Initialize(nocrypto_answer_str));
   }
-  JsepSessionDescription* CreateOfferSessionDescription(
-      cricket::MediaSessionOptions options) {
+  JsepSessionDescription* CreateOfferSessionDescriptionWithVersion(
+        cricket::MediaSessionOptions options,
+        const std::string& session_version) {
     const std::string session_id =
-        talk_base::ToString(talk_base::CreateRandomId());
-    const std::string session_version =
         talk_base::ToString(talk_base::CreateRandomId());
     JsepSessionDescription* offer(
         new JsepSessionDescription(JsepSessionDescription::kOffer));
@@ -403,6 +407,11 @@ class WebRtcSessionTest : public testing::Test {
       offer = NULL;
     }
     return offer;
+  }
+  JsepSessionDescription* CreateOfferSessionDescription(
+      cricket::MediaSessionOptions options) {
+    return CreateOfferSessionDescriptionWithVersion(options,
+        kSessionVersion);
   }
   void TestSessionCandidatesWithBundleRtcpMux(bool bundle, bool rtcp_mux) {
     AddInterface(kClientAddr1);
@@ -448,6 +457,17 @@ class WebRtcSessionTest : public testing::Test {
         EXPECT_FALSE(c0.IsEquivalent(c1));
       }
     }
+  }
+
+  void VerifyTransportType(const SessionDescriptionInterface* desc,
+                           const std::string& content_name,
+                           const std::string& transport_type) {
+    ASSERT_TRUE(desc != NULL);
+    ASSERT_TRUE(desc->description() != NULL);
+    const TransportInfo* transport_info =
+        desc->description()->GetTransportInfoByName(content_name);
+    ASSERT_TRUE(transport_info != NULL);
+    EXPECT_EQ(transport_type, transport_info->description.transport_type);
   }
 
   cricket::FakeMediaEngine* media_engine_;
@@ -1364,4 +1384,26 @@ TEST_F(WebRtcSessionTest, TestInitiatorFlagAsReceiver) {
   EXPECT_FALSE(session_->initiator());
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
   EXPECT_FALSE(session_->initiator());
+}
+
+TEST_F(WebRtcSessionTest, TestHandleBackwardCompatibility) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  // Use "0" as the session version to indicate a older client.
+  JsepSessionDescription* offer =
+      CreateOfferSessionDescriptionWithVersion(options, "0");
+  VerifyTransportType(offer, "audio", NS_JINGLE_ICE_UDP);
+  VerifyTransportType(offer, "video", NS_JINGLE_ICE_UDP);
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
+  VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);
+  // The WebRtcSession has remember the fact that the remote client is a older
+  // version client. So even the follow up offer has a session version of "1",
+  // the WebRtcSession will still update the transport type to NS_GINGLE_P2P.
+  offer = CreateOfferSessionDescriptionWithVersion(options, "1");
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
+  VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);
 }

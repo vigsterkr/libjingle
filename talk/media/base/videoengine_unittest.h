@@ -1408,6 +1408,44 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_TRUE(channel_->SetCapturer(2, NULL));
   }
 
+  void HighAspectHighHeightCapturer() {
+    const int kWidth  = 100;
+    const int kHeight = 10000;
+    const int kScaledWidth = 28;
+    const int kScaledHeight = 3040;
+
+    cricket::VideoCodec codec(DefaultCodec());
+    EXPECT_TRUE(SetOneCodec(codec));
+    EXPECT_TRUE(SetSend(true));
+
+    Renderer renderer;
+    EXPECT_TRUE(channel_->AddRecvStream(
+        cricket::StreamParams::CreateLegacy(kSsrc)));
+    EXPECT_TRUE(channel_->SetRenderer(kSsrc, &renderer));
+    EXPECT_TRUE(channel_->SetRender(true));
+    EXPECT_EQ(0, renderer.num_rendered_frames());
+
+    EXPECT_TRUE(SendFrame());
+    EXPECT_FRAME_ON_RENDERER_WAIT(renderer, 1, codec.width, codec.height,
+                                  kTimeout);
+
+    // Registering an external capturer is currently the same as screen casting
+    // (update the test when this changes).
+    talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer(
+        new cricket::FakeVideoCapturer);
+    const std::vector<cricket::VideoFormat>* formats =
+        capturer->GetSupportedFormats();
+    cricket::VideoFormat capture_format = (*formats)[0];
+    EXPECT_EQ(cricket::CS_RUNNING, capturer->Start(capture_format));
+    EXPECT_TRUE(channel_->SetCapturer(kSsrc, capturer.get()));
+    EXPECT_TRUE(talk_base::Thread::Current()->ProcessMessages(30));
+    EXPECT_TRUE(capturer->CaptureCustomFrame(kWidth, kHeight,
+                                             cricket::FOURCC_ARGB));
+    EXPECT_TRUE(capturer->CaptureFrame());
+    EXPECT_FRAME_ON_RENDERER_WAIT(renderer, 2, kScaledWidth, kScaledHeight,
+                                  kTimeout);
+  }
+
   // Tests that we can adapt video resolution with 16:10 aspect ratio properly.
   void AdaptResolution16x10() {
     cricket::VideoCodec codec(DefaultCodec());

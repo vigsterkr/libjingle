@@ -199,12 +199,35 @@ void P2PTransportChannel::AddAllocatorSession(PortAllocatorSession* session) {
 }
 
 void P2PTransportChannel::SetRole(TransportRole role) {
+  ASSERT(worker_thread_ == talk_base::Thread::Current());
+
   role_ = role;
   for (std::vector<PortInterface *>::iterator it = ports_.begin();
        it != ports_.end(); ++it) {
     (*it)->SetRole(role_);
   }
   // TODO - Recompute the priorites for the connections.
+}
+
+void P2PTransportChannel::SetTiebreaker(uint64 tiebreaker) {
+  ASSERT(worker_thread_ == talk_base::Thread::Current());
+  if (!ports_.empty()) {
+    LOG(LS_ERROR)
+        << "Attempt to change tiebreaker after Port has been allocated.";
+    return;
+  }
+
+  tiebreaker_ = tiebreaker;
+}
+
+void P2PTransportChannel::SetIceProtocolType(IceProtocolType type) {
+  ASSERT(worker_thread_ == talk_base::Thread::Current());
+
+  protocol_type_ = type;
+  for (std::vector<PortInterface *>::iterator it = ports_.begin();
+       it != ports_.end(); ++it) {
+    (*it)->SetIceProtocolType(protocol_type_);
+  }
 }
 
 void P2PTransportChannel::SetIceUfrag(const std::string& ice_ufrag) {
@@ -224,6 +247,7 @@ void P2PTransportChannel::Connect() {
                   << "ice_pwd_ are not set.";
     return;
   }
+
   // Kick off an allocator session
   Allocate();
 

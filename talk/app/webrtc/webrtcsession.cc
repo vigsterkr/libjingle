@@ -42,7 +42,10 @@
 #include "talk/session/media/channelmanager.h"
 #include "talk/session/media/mediasession.h"
 
+using cricket::ContentInfos;
 using cricket::MediaContentDescription;
+using cricket::SessionDescription;
+using cricket::TransportInfo;
 
 typedef cricket::MediaSessionOptions::Stream Stream;
 typedef cricket::MediaSessionOptions::Streams Streams;
@@ -52,6 +55,8 @@ namespace webrtc {
 enum {
   MSG_CANDIDATE_TIMEOUT = 101,
 };
+
+static const uint64 kInitSessionVersion = 1;
 
 // We allow 30 seconds to establish a connection, otherwise it's an error.
 static const int kCallSetupTimeout = 30 * 1000;
@@ -82,11 +87,11 @@ static void CopyCandidatesFromSessionDescription(
   }
 }
 
-static bool HasCrypto(const cricket::SessionDescription* desc) {
+static bool HasCrypto(const SessionDescription* desc) {
   if (!desc) {
     return false;
   }
-  const cricket::ContentInfos& contents = desc->contents();
+  const ContentInfos& contents = desc->contents();
   for (size_t index = 0; index < contents.size(); ++index) {
     const MediaContentDescription* media =
         static_cast<const MediaContentDescription*>(
@@ -116,9 +121,8 @@ static bool ValidStreams(const Streams& streams) {
   return (it == sorted_streams.end());
 }
 
-static bool GetAudioSsrcByName(
-    const cricket::SessionDescription* session_description,
-    const std::string& name, uint32 *ssrc) {
+static bool GetAudioSsrcByName(const SessionDescription* session_description,
+                               const std::string& name, uint32 *ssrc) {
   const cricket::ContentInfo* audio_info =
       cricket::GetFirstAudioContent(session_description);
   if (!audio_info) {
@@ -138,9 +142,8 @@ static bool GetAudioSsrcByName(
   return true;
 }
 
-static bool GetVideoSsrcByName(
-    const cricket::SessionDescription* session_description,
-    const std::string& name, uint32 *ssrc) {
+static bool GetVideoSsrcByName(const SessionDescription* session_description,
+                               const std::string& name, uint32 *ssrc) {
   const cricket::ContentInfo* video_info =
       cricket::GetFirstVideoContent(session_description);
   if (!video_info) {
@@ -174,9 +177,11 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
       ice_observer_(NULL),
       // RFC 4566 suggested a Network Time Protocol (NTP) format timestamp
       // as the session id and session version. To simplify, it should be fine
-      // to just use a random number as session id and start version from 0.
+      // to just use a random number as session id and start version from
+      // |kInitSessionVersion|.
       session_id_(talk_base::ToString(talk_base::CreateRandomId())),
-      session_version_(0) {
+      session_version_(kInitSessionVersion),
+      older_version_remote_peer_(false) {
   transport_desc_factory_.set_protocol(cricket::ICEPROTO_HYBRID);
 }
 
@@ -226,7 +231,7 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
     LOG(LS_ERROR) << "CreateOffer called with invalid media streams.";
     return NULL;
   }
-  cricket::SessionDescription* desc(
+  SessionDescription* desc(
       session_desc_factory_.CreateOffer(options,
                                         BaseSession::local_description()));
   // RFC 3264
@@ -260,7 +265,7 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     LOG(LS_ERROR) << "CreateAnswer called with invalid media streams.";
     return NULL;
   }
-  cricket::SessionDescription* desc(
+  SessionDescription* desc(
       session_desc_factory_.CreateAnswer(offer->description(), options,
                                          BaseSession::local_description()));
   // RFC 3264
@@ -360,6 +365,9 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     delete desc;
     return false;
   }
+
+  HandleBackwardCompatibility(desc);
+
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !HasCrypto(desc->description())) {
     LOG(LS_ERROR) << "SetRemoteDescription called with a session"
@@ -384,6 +392,9 @@ bool WebRtcSession::SetRemoteDescription(Action action,
   switch (action) {
     case kOffer:
       SetState(STATE_RECEIVEDINITIATE);
+      // Pushing remote transport description information down to the
+      // transport channels.
+      PushdownRemoteTransportDescription();
       break;
     case kAnswer:
       // Remove channel and transport proxies, if MediaContentDescription is
@@ -394,13 +405,15 @@ bool WebRtcSession::SetRemoteDescription(Action action,
       }
       EnableChannels();
       SetState(STATE_RECEIVEDACCEPT);
+      // Pushing remote transport description information down to the
+      // transport channels.
+      PushdownRemoteTransportDescription();
       break;
     case kPrAnswer:
       EnableChannels();
       SetState(STATE_RECEIVEDPRACCEPT);
       break;
   }
-
 
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
@@ -547,6 +560,7 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       SignalError();
       break;
     default:
+      cricket::BaseSession::OnMessage(msg);
       break;
   }
 }
@@ -657,8 +671,7 @@ bool WebRtcSession::GetLocalCandidateMediaIndex(const std::string& content_name,
     return false;
 
   bool content_found = false;
-  const cricket::ContentInfos& contents =
-      BaseSession::local_description()->contents();
+  const ContentInfos& contents = BaseSession::local_description()->contents();
   for (size_t index = 0; index < contents.size(); ++index) {
     if (contents[index].name == content_name) {
       *sdp_mline_index = index;
@@ -710,7 +723,7 @@ bool WebRtcSession::UseCandidate(
 }
 
 void WebRtcSession::RemoveUnusedChannelsAndTransports(
-    const cricket::SessionDescription* desc) {
+    const SessionDescription* desc) {
   if (!desc) {
     return;
   }
@@ -732,10 +745,8 @@ void WebRtcSession::RemoveUnusedChannelsAndTransports(
   }
 }
 
-bool WebRtcSession::CreateChannels(
-    Action action,
-    const cricket::SessionDescription* desc) {
-
+bool WebRtcSession::CreateChannels(Action action,
+                                   const SessionDescription* desc) {
   // Disabling the BUNDLE flag in PortAllocator if offer disabled it.
   if (state() == STATE_INIT && action == kOffer &&
       !desc->HasGroup(cricket::GROUP_TYPE_BUNDLE)) {
@@ -763,16 +774,14 @@ bool WebRtcSession::CreateChannels(
   return true;
 }
 
-bool WebRtcSession::CreateVoiceChannel(
-    const cricket::SessionDescription* desc) {
+bool WebRtcSession::CreateVoiceChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
   voice_channel_.reset(channel_manager_->CreateVoiceChannel(
       this, voice->name, true));
   return voice_channel_.get() ? true : false;
 }
 
-bool WebRtcSession::CreateVideoChannel(
-    const cricket::SessionDescription* desc) {
+bool WebRtcSession::CreateVideoChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
   video_channel_.reset(channel_manager_->CreateVideoChannel(
       this, video->name, true, voice_channel_.get()));
@@ -790,6 +799,43 @@ void WebRtcSession::CopySavedCandidates(
     delete saved_candidates_[i];
   }
   saved_candidates_.clear();
+}
+
+void WebRtcSession::HandleBackwardCompatibility(
+    SessionDescriptionInterface* remote_desc) {
+  if (!remote_desc || !remote_desc->description() ||
+      remote_desc->session_version().empty()) {
+    return;
+  }
+
+  // If the remote description has the init session version smaller than
+  // kInitSessionVersion, we consider it's a older client.
+  const uint64 remote_session_version =
+      talk_base::FromString<uint64>(remote_desc->session_version());
+  if (remote_session_version < kInitSessionVersion) {
+    older_version_remote_peer_ = true;
+  }
+  if (!older_version_remote_peer_) {
+    return;
+  }
+
+  // The RFC 5245 ICE is not supported before this version.
+  SessionDescription* desc = remote_desc->description();
+  const ContentInfos& contents = desc->contents();
+  // Update the TransportType of all the contents to NS_GINGLE_P2P, which means
+  // RFC 5245 ICE is not supported.
+  for (size_t i = 0; i < contents.size(); ++i) {
+    const TransportInfo* transport_info =
+        desc->GetTransportInfoByName(contents[i].name);
+    if (!transport_info) {
+      LOG(LS_WARNING) << "No transport info for content: " << contents[i].name;
+      continue;
+    }
+    TransportInfo new_transport_info = *transport_info;
+    desc->RemoveTransportInfoByName(contents[i].name);
+    new_transport_info.description.transport_type = cricket::NS_GINGLE_P2P;
+    desc->AddTransportInfo(new_transport_info);
+  }
 }
 
 }  // namespace webrtc

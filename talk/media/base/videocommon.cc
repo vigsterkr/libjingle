@@ -73,20 +73,26 @@ void ComputeScale(int frame_width, int frame_height,
                   int* scaled_width, int* scaled_height) {
   ASSERT(scaled_width != NULL);
   ASSERT(scaled_height != NULL);
+  // VP8 is the most limited in the max height and width supported. While lmi is
+  // the most limited in the number of pixels that can be encoded.
+  // For VP8 the values for max width and height can be found here
+  // webrtc/src/video_engine/vie_defines.h (kViEMaxCodecWidth and
+  // kViEMaxCodecHeight)
+  const int kMaxWidth = 4048;
+  const int kMaxHeight = 3040;
   const int kMaxPixels = 2880 * 1800;
-  const int kMaxDimension = 4096;
   int new_frame_width = frame_width;
   int new_frame_height = frame_height;
 
   // Limit width.
-  if (new_frame_width > kMaxDimension) {
-    new_frame_height = new_frame_height * kMaxDimension / new_frame_width & ~1;
-    new_frame_width = kMaxDimension;
+  if (new_frame_width > kMaxWidth) {
+    new_frame_height = new_frame_height * kMaxWidth / new_frame_width & ~1;
+    new_frame_width = kMaxWidth;
   }
   // Limit height.
-  if (new_frame_height > kMaxDimension) {
-    new_frame_width = new_frame_width * kMaxDimension / new_frame_height & ~3;
-    new_frame_height = kMaxDimension;
+  if (new_frame_height > kMaxHeight) {
+    new_frame_width = new_frame_width * kMaxHeight / new_frame_height & ~3;
+    new_frame_height = kMaxHeight;
   }
   // Limit number of pixels.
   if (new_frame_width * new_frame_height > kMaxPixels) {

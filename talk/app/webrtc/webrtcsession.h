@@ -189,6 +189,10 @@ class WebRtcSession : public cricket::BaseSession,
   // The |saved_candidates_| will be cleared after this function call.
   void CopySavedCandidates(SessionDescriptionInterface* dest_desc);
 
+  // Use the remote session version as the indicator of the older client and
+  // handle the backward compatibility if needed.
+  void HandleBackwardCompatibility(SessionDescriptionInterface* remote_desc);
+
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   cricket::ChannelManager* channel_manager_;
@@ -202,6 +206,8 @@ class WebRtcSession : public cricket::BaseSession,
   std::vector<IceCandidateInterface*> saved_candidates_;
   std::string session_id_;
   uint64 session_version_;
+  // If the remote peer is using a older version of implementation.
+  bool older_version_remote_peer_;
 };
 
 }  // namespace webrtc
