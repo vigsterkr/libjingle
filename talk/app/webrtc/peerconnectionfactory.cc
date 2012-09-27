@@ -35,12 +35,6 @@
 #include "talk/media/devices/dummydevicemanager.h"
 #include "talk/media/webrtc/webrtcmediaengine.h"
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/audio_device/main/interface/audio_device.h"
-#else
-#include "third_party/webrtc/modules/audio_device/main/interface/audio_device.h"
-#endif
-
 using talk_base::scoped_refptr;
 
 namespace {
@@ -51,24 +45,32 @@ struct CreatePeerConnectionParams : public talk_base::MessageData {
   CreatePeerConnectionParams(
       const webrtc::JsepInterface::IceServers& configuration,
       const webrtc::MediaConstraintsInterface* constraints,
+      webrtc::PortAllocatorFactoryInterface* allocator_factory,
       webrtc::PeerConnectionObserver* observer)
       : configuration(configuration),
         constraints(constraints),
+        allocator_factory(allocator_factory),
         observer(observer) {
   }
   scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
   const webrtc::JsepInterface::IceServers& configuration;
   const webrtc::MediaConstraintsInterface* constraints;
+  scoped_refptr<webrtc::PortAllocatorFactoryInterface> allocator_factory;
   webrtc::PeerConnectionObserver* observer;
 };
 
 struct CreatePeerConnectionParamsDeprecated : public talk_base::MessageData {
-  CreatePeerConnectionParamsDeprecated(const std::string& configuration,
-                                       webrtc::PeerConnectionObserver* observer)
-      : configuration(configuration), observer(observer) {
+  CreatePeerConnectionParamsDeprecated(
+      const std::string& configuration,
+      webrtc::PortAllocatorFactoryInterface* allocator_factory,
+        webrtc::PeerConnectionObserver* observer)
+      : configuration(configuration),
+        allocator_factory(allocator_factory),
+        observer(observer) {
   }
   scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
   const std::string& configuration;
+  scoped_refptr<webrtc::PortAllocatorFactoryInterface> allocator_factory;
   webrtc::PeerConnectionObserver* observer;
 };
 
@@ -98,11 +100,10 @@ CreatePeerConnectionFactory() {
 scoped_refptr<PeerConnectionFactoryInterface>
 CreatePeerConnectionFactory(talk_base::Thread* worker_thread,
                             talk_base::Thread* signaling_thread,
-                            PortAllocatorFactoryInterface* factory,
                             AudioDeviceModule* default_adm) {
   talk_base::RefCountedObject<PeerConnectionFactory>* pc_factory =
       new talk_base::RefCountedObject<PeerConnectionFactory>(
-          worker_thread, signaling_thread, factory, default_adm);
+          worker_thread, signaling_thread, default_adm);
   if (!pc_factory->Initialize()) {
     delete pc_factory;
     pc_factory = NULL;
@@ -123,16 +124,13 @@ PeerConnectionFactory::PeerConnectionFactory()
 PeerConnectionFactory::PeerConnectionFactory(
     talk_base::Thread* worker_thread,
     talk_base::Thread* signaling_thread,
-    PortAllocatorFactoryInterface* port_allocator_factory,
     AudioDeviceModule* default_adm)
     : owns_ptrs_(false),
       signaling_thread_(signaling_thread),
       worker_thread_(worker_thread),
-      allocator_factory_(port_allocator_factory),
       default_adm_(default_adm) {
   ASSERT(worker_thread != NULL);
   ASSERT(signaling_thread != NULL);
-  ASSERT(allocator_factory_.get() != NULL);
   // TODO: Currently there is no way creating an external adm in
   // libjingle source tree. So we can 't currently assert if this is NULL.
   // ASSERT(default_adm != NULL);
@@ -169,6 +167,7 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
           static_cast<CreatePeerConnectionParams*> (msg->pdata);
       pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
                                                      pdata->constraints,
+                                                     pdata->allocator_factory,
                                                      pdata->observer);
       break;
     }
@@ -176,6 +175,7 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
       CreatePeerConnectionParamsDeprecated* pdata =
           static_cast<CreatePeerConnectionParamsDeprecated*> (msg->pdata);
       pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
+                                                     pdata->allocator_factory,
                                                      pdata->observer);
       break;
     }
@@ -217,9 +217,11 @@ void PeerConnectionFactory::Terminate_s() {
 
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
-    const std::string& configuration,
+    const std::string& config,
+    PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParamsDeprecated params(configuration, observer);
+  CreatePeerConnectionParamsDeprecated params(config, allocator_factory,
+                                              observer);
   signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
   return params.peerconnection;
 }
@@ -228,19 +230,44 @@ scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const JsepInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
+    PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
-  CreatePeerConnectionParams params(configuration, constraints, observer);
+  CreatePeerConnectionParams params(configuration, constraints,
+                                    allocator_factory, observer);
   signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION, &params);
   return params.peerconnection;
+}
+
+
+scoped_refptr<PeerConnectionInterface>
+PeerConnectionFactory::CreatePeerConnection(
+    const std::string& configuration,
+    PeerConnectionObserver* observer) {
+
+  return CreatePeerConnection(configuration, NULL, observer);
+}
+
+scoped_refptr<PeerConnectionInterface>
+PeerConnectionFactory::CreatePeerConnection(
+    const JsepInterface::IceServers& configuration,
+    const MediaConstraintsInterface* constraints,
+    PeerConnectionObserver* observer) {
+  return CreatePeerConnection(configuration, constraints, NULL, observer);
 }
 
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection_s(
     const std::string& configuration,
+    PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
+  ASSERT(allocator_factory || allocator_factory_.get());
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
-  if (!pc->Initialize(configuration, observer)) {
+
+  if (!pc->Initialize(
+      configuration,
+      allocator_factory ? allocator_factory : allocator_factory_.get(),
+      observer)) {
     delete pc;
     return NULL;
   }
@@ -251,10 +278,16 @@ talk_base::scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection_s(
     const JsepInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
+    PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
+  ASSERT(allocator_factory || allocator_factory_.get());
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
-  if (!pc->Initialize(configuration, constraints, observer)) {
+  if (!pc->Initialize(
+      configuration,
+      constraints,
+      allocator_factory ? allocator_factory : allocator_factory_.get(),
+      observer)) {
     delete pc;
     return NULL;
   }
@@ -293,10 +326,6 @@ talk_base::Thread* PeerConnectionFactory::signaling_thread() {
 
 talk_base::Thread* PeerConnectionFactory::worker_thread() {
   return worker_thread_;
-}
-
-PortAllocatorFactoryInterface* PeerConnectionFactory::port_allocator_factory() {
-  return allocator_factory_.get();
 }
 
 }  // namespace webrtc

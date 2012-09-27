@@ -161,7 +161,6 @@ class ConnectivityChecker
   // Virtual for gMock.
   virtual bool Initialize();
   virtual void Start();
-  virtual void Stop();
 
   // MessageHandler implementation.
   virtual void OnMessage(talk_base::Message *msg);
@@ -233,7 +232,6 @@ class ConnectivityChecker
   // Must be called by the worker thread.
   void CleanUp();
 
-  void OnCheckDone(bool signal_results);
   void OnRequestDone(talk_base::AsyncHttpRequest* request);
   void OnRelayAddressReady(Port* port);
   void OnStunAddressReady(Port* port);
@@ -262,6 +260,7 @@ class ConnectivityChecker
   uint32 timeout_ms_;
   talk_base::SocketAddress stun_address_;
   talk_base::Thread* main_;
+  bool started_;
 };
 
 }  // namespace cricket

@@ -447,6 +447,34 @@ TEST_F(WebRtcVideoEngineTestFake, RtpTimestampOffsetHeaderExtensions) {
   EXPECT_EQ(0, vie_.GetReceiveRtpTimestampOffsetExtensionId(new_channel_num));
 }
 
+#ifdef USE_WEBRTC_313_BRANCH
+TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
+  EXPECT_TRUE(SetupEngine());
+
+  // Verify this is off by default.
+  EXPECT_TRUE(channel_->AddSendStream(cricket::StreamParams::CreateLegacy(1)));
+  int first_send_channel = vie_.GetLastChannel();
+  EXPECT_FALSE(vie_.GetTransmissionSmoothingStatus(first_send_channel));
+
+  // Enable the experiment and verify.
+  int options = cricket::OPT_CONFERENCE | cricket::OPT_VIDEO_LEAKY_BUCKET;
+  EXPECT_TRUE(channel_->SetOptions(options));
+  EXPECT_TRUE(vie_.GetTransmissionSmoothingStatus(first_send_channel));
+
+  // Add a receive channel and verify leaky bucket isn't enabled.
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
+  int recv_channel_num = vie_.GetLastChannel();
+  EXPECT_NE(first_send_channel, recv_channel_num);
+  EXPECT_FALSE(vie_.GetTransmissionSmoothingStatus(recv_channel_num));
+
+  // Add a new send stream and verify leaky bucket is enabled from start.
+  EXPECT_TRUE(channel_->AddSendStream(cricket::StreamParams::CreateLegacy(3)));
+  int second_send_channel = vie_.GetLastChannel();
+  EXPECT_NE(first_send_channel, second_send_channel);
+  EXPECT_TRUE(vie_.GetTransmissionSmoothingStatus(second_send_channel));
+}
+#endif
+
 // Test that AddRecvStream doesn't create new channel for 1:1 call.
 TEST_F(WebRtcVideoEngineTestFake, AddRecvStream1On1) {
   EXPECT_TRUE(SetupEngine());
@@ -1012,9 +1040,7 @@ TEST_F(WebRtcVideoMediaChannelTest, AddRemoveCapturerMultipleSources) {
   Base::AddRemoveCapturerMultipleSources();
 }
 
-// TODO(hellner): Crashes in libyuv, in the function ScaleARGBFilterRows_SSSE3.
-//                Please see b/7145771.
-TEST_F(WebRtcVideoMediaChannelTest, DISABLED_HighAspectHighHeightCapturer) {
+TEST_F(WebRtcVideoMediaChannelTest, HighAspectHighHeightCapturer) {
   Base::HighAspectHighHeightCapturer();
 }
 

@@ -198,9 +198,17 @@ class SetSessionDescriptionObserver : public talk_base::RefCountInterface {
 // MediaConstraintsInterface
 // Object used for passing arguments regarding media constraints from JavaScript
 // to the PeerConnection implementation.
-// The actual structure is being standardized.
 class MediaConstraintsInterface {
  public:
+  struct Constraint {
+    std::string key;
+    std::string value;
+  };
+  typedef std::vector<Constraint> Constraints;
+
+  virtual const Constraints& GetMandatory() const = 0;
+  virtual const Constraints& GetOptional() const = 0;
+
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~MediaConstraintsInterface() {}

@@ -284,7 +284,7 @@ CaptureState WebRtcVideoCapturer::Start(const VideoFormat& capture_format) {
                << talk_base::TimeSince(start) << " ms";
 
   captured_frames_ = 0;
-  talk_base::Thread::Current()->Post(this);
+  SetCaptureState(CS_RUNNING);
   return CS_STARTING;
 }
 
@@ -319,11 +319,6 @@ bool WebRtcVideoCapturer::GetPreferredFourccs(
     fourccs->push_back(kSupportedFourCCs[i].fourcc);
   }
   return true;
-}
-
-void WebRtcVideoCapturer::OnMessage(talk_base::Message* message) {
-  // TODO(juberti): Fire SignalStateChange appropriately.
-  SignalStateChange(this, CS_RUNNING);
 }
 
 void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,

@@ -358,16 +358,6 @@ const StaticQName QN_INVITE_NAME = { NS_GOOGLE_SUBSCRIBE, "name" };
 const StaticQName QN_INVITE_SUBJECT = { NS_GOOGLE_SUBSCRIBE, "subject" };
 const StaticQName QN_INVITE_MESSAGE = { NS_GOOGLE_SUBSCRIBE, "body" };
 
-// Google push
-const char NS_GOOGLE_PUSH[] = "google:push";
-const StaticQName QN_GOOGLE_PUSH_PUSH = { NS_GOOGLE_PUSH, "push" };
-const StaticQName QN_GOOGLE_PUSH_DATA = { NS_GOOGLE_PUSH, "data" };
-const StaticQName QN_GOOGLE_PUSH_RECIPIENT = { NS_GOOGLE_PUSH, "recipient" };
-const StaticQName QN_GOOGLE_PUSH_SUBSCRIBE = { NS_GOOGLE_PUSH, "subscribe" };
-const StaticQName QN_GOOGLE_PUSH_ITEM = { NS_GOOGLE_PUSH, "item" };
-const StaticQName QN_ATTR_CHANNEL = { STR_EMPTY, "channel" };
-const StaticQName QN_ATTR_DATA = { STR_EMPTY, "data" };
-
 // Kick
 const char NS_GOOGLE_MUC_ADMIN[] = "google:muc#admin";
 const StaticQName QN_GOOGLE_MUC_ADMIN_QUERY = { NS_GOOGLE_MUC_ADMIN, "query" };

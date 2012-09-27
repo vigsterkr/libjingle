@@ -269,6 +269,8 @@
         'libjingle_sound',
       ],
       'sources': [
+        'media/base/capturemanager.cc',
+        'media/base/capturerenderadapter.cc',
         'media/base/codec.cc',
         'media/base/constants.cc',
         'media/base/cpuid.cc',

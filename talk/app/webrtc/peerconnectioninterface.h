@@ -226,9 +226,11 @@ class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
 // PeerConnection, MediaStream and media tracks.
 // PeerConnectionFactoryInterface will create required libjingle threads,
 // socket and network manager factory classes for networking.
-// If application decides to provide its own implementation of these classes
-// it should use alternate create method which accepts a threads and a
-// PortAllocatorFactoryInterface as input.
+// If an application decides to provide its own threads and network
+// implementation of these classes it should use the alternate
+// CreatePeerConnectionFactory method which accepts threads as input and use the
+// CreatePeerConnection version that takes a PortAllocatorFactoryInterface as
+// argument.
 class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
  public:
   // Deprecated (jsep00)
@@ -238,6 +240,16 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
+                           PeerConnectionObserver* observer) = 0;
+  // Deprecated (jsep00)
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const std::string& config,
+                           PortAllocatorFactoryInterface* allocator_factory,
+                           PeerConnectionObserver* observer) = 0;
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const JsepInterface::IceServers& configuration,
+                           const MediaConstraintsInterface* constraints,
+                           PortAllocatorFactoryInterface* allocator_factory,
                            PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label) = 0;
@@ -267,7 +279,6 @@ CreatePeerConnectionFactory();
 talk_base::scoped_refptr<PeerConnectionFactoryInterface>
 CreatePeerConnectionFactory(talk_base::Thread* worker_thread,
                             talk_base::Thread* signaling_thread,
-                            PortAllocatorFactoryInterface* factory,
                             AudioDeviceModule* default_adm);
 
 }  // namespace webrtc

@@ -305,16 +305,16 @@ class PeerConnectionTestClientBase
     }
     peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
         talk_base::Thread::Current(), talk_base::Thread::Current(),
-        allocator_factory_, fake_audio_capture_module_);
+        fake_audio_capture_module_);
     if (peer_connection_factory_.get() == NULL) {
       return false;
     }
 
-    peer_connection_ = CreatePeerConnection();
+    peer_connection_ = CreatePeerConnection(allocator_factory_.get());
     return peer_connection_.get() != NULL;
   }
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection() = 0;
+      CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory) = 0;
   MessageReceiver* signaling_message_receiver() {
     return signaling_message_receiver_;
   }
@@ -439,9 +439,10 @@ class Jsep00TestClient
                                                         remote_hints) {}
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection() {
+      CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory) {
     const std::string config = "STUN stun.l.google.com:19302";
-    return peer_connection_factory()->CreatePeerConnection(config, this);
+    return peer_connection_factory()->CreatePeerConnection(
+        config, factory, this);
   }
 
   void HandleIncomingOffer(const std::string& msg) {
@@ -614,14 +615,14 @@ class JsepTestClient
                                                           remote_hints) {}
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection() {
+      CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory) {
     // CreatePeerConnection with IceServers.
     webrtc::JsepInterface::IceServers ice_servers;
     webrtc::JsepInterface::IceServer ice_server;
     ice_server.uri = "stun:stun.l.google.com:19302";
     ice_servers.push_back(ice_server);
     return peer_connection_factory()->CreatePeerConnection(ice_servers,
-        NULL, this);
+        NULL, factory, this);
   }
 
   void HandleIncomingOffer(const std::string& msg) {

@@ -251,8 +251,8 @@ void Transport::ConnectChannels_w() {
     // description. For example, when the application doesn't generate local
     // description from the CreateOffer/CreatAnswer.
     // TODO(ronghuawu): Fix all the cases that reach here and return error.
-    LOG(LS_WARNING) << "Transport::ConnectChannels_w: No local description has "
-                    << "been set. Will generate one.";
+    LOG(LS_INFO) << "Transport::ConnectChannels_w: No local description has "
+                 << "been set. Will generate one.";
     TransportDescription desc(NS_GINGLE_P2P, TransportOptions(),
                               talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
                               talk_base::CreateRandomString(ICE_PWD_LENGTH),

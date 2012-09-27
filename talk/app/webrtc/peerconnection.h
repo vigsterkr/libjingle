@@ -56,9 +56,11 @@ class PeerConnection : public PeerConnectionInterface,
 
 
   bool Initialize(const std::string& configuration,  // Deprecated JSEP00
+                  webrtc::PortAllocatorFactoryInterface* allocator_factory,
                   PeerConnectionObserver* observer);
   bool Initialize(const JsepInterface::IceServers& configuration,
                   const MediaConstraintsInterface* constraints,
+                  webrtc::PortAllocatorFactoryInterface* allocator_factory,
                   PeerConnectionObserver* observer);
   virtual talk_base::scoped_refptr<StreamCollectionInterface> local_streams();
   virtual talk_base::scoped_refptr<StreamCollectionInterface> remote_streams();
@@ -112,6 +114,8 @@ class PeerConnection : public PeerConnectionInterface,
 
   bool DoInitialize(const StunConfigurations& stun_config,
                     const TurnConfigurations& turn_config,
+                    const MediaConstraintsInterface* constraints,
+                    webrtc::PortAllocatorFactoryInterface* allocator_factory,
                     PeerConnectionObserver* observer);
 
   talk_base::Thread* signaling_thread() const {

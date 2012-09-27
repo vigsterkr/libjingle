@@ -144,7 +144,7 @@ const char* ProtoToString(ProtocolType proto) {
 
 bool StringToProto(const char* value, ProtocolType* proto) {
   for (size_t i = 0; i <= PROTO_LAST; ++i) {
-    if (strcmp(PROTO_NAMES[i], value) == 0) {
+    if (_stricmp(PROTO_NAMES[i], value) == 0) {
       *proto = static_cast<ProtocolType>(i);
       return true;
     }
@@ -278,7 +278,7 @@ void Port::OnReadPacket(
   } else if (msg->type() == STUN_BINDING_REQUEST) {
     // Check for role conflicts.
     if (IceProtocol() == ICEPROTO_RFC5245 &&
-        !MaybeIceRoleConflict(addr, msg.get())) {
+        !MaybeIceRoleConflict(addr, msg.get(), remote_username)) {
       LOG(LS_INFO) << "Received conflicting role from the peer.";
       return;
     }
@@ -437,7 +437,8 @@ bool Port::ParseStunUsername(const StunMessage* stun_msg,
 }
 
 bool Port::MaybeIceRoleConflict(
-    const talk_base::SocketAddress& addr, IceMessage* stun_msg) {
+    const talk_base::SocketAddress& addr, IceMessage* stun_msg,
+    const std::string& remote_ufrag) {
   // Validate ICE_CONTROLLING or ICE_CONTROLLED attributes.
   bool ret = true;
   TransportRole remote_ice_role = ROLE_UNKNOWN;
@@ -448,6 +449,17 @@ bool Port::MaybeIceRoleConflict(
     remote_ice_role = ROLE_CONTROLLING;
     remote_tiebreaker = stun_attr->value();
   }
+
+  // If |remote_ufrag| is same as port local username fragment and
+  // tie breaker value received in the ping message matches port
+  // tiebreaker value this must be a loopback call.
+  // We will treat this as valid scenario.
+  if (remote_ice_role == ROLE_CONTROLLING &&
+      username_fragment() == remote_ufrag &&
+      remote_tiebreaker == Tiebreaker()) {
+    return true;
+  }
+
   stun_attr = stun_msg->GetUInt64(STUN_ATTR_ICE_CONTROLLED);
   if (stun_attr) {
     remote_ice_role = ROLE_CONTROLLED;
@@ -869,7 +881,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
         if (remote_ufrag == remote_candidate_.username()) {
           // Check for role conflicts.
           if (port_->IceProtocol() == ICEPROTO_RFC5245 &&
-              !port_->MaybeIceRoleConflict(addr, msg.get())) {
+              !port_->MaybeIceRoleConflict(addr, msg.get(), remote_ufrag)) {
             // Received conflicting role from the peer.
             LOG(LS_INFO) << "Received conflicting role from the peer.";
             return;

@@ -229,6 +229,10 @@ static const uint32 kAudioTrack2Ssrc = 4;
 static const char kVideoTrackLabel3[] = "local_video_3";
 static const uint32 kVideoTrack3Ssrc = 5;
 
+// Candidate
+static const char kDummyMid[] = "dummy_mid";
+static const int kDummyIndex = 123;
+
 // Helper functions
 
 // Add some extra |newlines| to the |message| after |line|.
@@ -1008,8 +1012,6 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedAudioVideo) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidate) {
-  const std::string kDummyMid = "dummy_mid";
-  const int kDummyIndex = 123;
   JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
   EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidate, &jcandidate));
   EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
@@ -1017,9 +1019,20 @@ TEST_F(WebRtcSdpTest, DeserializeCandidate) {
   EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
 }
 
+TEST_F(WebRtcSdpTest, DeserializeCandidateWithDifferentTransport) {
+  JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
+  std::string new_sdp = kSdpOneCandidate;
+  Replace("udp", "unsupported_transport", &new_sdp);
+  EXPECT_FALSE(SdpDeserializeCandidate(new_sdp, &jcandidate));
+  new_sdp = kSdpOneCandidate;
+  Replace("udp", "uDP", &new_sdp);
+  EXPECT_TRUE(SdpDeserializeCandidate(new_sdp, &jcandidate));
+  EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
+  EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
+  EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
+}
+
 TEST_F(WebRtcSdpTest, DeserializeCandidateOldFormat) {
-  const std::string kDummyMid = "dummy_mid";
-  const int kDummyIndex = 123;
   JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
   EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidateOldFormat, &jcandidate));
   EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());

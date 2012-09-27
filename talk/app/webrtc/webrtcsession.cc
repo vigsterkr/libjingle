@@ -197,7 +197,11 @@ WebRtcSession::~WebRtcSession() {
   }
 }
 
-bool WebRtcSession::Initialize() {
+bool WebRtcSession::Initialize(const MediaConstraintsInterface* constraints) {
+  // TODO(perkj): Take |constraints| into consideration. Return false if not all
+  // mandatory constraints can be fulfilled. Note that |constraints|
+  // can be null.
+
   // By default SRTP-SDES is enabled in WebRtc.
   set_secure_policy(cricket::SEC_REQUIRED);
   // Make sure SessionDescriptions only contains the StreamParams we negotiate.

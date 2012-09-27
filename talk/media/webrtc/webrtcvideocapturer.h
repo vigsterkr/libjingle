@@ -55,7 +55,6 @@ class WebRtcVcmFactoryInterface {
 
 // WebRTC-based implementation of VideoCapturer.
 class WebRtcVideoCapturer : public VideoCapturer,
-                            public talk_base::MessageHandler,
                             public webrtc::VideoCaptureDataCallback {
  public:
   WebRtcVideoCapturer();
@@ -77,8 +76,6 @@ class WebRtcVideoCapturer : public VideoCapturer,
   virtual bool GetPreferredFourccs(std::vector<uint32>* fourccs);
 
  private:
-  // Callback for our started event.
-  virtual void OnMessage(talk_base::Message* message);
   // Callback when a frame is captured by camera.
   virtual void OnIncomingCapturedFrame(const WebRtc_Word32 id,
                                        webrtc::VideoFrame& frame,

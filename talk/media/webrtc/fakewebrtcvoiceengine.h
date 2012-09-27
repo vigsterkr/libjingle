@@ -41,6 +41,11 @@
 
 namespace cricket {
 
+// Function returning stats will return these values
+// for all values based on type.
+const int kIntStatValue = 123;
+const float kFractionLostStatValue = 0.5;
+
 static const char kFakeDefaultDeviceName[] = "Fake Default";
 static const int kFakeDefaultDeviceId = -1;
 static const char kFakeDeviceName[] = "Fake Device";
@@ -229,8 +234,6 @@ class FakeWebRtcVoiceEngine
     return 0;
   }
   WEBRTC_STUB(DeRegisterVoiceEngineObserver, ());
-  WEBRTC_STUB(RegisterAudioDeviceModule, (webrtc::AudioDeviceModule& adm));
-  WEBRTC_STUB(DeRegisterAudioDeviceModule, ());
 
   WEBRTC_FUNC(Init, (webrtc::AudioDeviceModule* adm)) {
     inited_ = true;
@@ -567,24 +570,13 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(GetRecordingDeviceStatus, (bool&));
   WEBRTC_STUB(ResetAudioDevice, ());
   WEBRTC_STUB(AudioDeviceControl, (unsigned int, unsigned int, unsigned int));
-  WEBRTC_STUB(NeedMorePlayData, (short int*, int, int, int, int&));
-  WEBRTC_STUB(RecordedDataIsAvailable, (short int*, int, int, int, int&));
-  WEBRTC_STUB(GetDevice, (char*, unsigned int));
-  WEBRTC_STUB(GetPlatform, (char*, unsigned int));
-  WEBRTC_STUB(GetOS, (char*, unsigned int));
-  WEBRTC_STUB(SetGrabPlayout, (bool));
-  WEBRTC_STUB(SetGrabRecording, (bool));
   WEBRTC_STUB(SetLoudspeakerStatus, (bool enable));
   WEBRTC_STUB(GetLoudspeakerStatus, (bool& enabled));
   WEBRTC_STUB(EnableBuiltInAEC, (bool enable));
   virtual bool BuiltInAECIsEnabled() const { return true; }
-  WEBRTC_STUB(SetSamplingRate, (int));
-  WEBRTC_STUB(GetSamplingRate, (int&));
 
   // webrtc::VoENetEqStats
   WEBRTC_STUB(GetNetworkStatistics, (int, webrtc::NetworkStatistics&));
-  WEBRTC_STUB(GetPreferredBufferSize, (int, short unsigned int&));
-  WEBRTC_STUB(ResetJitterStatistics, (int));
 
   // webrtc::VoENetwork
   WEBRTC_FUNC(RegisterExternalTransport, (int channel,
@@ -673,7 +665,6 @@ class FakeWebRtcVoiceEngine
     return 0;
   }
   WEBRTC_STUB(GetRemoteCSRCs, (int channel, unsigned int arrCSRC[15]));
-  WEBRTC_STUB(GetRemoteEnergy, (int channel, unsigned char arrEnergy[15]));
   WEBRTC_STUB(SetRTCPStatus, (int channel, bool enable));
   WEBRTC_STUB(GetRTCPStatus, (int channel, bool& enabled));
   WEBRTC_STUB(SetRTCP_CNAME, (int channel, const char cname[256]));
@@ -687,8 +678,23 @@ class FakeWebRtcVoiceEngine
                                   unsigned short* fractionLost));
   WEBRTC_STUB(GetRemoteRTCPSenderInfo, (int channel,
                                         webrtc::SenderInfo* sender_info));
-  WEBRTC_STUB(GetRemoteRTCPReportBlocks,
-              (int channel, std::vector<webrtc::ReportBlock>* receive_blocks));
+  WEBRTC_FUNC(GetRemoteRTCPReportBlocks,
+              (int channel, std::vector<webrtc::ReportBlock>* receive_blocks)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    webrtc::ReportBlock block;
+    block.source_SSRC = channels_[channel]->send_ssrc;
+    webrtc::CodecInst send_codec = channels_[channel]->send_codec;
+    if (send_codec.pltype >= 0) {
+      block.fraction_lost = (unsigned char)(kFractionLostStatValue * 256);
+      if (send_codec.plfreq / 1000 > 0) {
+        block.interarrival_jitter = kIntStatValue * (send_codec.plfreq / 1000);
+      }
+      block.cumulative_num_packets_lost = kIntStatValue;
+      block.extended_highest_sequence_number = kIntStatValue;
+      receive_blocks->push_back(block);
+    }
+    return 0;
+  }
   WEBRTC_STUB(SendApplicationDefinedRTCPPacket, (int channel,
                                                  const unsigned char subType,
                                                  unsigned int name,
@@ -697,11 +703,19 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(GetRTPStatistics, (int channel, unsigned int& averageJitterMs,
                                  unsigned int& maxJitterMs,
                                  unsigned int& discardedPackets));
-  WEBRTC_STUB(GetRTCPStatistics, (int channel, unsigned short& fractionLost,
-                                  unsigned int& cumulativeLost,
-                                  unsigned int& extendedMax,
-                                  unsigned int& jitterSamples, int& rttMs));
-  WEBRTC_STUB(GetRTCPStatistics, (int channel, webrtc::CallStatistics& stats));
+  WEBRTC_FUNC(GetRTCPStatistics, (int channel, webrtc::CallStatistics& stats)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    stats.fractionLost = static_cast<int16>(kIntStatValue);
+    stats.cumulativeLost = kIntStatValue;
+    stats.extendedMax = kIntStatValue;
+    stats.jitterSamples = kIntStatValue;
+    stats.rttMs = kIntStatValue;
+    stats.bytesSent = kIntStatValue;
+    stats.packetsSent = kIntStatValue;
+    stats.bytesReceived = kIntStatValue;
+    stats.packetsReceived = kIntStatValue;
+    return 0;
+  }
   WEBRTC_FUNC(SetFECStatus, (int channel, bool enable, int redPayloadtype)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->fec = enable;
@@ -714,12 +728,6 @@ class FakeWebRtcVoiceEngine
     redPayloadtype = channels_[channel]->fec_type;
     return 0;
   }
-  WEBRTC_STUB(SetRTPKeepaliveStatus, (int channel, bool enable,
-                                      int unknownPayloadType,
-                                      int deltaTransmitTimeSeconds));
-  WEBRTC_STUB(GetRTPKeepaliveStatus, (int channel, bool& enabled,
-                                      int& unknownPayloadType,
-                                      int& deltaTransmitTimeSeconds));
   WEBRTC_STUB(StartRTPDump, (int channel, const char* fileNameUTF8,
                              webrtc::RTPDirections direction));
   WEBRTC_STUB(StopRTPDump, (int channel, webrtc::RTPDirections direction));
@@ -736,7 +744,6 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(SetInitSequenceNumber, (int channel, short sequenceNumber));
   WEBRTC_STUB(SetMinimumPlayoutDelay, (int channel, int delayMs));
   WEBRTC_STUB(GetDelayEstimate, (int channel, int& delayMs));
-  WEBRTC_STUB(GetSoundcardBufferSize, (int& bufferMs));
 
   // webrtc::VoEVolumeControl
   WEBRTC_STUB(SetSpeakerVolume, (unsigned int));
@@ -817,7 +824,7 @@ class FakeWebRtcVoiceEngine
     mode = ec_mode_;
     return 0;
   }
-#ifdef USE_WEBRTC_DEV_BRANCH
+#ifdef USE_WEBRTC_313_BRANCH
   WEBRTC_STUB(EnableDriftCompensation, (bool enable))
   WEBRTC_BOOL_STUB(DriftCompensationEnabled, ())
 #endif

@@ -107,9 +107,10 @@ Connection* TCPPort::CreateConnection(const Candidate& address,
 void TCPPort::PrepareAddress() {
   if (socket_) {
     // If socket isn't bound yet the address will be added in
-    // OnAddressReady(). Socket may be in the CLOSED state if Listed()
+    // OnAddressReady(). Socket may be in the CLOSED state if Listen()
     // failed, we still want ot add the socket address.
-    LOG(LS_ERROR) << socket_->GetState();
+    LOG(LS_VERBOSE) << "Preparing TCP address, current state: "
+                    << socket_->GetState();
     if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND ||
         socket_->GetState() == talk_base::AsyncPacketSocket::STATE_CLOSED)
       AddAddress(socket_->GetLocalAddress(), socket_->GetLocalAddress(),

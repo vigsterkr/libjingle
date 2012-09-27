@@ -1444,6 +1444,7 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_TRUE(capturer->CaptureFrame());
     EXPECT_FRAME_ON_RENDERER_WAIT(renderer, 2, kScaledWidth, kScaledHeight,
                                   kTimeout);
+    EXPECT_TRUE(channel_->SetCapturer(kSsrc, NULL));
   }
 
   // Tests that we can adapt video resolution with 16:10 aspect ratio properly.

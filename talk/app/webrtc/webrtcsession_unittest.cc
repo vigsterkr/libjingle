@@ -242,7 +242,7 @@ class WebRtcSessionTest : public testing::Test {
         &observer_,
         &mediastream_signaling_));
 
-    EXPECT_TRUE(session_->Initialize());
+    EXPECT_TRUE(session_->Initialize(NULL));
     mediastream_signaling_.UseOptionsReceiveOnly();
   }
 
@@ -1391,18 +1391,18 @@ TEST_F(WebRtcSessionTest, TestHandleBackwardCompatibility) {
   session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
-  // Use "0" as the session version to indicate a older client.
+  // Use "1" as the session version to indicate a older client.
   JsepSessionDescription* offer =
-      CreateOfferSessionDescriptionWithVersion(options, "0");
+      CreateOfferSessionDescriptionWithVersion(options, "1");
   VerifyTransportType(offer, "audio", NS_JINGLE_ICE_UDP);
   VerifyTransportType(offer, "video", NS_JINGLE_ICE_UDP);
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
   VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);
   // The WebRtcSession has remember the fact that the remote client is a older
-  // version client. So even the follow up offer has a session version of "1",
+  // version client. So even the follow up offer has a session version of "2",
   // the WebRtcSession will still update the transport type to NS_GINGLE_P2P.
-  offer = CreateOfferSessionDescriptionWithVersion(options, "1");
+  offer = CreateOfferSessionDescriptionWithVersion(options, "2");
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
   VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
   VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);

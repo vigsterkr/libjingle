@@ -40,7 +40,9 @@
 namespace cricket {
 
 static const int64 kMaxDistance = ~(static_cast<int64>(1) << 63);
-static const int64  kMinDesirableFps = static_cast<int64>(14);
+static const int64 kMinDesirableFps = static_cast<int64>(14);
+
+typedef talk_base::TypedMessageData<CaptureState> StateChangeParams;
 
 /////////////////////////////////////////////////////////////////////
 // Implementation of struct CapturedFrame
@@ -70,8 +72,30 @@ bool CapturedFrame::GetDataSize(uint32* size) const {
 /////////////////////////////////////////////////////////////////////
 // Implementation of class VideoCapturer
 /////////////////////////////////////////////////////////////////////
-VideoCapturer::VideoCapturer() {
+VideoCapturer::VideoCapturer() : thread_(talk_base::Thread::Current()) {
+  Construct();
+}
+
+VideoCapturer::VideoCapturer(talk_base::Thread* thread)
+    : thread_(thread) {
+  Construct();
+}
+
+void VideoCapturer::Construct() {
+  capture_state_ = CS_STOPPED;
   SignalFrameCaptured.connect(this, &VideoCapturer::OnFrameCaptured);
+}
+
+bool VideoCapturer::StartCapturing(const VideoFormat& capture_format) {
+  CaptureState result = Start(capture_format);
+  const bool success = (result == CS_RUNNING) || (result == CS_STARTING);
+  if (!success) {
+    return false;
+  }
+  if (result == CS_RUNNING) {
+    SetCaptureState(result);
+  }
+  return true;
 }
 
 void VideoCapturer::SetSupportedFormats(
@@ -156,9 +180,23 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
     return;
   }
   SignalVideoFrame(this, &i420_frame);
-#else
-  SignalVideoFrame(this, NULL);
 #endif  // VIDEO_FRAME_NAME
+}
+
+void VideoCapturer::SetCaptureState(CaptureState state) {
+  if (state == capture_state_) {
+    // Don't trigger a state changed callback if the state hasn't changed.
+    return;
+  }
+  StateChangeParams* state_params = new StateChangeParams(state);
+  capture_state_ = state;
+  thread_->Post(this, 0, state_params);
+}
+
+void VideoCapturer::OnMessage(talk_base::Message* message) {
+  talk_base::scoped_ptr<StateChangeParams> p(
+      static_cast<StateChangeParams*> (message->pdata));
+  SignalStateChange(this, p->data());
 }
 
 // Get the distance between the supported and desired formats.

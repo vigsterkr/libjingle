@@ -91,12 +91,20 @@ ConnectivityChecker::ConnectivityChecker(
       connection_(connection),
       proxy_detect_(NULL),
       timeout_ms_(kDefaultTimeoutMs),
-      stun_address_(kDefaultStunHostname, kDefaultStunPort) {
+      stun_address_(kDefaultStunHostname, kDefaultStunPort),
+      started_(false) {
 }
 
 ConnectivityChecker::~ConnectivityChecker() {
-  Stop();
-  nics_.clear();
+  if (started_) {
+    // We try to clear the TIMEOUT below. But worker may still handle it and
+    // cause SignalCheckDone to happen on main-thread. So we finally clear any
+    // pending SIGNAL_RESULTS.
+    worker_->Clear(this, MSG_TIMEOUT);
+    worker_->Send(this, MSG_STOP);
+    nics_.clear();
+    main_->Clear(this, MSG_SIGNAL_RESULTS);
+  }
 }
 
 bool ConnectivityChecker::Initialize() {
@@ -110,15 +118,11 @@ bool ConnectivityChecker::Initialize() {
 void ConnectivityChecker::Start() {
   main_ = talk_base::Thread::Current();
   worker_->Post(this, MSG_START);
-}
-
-void ConnectivityChecker::Stop() {
-  worker_->Post(this, MSG_STOP);
+  started_ = true;
 }
 
 void ConnectivityChecker::CleanUp() {
   ASSERT(worker_ == talk_base::Thread::Current());
-  worker_->Clear(this, MSG_TIMEOUT);
   if (proxy_detect_) {
     proxy_detect_->Release();
     proxy_detect_ = NULL;
@@ -177,12 +181,12 @@ void ConnectivityChecker::OnMessage(talk_base::Message *msg) {
       CheckNetworks();
       break;
     case MSG_STOP:
-      // We were stopped, just close down without signaling.
-      OnCheckDone(false);
+      // We're being stopped, free resources.
+      CleanUp();
       break;
     case MSG_TIMEOUT:
-      // Close down and signal results.
-      OnCheckDone(true);
+      // We need to signal results on the main thread.
+      main_->Post(this, MSG_SIGNAL_RESULTS);
       break;
     case MSG_SIGNAL_RESULTS:
       ASSERT(main_ == talk_base::Thread::Current());
@@ -190,15 +194,6 @@ void ConnectivityChecker::OnMessage(talk_base::Message *msg) {
       break;
     default:
       LOG(LS_ERROR) << "Unknown message: " << msg->message_id;
-  }
-}
-
-void ConnectivityChecker::OnCheckDone(bool signal_results) {
-  // Clean up memory allocated by the worker thread.
-  CleanUp();
-
-  if (signal_results) {
-    main_->Post(this, MSG_SIGNAL_RESULTS);
   }
 }
 

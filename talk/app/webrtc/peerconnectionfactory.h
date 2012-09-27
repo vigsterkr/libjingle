@@ -47,6 +47,16 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
                            PeerConnectionObserver* observer);
+
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const std::string& config,
+                           PortAllocatorFactoryInterface* allocator_factory,
+                           PeerConnectionObserver* observer);
+  virtual talk_base::scoped_refptr<PeerConnectionInterface>
+      CreatePeerConnection(const JsepInterface::IceServers& configuration,
+                           const MediaConstraintsInterface* constraints,
+                           PortAllocatorFactoryInterface* allocator_factory,
+                           PeerConnectionObserver* observer);
   bool Initialize();
 
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
@@ -63,14 +73,12 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   virtual cricket::ChannelManager* channel_manager();
   virtual talk_base::Thread* signaling_thread();
   virtual talk_base::Thread* worker_thread();
-  virtual PortAllocatorFactoryInterface* port_allocator_factory();
 
  protected:
   PeerConnectionFactory();
   PeerConnectionFactory(
       talk_base::Thread* worker_thread,
       talk_base::Thread* signaling_thread,
-      PortAllocatorFactoryInterface* port_allocator_factory,
       AudioDeviceModule* default_adm);
   virtual ~PeerConnectionFactory();
 
@@ -80,10 +88,12 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   void Terminate_s();
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
       const std::string& configuration,
+      PortAllocatorFactoryInterface* allocator_factory,
       PeerConnectionObserver* observer);
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
       const JsepInterface::IceServers& configuration,
       const MediaConstraintsInterface* constraints,
+      PortAllocatorFactoryInterface* allocator_factory,
       PeerConnectionObserver* observer);
   // Implements talk_base::MessageHandler.
   void OnMessage(talk_base::Message* msg);

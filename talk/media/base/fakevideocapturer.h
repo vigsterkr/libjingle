@@ -117,11 +117,13 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
       SetCaptureFormat(&supported);
     }
     running_ = true;
+    SetCaptureState(cricket::CS_RUNNING);
     return cricket::CS_RUNNING;
   }
   virtual void Stop() {
     running_ = false;
     SetCaptureFormat(NULL);
+    SetCaptureState(cricket::CS_STOPPED);
   }
   virtual bool IsRunning() { return running_; }
   bool GetPreferredFourccs(std::vector<uint32>* fourccs) {

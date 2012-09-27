@@ -113,13 +113,14 @@ TEST(PeerConnectionFactory, CreatePCUsingExternalModules) {
   talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory =
       CreatePeerConnectionFactory(talk_base::Thread::Current(),
                                   talk_base::Thread::Current(),
-                                  allocator_factory.get(),
                                   NULL);
   ASSERT_TRUE(factory.get() != NULL);
 
   NullPeerConnectionObserver observer;
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(kStunConfiguration, &observer));
+      factory->CreatePeerConnection(kStunConfiguration,
+                                    allocator_factory.get(),
+                                    &observer));
   EXPECT_TRUE(pc.get() != NULL);
 }
 

@@ -327,16 +327,6 @@ extern const StaticQName QN_INVITE_NAME;
 extern const StaticQName QN_INVITE_SUBJECT;
 extern const StaticQName QN_INVITE_MESSAGE;
 
-// Google push
-extern const char NS_GOOGLE_PUSH[];
-extern const StaticQName QN_GOOGLE_PUSH_PUSH;
-extern const StaticQName QN_GOOGLE_PUSH_DATA;
-extern const StaticQName QN_GOOGLE_PUSH_RECIPIENT;
-extern const StaticQName QN_GOOGLE_PUSH_SUBSCRIBE;
-extern const StaticQName QN_GOOGLE_PUSH_ITEM;
-extern const StaticQName QN_ATTR_CHANNEL;
-extern const StaticQName QN_ATTR_DATA;
-
 // Kick
 extern const char NS_GOOGLE_MUC_ADMIN[];
 extern const StaticQName QN_GOOGLE_MUC_ADMIN_QUERY;
@@ -549,32 +539,6 @@ extern const StaticQName QN_GOOGLE_MUC_RECORDING;
 extern const StaticQName QN_GOOGLE_MUC_MEDIA_BLOCK;
 extern const StaticQName QN_STATE_ATTR;
 
-
-extern const char NS_GOOGLE_MUC_HANGOUT[];
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_OCCUPANTS_QUERY;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITE;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_START_CONTEXT;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITEE;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_INVITE_TYPE;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_PUBLIC;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_NOTIFICATION_STATUS;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_HANGOUT_ID;
-extern const StaticQName QN_GOOGLE_MUC_HANGOUT_NOTIFICATION_TYPE;
-extern const StaticQName QN_ATTR_CREATE_ACTIVITY;
-
-extern const char NS_DEVICE_REGISTRATION[];
-extern const StaticQName QN_DEVICE_REGISTER;
-extern const StaticQName QN_DEVICE_UNREGISTER;
-extern const StaticQName QN_DEVICE_ID;
-extern const StaticQName QN_APP_ID;
-extern const StaticQName QN_LOCALE;
-extern const StaticQName QN_APP_VERSION;
-extern const StaticQName QN_BUILD_TYPE;
-extern const StaticQName QN_DEVICE_HARDWARE;
-extern const StaticQName QN_DEVICE_OS_VERSION;
-extern const StaticQName QN_IOS_RESOURCE;
-extern const StaticQName QN_TOKEN;
-extern const StaticQName QN_IOS_CAPABILITY;
 
 extern const char AUTH_MECHANISM_GOOGLE_COOKIE[];
 extern const char AUTH_MECHANISM_GOOGLE_TOKEN[];

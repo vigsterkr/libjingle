@@ -1033,6 +1033,38 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrc) {
   EXPECT_EQ(kSsrc1, send_ssrc);
 }
 
+TEST_F(WebRtcVoiceEngineTestFake, GetStats) {
+  // Setup. We need send codec to be set to get all stats.
+  EXPECT_TRUE(SetupEngine());
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kPcmuCodec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+
+  cricket::VoiceMediaInfo info;
+  EXPECT_EQ(true, channel_->GetStats(&info));
+  EXPECT_EQ(1u, info.senders.size());
+  EXPECT_EQ(kSsrc1, info.senders[0].ssrc);
+  EXPECT_EQ(kPcmuCodec.name, info.senders[0].codec_name);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].bytes_sent);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].packets_sent);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].packets_lost);
+  EXPECT_EQ(cricket::kFractionLostStatValue, info.senders[0].fraction_lost);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].ext_seqnum);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].rtt_ms);
+  EXPECT_EQ(cricket::kIntStatValue, info.senders[0].jitter_ms);
+  // TODO(sriniv): Add testing for more fields. These are not populated
+  // in FakeWebrtcVoiceEngine yet.
+  // EXPECT_EQ(cricket::kIntStatValue, info.senders[0].audio_level);
+  // EXPECT_EQ(cricket::kIntStatValue, info.senders[0].echo_delay_median_ms);
+  // EXPECT_EQ(cricket::kIntStatValue, info.senders[0].echo_delay_std_ms);
+  // EXPECT_EQ(cricket::kIntStatValue, info.senders[0].echo_return_loss);
+  // EXPECT_EQ(cricket::kIntStatValue,
+  //           info.senders[0].echo_return_loss_enhancement);
+
+  EXPECT_EQ(1u, info.receivers.size());
+  // TODO(sriniv): Add testing for receiver fields.
+}
+
 // Test that we can set the outgoing SSRC properly with multiple streams.
 // SSRC is set in SetupEngine by calling AddSendStream.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendSsrcWithMultipleStreams) {

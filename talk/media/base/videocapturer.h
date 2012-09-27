@@ -33,8 +33,10 @@
 
 #include "talk/base/basictypes.h"
 #include "talk/base/criticalsection.h"
+#include "talk/base/messagehandler.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sigslot.h"
+#include "talk/base/thread.h"
 #include "talk/media/base/videocommon.h"
 #include "talk/media/devices/devicemanager.h"
 
@@ -112,9 +114,14 @@ struct CapturedFrame {
 //   The Start() and Stop() methods are called by a single thread (that is, the
 //   media engine thread). Hence, there is no need to make them thread safe.
 //
-class VideoCapturer : public sigslot::has_slots<> {
+class VideoCapturer
+    : public sigslot::has_slots<>,
+      public talk_base::MessageHandler {
  public:
+  // All signals are marshalled to |thread| or the creating thread if
+  // none is provided.
   VideoCapturer();
+  explicit VideoCapturer(talk_base::Thread* thread);
   virtual ~VideoCapturer() {}
 
   // Gets the id of the underlying device, which is available after the capturer
@@ -146,6 +153,10 @@ class VideoCapturer : public sigslot::has_slots<> {
   virtual bool GetBestCaptureFormat(const VideoFormat& desired,
                                     VideoFormat* best_format);
 
+  // TODO(hellner): deprecate (make private) the Start API in favor of this one.
+  //                Also remove CS_STARTING as it is implied by the return
+  //                value of StartCapturing().
+  bool StartCapturing(const VideoFormat& capture_format);
   // Start the video capturer with the specified capture format.
   // Parameter
   //   capture_format: The caller got this parameter by either calling
@@ -186,15 +197,26 @@ class VideoCapturer : public sigslot::has_slots<> {
   sigslot::signal2<VideoCapturer*, CaptureState> SignalStateChange;
   // TODO(hellner): rename |SignalFrameCaptured| to something like
   //                |SignalRawFrame| or |SignalNativeFrame|.
+  // Frame callbacks are multithreaded to allow disconnect and connect to be
+  // called concurrently. It also ensures that it is safe to call disconnect
+  // at any time which is needed since the signal may be called from an
+  // unmarshalled thread owned by the VideoCapturer.
   // Signal the captured frame to downstream.
-  sigslot::signal2<VideoCapturer*, const CapturedFrame*> SignalFrameCaptured;
+  sigslot::signal2<VideoCapturer*, const CapturedFrame*,
+                   sigslot::multi_threaded_local> SignalFrameCaptured;
   // Signal the captured frame converted to I420 to downstream.
-  sigslot::signal2<VideoCapturer*, const VideoFrame*> SignalVideoFrame;
+  sigslot::signal2<VideoCapturer*, const VideoFrame*,
+                   sigslot::multi_threaded_local> SignalVideoFrame;
   // Signals a change in capturer state.
 
  protected:
   // Callback attached to SignalFrameCaptured where SignalVideoFrames is called.
-  void OnFrameCaptured(VideoCapturer*, const CapturedFrame* captured_frame);
+  void OnFrameCaptured(VideoCapturer* video_capturer,
+                       const CapturedFrame* captured_frame);
+  void SetCaptureState(CaptureState state);
+
+  // Marshals SignalStateChange onto thread_.
+  void OnMessage(talk_base::Message* message);
 
   // subclasses override this virtual method to provide a vector of fourccs, in
   // order of preference, that are expected by the media engine.
@@ -214,6 +236,7 @@ class VideoCapturer : public sigslot::has_slots<> {
  private:
   typedef std::vector<VideoProcessor*> VideoProcessors;
 
+  void Construct();
   // Get the distance between the desired format and the supported format.
   // Return the max distance if they mismatch. See the implementation for
   // details.
@@ -225,7 +248,9 @@ class VideoCapturer : public sigslot::has_slots<> {
   // this frame should be dropped as it has not applied all processors.
   bool ApplyProcessors(VideoFrame* video_frame);
 
+  talk_base::Thread* thread_;
   std::string id_;
+  CaptureState capture_state_;
   talk_base::scoped_ptr<VideoFormat> capture_format_;
   talk_base::scoped_ptr<std::vector<VideoFormat> > supported_formats_;
 

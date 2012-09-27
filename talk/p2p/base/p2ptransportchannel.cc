@@ -940,7 +940,6 @@ void P2PTransportChannel::NominateBestConnection() {
       (best_connection_->port()->IceProtocol() == ICEPROTO_RFC5245) &&
       (role_ == ROLE_CONTROLLING)) {
     best_connection_->set_nominated(true);
-    best_connection_->Ping(talk_base::Time());
   }
 }
 

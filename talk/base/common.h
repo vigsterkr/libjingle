@@ -149,4 +149,17 @@ inline bool ImplicitCastToBool(bool result) { return result; }
 #define FORCE_INLINE
 #endif
 
+// Borrowed from Chromium's base/compiler_specific.h.
+// Annotate a virtual method indicating it must be overriding a virtual
+// method in the parent class.
+// Use like:
+//   virtual void foo() OVERRIDE;
+#if defined(WIN32)
+#define OVERRIDE override
+#elif defined(__clang__)
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
+
 #endif  // TALK_BASE_COMMON_H_

@@ -230,8 +230,9 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   void CreateStunUsername(const std::string& remote_username,
                           std::string* stun_username_attr_str) const;
 
-  bool MaybeIceRoleConflict(
-      const talk_base::SocketAddress& addr, IceMessage* stun_msg);
+  bool MaybeIceRoleConflict(const talk_base::SocketAddress& addr,
+                            IceMessage* stun_msg,
+                            const std::string& remote_ufrag);
 
  protected:
   // Fills in the local address of the port.

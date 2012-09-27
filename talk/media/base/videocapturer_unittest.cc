@@ -12,7 +12,18 @@
 #include "talk/media/base/videocapturer.h"
 #include "talk/media/base/videoprocessor.h"
 
+// If HAS_I420_FRAME is not defined the video capturer will not be able to
+// provide OnVideoFrame-callbacks since they require cricket::CapturedFrame to
+// be decoded as a cricket::VideoFrame (i.e. an I420 frame). This functionality
+// only exist if HAS_I420_FRAME is defined below. I420 frames are also a
+// requirement for the VideoProcessors so they will not be called either.
+#if defined(HAVE_WEBRTC_VIDEO)
+#define HAS_I420_FRAME
+#endif
+
 using cricket::FakeVideoCapturer;
+
+const int kMsCallbackWait = 500;
 
 // Sets the elapsed time in the video frame to 0.
 class VideoProcessor0 : public cricket::VideoProcessor {
@@ -39,9 +50,13 @@ class VideoCapturerTest
       public testing::Test {
  public:
   VideoCapturerTest()
-      : video_frames_received_(0),
+      : capture_state_(cricket::CS_STOPPED),
+        num_state_changes_(0),
+        video_frames_received_(0),
         last_frame_elapsed_time_(0) {
     capturer_.SignalVideoFrame.connect(this, &VideoCapturerTest::OnVideoFrame);
+    capturer_.SignalStateChange.connect(this,
+                                        &VideoCapturerTest::OnStateChange);
   }
 
  protected:
@@ -49,26 +64,40 @@ class VideoCapturerTest
     ++video_frames_received_;
     last_frame_elapsed_time_ = frame->GetElapsedTime();
   }
+  void OnStateChange(cricket::VideoCapturer*,
+                     cricket::CaptureState capture_state) {
+    capture_state_ = capture_state;
+    ++num_state_changes_;
+  }
+  cricket::CaptureState capture_state() { return capture_state_; }
+  int num_state_changes() { return num_state_changes_; }
   int video_frames_received() const {
     return video_frames_received_;
   }
   int64 last_frame_elapsed_time() const { return last_frame_elapsed_time_; }
 
   cricket::FakeVideoCapturer capturer_;
+  cricket::CaptureState capture_state_;
+  int num_state_changes_;
   int video_frames_received_;
   int64 last_frame_elapsed_time_;
 };
 
-TEST_F(VideoCapturerTest, VideoFrame) {
+TEST_F(VideoCapturerTest, CaptureState) {
   EXPECT_EQ(cricket::CS_RUNNING, capturer_.Start(cricket::VideoFormat(
       640,
       480,
       cricket::VideoFormat::FpsToInterval(30),
       cricket::FOURCC_I420)));
   EXPECT_TRUE(capturer_.IsRunning());
-  EXPECT_EQ(0, video_frames_received());
-  EXPECT_TRUE(capturer_.CaptureFrame());
-  EXPECT_EQ(1, video_frames_received());
+  EXPECT_EQ_WAIT(cricket::CS_RUNNING, capture_state(), kMsCallbackWait);
+  EXPECT_EQ(1, num_state_changes());
+  capturer_.Stop();
+  EXPECT_EQ_WAIT(cricket::CS_STOPPED, capture_state(), kMsCallbackWait);
+  EXPECT_EQ(2, num_state_changes());
+  capturer_.Stop();
+  talk_base::Thread::Current()->ProcessMessages(100);
+  EXPECT_EQ(2, num_state_changes());
 }
 
 TEST_F(VideoCapturerTest, TestFourccMatch) {
@@ -444,6 +473,19 @@ TEST_F(VideoCapturerTest, TestRequest16x10_9) {
   EXPECT_EQ(360, best.height);
 }
 
+#if defined(HAS_I420_FRAME)
+TEST_F(VideoCapturerTest, VideoFrame) {
+  EXPECT_EQ(cricket::CS_RUNNING, capturer_.Start(cricket::VideoFormat(
+      640,
+      480,
+      cricket::VideoFormat::FpsToInterval(30),
+      cricket::FOURCC_I420)));
+  EXPECT_TRUE(capturer_.IsRunning());
+  EXPECT_EQ(0, video_frames_received());
+  EXPECT_TRUE(capturer_.CaptureFrame());
+  EXPECT_EQ(1, video_frames_received());
+}
+
 TEST_F(VideoCapturerTest, ProcessorChainTest) {
   VideoProcessor0 processor0;
   VideoProcessor1 processor1;
@@ -484,3 +526,4 @@ TEST_F(VideoCapturerTest, ProcessorDropFrame) {
   EXPECT_TRUE(capturer_.CaptureFrame());
   EXPECT_EQ(0, video_frames_received());
 }
+#endif  // HAS_I420_FRAME

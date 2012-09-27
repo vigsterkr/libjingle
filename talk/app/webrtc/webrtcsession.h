@@ -64,7 +64,7 @@ class WebRtcSession : public cricket::BaseSession,
                 MediaStreamSignaling* mediastream_signaling);
   virtual ~WebRtcSession();
 
-  bool Initialize();
+  bool Initialize(const MediaConstraintsInterface* constraints);
 
   void RegisterObserver(IceCandidateObserver* observer) {
     ice_observer_ = observer;
