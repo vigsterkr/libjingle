@@ -37,6 +37,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/sigslotrepeater.h"
 #include "talk/base/stringencode.h"
+#include "talk/media/base/capturemanager.h"
 #include "talk/media/base/rtpdataengine.h"
 #include "talk/media/base/videocapturer.h"
 #include "talk/session/media/soundclip.h"
@@ -69,6 +70,14 @@ enum {
   MSG_SETVIDEOCAPTURER = 26,
   MSG_CREATEDATACHANNEL = 27,
   MSG_DESTROYDATACHANNEL = 28,
+  // The following are done in the new "CaptureManager" style that
+  // all local video capturers, processors, and managers should move
+  // to.
+  // TODO(pthatcher): Add more of the CaptureManager interface.
+  MSG_STARTVIDEOCAPTURE = 29,
+  MSG_STOPVIDEOCAPTURE = 30,
+  MSG_ADDVIDEORENDERER = 31,
+  MSG_REMOVEVIDEORENDERER = 32,
 };
 
 static const int kNotSetOutputVolume = -1;
@@ -170,6 +179,23 @@ struct VoiceProcessorParams : public talk_base::MessageData {
   bool result;
 };
 
+struct VideoCapturerFormatParams : public talk_base::MessageData {
+  explicit VideoCapturerFormatParams(
+      VideoCapturer* capturer, const VideoFormat& format)
+      : capturer(capturer), format(format), result(false) {}
+  VideoCapturer* capturer;
+  VideoFormat format;
+  bool result;
+};
+
+struct VideoCapturerRendererParams : public talk_base::MessageData {
+  VideoCapturerRendererParams(VideoCapturer* capturer, VideoRenderer* renderer)
+      : capturer(capturer), renderer(renderer), result(false) {}
+  VideoCapturer* capturer;
+  VideoRenderer* renderer;
+  bool result;
+};
+
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread) {
   Construct(MediaEngineFactory::Create(),
             new RtpDataEngine(),
@@ -197,6 +223,7 @@ void ChannelManager::Construct(MediaEngineInterface* me,
   media_engine_.reset(me);
   data_media_engine_.reset(dme);
   device_manager_.reset(dm);
+  capture_manager_.reset(new CaptureManager());
   initialized_ = false;
   main_thread_ = talk_base::Thread::Current();
   worker_thread_ = worker_thread;
@@ -343,7 +370,7 @@ void ChannelManager::Terminate() {
 
 void ChannelManager::Terminate_w() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-    // Need to destroy the voice/video channels
+  // Need to destroy the voice/video channels
   while (!video_channels_.empty()) {
     DestroyVideoChannel_w(video_channels_.back());
   }
@@ -895,6 +922,55 @@ bool ChannelManager::UnregisterVoiceProcessor_w(
   return media_engine_->UnregisterVoiceProcessor(ssrc, processor, direction);
 }
 
+// The following are done in the new "CaptureManager" style that
+// all local video capturers, processors, and managers should move
+// to.
+// TODO(pthatcher): Add more of the CaptureManager interface.
+bool ChannelManager::StartVideoCapture(
+    VideoCapturer* capturer, const VideoFormat& video_format) {
+  VideoCapturerFormatParams params(capturer, video_format);
+  return Send(MSG_STARTVIDEOCAPTURE, &params) && params.result;
+}
+
+bool ChannelManager::StartVideoCapture_w(
+    VideoCapturer* capturer, const VideoFormat& video_format) {
+  return capture_manager_->StartVideoCapture(capturer, video_format);
+}
+
+bool ChannelManager::StopVideoCapture(
+    VideoCapturer* capturer, const VideoFormat& video_format) {
+  VideoCapturerFormatParams params(capturer, video_format);
+  return (Send(MSG_STOPVIDEOCAPTURE, &params) && params.result);
+}
+
+bool ChannelManager::StopVideoCapture_w(
+    VideoCapturer* capturer, const VideoFormat& video_format) {
+  return capture_manager_->StopVideoCapture(capturer, video_format);
+}
+
+bool ChannelManager::AddVideoRenderer(
+    VideoCapturer* capturer, VideoRenderer* renderer) {
+  VideoCapturerRendererParams params(capturer, renderer);
+  return (Send(MSG_ADDVIDEORENDERER, &params) && params.result);
+}
+
+bool ChannelManager::AddVideoRenderer_w(
+    VideoCapturer* capturer, VideoRenderer* renderer) {
+  return capture_manager_->AddVideoRenderer(capturer, renderer);
+}
+
+bool ChannelManager::RemoveVideoRenderer(
+    VideoCapturer* capturer, VideoRenderer* renderer) {
+  VideoCapturerRendererParams params(capturer, renderer);
+  return (Send(MSG_REMOVEVIDEORENDERER, &params) && params.result);
+}
+
+bool ChannelManager::RemoveVideoRenderer_w(
+    VideoCapturer* capturer, VideoRenderer* renderer) {
+  return capture_manager_->RemoveVideoRenderer(capturer, renderer);
+}
+
+
 bool ChannelManager::Send(uint32 id, talk_base::MessageData* data) {
   if (!worker_thread_ || !initialized_) return false;
   worker_thread_->Send(this, id, data);
@@ -1053,6 +1129,30 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
       data->result = UnregisterVoiceProcessor_w(data->ssrc,
                                               data->processor,
                                               data->direction);
+      break;
+    }
+    case MSG_STARTVIDEOCAPTURE: {
+      VideoCapturerFormatParams* data =
+          static_cast<VideoCapturerFormatParams*>(message->pdata);
+      data->result = StartVideoCapture_w(data->capturer, data->format);
+      break;
+    }
+    case MSG_STOPVIDEOCAPTURE: {
+      VideoCapturerFormatParams* data =
+          static_cast<VideoCapturerFormatParams*>(message->pdata);
+      data->result = StopVideoCapture_w(data->capturer, data->format);
+      break;
+    }
+    case MSG_ADDVIDEORENDERER: {
+      VideoCapturerRendererParams* data =
+          static_cast<VideoCapturerRendererParams*>(message->pdata);
+      data->result = AddVideoRenderer_w(data->capturer, data->renderer);
+      break;
+    }
+    case MSG_REMOVEVIDEORENDERER: {
+      VideoCapturerRendererParams* data =
+          static_cast<VideoCapturerRendererParams*>(message->pdata);
+      data->result = RemoveVideoRenderer_w(data->capturer, data->renderer);
       break;
     }
   }

@@ -48,6 +48,7 @@
 #include "third_party/webrtc/voice_engine/include/voe_base.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
+
 namespace cricket {
 
 // Extend AudioOptions to include various WebRtc-specific options.

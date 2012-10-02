@@ -130,7 +130,6 @@ static const DataCodec kDataCodecsAnswer[] = {
   DataCodec(97, "utf8-text", 1)
 };
 
-static const uint32 kSimSsrc[] = {10, 20, 30};
 static const uint32 kFec1Ssrc[] = {10, 11};
 static const uint32 kFec2Ssrc[] = {20, 21};
 static const uint32 kFec3Ssrc[] = {30, 31};

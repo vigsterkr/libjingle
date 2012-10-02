@@ -49,6 +49,7 @@
 #include "talk/media/base/voiceprocessor.h"
 #include "talk/media/webrtc/webrtcvoe.h"
 
+
 #ifdef WIN32
 #include <objbase.h>  // NOLINT
 #endif
@@ -545,7 +546,7 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
       return false;
     }
 #if !defined(IOS) && !defined(ANDROID)
-// SetEcMetricsStatus is currently disabled on mobile.
+    // SetEcMetricsStatus is currently disabled on mobile.
     if (voep->SetEcMetricsStatus(echo_cancellation) == -1) {
       LOG_RTCERR1(SetEcMetricsStatus, echo_cancellation);
       return false;
@@ -559,13 +560,13 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
     }
   }
 
-  bool auto_gain_control;
-  if (options.auto_gain_control.Get(&auto_gain_control)) {
-    if (voep->SetAgcStatus(auto_gain_control, options.agc_mode) == -1) {
-      LOG_RTCERR2(SetAgcStatus, auto_gain_control, options.agc_mode);
-      return false;
+    bool auto_gain_control;
+    if (options.auto_gain_control.Get(&auto_gain_control)) {
+      if (voep->SetAgcStatus(auto_gain_control, options.agc_mode) == -1) {
+        LOG_RTCERR2(SetAgcStatus, auto_gain_control, options.agc_mode);
+        return false;
+      }
     }
-  }
 
   bool noise_suppression;
   if (options.noise_suppression.Get(&noise_suppression)) {
@@ -2296,7 +2297,7 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
   sinfo.echo_delay_std_ms = -1;
   if (engine()->voe()->processing()->GetEcMetricsStatus(echo_metrics_on) !=
       -1 && echo_metrics_on) {
-    // TODO(andrew): we may want to use VoECallReport::GetEchoMetricsSummary
+    // TODO(ajm): we may want to use VoECallReport::GetEchoMetricsSummary
     // here, but it appears to be unsuitable currently. Revisit after this is
     // investigated: http://b/issue?id=5666755
     int erl, erle, rerl, anlp;

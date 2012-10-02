@@ -83,6 +83,15 @@ static const int kMediaContentIndex1 = 1;
 
 static const int kIceCandidatesTimeout = 10000;
 
+// Add some extra |newlines| to the |message| after |line|.
+static void InjectAfter(const std::string& line,
+                        const std::string& newlines,
+                        std::string* message) {
+  const std::string tmp = line + newlines;
+  talk_base::replace_substrs(line.c_str(), line.length(),
+                             tmp.c_str(), tmp.length(), message);
+}
+
 class MockCandidateObserver : public webrtc::IceCandidateObserver {
  public:
   MockCandidateObserver()
@@ -459,15 +468,11 @@ class WebRtcSessionTest : public testing::Test {
     }
   }
 
-  void VerifyTransportType(const SessionDescriptionInterface* desc,
-                           const std::string& content_name,
-                           const std::string& transport_type) {
-    ASSERT_TRUE(desc != NULL);
-    ASSERT_TRUE(desc->description() != NULL);
-    const TransportInfo* transport_info =
-        desc->description()->GetTransportInfoByName(content_name);
-    ASSERT_TRUE(transport_info != NULL);
-    EXPECT_EQ(transport_type, transport_info->description.transport_type);
+  void VerifyTransportType(const std::string& content_name,
+                           cricket::TransportProtocol protocol) {
+    const cricket::Transport* transport = session_->GetTransport(content_name);
+    ASSERT_TRUE(transport != NULL);
+    EXPECT_EQ(protocol, transport->protocol());
   }
 
   cricket::FakeMediaEngine* media_engine_;
@@ -1394,16 +1399,126 @@ TEST_F(WebRtcSessionTest, TestHandleBackwardCompatibility) {
   // Use "1" as the session version to indicate a older client.
   JsepSessionDescription* offer =
       CreateOfferSessionDescriptionWithVersion(options, "1");
-  VerifyTransportType(offer, "audio", NS_JINGLE_ICE_UDP);
-  VerifyTransportType(offer, "video", NS_JINGLE_ICE_UDP);
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
-  VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer));
+  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
+  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
   // The WebRtcSession has remember the fact that the remote client is a older
   // version client. So even the follow up offer has a session version of "2",
   // the WebRtcSession will still update the transport type to NS_GINGLE_P2P.
   offer = CreateOfferSessionDescriptionWithVersion(options, "2");
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  VerifyTransportType(session_->remote_description(), "audio", NS_GINGLE_P2P);
-  VerifyTransportType(session_->remote_description(), "video", NS_GINGLE_P2P);
+  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
+  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
+}
+
+TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  std::string sdp;
+  EXPECT_TRUE(answer->ToString(&sdp));
+  // Adding ice-options to the session level.
+  InjectAfter("t=0 0\r\n",
+              "a=ice-options:google-ice\r\n",
+              &sdp);
+  JsepSessionDescription* answer_with_gice =
+      new JsepSessionDescription(JsepSessionDescription::kAnswer);
+  EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                             answer_with_gice));
+  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
+  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
+}
+
+TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                             answer));
+  VerifyTransportType("audio", cricket::ICEPROTO_RFC5245);
+  VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
+}
+
+TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  std::string sdp;
+  EXPECT_TRUE(answer->ToString(&sdp));
+  // Adding ice-options to the session level.
+  InjectAfter("t=0 0\r\n",
+              "a=ice-options:google-ice\r\n",
+              &sdp);
+  JsepSessionDescription* answer_with_gice =
+      new JsepSessionDescription(JsepSessionDescription::kAnswer);
+  EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer_with_gice));
+  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
+  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
+}
+
+TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer,
+                                             offer));
+  SessionDescriptionInterface* answer =
+      session_->CreateAnswer(MediaHints(), offer);
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer));
+  VerifyTransportType("audio", cricket::ICEPROTO_RFC5245);
+  VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
+}
+
+TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(MediaHints()));
+  std::string offer_str;
+  offer->ToString(&offer_str);
+  // Disable google-ice
+  const std::string gice_option = "google-ice";
+  const std::string xgoogle_xice = "xgoogle-xice";
+  talk_base::replace_substrs(gice_option.c_str(), gice_option.length(),
+                             xgoogle_xice.c_str(), xgoogle_xice.length(),
+                             &offer_str);
+  JsepSessionDescription *ice_only_offer =
+      new JsepSessionDescription(JsepSessionDescription::kOffer);
+  EXPECT_TRUE((ice_only_offer)->Initialize(offer_str));
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                            ice_only_offer));
+  std::string original_offer_sdp;
+  EXPECT_TRUE(offer->ToString(&original_offer_sdp));
+  JsepSessionDescription* answer_with_gice =
+      new JsepSessionDescription(JsepSessionDescription::kAnswer);
+  EXPECT_TRUE((answer_with_gice)->Initialize(original_offer_sdp));
+  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                              answer_with_gice));
 }

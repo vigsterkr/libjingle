@@ -2302,9 +2302,9 @@ TEST_F(VideoChannelTest, TestScreencastEvents) {
   channel1_->SignalScreencastWindowEvent.connect(
       &catcher,
       &cricket::ScreencastEventCatcher::OnEvent);
-  EXPECT_TRUE(channel1_->AddScreencast(0, ScreencastId(WindowId(0)), 5));
+  EXPECT_TRUE(channel1_->AddScreencast(0, ScreencastId(WindowId(0))) != NULL);
   ASSERT_TRUE(screencapture_factory->window_capturer() != NULL);
-  EXPECT_EQ_WAIT(cricket::CS_RUNNING, screencapture_factory->capture_state(),
+  EXPECT_EQ_WAIT(cricket::CS_STOPPED, screencapture_factory->capture_state(),
                  kTimeoutMs);
   screencapture_factory->window_capturer()->SignalStateChange(
       screencapture_factory->window_capturer(), cricket::CS_PAUSED);

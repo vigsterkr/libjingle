@@ -180,6 +180,7 @@ extern const buzz::StaticQName QN_FINGERPRINT_DIGEST;
 
 extern const char NS_JINGLE_ICE_UDP[];
 
+extern const char ICE_OPTION_GICE[];
 extern const char NS_GINGLE_P2P[];
 extern const buzz::StaticQName QN_GINGLE_P2P_TRANSPORT;
 extern const buzz::StaticQName QN_GINGLE_P2P_CANDIDATE;

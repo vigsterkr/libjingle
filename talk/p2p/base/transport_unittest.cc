@@ -154,13 +154,18 @@ TEST_F(TransportTest, TestSetDescriptionsIceDtls) {
                                   talk_base::DIGEST_SHA_1, &remote_identity),
                               Candidates());
   EXPECT_TRUE(SetupChannel());
-  EXPECT_TRUE(transport_->SetLocalTransportDescription(local));
-  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote));
+  EXPECT_TRUE(transport_->SetLocalTransportDescription(local,
+                                                       cricket::CA_OFFER));
+  EXPECT_NE(cricket::ICEPROTO_RFC5245, transport_->protocol());
+  EXPECT_NE(cricket::ICEPROTO_RFC5245, channel_->protocol());
+  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote,
+                                                        cricket::CA_ANSWER));
   transport_->ConnectChannels();
   FakeTransportChannel* channel2 = CreateChannel(2);
   ASSERT_TRUE(channel2 != NULL);
   // channel_ was created before SetLocal/SetRemote; channel2 was created after.
   EXPECT_EQ(cricket::ICEPROTO_RFC5245, channel_->protocol());
+  EXPECT_EQ(cricket::ICEPROTO_RFC5245, transport_->protocol());
   EXPECT_EQ(local.ice_ufrag, channel_->ice_ufrag());
   EXPECT_EQ(local.ice_pwd, channel_->ice_pwd());
   EXPECT_EQ(*remote.identity_fingerprint, channel_->dtls_fingerprint());
@@ -177,13 +182,18 @@ TEST_F(TransportTest, TestSetDescriptionsGiceDtls) {
   TransportDescription remote(cricket::NS_GINGLE_P2P, TransportOptions(),
                               "DEFGDEFG", "defgdefg", NULL, Candidates());
   EXPECT_TRUE(SetupChannel());
-  EXPECT_TRUE(transport_->SetLocalTransportDescription(local));
-  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote));
+  EXPECT_TRUE(transport_->SetLocalTransportDescription(local,
+                                                       cricket::CA_OFFER));
+  EXPECT_NE(cricket::ICEPROTO_GOOGLE, transport_->protocol());
+  EXPECT_NE(cricket::ICEPROTO_GOOGLE, channel_->protocol());
+  EXPECT_TRUE(transport_->SetRemoteTransportDescription(remote,
+                                                        cricket::CA_ANSWER));
   transport_->ConnectChannels();
   FakeTransportChannel* channel2 = CreateChannel(2);
   ASSERT_TRUE(channel2 != NULL);
   // channel_ was created before SetLocal/SetRemote; channel2 was created after.
   EXPECT_EQ(cricket::ICEPROTO_GOOGLE, channel_->protocol());
+  EXPECT_EQ(cricket::ICEPROTO_GOOGLE, transport_->protocol());
   EXPECT_EQ(local.ice_ufrag, channel_->ice_ufrag());
   EXPECT_EQ(local.ice_pwd, channel_->ice_pwd());
   EXPECT_EQ("", channel_->dtls_fingerprint().algorithm);
@@ -191,15 +201,6 @@ TEST_F(TransportTest, TestSetDescriptionsGiceDtls) {
   EXPECT_EQ(local.ice_ufrag, channel2->ice_ufrag());
   EXPECT_EQ(local.ice_pwd, channel2->ice_pwd());
   EXPECT_EQ("", channel2->dtls_fingerprint().algorithm);
-}
-
-// Tests that an implicit local description is used if none is supplied.
-TEST_F(TransportTest, TestImplicitDescriptions) {
-  EXPECT_TRUE(SetupChannel());
-  transport_->ConnectChannels();
-  EXPECT_EQ(cricket::ICEPROTO_GOOGLE, channel_->protocol());
-  EXPECT_NE("", channel_->ice_ufrag());
-  EXPECT_NE("", channel_->ice_pwd());
 }
 
 // Tests that we can properly serialize/deserialize candidates.

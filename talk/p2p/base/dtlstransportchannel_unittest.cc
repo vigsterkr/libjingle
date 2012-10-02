@@ -131,14 +131,17 @@ class DtlsTestClient : public sigslot::has_slots<> {
       }
     }
 
-    // TODO(juberti): Call SetLocalTransportDescription here as well.
-    // Right now, we'll generate a default local description.
     std::string transport_type = (protocol_ == cricket::ICEPROTO_GOOGLE) ?
         cricket::NS_GINGLE_P2P : cricket::NS_JINGLE_ICE_UDP;
+    cricket::TransportDescription local_desc(transport_type,
+        cricket::TransportOptions(), "", "", NULL, cricket::Candidates());
+    ASSERT_TRUE(transport_->SetLocalTransportDescription(local_desc,
+                                                         cricket::CA_OFFER));
     cricket::TransportDescription remote_desc(transport_type,
         cricket::TransportOptions(), "", "",
         fingerprint.release(), cricket::Candidates());
-    ASSERT_TRUE(transport_->SetRemoteTransportDescription(remote_desc));
+    ASSERT_TRUE(transport_->SetRemoteTransportDescription(remote_desc,
+                                                          cricket::CA_ANSWER));
   }
 
   bool Connect(DtlsTestClient* peer) {
@@ -380,8 +383,6 @@ TEST_F(DtlsTransportChannelTest, TestChannelSetup) {
   EXPECT_EQ(cricket::ROLE_CONTROLLING, channel1->role());
   EXPECT_EQ(1U, channel1->tiebreaker());
   EXPECT_EQ(cricket::ICEPROTO_RFC5245, channel1->protocol());
-  EXPECT_FALSE(channel1->ice_ufrag().empty());
-  EXPECT_FALSE(channel1->ice_pwd().empty());
   ASSERT_EQ(cricket::ROLE_CONTROLLED, channel2->role());
   EXPECT_EQ(2U, channel2->tiebreaker());
   EXPECT_EQ(cricket::ICEPROTO_RFC5245, channel2->protocol());

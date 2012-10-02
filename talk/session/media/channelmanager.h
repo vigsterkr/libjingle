@@ -40,6 +40,7 @@
 
 namespace cricket {
 
+class CaptureManager;
 class Soundclip;
 class VideoProcessor;
 class VoiceChannel;
@@ -168,6 +169,16 @@ class ChannelManager : public talk_base::MessageHandler,
   bool UnregisterVoiceProcessor(uint32 ssrc,
                                 VoiceProcessor* processor,
                                 MediaProcessorDirection direction);
+  // The following are done in the new "CaptureManager" style that
+  // all local video capturers, processors, and managers should move
+  // to.
+  // TODO(pthatcher): Add more of the CaptureManager interface.
+  bool StartVideoCapture(VideoCapturer* video_capturer,
+                         const VideoFormat& video_format);
+  bool StopVideoCapture(VideoCapturer* video_capturer,
+                        const VideoFormat& video_format);
+  bool AddVideoRenderer(VideoCapturer* capturer, VideoRenderer* renderer);
+  bool RemoveVideoRenderer(VideoCapturer* capturer, VideoRenderer* renderer);
 
   // The operations below occur on the main thread.
 
@@ -238,12 +249,24 @@ class ChannelManager : public talk_base::MessageHandler,
   bool UnregisterVoiceProcessor_w(uint32 ssrc,
                                   VoiceProcessor* processor,
                                   MediaProcessorDirection direction);
+  // The following are done in the new "CaptureManager" style that
+  // all local video capturers, processors, and managers should move
+  // to.
+  // TODO(pthatcher): Add more of the CaptureManager interface.
+  bool StartVideoCapture_w(VideoCapturer* video_capturer,
+                           const VideoFormat& video_format);
+  bool StopVideoCapture_w(VideoCapturer* video_capturer,
+                          const VideoFormat& video_format);
+  bool AddVideoRenderer_w(VideoCapturer* capturer, VideoRenderer* renderer);
+  bool RemoveVideoRenderer_w(VideoCapturer* capturer, VideoRenderer* renderer);
+
 
   void OnMessage(talk_base::Message *message);
 
   talk_base::scoped_ptr<MediaEngineInterface> media_engine_;
   talk_base::scoped_ptr<DataEngineInterface> data_media_engine_;
   talk_base::scoped_ptr<DeviceManagerInterface> device_manager_;
+  talk_base::scoped_ptr<CaptureManager> capture_manager_;
   bool initialized_;
   talk_base::Thread* main_thread_;
   talk_base::Thread* worker_thread_;

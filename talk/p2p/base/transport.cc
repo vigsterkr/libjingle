@@ -79,11 +79,24 @@ struct ChannelParams : public talk_base::MessageData {
 };
 
 struct TransportDescriptionParams : public talk_base::MessageData {
-  explicit TransportDescriptionParams(const TransportDescription& desc)
-      : desc(desc), result(false) {}
+  TransportDescriptionParams(const TransportDescription& desc,
+                             ContentAction action)
+      : desc(desc), action(action), result(false) {}
   const TransportDescription& desc;
+  ContentAction action;
   bool result;
 };
+
+cricket::TransportProtocol GetProtocolFromDescription(
+    const cricket::TransportDescription* desc) {
+  ASSERT(desc != NULL);
+
+  if (desc->transport_type == cricket::NS_JINGLE_ICE_UDP) {
+    return (desc->HasOption(cricket::ICE_OPTION_GICE)) ?
+        cricket::ICEPROTO_HYBRID : cricket::ICEPROTO_RFC5245;
+  }
+  return cricket::ICEPROTO_GOOGLE;
+}
 
 Transport::Transport(talk_base::Thread* signaling_thread,
                      talk_base::Thread* worker_thread,
@@ -100,7 +113,8 @@ Transport::Transport(talk_base::Thread* signaling_thread,
     writable_(TRANSPORT_STATE_NONE),
     connect_requested_(false),
     role_(ROLE_UNKNOWN),
-    tiebreaker_(0) {
+    tiebreaker_(0),
+    protocol_(ICEPROTO_HYBRID) {
 }
 
 Transport::~Transport() {
@@ -114,15 +128,15 @@ void Transport::SetRole(TransportRole role) {
 }
 
 bool Transport::SetLocalTransportDescription(
-    const TransportDescription& description) {
-  TransportDescriptionParams params(description);
+    const TransportDescription& description, ContentAction action) {
+  TransportDescriptionParams params(description, action);
   worker_thread()->Send(this, MSG_SETLOCALDESCRIPTION, &params);
   return params.result;
 }
 
 bool Transport::SetRemoteTransportDescription(
-    const TransportDescription& description) {
-  TransportDescriptionParams params(description);
+    const TransportDescription& description, ContentAction action) {
+  TransportDescriptionParams params(description, action);
   worker_thread()->Send(this, MSG_SETREMOTEDESCRIPTION, &params);
   return params.result;
 }
@@ -166,6 +180,9 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
   }
   if (remote_description_.get()) {
     ApplyRemoteTransportDescription_w(impl);
+  }
+  if (local_description_.get() && remote_description_.get()) {
+    impl->SetIceProtocolType(protocol_);
   }
 
   impl->SignalReadableState.connect(this, &Transport::OnChannelReadableState);
@@ -246,18 +263,21 @@ void Transport::ConnectChannels_w() {
   connect_requested_ = true;
   signaling_thread()->Post(
       this, MSG_CANDIDATEREADY, NULL);
+
   if (!local_description_.get()) {
-    // This can happen if there's no transport info in the local session
-    // description. For example, when the application doesn't generate local
-    // description from the CreateOffer/CreatAnswer.
-    // TODO(ronghuawu): Fix all the cases that reach here and return error.
+    // TOOD(mallinath) : TransportDescription(TD) shouldn't be generated here.
+    // As Transport must know TD is offer or answer and cricket::Transport
+    // doesn't have the capability to decide it. This should be set by the
+    // Session.
+    // Session must generate local TD before remote candidates pushed when
+    // initiate request initiated by the remote.
     LOG(LS_INFO) << "Transport::ConnectChannels_w: No local description has "
                  << "been set. Will generate one.";
     TransportDescription desc(NS_GINGLE_P2P, TransportOptions(),
                               talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
                               talk_base::CreateRandomString(ICE_PWD_LENGTH),
                               NULL, Candidates());
-    SetLocalTransportDescription_w(desc);
+    SetLocalTransportDescription_w(desc, CA_OFFER);
   }
 
   CallChannels_w(&TransportChannelImpl::Connect);
@@ -535,7 +555,7 @@ void Transport::SetRole_w() {
 }
 
 bool Transport::SetLocalTransportDescription_w(
-    const TransportDescription& desc) {
+    const TransportDescription& desc, ContentAction action) {
   bool ret = true;
   talk_base::CritScope cs(&crit_);
   local_description_.reset(new TransportDescription(desc));
@@ -543,17 +563,33 @@ bool Transport::SetLocalTransportDescription_w(
        iter != channels_.end(); ++iter) {
     ret &= ApplyLocalTransportDescription_w(iter->second.get());
   }
+  // If PRANSWER/ANSWER is set, we should decide transport protocol type.
+  if (action == CA_PRANSWER || action == CA_ANSWER) {
+    ret = NegotiateTransportDescription_w(remote_description_.get(),
+                                          local_description_.get());
+    if (ret) {
+      SetTransportType_w();
+    }
+  }
   return ret;
 }
 
 bool Transport::SetRemoteTransportDescription_w(
-    const TransportDescription& desc) {
+    const TransportDescription& desc, ContentAction action) {
   bool ret = true;
   talk_base::CritScope cs(&crit_);
   remote_description_.reset(new TransportDescription(desc));
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end(); ++iter) {
     ret &= ApplyRemoteTransportDescription_w(iter->second.get());
+  }
+  // If PRANSWER/ANSWER is set, we should decide transport protocol type.
+  if (action == CA_PRANSWER || action == CA_ANSWER) {
+    ret = NegotiateTransportDescription_w(local_description_.get(),
+                                          remote_description_.get());
+    if (ret) {
+      SetTransportType_w();
+    }
   }
   return ret;
 }
@@ -566,10 +602,6 @@ bool Transport::ApplyLocalTransportDescription_w(TransportChannelImpl* ch) {
 
 bool Transport::ApplyRemoteTransportDescription_w(TransportChannelImpl* ch) {
   bool ret;
-  TransportProtocol proto =
-      (remote_description_->transport_type == NS_JINGLE_ICE_UDP) ?
-          ICEPROTO_RFC5245 : ICEPROTO_GOOGLE;
-  ch->SetIceProtocolType(proto);
   talk_base::SSLFingerprint* fp =
       remote_description_->identity_fingerprint.get();
   if (fp) {
@@ -580,6 +612,39 @@ bool Transport::ApplyRemoteTransportDescription_w(TransportChannelImpl* ch) {
     ret = ch->SetRemoteFingerprint("", NULL, 0);
   }
   return ret;
+}
+
+bool Transport::NegotiateTransportDescription_w(
+    const TransportDescription* offer, const TransportDescription* answer) {
+  ASSERT(offer != NULL);
+  ASSERT(answer != NULL);
+
+  TransportProtocol offer_proto = GetProtocolFromDescription(offer);
+  TransportProtocol answer_proto = GetProtocolFromDescription(answer);
+
+  // If offered protocol is gice/ice, then we expect to receive matching
+  // protocol in answer, anything else is treated as an error.
+  // HYBRID is not an option when offered specific protocol.
+  // If offered protocol is HYBRID and answered protocol is HYBRID then
+  // gice is preferred protocol.
+  // TODO(mallinath) - Answer from local or remote should't have both ice
+  // and gice support. It should always pick which protocol it wants to use.
+  // Once WebRTC stops supporting gice (for backward compatibility), HYBRID in
+  // answer must be treated as error.
+  if ((offer_proto == ICEPROTO_GOOGLE || offer_proto == ICEPROTO_RFC5245) &&
+      (offer_proto != answer_proto)) {
+    return false;
+  }
+  protocol_ = answer_proto == ICEPROTO_HYBRID ? ICEPROTO_GOOGLE : answer_proto;
+  return true;
+}
+
+bool Transport::SetTransportType_w() {
+  for (ChannelMap::iterator iter = channels_.begin();
+       iter != channels_.end(); ++iter) {
+    iter->second.get()->SetIceProtocolType(protocol_);
+  }
+  return true;
 }
 
 void Transport::OnMessage(talk_base::Message* msg) {
@@ -648,13 +713,15 @@ void Transport::OnMessage(talk_base::Message* msg) {
     case MSG_SETLOCALDESCRIPTION: {
         TransportDescriptionParams* params =
             static_cast<TransportDescriptionParams*>(msg->pdata);
-        params->result = SetLocalTransportDescription_w(params->desc);
+        params->result = SetLocalTransportDescription_w(params->desc,
+                                                        params->action);
       }
       break;
     case MSG_SETREMOTEDESCRIPTION: {
         TransportDescriptionParams* params =
             static_cast<TransportDescriptionParams*>(msg->pdata);
-        params->result = SetRemoteTransportDescription_w(params->desc);
+        params->result = SetRemoteTransportDescription_w(params->desc,
+                                                         params->action);
       }
       break;
   }

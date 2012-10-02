@@ -138,11 +138,14 @@ class TransportProxy : public sigslot::has_slots<>,
     candidates_allocated_ = allocated;
   }
   bool candidates_allocated() { return candidates_allocated_; }
-  void SetLocalTransportDescription(const TransportDescription& description) {
-    transport_->get()->SetLocalTransportDescription(description);
+  bool SetLocalTransportDescription(const TransportDescription& description,
+                                    ContentAction action) {
+    return transport_->get()->SetLocalTransportDescription(description, action);
   }
-  void SetRemoteTransportDescription(const TransportDescription& description) {
-    transport_->get()->SetRemoteTransportDescription(description);
+  bool SetRemoteTransportDescription(const TransportDescription& description,
+                                     ContentAction action) {
+    return transport_->get()->SetRemoteTransportDescription(description,
+                                                            action);
   }
 
   void OnRemoteCandidates(const Candidates& candidates) {
@@ -284,14 +287,6 @@ class BaseSession : public sigslot::has_slots<>,
       delete local_description_;
       local_description_ = sdesc;
     }
-    // Update the TransportInfo to all the TransportProxy.
-    for (TransportMap::iterator iter = transports_.begin();
-         iter != transports_.end(); ++iter) {
-      TransportDescription tdesc;
-      if (GetLocalTransportDescription(iter->second->content_name(), &tdesc)) {
-        iter->second->SetLocalTransportDescription(tdesc);
-      }
-    }
     return true;
   }
 
@@ -302,22 +297,6 @@ class BaseSession : public sigslot::has_slots<>,
       remote_description_ = sdesc;
     }
     return true;
-  }
-
-  void PushdownRemoteTransportDescription() {
-    // Update the Transports with the right information
-    for (TransportMap::iterator iter = transports_.begin();
-         iter != transports_.end(); ++iter) {
-      TransportDescription tdesc;
-
-      // If no transport info was in this session description, ret == false
-      // and we just skip this one.
-      bool ret = GetRemoteTransportDescription(
-          iter->second->content_name(), &tdesc);
-      if (ret) {
-        iter->second->SetRemoteTransportDescription(tdesc);
-      }
-    }
   }
 
   const SessionDescription* initiator_description() const {
@@ -375,6 +354,8 @@ class BaseSession : public sigslot::has_slots<>,
                               int component);
 
  protected:
+  bool PushdownTransportDescription(ContentSource source,
+                                    ContentAction action);
   void set_initiator(bool initiator) { initiator_ = initiator; }
 
   // Specifies the identity to use in this session.
@@ -468,6 +449,9 @@ class BaseSession : public sigslot::has_slots<>,
   Error error_;
 
  private:
+  // Helper methods to push local and remote transport descriptions.
+  bool PushdownLocalTransportDescription(ContentAction action);
+  bool PushdownRemoteTransportDescription(ContentAction action);
   // This method will check GroupInfo in local and remote SessionDescriptions.
   bool ContentsGrouped();
   // This method will delete the Transport and TransportChannelImpl's and

@@ -50,7 +50,7 @@
 #endif
 #else
 #include "third_party/webrtc/common_types.h"
-#include "third_party/webrtc/modules/audio_device/main/interface/audio_device.h"
+#include "third_party/webrtc/modules/audio_device/include/audio_device.h"
 #endif  // WEBRTC_RELATIVE_PATH
 
 namespace talk_base {

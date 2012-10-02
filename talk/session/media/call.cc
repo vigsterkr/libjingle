@@ -145,8 +145,9 @@ void Call::Terminate() {
 
   // There may be more than one session to terminate
   std::vector<Session*>::iterator it;
-  for (it = sessions.begin(); it != sessions.end(); ++it)
+  for (it = sessions.begin(); it != sessions.end(); ++it) {
     TerminateSession(*it);
+  }
 }
 
 bool Call::SendViewRequest(Session* session,
@@ -314,6 +315,15 @@ void Call::RemoveSession(Session* session) {
   if (it == media_session_map_.end())
     return;
 
+  // Remove all the screencasts, if they haven't been already.
+  while (!it->second.started_screencasts.empty()) {
+    uint32 ssrc = it->second.started_screencasts.begin()->first;
+    if (!StopScreencastWithoutSendingUpdate(it->second.session, ssrc)) {
+      LOG(LS_ERROR) << "Unable to stop screencast with ssrc " << ssrc;
+      ASSERT(false);
+    }
+  }
+
   // Destroy video channel
   VideoChannel* video_channel = it->second.video_channel;
   if (video_channel != NULL)
@@ -430,15 +440,56 @@ void Call::PressDTMF(int event) {
   }
 }
 
-void Call::AddScreencast(Session* session,
-                         const std::string& stream_name, uint32 ssrc,
-                         const ScreencastId& screencastid, int fps) {
+cricket::VideoFormat ScreencastFormatFromFps(int fps) {
+  // The capturer pretty much ignore this, but just in case we give it
+  // a resolution big enough to cover any expected desktop.  In any
+  // case, it can't be 0x0, or the CaptureManager will fail to use it.
+  return cricket::VideoFormat(
+      1, 1,
+      cricket::VideoFormat::FpsToInterval(fps), cricket::FOURCC_ANY);
+}
+
+bool Call::StartScreencast(Session* session,
+                           const std::string& stream_name, uint32 ssrc,
+                           const ScreencastId& screencastid, int fps) {
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it == media_session_map_.end()) {
+    return false;
+  }
+
   VideoChannel *video_channel = GetVideoChannel(session);
   if (!video_channel) {
     LOG(LS_WARNING) << "Cannot add screencast"
                     << " because there is no video channel.";
-    return;
+    return false;
   }
+
+  VideoCapturer *capturer = video_channel->AddScreencast(ssrc, screencastid);
+  if (capturer == NULL) {
+    LOG(LS_WARNING) << "Could not create screencast capturer.";
+    return false;
+  }
+
+  VideoFormat format = ScreencastFormatFromFps(fps);
+  if (!session_client_->channel_manager()->StartVideoCapture(
+          capturer, format)) {
+    LOG(LS_WARNING) << "Could not start video capture.";
+    video_channel->RemoveScreencast(ssrc);
+    return false;
+  }
+
+  if (!video_channel->SetCapturer(ssrc, capturer)) {
+    LOG(LS_WARNING) << "Could not start sending screencast.";
+    session_client_->channel_manager()->StopVideoCapture(
+        capturer, ScreencastFormatFromFps(fps));
+    video_channel->RemoveScreencast(ssrc);
+  }
+
+  // TODO(pthatcher): Once the CaptureManager has a nicer interface
+  // for removing captures (such as having StartCapture return a
+  // handle), remove this StartedCapture stuff.
+  it->second.started_screencasts.insert(
+      std::make_pair(ssrc, StartedCapture(capturer, format)));
 
   // TODO(pthatcher): Verify we aren't re-using an existing name or
   // ssrc.
@@ -449,17 +500,21 @@ void Call::AddScreencast(Session* session,
 
   // TODO(pthatcher): Wait until view request before sending video.
   video_channel->SetLocalContent(video, CA_UPDATE);
-  video_channel->AddScreencast(ssrc, screencastid, fps);
   SendVideoStreamUpdate(session, video);
+  return true;
 }
 
-void Call::RemoveScreencast(Session* session,
-                            const std::string& stream_name, uint32 ssrc) {
+bool Call::StopScreencast(Session* session,
+                          const std::string& stream_name, uint32 ssrc) {
+  if (!StopScreencastWithoutSendingUpdate(session, ssrc)) {
+    return false;
+  }
+
   VideoChannel *video_channel = GetVideoChannel(session);
   if (!video_channel) {
-    LOG(LS_WARNING) << "Cannot remove screencast"
+    LOG(LS_WARNING) << "Cannot add screencast"
                     << " because there is no video channel.";
-    return;
+    return false;
   }
 
   StreamParams stream;
@@ -467,9 +522,45 @@ void Call::RemoveScreencast(Session* session,
   // No ssrcs
   VideoContentDescription* video = CreateVideoStreamUpdate(stream);
 
-  video_channel->RemoveScreencast(ssrc);
   video_channel->SetLocalContent(video, CA_UPDATE);
   SendVideoStreamUpdate(session, video);
+  return true;
+}
+
+bool Call::StopScreencastWithoutSendingUpdate(
+    Session* session, uint32 ssrc) {
+  MediaSessionMap::iterator it = media_session_map_.find(session->id());
+  if (it == media_session_map_.end()) {
+    return false;
+  }
+
+  VideoChannel *video_channel = GetVideoChannel(session);
+  if (!video_channel) {
+    LOG(LS_WARNING) << "Cannot remove screencast"
+                    << " because there is no video channel.";
+    return false;
+  }
+
+  StartedScreencastMap::const_iterator screencast_iter =
+      it->second.started_screencasts.find(ssrc);
+  if (screencast_iter == it->second.started_screencasts.end()) {
+    LOG(LS_WARNING) << "Could not stop screencast " << ssrc
+                    << " because there is no capturer.";
+    return false;
+  }
+
+  VideoCapturer* capturer = screencast_iter->second.capturer;
+  VideoFormat format = screencast_iter->second.format;
+  video_channel->SetCapturer(ssrc, NULL);
+  if (!session_client_->channel_manager()->StopVideoCapture(
+          capturer, format)) {
+    LOG(LS_WARNING) << "Could not stop screencast " << ssrc
+                    << " because could not stop capture.";
+    return false;
+  }
+  video_channel->RemoveScreencast(ssrc);
+  it->second.started_screencasts.erase(ssrc);
+  return true;
 }
 
 VideoContentDescription* Call::CreateVideoStreamUpdate(

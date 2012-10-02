@@ -1,5 +1,8 @@
 Libjingle
 
+0.7.1 - Oct 2, 2012
+  - Fix for the "google-ice" ICE option in answer.
+
 0.7.0 - Sep 14, 2012
   - Enable RFC 5245 ICE for PeerConnection.
 

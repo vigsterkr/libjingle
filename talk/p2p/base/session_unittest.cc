@@ -713,10 +713,15 @@ cricket::SessionDescription* NewTestSessionDescription(
   offer->AddContent(content_name_a, content_type_a,
                     new TestContentDescription(gingle_content_type,
                                                content_type_a));
+  cricket::TransportDescription desc(cricket::NS_GINGLE_P2P,
+                                     cricket::Candidates());
+  offer->AddTransportInfo(cricket::TransportInfo(content_name_a, desc));
+
   if (content_name_a != content_name_b) {
     offer->AddContent(content_name_b, content_type_b,
                       new TestContentDescription(gingle_content_type,
                                                  content_type_b));
+    offer->AddTransportInfo(cricket::TransportInfo(content_name_b, desc));
   }
   return offer;
 }
@@ -728,6 +733,10 @@ cricket::SessionDescription* NewTestSessionDescription(
   offer->AddContent(content_name, content_type,
                     new TestContentDescription(content_type,
                                                content_type));
+  offer->AddTransportInfo(cricket::TransportInfo
+                          (content_name, cricket::TransportDescription(
+                          cricket::NS_GINGLE_P2P,
+                          cricket::Candidates())));
   return offer;
 }
 

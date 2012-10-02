@@ -138,9 +138,10 @@ class WebRtcSession : public cricket::BaseSession,
   // Invokes ConnectChannels() on transport proxies, which initiates ice
   // candidates allocation.
   bool StartCandidatesAllocation();
+  bool UpdateSessionState(Action action, cricket::ContentSource source,
+                          const cricket::SessionDescription* desc);
 
   virtual void OnMessage(talk_base::Message* msg);
-
 
   // Transport related callbacks, override from cricket::BaseSession.
   virtual void OnTransportRequestSignaling(cricket::Transport* transport);

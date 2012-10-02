@@ -531,6 +531,9 @@ class FakeWebRtcVideoEngine
     }
     return -1;
   }
+#ifdef USE_WEBRTC_DEV_BRANCH
+  WEBRTC_STUB(SetExpectedRenderDelay, (int render_id, int render_delay));
+#endif
   WEBRTC_STUB(ConfigureRender, (int, const unsigned int, const float,
       const float, const float, const float));
   WEBRTC_STUB(MirrorRenderStream, (const int, const bool, const bool,
@@ -553,10 +556,8 @@ class FakeWebRtcVideoEngine
   WEBRTC_FUNC(SetLocalSSRC, (const int channel,
                              const unsigned int ssrc,
                              const webrtc::StreamType usage,
-                             const unsigned char simulcast_idx)) {
-    // default simulcast_idx is 0.
+                             const unsigned char idx)) {
     WEBRTC_CHECK_CHANNEL(channel);
-    channels_[channel]->ssrcs_[simulcast_idx] = ssrc;
     return 0;
   }
   WEBRTC_STUB_CONST(SetRemoteSSRCType, (const int,

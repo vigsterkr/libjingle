@@ -32,6 +32,7 @@
 #include <map>
 #include <vector>
 
+
 #include "talk/base/basictypes.h"
 #include "talk/base/stringutils.h"
 #include "talk/media/base/codec.h"
@@ -54,6 +55,7 @@ static const int kFakeDeviceId = 0;
 #else
 static const int kFakeDeviceId = 1;
 #endif
+
 
 class FakeWebRtcVoiceEngine
     : public webrtc::VoEAudioProcessing,

@@ -317,6 +317,55 @@ BaseSession::~BaseSession() {
   delete local_description_;
 }
 
+bool BaseSession::PushdownTransportDescription(ContentSource source,
+                                               ContentAction action) {
+  bool ret = false;
+  if (source == CS_LOCAL) {
+    ret = PushdownLocalTransportDescription(action);
+  } else {
+    ret = PushdownRemoteTransportDescription(action);
+  }
+  return ret;
+}
+
+bool BaseSession::PushdownLocalTransportDescription(ContentAction action) {
+  // Update the Transports with the right information
+  for (TransportMap::iterator iter = transports_.begin();
+       iter != transports_.end(); ++iter) {
+    TransportDescription tdesc;
+
+    // If no transport info was in this session description, ret == false
+    // and we just skip this one.
+    bool ret = GetLocalTransportDescription(
+        iter->second->content_name(), &tdesc);
+    if (ret) {
+      if (!iter->second->SetLocalTransportDescription(tdesc, action)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool BaseSession::PushdownRemoteTransportDescription(ContentAction action) {
+  // Update the Transports with the right information
+  for (TransportMap::iterator iter = transports_.begin();
+       iter != transports_.end(); ++iter) {
+    TransportDescription tdesc;
+
+    // If no transport info was in this session description, ret == false
+    // and we just skip this one.
+    bool ret = GetRemoteTransportDescription(
+        iter->second->content_name(), &tdesc);
+    if (ret) {
+      if (!iter->second->SetRemoteTransportDescription(tdesc, action)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 TransportChannel* BaseSession::CreateChannel(const std::string& content_name,
                                              const std::string& channel_name,
                                              int component) {
@@ -371,10 +420,6 @@ TransportProxy* BaseSession::GetOrCreateTransportProxy(
 
   transproxy = new TransportProxy(sid_, content_name,
                                   new TransportWrapper(transport));
-  TransportDescription tdesc;
-  if (GetLocalTransportDescription(content_name, &tdesc)) {
-    transproxy->SetLocalTransportDescription(tdesc);
-  }
   transproxy->SignalCandidatesReady.connect(
       this, &BaseSession::OnTransportProxyCandidatesReady);
   transports_[content_name] = transproxy;
@@ -706,9 +751,12 @@ bool Session::Initiate(const std::string &to,
     return false;
   }
 
-  SetState(Session::STATE_SENTINITIATE);
-
+  // We need to connect transport proxy and impl here so that we can process
+  // the TransportDescriptions.
   SpeculativelyConnectAllTransportChannels();
+
+  PushdownTransportDescription(CS_LOCAL, CA_OFFER);
+  SetState(Session::STATE_SENTINITIATE);
   return true;
 }
 
@@ -729,6 +777,7 @@ bool Session::Accept(const SessionDescription* sdesc) {
   }
   // TODO - Add BUNDLE support to transport-info messages.
   MaybeEnableMuxingSupport();  // Enable transport channel mux if supported.
+  PushdownTransportDescription(CS_LOCAL, CA_ANSWER);
   SetState(Session::STATE_SENTACCEPT);
   return true;
 }
@@ -1100,7 +1149,10 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
   set_remote_name(msg.from);
   set_initiator_name(msg.initiator);
   set_remote_description(new SessionDescription(init.ClearContents(),
+                                                init.transports,
                                                 init.groups));
+  // Updating transport with TransportDescription.
+  PushdownTransportDescription(CS_REMOTE, CA_OFFER);
   SetState(STATE_RECEIVEDINITIATE);
 
   // Users of Session may listen to state change and call Reject().
@@ -1128,8 +1180,11 @@ bool Session::OnAcceptMessage(const SessionMessage& msg, MessageError* error) {
   OnInitiateAcked();
 
   set_remote_description(new SessionDescription(accept.ClearContents(),
+                                                accept.transports,
                                                 accept.groups));
   MaybeEnableMuxingSupport();  // Enable transport channel mux if supported.
+  // Updating transport with TransportDescription.
+  PushdownTransportDescription(CS_REMOTE, CA_ANSWER);
   SetState(STATE_RECEIVEDACCEPT);
 
   // Users of Session may listen to state change and call Reject().

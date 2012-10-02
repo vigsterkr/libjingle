@@ -460,9 +460,14 @@ class VideoChannel : public BaseChannel {
   bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);
   bool ApplyViewRequest(const ViewRequest& request);
 
-  bool AddScreencast(uint32 ssrc, const ScreencastId& id, int fps);
+  // TODO(pthatcher): Refactor to use a "capture id" instead of an
+  // ssrc here as the "key".
+  VideoCapturer* AddScreencast(uint32 ssrc, const ScreencastId& id);
+  VideoCapturer* GetScreencastCapturer(uint32 ssrc);
   bool SetCapturer(uint32 ssrc, VideoCapturer* capturer);
   bool RemoveScreencast(uint32 ssrc);
+  // True if we've added a screencast.  Doesn't matter if the capturer
+  // has been started or not.
   bool IsScreencasting();
   int ScreencastFps(uint32 ssrc);
 
@@ -511,10 +516,10 @@ class VideoChannel : public BaseChannel {
   bool ApplyViewRequest_w(const ViewRequest& request);
   void SetRenderer_w(uint32 ssrc, VideoRenderer* renderer);
 
-  bool AddScreencast_w(uint32 ssrc, const ScreencastId& id, int fps);
+  VideoCapturer* AddScreencast_w(uint32 ssrc, const ScreencastId& id);
+  VideoCapturer* GetScreencastCapturer_w(uint32 ssrc);
   bool SetCapturer_w(uint32 ssrc, VideoCapturer* capturer);
   bool RemoveScreencast_w(uint32 ssrc);
-  void RemoveCapturer_w(uint32 ssrc);
   void OnScreencastWindowEvent_s(uint32 ssrc, talk_base::WindowEvent we);
   bool IsScreencasting_w() const;
   int ScreencastFps_w(uint32 ssrc) const;

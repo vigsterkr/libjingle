@@ -32,7 +32,7 @@
 #include "talk/media/devices/gtkvideorenderer.h"
 #elif defined(OSX) && !defined(CARBON_DEPRECATED)
 #include "talk/media/devices/carbonvideorenderer.h"
-#elif defined(OSX)
+#elif defined(IOS) || defined(OSX)
 #include "talk/media/base/videorenderer.h"  // for base VideoRenderer decl.
 #elif defined(WIN32)
 #include "talk/media/devices/gdivideorenderer.h"

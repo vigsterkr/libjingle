@@ -137,8 +137,8 @@ namespace talk_base {
 }
 
 #define ALIGNP(p, t) \
-  (reinterpret_cast<uint8*>(((reinterpret_cast<uintptr_t>(p) + \
-  ((t)-1)) & ~((t)-1))))
+    (reinterpret_cast<uint8*>(((reinterpret_cast<uintptr_t>(p) + \
+    ((t) - 1)) & ~((t) - 1))))
 #define IS_ALIGNED(p, a) (!((uintptr_t)(p) & ((a) - 1)))
 
 // Note: UNUSED is also defined in common.h

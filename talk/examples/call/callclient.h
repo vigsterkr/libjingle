@@ -241,16 +241,21 @@ class CallClient: public sigslot::has_slots<> {
   buzz::Jid GenerateRandomMucJid();
 
   // Depending on |enable|, render (or don't) all the streams in |session|.
-  void RenderAllStreams(cricket::Session* session, bool enable);
+  void RenderAllStreams(cricket::Call* call,
+                        cricket::Session* session,
+                        bool enable);
 
   // Depending on |enable|, render (or don't) the streams in |video_streams|.
-  void RenderStreams(cricket::Session* session,
+  void RenderStreams(cricket::Call* call,
+                     cricket::Session* session,
                      const std::vector<cricket::StreamParams>& video_streams,
                      bool enable);
 
   // Depending on |enable|, render (or don't) the supplied |stream|.
-  void RenderStream(cricket::Session* session,
-                    const cricket::StreamParams& stream, bool enable);
+  void RenderStream(cricket::Call* call,
+                    cricket::Session* session,
+                    const cricket::StreamParams& stream,
+                    bool enable);
   void AddStaticRenderedView(
       cricket::Session* session,
       uint32 ssrc, int width, int height, int framerate,

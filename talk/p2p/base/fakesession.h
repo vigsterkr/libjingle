@@ -69,7 +69,7 @@ class FakeTransportChannel : public TransportChannelImpl,
         do_dtls_(false),
         role_(ROLE_UNKNOWN),
         tiebreaker_(0),
-        ice_proto_(ICEPROTO_GOOGLE),
+        ice_proto_(ICEPROTO_HYBRID),
         dtls_fingerprint_("", NULL, 0) {
   }
   ~FakeTransportChannel() {

@@ -37,6 +37,7 @@
 #include "talk/media/base/mediachannel.h"
 #include "talk/media/base/screencastid.h"
 #include "talk/media/base/streamparams.h"
+#include "talk/media/base/videocommon.h"
 #include "talk/p2p/base/session.h"
 #include "talk/p2p/client/socketmonitor.h"
 #include "talk/session/media/audiomonitor.h"
@@ -87,11 +88,11 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                 const SendDataParams& params,
                 const std::string& data);
   void PressDTMF(int event);
-  void AddScreencast(Session* session,
-                     const std::string& stream_name, uint32 ssrc,
-                     const ScreencastId& screencastid, int fps);
-  void RemoveScreencast(Session* session,
-                        const std::string& stream_name, uint32 ssrc);
+  bool StartScreencast(Session* session,
+                       const std::string& stream_name, uint32 ssrc,
+                       const ScreencastId& screencastid, int fps);
+  bool StopScreencast(Session* session,
+                      const std::string& stream_name, uint32 ssrc);
 
   std::vector<Session*> sessions();
   uint32 id();
@@ -215,9 +216,22 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
                         BaseChannel* channel,
                         std::vector<StreamParams>* recv_streams);
   void ContinuePlayDTMF();
+  bool StopScreencastWithoutSendingUpdate(Session* session, uint32 ssrc);
+  bool StopAllScreencastsWithoutSendingUpdate(Session* session);
 
   uint32 id_;
   MediaSessionClient* session_client_;
+
+  struct StartedCapture {
+    StartedCapture(cricket::VideoCapturer* capturer,
+                   const cricket::VideoFormat& format) :
+        capturer(capturer),
+        format(format) {
+    }
+    cricket::VideoCapturer* capturer;
+    cricket::VideoFormat format;
+  };
+  typedef std::map<uint32, StartedCapture> StartedScreencastMap;
 
   struct MediaSession {
     Session* session;
@@ -225,6 +239,7 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
     VideoChannel* video_channel;
     DataChannel* data_channel;
     MediaStreams* recv_streams;
+    StartedScreencastMap started_screencasts;
   };
 
   // Create a map of media sessions, keyed off session->id().

@@ -160,6 +160,7 @@ class WebRtcVoiceEngineTestFake : public testing::Test {
     EXPECT_TRUE(voe_.WasPlayDtmfToneCalled(4, 145));
   }
 
+
  protected:
   cricket::FakeWebRtcVoiceEngine voe_;
   cricket::FakeWebRtcVoiceEngine voe_sc_;
@@ -1718,6 +1719,7 @@ TEST_F(WebRtcVoiceEngineTestFake, InitDoesNotOverwriteDefaultAgcConfig) {
             config.digitalCompressionGaindB);
   EXPECT_EQ(set_config.limiterEnable, config.limiterEnable);
 }
+
 
 TEST_F(WebRtcVoiceEngineTestFake, SetOptionOverridesViaChannels) {
   EXPECT_TRUE(SetupEngine());

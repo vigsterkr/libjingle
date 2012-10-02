@@ -84,7 +84,7 @@ bool VideoCapturerState::RemoveCaptureResolution(
 
 VideoFormat VideoCapturerState::GetHighestFormat(
     VideoCapturer* video_capturer) const {
-  VideoFormat highest_format(0, 0, VideoFormat::FpsToInterval(30), FOURCC_ANY);
+  VideoFormat highest_format(0, 0, VideoFormat::FpsToInterval(1), FOURCC_ANY);
   if (capture_formats_.empty()) {
     return kDefaultCaptureFormat;
   }
@@ -95,6 +95,9 @@ VideoFormat VideoCapturerState::GetHighestFormat(
     }
     if (iter->video_format.height > highest_format.height) {
       highest_format.height = iter->video_format.height;
+    }
+    if (iter->video_format.interval < highest_format.interval) {
+      highest_format.interval = iter->video_format.interval;
     }
   }
   return highest_format;

@@ -178,6 +178,7 @@ const buzz::StaticQName QN_FINGERPRINT_DIGEST = { cricket::NS_EMPTY, "digest" };
 
 const char NS_JINGLE_ICE_UDP[] = "urn:xmpp:jingle:transports:ice-udp:1";
 
+const char ICE_OPTION_GICE[] = "google-ice";
 const char NS_GINGLE_P2P[] = "http://www.google.com/transport/p2p";
 const buzz::StaticQName QN_GINGLE_P2P_TRANSPORT =
     { NS_GINGLE_P2P, LN_TRANSPORT };
