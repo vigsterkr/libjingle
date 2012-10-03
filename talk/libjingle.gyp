@@ -27,6 +27,23 @@
 
 {
   'includes': ['build/common.gypi'],
+
+  'conditions': [
+    [ 'os_posix == 1 and OS != "mac" and OS != "ios"', {
+      'conditions': [
+        ['sysroot!=""', {
+          'variables': {
+            'pkg-config': '../../../build/linux/pkg-config-wrapper "<(sysroot)" "<(target_arch)"',
+          },
+        }, {
+          'variables': {
+            'pkg-config': 'pkg-config'
+          },
+        }],
+      ],
+    }],
+  ],
+
   'targets': [
     {
       'target_name': 'libjingle',
@@ -34,11 +51,9 @@
       'dependencies': [
         '<(DEPTH)/third_party/expat/expat.gyp:expat',
       ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          '<(DEPTH)/third_party/expat/files/lib',
-        ],
-      },
+      'export_dependent_settings': [
+        '<(DEPTH)/third_party/expat/expat.gyp:expat',
+      ],
       'sources': [
         'base/asyncfile.cc',
         'base/asynchttprequest.cc',
@@ -148,6 +163,13 @@
         'xmpp/xmpptask.cc',
       ],
       'conditions': [
+        ['OS=="mac" or OS=="win"', {
+          'dependencies': [
+            # The chromium copy of nss should NOT be used on platforms that
+            # have NSS as system libraries, such as linux.
+            '<(DEPTH)/third_party/nss/nss.gyp:nss',
+          ],
+        }],
         ['OS=="linux"', {
           'sources': [
             'base/dbus.cc',
@@ -165,8 +187,15 @@
               '-lX11',
               '-lXcomposite',
               '-lXrender',
+              '<!@(<(pkg-config) --libs-only-l nss | sed -e "s/-lssl3//")',
             ],
           },
+          'cflags': [
+            '<!@(<(pkg-config) --cflags nss)',
+          ],
+          'ldflags': [
+            '<!@(<(pkg-config) --libs-only-L --libs-only-other nss)',
+          ],
         }],
         ['OS=="mac"', {
           'sources': [

@@ -29,6 +29,12 @@ deps = {
   "third_party/libsrtp/":
     From("chromium_deps", "src/third_party/libsrtp"),
 
+  "third_party/icu/":
+    From("chromium_deps", "src/third_party/icu"),
+
+  "third_party/sqlite/":
+    Var("chromium_trunk") + "/src/third_party/sqlite@" + Var("chromium_revision"),
+
   "tools/clang":
     Var("chromium_trunk") + "/src/tools/clang@" + Var("chromium_revision"),
 
@@ -51,7 +57,18 @@ deps_os = {
     # Use stripped down version of Cygwin (required by GYP) from webrtc.
     "third_party/cygwin":
       (Var("googlecode_url") % "webrtc") + "/deps/third_party/cygwin",
+
+    # NSS, for SSLClientSocketNSS.
+    "third_party/nss":
+      From("chromium_deps", "src/third_party/nss"),
   },
+
+  "mac": {
+    # NSS, for SSLClientSocketNSS.
+    "third_party/nss":
+      From("chromium_deps", "src/third_party/nss"),
+  },
+
   "unix": {
     "third_party/gold":
       From("chromium_deps", "src/third_party/gold"),

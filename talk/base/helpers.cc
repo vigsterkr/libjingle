@@ -31,14 +31,16 @@
 
 // TODO(juberti): Re-enable this once the OpenSSL build issues are fixed.
 //#include "talk/base/sslconfig.h"
+#if defined(SSL_USE_OPENSSL)
+#include <openssl/rand.h>
+#elif defined(SSL_USE_NSS)
+#include "pk11func.h"
+#else
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <ntsecapi.h>
-#else
-#ifdef SSL_USE_OPENSSL
-#include <openssl/rand.h>
-#endif
+#endif  // WIN32
 #endif
 
 #include "talk/base/base64.h"
@@ -60,9 +62,55 @@ class RandomGenerator {
   virtual bool Generate(void* buf, size_t len) = 0;
 };
 
-// The real random generators, using either CryptoAPI or OpenSSL.
-// We also support the 'old' generator on Mac/Linux until we have time to
-// fully test the OpenSSL one.
+#if defined(SSL_USE_OPENSSL)
+// The OpenSSL RNG. Need to make sure it doesn't run out of entropy.
+class SecureRandomGenerator : public RandomGenerator {
+ public:
+  SecureRandomGenerator() : inited_(false) {
+  }
+  ~SecureRandomGenerator() {
+  }
+  virtual bool Init(const void* seed, size_t len) {
+    // By default, seed from the system state.
+    if (!inited_) {
+      if (RAND_poll() <= 0) {
+        return false;
+      }
+      inited_ = true;
+    }
+    // Allow app data to be mixed in, if provided.
+    if (seed) {
+      RAND_seed(seed, len);
+    }
+    return true;
+  }
+  virtual bool Generate(void* buf, size_t len) {
+    if (!inited_ && !Init(NULL, 0)) {
+      return false;
+    }
+    return (RAND_bytes(reinterpret_cast<unsigned char*>(buf), len) > 0);
+  }
+
+ private:
+  bool inited_;
+};
+
+#elif defined(SSL_USE_NSS)
+// The NSS RNG.
+class SecureRandomGenerator : public RandomGenerator {
+ public:
+  SecureRandomGenerator() {}
+  ~SecureRandomGenerator() {}
+  virtual bool Init(const void* seed, size_t len) {
+    return true;
+  }
+  virtual bool Generate(void* buf, size_t len) {
+    return (PK11_GenerateRandom(reinterpret_cast<unsigned char*>(buf),
+                                static_cast<int>(len)) == SECSuccess);
+  }
+};
+
+#else
 #ifdef WIN32
 class SecureRandomGenerator : public RandomGenerator {
  public:
@@ -105,9 +153,9 @@ class SecureRandomGenerator : public RandomGenerator {
   HINSTANCE advapi32_;
   RtlGenRandomProc rtl_gen_random_;
 };
+
 #else
-#ifndef SSL_USE_OPENSSL
-// The old RNG.
+// TODO(ronghuawu): Remove the old RNG.
 class SecureRandomGenerator : public RandomGenerator {
  public:
   SecureRandomGenerator() : seed_(1) {
@@ -136,40 +184,9 @@ class SecureRandomGenerator : public RandomGenerator {
   }
   int seed_;
 };
-#else
-// The OpenSSL RNG. Need to make sure it doesn't run out of entropy.
-class SecureRandomGenerator : public RandomGenerator {
- public:
-  SecureRandomGenerator() : inited_(false) {
-  }
-  ~SecureRandomGenerator() {
-  }
-  virtual bool Init(const void* seed, size_t len) {
-    // By default, seed from the system state.
-    if (!inited_) {
-      if (RAND_poll() <= 0) {
-        return false;
-      }
-      inited_ = true;
-    }
-    // Allow app data to be mixed in, if provided.
-    if (seed) {
-      RAND_seed(seed, len);
-    }
-    return true;
-  }
-  virtual bool Generate(void* buf, size_t len) {
-    if (!inited_ && !Init(NULL, 0)) {
-      return false;
-    }
-    return (RAND_bytes(reinterpret_cast<unsigned char*>(buf), len) > 0);
-  }
 
- private:
-  bool inited_;
-};
-#endif  // SSL_USE_OPENSSL
 #endif  // WIN32
+#endif
 
 // A test random generator, for predictable output.
 class TestRandomGenerator : public RandomGenerator {
