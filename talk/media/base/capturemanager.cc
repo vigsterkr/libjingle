@@ -35,11 +35,8 @@
 
 namespace cricket {
 
-const VideoFormat VideoCapturerState::kDefaultCaptureFormat(
-    640,
-    360,
-    VideoFormat::FpsToInterval(30),
-    FOURCC_ANY);
+const VideoFormatPod VideoCapturerState::kDefaultCaptureFormat = {
+    640, 360, FPS_TO_INTERVAL(30), FOURCC_ANY};
 
 VideoCapturerState::VideoCapturerState(CaptureRenderAdapter* adapter)
     : adapter_(adapter),
@@ -86,7 +83,8 @@ VideoFormat VideoCapturerState::GetHighestFormat(
     VideoCapturer* video_capturer) const {
   VideoFormat highest_format(0, 0, VideoFormat::FpsToInterval(1), FOURCC_ANY);
   if (capture_formats_.empty()) {
-    return kDefaultCaptureFormat;
+    VideoFormat default_format(kDefaultCaptureFormat);
+    return default_format;
   }
   for (CaptureFormats::const_iterator iter = capture_formats_.begin();
        iter != capture_formats_.end(); ++iter) {

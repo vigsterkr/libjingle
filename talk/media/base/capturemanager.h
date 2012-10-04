@@ -59,7 +59,7 @@ class VideoRenderer;
 // CaptureManager helper class.
 class VideoCapturerState {
  public:
-  static const VideoFormat kDefaultCaptureFormat;
+  static const VideoFormatPod kDefaultCaptureFormat;
 
   static VideoCapturerState* Create(VideoCapturer* video_capturer);
   ~VideoCapturerState() {}

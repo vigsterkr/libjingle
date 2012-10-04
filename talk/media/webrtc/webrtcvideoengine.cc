@@ -490,34 +490,32 @@ const WebRtcVideoEngine::VideoCodecPref
     {kFecPayloadName, 102, 2},
 };
 
-static const int64 kNsPerFrame = 33333333;  // 30fps
-
 // The formats are sorted by the descending order of width. We use the order to
 // find the next format for CPU and bandwidth adaptation.
 const VideoFormatPod WebRtcVideoEngine::kVideoFormats[] = {
-  {1280, 800, kNsPerFrame, FOURCC_ANY},
-  {1280, 720, kNsPerFrame, FOURCC_ANY},
-  {960, 600, kNsPerFrame, FOURCC_ANY},
-  {960, 540, kNsPerFrame, FOURCC_ANY},
-  {640, 400, kNsPerFrame, FOURCC_ANY},
-  {640, 360, kNsPerFrame, FOURCC_ANY},
-  {640, 480, kNsPerFrame, FOURCC_ANY},
-  {480, 300, kNsPerFrame, FOURCC_ANY},
-  {480, 270, kNsPerFrame, FOURCC_ANY},
-  {480, 360, kNsPerFrame, FOURCC_ANY},
-  {320, 200, kNsPerFrame, FOURCC_ANY},
-  {320, 180, kNsPerFrame, FOURCC_ANY},
-  {320, 240, kNsPerFrame, FOURCC_ANY},
-  {240, 150, kNsPerFrame, FOURCC_ANY},
-  {240, 135, kNsPerFrame, FOURCC_ANY},
-  {240, 180, kNsPerFrame, FOURCC_ANY},
-  {160, 100, kNsPerFrame, FOURCC_ANY},
-  {160, 90, kNsPerFrame, FOURCC_ANY},
-  {160, 120, kNsPerFrame, FOURCC_ANY},
+  {1280, 800, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {1280, 720, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {960, 600, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {960, 540, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {640, 400, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {640, 360, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {640, 480, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {480, 300, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {480, 270, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {480, 360, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {320, 200, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {320, 180, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {320, 240, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {240, 150, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {240, 135, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {240, 180, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {160, 100, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {160, 90, FPS_TO_INTERVAL(30), FOURCC_ANY},
+  {160, 120, FPS_TO_INTERVAL(30), FOURCC_ANY},
 };
 
 const VideoFormatPod WebRtcVideoEngine::kDefaultVideoFormat =
-    {640, 400, kNsPerFrame, FOURCC_ANY};
+  {640, 400, FPS_TO_INTERVAL(30), FOURCC_ANY};
 
 static void UpdateVideoCodec(const cricket::VideoFormat& video_format,
                              webrtc::VideoCodec* target_codec) {
@@ -648,6 +646,7 @@ bool WebRtcVideoEngine::InitVideoEngine() {
     LOG_RTCERR0(RegisterVideoRenderModule);
     return false;
   }
+
 
   initialized_ = true;
   return true;
