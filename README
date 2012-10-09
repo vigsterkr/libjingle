@@ -29,7 +29,49 @@ illustrate the basic concepts of how the provided classes work.
 
 2. How to Build
 
-2.1 Prerequisites
+We now support two ways to build libjingle: GYP and Scons. We recommend
+using GYP which is easier to get dependencies and simple to use.
+
+2.1. Building using GYP
+
+2.1.1. Prerequisites
+
+First, be sure to install the prerequisite software.
+http://www.webrtc.org/reference/getting-started/prerequisite-sw
+
+The currently supported platforms are Windows, Mac OS X, and Linux.
+
+2.1.2. Getting the code and building
+
+Create a working directory, enter it, and run:
+$ gclient config http://libjingle.googlecode.com/svn/trunk
+$ gclient sync
+
+The sync will generate native build files for your environment using gyp
+(Linux: make/ninja, OS X: XCode/make/ninja, Windows: Visual Studio). This
+generation can also be forced manually:
+$ gclient runhooks
+
+It is also possible to choice the build method by set the environment variable
+GYP_GENERATORS. For examplerun this on mac will generate makefiles instead of
+xcode projects:
+$ GYP_GENERATORS=make gclient runhooks
+
+For more information on ninja build:
+http://code.google.com/p/chromium/wiki/NinjaBuild
+
+On Windows, gyp will use the latest Visual Studio on your system by default.
+In order to specify a particular Visual Studio version, there are a few
+options. You can set an environment variable GYP_MSVS_VERSION=<version> before
+runhooks, or manually run the gyp command triggered by runhooks. From the
+trunk/ directory:
+$ build/gyp_chromium --depth=. -G msvs_version=<version> talk/libjingle_all.gyp
+
+where <version> is, for example, 2008.
+
+2.2. Building using SCons 
+
+2.2.1. Prerequisites
 
 Libjingle is built with swtoolkit (http://code.google.com/p/swtoolkit/), which
 is a set of extensions to the open-source SCons build tool (www.scons.org).
@@ -63,7 +105,7 @@ is a set of extensions to the open-source SCons build tool (www.scons.org).
     so that your folder structure looks like:
     /talk/third_party/gtest/...
 
-2.2 libjingle
+2.2.2. libjingle
 
 Libjingle needs to be downloaded and patched
 
@@ -94,7 +136,7 @@ Libjingle needs to be downloaded and patched
   * Third, on Windows, copy config.h
     copy talk\third_party\srtp\config.hw talk\third_party\srtp\crypto\include\config.h
 
-2.2 Build Libjingle under Linux or OS X
+2.2.3. Build Libjingle under Linux or OS X
   * On Linux, you need to install libssl-dev, libasound2-dev and gtk+2.0.
   * Some optional new features in OpenSSL are only available in OpenSSL v1.0
     and above. To build with new OpenSSL features, you need to add the
@@ -112,7 +154,7 @@ Libjingle needs to be downloaded and patched
     $path_to_swtoolkit/hammer.sh --help for information on how to build for
     different modes.
 
-2.3 Build Libjingle under Windows
+2.2.4. Build Libjingle under Windows
   * First, make sure the SCONS_DIR environment variable is set correctly and
     Microsoft Visual Studio is installed.
     dir %SCONS_DIR%
