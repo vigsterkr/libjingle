@@ -92,13 +92,15 @@ void RemoteAudioTrackHandler::OnEnabledChanged() {
 }
 
 LocalVideoTrackHandler::LocalVideoTrackHandler(
-    LocalVideoTrackInterface* track,
+    VideoTrackInterface* track,
     VideoProviderInterface* provider)
     : BaseTrackHandler(track),
       local_video_track_(track),
       provider_(provider) {
-  provider_->SetCaptureDevice(local_video_track_->label(),
-                              local_video_track_->GetVideoCapture());
+  VideoSourceInterface* source = local_video_track_->GetSource();
+  if (source)
+    provider_->SetCaptureDevice(local_video_track_->label(),
+                                source->GetVideoCapturer());
   OnEnabledChanged();
 }
 
@@ -166,7 +168,6 @@ MediaStreamInterface* MediaStreamHandler::stream() {
 void MediaStreamHandler::OnChanged() {
 }
 
-
 LocalMediaStreamHandler::LocalMediaStreamHandler(
     MediaStreamInterface* stream,
     AudioProviderInterface* audio_provider,
@@ -182,8 +183,7 @@ LocalMediaStreamHandler::LocalMediaStreamHandler(
   // Create a VideoTrack handler for all video tracks in the MediaStream.
   VideoTracks* video_tracklist(stream->video_tracks());
   for (size_t j = 0; j < video_tracklist->count(); ++j) {
-    LocalVideoTrackInterface* track =
-        static_cast<LocalVideoTrackInterface*>(video_tracklist->at(j));
+    VideoTrackInterface* track = video_tracklist->at(j);
     BaseTrackHandler* handler(new LocalVideoTrackHandler(track,
                                                          video_provider));
     track_handlers_.push_back(handler);

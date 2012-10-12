@@ -63,6 +63,7 @@ enum FourCC {
   FOURCC_I444 = FOURCC('I', '4', '4', '4'),
   FOURCC_I411 = FOURCC('I', '4', '1', '1'),
   FOURCC_I400 = FOURCC('I', '4', '0', '0'),
+  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Linux version of I420.
   FOURCC_YV12 = FOURCC('Y', 'V', '1', '2'),
   FOURCC_YV16 = FOURCC('Y', 'V', '1', '6'),
   FOURCC_YV24 = FOURCC('Y', 'V', '2', '4'),
@@ -93,7 +94,6 @@ enum FourCC {
   // Aliases for canonical fourcc codes, replaced with their canonical
   // equivalents by CanonicalFourCC().
   FOURCC_IYUV = FOURCC('I', 'Y', 'U', 'V'),  // Alias for I420.
-  FOURCC_YU12 = FOURCC('Y', 'U', '1', '2'),  // Alias for I420.
   FOURCC_YU16 = FOURCC('Y', 'U', '1', '6'),  // Alias for I422.
   FOURCC_YU24 = FOURCC('Y', 'U', '2', '4'),  // Alias for I444.
   FOURCC_YUYV = FOURCC('Y', 'U', 'Y', 'V'),  // Alias for YUY2.

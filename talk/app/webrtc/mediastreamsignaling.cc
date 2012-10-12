@@ -27,8 +27,10 @@
 
 #include "talk/app/webrtc/mediastreamsignaling.h"
 
+#include "talk/app/webrtc/audiotrack.h"
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
+#include "talk/app/webrtc/videotrack.h"
 
 namespace webrtc {
 
@@ -106,7 +108,7 @@ void MediaStreamSignaling::UpdateRemoteStreams(
     const cricket::AudioContentDescription* desc =
           static_cast<const cricket::AudioContentDescription*>(
               audio_content->description);
-    UpdateRemoteStreamsList<AudioTrackInterface, AudioTrackProxy>(
+    UpdateRemoteStreamsList<AudioTrackInterface, AudioTrack, AudioTrackProxy>(
         desc->streams(), current_streams);
   }
 
@@ -115,7 +117,7 @@ void MediaStreamSignaling::UpdateRemoteStreams(
     const cricket::VideoContentDescription* video_desc =
         static_cast<const cricket::VideoContentDescription*>(
             video_content->description);
-    UpdateRemoteStreamsList<VideoTrackInterface, VideoTrackProxy>(
+    UpdateRemoteStreamsList<VideoTrackInterface, VideoTrack, VideoTrackProxy>(
         video_desc->streams(), current_streams);
   }
 
@@ -155,7 +157,7 @@ void MediaStreamSignaling::UpdateRemoteStreams(
   remote_streams_ = current_streams;
 }
 
-template <typename TrackInterface, typename TrackProxy>
+template <typename TrackInterface, typename Track, typename TrackProxy>
 void MediaStreamSignaling::UpdateRemoteStreamsList(
     const cricket::StreamParamsVec& streams,
     StreamCollection* current_streams) {
@@ -173,7 +175,7 @@ void MediaStreamSignaling::UpdateRemoteStreamsList(
         current_streams->AddStream(new_stream);
       }
       scoped_refptr<TrackInterface> track(
-          TrackProxy::CreateRemote(it->name, signaling_thread_));
+          TrackProxy::Create(Track::Create(it->name, NULL), signaling_thread_));
       track->set_state(MediaStreamTrackInterface::kLive);
       new_stream->AddTrack(track);
     } else {

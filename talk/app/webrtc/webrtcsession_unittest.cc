@@ -47,13 +47,19 @@
 #include "talk/session/media/channelmanager.h"
 #include "talk/session/media/mediasession.h"
 
+using cricket::kDtmfDelay;
+using cricket::kDtmfReset;
 using cricket::BaseSession;
+using cricket::DF_PLAY;
+using cricket::DF_SEND;
+using cricket::FakeVoiceMediaChannel;
 using cricket::NS_JINGLE_ICE_UDP;
 using cricket::NS_GINGLE_P2P;
 using cricket::TransportInfo;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
 using webrtc::IceCandidateCollection;
+using webrtc::MediaHints;
 using webrtc::JsepInterface;
 using webrtc::JsepSessionDescription;
 using webrtc::JsepIceCandidate;
@@ -82,6 +88,9 @@ static const char kMediaContentName0[] = "audio";
 static const int kMediaContentIndex1 = 1;
 
 static const int kIceCandidatesTimeout = 10000;
+
+static const cricket::AudioCodec
+    kTelephoneEventCodec(106, "telephone-event", 8000, 0, 1, 0);
 
 // Add some extra |newlines| to the |message| after |line|.
 static void InjectAfter(const std::string& line,
@@ -253,6 +262,14 @@ class WebRtcSessionTest : public testing::Test {
 
     EXPECT_TRUE(session_->Initialize(NULL));
     mediastream_signaling_.UseOptionsReceiveOnly();
+  }
+
+  void InitWithDtmfCodec() {
+    // Add kTelephoneEventCodec for dtmf test.
+    std::vector<cricket::AudioCodec> codecs;
+    codecs.push_back(kTelephoneEventCodec);
+    media_engine_->SetAudioCodecs(codecs);
+    Init();
   }
 
   // Creates a local offer and applies it. Starts ice.
@@ -467,6 +484,49 @@ class WebRtcSessionTest : public testing::Test {
       }
     }
   }
+  // Tests that we can only send DTMF when the dtmf codec is supported.
+  void TestCanSendDtmf(bool can) {
+    if (can) {
+      WebRtcSessionTest::InitWithDtmfCodec();
+    } else {
+      WebRtcSessionTest::Init();
+    }
+    mediastream_signaling_.UseOptionsWithStream1();
+    SetRemoteAndLocalSessionDescription();
+    EXPECT_FALSE(session_->CanSendDtmf(""));
+    EXPECT_EQ(can, session_->CanSendDtmf(kAudioTrack1));
+  }
+  void TestSendDtmf(bool play) {
+    WebRtcSessionTest::Init();
+    mediastream_signaling_.UseOptionsWithStream1();
+    SetRemoteAndLocalSessionDescription();
+    FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
+    EXPECT_EQ(0U, channel->dtmf_info_queue().size());
+
+    std::string play_name;
+    int expected_flags = DF_SEND;
+    if (play) {
+      play_name = kAudioTrack1;
+      expected_flags |= DF_PLAY;
+    }
+    session_->SendDtmf(kAudioTrack1, "1,a", 90, play_name);
+    ASSERT_EQ(4U, channel->dtmf_info_queue().size());
+    uint32 send_ssrc  = channel->send_streams()[0].first_ssrc();
+    // It should start with a kDtmfReset.
+    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[0],
+                                send_ssrc, kDtmfReset, 90, expected_flags));
+    // The code for event '1' is 1.
+    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[1],
+                                send_ssrc, 1, 90, expected_flags));
+    // The code for event ',' is kDtmfDelay.
+    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[2],
+                                send_ssrc, kDtmfDelay, cricket::kDtmfDelayInMs,
+                                expected_flags));
+    // The code for event 'a' is 12.
+    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[3],
+                                send_ssrc, 12, 90, expected_flags));
+  }
+
 
   void VerifyTransportType(const std::string& content_name,
                            cricket::TransportProtocol protocol) {
@@ -1365,6 +1425,22 @@ TEST_F(WebRtcSessionTest, SetVideoSend) {
   EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
   session_->SetVideoSend(kVideoTrack1, true);
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
+}
+
+TEST_F(WebRtcSessionTest, CanNotSendDtmf) {
+  TestCanSendDtmf(false);
+}
+
+TEST_F(WebRtcSessionTest, CanSendDtmf) {
+  TestCanSendDtmf(true);
+}
+
+TEST_F(WebRtcSessionTest, SendDtmf) {
+  TestSendDtmf(false);
+}
+
+TEST_F(WebRtcSessionTest, SendAndPlayDtmf) {
+  TestSendDtmf(true);
 }
 
 TEST_F(WebRtcSessionTest, TestInitiatorFlagAsOriginator) {

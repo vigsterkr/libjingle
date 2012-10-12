@@ -14,7 +14,9 @@
 #include "config.h"
 #endif  // HAVE_CONFIG_H
 
-#if HAVE_OPENSSL_SSL_H
+#include "talk/base/sslconfig.h"  // For SSL_USE_*
+
+#if SSL_USE_OPENSSL
 #define USE_SSL_TUNNEL
 #endif
 

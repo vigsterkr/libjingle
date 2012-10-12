@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "talk/base/buffer.h"
+#include "talk/base/stringutils.h"
 #include "talk/media/base/mediaengine.h"
 #include "talk/media/base/rtputils.h"
 #include "talk/media/base/streamparams.h"
@@ -322,6 +323,16 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
     return true;
   }
 
+  virtual bool CanInsertDtmf() {
+    for (std::vector<AudioCodec>::const_iterator it = send_codecs_.begin();
+         it != send_codecs_.end(); ++it) {
+      // Find the DTMF telephone event "codec".
+      if (_stricmp(it->name.c_str(), "telephone-event") == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
   virtual bool InsertDtmf(uint32 ssrc, int event_code, int duration,
                           int flags) {
     dtmf_info_queue_.push_back(DtmfInfo(ssrc, event_code, duration, flags));

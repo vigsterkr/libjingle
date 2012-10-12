@@ -60,6 +60,12 @@ class MockPeerConnection : public PeerConnectionInterface {
       ReadyState());
   MOCK_METHOD0(ice_state,
       IceState());
+  MOCK_METHOD1(CanSendDtmf,
+      bool(const AudioTrackInterface* track));
+  MOCK_METHOD4(SendDtmf,
+      bool(const AudioTrackInterface* send_track,
+           const std::string& tones, int duration,
+           const AudioTrackInterface* play_track));
   MOCK_METHOD1(CreateOffer,
       SessionDescriptionInterface*(const MediaHints& hints));
   MOCK_METHOD2(CreateAnswer,
@@ -216,6 +222,33 @@ TEST_F(PeerConnectionProxyTest, ice_state) {
           DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
                 Return(PeerConnectionInterface::kIceCompleted)));
   EXPECT_EQ(PeerConnectionInterface::kIceCompleted, pc_proxy_->ice_state());
+}
+
+TEST_F(PeerConnectionProxyTest, CanSendDtmf) {
+  AudioTrackInterface* fake_track =
+        GetFakePointer1<AudioTrackInterface>();
+  EXPECT_CALL(*pc_, CanSendDtmf(fake_track))
+      .Times(Exactly(1))
+      .WillOnce(
+          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
+                Return(true)));
+  EXPECT_EQ(true, pc_proxy_->CanSendDtmf(fake_track));
+}
+
+TEST_F(PeerConnectionProxyTest, SendDtmf) {
+  AudioTrackInterface* fake_send_track =
+        GetFakePointer1<AudioTrackInterface>();
+  AudioTrackInterface* fake_play_track =
+        GetFakePointer2<AudioTrackInterface>();
+  const std::string tones = "123,abc";
+  int duration = 120;
+  EXPECT_CALL(*pc_, SendDtmf(fake_send_track, tones, duration, fake_play_track))
+      .Times(Exactly(1))
+      .WillOnce(
+          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
+                Return(true)));
+  EXPECT_EQ(true, pc_proxy_->SendDtmf(fake_send_track, tones, duration,
+                                      fake_play_track));
 }
 
 TEST_F(PeerConnectionProxyTest, CreateOfferJSEP00) {

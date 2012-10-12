@@ -171,6 +171,7 @@ bool VideoFrame::Validate(uint32 fourcc, int w, int h,
       break;
     case FOURCC_I420:
     case FOURCC_I411:
+    case FOURCC_YU12:
     case FOURCC_YV12:
     case FOURCC_M420:
     case FOURCC_Q420:

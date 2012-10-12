@@ -104,6 +104,13 @@ class scoped_ptr {
   T** use() {
     return &ptr;
   }
+
+  // Allow scoped_ptr<T> to be used in boolean expressions, but not
+  // implicitly convertible to a real bool (which is dangerous).
+  // Borrowed from chromium's scoped_ptr implementation.
+  typedef T* scoped_ptr::*Testable;
+  operator Testable() const { return ptr ? &scoped_ptr::ptr : NULL; }
+
 };
 
 template<typename T> inline
@@ -178,6 +185,12 @@ class scoped_array {
     }
     return &ptr;
   }
+
+  // Allow scoped_array<T> to be used in boolean expressions, but not
+  // implicitly convertible to a real bool (which is dangerous).
+  // Borrowed from chromium's scoped_array implementation.
+  typedef T* scoped_array::*Testable;
+  operator Testable() const { return ptr ? &scoped_array::ptr : NULL; }
 };
 
 template<class T> inline
@@ -246,6 +259,12 @@ template<typename T, void (*FF)(void*) = free> class scoped_ptr_malloc {
     }
     return &ptr;
   }
+
+  // Allow scoped_ptr_malloc<T> to be used in boolean expressions, but not
+  // implicitly convertible to a real bool (which is dangerous).
+  // Borrowed from chromium's scoped_ptr_malloc implementation.
+  typedef T* scoped_ptr_malloc::*Testable;
+  operator Testable() const { return ptr ? &scoped_ptr_malloc::ptr : NULL; }
 };
 
 template<typename T, void (*FF)(void*)> inline

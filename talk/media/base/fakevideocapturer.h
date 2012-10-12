@@ -43,7 +43,8 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
  public:
   FakeVideoCapturer()
       : running_(false),
-        next_timestamp_(talk_base::kNumNanosecsPerMillisec) {
+        next_timestamp_(talk_base::kNumNanosecsPerMillisec),
+        is_screencast_(false) {
     // Default supported formats. Use ResetSupportedFormats to over write.
     std::vector<cricket::VideoFormat> formats;
     formats.push_back(cricket::VideoFormat(640, 480,
@@ -126,6 +127,10 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
     SetCaptureState(cricket::CS_STOPPED);
   }
   virtual bool IsRunning() { return running_; }
+  void SetScreencast(bool is_screencast) {
+    is_screencast_ = is_screencast;
+  }
+  virtual bool IsScreencast() { return is_screencast_; }
   bool GetPreferredFourccs(std::vector<uint32>* fourccs) {
     fourccs->push_back(cricket::FOURCC_I420);
     fourccs->push_back(cricket::FOURCC_MJPG);
@@ -135,6 +140,7 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
  private:
   bool running_;
   int64 next_timestamp_;
+  bool is_screencast_;
 };
 
 }  // namespace cricket

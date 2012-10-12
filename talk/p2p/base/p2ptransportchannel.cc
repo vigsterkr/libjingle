@@ -31,6 +31,7 @@
 #include "talk/base/common.h"
 #include "talk/base/crc32.h"
 #include "talk/base/logging.h"
+#include "talk/base/stringencode.h"
 #include "talk/p2p/base/common.h"
 #include "talk/p2p/base/relayport.h"  // For RELAY_PORT_TYPE.
 #include "talk/p2p/base/stunport.h"  // For STUN_PORT_TYPE.
@@ -429,11 +430,13 @@ void P2PTransportChannel::OnUnknownAddress(
     // TODO: Change the preference to the preference of
     // the peer-reflexive candidate when it's ready.
     // For now just default to a STUN preference.
+    // TODO(ronghuawu): Use Port::ComputeFoundation to calculate foundation.
     std::string id = talk_base::CreateRandomString(8);
     new_remote_candidate = Candidate(
         id, component(), ProtoToString(proto), address,
         0, remote_username, remote_password, type,
-        port->Network()->name(), 0U, talk_base::ComputeCrc32(id));
+        port->Network()->name(), 0U,
+        talk_base::ToString<uint32>(talk_base::ComputeCrc32(id)));
     new_remote_candidate.set_priority(
         new_remote_candidate.GetPriority(ICE_TYPE_PREFERENCE_SRFLX));
   }

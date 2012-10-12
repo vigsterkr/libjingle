@@ -97,7 +97,7 @@ class JsepSessionDescriptionTest : public testing::Test {
     talk_base::SocketAddress address("127.0.0.1", port++);
     cricket::Candidate candidate("rtp", cricket::ICE_CANDIDATE_COMPONENT_RTP,
                                  "udp", address, 1, "",
-                                 "", "local", "eth0", 0, 0);
+                                 "", "local", "eth0", 0, "1");
     candidate_ = candidate;
     const std::string session_id =
         talk_base::ToString(talk_base::CreateRandomId());

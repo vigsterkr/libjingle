@@ -38,8 +38,8 @@ enum {
   MSG_ENABLED,
   MSG_SET_ENABLED,
   MSG_STATE,
-  MSG_GET_AUDIODEVICE,
-  MSG_GET_VIDEODEVICE,
+  MSG_GET_AUDIOSOURCE,
+  MSG_GET_VIDEOSOURCE,
   MSG_ADD_VIDEORENDERER,
   MSG_REMOVE_VIDEORENDERER,
   MSG_GET_VIDEOFRAMEINPUT,
@@ -56,15 +56,14 @@ typedef talk_base::TypedMessageData<webrtc::VideoRendererInterface*>
 typedef talk_base::TypedMessageData<cricket::VideoRenderer*>
     VideoFrameInputMessageData;
 
-
-class AudioDeviceMessageData : public talk_base::MessageData {
+class AudioSourceMessageData : public talk_base::MessageData {
  public:
-  talk_base::scoped_refptr<webrtc::AudioDeviceModule> audio_device_;
+  talk_base::scoped_refptr<webrtc::AudioSourceInterface> audio_source_;
 };
 
-class VideoDeviceMessageData : public talk_base::MessageData {
+class VideoSourceMessageData : public talk_base::MessageData {
  public:
-  cricket::VideoCapturer* video_device_;
+  talk_base::scoped_refptr<webrtc::VideoSourceInterface> video_source_;
 };
 
 }  // namespace anonymous
@@ -73,13 +72,9 @@ namespace webrtc {
 
 template <class T>
 MediaStreamTrackProxy<T>::MediaStreamTrackProxy(
-    talk_base::Thread* signaling_thread)
-    : signaling_thread_(signaling_thread) {
-}
-
-template <class T>
-void MediaStreamTrackProxy<T>::Init(MediaStreamTrackInterface* track) {
-  track_ = track;
+    T* track, talk_base::Thread* signaling_thread)
+    : signaling_thread_(signaling_thread),
+      track_(track) {
 }
 
 template <class T>
@@ -210,139 +205,47 @@ bool MediaStreamTrackProxy<T>::HandleMessage(talk_base::Message* msg) {
   }
 }
 
-AudioTrackProxy::AudioTrackProxy(const std::string& label,
+
+AudioTrackProxy::AudioTrackProxy(AudioTrackInterface* track,
                                  talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalAudioTrackInterface>(signaling_thread),
-      audio_track_(AudioTrack::CreateRemote(label)) {
-  Init(audio_track_);
+    : MediaStreamTrackProxy<AudioTrackInterface>(track,
+                                                 signaling_thread) {
 }
 
-AudioTrackProxy::AudioTrackProxy(const std::string& label,
-                                 AudioDeviceModule* audio_device,
-                                 talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalAudioTrackInterface>(signaling_thread),
-      audio_track_(AudioTrack::CreateLocal(label, audio_device)) {
-  Init(audio_track_);
-}
-
-AudioTrackProxy::AudioTrackProxy(LocalAudioTrackInterface* implementation,
-                                 talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalAudioTrackInterface>(signaling_thread),
-      audio_track_(implementation) {
-  Init(audio_track_);
-}
-
-talk_base::scoped_refptr<AudioTrackInterface> AudioTrackProxy::CreateRemote(
-    const std::string& label,
-    talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<AudioTrackProxy>* track =
-      new talk_base::RefCountedObject<AudioTrackProxy>(label, signaling_thread);
-  return track;
-}
-
-talk_base::scoped_refptr<LocalAudioTrackInterface> AudioTrackProxy::CreateLocal(
-    const std::string& label,
-    AudioDeviceModule* audio_device,
-    talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<AudioTrackProxy>* track =
-      new talk_base::RefCountedObject<AudioTrackProxy>(label,
-                                               audio_device,
-                                               signaling_thread);
-  return track;
-}
-
-talk_base::scoped_refptr<LocalAudioTrackInterface> AudioTrackProxy::CreateLocal(
-    LocalAudioTrackInterface* implementation,
-    talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<AudioTrackProxy>* track =
-      new talk_base::RefCountedObject<AudioTrackProxy>(implementation,
-                                               signaling_thread);
-  return track;
-}
-
-AudioDeviceModule* AudioTrackProxy::GetAudioDevice() {
+AudioSourceInterface* AudioTrackProxy::GetSource() const {
   if (!signaling_thread_->IsCurrent()) {
-    AudioDeviceMessageData msg;
-    Send(MSG_GET_AUDIODEVICE, &msg);
-    return msg.audio_device_;
+    AudioSourceMessageData msg;
+    Send(MSG_GET_AUDIOSOURCE, &msg);
+    return msg.audio_source_;
   }
-  return audio_track_->GetAudioDevice();
+  return track_->GetSource();
 }
 
 void AudioTrackProxy::OnMessage(talk_base::Message* msg) {
-  if (!MediaStreamTrackProxy<LocalAudioTrackInterface>::HandleMessage(msg)) {
-    if (msg->message_id == MSG_GET_AUDIODEVICE) {
-      AudioDeviceMessageData* audio_device =
-          static_cast<AudioDeviceMessageData*>(msg->pdata);
-      audio_device->audio_device_ = audio_track_->GetAudioDevice();
-    } else {
-      ASSERT(!"Not Implemented!");
+  if (!HandleMessage(msg)) {
+    if (msg->message_id == MSG_GET_AUDIOSOURCE) {
+      AudioSourceMessageData* audio_source =
+          static_cast<AudioSourceMessageData*>(msg->pdata);
+      audio_source->audio_source_ = track_->GetSource();
+      return;
     }
+    ASSERT(!"Not Implemented!");
   }
 }
 
-VideoTrackProxy::VideoTrackProxy(const std::string& label,
-                                 talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalVideoTrackInterface>(signaling_thread),
-      video_track_(VideoTrack::CreateRemote(label)) {
-  Init(video_track_);
-}
-
-VideoTrackProxy::VideoTrackProxy(const std::string& label,
-                                 cricket::VideoCapturer* video_device,
-                                 talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalVideoTrackInterface>(signaling_thread),
-      video_track_(VideoTrack::CreateLocal(label, video_device)) {
-  Init(video_track_);
-}
-
-VideoTrackProxy::VideoTrackProxy(LocalVideoTrackInterface* implementation,
-                                 talk_base::Thread* signaling_thread)
-    : MediaStreamTrackProxy<LocalVideoTrackInterface>(signaling_thread),
-      video_track_(implementation) {
-  Init(video_track_);
-}
-
-talk_base::scoped_refptr<VideoTrackInterface> VideoTrackProxy::CreateRemote(
-    const std::string& label,
+talk_base::scoped_refptr<AudioTrackProxy> AudioTrackProxy::Create(
+    AudioTrackInterface* track,
     talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<VideoTrackProxy>* track =
-      new talk_base::RefCountedObject<VideoTrackProxy>(label, signaling_thread);
-  return track;
-}
-
-talk_base::scoped_refptr<LocalVideoTrackInterface> VideoTrackProxy::CreateLocal(
-    const std::string& label,
-    cricket::VideoCapturer* video_device,
-    talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<VideoTrackProxy>* track =
-      new talk_base::RefCountedObject<VideoTrackProxy>(label, video_device,
+  talk_base::RefCountedObject<AudioTrackProxy>* proxy =
+      new talk_base::RefCountedObject<AudioTrackProxy>(track,
                                                        signaling_thread);
-  return track;
+  return proxy;
 }
 
-talk_base::scoped_refptr<LocalVideoTrackInterface> VideoTrackProxy::CreateLocal(
-    LocalVideoTrackInterface* implementation,
-    talk_base::Thread* signaling_thread) {
-  ASSERT(signaling_thread != NULL);
-  talk_base::RefCountedObject<VideoTrackProxy>* track =
-      new talk_base::RefCountedObject<VideoTrackProxy>(implementation,
-                                                       signaling_thread);
-  return track;
-}
-
-cricket::VideoCapturer* VideoTrackProxy::GetVideoCapture() {
-  if (!signaling_thread_->IsCurrent()) {
-    VideoDeviceMessageData msg;
-    Send(MSG_GET_VIDEODEVICE, &msg);
-    return msg.video_device_;
-  }
-  return video_track_->GetVideoCapture();
+VideoTrackProxy::VideoTrackProxy(VideoTrackInterface* video_track,
+                                 talk_base::Thread* signaling_thread)
+    : MediaStreamTrackProxy<VideoTrackInterface>(video_track,
+                                                 signaling_thread) {
 }
 
 void VideoTrackProxy::AddRenderer(VideoRendererInterface* renderer) {
@@ -351,7 +254,7 @@ void VideoTrackProxy::AddRenderer(VideoRendererInterface* renderer) {
     Send(MSG_ADD_VIDEORENDERER, &msg);
     return;
   }
-  video_track_->AddRenderer(renderer);
+  track_->AddRenderer(renderer);
 }
 
 void VideoTrackProxy::RemoveRenderer(VideoRendererInterface* renderer) {
@@ -360,7 +263,7 @@ void VideoTrackProxy::RemoveRenderer(VideoRendererInterface* renderer) {
     Send(MSG_REMOVE_VIDEORENDERER, &msg);
     return;
   }
-  video_track_->RemoveRenderer(renderer);
+  track_->RemoveRenderer(renderer);
 }
 
 cricket::VideoRenderer* VideoTrackProxy::FrameInput() {
@@ -369,34 +272,43 @@ cricket::VideoRenderer* VideoTrackProxy::FrameInput() {
     Send(MSG_GET_VIDEOFRAMEINPUT, &msg);
     return msg.data();
   }
-  return video_track_->FrameInput();
+  return track_->FrameInput();
+}
+
+VideoSourceInterface* VideoTrackProxy::GetSource() const {
+  if (!signaling_thread_->IsCurrent()) {
+    VideoSourceMessageData msg;
+    Send(MSG_GET_VIDEOSOURCE, &msg);
+    return msg.video_source_;
+  }
+  return track_->GetSource();
 }
 
 void VideoTrackProxy::OnMessage(talk_base::Message* msg) {
-  if (!MediaStreamTrackProxy<LocalVideoTrackInterface>::HandleMessage(msg)) {
+  if (!MediaStreamTrackProxy<VideoTrackInterface>::HandleMessage(msg)) {
     switch (msg->message_id) {
-      case  MSG_GET_VIDEODEVICE: {
-        VideoDeviceMessageData* video_device =
-            static_cast<VideoDeviceMessageData*>(msg->pdata);
-        video_device->video_device_ = video_track_->GetVideoCapture();
+       case  MSG_GET_VIDEOSOURCE: {
+        VideoSourceMessageData* video_source =
+            static_cast<VideoSourceMessageData*>(msg->pdata);
+        video_source->video_source_ = track_->GetSource();
         break;
       }
       case MSG_ADD_VIDEORENDERER: {
         VideoRendererInterfaceMessageData* renderer =
             static_cast<VideoRendererInterfaceMessageData*>(msg->pdata);
-        video_track_->AddRenderer(renderer->data());
+        track_->AddRenderer(renderer->data());
         break;
       }
       case MSG_REMOVE_VIDEORENDERER: {
         VideoRendererInterfaceMessageData* message =
             static_cast<VideoRendererInterfaceMessageData*>(msg->pdata);
-        video_track_->RemoveRenderer(message->data());
+        track_->RemoveRenderer(message->data());
         break;
       }
       case MSG_GET_VIDEOFRAMEINPUT: {
         VideoFrameInputMessageData* message =
             static_cast<VideoFrameInputMessageData*>(msg->pdata);
-        message->data() = video_track_->FrameInput();
+        message->data() = track_->FrameInput();
         break;
       }
     default:
@@ -404,6 +316,15 @@ void VideoTrackProxy::OnMessage(talk_base::Message* msg) {
       break;
     }
   }
+}
+
+talk_base::scoped_refptr<VideoTrackProxy> VideoTrackProxy::Create(
+    VideoTrackInterface* track,
+    talk_base::Thread* signaling_thread) {
+  talk_base::RefCountedObject<VideoTrackProxy>* proxy =
+      new talk_base::RefCountedObject<VideoTrackProxy>(track,
+                                                       signaling_thread);
+  return proxy;
 }
 
 }  // namespace webrtc

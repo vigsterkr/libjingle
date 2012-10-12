@@ -192,6 +192,10 @@ class VideoCapturer
   // returns false.
   bool RemoveVideoProcessor(VideoProcessor* video_processor);
 
+  // Returns true if the capturer is screencasting. This can be used to
+  // implement screencast specific behavior.
+  virtual bool IsScreencast() = 0;
+
   // Signal all capture state changes that are not a direct result of calling
   // Start().
   sigslot::signal2<VideoCapturer*, CaptureState> SignalStateChange;

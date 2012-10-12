@@ -269,8 +269,8 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   // Checks if this port is useless, and hence, should be destroyed.
   void CheckTimeout();
 
-  uint32 ComputeFoundation(const std::string& protocol,
-                           const talk_base::SocketAddress& base_address) const;
+  std::string ComputeFoundation(const std::string& protocol,
+      const talk_base::SocketAddress& base_address) const;
 
   talk_base::Thread* thread_;
   talk_base::PacketSocketFactory* factory_;
@@ -402,6 +402,7 @@ class Connection : public talk_base::MessageHandler,
 
   // Called whenever a valid ping is received on this connection.  This is
   // public because the connection intercepts the first ping for us.
+  uint32 last_ping_received() const { return last_ping_received_; }
   void ReceivedPing();
 
   // Debugging description of this connection

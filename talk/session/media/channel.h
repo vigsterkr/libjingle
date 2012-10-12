@@ -363,6 +363,8 @@ class VoiceChannel : public BaseChannel {
   bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
   // TODO(ronghuawu): Replace PressDTMF with InsertDtmf.
   bool PressDTMF(int digit, bool playout);
+  // Returns if the telephone-event has been negotiated.
+  bool CanInsertDtmf();
   // Send and/or play a DTMF |event| according to the |flags|.
   // The DTMF out-of-band signal will be used on sending.
   // The |ssrc| should be either 0 or a valid send stream ssrc.
@@ -416,6 +418,7 @@ class VoiceChannel : public BaseChannel {
   bool SetRingbackTone_w(const void* buf, int len);
   bool PlayRingbackTone_w(uint32 ssrc, bool play, bool loop);
   void HandleEarlyMediaTimeout();
+  bool CanInsertDtmf_w();
   bool InsertDtmf_w(uint32 ssrc, int event, int duration, int flags);
   bool SetOutputScaling_w(uint32 ssrc, double left, double right);
 

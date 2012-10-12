@@ -1696,6 +1696,67 @@ TEST_F(PortTest, TestHandleStunMessageAsIceBadFingerprint) {
   EXPECT_EQ(0, port->last_stun_error_code());
 }
 
+// Test handling of STUN binding indication messages (as ICE). STUN binding
+// indications are allowed only to the connection which is in read mode.
+TEST_F(PortTest, TestHandleStunBindingIndication) {
+  talk_base::scoped_ptr<TestPort> lport(
+      CreateTestPort(kLocalAddr2, "lfrag", "lpass"));
+  lport->SetIceProtocolType(ICEPROTO_RFC5245);
+  lport->SetRole(cricket::ROLE_CONTROLLING);
+  lport->SetTiebreaker(kTiebreaker1);
+
+  // Verifying encoding and decoding STUN indication message.
+  talk_base::scoped_ptr<IceMessage> in_msg, out_msg;
+  talk_base::scoped_ptr<ByteBuffer> buf(new ByteBuffer());
+  talk_base::SocketAddress addr(kLocalAddr1);
+  std::string username;
+
+  in_msg.reset(CreateStunMessage(STUN_BINDING_INDICATION));
+  in_msg->AddFingerprint();
+  WriteStunMessage(in_msg.get(), buf.get());
+  EXPECT_TRUE(lport->GetStunMessage(buf->Data(), buf->Length(), addr,
+                                    out_msg.accept(), &username));
+  EXPECT_TRUE(out_msg.get() != NULL);
+  EXPECT_EQ(out_msg->type(), STUN_BINDING_INDICATION);
+  EXPECT_EQ("", username);
+
+  // Verify connection can handle STUN indication and updates
+  // last_ping_received.
+  talk_base::scoped_ptr<TestPort> rport(
+      CreateTestPort(kLocalAddr2, "rfrag", "rpass"));
+  rport->SetIceProtocolType(ICEPROTO_RFC5245);
+  rport->SetRole(cricket::ROLE_CONTROLLED);
+  rport->SetTiebreaker(kTiebreaker2);
+
+  lport->PrepareAddress();
+  rport->PrepareAddress();
+  ASSERT_FALSE(lport->Candidates().empty());
+  ASSERT_FALSE(rport->Candidates().empty());
+
+  Connection* lconn = lport->CreateConnection(rport->Candidates()[0],
+                                              Port::ORIGIN_MESSAGE);
+  Connection* rconn = rport->CreateConnection(lport->Candidates()[0],
+                                              Port::ORIGIN_MESSAGE);
+  rconn->Ping(0);
+
+  ASSERT_TRUE_WAIT(rport->last_stun_msg() != NULL, 1000);
+  IceMessage* msg = rport->last_stun_msg();
+  EXPECT_EQ(STUN_BINDING_REQUEST, msg->type());
+  // Send rport binding request to lport.
+  lconn->OnReadPacket(rport->last_stun_buf()->Data(),
+                      rport->last_stun_buf()->Length());
+  ASSERT_TRUE_WAIT(lport->last_stun_msg() != NULL, 1000);
+  EXPECT_EQ(STUN_BINDING_RESPONSE, lport->last_stun_msg()->type());
+  uint32 last_ping_received1 = lconn->last_ping_received();
+
+  // Adding a delay of 100ms.
+  talk_base::Thread::Current()->ProcessMessages(100);
+  // Pinging lconn using stun indication message.
+  lconn->OnReadPacket(buf->Data(), buf->Length());
+  uint32 last_ping_received2 = lconn->last_ping_received();
+  EXPECT_GT(last_ping_received2, last_ping_received1);
+}
+
 TEST_F(PortTest, TestComputeCandidatePriority) {
   talk_base::scoped_ptr<TestPort> port(
       CreateTestPort(kLocalAddr1, "name", "pass"));

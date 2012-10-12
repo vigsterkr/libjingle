@@ -30,6 +30,7 @@
 #include <math.h>
 #include <string.h>
 
+#include <algorithm>
 #include <string>
 
 #include <X11/Xatom.h>
@@ -40,6 +41,57 @@
 #include "talk/base/logging.h"
 
 namespace talk_base {
+
+// Convenience wrapper for XGetWindowProperty results.
+template <class PropertyType>
+class XWindowProperty {
+ public:
+  XWindowProperty(Display* display, Window window, Atom property)
+      : data_(NULL) {
+    const int kBitsPerByte = 8;
+    Atom actual_type;
+    int actual_format;
+    unsigned long bytes_after;  // NOLINT: type required by XGetWindowProperty
+    int status = XGetWindowProperty(display, window, property, 0L, ~0L, False,
+                                    AnyPropertyType, &actual_type,
+                                    &actual_format, &size_,
+                                    &bytes_after, &data_);
+    succeeded_ = (status == Success);
+    if (!succeeded_) {
+      data_ = NULL;  // Ensure nothing is freed.
+    } else if (sizeof(PropertyType) * kBitsPerByte != actual_format) {
+      LOG(LS_WARNING) << "Returned type size differs from "
+          "requested type size.";
+      succeeded_ = false;
+      // We still need to call XFree in this case, so leave data_ alone.
+    }
+    if (!succeeded_) {
+      size_ = 0;
+    }
+  }
+
+  ~XWindowProperty() {
+    if (data_) {
+      XFree(data_);
+    }
+  }
+
+  bool succeeded() const { return succeeded_; }
+  size_t size() const { return size_; }
+  const PropertyType* data() const {
+    return reinterpret_cast<PropertyType*>(data_);
+  }
+  PropertyType* data() {
+    return reinterpret_cast<PropertyType*>(data_);
+  }
+
+ private:
+  bool succeeded_;
+  unsigned long size_;  // NOLINT: type required by XGetWindowProperty
+  unsigned char* data_;
+
+  DISALLOW_COPY_AND_ASSIGN(XWindowProperty);
+};
 
 // Stupid X11.  It seems none of the synchronous returns codes from X11 calls
 // are meaningful unless an asynchronous error handler is configured.  This
@@ -314,14 +366,16 @@ class XWindowEnumerator {
     // In addition to needing X11 server-side support for Xcomposite, it
     // actually needs to be turned on for this window in order to get a good
     // thumbnail. If the user has modern hardware/drivers but isn't using a
-    // compositing window manager, that won't be the case. We could
-    // automatically turn it on for all windows here so that we can get
-    // thumbnails, but the transition is visually ugly, so instead we just want
-    // to detect this case and bail out. To do so, we attempt to retrieve the
-    // backing pixmap for the window, which will only exist if the window has
-    // been redirected to offscreen drawing by a compositing window manager. If
-    // it doesn't exist, the calls will raise errors, so we must suppress errors
-    // to prevent libX11 from aborting the program.
+    // compositing window manager, that won't be the case. Here we
+    // automatically turn it on for shareable windows so that we can get
+    // thumbnails. We used to avoid it because the transition is visually ugly,
+    // but recent window managers don't always redirect windows which led to
+    // no thumbnails at all, which is a worse experience.
+
+    // Redirect drawing to an offscreen buffer (ie, turn on compositing).
+    // X11 remembers what has requested this and will turn it off for us when
+    // we exit.
+    XCompositeRedirectWindow(display_, id.id(), CompositeRedirectAutomatic);
     Pixmap src_pixmap = XCompositeNameWindowPixmap(display_, id.id());
     if (!src_pixmap) {
       // Even if the backing pixmap doesn't exist, this still should have
@@ -693,6 +747,24 @@ bool LinuxWindowPicker::IsDesktopElement(_XDisplay* display, Window window) {
     LOG(LS_WARNING) << "Zero is never a valid window.";
     return false;
   }
+
+  // First look for _NET_WM_WINDOW_TYPE. The standard
+  // (http://standards.freedesktop.org/wm-spec/latest/ar01s05.html#id2760306)
+  // says this hint *should* be present on all windows, and we use the existence
+  // of _NET_WM_WINDOW_TYPE_NORMAL in the property to indicate a window is not
+  // a desktop element (that is, only "normal" windows should be shareable).
+  Atom window_type_atom = XInternAtom(display, "_NET_WM_WINDOW_TYPE", True);
+  XWindowProperty<uint32_t> window_type(display, window, window_type_atom);
+  if (window_type.succeeded() && window_type.size() > 0) {
+    Atom normal_window_type_atom = XInternAtom(
+        display, "_NET_WM_WINDOW_TYPE_NORMAL", True);
+    uint32_t* end = window_type.data() + window_type.size();
+    bool is_normal = (end != std::find(
+        window_type.data(), end, normal_window_type_atom));
+    return !is_normal;
+  }
+
+  // Fall back on using the hint.
   XClassHint class_hint;
   Status s = XGetClassHint(display, window, &class_hint);
   bool result = false;

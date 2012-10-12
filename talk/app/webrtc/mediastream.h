@@ -37,8 +37,6 @@
 #include "talk/app/webrtc/notifier.h"
 
 namespace webrtc {
-class AudioTrack;
-class VideoTrack;
 
 class MediaStream : public Notifier<LocalMediaStreamInterface> {
  public:

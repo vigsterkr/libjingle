@@ -25,4 +25,12 @@ TEST(WindowPickerTest, GetDesktopList) {
   EXPECT_TRUE(picker->Init());
   talk_base::DesktopDescriptionList descriptions;
   EXPECT_TRUE(picker->GetDesktopList(&descriptions));
+  if (descriptions.size() > 0) {
+    int width = 0;
+    int height = 0;
+    EXPECT_TRUE(picker->GetDesktopDimensions(descriptions[0].id(), &width,
+                                             &height));
+    EXPECT_GT(width, 0);
+    EXPECT_GT(height, 0);
+  }
 }

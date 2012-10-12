@@ -55,16 +55,18 @@ static const uint32 kTimeout = 5000U;
 
 using talk_base::scoped_ptr;
 using talk_base::scoped_refptr;
+using webrtc::AudioSourceInterface;
 using webrtc::FakePortAllocatorFactory;
 using webrtc::IceCandidateInterface;
-using webrtc::LocalAudioTrackInterface;
+using webrtc::AudioTrackInterface;
 using webrtc::LocalMediaStreamInterface;
-using webrtc::LocalVideoTrackInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
 using webrtc::SessionDescriptionInterface;
+using webrtc::VideoSourceInterface;
+using webrtc::VideoTrackInterface;
 
 // Gets the first ssrc of given content type from the ContentInfo.
 static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
@@ -299,8 +301,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
     // Create a local stream.
     scoped_refptr<LocalMediaStreamInterface> stream(
         pc_factory_->CreateLocalMediaStream(label));
-    scoped_refptr<LocalVideoTrackInterface> video_track(
-        pc_factory_->CreateLocalVideoTrack(label, NULL));
+    scoped_refptr<VideoTrackInterface> video_track(
+        pc_factory_->CreateVideoTrack(label, NULL));
     stream->AddTrack(video_track.get());
     EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
@@ -311,8 +313,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
     // Create a local stream.
     scoped_refptr<LocalMediaStreamInterface> stream(
         pc_factory_->CreateLocalMediaStream(label));
-    scoped_refptr<LocalAudioTrackInterface> audio_track(
-        pc_factory_->CreateLocalAudioTrack(label, NULL));
+    scoped_refptr<AudioTrackInterface> audio_track(
+        pc_factory_->CreateAudioTrack(label, NULL));
     stream->AddTrack(audio_track.get());
     EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
@@ -325,11 +327,12 @@ class PeerConnectionInterfaceTest : public testing::Test {
     // Create a local stream.
     scoped_refptr<LocalMediaStreamInterface> stream(
         pc_factory_->CreateLocalMediaStream(stream_label));
-    scoped_refptr<LocalAudioTrackInterface> audio_track(
-        pc_factory_->CreateLocalAudioTrack(audio_track_label, NULL));
+    scoped_refptr<AudioTrackInterface> audio_track(
+        pc_factory_->CreateAudioTrack(
+            audio_track_label, static_cast<AudioSourceInterface*>(NULL)));
     stream->AddTrack(audio_track.get());
-    scoped_refptr<LocalVideoTrackInterface> video_track(
-        pc_factory_->CreateLocalVideoTrack(video_track_label, NULL));
+    scoped_refptr<VideoTrackInterface> video_track(
+        pc_factory_->CreateVideoTrack(video_track_label, NULL));
     stream->AddTrack(video_track.get());
     EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
@@ -405,8 +408,9 @@ TEST_F(PeerConnectionInterfaceTest, AddStreams) {
   // Fail to add another stream with audio since we already have an audio track.
   scoped_refptr<LocalMediaStreamInterface> stream(
       pc_factory_->CreateLocalMediaStream(kStreamLabel3));
-  scoped_refptr<LocalAudioTrackInterface> audio_track(
-      pc_factory_->CreateLocalAudioTrack(kStreamLabel3, NULL));
+  scoped_refptr<AudioTrackInterface> audio_track(
+      pc_factory_->CreateAudioTrack(
+          kStreamLabel3, static_cast<AudioSourceInterface*>(NULL)));
   stream->AddTrack(audio_track.get());
   EXPECT_FALSE(pc_->AddStream(stream, NULL));
 

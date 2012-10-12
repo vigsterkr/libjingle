@@ -43,6 +43,7 @@ namespace cricket {
 // These are the types of STUN messages defined in RFC 5389.
 enum StunMessageType {
   STUN_BINDING_REQUEST            = 0x0001,
+  STUN_BINDING_INDICATION         = 0x0010,
   STUN_BINDING_RESPONSE           = 0x0101,
   STUN_BINDING_ERROR_RESPONSE     = 0x0111,
 };

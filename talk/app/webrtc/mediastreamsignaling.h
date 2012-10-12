@@ -92,7 +92,7 @@ class MediaStreamSignaling {
  private:
   // Create new MediaStreams and Tracks if they exist in |streams|
   // Both new and existing MediaStreams are added to |current_streams|.
-  template <typename TrackInterface, typename TrackProxy>
+  template <typename TrackInterface, typename Track, typename TrackProxy>
   void UpdateRemoteStreamsList(
       const std::vector<cricket::StreamParams>& streams,
       StreamCollection* current_streams);

@@ -957,6 +957,7 @@ class VideoMediaChannelTest : public testing::Test,
     Renderer renderer1;
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer(
       new cricket::FakeVideoCapturer);
+    capturer->SetScreencast(true);
     cricket::VideoFormat format(1024, 768,
                                 cricket::VideoFormat::FpsToInterval(5), 0);
     EXPECT_EQ(cricket::CS_RUNNING, capturer->Start(format));
@@ -1281,6 +1282,7 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_FRAME_WAIT(1, 640, 400, kTimeout);
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer(
         new cricket::FakeVideoCapturer);
+    capturer->SetScreencast(true);
     cricket::VideoFormat format(1024, 768,
                                 cricket::VideoFormat::FpsToInterval(30), 0);
     EXPECT_EQ(cricket::CS_RUNNING, capturer->Start(format));
@@ -1364,6 +1366,7 @@ class VideoMediaChannelTest : public testing::Test,
         cricket::StreamParams::CreateLegacy(1)));
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer1(
         new cricket::FakeVideoCapturer);
+    capturer1->SetScreencast(true);
     EXPECT_EQ(cricket::CS_RUNNING, capturer1->Start(capture_format));
     // Set up additional stream 2.
     Renderer renderer2;
@@ -1375,6 +1378,7 @@ class VideoMediaChannelTest : public testing::Test,
         cricket::StreamParams::CreateLegacy(2)));
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer2(
         new cricket::FakeVideoCapturer);
+    capturer2->SetScreencast(true);
     EXPECT_EQ(cricket::CS_RUNNING, capturer2->Start(capture_format));
     // State for all the streams.
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
@@ -1433,6 +1437,7 @@ class VideoMediaChannelTest : public testing::Test,
     // (update the test when this changes).
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer(
         new cricket::FakeVideoCapturer);
+    capturer->SetScreencast(true);
     const std::vector<cricket::VideoFormat>* formats =
         capturer->GetSupportedFormats();
     cricket::VideoFormat capture_format = (*formats)[0];

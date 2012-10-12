@@ -34,21 +34,10 @@ namespace webrtc {
 
 static const char kVideoTrackKind[] = "video";
 
-VideoTrack::VideoTrack(const std::string& label)
-    : MediaStreamTrack<LocalVideoTrackInterface>(label),
-      video_device_(NULL) {
-}
-
 VideoTrack::VideoTrack(const std::string& label,
-                       cricket::VideoCapturer* video_device)
-    : MediaStreamTrack<LocalVideoTrackInterface>(label),
-      video_device_(NULL) {
-  video_device_.reset(video_device);
-}
-
-  // Get the VideoCapture device associated with this track.
-cricket::VideoCapturer* VideoTrack::GetVideoCapture() {
-  return video_device_.get();
+                       VideoSourceInterface* video_source)
+    : MediaStreamTrack<VideoTrackInterface>(label),
+      video_source_(video_source) {
 }
 
 std::string VideoTrack::kind() const {
@@ -67,19 +56,24 @@ cricket::VideoRenderer* VideoTrack::FrameInput() {
   return &renderers_;
 }
 
-talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateRemote(
-    const std::string& label) {
+talk_base::scoped_refptr<VideoTrack> VideoTrack::Create(
+    const std::string& label, VideoSourceInterface* source) {
   talk_base::RefCountedObject<VideoTrack>* track =
-      new talk_base::RefCountedObject<VideoTrack>(label);
+      new talk_base::RefCountedObject<VideoTrack>(label, source);
   return track;
 }
 
-talk_base::scoped_refptr<VideoTrack> VideoTrack::CreateLocal(
-    const std::string& label,
-    cricket::VideoCapturer* video_device) {
-  talk_base::RefCountedObject<VideoTrack>* track =
-      new talk_base::RefCountedObject<VideoTrack>(label, video_device);
-  return track;
+LocalVideoSource::LocalVideoSource(cricket::VideoCapturer* capturer)
+    : video_capturer_(capturer) {
+}
+
+LocalVideoSource::~LocalVideoSource() {
+  delete video_capturer_;
+}
+
+talk_base::scoped_refptr<LocalVideoSource> LocalVideoSource::Create(
+    cricket::VideoCapturer* capturer) {
+  return new talk_base::RefCountedObject<LocalVideoSource>(capturer);
 }
 
 }  // namespace webrtc

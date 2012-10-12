@@ -32,39 +32,21 @@ namespace webrtc {
 
 static const char kAudioTrackKind[] = "audio";
 
-AudioTrack::AudioTrack(const std::string& label)
-    : MediaStreamTrack<LocalAudioTrackInterface>(label),
-      audio_device_(NULL) {
-}
 
 AudioTrack::AudioTrack(const std::string& label,
-                       AudioDeviceModule* audio_device)
-    : MediaStreamTrack<LocalAudioTrackInterface>(label),
-      audio_device_(audio_device) {
+                       AudioSourceInterface* audio_source)
+    : MediaStreamTrack<AudioTrackInterface>(label),
+      audio_source_(audio_source) {
 }
 
-  // Get the AudioDeviceModule associated with this track.
-AudioDeviceModule* AudioTrack::GetAudioDevice() {
-  return audio_device_.get();
-}
-
-  // Implement MediaStreamTrack
 std::string AudioTrack::kind() const {
   return kAudioTrackKind;
 }
 
-talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateRemote(
-    const std::string& label) {
+talk_base::scoped_refptr<AudioTrack> AudioTrack::Create(
+    const std::string& label, AudioSourceInterface* source) {
   talk_base::RefCountedObject<AudioTrack>* track =
-      new talk_base::RefCountedObject<AudioTrack>(label);
-  return track;
-}
-
-talk_base::scoped_refptr<AudioTrack> AudioTrack::CreateLocal(
-    const std::string& label,
-    AudioDeviceModule* audio_device) {
-  talk_base::RefCountedObject<AudioTrack>* track =
-      new talk_base::RefCountedObject<AudioTrack>(label, audio_device);
+      new talk_base::RefCountedObject<AudioTrack>(label, source);
   return track;
 }
 

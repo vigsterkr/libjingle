@@ -184,8 +184,11 @@ class Thread : public MessageQueue {
   bool IsOwned();
 
 #ifdef WIN32
-  HANDLE GetHandle() {
+  HANDLE GetHandle() const {
     return thread_;
+  }
+  DWORD GetId() const {
+    return thread_id_;
   }
 #elif POSIX
   pthread_t GetPThread() {
@@ -226,6 +229,7 @@ class Thread : public MessageQueue {
 
 #ifdef WIN32
   HANDLE thread_;
+  DWORD thread_id_;
 #endif
 
   bool owned_;

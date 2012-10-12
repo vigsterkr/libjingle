@@ -34,7 +34,6 @@
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
-#include "talk/media/webrtc/webrtcvideocapturer.h"
 #include "talk/session/media/channelmanager.h"
 
 namespace {
@@ -261,16 +260,6 @@ bool CanAddLocalMediaStream(webrtc::StreamCollectionInterface* current_streams,
 
 namespace webrtc {
 
-cricket::VideoCapturer* CreateVideoCapturer(VideoCaptureModule* vcm) {
-  cricket::WebRtcVideoCapturer* video_capturer =
-      new cricket::WebRtcVideoCapturer;
-  if (!video_capturer->Init(vcm)) {
-    delete video_capturer;
-    video_capturer = NULL;
-  }
-  return video_capturer;
-}
-
 PeerConnection::PeerConnection(PeerConnectionFactory* factory)
     : factory_(factory),
       observer_(NULL),
@@ -385,6 +374,27 @@ PeerConnectionInterface::ReadyState PeerConnection::ready_state() {
 
 PeerConnectionInterface::IceState PeerConnection::ice_state() {
   return ice_state_;
+}
+
+bool PeerConnection::CanSendDtmf(const AudioTrackInterface* track) {
+  if (!track) {
+    return false;
+  }
+  return session_->CanSendDtmf(track->label());
+}
+
+bool PeerConnection::SendDtmf(const AudioTrackInterface* send_track,
+                              const std::string& tones, int duration,
+                              const AudioTrackInterface* play_track) {
+  if (!send_track) {
+    return false;
+  }
+  std::string play_name;
+  if (play_track) {
+    play_name = play_track->label();
+  }
+
+  return session_->SendDtmf(send_track->label(), tones, duration, play_name);
 }
 
 bool PeerConnection::StartIce(IceOptions options) {

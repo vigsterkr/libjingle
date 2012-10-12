@@ -27,8 +27,10 @@
 
 #include <string>
 
+#include "talk/app/webrtc/audiotrack.h"
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
+#include "talk/app/webrtc/videotrack.h"
 #include "talk/base/refcount.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
@@ -70,7 +72,7 @@ class TrackStateMessageData : public talk_base::MessageData {
   webrtc::MediaStreamTrackInterface::TrackState state_;
 };
 
-}  // namespace anonymous
+}  // anonymous namespace
 
 namespace webrtc {
 
@@ -184,17 +186,17 @@ class MockMediaStreamTrack: public T {
   talk_base::Thread* signaling_thread_;
 };
 
-class MockLocalVideoTrack
-    : public MockMediaStreamTrack<LocalVideoTrackInterface> {
+class MockVideoTrack
+    : public MockMediaStreamTrack<VideoTrackInterface> {
  public:
-    MockLocalVideoTrack(LocalVideoTrackInterface* implementation,
-                        talk_base::Thread* signaling_thread)
-        : MockMediaStreamTrack<LocalVideoTrackInterface>(implementation,
-                                                         signaling_thread) {
-    }
-  virtual cricket::VideoCapturer* GetVideoCapture() {
+  MockVideoTrack(VideoTrackInterface* implementation,
+                 talk_base::Thread* signaling_thread)
+      : MockMediaStreamTrack<VideoTrackInterface>(implementation,
+                                                  signaling_thread) {
+  }
+  virtual VideoSourceInterface* GetSource() const {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->GetVideoCapture();
+    return track_impl_->GetSource();
   }
   virtual void AddRenderer(VideoRendererInterface* renderer) {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
@@ -210,18 +212,18 @@ class MockLocalVideoTrack
   }
 };
 
-class MockLocalAudioTrack
-    : public MockMediaStreamTrack<LocalAudioTrackInterface> {
+class MockAudioTrack
+    : public MockMediaStreamTrack<AudioTrackInterface> {
  public:
-  MockLocalAudioTrack(LocalAudioTrackInterface* implementation,
+  MockAudioTrack(AudioTrackInterface* implementation,
                       talk_base::Thread* signaling_thread)
-    : MockMediaStreamTrack<LocalAudioTrackInterface>(implementation,
-                                                     signaling_thread) {
+    : MockMediaStreamTrack<AudioTrackInterface>(implementation,
+                                                signaling_thread) {
   }
 
-  virtual AudioDeviceModule* GetAudioDevice() {
+  virtual AudioSourceInterface* GetSource() const {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->GetAudioDevice();
+    return track_impl_->GetSource();
   }
 };
 
@@ -236,8 +238,8 @@ class MediaStreamTest: public testing::Test,
     // Create a stream proxy object that uses our mocked
     // version of a LocalMediaStream.
     scoped_refptr<MockMediaStream> mock_stream(
-        new talk_base::RefCountedObject<MockMediaStream>(label,
-                                                 signaling_thread_.get()));
+        new talk_base::RefCountedObject<MockMediaStream>(
+            label, signaling_thread_.get()));
     stream_ = MediaStreamProxy::Create(label, signaling_thread_.get(),
                                        mock_stream);
     ASSERT_TRUE(stream_.get() != NULL);
@@ -245,27 +247,27 @@ class MediaStreamTest: public testing::Test,
     EXPECT_EQ(MediaStreamInterface::kInitializing, stream_->ready_state());
 
     // Create a video track proxy object that uses our mocked
-    // version of a LocalVideoTrack
+    // version of a VideoTrack
     scoped_refptr<VideoTrack> video_track_impl(
-        VideoTrack::CreateLocal(kVideoTrackLabel, NULL));
-    scoped_refptr<MockLocalVideoTrack> mock_videotrack(
-        new talk_base::RefCountedObject<MockLocalVideoTrack>(video_track_impl,
-                                                     signaling_thread_.get()));
-    video_track_ = VideoTrackProxy::CreateLocal(mock_videotrack,
-                                                signaling_thread_.get());
+        VideoTrack::Create(kVideoTrackLabel, NULL));
+    scoped_refptr<MockVideoTrack> mock_videotrack(
+        new talk_base::RefCountedObject<MockVideoTrack>(
+            video_track_impl, signaling_thread_.get()));
+    video_track_ = VideoTrackProxy::Create(mock_videotrack,
+                                           signaling_thread_.get());
 
     ASSERT_TRUE(video_track_.get() != NULL);
     EXPECT_EQ(MediaStreamTrackInterface::kInitializing, video_track_->state());
 
     // Create an audio track proxy object that uses our mocked
-    // version of a LocalAudioTrack
-    scoped_refptr<AudioTrack> audio_track_impl(
-        AudioTrack::CreateLocal(kAudioTrackLabel, NULL));
-    scoped_refptr<MockLocalAudioTrack> mock_audiotrack(
-        new talk_base::RefCountedObject<MockLocalAudioTrack>(audio_track_impl,
-                                                     signaling_thread_.get()));
-    audio_track_ = AudioTrackProxy::CreateLocal(mock_audiotrack,
-                                                signaling_thread_.get());
+    // version of a AudioTrack
+    scoped_refptr<AudioTrackInterface> audio_track_impl(
+        AudioTrack::Create(kAudioTrackLabel, NULL));
+    scoped_refptr<MockAudioTrack> mock_audiotrack(
+        new talk_base::RefCountedObject<MockAudioTrack>(
+            audio_track_impl, signaling_thread_.get()));
+    audio_track_ = AudioTrackProxy::Create(mock_audiotrack,
+                                           signaling_thread_.get());
 
     ASSERT_TRUE(audio_track_.get() != NULL);
     EXPECT_EQ(MediaStreamTrackInterface::kInitializing, audio_track_->state());
@@ -294,8 +296,8 @@ class MediaStreamTest: public testing::Test,
 
   talk_base::scoped_ptr<talk_base::Thread> signaling_thread_;
   scoped_refptr<LocalMediaStreamInterface> stream_;
-  scoped_refptr<LocalVideoTrackInterface> video_track_;
-  scoped_refptr<LocalAudioTrackInterface> audio_track_;
+  scoped_refptr<VideoTrackInterface> video_track_;
+  scoped_refptr<AudioTrackInterface> audio_track_;
 
  private:
   // Implements talk_base::MessageHandler.

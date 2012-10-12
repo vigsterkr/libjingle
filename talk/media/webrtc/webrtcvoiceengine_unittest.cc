@@ -135,9 +135,11 @@ class WebRtcVoiceEngineTestFake : public testing::Test {
     codecs.push_back(kPcmuCodec);
     EXPECT_TRUE(channel_->SetSendCodecs(codecs));
     EXPECT_TRUE(channel_->SetSend(cricket::SEND_MICROPHONE));
+    EXPECT_FALSE(channel_->CanInsertDtmf());
     EXPECT_FALSE(channel_->InsertDtmf(ssrc, 1, 111, cricket::DF_SEND));
     codecs.push_back(kTelephoneEventCodec);
     EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+    EXPECT_TRUE(channel_->CanInsertDtmf());
     // Check we fail if the ssrc is invalid.
     EXPECT_FALSE(channel_->InsertDtmf(-1, 1, 111, cricket::DF_SEND));
 

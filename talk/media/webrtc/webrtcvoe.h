@@ -34,11 +34,7 @@
 
 #ifdef WEBRTC_RELATIVE_PATH
 #include "common_types.h"
-#ifdef USE_WEBRTC_313_BRANCH
 #include "modules/audio_device/include/audio_device.h"
-#else
-#include "modules/audio_device/main/interface/audio_device.h"
-#endif
 #include "voice_engine/include/voe_audio_processing.h"
 #include "voice_engine/include/voe_base.h"
 #include "voice_engine/include/voe_codec.h"

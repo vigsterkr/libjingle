@@ -110,13 +110,13 @@ CreateStreamCollection(int number_of_streams) {
         webrtc::MediaStream::Create(kStreams[i]));
 
     // Add a local audio track.
-    talk_base::scoped_refptr<webrtc::LocalAudioTrackInterface>
-    audio_track(webrtc::AudioTrack::CreateLocal(kAudioTracks[i], NULL));
+    talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+        webrtc::AudioTrack::Create(kAudioTracks[i], NULL));
     stream->AddTrack(audio_track);
 
     // Add a local video track.
-    talk_base::scoped_refptr<webrtc::LocalVideoTrackInterface>
-    video_track(webrtc::VideoTrack::CreateLocal(kVideoTracks[i], NULL));
+    talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track(
+        webrtc::VideoTrack::Create(kVideoTracks[i], NULL));
     stream->AddTrack(video_track);
 
     local_collection->AddStream(stream);

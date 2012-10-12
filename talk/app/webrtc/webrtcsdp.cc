@@ -254,6 +254,16 @@ static bool GetLine(const std::string& message,
   return true;
 }
 
+// Returns the first line of the message without the line breaker.
+static bool GetFirstLine(const std::string& message, std::string* line) {
+  size_t pos = 0;
+  if (!GetLine(message, &pos, line)) {
+    // If GetLine failed, just return the full |message|.
+    *line = message;
+  }
+  return true;
+}
+
 static bool IsLineType(const std::string& message,
                        const char type,
                        size_t line_start) {
@@ -620,13 +630,17 @@ bool SdpDeserializeCandidate(const std::string& message,
 bool ParseCandidate(const std::string& message, Candidate* candidate) {
   ASSERT(candidate != NULL);
 
-  if (!IsLineType(message, kLineTypeAttributes) ||
-      !HasAttribute(message, kAttributeCandidate)) {
+  // Get the first line from |message|.
+  std::string first_line;
+  GetFirstLine(message, &first_line);
+
+  if (!IsLineType(first_line, kLineTypeAttributes) ||
+      !HasAttribute(first_line, kAttributeCandidate)) {
     // Must start with a=candidate line
     return false;
   }
   std::vector<std::string> fields;
-  talk_base::split(message.substr(kLinePrefixLength),
+  talk_base::split(first_line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
   // RFC 5245
   // a=candidate:<foundation> <component-id> <transport> <priority>
@@ -637,14 +651,13 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   const size_t mandatory_fields_num = 8;
   if (fields.size() < mandatory_fields_num ||
       (fields[6] != kAttributeCandidateTyp)) {
-    LOG_LINE_PARSING_ERROR(message);
+    LOG_LINE_PARSING_ERROR(first_line);
     return false;
   }
-  std::string foundation_str;
-  if (!GetValue(fields[0], kAttributeCandidate, &foundation_str)) {
+  std::string foundation;
+  if (!GetValue(fields[0], kAttributeCandidate, &foundation)) {
     return false;
   }
-  const uint32 foundation = talk_base::FromString<uint32>(foundation_str);
   const int component_id = talk_base::FromString<int>(fields[1]);
   const std::string transport = fields[2];
   const uint32 priority = talk_base::FromString<uint32>(fields[3]);
@@ -654,7 +667,7 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
 
   cricket::ProtocolType protocol;
   if (!StringToProto(transport.c_str(), &protocol)) {
-    LOG(LS_ERROR) << "Unsupported transport type: " << message;
+    LOG(LS_ERROR) << "Unsupported transport type: " << first_line;
     return false;
   }
 
@@ -667,7 +680,7 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   } else if (type == kCandidateRelay) {
     candidate_type = cricket::RELAY_PORT_TYPE;
   } else {
-    LOG(LS_ERROR) << "Unsupported candidate type from message: " << message;
+    LOG(LS_ERROR) << "Unsupported candidate type from message: " << first_line;
     return false;
   }
 

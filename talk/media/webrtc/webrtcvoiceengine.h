@@ -391,6 +391,7 @@ class WebRtcVoiceMediaChannel
 
   virtual bool SetRingbackTone(const char *buf, int len);
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop);
+  virtual bool CanInsertDtmf();
   virtual bool InsertDtmf(uint32 ssrc, int event, int duration, int flags);
 
   virtual void OnPacketReceived(talk_base::Buffer* packet);

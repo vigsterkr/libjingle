@@ -84,7 +84,7 @@ class PortAllocator;
 }
 
 namespace webrtc {
-class VideoCaptureModule;
+class AudioDeviceModule;
 
 // MediaStream container interface.
 class StreamCollectionInterface : public talk_base::RefCountInterface {
@@ -172,6 +172,25 @@ class PeerConnectionInterface : public JsepInterface,
   // remote peer is notified.
   virtual void RemoveStream(MediaStreamInterface* stream) = 0;
 
+  // Returns true if the |track| is capable of sending DTMF. Otherwise returns
+  // false.
+  virtual bool CanSendDtmf(const AudioTrackInterface* track) = 0;
+
+  // Queues a task that sends the DTMF |tones| using |send_track|.
+  // If the |play_track| is specified, play out an appropriate audio feedback
+  // signal using this track.
+  // The |tones| parameter is treated as a series of characters.
+  // The characters 0 to 9, A to D, #, and * generated the associated DTMF
+  // tones. The characters a to d are equivalent to A to D.
+  // The character, indicates a an delay of 2 seconds before processing the next
+  // character in the tones parameter. Unrecognized characters are ignored.
+  // If SendDtmf is called on the same object while an existing task for this
+  // object to generate DTMF is still running, the previous task is canceled.
+  // The duration can not be more than 6000 or less than 70.
+  virtual bool SendDtmf(const AudioTrackInterface* send_track,
+                        const std::string& tones, int duration,
+                        const AudioTrackInterface* play_track) = 0;
+
   // Returns the current ReadyState.
   virtual ReadyState ready_state() = 0;
 
@@ -182,12 +201,6 @@ class PeerConnectionInterface : public JsepInterface,
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~PeerConnectionInterface() {}
 };
-
-// Helper function to create a new instance of cricket::VideoCapturer
-// from VideoCaptureModule.
-// TODO: This function should be removed once chrome implement video
-// capture as the cricket::VideoCapturer.
-cricket::VideoCapturer* CreateVideoCapturer(VideoCaptureModule* vcm);
 
 // Factory class used for creating cricket::PortAllocator that is used
 // for ICE negotiation.
@@ -254,10 +267,30 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label) = 0;
 
+  // Creates a VideoSourceInterface. The new source take ownership of
+  // |capturer|. |constraints| decides video resolution and frame rate but can
+  // be NULL.
+  virtual talk_base::scoped_refptr<VideoSourceInterface> CreateVideoSource(
+      cricket::VideoCapturer* capturer,
+      const MediaConstraintsInterface* constraints) = 0;
+
+  // Creates a new local VideoTrack. The same |source| can be used in several
+  // tracks.
+  virtual talk_base::scoped_refptr<VideoTrackInterface>
+      CreateVideoTrack(const std::string& label,
+                       VideoSourceInterface* source) = 0;
+
+  // Creates an new AudioTrack. At the moment |source| can be NULL.
+  virtual talk_base::scoped_refptr<AudioTrackInterface>
+      CreateAudioTrack(const std::string& label,
+                       AudioSourceInterface* source) = 0;
+
+  // Deprecated: Please use the version that take a source as input.
   virtual talk_base::scoped_refptr<LocalVideoTrackInterface>
       CreateLocalVideoTrack(const std::string& label,
                             cricket::VideoCapturer* video_device) = 0;
 
+  // Deprecated: Please use the version that take a source as input.
   virtual talk_base::scoped_refptr<LocalAudioTrackInterface>
       CreateLocalAudioTrack(const std::string& label,
                             AudioDeviceModule* audio_device) = 0;

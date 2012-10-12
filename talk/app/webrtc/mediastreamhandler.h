@@ -102,7 +102,7 @@ class RemoteAudioTrackHandler : public BaseTrackHandler {
 // requested change.
 class LocalVideoTrackHandler : public BaseTrackHandler {
  public:
-  LocalVideoTrackHandler(LocalVideoTrackInterface* track,
+  LocalVideoTrackHandler(VideoTrackInterface* track,
                          VideoProviderInterface* provider);
   virtual ~LocalVideoTrackHandler();
 
@@ -111,7 +111,7 @@ class LocalVideoTrackHandler : public BaseTrackHandler {
   virtual void OnEnabledChanged();
 
  private:
-  talk_base::scoped_refptr<LocalVideoTrackInterface> local_video_track_;
+  talk_base::scoped_refptr<VideoTrackInterface> local_video_track_;
   VideoProviderInterface* provider_;
 };
 

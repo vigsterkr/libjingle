@@ -73,8 +73,11 @@ static const char kCandidateUfragVoice[] = "ufrag_voice";
 static const char kCandidatePwdVoice[] = "pwd_voice";
 static const char kCandidateUfragVideo[] = "ufrag_video";
 static const char kCandidatePwdVideo[] = "pwd_video";
-static const uint32 kCandidateGeneration = 0;
-static const uint32 kCandidateFoundation = 1;
+static const uint32 kCandidateGeneration = 2;
+static const char kCandidateFoundation1[] = "a0+B/1";
+static const char kCandidateFoundation2[] = "a0+B/2";
+static const char kCandidateFoundation3[] = "a0+B/3";
+static const char kCandidateFoundation4[] = "a0+B/4";
 
 // Reference sdp string
 static const char kSdpFullString[] =
@@ -85,20 +88,20 @@ static const char kSdpFullString[] =
     "m=audio 2345 RTP/SAVPF 103 104\r\n"
     "c=IN IP4 74.125.127.126\r\n"
     "a=rtcp:2347 IN IP4 74.125.127.126\r\n"
-    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 192.168.1.5 1235 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 ::1 1238 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 ::1 1239 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 74.125.127.126 2345 typ srflx "
+    "a=candidate:a0+B/1 1 udp 2130706432 192.168.1.5 1234 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/1 2 udp 2130706432 192.168.1.5 1235 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/2 1 udp 2130706432 ::1 1238 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/2 2 udp 2130706432 ::1 1239 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/3 1 udp 2130706432 74.125.127.126 2345 typ srflx "
     "raddr 192.168.1.5 rport 2346 "
-    "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 74.125.127.126 2347 typ srflx "
+    "generation 2\r\n"
+    "a=candidate:a0+B/3 2 udp 2130706432 74.125.127.126 2347 typ srflx "
     "raddr 192.168.1.5 rport 2348 "
-    "generation 0\r\n"
+    "generation 2\r\n"
     "a=ice-ufrag:ufrag_voice\r\na=ice-pwd:pwd_voice\r\n"
     "a=sendrecv\r\n"
     "a=mid:audio_content_name\r\n"
@@ -117,18 +120,18 @@ static const char kSdpFullString[] =
     "m=video 3457 RTP/SAVPF 120\r\n"
     "c=IN IP4 74.125.224.39\r\n"
     "a=rtcp:3456 IN IP4 74.125.224.39\r\n"
-    "a=candidate:1 2 udp 2130706432 192.168.1.5 1236 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 192.168.1.5 1237 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 ::1 1240 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 ::1 1241 typ host "
-    "generation 0\r\n"
-    "a=candidate:1 2 udp 2130706432 74.125.224.39 3456 typ relay "
-    "generation 0\r\n"
-    "a=candidate:1 1 udp 2130706432 74.125.224.39 3457 typ relay "
-    "generation 0\r\n"
+    "a=candidate:a0+B/1 2 udp 2130706432 192.168.1.5 1236 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/1 1 udp 2130706432 192.168.1.5 1237 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/2 2 udp 2130706432 ::1 1240 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/2 1 udp 2130706432 ::1 1241 typ host "
+    "generation 2\r\n"
+    "a=candidate:a0+B/4 2 udp 2130706432 74.125.224.39 3456 typ relay "
+    "generation 2\r\n"
+    "a=candidate:a0+B/4 1 udp 2130706432 74.125.224.39 3457 typ relay "
+    "generation 2\r\n"
     "a=ice-ufrag:ufrag_video\r\na=ice-pwd:pwd_video\r\n"
     "a=sendrecv\r\n"
     "a=mid:video_content_name\r\n"
@@ -190,13 +193,13 @@ static const char kSdpString[] =
 
 // One candidate reference string.
 static const char kSdpOneCandidate[] =
-    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host "
-    "generation 0\r\n";
+    "a=candidate:a0+B/1 1 udp 2130706432 192.168.1.5 1234 typ host "
+    "generation 2\r\n";
 
 // One candidate reference string.
 static const char kSdpOneCandidateOldFormat[] =
-    "a=candidate:1 1 udp 2130706432 192.168.1.5 1234 typ host network_name"
-    " eth0 username user_rtp password password_rtp generation 0\r\n";
+    "a=candidate:a0+B/1 1 udp 2130706432 192.168.1.5 1234 typ host network_name"
+    " eth0 username user_rtp password password_rtp generation 2\r\n";
 
 // Session id and version
 static const char kSessionId[] = "18446744069414584320";
@@ -370,22 +373,22 @@ class WebRtcSdpTest : public testing::Test {
     Candidate candidate1(
         "", ICE_CANDIDATE_COMPONENT_RTP, "udp", address, kCandidatePriority,
         "", "", LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation1);
     address.SetPort(port++);
     Candidate candidate2(
         "", ICE_CANDIDATE_COMPONENT_RTCP, "udp", address, kCandidatePriority,
         "", "", LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation1);
     address.SetPort(port++);
     Candidate candidate3(
         "", ICE_CANDIDATE_COMPONENT_RTCP, "udp", address, kCandidatePriority,
         "", "", LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation1);
     address.SetPort(port++);
     Candidate candidate4(
         "", ICE_CANDIDATE_COMPONENT_RTP, "udp", address, kCandidatePriority,
         "", "", LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation1);
 
     // v6 host
     talk_base::SocketAddress v6_address("::1", port++);
@@ -393,25 +396,25 @@ class WebRtcSdpTest : public testing::Test {
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
         "", "", cricket::LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation2);
     v6_address.SetPort(port++);
     cricket::Candidate candidate6(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
         "", "", cricket::LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation2);
     v6_address.SetPort(port++);
     cricket::Candidate candidate7(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", v6_address, kCandidatePriority,
         "", "", cricket::LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation2);
     v6_address.SetPort(port++);
     cricket::Candidate candidate8(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", v6_address, kCandidatePriority,
         "", "", cricket::LOCAL_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation2);
 
     // stun
     int port_stun = 2345;
@@ -421,7 +424,7 @@ class WebRtcSdpTest : public testing::Test {
         ("", cricket::ICE_CANDIDATE_COMPONENT_RTP,
          "udp", address_stun, kCandidatePriority,
          "", "", STUN_PORT_TYPE,
-         "", kCandidateGeneration, kCandidateFoundation);
+         "", kCandidateGeneration, kCandidateFoundation3);
     candidate9.set_related_address(rel_address_stun);
 
     address_stun.SetPort(port_stun++);
@@ -430,7 +433,7 @@ class WebRtcSdpTest : public testing::Test {
         "", cricket::ICE_CANDIDATE_COMPONENT_RTCP,
         "udp", address_stun, kCandidatePriority,
         "", "", STUN_PORT_TYPE,
-        "", kCandidateGeneration, kCandidateFoundation);
+        "", kCandidateGeneration, kCandidateFoundation3);
     candidate10.set_related_address(rel_address_stun);
 
     // relay
@@ -441,14 +444,14 @@ class WebRtcSdpTest : public testing::Test {
         "udp", address_relay, kCandidatePriority,
         "", "",
         cricket::RELAY_PORT_TYPE, "",
-        kCandidateGeneration, kCandidateFoundation);
+        kCandidateGeneration, kCandidateFoundation4);
     address_relay.SetPort(port_relay++);
     cricket::Candidate candidate12(
         "", cricket::ICE_CANDIDATE_COMPONENT_RTP,
         "udp", address_relay, kCandidatePriority,
         "", "",
         RELAY_PORT_TYPE, "",
-        kCandidateGeneration, kCandidateFoundation);
+        kCandidateGeneration, kCandidateFoundation4);
 
     // voice
     candidates_.push_back(candidate1);
@@ -1013,7 +1016,28 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedAudioVideo) {
 
 TEST_F(WebRtcSdpTest, DeserializeCandidate) {
   JsepIceCandidate jcandidate(kDummyMid, kDummyIndex);
-  EXPECT_TRUE(SdpDeserializeCandidate(kSdpOneCandidate, &jcandidate));
+
+  std::string sdp = kSdpOneCandidate;
+  EXPECT_TRUE(SdpDeserializeCandidate(sdp, &jcandidate));
+  EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
+  EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
+  EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));
+
+  // Candidate line without generation extension.
+  sdp = kSdpOneCandidate;
+  Replace(" generation 2", "", &sdp);
+  EXPECT_TRUE(SdpDeserializeCandidate(sdp, &jcandidate));
+  EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
+  EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
+  Candidate expected = jcandidate_->candidate();
+  expected.set_generation(0);
+  EXPECT_TRUE(jcandidate.candidate().IsEquivalent(expected));
+
+  // Multiple candidate lines.
+  // Only the first line will be deserialized. The rest will be ignored.
+  sdp = kSdpOneCandidate;
+  sdp.append("a=candidate:1 2 tcp 1234 192.168.1.100 5678 typ host\r\n");
+  EXPECT_TRUE(SdpDeserializeCandidate(sdp, &jcandidate));
   EXPECT_EQ(kDummyMid, jcandidate.sdp_mid());
   EXPECT_EQ(kDummyIndex, jcandidate.sdp_mline_index());
   EXPECT_TRUE(jcandidate.candidate().IsEquivalent(jcandidate_->candidate()));

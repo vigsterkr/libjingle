@@ -27,11 +27,13 @@
 
 #include "talk/app/webrtc/peerconnectionfactory.h"
 
+#include "talk/app/webrtc/audiotrack.h"
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/peerconnectionproxy.h"
 #include "talk/app/webrtc/portallocatorfactory.h"
+#include "talk/app/webrtc/videotrack.h"
 #include "talk/media/devices/dummydevicemanager.h"
 #include "talk/media/webrtc/webrtcmediaengine.h"
 
@@ -300,20 +302,51 @@ PeerConnectionFactory::CreateLocalMediaStream(
   return MediaStreamProxy::Create(label, signaling_thread_);
 }
 
+talk_base::scoped_refptr<VideoSourceInterface>
+PeerConnectionFactory::CreateVideoSource(
+    cricket::VideoCapturer* capturer,
+    const MediaConstraintsInterface* constraints) {
+  // TODO(perkj): Make sure source starts the capture device and take
+  // constraints into consideration.
+  return LocalVideoSource::Create(capturer);
+}
+
+talk_base::scoped_refptr<VideoTrackInterface>
+PeerConnectionFactory::CreateVideoTrack(
+    const std::string& label,
+    VideoSourceInterface* source) {
+  talk_base::scoped_refptr<VideoTrackInterface> track(
+      VideoTrack::Create(label, source));
+  return VideoTrackProxy::Create(track, signaling_thread_);
+}
+
+// Deprecated: Please use the version that take a source as input.
+// TODO(perkj) Remove when Chrome does not make use of this.
 scoped_refptr<LocalVideoTrackInterface>
 PeerConnectionFactory::CreateLocalVideoTrack(
     const std::string& label,
     cricket::VideoCapturer* video_device) {
-  return VideoTrackProxy::CreateLocal(label, video_device,
-                                      signaling_thread_);
+  talk_base::scoped_refptr<VideoSourceInterface> source(
+      CreateVideoSource(video_device, NULL));
+  return CreateVideoTrack(label, source);
 }
 
+scoped_refptr<AudioTrackInterface> PeerConnectionFactory::CreateAudioTrack(
+    const std::string& label,
+    AudioSourceInterface* source) {
+  talk_base::scoped_refptr<AudioTrackInterface> track(
+      AudioTrack::Create(label, source));
+  return AudioTrackProxy::Create(track, signaling_thread_);
+}
+
+// Deprecated: Please use the version that take a source as input.
+// TODO(perkj): Remove when Chrome does not make use of this.
 scoped_refptr<LocalAudioTrackInterface>
 PeerConnectionFactory::CreateLocalAudioTrack(
     const std::string& label,
     AudioDeviceModule* audio_device) {
-  return AudioTrackProxy::CreateLocal(label, audio_device,
-                                      signaling_thread_);
+  // |audio_device| have never been used in an audio track.
+  return CreateAudioTrack(label, NULL);
 }
 
 cricket::ChannelManager* PeerConnectionFactory::channel_manager() {

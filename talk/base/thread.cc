@@ -146,6 +146,7 @@ Thread::Thread(SocketServer* ss)
       has_sends_(false),
 #if defined(WIN32)
       thread_(NULL),
+      thread_id_(0),
 #endif
       owned_(true),
       delete_self_when_complete_(false) {
@@ -234,7 +235,7 @@ bool Thread::Start(Runnable* runnable) {
     flags = CREATE_SUSPENDED;
   }
   thread_ = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)PreRun, init, flags,
-                         NULL);
+                         &thread_id_);
   if (thread_) {
     started_ = true;
     if (priority_ != PRIORITY_NORMAL) {
@@ -291,6 +292,7 @@ void Thread::Join() {
     WaitForSingleObject(thread_, INFINITE);
     CloseHandle(thread_);
     thread_ = NULL;
+    thread_id_ = 0;
 #elif defined(POSIX)
     void *pv;
     pthread_join(thread_, &pv);
@@ -525,6 +527,7 @@ bool Thread::WrapCurrentWithThreadManager(ThreadManager* thread_manager) {
     LOG_GLE(LS_ERROR) << "Unable to get handle to thread.";
     return false;
   }
+  thread_id_ = GetCurrentThreadId();
 #elif defined(POSIX)
   thread_ = pthread_self();
 #endif

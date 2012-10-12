@@ -2128,6 +2128,10 @@ bool WebRtcVoiceMediaChannel::PlayRingbackTone(uint32 ssrc,
   return true;
 }
 
+bool WebRtcVoiceMediaChannel::CanInsertDtmf() {
+  return dtmf_allowed_;
+}
+
 bool WebRtcVoiceMediaChannel::InsertDtmf(uint32 ssrc, int event,
                                          int duration, int flags) {
   if (!dtmf_allowed_) {

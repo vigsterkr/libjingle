@@ -36,6 +36,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/messagedigest.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/common.h"
 
@@ -214,12 +215,12 @@ Connection* Port::GetConnection(const talk_base::SocketAddress& remote_addr) {
 //   then the foundation will be different.  Two candidate pairs with
 //   the same foundation pairs are likely to have similar network
 //   characteristics.  Foundations are used in the frozen algorithm.
-uint32 Port::ComputeFoundation(
+std::string Port::ComputeFoundation(
     const std::string& protocol,
     const talk_base::SocketAddress& base_address) const {
   std::ostringstream ost;
   ost << type_ << base_address.ipaddr().ToString() << protocol;
-  return talk_base::ComputeCrc32(ost.str());
+  return talk_base::ToString<uint32>(talk_base::ComputeCrc32(ost.str()));
 }
 
 void Port::AddAddress(const talk_base::SocketAddress& address,
@@ -376,6 +377,12 @@ bool Port::GetStunMessage(const char* data, size_t size,
     }
     // NOTE: Username should not be used in verifying response messages.
     out_username->clear();
+  } else if (stun_msg->type() == STUN_BINDING_INDICATION) {
+    LOG_J(LS_VERBOSE, this) << "Received STUN binding indication:"
+                            << " from " << addr.ToString();
+    out_username->clear();
+    // No stun attributes will be verified, if it's stun indication message.
+    // Returning from end of the this method.
   } else {
     LOG_J(LS_ERROR, this) << "Received STUN packet with invalid type ("
                           << stun_msg->type() << ") from " << addr.ToString();
@@ -926,6 +933,20 @@ void Connection::OnReadPacket(const char* data, size_t size) {
           requests_.CheckResponse(msg.get());
         }
         // Otherwise silently discard the response message.
+        break;
+
+      // Remote end point sent an STUN indication instead of regular
+      // binding request. In this case |last_ping_received_| will be updated.
+      // Otherwise we can mark connection to read timeout. No response will be
+      // sent in this scenario.
+      case STUN_BINDING_INDICATION:
+        if (port_->IceProtocol() == ICEPROTO_RFC5245 &&
+            read_state_ == STATE_READABLE) {
+          ReceivedPing();
+        } else {
+          LOG_J(LS_WARNING, this) << "Received STUN binding indication "
+                                  << "from an unreadable connection.";
+        }
         break;
 
       default:

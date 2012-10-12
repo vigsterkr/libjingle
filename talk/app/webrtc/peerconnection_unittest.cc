@@ -38,6 +38,7 @@
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
+#include "talk/media/webrtc/webrtcvideocapturer.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/media/mediasession.h"
@@ -54,6 +55,18 @@ void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
     webrtc::VideoTrackInterface* track = track_list->at(i);
     video_tracks->push_back(track);
   }
+}
+
+// TODO(perkj): Refactor this test to use a cricket::FakeVideoCapturer instead.
+static cricket::VideoCapturer* CreateVideoCapturer(webrtc::
+                                                   VideoCaptureModule* vcm) {
+  cricket::WebRtcVideoCapturer* video_capturer =
+      new cricket::WebRtcVideoCapturer;
+  if (!video_capturer->Init(vcm)) {
+    delete video_capturer;
+    video_capturer = NULL;
+  }
+  return video_capturer;
 }
 
 class SignalingMessageReceiver {
@@ -110,7 +123,7 @@ class PeerConnectionTestClientBase
     // TODO: the default audio device module is used regardless of
     // the second parameter to the CreateLocalAudioTrack(..) call. Pass the
     // fake ADM anyways in case the local track is used in the future.
-    talk_base::scoped_refptr<webrtc::LocalAudioTrackInterface> audio_track(
+    talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
         peer_connection_factory_->CreateLocalAudioTrack(
             "audio_track",
             fake_audio_capture_module_));
@@ -241,6 +254,32 @@ class PeerConnectionTestClientBase
     return true;
   }
 
+  // Verify the CanSendDtmf and SendDtmf interfaces.
+  bool VerifySendDtmf() {
+    // An invalid audio track can't send dtmf.
+    EXPECT_FALSE(peer_connection_->CanSendDtmf(NULL));
+
+    if (hints_.has_audio() && remote_hints_.has_audio()) {
+      // The local audio track should be able to send dtmf.
+      const webrtc::AudioTrackInterface* send_track =
+          peer_connection_->local_streams()->at(0)->audio_tracks()->at(0);
+      EXPECT_TRUE(peer_connection_->CanSendDtmf(send_track));
+
+      // The duration can not be more than 6000 or less than 70.
+      EXPECT_FALSE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                              30, NULL));
+      EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                             100, NULL));
+
+      // Play the dtmf at the same time.
+      const webrtc::AudioTrackInterface* play_track =
+          peer_connection_->remote_streams()->at(0)->audio_tracks()->at(0);
+      EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                             100, play_track));
+    }
+    return true;
+  }
+
   virtual int num_rendered_frames() {
     if (fake_video_renderer_.get() == NULL) {
       return 0;
@@ -363,7 +402,7 @@ class PeerConnectionTestClientBase
   // Owns and ensures that fake_video_capture_module_ is available as long as
   // this class exists.  It also ensures destruction of the memory associated
   // with it when this class is deleted.
-  talk_base::scoped_refptr<webrtc::LocalVideoTrackInterface> video_track_;
+  talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track_;
   // Needed to keep track of number of frames send.
   talk_base::scoped_refptr<FakeAudioCaptureModule> fake_audio_capture_module_;
   FakeVideoCaptureModule* fake_video_capture_module_;
@@ -725,6 +764,10 @@ class P2PTestConductor : public testing::Test {
     return initiating_client_->VerifyLocalCandidates() &&
         receiving_client_->VerifyLocalCandidates();
   }
+  bool VerifySendDtmf() {
+    return initiating_client_->VerifySendDtmf() &&
+        receiving_client_->VerifySendDtmf();
+  }
   ~P2PTestConductor() {
     if (initiating_client_.get() != NULL) {
       initiating_client_->set_signaling_message_receiver(NULL);
@@ -790,6 +833,7 @@ class P2PTestConductor : public testing::Test {
                      kMaxWaitForFramesMs);
     const int kMaxWaitForCandidatesMs = 5000;
     EXPECT_TRUE_WAIT(VerifyLocalCandidates(), kMaxWaitForCandidatesMs);
+    VerifySendDtmf();
     EXPECT_TRUE(StopSession());
   }
 

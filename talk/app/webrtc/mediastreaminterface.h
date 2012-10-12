@@ -25,9 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// This file contains interfaces for MediaStream and MediaTrack. These
-// interfaces are used for implementing MediaStream and MediaTrack as defined
-// in http://dev.w3.org/2011/webrtc/editor/webrtc.html#stream-api. These
+// This file contains interfaces for MediaStream, MediaTrack and MediaSource.
+// These interfaces are used for implementing MediaStream and MediaTrack as
+// defined in http://dev.w3.org/2011/webrtc/editor/webrtc.html#stream-api. These
 // interfaces must be used only with PeerConnection. PeerConnectionManager
 // interface provides the factory methods to create MediaStream and MediaTracks.
 
@@ -49,8 +49,6 @@ class VideoFrame;
 }  // namespace cricket
 
 namespace webrtc {
-
-class AudioDeviceModule;
 
 // Generic observer interface.
 class ObserverInterface {
@@ -102,6 +100,16 @@ class VideoRendererInterface {
   virtual ~VideoRendererInterface() {}
 };
 
+// VideoSourceInterface is a reference counted source used for VideoTracks.
+// The same source can be used in multiple VideoTracks.
+class VideoSourceInterface : public talk_base::RefCountInterface {
+ public:
+  virtual cricket::VideoCapturer* GetVideoCapturer() = 0;
+
+ protected:
+  virtual ~VideoSourceInterface() {}
+};
+
 class VideoTrackInterface : public MediaStreamTrackInterface {
  public:
   // Register a renderer that will render all frames received on this track.
@@ -115,32 +123,34 @@ class VideoTrackInterface : public MediaStreamTrackInterface {
   // registered renderers.
   virtual cricket::VideoRenderer* FrameInput() = 0;
 
+  virtual VideoSourceInterface* GetSource() const = 0;
+
  protected:
   virtual ~VideoTrackInterface() {}
 };
 
-class LocalVideoTrackInterface : public VideoTrackInterface {
- public:
-  // Get the VideoCapturer associated with the track.
-  virtual cricket::VideoCapturer* GetVideoCapture() = 0;
+// TODO(perkj): Deprecate and remove LocalAudioTrackInterface when no clients
+// use it.
+typedef VideoTrackInterface LocalVideoTrackInterface;
 
- protected:
-  virtual ~LocalVideoTrackInterface() {}
+// AudioSourceInterface is a reference counted source used for AudioTracks.
+// The same source can be used in multiple AudioTracks.
+// TODO(perkj): Extend this class with necessary methods to allow separate
+// sources for each audio track.
+class AudioSourceInterface : public talk_base::RefCountInterface {
 };
 
 class AudioTrackInterface : public MediaStreamTrackInterface {
  public:
+  virtual AudioSourceInterface* GetSource() const =  0;
+
  protected:
   virtual ~AudioTrackInterface() {}
 };
 
-class LocalAudioTrackInterface : public AudioTrackInterface {
- public:
-  // Get the AudioDeviceModule associated with this track.
-  virtual AudioDeviceModule* GetAudioDevice() =  0;
- protected:
-  virtual ~LocalAudioTrackInterface() {}
-};
+// TODO(perkj): Deprecate and remove LocalAudioTrackInterface when no clients
+// use it.
+typedef AudioTrackInterface LocalAudioTrackInterface;
 
 // List of of tracks.
 template <class TrackType>

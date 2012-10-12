@@ -106,7 +106,7 @@ class WebRtcVideoEngineTestFake : public testing::Test {
                     pixel.get(), size, 1, 1, 0, 0, 0)) {
       return false;
     }
-    return channel_->SendFrame(0u, &frame);
+    return channel_->SendFrame(0u, &frame, false);
   }
   void VerifyVP8SendCodec(int channel_num,
                           unsigned int width,
@@ -447,7 +447,6 @@ TEST_F(WebRtcVideoEngineTestFake, RtpTimestampOffsetHeaderExtensions) {
   EXPECT_EQ(0, vie_.GetReceiveRtpTimestampOffsetExtensionId(new_channel_num));
 }
 
-#ifdef USE_WEBRTC_313_BRANCH
 TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
   EXPECT_TRUE(SetupEngine());
 
@@ -473,7 +472,6 @@ TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
   EXPECT_NE(first_send_channel, second_send_channel);
   EXPECT_TRUE(vie_.GetTransmissionSmoothingStatus(second_send_channel));
 }
-#endif
 
 // Test that AddRecvStream doesn't create new channel for 1:1 call.
 TEST_F(WebRtcVideoEngineTestFake, AddRecvStream1On1) {

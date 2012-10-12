@@ -243,13 +243,13 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   // Public functions for use by tests and other specialized code.
   uint32 send_ssrc() const { return 0; }
   bool GetRenderer(uint32 ssrc, VideoRenderer** renderer);
-  bool SendFrame(uint32 ssrc, const VideoFrame* frame);
+  bool SendFrame(uint32 ssrc, const VideoFrame* frame, bool is_screencast);
   bool SendFrame(WebRtcVideoChannelSendInfo* channel_info,
-                 const VideoFrame* frame, bool owns_capturer);
+                 const VideoFrame* frame, bool is_screencast);
 
   // Thunk functions for use with HybridVideoEngine
   void OnLocalFrame(VideoCapturer* capturer, const VideoFrame* frame) {
-    SendFrame(0u, frame);
+    SendFrame(0u, frame, capturer->IsScreencast());
   }
   void OnLocalFrameFormat(VideoCapturer* capturer, const VideoFormat* format) {
   }
@@ -297,7 +297,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   // |reset| is set to whether resetting has happened on vie or not.
   // Returns false on error.
   bool MaybeResetVieSendCodec(WebRtcVideoChannelSendInfo* send_channel,
-                              int new_width, int new_height, bool owns_capturer,
+                              int new_width, int new_height, bool is_screencast,
                               bool* reset);
   // Helper function for starting the sending of media on all channels or
   // |channel_id|. Note that these two function do not change |sending_|.

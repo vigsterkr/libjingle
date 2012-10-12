@@ -33,40 +33,25 @@
 #include "talk/app/webrtc/notifier.h"
 #include "talk/base/scoped_ref_ptr.h"
 
-#ifdef WEBRTC_RELATIVE_PATH
-#ifdef USE_WEBRTC_313_BRANCH
-#include "modules/audio_device/include/audio_device.h"
-#else
-#include "modules/audio_device/main/interface/audio_device.h"
-#endif
-#else
-#include "third_party/webrtc/modules/audio_device/include/audio_device.h"
-#endif
-
 namespace webrtc {
 
-class AudioTrack : public MediaStreamTrack<LocalAudioTrackInterface> {
+class AudioTrack : public MediaStreamTrack<AudioTrackInterface> {
  public:
-  // Creates a remote audio track.
-  static talk_base::scoped_refptr<AudioTrack> CreateRemote(
-      const std::string& label);
-  // Creates a local audio track.
-  static talk_base::scoped_refptr<AudioTrack> CreateLocal(
-      const std::string& label,
-      AudioDeviceModule* audio_device);
+  static talk_base::scoped_refptr<AudioTrack> Create(
+      const std::string& label, AudioSourceInterface* source);
 
-  // Get the AudioDeviceModule associated with this track.
-  virtual AudioDeviceModule* GetAudioDevice();
+  virtual AudioSourceInterface* GetSource() const {
+    return audio_source_.get();
+  }
 
   // Implement MediaStreamTrack
   virtual std::string kind() const;
 
  protected:
-  explicit AudioTrack(const std::string& label);
-  AudioTrack(const std::string& label, AudioDeviceModule* audio_device);
+  AudioTrack(const std::string& label, AudioSourceInterface* audio_source);
 
  private:
-  talk_base::scoped_refptr<AudioDeviceModule> audio_device_;
+  talk_base::scoped_refptr<AudioSourceInterface> audio_source_;
 };
 
 }  // namespace webrtc

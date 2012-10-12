@@ -43,38 +43,39 @@ namespace cricket {
 
 enum {
   MSG_ENABLE = 1,
-  MSG_DISABLE = 2,
-  MSG_MUTESTREAM = 3,
-  MSG_ISSTREAMMUTED = 4,
-  MSG_SETREMOTECONTENT = 6,
-  MSG_SETLOCALCONTENT = 7,
-  MSG_EARLYMEDIATIMEOUT = 8,
-  MSG_INSERTDTMF = 9,
-  MSG_SETRENDERER = 10,
-  MSG_ADDRECVSTREAM = 11,
-  MSG_REMOVERECVSTREAM = 12,
-  MSG_SETRINGBACKTONE = 13,
-  MSG_PLAYRINGBACKTONE = 14,
-  MSG_SETMAXSENDBANDWIDTH = 15,
-  MSG_ADDSCREENCAST = 16,
-  MSG_REMOVESCREENCAST = 17,
-  MSG_SENDINTRAFRAME = 19,
-  MSG_REQUESTINTRAFRAME = 20,
-  MSG_SCREENCASTWINDOWEVENT = 21,
-  MSG_RTPPACKET = 22,
-  MSG_RTCPPACKET = 23,
-  MSG_CHANNEL_ERROR = 24,
-  MSG_SETCHANNELOPTIONS = 25,
-  MSG_SCALEVOLUME = 26,
-  MSG_HANDLEVIEWREQUEST = 27,
-  MSG_SENDDATA = 28,
-  MSG_DATARECEIVED = 29,
-  MSG_SETCAPTURER = 30,
-  MSG_ISSCREENCASTING = 32,
-  MSG_SCREENCASTFPS = 33,
-  MSG_SETSCREENCASTFACTORY = 34,
-  MSG_FIRSTPACKETRECEIVED = 35,
-  MSG_SESSION_ERROR = 36,
+  MSG_DISABLE,
+  MSG_MUTESTREAM,
+  MSG_ISSTREAMMUTED,
+  MSG_SETREMOTECONTENT,
+  MSG_SETLOCALCONTENT,
+  MSG_EARLYMEDIATIMEOUT,
+  MSG_CANINSERTDTMF,
+  MSG_INSERTDTMF,
+  MSG_SETRENDERER,
+  MSG_ADDRECVSTREAM,
+  MSG_REMOVERECVSTREAM,
+  MSG_SETRINGBACKTONE,
+  MSG_PLAYRINGBACKTONE,
+  MSG_SETMAXSENDBANDWIDTH,
+  MSG_ADDSCREENCAST,
+  MSG_REMOVESCREENCAST,
+  MSG_SENDINTRAFRAME,
+  MSG_REQUESTINTRAFRAME,
+  MSG_SCREENCASTWINDOWEVENT,
+  MSG_RTPPACKET,
+  MSG_RTCPPACKET,
+  MSG_CHANNEL_ERROR,
+  MSG_SETCHANNELOPTIONS,
+  MSG_SCALEVOLUME,
+  MSG_HANDLEVIEWREQUEST,
+  MSG_SENDDATA,
+  MSG_DATARECEIVED,
+  MSG_SETCAPTURER,
+  MSG_ISSCREENCASTING,
+  MSG_SCREENCASTFPS,
+  MSG_SETSCREENCASTFACTORY,
+  MSG_FIRSTPACKETRECEIVED,
+  MSG_SESSION_ERROR,
 };
 
 // Value specified in RFC 5764.
@@ -136,6 +137,7 @@ struct PlayRingbackToneMessageData : public talk_base::MessageData {
   bool loop;
   bool result;
 };
+typedef talk_base::TypedMessageData<bool> BoolMessageData;
 struct DtmfMessageData : public talk_base::MessageData {
   DtmfMessageData(uint32 ssrc, int event, int duration, int flags)
       : ssrc(ssrc),
@@ -1405,6 +1407,12 @@ bool VoiceChannel::PressDTMF(int digit, bool playout) {
   return InsertDtmf(0, digit, duration_ms, flags);
 }
 
+bool VoiceChannel::CanInsertDtmf() {
+  BoolMessageData data(false);
+  Send(MSG_CANINSERTDTMF, &data);
+  return data.data();
+}
+
 bool VoiceChannel::InsertDtmf(uint32 ssrc, int event_code, int duration,
                               int flags) {
   DtmfMessageData data(ssrc, event_code, duration, flags);
@@ -1611,9 +1619,13 @@ void VoiceChannel::HandleEarlyMediaTimeout() {
   }
 }
 
+bool VoiceChannel::CanInsertDtmf_w() {
+  return media_channel()->CanInsertDtmf();
+}
+
 bool VoiceChannel::InsertDtmf_w(uint32 ssrc, int event, int duration,
                                 int flags) {
-  if (!enabled() || !writable()) {
+  if (!enabled()) {
     return false;
   }
 
@@ -1651,6 +1663,12 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
     case MSG_EARLYMEDIATIMEOUT:
       HandleEarlyMediaTimeout();
       break;
+    case MSG_CANINSERTDTMF: {
+      BoolMessageData* data =
+          static_cast<BoolMessageData*>(pmsg->pdata);
+      data->data() = CanInsertDtmf_w();
+      break;
+    }
     case MSG_INSERTDTMF: {
       DtmfMessageData* data =
           static_cast<DtmfMessageData*>(pmsg->pdata);

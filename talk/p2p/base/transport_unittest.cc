@@ -208,16 +208,16 @@ TEST_F(TransportTest, TestP2PTransportWriteAndParseCandidate) {
   Candidate test_candidate(
       "", 1, "udp",
       talk_base::SocketAddress("2001:db8:fefe::1", 9999),
-      738197504, "abcdef", "ghijkl", "foo", "testnet", 50, 0);
+      738197504, "abcdef", "ghijkl", "foo", "testnet", 50, "");
   Candidate test_candidate2(
       "", 2, "tcp",
       talk_base::SocketAddress("192.168.7.1", 9999),
-      1107296256, "mnopqr", "stuvwx", "bar", "testnet2", 100, 0);
+      1107296256, "mnopqr", "stuvwx", "bar", "testnet2", 100, "");
   talk_base::SocketAddress host_address("www.google.com", 24601);
   host_address.SetResolvedIP(talk_base::IPAddress(0x0A000001));
   Candidate test_candidate3(
       "", 3, "spdy", host_address, 1476395008, "yzabcd",
-      "efghij", "baz", "testnet3", 150, 0);
+      "efghij", "baz", "testnet3", 150, "");
   cricket::Candidates candidates;
   candidates.push_back(test_candidate);
   candidates.push_back(test_candidate2);
@@ -304,16 +304,16 @@ TEST_F(TransportTest, TestRawTransportWriteAndParseCandidate) {
   Candidate test_candidate(
       "", 1, "udp",
       talk_base::SocketAddress("2001:db8:fefe::1", 9999),
-      738197504, "abcdef", "ghijkl", "foo", "testnet", 50, 0);
+      738197504, "abcdef", "ghijkl", "foo", "testnet", 50, "1");
   Candidate test_candidate2(
       "", 1, "udp",
       talk_base::SocketAddress("192.168.7.1", 9999),
-      1107296256, "mnopqr", "stuvwx", "bar", "testnet2", 100, 0);
+      1107296256, "mnopqr", "stuvwx", "bar", "testnet2", 100, "1");
   talk_base::SocketAddress host_address("www.google.com", 24601);
   host_address.SetResolvedIP(talk_base::IPAddress(0x0A000001));
   Candidate test_candidate3(
       "", 1, "udp", host_address, 1476395008, "yzabcd",
-      "efghij", "baz", "testnet3", 150, 0);
+      "efghij", "baz", "testnet3", 150, "1");
   cricket::Candidates candidates;
   candidates.push_back(test_candidate);
   candidates.push_back(test_candidate2);

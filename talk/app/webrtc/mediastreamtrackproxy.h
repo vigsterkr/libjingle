@@ -34,16 +34,8 @@
 #include <string>
 #include <vector>
 
-#include "talk/app/webrtc/audiotrack.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
-#include "talk/app/webrtc/videotrack.h"
 #include "talk/base/thread.h"
-
-namespace cricket {
-
-class VideoCapturer;
-
-}  // namespace cricket
 
 namespace webrtc {
 
@@ -51,9 +43,7 @@ template <class T>
 class MediaStreamTrackProxy : public T,
                               talk_base::MessageHandler {
  public:
-  void Init(MediaStreamTrackInterface* track);
   // Implement MediaStreamTrack.
-
   virtual std::string kind() const;
   virtual std::string label() const;
   virtual bool enabled() const;
@@ -66,84 +56,51 @@ class MediaStreamTrackProxy : public T,
   virtual void UnregisterObserver(ObserverInterface* observer);
 
  protected:
-  explicit MediaStreamTrackProxy(talk_base::Thread* signaling_thread);
+  MediaStreamTrackProxy(T* track, talk_base::Thread* signaling_thread);
 
   void Send(uint32 id, talk_base::MessageData* data) const;
   // Returns true if the message is handled.
   bool HandleMessage(talk_base::Message* msg);
 
   mutable talk_base::Thread* signaling_thread_;
-  MediaStreamTrackInterface* track_;
+  talk_base::scoped_refptr<T> track_;
 };
 
 // AudioTrackProxy is a proxy for the AudioTrackInterface. The purpose is
 // to make sure AudioTrack is only accessed from the signaling thread.
 // It can be used as a proxy for both local and remote audio tracks.
-class AudioTrackProxy : public MediaStreamTrackProxy<LocalAudioTrackInterface> {
+class AudioTrackProxy : public MediaStreamTrackProxy<AudioTrackInterface> {
  public:
-  static talk_base::scoped_refptr<AudioTrackInterface> CreateRemote(
-      const std::string& label,
-      talk_base::Thread* signaling_thread);
-  static talk_base::scoped_refptr<LocalAudioTrackInterface> CreateLocal(
-      const std::string& label,
-      AudioDeviceModule* audio_device,
-      talk_base::Thread* signaling_thread);
-  static talk_base::scoped_refptr<LocalAudioTrackInterface> CreateLocal(
-      LocalAudioTrackInterface* implementation,
-      talk_base::Thread* signaling_thread);
-
-  virtual AudioDeviceModule* GetAudioDevice();
+  static talk_base::scoped_refptr<AudioTrackProxy> Create(
+      AudioTrackInterface* track, talk_base::Thread* signaling_thread);
+  virtual AudioSourceInterface* GetSource() const;
 
  protected:
-  AudioTrackProxy(const std::string& label,
-                  talk_base::Thread* signaling_thread);
-  AudioTrackProxy(const std::string& label,
-                  AudioDeviceModule* audio_device,
-                  talk_base::Thread* signaling_thread);
-  AudioTrackProxy(LocalAudioTrackInterface* implementation,
+  AudioTrackProxy(AudioTrackInterface* track,
                   talk_base::Thread* signaling_thread);
   // Implement MessageHandler
   virtual void OnMessage(talk_base::Message* msg);
-
-  talk_base::scoped_refptr<LocalAudioTrackInterface> audio_track_;
 };
 
-// VideoTrackProxy is a proxy for the VideoTrackInterface and
-// LocalVideoTrackInterface. The purpose is
+// VideoTrackProxy is a proxy for the VideoTrackInterface. The purpose is
 // to make sure VideoTrack is only accessed from the signaling thread.
 // It can be used as a proxy for both local and remote video tracks.
-class VideoTrackProxy : public MediaStreamTrackProxy<LocalVideoTrackInterface> {
+class VideoTrackProxy : public MediaStreamTrackProxy<VideoTrackInterface> {
  public:
-  static talk_base::scoped_refptr<VideoTrackInterface> CreateRemote(
-      const std::string& label,
-      talk_base::Thread* signaling_thread);
-  static talk_base::scoped_refptr<LocalVideoTrackInterface> CreateLocal(
-      const std::string& label,
-      cricket::VideoCapturer* video_device,
-      talk_base::Thread* signaling_thread);
-  static talk_base::scoped_refptr<LocalVideoTrackInterface> CreateLocal(
-      LocalVideoTrackInterface* implementation,
-      talk_base::Thread* signaling_thread);
-
-  virtual cricket::VideoCapturer* GetVideoCapture();
+  static talk_base::scoped_refptr<VideoTrackProxy> Create(
+      VideoTrackInterface* track, talk_base::Thread* signaling_thread);
 
   virtual void AddRenderer(VideoRendererInterface* renderer);
   virtual void RemoveRenderer(VideoRendererInterface* renderer);
   virtual cricket::VideoRenderer* FrameInput();
+  virtual VideoSourceInterface* GetSource() const;
 
  protected:
-  VideoTrackProxy(const std::string& label,
-                  talk_base::Thread* signaling_thread);
-  VideoTrackProxy(const std::string& label,
-                  cricket::VideoCapturer* video_device,
-                  talk_base::Thread* signaling_thread);
-  VideoTrackProxy(LocalVideoTrackInterface* implementation,
+  VideoTrackProxy(VideoTrackInterface* video_track,
                   talk_base::Thread* signaling_thread);
 
   // Implement MessageHandler
   virtual void OnMessage(talk_base::Message* msg);
-
-  talk_base::scoped_refptr<LocalVideoTrackInterface> video_track_;
 };
 
 }  // namespace webrtc

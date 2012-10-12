@@ -252,6 +252,8 @@ enum DtmfFlags {
 // Special purpose DTMF event code used by the VoiceMediaChannel::InsertDtmf.
 const int kDtmfDelay = -1;  // Insert a delay to the end of the DTMF queue.
 const int kDtmfReset = -2;  // Reset the DTMF queue.
+// The delay in ms when the InsertDtmf is called with kDtmfDelay.
+const int kDtmfDelayInMs = 2000;
 
 class MediaChannel : public sigslot::has_slots<> {
  public:
@@ -570,6 +572,8 @@ class VoiceMediaChannel : public MediaChannel {
   virtual bool SetRingbackTone(const char *buf, int len) = 0;
   // Plays or stops the aforementioned ringback tone
   virtual bool PlayRingbackTone(uint32 ssrc, bool play, bool loop) = 0;
+  // Returns if the telephone-event has been negotiated.
+  virtual bool CanInsertDtmf() { return false; }
   // Send and/or play a DTMF |event| according to the |flags|.
   // The DTMF out-of-band signal will be used on sending.
   // The |ssrc| should be either 0 or a valid send stream ssrc.

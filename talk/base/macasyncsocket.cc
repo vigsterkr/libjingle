@@ -156,7 +156,6 @@ int MacAsyncSocket::Send(const void* buffer, size_t length) {
 
     if (IsBlocking()) {
       // Reenable the writable callback (once), since we are flow controlled.
-      LOG(LS_VERBOSE) << "Enabling flow control callback.";
       CFSocketEnableCallBacks(socket_, kCallbackFlags);
       current_callbacks_ = kCallbackFlags;
     }

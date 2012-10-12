@@ -75,10 +75,11 @@ class MediaStreamHandlerTest : public testing::Test {
   virtual void SetUp() {
     collection_ = StreamCollection::Create();
     stream_ = MediaStream::Create(kStreamLabel1);
-    video_track_ = VideoTrack::CreateLocal(kVideoTrackLabel,
-                                           new cricket::FakeVideoCapturer());
+    talk_base::scoped_refptr<VideoSourceInterface> source(
+        LocalVideoSource::Create(new cricket::FakeVideoCapturer()));
+    video_track_ = VideoTrack::Create(kVideoTrackLabel, source);
     EXPECT_TRUE(stream_->AddTrack(video_track_));
-    audio_track_ = AudioTrack::CreateLocal(kAudioTrackLabel,
+    audio_track_ = AudioTrack::Create(kAudioTrackLabel,
                                            NULL);
     EXPECT_TRUE(stream_->AddTrack(audio_track_));
   }
@@ -86,7 +87,7 @@ class MediaStreamHandlerTest : public testing::Test {
   void AddLocalStream() {
     collection_->AddStream(stream_);
     EXPECT_CALL(video_provider_, SetCaptureDevice(
-        kVideoTrackLabel, video_track_->GetVideoCapture()));
+        kVideoTrackLabel, video_track_->GetSource()->GetVideoCapturer()));
     EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackLabel, true));
     EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackLabel, true));
     handlers_.CommitLocalStreams(collection_);
@@ -118,7 +119,7 @@ class MediaStreamHandlerTest : public testing::Test {
   MediaStreamHandlers handlers_;
   talk_base::scoped_refptr<StreamCollection> collection_;
   talk_base::scoped_refptr<LocalMediaStreamInterface> stream_;
-  talk_base::scoped_refptr<LocalVideoTrackInterface> video_track_;
+  talk_base::scoped_refptr<VideoTrackInterface> video_track_;
   talk_base::scoped_refptr<AudioTrackInterface> audio_track_;
 };
 

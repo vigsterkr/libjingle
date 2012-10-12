@@ -37,6 +37,8 @@ enum {
   MSG_RETURNREMOTEMEDIASTREAMS,
   MSG_READYSTATE,
   MSG_ICESTATE,
+  MSG_CANSENDDTMF,
+  MSG_SEND_DTMF,
   MSG_TERMINATE,
   MSG_CREATEOFFER,
   MSG_CREATEOFFERJSEP00,
@@ -136,6 +138,30 @@ struct IceStateMessage : public talk_base::MessageData {
   webrtc::PeerConnectionInterface::IceState state;
 };
 
+class SendDtmfMessageData : public talk_base::MessageData {
+ public:
+  explicit SendDtmfMessageData(const webrtc::AudioTrackInterface* send_track)
+      : send_track(send_track),
+        duration(0),
+        play_track(NULL),
+        result(false) {}
+
+  SendDtmfMessageData(const webrtc::AudioTrackInterface* send_track,
+                      std::string tones, int duration,
+                      const webrtc::AudioTrackInterface* play_track)
+      : send_track(send_track),
+        tones(tones),
+        duration(duration),
+        play_track(play_track),
+        result(false) {}
+
+  const webrtc::AudioTrackInterface* send_track;
+  std::string tones;
+  int duration;
+  const webrtc::AudioTrackInterface* play_track;
+  bool result;
+};
+
 }  // namespace
 
 namespace webrtc {
@@ -224,6 +250,26 @@ PeerConnectionInterface::IceState PeerConnectionProxy::ice_state() {
     return msg.state;
   }
   return peerconnection_->ice_state();
+}
+
+bool PeerConnectionProxy::CanSendDtmf(const AudioTrackInterface* track) {
+  if (!signaling_thread_->IsCurrent()) {
+    SendDtmfMessageData msg(track);
+    signaling_thread_->Send(this, MSG_CANSENDDTMF, &msg);
+    return msg.result;
+  }
+  return peerconnection_->CanSendDtmf(track);
+}
+
+bool PeerConnectionProxy::SendDtmf(const AudioTrackInterface* send_track,
+                                   const std::string& tones, int duration,
+                                   const AudioTrackInterface* play_track) {
+  if (!signaling_thread_->IsCurrent()) {
+    SendDtmfMessageData msg(send_track, tones, duration, play_track);
+    signaling_thread_->Send(this, MSG_SEND_DTMF, &msg);
+    return msg.result;
+  }
+  return peerconnection_->SendDtmf(send_track, tones, duration, play_track);
 }
 
 bool PeerConnectionProxy::StartIce(IceOptions options) {
@@ -429,6 +475,17 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
     case MSG_ICESTATE: {
       IceStateMessage* param(static_cast<IceStateMessage*> (data));
       param->state = peerconnection_->ice_state();
+      break;
+    }
+    case MSG_CANSENDDTMF: {
+      SendDtmfMessageData* param(static_cast<SendDtmfMessageData*> (data));
+      param->result = peerconnection_->CanSendDtmf(param->send_track);
+      break;
+    }
+    case MSG_SEND_DTMF: {
+      SendDtmfMessageData* param(static_cast<SendDtmfMessageData*> (data));
+      param->result = peerconnection_->SendDtmf(param->send_track,
+          param->tones, param->duration, param->play_track);
       break;
     }
     case MSG_CREATEOFFERJSEP00: {

@@ -30,52 +30,45 @@
 
 #include <string>
 
-#include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/mediastreamtrack.h"
-#include "talk/app/webrtc/notifier.h"
 #include "talk/app/webrtc/videotrackrenderers.h"
-#include "talk/base/scoped_ptr.h"
 #include "talk/base/scoped_ref_ptr.h"
-
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_capture/main/interface/video_capture.h"
-#else
-#include "third_party/webrtc/modules/video_capture/main/interface/video_capture.h"
-#endif
-
-namespace cricket {
-
-class VideoCapturer;
-
-}  // namespace cricket
 
 namespace webrtc {
 
-class VideoTrack : public MediaStreamTrack<LocalVideoTrackInterface> {
+class VideoTrack : public MediaStreamTrack<VideoTrackInterface> {
  public:
-  // Create a video track used for remote video tracks.
-  static talk_base::scoped_refptr<VideoTrack> CreateRemote(
-      const std::string& label);
-  // Create a video track used for local video tracks.
-  static talk_base::scoped_refptr<VideoTrack> CreateLocal(
-      const std::string& label,
-      cricket::VideoCapturer* video_device);
-
-  virtual cricket::VideoCapturer* GetVideoCapture();
+  static talk_base::scoped_refptr<VideoTrack> Create(
+      const std::string& label, VideoSourceInterface* source);
 
   virtual void AddRenderer(VideoRendererInterface* renderer);
   virtual void RemoveRenderer(VideoRendererInterface* renderer);
   virtual cricket::VideoRenderer* FrameInput();
+  virtual VideoSourceInterface* GetSource() const {
+    return video_source_.get();
+  }
 
   virtual std::string kind() const;
 
  protected:
-  explicit VideoTrack(const std::string& label);
-  VideoTrack(const std::string& label, cricket::VideoCapturer* video_device);
+  VideoTrack(const std::string& label, VideoSourceInterface* video_source);
 
  private:
   VideoTrackRenderers renderers_;
-  talk_base::scoped_ptr<cricket::VideoCapturer> video_device_;
+  talk_base::scoped_refptr<VideoSourceInterface> video_source_;
+};
+
+class LocalVideoSource : public VideoSourceInterface {
+ public:
+  static talk_base::scoped_refptr<LocalVideoSource> Create(
+      cricket::VideoCapturer* capturer);
+  virtual cricket::VideoCapturer* GetVideoCapturer() { return video_capturer_;}
+
+ protected:
+  explicit LocalVideoSource(cricket::VideoCapturer* capturer);
+  ~LocalVideoSource();
+ private:
+  cricket::VideoCapturer* video_capturer_;
 };
 
 }  // namespace webrtc
