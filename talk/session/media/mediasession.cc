@@ -27,6 +27,7 @@
 
 #include "talk/session/media/mediasession.h"
 
+#include <functional>
 #include <set>
 
 #include "talk/base/helpers.h"
