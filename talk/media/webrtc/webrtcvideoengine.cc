@@ -369,7 +369,7 @@ class WebRtcVideoChannelSendInfo  {
   }
   void ClearStreamParams() { stream_params_.reset(); }
   bool has_ssrc(uint32 local_ssrc) const {
-    return (stream_params_.get() == NULL) ? false :
+    return !stream_params_ ? false :
         stream_params_->has_ssrc(local_ssrc);
   }
   WebRtcLocalStreamInfo* local_stream_info() {
@@ -1316,7 +1316,7 @@ bool WebRtcVideoMediaChannel::SetSendCodecs(
 }
 
 bool WebRtcVideoMediaChannel::GetSendCodec(VideoCodec* send_codec) {
-  if (!send_codec_.get()) {
+  if (!send_codec_) {
     return false;
   }
   ConvertToCricketVideoCodec(*send_codec_, send_codec);
@@ -1325,7 +1325,7 @@ bool WebRtcVideoMediaChannel::GetSendCodec(VideoCodec* send_codec) {
 
 bool WebRtcVideoMediaChannel::SetSendStreamFormat(uint32 ssrc,
                                                   const VideoFormat& format) {
-  if (send_codec_.get() == NULL) {
+  if (!send_codec_) {
     LOG(LS_ERROR) << "The send codec has not been set yet.";
     return false;
   }
@@ -1393,7 +1393,7 @@ bool WebRtcVideoMediaChannel::SetSend(bool send) {
   if (send) {
     // We've been asked to start sending.
     // SetSendCodecs must have been called already.
-    if (!send_codec_.get()) {
+    if (!send_codec_) {
       return false;
     }
     // Start send now.
@@ -1473,7 +1473,7 @@ bool WebRtcVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   send_channel->set_stream_params(sp);
 
   // Reset send codec after stream parameters changed.
-  if (send_codec_.get() != NULL) {
+  if (send_codec_) {
     if (!SetSendCodec(send_channel, *send_codec_, send_min_bitrate_,
                       send_start_bitrate_, send_max_bitrate_)) {
       return false;
@@ -1920,7 +1920,13 @@ bool WebRtcVideoMediaChannel::SetRenderer(uint32 ssrc,
 
 bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
   // Get sender statistics and build VideoSenderInfo.
-  if (send_codec_.get() != NULL) {
+  unsigned int total_bitrate_sent = 0;
+  unsigned int video_bitrate_sent = 0;
+  unsigned int fec_bitrate_sent = 0;
+  unsigned int nack_bitrate_sent = 0;
+  unsigned int estimated_send_bandwidth = 0;
+  unsigned int target_enc_bitrate = 0;
+  if (send_codec_) {
     for (SendChannelMap::const_iterator iter = send_channels_.begin();
          iter != send_channels_.end(); ++iter) {
       WebRtcVideoChannelSendInfo* send_channel = iter->second;
@@ -1985,12 +1991,43 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
         sinfo.rtt_ms = r_rtt_ms;
       }
       info->senders.push_back(sinfo);
+
+      unsigned int channel_total_bitrate_sent = 0;
+      unsigned int channel_video_bitrate_sent = 0;
+      unsigned int channel_fec_bitrate_sent = 0;
+      unsigned int channel_nack_bitrate_sent = 0;
+      if (engine_->vie()->rtp()->GetBandwidthUsage(
+          channel_id, channel_total_bitrate_sent, channel_video_bitrate_sent,
+          channel_fec_bitrate_sent, channel_nack_bitrate_sent) == 0) {
+        total_bitrate_sent += channel_total_bitrate_sent;
+        video_bitrate_sent += channel_video_bitrate_sent;
+        fec_bitrate_sent += channel_fec_bitrate_sent;
+        nack_bitrate_sent += channel_nack_bitrate_sent;
+      } else {
+        LOG_RTCERR1(GetBandwidthUsage, channel_id);
+      }
+
+      unsigned int estimated_stream_send_bandwidth = 0;
+      if (engine_->vie()->rtp()->GetEstimatedSendBandwidth(
+          channel_id, &estimated_stream_send_bandwidth) == 0) {
+        estimated_send_bandwidth += estimated_stream_send_bandwidth;
+      } else {
+        LOG_RTCERR1(GetEstimatedSendBandwidth, channel_id);
+      }
+      unsigned int target_enc_stream_bitrate = 0;
+      if (engine_->vie()->codec()->GetCodecTargetBitrate(
+          channel_id, &target_enc_stream_bitrate) == 0) {
+        target_enc_bitrate += target_enc_stream_bitrate;
+      } else {
+        LOG_RTCERR1(GetCodecTargetBitrate, channel_id);
+      }
     }
   } else {
     LOG(LS_WARNING) << "GetStats: sender information not ready.";
   }
 
   // Get the SSRC and stats for each receiver, based on our own calculations.
+  unsigned int estimated_recv_bandwidth = 0;
   for (RecvChannelMap::const_iterator it = recv_channels_.begin();
        it != recv_channels_.end(); ++it) {
     // Don't report receive statistics from the default channel if we have
@@ -2041,45 +2078,28 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
       rinfo.fraction_lost = static_cast<float>(s_fraction_lost) / (1 << 8);
     }
     info->receivers.push_back(rinfo);
+
+    unsigned int estimated_recv_stream_bandwidth = 0;
+    if (engine_->vie()->rtp()->GetEstimatedReceiveBandwidth(
+        channel->channel_id(), &estimated_recv_stream_bandwidth) == 0) {
+      estimated_recv_bandwidth += estimated_recv_stream_bandwidth;
+    } else {
+      LOG_RTCERR1(GetEstimatedReceiveBandwidth, channel->channel_id());
+    }
   }
 
   // Build BandwidthEstimationInfo.
   // TODO(zhurunz): Add real unittest for this.
   BandwidthEstimationInfo bwe;
-  unsigned int total_bitrate_sent;
-  unsigned int video_bitrate_sent;
-  unsigned int fec_bitrate_sent;
-  unsigned int nack_bitrate_sent;
-  if (engine_->vie()->rtp()->GetBandwidthUsage(vie_channel_,
-      total_bitrate_sent, video_bitrate_sent,
-      fec_bitrate_sent, nack_bitrate_sent) == 0) {
-    bwe.actual_enc_bitrate = video_bitrate_sent;
-    bwe.transmit_bitrate = total_bitrate_sent;
-    bwe.retransmit_bitrate = nack_bitrate_sent;
-  } else {
-    LOG_RTCERR1(GetBandwidthUsage, vie_channel_);
-  }
-  unsigned int estimated_send_bandwidth;
-  if (engine_->vie()->rtp()->GetEstimatedSendBandwidth(
-      vie_channel_, &estimated_send_bandwidth) == 0) {
-    bwe.available_send_bandwidth = estimated_send_bandwidth;
-  } else {
-    LOG_RTCERR1(GetEstimatedSendBandwidth, vie_channel_);
-  }
-  unsigned int estimated_recv_bandwidth;
-  if (engine_->vie()->rtp()->GetEstimatedReceiveBandwidth(
-      vie_channel_, &estimated_recv_bandwidth) == 0) {
-    bwe.available_recv_bandwidth = estimated_recv_bandwidth;
-  } else {
-    LOG_RTCERR1(GetEstimatedReceiveBandwidth, vie_channel_);
-  }
-  unsigned int target_enc_bitrate;
-  if (engine_->vie()->codec()->GetCodecTargetBitrate(
-      vie_channel_, &target_enc_bitrate) == 0) {
-    bwe.target_enc_bitrate = target_enc_bitrate;
-  } else {
-    LOG_RTCERR1(GetCodecTargetBitrate, vie_channel_);
-  }
+
+  // Calculations done above per send/receive stream.
+  bwe.actual_enc_bitrate = video_bitrate_sent;
+  bwe.transmit_bitrate = total_bitrate_sent;
+  bwe.retransmit_bitrate = nack_bitrate_sent;
+  bwe.available_send_bandwidth = estimated_send_bandwidth;
+  bwe.available_recv_bandwidth = estimated_recv_bandwidth;
+  bwe.target_enc_bitrate = target_enc_bitrate;
+
   info->bw_estimations.push_back(bwe);
 
   return true;
@@ -2135,7 +2155,7 @@ bool WebRtcVideoMediaChannel::SetCapturer(uint32 ssrc,
       this,
       &WebRtcVideoMediaChannel::OnFrameCaptured);
   const int64 timestamp = send_channel->last_frame_time_stamp();
-  if (send_codec_.get()) {
+  if (send_codec_) {
     QueueBlackFrame(ssrc, timestamp, send_codec_->maxFramerate);
   }
   return true;
@@ -2278,7 +2298,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
     return true;
   }
 
-  if (!send_codec_.get()) {
+  if (!send_codec_) {
     LOG(LS_INFO) << "The send codec has not been set up yet";
     return true;
   }
@@ -2336,7 +2356,7 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
   int expected_bitrate = InConferenceMode() ?
       conf_max_bitrate : kMaxVideoBitrate;
 
-  if (NULL != send_codec_.get() &&
+  if (send_codec_ &&
       (send_max_bitrate_ != expected_bitrate || denoiser_changed)) {
     // On success, SetSendCodec() will reset send_max_bitrate_ to
     // expected_bitrate.
@@ -2452,7 +2472,7 @@ bool WebRtcVideoMediaChannel::SendFrame(
   const bool mute = (send_channel->muted() && !is_screencast);
   send_channel->ProcessFrame(*frame_out, mute, processed_frame.use(),
                              &clocks);
-  if (processed_frame.get()) {
+  if (processed_frame) {
     frame_out = processed_frame.get();
   }
 
@@ -2777,7 +2797,7 @@ bool WebRtcVideoMediaChannel::SetSendCodec(const webrtc::VideoCodec& codec,
     for (SendChannelMap::iterator iter = send_channels_.begin();
          iter != send_channels_.end(); ++iter) {
       WebRtcVideoChannelSendInfo* send_channel = iter->second;
-      if (send_codec_.get() != NULL) {
+      if (send_codec_) {
         SetSendCodec(send_channel, *send_codec_.get(), send_min_bitrate_,
                      send_start_bitrate_, send_max_bitrate_);
       }
@@ -2915,7 +2935,7 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
     *reset = false;
   }
 
-  if (NULL == send_codec_.get()) {
+  if (!send_codec_) {
     return false;
   }
   webrtc::VideoCodec target_codec = *send_codec_.get();

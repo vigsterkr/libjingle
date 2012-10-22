@@ -48,7 +48,7 @@ void FileLock::Unlock() {
 }
 
 void FileLock::MaybeUnlock() {
-  if (file_.get() != NULL) {
+  if (file_) {
     LOG(LS_INFO) << "Unlocking:" << path_;
     file_->Close();
     Filesystem::DeleteFile(path_);

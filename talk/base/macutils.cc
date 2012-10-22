@@ -44,9 +44,8 @@ bool ToUtf8(const CFStringRef str16, std::string* str8) {
                                                     kCFStringEncodingUTF8)
                   + 1;
   scoped_array<char> buffer(new char[maxlen]);
-  if (!buffer.get()
-      || !CFStringGetCString(str16, buffer.get(), maxlen,
-                             kCFStringEncodingUTF8))
+  if (!buffer || !CFStringGetCString(str16, buffer.get(), maxlen,
+                                     kCFStringEncodingUTF8))
     return false;
   str8->assign(buffer.get());
   return true;

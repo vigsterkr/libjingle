@@ -169,7 +169,7 @@ RtpSenderReceiver::RtpSenderReceiver(
       sending_(false),
       first_packet_(true) {
   input_stream_.reset(input_file_stream);
-  if (input_stream_.get()) {
+  if (input_stream_) {
     rtp_dump_reader_.reset(new RtpDumpLoopReader(input_stream_.get()));
     // Start the sender thread, which reads rtp dump records, waits based on
     // the record timestamps, and sends the RTP packets to the network.
@@ -178,7 +178,7 @@ RtpSenderReceiver::RtpSenderReceiver(
 
   // Create a rtp dump writer for the output RTP dump stream.
   output_stream_.reset(output_file_stream);
-  if (output_stream_.get()) {
+  if (output_stream_) {
     rtp_dump_writer_.reset(new RtpDumpWriter(output_stream_.get()));
   }
 }
@@ -194,13 +194,13 @@ bool RtpSenderReceiver::SetSend(bool send) {
 }
 
 void RtpSenderReceiver::SetSendSsrc(uint32 ssrc) {
-  if (rtp_dump_reader_.get()) {
+  if (rtp_dump_reader_) {
     rtp_dump_reader_->SetSsrc(ssrc);
   }
 }
 
 void RtpSenderReceiver::OnPacketReceived(talk_base::Buffer* packet) {
-  if (rtp_dump_writer_.get()) {
+  if (rtp_dump_writer_) {
     rtp_dump_writer_->WriteRtpPacket(packet->data(), packet->length());
   }
 }

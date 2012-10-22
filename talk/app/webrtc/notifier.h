@@ -58,9 +58,13 @@ class Notifier : public T {
   }
 
   void FireOnChanged() {
-    for (std::list<ObserverInterface*>::iterator it = observers_.begin();
-         it != observers_.end(); ++it) {
-      (*it)-> OnChanged();
+    // Copy the list of observers to avoid a crash if the observer object
+    // unregisters as a result of the OnChanged() call. If the same list is used
+    // UnregisterObserver will affect the list make the iterator invalid.
+    std::list<ObserverInterface*> observers = observers_;
+    for (std::list<ObserverInterface*>::iterator it = observers.begin();
+         it != observers.end(); ++it) {
+      (*it)->OnChanged();
     }
   }
 

@@ -35,6 +35,7 @@
 #define TALK_APP_WEBRTC_MEDIASTREAMINTERFACE_H_
 
 #include <string>
+#include <vector>
 
 #include "talk/base/basictypes.h"
 #include "talk/base/refcount.h"
@@ -65,6 +66,26 @@ class NotifierInterface {
   virtual void UnregisterObserver(ObserverInterface* observer) = 0;
 
   virtual ~NotifierInterface() {}
+};
+
+// Base class for sources. A MediaStreamTrack have an underlying source that
+// provide media. A source can be shared with multiple tracks.
+// TODO(perkj): Implement sources for local and remote audio tracks and
+// remote video tracks.
+class MediaSourceInterface :  public talk_base::RefCountInterface,
+                              public NotifierInterface {
+ public:
+  enum SourceState {
+    kInitializing,
+    kLive,
+    kEnded,
+    kMuted
+  };
+
+  virtual SourceState state() const = 0;
+
+ protected:
+  virtual ~MediaSourceInterface() {}
 };
 
 // Information about a track.
@@ -100,15 +121,7 @@ class VideoRendererInterface {
   virtual ~VideoRendererInterface() {}
 };
 
-// VideoSourceInterface is a reference counted source used for VideoTracks.
-// The same source can be used in multiple VideoTracks.
-class VideoSourceInterface : public talk_base::RefCountInterface {
- public:
-  virtual cricket::VideoCapturer* GetVideoCapturer() = 0;
-
- protected:
-  virtual ~VideoSourceInterface() {}
-};
+class VideoSourceInterface;
 
 class VideoTrackInterface : public MediaStreamTrackInterface {
  public:
@@ -137,7 +150,7 @@ typedef VideoTrackInterface LocalVideoTrackInterface;
 // The same source can be used in multiple AudioTracks.
 // TODO(perkj): Extend this class with necessary methods to allow separate
 // sources for each audio track.
-class AudioSourceInterface : public talk_base::RefCountInterface {
+class AudioSourceInterface : public MediaSourceInterface {
 };
 
 class AudioTrackInterface : public MediaStreamTrackInterface {
@@ -192,6 +205,40 @@ class LocalMediaStreamInterface : public MediaStreamInterface {
  public:
   virtual bool AddTrack(AudioTrackInterface* track) = 0;
   virtual bool AddTrack(VideoTrackInterface* track) = 0;
+};
+
+// MediaConstraintsInterface
+// Interface used for passing arguments about media constraints
+// to the MediaStream and PeerConnection implementation.
+class MediaConstraintsInterface {
+ public:
+  struct Constraint {
+    Constraint() {}
+    Constraint(const std::string& key, const std::string value)
+        : key(key), value(value) {
+    }
+    std::string key;
+    std::string value;
+  };
+  typedef std::vector<Constraint> Constraints;
+
+  virtual const Constraints& GetMandatory() const = 0;
+  virtual const Constraints& GetOptional() const = 0;
+
+  // Constraint keys used by a local video source.
+  // Specified by draft-alvestrand-constraints-resolution-00b
+  static const char kMinAspectRatio[];  // minAspectRatio
+  static const char kMaxAspectRatio[];  // maxAspectRatio
+  static const char kMaxWidth[];  // maxWidth
+  static const char kMinWidth[];  // minWidth
+  static const char kMaxHeight[];  // maxHeight
+  static const char kMinHeight[];  // minHeight
+  static const char kMaxFrameRate[];  // maxFrameRate
+  static const char kMinFrameRate[];  // minFrameRate
+
+ protected:
+  // Dtor protected as objects shouldn't be deleted via this interface
+  virtual ~MediaConstraintsInterface() {}
 };
 
 }  // namespace webrtc

@@ -29,6 +29,7 @@
 #define TALK_MEDIA_BASE_VIDEOFRAME_H_
 
 #include "talk/base/basictypes.h"
+#include "talk/base/stream.h"
 
 namespace cricket {
 
@@ -102,6 +103,13 @@ class VideoFrame {
   // it was written or not (like snprintf). If there is insufficient space,
   // nothing is written.
   virtual size_t CopyToBuffer(uint8 *buffer, size_t size) const = 0;
+
+  // Writes the frame into the given stream and returns the StreamResult.
+  // See talk/base/stream.h for a description of StreamResult and error.
+  // Error may be NULL. If a non-success value is returned from
+  // StreamInterface::Write(), we immediately return with that value.
+  virtual talk_base::StreamResult Write(talk_base::StreamInterface* stream,
+                                        int* error);
 
   // Converts the I420 data to RGB of a certain type such as ARGB and ABGR.
   // Returns the frame's actual size, regardless of whether it was written or

@@ -29,6 +29,7 @@
 
 #include <vector>
 
+#include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamhandler.h"
 #include "talk/app/webrtc/streamcollection.h"
@@ -68,6 +69,19 @@ enum ServiceType {
   TURN,     // Indicates a TURN server
   TURNS,    // Indicates a TURN server used with a TLS session.
   INVALID,  // Unknown.
+};
+
+enum {
+  MSG_ICECHANGE = 0,
+  MSG_ICECANDIDATE,
+  MSG_ICECOMPLETE,
+};
+
+struct CandidateMsg : public talk_base::MessageData {
+  explicit CandidateMsg(const webrtc::JsepIceCandidate* candidate)
+      : candidate(candidate) {
+  }
+  const webrtc::JsepIceCandidate* candidate;
 };
 
 typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
@@ -330,8 +344,9 @@ bool PeerConnection::DoInitialize(
     return false;
 
 
-  // Register PeerConnection observer as receiver of local ice candidates.
-  session_->RegisterObserver(observer_);
+  // Register PeerConnection as receiver of local ice candidates.
+  // All the callbacks will be posted to the application from PeerConnection.
+  session_->RegisterObserver(this);
   session_->SignalState.connect(this, &PeerConnection::OnSessionStateChange);
   return true;
 }
@@ -567,6 +582,28 @@ void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
   }
 }
 
+void PeerConnection::OnMessage(talk_base::Message* msg) {
+  switch (msg->message_id) {
+    case MSG_ICECHANGE: {
+      observer_->OnIceChange();
+      break;
+    }
+    case MSG_ICECANDIDATE: {
+      CandidateMsg* data = static_cast<CandidateMsg*>(msg->pdata);
+      observer_->OnIceCandidate(data->candidate);
+      delete data->candidate;
+      delete data;
+      break;
+    }
+    case MSG_ICECOMPLETE: {
+      observer_->OnIceComplete();
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 void PeerConnection::OnAddStream(MediaStreamInterface* stream) {
   stream_handler_->AddRemoteStream(stream);
   observer_->OnAddStream(stream);
@@ -575,6 +612,28 @@ void PeerConnection::OnAddStream(MediaStreamInterface* stream) {
 void PeerConnection::OnRemoveStream(MediaStreamInterface* stream) {
   stream_handler_->RemoveRemoteStream(stream);
   observer_->OnRemoveStream(stream);
+}
+
+void PeerConnection::OnIceChange() {
+  signaling_thread()->Post(this, MSG_ICECHANGE);
+}
+
+void PeerConnection::OnIceCandidate(const IceCandidateInterface* candidate) {
+  JsepIceCandidate* candidate_copy = NULL;
+  if (candidate) {
+    // TODO(ronghuawu): Make IceCandidateInterface reference counted instead
+    // of making a copy.
+    candidate_copy = new JsepIceCandidate(candidate->sdp_mid(),
+                                          candidate->sdp_mline_index(),
+                                          candidate->candidate());
+  }
+  // The Post takes the ownership of the |candidate_copy|.
+  signaling_thread()->Post(this, MSG_ICECANDIDATE,
+                           new CandidateMsg(candidate_copy));
+}
+
+void PeerConnection::OnIceComplete() {
+  signaling_thread()->Post(this, MSG_ICECOMPLETE);
 }
 
 void PeerConnection::ChangeReadyState(

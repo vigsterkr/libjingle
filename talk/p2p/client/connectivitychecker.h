@@ -165,6 +165,12 @@ class ConnectivityChecker
   // MessageHandler implementation.
   virtual void OnMessage(talk_base::Message *msg);
 
+  // Instruct checker to stop and wait until that's done.
+  // Virtual for gMock.
+  virtual void Stop() {
+    worker_->Stop();
+  }
+
   const NicMap& GetResults() const {
     return nics_;
   }
@@ -179,10 +185,6 @@ class ConnectivityChecker
 
   const std::string& connection() const {
     return connection_;
-  }
-
-  talk_base::Thread* worker() {
-    return worker_;
   }
 
   const std::string& jid() const {
@@ -218,6 +220,10 @@ class ConnectivityChecker
   virtual void InitiateProxyDetection();
   virtual void SetProxyInfo(const talk_base::ProxyInfo& info);
   virtual talk_base::ProxyInfo GetProxyInfo() const;
+
+  talk_base::Thread* worker() {
+    return worker_;
+  }
 
  private:
   bool AddNic(const talk_base::IPAddress& ip,

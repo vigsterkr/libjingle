@@ -42,21 +42,6 @@
 
 namespace {
 
-// The length of time we wait before timing out readability on a connection.
-const uint32 CONNECTION_READ_TIMEOUT = 30 * 1000;   // 30 seconds
-
-// The length of time we wait before timing out writability on a connection.
-const uint32 CONNECTION_WRITE_TIMEOUT = 15 * 1000;  // 15 seconds
-
-// The length of time we wait before we become unwritable.
-const uint32 CONNECTION_WRITE_CONNECT_TIMEOUT = 5 * 1000;  // 5 seconds
-
-// The number of pings that must fail to respond before we become unwritable.
-const uint32 CONNECTION_WRITE_CONNECT_FAILURES = 5;
-
-// This is the length of time that we wait for a ping response to come back.
-const int CONNECTION_RESPONSE_TIMEOUT = 5 * 1000;   // 5 seconds
-
 // Determines whether we have seen at least the given maximum number of
 // pings fail to have a response.
 inline bool TooManyFailures(
@@ -532,6 +517,20 @@ void Port::SendBindingResponse(StunMessage* request,
   StunMessage response;
   response.SetType(STUN_BINDING_RESPONSE);
   response.SetTransactionID(request->transaction_id());
+  const StunUInt32Attribute* retransmit_attr =
+      request->GetUInt32(STUN_ATTR_RETRANSMIT_COUNT);
+  if (retransmit_attr) {
+    // Inherit the incoming retransmit value in the response so the other side
+    // can see our view of lost pings.
+    response.AddAttribute(new StunUInt32Attribute(
+        STUN_ATTR_RETRANSMIT_COUNT, retransmit_attr->value()));
+
+    if (retransmit_attr->value() > CONNECTION_WRITE_CONNECT_FAILURES) {
+      LOG_J(LS_INFO, this)
+          << "Received a remote ping with high retransmit count: "
+          << retransmit_attr->value();
+    }
+  }
 
   // Only GICE messages have USERNAME and MAPPED-ADDRESS in the response.
   // ICE messages use XOR-MAPPED-ADDRESS, and add MESSAGE-INTEGRITY.
@@ -694,6 +693,10 @@ class ConnectionRequest : public StunRequest {
     request->AddAttribute(
         new StunByteStringAttribute(STUN_ATTR_USERNAME, username));
 
+    // connection_ already holds this ping, so subtract one from count.
+    request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_RETRANSMIT_COUNT,
+        connection_->pings_since_last_response_.size() - 1));
+
     // Adding ICE-specific attributes to the STUN request message.
     if (connection_->port()->IceProtocol() == ICEPROTO_RFC5245) {
       // Adding ICE_CONTROLLED or ICE_CONTROLLING attribute based on the role.
@@ -761,8 +764,8 @@ class ConnectionRequest : public StunRequest {
 Connection::Connection(Port* port, size_t index,
                        const Candidate& remote_candidate)
   : port_(port), local_candidate_index_(index),
-    remote_candidate_(remote_candidate), read_state_(STATE_READ_TIMEOUT),
-    write_state_(STATE_WRITE_CONNECT), connected_(true), pruned_(false),
+    remote_candidate_(remote_candidate), read_state_(STATE_READ_INIT),
+    write_state_(STATE_WRITE_INIT), connected_(true), pruned_(false),
     requests_(port->thread()), rtt_(DEFAULT_RTT),
     last_ping_sent_(0), last_ping_received_(0), last_data_received_(0),
     last_ping_response_received_(0), reported_(false), nominated_(false),
@@ -867,8 +870,11 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       SignalReadPacket(this, data, size);
 
       // If timed out sending writability checks, start up again
-      if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
-        set_write_state(STATE_WRITE_CONNECT);
+      if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT)) {
+        LOG(LS_WARNING) << "Received a data packet on a timed-out Connection. "
+                        << "Resetting state to STATE_WRITE_INIT.";
+        set_write_state(STATE_WRITE_INIT);
+      }
     } else {
       // Not readable means the remote address hasn't sent a valid
       // binding request yet.
@@ -900,7 +906,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
 
           // If timed out sending writability checks, start up again
           if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT))
-            set_write_state(STATE_WRITE_CONNECT);
+            set_write_state(STATE_WRITE_INIT);
 
           if ((port_->IceProtocol() == ICEPROTO_RFC5245) &&
               (port_->Role() == ROLE_CONTROLLED)) {
@@ -1031,10 +1037,10 @@ void Connection::UpdateState(uint32 now) {
                          << " ms since last received data="
                          << now - last_data_received_
                          << " rtt=" << rtt;
-    set_write_state(STATE_WRITE_CONNECT);
+    set_write_state(STATE_WRITE_UNRELIABLE);
   }
 
-  if ((write_state_ == STATE_WRITE_CONNECT) &&
+  if ((write_state_ == STATE_WRITE_UNRELIABLE) &&
       TooLongWithoutResponse(pings_since_last_response_,
                              CONNECTION_WRITE_TIMEOUT,
                              now)) {
@@ -1065,14 +1071,16 @@ std::string Connection::ToString() const {
     '-',  // not connected (false)
     'C',  // connected (true)
   };
-  const char READ_STATE_ABBREV[2] = {
+  const char READ_STATE_ABBREV[3] = {
+    '-',  // STATE_READ_INIT
     'R',  // STATE_READABLE
-    '-',  // STATE_READ_TIMEOUT
+    'x',  // STATE_READ_TIMEOUT
   };
-  const char WRITE_STATE_ABBREV[3] = {
+  const char WRITE_STATE_ABBREV[4] = {
     'W',  // STATE_WRITABLE
-    'w',  // STATE_WRITE_CONNECT
-    '-',  // STATE_WRITE_TIMEOUT
+    'w',  // STATE_WRITE_UNRELIABLE
+    '-',  // STATE_WRITE_INIT
+    'x',  // STATE_WRITE_TIMEOUT
   };
   const std::string ICESTATE[4] = {
     "W",  // STATE_WAITING
@@ -1125,9 +1133,13 @@ void Connection::OnConnectionRequestResponse(ConnectionRequest* request,
     pings.append(buf).append(" ");
   }
 
-  LOG_J(LS_VERBOSE, this) << "Received STUN ping response " << request->id()
-                          << ", pings_since_last_response_=" << pings
-                          << ", rtt=" << rtt;
+  talk_base::LoggingSeverity level =
+      (pings_since_last_response_.size() > CONNECTION_WRITE_CONNECT_FAILURES) ?
+          talk_base::LS_INFO : talk_base::LS_VERBOSE;
+
+  LOG_JV(level, this) << "Received STUN ping response " << request->id()
+                      << ", pings_since_last_response_=" << pings
+                      << ", rtt=" << rtt;
 
   pings_since_last_response_.clear();
   last_ping_response_received_ = talk_base::Time();
@@ -1174,12 +1186,14 @@ void Connection::OnConnectionRequestTimeout(ConnectionRequest* request) {
 }
 
 void Connection::CheckTimeout() {
-  // If both read and write have timed out, then this connection can contribute
-  // no more to p2p socket unless at some later date readability were to come
-  // back.  However, we gave readability a long time to timeout, so at this
-  // point, it seems fair to get rid of this connection.
-  if ((read_state_ == STATE_READ_TIMEOUT) &&
-      (write_state_ == STATE_WRITE_TIMEOUT)) {
+  // If both read and write have timed out or read has never initialized, then
+  // this connection can contribute no more to p2p socket unless at some later
+  // date readability were to come back.  However, we gave readability a long
+  // time to timeout, so at this point, it seems fair to get rid of this
+  // connection.
+  if ((read_state_ == STATE_READ_TIMEOUT ||
+       read_state_ == STATE_READ_INIT) &&
+      write_state_ == STATE_WRITE_TIMEOUT) {
     port_->thread()->Post(this, MSG_DELETE);
   }
 }
@@ -1221,7 +1235,7 @@ ProxyConnection::ProxyConnection(Port* port, size_t index,
 }
 
 int ProxyConnection::Send(const void* data, size_t size) {
-  if (write_state() != STATE_WRITABLE) {
+  if (write_state_ == STATE_WRITE_INIT || write_state_ == STATE_WRITE_TIMEOUT) {
     error_ = EWOULDBLOCK;
     return SOCKET_ERROR;
   }

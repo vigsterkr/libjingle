@@ -80,7 +80,7 @@ public:
   bool allow_plain_;
 
   void ResetSocket() {
-    if (socket_.get() != NULL) {
+    if (socket_) {
       socket_->SignalConnected.disconnect(this);
       socket_->SignalRead.disconnect(this);
       socket_->SignalClosed.disconnect(this);
@@ -112,7 +112,7 @@ XmppReturnStatus XmppClient::Connect(
     const std::string& lang, AsyncSocket* socket, PreXmppAuth* pre_auth) {
   if (socket == NULL)
     return XMPP_RETURN_BADARGUMENT;
-  if (d_->socket_.get() != NULL)
+  if (d_->socket_)
     return XMPP_RETURN_BADSTATE;
 
   d_->socket_.reset(socket);
@@ -168,7 +168,7 @@ XmppReturnStatus XmppClient::Connect(
 }
 
 XmppEngine::State XmppClient::GetState() const {
-  if (d_->engine_.get() == NULL)
+  if (!d_->engine_)
     return XmppEngine::STATE_NONE;
   return d_->engine_->GetState();
 }
@@ -177,7 +177,7 @@ XmppEngine::Error XmppClient::GetError(int* subcode) {
   if (subcode) {
     *subcode = 0;
   }
-  if (d_->engine_.get() == NULL)
+  if (!d_->engine_)
     return XmppEngine::ERROR_NONE;
   if (d_->pre_engine_error_ != XmppEngine::ERROR_NONE) {
     if (subcode) {
@@ -189,38 +189,38 @@ XmppEngine::Error XmppClient::GetError(int* subcode) {
 }
 
 const XmlElement* XmppClient::GetStreamError() {
-  if (d_->engine_.get() == NULL) {
+  if (!d_->engine_) {
     return NULL;
   }
   return d_->engine_->GetStreamError();
 }
 
 CaptchaChallenge XmppClient::GetCaptchaChallenge() {
-  if (d_->engine_.get() == NULL)
+  if (!d_->engine_)
     return CaptchaChallenge();
   return d_->captcha_challenge_;
 }
 
 std::string XmppClient::GetAuthMechanism() {
-  if (d_->engine_.get() == NULL)
+  if (!d_->engine_)
     return "";
   return d_->auth_mechanism_;
 }
 
 std::string XmppClient::GetAuthToken() {
-  if (d_->engine_.get() == NULL)
+  if (!d_->engine_)
     return "";
   return d_->auth_token_;
 }
 
 int XmppClient::ProcessStart() {
   // Should not happen, but was observed in crash reports
-  if (d_->socket_.get() == NULL) {
+  if (!d_->socket_) {
     LOG(LS_ERROR) << "socket_ already reset";
     return STATE_DONE;
   }
 
-  if (d_->pre_auth_.get()) {
+  if (d_->pre_auth_) {
     d_->pre_auth_->SignalAuthDone.connect(this, &XmppClient::OnAuthDone);
     d_->pre_auth_->StartPreXmppAuth(
         d_->engine_->GetUser(), d_->server_, d_->pass_,
@@ -242,13 +242,13 @@ void XmppClient::OnAuthDone() {
 
 int XmppClient::ProcessTokenLogin() {
   // Should not happen, but was observed in crash reports
-  if (d_->socket_.get() == NULL) {
+  if (!d_->socket_) {
     LOG(LS_ERROR) << "socket_ already reset";
     return STATE_DONE;
   }
 
   // Don't know how this could happen, but crash reports show it as NULL
-  if (!d_->pre_auth_.get()) {
+  if (!d_->pre_auth_) {
     d_->pre_engine_error_ = XmppEngine::ERROR_AUTH;
     EnsureClosed();
     return STATE_ERROR;
@@ -286,7 +286,7 @@ int XmppClient::ProcessTokenLogin() {
 
 int XmppClient::ProcessStartXmppLogin() {
   // Should not happen, but was observed in crash reports
-  if (d_->socket_.get() == NULL) {
+  if (!d_->socket_) {
     LOG(LS_ERROR) << "socket_ already reset";
     return STATE_DONE;
   }
@@ -302,14 +302,14 @@ int XmppClient::ProcessStartXmppLogin() {
 
 int XmppClient::ProcessResponse() {
   // Hang around while we are connected.
-  if (!delivering_signal_ && (d_->engine_.get() == NULL ||
-    d_->engine_->GetState() == XmppEngine::STATE_CLOSED))
+  if (!delivering_signal_ &&
+      (!d_->engine_ || d_->engine_->GetState() == XmppEngine::STATE_CLOSED))
     return STATE_DONE;
   return STATE_BLOCKED;
 }
 
 XmppReturnStatus XmppClient::Disconnect() {
-  if (d_->socket_.get() == NULL)
+  if (!d_->socket_)
     return XMPP_RETURN_BADSTATE;
   Abort();
   d_->engine_->Disconnect();
@@ -365,7 +365,7 @@ void XmppClient::Private::OnSocketRead() {
   size_t bytes_read;
   for (;;) {
     // Should not happen, but was observed in crash reports
-    if (socket_.get() == NULL) {
+    if (!socket_) {
       LOG(LS_ERROR) << "socket_ already reset";
       return;
     }

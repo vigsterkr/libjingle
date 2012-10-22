@@ -218,7 +218,9 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   void OnRequestSignaling(TransportChannelImpl* channel);
   void OnCandidateReady(TransportChannelImpl* channel, const Candidate& c);
   void OnCandidatesAllocationDone(TransportChannelImpl* channel);
+  void OnRoleConflict(TransportChannelImpl* channel);
   void OnRouteChange(TransportChannel* channel, const Candidate& candidate);
+
   Transport* transport_;  // The transport_ that created us.
   talk_base::Thread* worker_thread_;  // Everything should occur on this thread.
   TransportChannelImpl* channel_;  // Underlying channel, owned by transport_.

@@ -396,6 +396,7 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       rtcp_transport_channel_(NULL),
       enabled_(false),
       writable_(false),
+      optimistic_data_send_(false),
       was_ever_writable_(false),
       local_content_direction_(MD_INACTIVE),
       remote_content_direction_(MD_INACTIVE),
@@ -593,8 +594,9 @@ bool BaseChannel::PacketIsRtcp(const TransportChannel* channel,
 }
 
 bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
-  // Ensure we have a path capable of sending packets.
-  if (!writable_) {
+  // Unless we're sending optimistically, we only allow packets through when we
+  // are completely writable.
+  if (!optimistic_data_send_ && !writable_) {
     return false;
   }
 
@@ -620,7 +622,7 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
   // transport.
   TransportChannel* channel = (!rtcp || rtcp_mux_filter_.IsActive()) ?
       transport_channel_ : rtcp_transport_channel_;
-  if (!channel || !channel->writable()) {
+  if (!channel || (!optimistic_data_send_ && !channel->writable())) {
     return false;
   }
 
@@ -1435,7 +1437,7 @@ void VoiceChannel::StartMediaMonitor(int cms) {
 }
 
 void VoiceChannel::StopMediaMonitor() {
-  if (media_monitor_.get()) {
+  if (media_monitor_) {
     media_monitor_->Stop();
     media_monitor_->SignalUpdate.disconnect(this);
     media_monitor_.reset();
@@ -1450,7 +1452,7 @@ void VoiceChannel::StartAudioMonitor(int cms) {
 }
 
 void VoiceChannel::StopAudioMonitor() {
-  if (audio_monitor_.get()) {
+  if (audio_monitor_) {
     audio_monitor_->Stop();
     audio_monitor_.reset();
   }
@@ -1462,7 +1464,7 @@ bool VoiceChannel::IsAudioMonitorRunning() const {
 
 void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
   // Don't allow resetting parameters on the fly.
-  if (!typing_monitor_.get()) {
+  if (!typing_monitor_) {
     typing_monitor_.reset(new TypingMonitor(this, worker_thread(), settings));
     SignalAutoMuted.repeat(typing_monitor_->SignalMuted);
   }
@@ -1470,7 +1472,7 @@ void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
 
 bool VoiceChannel::MuteStream_w(uint32 ssrc, bool mute) {
   bool ret = BaseChannel::MuteStream_w(ssrc, mute);
-  if (typing_monitor_.get() && mute)
+  if (typing_monitor_ && mute)
     typing_monitor_->OnChannelMuted();
   return ret;
 }
@@ -1893,7 +1895,7 @@ void VideoChannel::StartMediaMonitor(int cms) {
 }
 
 void VideoChannel::StopMediaMonitor() {
-  if (media_monitor_.get()) {
+  if (media_monitor_) {
     media_monitor_->Stop();
     media_monitor_.reset();
   }

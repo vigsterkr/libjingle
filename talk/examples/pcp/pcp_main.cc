@@ -373,7 +373,7 @@ public:
     std::string description, cricket::Session* session) {
     std::cout << "IncomingTunnel from " << jid.Str()
       << ": " << description << std::endl;
-    if (!server_ || (file_.get() != NULL)) {
+    if (!server_ || file_) {
       client->DeclineTunnel(session);
       return;
     }

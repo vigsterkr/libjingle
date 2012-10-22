@@ -224,7 +224,7 @@ XmppReturnStatus XmppEngineImpl::Connect() {
 
   // get the login task started
   state_ = STATE_OPENING;
-  if (login_task_.get()) {
+  if (login_task_) {
     login_task_->IncomingStanza(NULL, false);
     if (login_task_->IsDone())
       login_task_.reset();
@@ -239,7 +239,7 @@ XmppReturnStatus XmppEngineImpl::SendStanza(const XmlElement* element) {
 
   EnterExit ee(this);
 
-  if (login_task_.get()) {
+  if (login_task_) {
     // still handshaking - then outbound stanzas are queued
     login_task_->OutgoingStanza(element);
   } else {
@@ -251,7 +251,7 @@ XmppReturnStatus XmppEngineImpl::SendStanza(const XmlElement* element) {
 }
 
 XmppReturnStatus XmppEngineImpl::SendRaw(const std::string& text) {
-  if (state_ == STATE_CLOSED || login_task_.get())
+  if (state_ == STATE_CLOSED || login_task_)
     return XMPP_RETURN_BADSTATE;
 
   EnterExit ee(this);
@@ -282,7 +282,7 @@ void XmppEngineImpl::IncomingStart(const XmlElement* start) {
   if (HasError() || raised_reset_)
     return;
 
-  if (login_task_.get()) {
+  if (login_task_) {
     // start-stream should go to login task
     login_task_->IncomingStanza(start, true);
     if (login_task_->IsDone())
@@ -301,7 +301,7 @@ void XmppEngineImpl::IncomingStanza(const XmlElement* stanza) {
   if (stanza->Name() == QN_STREAM_ERROR) {
     // Explicit XMPP stream error
     SignalStreamError(stanza);
-  } else if (login_task_.get()) {
+  } else if (login_task_) {
     // Handle login handshake
     login_task_->IncomingStanza(stanza, false);
     if (login_task_->IsDone())

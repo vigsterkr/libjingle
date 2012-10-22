@@ -27,6 +27,8 @@
 
 #include "talk/app/webrtc/mediastreamhandler.h"
 
+#include "talk/app/webrtc/videosourceinterface.h"
+
 namespace webrtc {
 
 BaseTrackHandler::BaseTrackHandler(MediaStreamTrackInterface* track)

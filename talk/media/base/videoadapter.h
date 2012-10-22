@@ -52,9 +52,7 @@ class VideoAdapter {
   const VideoFormat& input_format();
   const VideoFormat& output_format();
   // If the parameter black is true, the adapted frames will be black.
-  // TODO(whyuan): Rename S/GetBlackOutput properly.
   void SetBlackOutput(bool black);
-  bool GetBlackOutput() const { return black_output_; }
 
   // Adapt the input frame from the input format to the output format. Return
   // true and set the output frame to NULL if the input frame is dropped. Return
@@ -129,6 +127,8 @@ class CoordinatedVideoAdapter
   // Handle the CPU load provided by a CPU monitor.
   void OnCpuLoadUpdated(int current_cpus, int max_cpus,
                         float process_load, float system_load);
+
+  sigslot::signal0<> SignalCpuAdaptationUnable;
 
  private:
   // Adapt to the minimum of the formats the server requests, the CPU wants, and

@@ -100,15 +100,15 @@ bool VideoCapturer::StartCapturing(const VideoFormat& capture_format) {
 
 void VideoCapturer::SetSupportedFormats(
     const std::vector<VideoFormat>& formats) {
-  if (!supported_formats_.get()) {
+  if (!supported_formats_) {
     supported_formats_.reset(new std::vector<VideoFormat>);
   }
-  *(supported_formats_.get()) = formats;
+  *supported_formats_ = formats;
 }
 
 bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
                                          VideoFormat* best_format) {
-  if (!supported_formats_.get()) {
+  if (!supported_formats_) {
     return false;
   }
   LOG(LS_INFO) << " Capture Requested " << format.ToString();

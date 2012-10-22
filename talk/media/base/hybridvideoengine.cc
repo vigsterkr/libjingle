@@ -46,20 +46,20 @@ HybridVideoMediaChannel::~HybridVideoMediaChannel() {
 }
 
 void HybridVideoMediaChannel::SetInterface(NetworkInterface* iface) {
-  if (channel1_.get()) {
+  if (channel1_) {
     channel1_->SetInterface(iface);
   }
-  if (channel2_.get()) {
+  if (channel2_) {
     channel2_->SetInterface(iface);
   }
 }
 
 bool HybridVideoMediaChannel::SetOptions(int options) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->SetOptions(options);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->SetOptions(options);
   }
   return ret;
@@ -69,10 +69,10 @@ int HybridVideoMediaChannel::GetOptions() const {
   if (active_channel_) {
     return active_channel_->GetOptions();
   }
-  if (channel1_.get()) {
+  if (channel1_) {
     return channel1_->GetOptions();
   }
-  if (channel2_.get()) {
+  if (channel2_) {
     return channel2_->GetOptions();
   }
   return 0;
@@ -84,10 +84,10 @@ bool HybridVideoMediaChannel::SetRecvCodecs(
   bool ret = true;
   std::vector<VideoCodec> codecs1, codecs2;
   SplitCodecs(codecs, &codecs1, &codecs2);
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->SetRecvCodecs(codecs1);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->SetRecvCodecs(codecs2);
   }
   return ret;
@@ -96,10 +96,10 @@ bool HybridVideoMediaChannel::SetRecvCodecs(
 bool HybridVideoMediaChannel::SetRecvRtpHeaderExtensions(
     const std::vector<RtpHeaderExtension>& extensions) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->SetRecvRtpHeaderExtensions(extensions);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->SetRecvRtpHeaderExtensions(extensions);
   }
   return ret;
@@ -108,10 +108,10 @@ bool HybridVideoMediaChannel::SetRecvRtpHeaderExtensions(
 bool HybridVideoMediaChannel::SetRenderer(uint32 ssrc,
                                           VideoRenderer* renderer) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->SetRenderer(ssrc, renderer);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->SetRenderer(ssrc, renderer);
   }
   return ret;
@@ -119,10 +119,10 @@ bool HybridVideoMediaChannel::SetRenderer(uint32 ssrc,
 
 bool HybridVideoMediaChannel::SetRender(bool render) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->SetRender(render);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->SetRender(render);
   }
   return ret;
@@ -130,10 +130,10 @@ bool HybridVideoMediaChannel::SetRender(bool render) {
 
 bool HybridVideoMediaChannel::MuteStream(uint32 ssrc, bool muted) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->MuteStream(ssrc, muted);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->MuteStream(ssrc, muted);
   }
   return ret;
@@ -223,10 +223,10 @@ bool HybridVideoMediaChannel::SetCapturer(uint32 ssrc,
 
 bool HybridVideoMediaChannel::AddSendStream(const StreamParams& sp) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->AddSendStream(sp);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->AddSendStream(sp);
   }
   return ret;
@@ -234,10 +234,10 @@ bool HybridVideoMediaChannel::AddSendStream(const StreamParams& sp) {
 
 bool HybridVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
   bool ret = true;
-  if (channel1_.get()) {
+  if (channel1_) {
     ret = channel1_->RemoveSendStream(ssrc);
   }
-  if (channel2_.get() && ret) {
+  if (channel2_ && ret) {
     ret = channel2_->RemoveSendStream(ssrc);
   }
   return ret;

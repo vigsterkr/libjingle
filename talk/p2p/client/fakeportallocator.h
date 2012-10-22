@@ -42,7 +42,7 @@ class FakePortAllocatorSession : public PortAllocatorSession {
   }
 
   virtual void GetPortConfigurations() {
-    if (!port_.get()) {
+    if (!port_) {
       port_.reset(cricket::UDPPort::Create(worker_thread_, factory_,
                       &network_, network_.ip(), 0, 0,
                       username(),

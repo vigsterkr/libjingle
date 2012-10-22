@@ -53,7 +53,7 @@ Console::~Console() {
 }
 
 void Console::Start() {
-  if (!console_thread_.get()) {
+  if (!console_thread_) {
     // stdin was closed in Stop(), so we can't restart.
     LOG(LS_ERROR) << "Cannot re-start";
     return;
@@ -67,7 +67,7 @@ void Console::Start() {
 }
 
 void Console::Stop() {
-  if (console_thread_.get() && console_thread_->started()) {
+  if (console_thread_ && console_thread_->started()) {
 #ifdef WIN32
     CloseHandle(GetStdHandle(STD_INPUT_HANDLE));
 #else

@@ -148,7 +148,7 @@ XmppPresenceImpl::XmppPresenceImpl() {
 
 const Jid
 XmppPresenceImpl::jid() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return Jid();
 
   return Jid(raw_xml_->Attr(QN_FROM));
@@ -156,7 +156,7 @@ XmppPresenceImpl::jid() const {
 
 XmppPresenceAvailable
 XmppPresenceImpl::available() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return XMPP_PRESENCE_UNAVAILABLE;
 
   if (raw_xml_->Attr(QN_TYPE) == "unavailable")
@@ -169,7 +169,7 @@ XmppPresenceImpl::available() const {
 
 XmppReturnStatus
 XmppPresenceImpl::set_available(XmppPresenceAvailable available) {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   if (available == XMPP_PRESENCE_AVAILABLE)
@@ -183,7 +183,7 @@ XmppPresenceImpl::set_available(XmppPresenceAvailable available) {
 
 XmppPresenceShow
 XmppPresenceImpl::presence_show() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return XMPP_PRESENCE_DEFAULT;
 
   XmppPresenceShow show = XMPP_PRESENCE_DEFAULT;
@@ -193,7 +193,7 @@ XmppPresenceImpl::presence_show() const {
 
 XmppReturnStatus
 XmppPresenceImpl::set_presence_show(XmppPresenceShow show) {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   const char* show_string;
@@ -213,7 +213,7 @@ XmppPresenceImpl::set_presence_show(XmppPresenceShow show) {
 
 int
 XmppPresenceImpl::priority() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return 0;
 
   int raw_priority = 0;
@@ -229,7 +229,7 @@ XmppPresenceImpl::priority() const {
 
 XmppReturnStatus
 XmppPresenceImpl::set_priority(int priority) {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   if (priority < -128 || priority > 127)
@@ -249,7 +249,7 @@ XmppPresenceImpl::set_priority(int priority) {
 
 const std::string
 XmppPresenceImpl::status() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return STR_EMPTY;
 
   XmlElement* status_element;
@@ -275,7 +275,7 @@ XmppPresenceImpl::status() const {
 
 XmppReturnStatus
 XmppPresenceImpl::set_status(const std::string& status) {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   raw_xml_->ClearNamedChildren(QN_STATUS);
@@ -290,12 +290,12 @@ XmppPresenceImpl::set_status(const std::string& status) {
 
 XmppPresenceConnectionStatus
 XmppPresenceImpl::connection_status() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
       return XMPP_CONNECTION_STATUS_UNKNOWN;
 
-  XmlElement* con = raw_xml_.get()->FirstNamed(QN_GOOGLE_PSTN_CONFERENCE_STATUS);
+  XmlElement* con = raw_xml_->FirstNamed(QN_GOOGLE_PSTN_CONFERENCE_STATUS);
   if (con) {
-    std::string status = con->Attr(QN_STATUS);
+    std::string status = con->Attr(QN_ATTR_STATUS);
     if (status == STR_PSTN_CONFERENCE_STATUS_CONNECTING)
       return XMPP_CONNECTION_STATUS_CONNECTING;
     else if (status == STR_PSTN_CONFERENCE_STATUS_CONNECTED)
@@ -309,7 +309,7 @@ XmppPresenceImpl::connection_status() const {
 
 const std::string
 XmppPresenceImpl::google_user_id() const {
-  if (raw_xml_.get() == NULL)
+  if (!raw_xml_)
     return std::string();
 
   XmlElement* muc_user_x = raw_xml_->FirstNamed(QN_MUC_USER_X);
@@ -325,7 +325,7 @@ XmppPresenceImpl::google_user_id() const {
 
 const std::string
 XmppPresenceImpl::nickname() const {
-  if (raw_xml_.get() == NULL)
+  if (!raw_xml_)
     return std::string();
 
   XmlElement* nickname = raw_xml_->FirstNamed(QN_NICKNAME);
@@ -338,7 +338,7 @@ XmppPresenceImpl::nickname() const {
 
 const XmlElement*
 XmppPresenceImpl::raw_xml() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     const_cast<XmppPresenceImpl*>(this)->CreateRawXmlSkeleton();
   return raw_xml_.get();
 }
@@ -397,7 +397,7 @@ XmppRosterContactImpl::jid() const {
 XmppReturnStatus
 XmppRosterContactImpl::set_jid(const Jid& jid)
 {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   if (!jid.IsValid())
@@ -415,7 +415,7 @@ XmppRosterContactImpl::name() const {
 
 XmppReturnStatus
 XmppRosterContactImpl::set_name(const std::string& name) {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   if (name == STR_EMPTY)
@@ -428,7 +428,7 @@ XmppRosterContactImpl::set_name(const std::string& name) {
 
 XmppSubscriptionState
 XmppRosterContactImpl::subscription_state() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return XMPP_SUBSCRIPTION_NONE;
 
   XmppSubscriptionState state = XMPP_SUBSCRIPTION_NONE;
@@ -443,7 +443,7 @@ XmppRosterContactImpl::subscription_state() const {
 
 size_t
 XmppRosterContactImpl::GetGroupCount() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return 0;
 
   if (-1 == group_count_) {
@@ -501,7 +501,7 @@ XmppRosterContactImpl::AddGroup(const std::string& group) {
   if (group == STR_EMPTY)
     return XMPP_RETURN_BADARGUMENT;
 
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     CreateRawXmlSkeleton();
 
   if (FindGroup(group, NULL, NULL))
@@ -519,7 +519,7 @@ XmppRosterContactImpl::RemoveGroup(const std::string& group) {
   if (group == STR_EMPTY)
     return XMPP_RETURN_BADARGUMENT;
 
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     return XMPP_RETURN_OK;
 
   XmlChild * child_before;
@@ -556,7 +556,7 @@ XmppRosterContactImpl::FindGroup(const std::string& group,
 
 const XmlElement*
 XmppRosterContactImpl::raw_xml() const {
-  if (!raw_xml_.get())
+  if (!raw_xml_)
     const_cast<XmppRosterContactImpl*>(this)->CreateRawXmlSkeleton();
   return raw_xml_.get();
 }

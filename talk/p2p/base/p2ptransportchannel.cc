@@ -779,21 +779,20 @@ void P2PTransportChannel::SortConnections() {
   }
 
   // Count the number of connections in the various states.
-
   int writable = 0;
-  int write_connect = 0;
-  int write_timeout = 0;
+  int not_writable = 0;
 
   for (uint32 i = 0; i < connections_.size(); ++i) {
     switch (connections_[i]->write_state()) {
     case Connection::STATE_WRITABLE:
       ++writable;
       break;
-    case Connection::STATE_WRITE_CONNECT:
-      ++write_connect;
+    case Connection::STATE_WRITE_UNRELIABLE:
+    case Connection::STATE_WRITE_INIT:
+      ++not_writable;
       break;
     case Connection::STATE_WRITE_TIMEOUT:
-      ++write_timeout;
+      // Don't need to count these.
       break;
     default:
       ASSERT(false);
@@ -802,7 +801,7 @@ void P2PTransportChannel::SortConnections() {
 
   if (writable > 0) {
     HandleWritable();
-  } else if (write_connect > 0) {
+  } else if (not_writable > 0) {
     HandleNotWritable();
   } else {
     HandleAllTimedOut();
@@ -856,9 +855,6 @@ void P2PTransportChannel::UpdateChannelState() {
 // was writable, go into the writable state.
 void P2PTransportChannel::HandleWritable() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-  //
-  // One or more connections writable!
-  //
   if (!writable()) {
     for (uint32 i = 0; i < allocator_sessions_.size(); ++i) {
       if (allocator_sessions_[i]->IsGettingAllPorts()) {
@@ -874,13 +870,10 @@ void P2PTransportChannel::HandleWritable() {
 }
 
 // We checked the status of our connections and we didn't have any that
-// were writable, go into the connecting state (kick off a new allocator
+// were fully writable, go into the connecting state (kick off a new allocator
 // session).
 void P2PTransportChannel::HandleNotWritable() {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
-  //
-  // No connections are writable but not timed out!
-  //
   if (was_writable_) {
     // If we were writable, let's kick off an allocator session immediately
     was_writable_ = false;
@@ -895,9 +888,6 @@ void P2PTransportChannel::HandleNotWritable() {
 // We checked the status of our connections and not only weren't they writable
 // but they were also timed out, we really need a new allocator.
 void P2PTransportChannel::HandleAllTimedOut() {
-  //
-  // No connections... all are timed out!
-  //
   if (!was_timed_out_) {
     // We weren't timed out before, so kick off an allocator now (we'll still
     // be in the fully timed out state until the allocator actually gives back

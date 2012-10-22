@@ -191,7 +191,7 @@ VideoCapturer* DeviceManager::CreateVideoCapturer(const Device& device) const {
 
 bool DeviceManager::GetWindows(
     std::vector<talk_base::WindowDescription>* descriptions) {
-  if (!window_picker_.get()) {
+  if (!window_picker_) {
     return false;
   }
   return window_picker_->GetWindowList(descriptions);
@@ -212,7 +212,7 @@ VideoCapturer* DeviceManager::CreateWindowCapturer(talk_base::WindowId window) {
 
 bool DeviceManager::GetDesktops(
     std::vector<talk_base::DesktopDescription>* descriptions) {
-  if (!window_picker_.get()) {
+  if (!window_picker_) {
     return false;
   }
   return window_picker_->GetDesktopList(descriptions);

@@ -947,6 +947,8 @@ class VideoMediaChannelTest : public testing::Test,
     // it will come first in the senders map.
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
     EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    EXPECT_TRUE(channel_->AddRecvStream(
+        cricket::StreamParams::CreateLegacy(1234)));
     EXPECT_TRUE(SetSend(true));
     EXPECT_TRUE(channel_->SetRender(true));
     EXPECT_TRUE(SendFrame());

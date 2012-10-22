@@ -105,7 +105,7 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
 
   bool CreateSession(int component) {
     session_.reset(CreateSession("session", component));
-    if (!session_.get())
+    if (!session_)
       return false;
     return true;
   }
@@ -143,7 +143,7 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
 
  protected:
   cricket::BasicPortAllocator& allocator() {
-    return *(allocator_.get());
+    return *allocator_;
   }
 
   void OnPortReady(cricket::PortAllocatorSession* ses,

@@ -120,6 +120,10 @@ class FakeTransportChannel : public TransportChannelImpl,
     }
   }
 
+  void SetWritable(bool writable) {
+    set_writable(writable);
+  }
+
   void SetDestination(FakeTransportChannel* dest) {
     if (state_ == STATE_CONNECTING && dest) {
       // This simulates the delivery of candidates.
@@ -278,6 +282,13 @@ class FakeTransport : public Transport {
          ++it) {
       it->second->SetLocalIdentity(identity_);
       SetChannelDestination(it->first, it->second);
+    }
+  }
+
+  void SetWritable(bool writable) {
+    for (ChannelMap::iterator it = channels_.begin(); it != channels_.end();
+         ++it) {
+      it->second->SetWritable(writable);
     }
   }
 

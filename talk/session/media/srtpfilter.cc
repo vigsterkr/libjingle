@@ -167,7 +167,7 @@ bool SrtpFilter::SetRtcpParams(const std::string& send_cs,
                                const uint8* recv_key, int recv_key_len) {
   // This can only be called once, but can be safely called after
   // SetRtpParams
-  if (send_rtcp_session_.get() || send_rtcp_session_.get()) {
+  if (send_rtcp_session_ || send_rtcp_session_) {
     LOG(LS_ERROR) << "Tried to set SRTCP Params when filter already active";
     return false;
   }
@@ -204,7 +204,7 @@ bool SrtpFilter::ProtectRtcp(void* p, int in_len, int max_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to ProtectRtcp: SRTP not active";
     return false;
   }
-  if (send_rtcp_session_.get()) {
+  if (send_rtcp_session_) {
     return send_rtcp_session_->ProtectRtcp(p, in_len, max_len, out_len);
   } else {
     return send_session_->ProtectRtcp(p, in_len, max_len, out_len);
@@ -224,7 +224,7 @@ bool SrtpFilter::UnprotectRtcp(void* p, int in_len, int* out_len) {
     LOG(LS_WARNING) << "Failed to UnprotectRtcp: SRTP not active";
     return false;
   }
-  if (recv_rtcp_session_.get()) {
+  if (recv_rtcp_session_) {
     return recv_rtcp_session_->UnprotectRtcp(p, in_len, out_len);
   } else {
     return recv_session_->UnprotectRtcp(p, in_len, out_len);
@@ -236,9 +236,9 @@ void SrtpFilter::set_signal_silent_time(uint32 signal_silent_time_in_ms) {
   if (state_ == ST_ACTIVE) {
     send_session_->set_signal_silent_time(signal_silent_time_in_ms);
     recv_session_->set_signal_silent_time(signal_silent_time_in_ms);
-    if (send_rtcp_session_.get())
+    if (send_rtcp_session_)
       send_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms);
-    if (recv_rtcp_session_.get())
+    if (recv_rtcp_session_)
       recv_rtcp_session_->set_signal_silent_time(signal_silent_time_in_ms);
   }
 }

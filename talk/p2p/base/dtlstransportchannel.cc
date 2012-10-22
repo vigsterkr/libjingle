@@ -114,6 +114,8 @@ DtlsTransportChannelWrapper::DtlsTransportChannelWrapper(
       &DtlsTransportChannelWrapper::OnCandidateReady);
   channel_->SignalCandidatesAllocationDone.connect(this,
       &DtlsTransportChannelWrapper::OnCandidatesAllocationDone);
+  channel_->SignalRoleConflict.connect(this,
+      &DtlsTransportChannelWrapper::OnRoleConflict);
   channel_->SignalRouteChange.connect(this,
       &DtlsTransportChannelWrapper::OnRouteChange);
 }
@@ -197,7 +199,7 @@ bool DtlsTransportChannelWrapper::SetupDtls() {
       new StreamInterfaceChannel(worker_thread_, channel_);
 
   dtls_.reset(talk_base::SSLStreamAdapter::Create(downward));
-  if (!dtls_.get()) {
+  if (!dtls_) {
     LOG(LS_ERROR) << "Failed to create DTLS adapter";
     delete downward;
     return false;
@@ -496,6 +498,12 @@ void DtlsTransportChannelWrapper::OnCandidatesAllocationDone(
     TransportChannelImpl* channel) {
   ASSERT(channel == channel_);
   SignalCandidatesAllocationDone(this);
+}
+
+void DtlsTransportChannelWrapper::OnRoleConflict(
+    TransportChannelImpl* channel) {
+  ASSERT(channel == channel_);
+  SignalRoleConflict(this);
 }
 
 void DtlsTransportChannelWrapper::OnRouteChange(

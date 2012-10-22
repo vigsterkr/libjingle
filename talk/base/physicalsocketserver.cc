@@ -1425,14 +1425,14 @@ bool PhysicalSocketServer::SetPosixSignalHandler(int signum,
     if (!InstallSignal(signum, handler)) {
       return false;
     }
-    if (signal_dispatcher_.get()) {
+    if (signal_dispatcher_) {
       signal_dispatcher_->ClearHandler(signum);
       if (!signal_dispatcher_->HasHandlers()) {
         signal_dispatcher_.reset();
       }
     }
   } else {
-    if (!signal_dispatcher_.get()) {
+    if (!signal_dispatcher_) {
       signal_dispatcher_.reset(new PosixSignalDispatcher(this));
     }
     signal_dispatcher_->SetHandler(signum, handler);

@@ -474,17 +474,18 @@ def mac_common_include_x86_64(env):
 
 def mac_osx_version_min(env, ver):
   if ver != "":
+    sdk_path = '/Developer/SDKs/MacOSX%s.sdk' % ver
     env.Append(
       CCFLAGS = [
         '-mmacosx-version-min=' + ver,
-        '-isysroot',
-        '/Developer/SDKs/MacOSX' + ver + '.sdk'
+        '-isysroot', sdk_path,
       ],
       LINKFLAGS = [
         '-mmacosx-version-min=' + ver,
-        '-isysroot',
-        '/Developer/SDKs/MacOSX' + ver + '.sdk'
+        '-isysroot', sdk_path,
       ],
+      osx_sdk_path = sdk_path,
+      osx_version_min = ver,
     )
 
 # Create all environments

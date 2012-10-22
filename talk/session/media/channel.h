@@ -87,6 +87,10 @@ class BaseChannel
     return rtcp_transport_channel_;
   }
   bool enabled() const { return enabled_; }
+  // Set to true to have the channel optimistically allow data to be sent even
+  // when the channel isn't fully writable.
+  void set_optimistic_data_send(bool value) { optimistic_data_send_ = value; }
+  bool optimistic_data_send() const { return optimistic_data_send_; }
 
   // This function returns true iff we are using SRTP.
   bool secure() const { return srtp_filter_.IsActive(); }
@@ -329,6 +333,7 @@ class BaseChannel
   talk_base::scoped_ptr<SocketMonitor> socket_monitor_;
   bool enabled_;
   bool writable_;
+  bool optimistic_data_send_;
   bool was_ever_writable_;
   MediaContentDirection local_content_direction_;
   MediaContentDirection remote_content_direction_;

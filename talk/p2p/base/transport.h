@@ -287,6 +287,7 @@ class Transport : public talk_base::MessageHandler,
     int ref() const { return ref_; }
 
     TransportChannelImpl* get() const { return impl_; }
+    TransportChannelImpl* operator->() const  { return impl_; }
     void set_candidates_allocated(bool status) {
       candidates_allocated_ = status;
     }
@@ -337,6 +338,7 @@ class Transport : public talk_base::MessageHandler,
   void OnConnecting_s();
   void OnChannelRouteChange_s(const TransportChannel* channel,
                               const Candidate& remote_candidate);
+  void OnChannelCandidatesAllocationDone_s();
 
   // Helper function that invokes the given function on every channel.
   typedef void (TransportChannelImpl::* TransportChannelFunc)();

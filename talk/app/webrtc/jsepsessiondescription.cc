@@ -135,7 +135,7 @@ bool JsepSessionDescription::AddCandidate(
 }
 
 size_t JsepSessionDescription::number_of_mediasections() const {
-  if (!description_.get())
+  if (!description_)
     return 0;
   return description_->contents().size();
 }
@@ -146,7 +146,7 @@ const IceCandidateCollection* JsepSessionDescription::candidates(
 }
 
 bool JsepSessionDescription::ToString(std::string* out) const {
-  if (!description_.get() || !out)
+  if (!description_ || !out)
     return false;
   *out = SdpSerialize(*this);
   return !out->empty();
@@ -159,7 +159,7 @@ bool JsepSessionDescription::GetMediasectionIndex(
     return false;
   }
   *index = static_cast<size_t>(candidate->sdp_mline_index());
-  if (description_.get() && !candidate->sdp_mid().empty()) {
+  if (description_ && !candidate->sdp_mid().empty()) {
     bool found = false;
     // Try to match the sdp_mid with content name.
     for (size_t i = 0; i < description_->contents().size(); ++i) {
@@ -202,4 +202,3 @@ JsepSessionDescription::GetAction(const std::string& type) {
 }
 
 }  // namespace webrtc
-

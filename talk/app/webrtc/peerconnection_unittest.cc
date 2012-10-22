@@ -116,7 +116,7 @@ class PeerConnectionTestClientBase
   virtual void StartSession()  = 0;
 
   void AddMediaStream() {
-    if (video_track_.get() != NULL) {
+    if (video_track_) {
       // Tracks have already been set up.
       return;
     }
@@ -281,7 +281,7 @@ class PeerConnectionTestClientBase
   }
 
   virtual int num_rendered_frames() {
-    if (fake_video_renderer_.get() == NULL) {
+    if (!fake_video_renderer_) {
       return 0;
     }
     return fake_video_renderer_->num_rendered_frames();
@@ -331,10 +331,10 @@ class PeerConnectionTestClientBase
         signaling_message_receiver_(NULL) {
   }
   bool Init() {
-    EXPECT_TRUE(peer_connection_.get() == NULL);
-    EXPECT_TRUE(peer_connection_factory_.get() == NULL);
+    EXPECT_TRUE(!peer_connection_);
+    EXPECT_TRUE(!peer_connection_factory_);
     allocator_factory_ = webrtc::FakePortAllocatorFactory::Create();
-    if (allocator_factory_.get() == NULL) {
+    if (!allocator_factory_) {
       return false;
     }
     fake_audio_capture_module_ = FakeAudioCaptureModule::Create(
@@ -345,7 +345,7 @@ class PeerConnectionTestClientBase
     peer_connection_factory_ = webrtc::CreatePeerConnectionFactory(
         talk_base::Thread::Current(), talk_base::Thread::Current(),
         fake_audio_capture_module_);
-    if (peer_connection_factory_.get() == NULL) {
+    if (!peer_connection_factory_) {
       return false;
     }
 
@@ -494,7 +494,7 @@ class Jsep00TestClient
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> answer(
         peer_connection()->CreateAnswer(hints(),
                                         desc.get()));
-    ASSERT_TRUE(answer.get() != NULL);
+    ASSERT_TRUE(answer);
     // Verify that we have the rejected flag set properly.
     if (hints().has_audio() && !remote_hints().has_audio()) {
       const ContentInfo* audio_content =
@@ -769,10 +769,10 @@ class P2PTestConductor : public testing::Test {
         receiving_client_->VerifySendDtmf();
   }
   ~P2PTestConductor() {
-    if (initiating_client_.get() != NULL) {
+    if (initiating_client_) {
       initiating_client_->set_signaling_message_receiver(NULL);
     }
-    if (receiving_client_.get() != NULL) {
+    if (receiving_client_) {
       receiving_client_->set_signaling_message_receiver(NULL);
     }
   }
@@ -780,8 +780,7 @@ class P2PTestConductor : public testing::Test {
   bool CreateTestClients(const MediaHints& hints0, const MediaHints& hints1) {
     initiating_client_.reset(SignalingClass::CreateClient(0, hints0, hints1));
     receiving_client_.reset(SignalingClass::CreateClient(1, hints1, hints0));
-    if ((initiating_client_.get() == NULL) ||
-        (receiving_client_.get() == NULL)) {
+    if (!initiating_client_ || !receiving_client_) {
       return false;
     }
     initiating_client_->set_signaling_message_receiver(receiving_client_.get());
@@ -839,8 +838,7 @@ class P2PTestConductor : public testing::Test {
 
  private:
   bool IsInitialized() const {
-    return (initiating_client_.get() != NULL) &&
-        (receiving_client_.get() != NULL);
+    return (initiating_client_ && receiving_client_);
   }
 
   talk_base::scoped_ptr<SignalingClass> initiating_client_;

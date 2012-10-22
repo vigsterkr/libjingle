@@ -139,7 +139,7 @@ bool CpuSampler::Init() {
 #if defined(LINUX) || defined(ANDROID)
   Pathname sname("/proc/stat");
   sfile_.reset(Filesystem::OpenFile(sname, "rb"));
-  if (sfile_.get() == NULL) {
+  if (!sfile_) {
     LOG_ERR(LS_ERROR) << "open proc/stat failed:";
     return false;
   }
@@ -257,7 +257,7 @@ float CpuSampler::GetSystemLoad() {
 #endif  // defined(IOS) || defined(OSX)
 
 #if defined(LINUX) || defined(ANDROID)
-  if (sfile_.get() == NULL) {
+  if (!sfile_) {
     LOG(LS_ERROR) << "Invalid handle for proc/stat";
     return 0.f;
   }

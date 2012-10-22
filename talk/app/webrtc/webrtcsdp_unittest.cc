@@ -610,9 +610,9 @@ class WebRtcSdpTest : public testing::Test {
                 transport2.description.ice_ufrag);
       EXPECT_EQ(transport1.description.ice_pwd,
                 transport2.description.ice_pwd);
-      if (transport1.description.identity_fingerprint.get() != NULL) {
-        EXPECT_EQ(*transport1.description.identity_fingerprint.get(),
-                  *transport2.description.identity_fingerprint.get());
+      if (transport1.description.identity_fingerprint) {
+        EXPECT_EQ(*transport1.description.identity_fingerprint,
+                  *transport2.description.identity_fingerprint);
       } else {
         EXPECT_EQ(transport1.description.identity_fingerprint.get(),
                   transport2.description.identity_fingerprint.get());
@@ -898,8 +898,7 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithAudioVideoRejected) {
 }
 
 TEST_F(WebRtcSdpTest, SerializeCandidates) {
-  std::string message = webrtc::SdpSerializeCandidate(
-      *jcandidate_.get());
+  std::string message = webrtc::SdpSerializeCandidate(*jcandidate_);
   EXPECT_EQ(std::string(kSdpOneCandidate), message);
 }
 

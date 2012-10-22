@@ -58,6 +58,21 @@ extern const char LOCAL_PORT_TYPE[];
 extern const char STUN_PORT_TYPE[];
 extern const char RELAY_PORT_TYPE[];
 
+// The length of time we wait before timing out readability on a connection.
+const uint32 CONNECTION_READ_TIMEOUT = 30 * 1000;   // 30 seconds
+
+// The length of time we wait before timing out writability on a connection.
+const uint32 CONNECTION_WRITE_TIMEOUT = 15 * 1000;  // 15 seconds
+
+// The length of time we wait before we become unwritable.
+const uint32 CONNECTION_WRITE_CONNECT_TIMEOUT = 5 * 1000;  // 5 seconds
+
+// The number of pings that must fail to respond before we become unwritable.
+const uint32 CONNECTION_WRITE_CONNECT_FAILURES = 5;
+
+// This is the length of time that we wait for a ping response to come back.
+const int CONNECTION_RESPONSE_TIMEOUT = 5 * 1000;   // 5 seconds
+
 
 enum IcePriorityValue {
   ICE_TYPE_PREFERENCE_RELAY = 0,
@@ -338,16 +353,18 @@ class Connection : public talk_base::MessageHandler,
   uint64 priority() const;
 
   enum ReadState {
-    STATE_READABLE     = 0,  // we have received pings recently
-    STATE_READ_TIMEOUT = 1   // we haven't received pings in a while
+    STATE_READ_INIT    = 0,  // we have yet to receive a ping
+    STATE_READABLE     = 1,  // we have received pings recently
+    STATE_READ_TIMEOUT = 2,  // we haven't received pings in a while
   };
 
   ReadState read_state() const { return read_state_; }
 
   enum WriteState {
-    STATE_WRITABLE      = 0,  // we have received ping responses recently
-    STATE_WRITE_CONNECT = 1,  // we have had a few ping failures
-    STATE_WRITE_TIMEOUT = 2   // we have had a large number of ping failures
+    STATE_WRITABLE          = 0,  // we have received ping responses recently
+    STATE_WRITE_UNRELIABLE  = 1,  // we have had a few ping failures
+    STATE_WRITE_INIT        = 2,  // we have yet to receive a ping response
+    STATE_WRITE_TIMEOUT     = 3,  // we have had a large number of ping failures
   };
 
   WriteState write_state() const { return write_state_; }

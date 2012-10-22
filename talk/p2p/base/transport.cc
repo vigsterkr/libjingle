@@ -175,13 +175,13 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
   // Push down our transport state to the new channel.
   impl->SetRole(role_);
   impl->SetTiebreaker(tiebreaker_);
-  if (local_description_.get()) {
+  if (local_description_) {
     ApplyLocalTransportDescription_w(impl);
   }
-  if (remote_description_.get()) {
+  if (remote_description_) {
     ApplyRemoteTransportDescription_w(impl);
   }
-  if (local_description_.get() && remote_description_.get()) {
+  if (local_description_ && remote_description_) {
     impl->SetIceProtocolType(protocol_);
   }
 
@@ -264,7 +264,7 @@ void Transport::ConnectChannels_w() {
   signaling_thread()->Post(
       this, MSG_CANDIDATEREADY, NULL);
 
-  if (!local_description_.get()) {
+  if (!local_description_) {
     // TOOD(mallinath) : TransportDescription(TD) shouldn't be generated here.
     // As Transport must know TD is offer or answer and cricket::Transport
     // doesn't have the capability to decide it. This should be set by the
@@ -409,7 +409,7 @@ void Transport::OnRemoteCandidate_w(const Candidate& candidate) {
   ChannelMap::iterator iter = channels_.find(candidate.component());
   // It's ok for a channel to go away while this message is in transit.
   if (iter != channels_.end()) {
-    iter->second.get()->OnCandidate(candidate);
+    iter->second->OnCandidate(candidate);
   }
 }
 
@@ -449,8 +449,8 @@ TransportState Transport::GetTransportState_s(bool read) {
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end();
        ++iter) {
-    bool b = (read ? iter->second.get()->readable() :
-      iter->second.get()->writable());
+    bool b = (read ? iter->second->readable() :
+      iter->second->writable());
     any = any || b;
     all = all && b;
   }
@@ -528,6 +528,7 @@ void Transport::OnChannelRouteChange_s(const TransportChannel* channel,
 void Transport::OnChannelCandidatesAllocationDone(
     TransportChannelImpl* channel) {
   ASSERT(worker_thread()->IsCurrent());
+  talk_base::CritScope cs(&crit_);
   ChannelMap::iterator iter = channels_.find(channel->component());
   ASSERT(iter != channels_.end());
   iter->second.set_candidates_allocated(true);
@@ -542,6 +543,11 @@ void Transport::OnChannelCandidatesAllocationDone(
   signaling_thread_->Post(this, MSG_CANDIDATEALLOCATIONCOMPLETE);
 }
 
+void Transport::OnChannelCandidatesAllocationDone_s() {
+  ASSERT(signaling_thread()->IsCurrent());
+  SignalCandidatesAllocationDone(this);
+}
+
 void Transport::OnRoleConflict(TransportChannelImpl* channel) {
   signaling_thread_->Post(this, MSG_ROLECONFLICT);
 }
@@ -550,7 +556,7 @@ void Transport::SetRole_w() {
   talk_base::CritScope cs(&crit_);
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end(); ++iter) {
-    iter->second.get()->SetRole(role_);
+    iter->second->SetRole(role_);
   }
 }
 
@@ -642,7 +648,7 @@ bool Transport::NegotiateTransportDescription_w(
 bool Transport::SetTransportType_w() {
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end(); ++iter) {
-    iter->second.get()->SetIceProtocolType(protocol_);
+    iter->second->SetIceProtocolType(protocol_);
   }
   return true;
 }
@@ -702,7 +708,7 @@ void Transport::OnMessage(talk_base::Message* msg) {
       }
       break;
     case MSG_CANDIDATEALLOCATIONCOMPLETE:
-      SignalCandidatesAllocationDone(this);
+      OnChannelCandidatesAllocationDone_s();
       break;
     case MSG_ROLECONFLICT:
       SignalRoleConflict();

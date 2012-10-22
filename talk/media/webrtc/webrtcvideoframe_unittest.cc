@@ -29,7 +29,7 @@
 #include "talk/media/base/videoframe_unittest.h"
 #include "talk/media/webrtc/webrtcvideoframe.h"
 
-extern int FLAG_yuvconverter_repeat; // from lmivideoframe_unittest.cc
+extern int FLAG_yuvconverter_repeat;  // From lmivideoframe_unittest.cc.
 
 class WebRtcVideoFrameTest : public VideoFrameTest<cricket::WebRtcVideoFrame> {
  public:
@@ -253,14 +253,15 @@ TEST_WEBRTCVIDEOFRAME(ConvertFromUYVYBufferInverted)
 TEST_WEBRTCVIDEOFRAME(ConvertFromV210Buffer)
 TEST_WEBRTCVIDEOFRAME(ConvertFromV210BufferStride)
 TEST_WEBRTCVIDEOFRAME(ConvertFromV210BufferInverted)
-//TEST_WEBRTCVIDEOFRAME(ConvertToI422Buffer)
+// TEST_WEBRTCVIDEOFRAME(ConvertToI422Buffer)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerGRBG)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerGBRG)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerBGGR)
 TEST_WEBRTCVIDEOFRAME(ConvertARGBToBayerRGGB)
 TEST_WEBRTCVIDEOFRAME(CopyToBuffer)
+TEST_WEBRTCVIDEOFRAME(Write)
 TEST_WEBRTCVIDEOFRAME(CopyToBuffer1Pixel)
-//TEST_WEBRTCVIDEOFRAME(ConstructARGBBlackWhitePixel)
+// TEST_WEBRTCVIDEOFRAME(ConstructARGBBlackWhitePixel)
 
 TEST_WEBRTCVIDEOFRAME(StretchToFrame)
 TEST_WEBRTCVIDEOFRAME(Copy)

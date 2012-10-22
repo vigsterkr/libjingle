@@ -82,6 +82,7 @@ class FakeWebRtcVideoEngine
           has_renderer_(false),
           render_started_(false),
           send(false),
+          receive_(false),
           rtcp_status_(webrtc::kRtcpNone),
           key_frame_request_method_(webrtc::kViEKeyFrameRequestNone),
           tmmbr_(false),
@@ -91,7 +92,12 @@ class FakeWebRtcVideoEngine
           rtp_offset_receive_id_(0),
           transmission_smoothing_(false),
           nack_(false),
-          hybrid_nack_fec_(false) {
+          hybrid_nack_fec_(false),
+          send_video_bitrate_(0),
+          send_fec_bitrate_(0),
+          send_nack_bitrate_(0),
+          send_bandwidth_(0),
+          receive_bandwidth_(0) {
       ssrcs_[0] = 0;  // default ssrc.
       memset(&send_codec, 0, sizeof(send_codec));
     }
@@ -100,6 +106,7 @@ class FakeWebRtcVideoEngine
     bool has_renderer_;
     bool render_started_;
     bool send;
+    bool receive_;
     std::map<int, int> ssrcs_;
     std::string cname_;
     webrtc::ViERTCPMode rtcp_status_;
@@ -114,6 +121,11 @@ class FakeWebRtcVideoEngine
     bool hybrid_nack_fec_;
     std::vector<webrtc::VideoCodec> recv_codecs;
     webrtc::VideoCodec send_codec;
+    unsigned int send_video_bitrate_;
+    unsigned int send_fec_bitrate_;
+    unsigned int send_nack_bitrate_;
+    unsigned int send_bandwidth_;
+    unsigned int receive_bandwidth_;
   };
   class Capturer : public webrtc::ViEExternalCapture {
    public:
@@ -267,6 +279,22 @@ class FakeWebRtcVideoEngine
       channels_.find(channel)->second->recv_codecs;
     return std::find(codecs.begin(), codecs.end(), codec) != codecs.end();
   };
+  void SetSendBitrates(int channel, unsigned int video_bitrate,
+                       unsigned int fec_bitrate, unsigned int nack_bitrate) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    channels_[channel]->send_video_bitrate_ = video_bitrate;
+    channels_[channel]->send_fec_bitrate_ = fec_bitrate;
+    channels_[channel]->send_nack_bitrate_ = nack_bitrate;
+  }
+  void SetSendBandwidthEstimate(int channel, unsigned int send_bandwidth) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    channels_[channel]->send_bandwidth_ = send_bandwidth;
+  }
+  void SetReceiveBandwidthEstimate(int channel,
+                                   unsigned int receive_bandwidth) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    channels_[channel]->receive_bandwidth_ = receive_bandwidth;
+  };
 
   WEBRTC_STUB(Release, ());
 
@@ -317,8 +345,16 @@ class FakeWebRtcVideoEngine
     channels_[channel]->send = false;
     return 0;
   }
-  WEBRTC_STUB(StartReceive, (const int));
-  WEBRTC_STUB(StopReceive, (const int));
+  WEBRTC_FUNC(StartReceive, (const int channel)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->receive_ = true;
+    return 0;
+  }
+  WEBRTC_FUNC(StopReceive, (const int channel)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->receive_ = false;
+    return 0;
+  }
   WEBRTC_STUB(RegisterObserver, (webrtc::ViEBaseObserver&));
   WEBRTC_STUB(DeregisterObserver, ());
   WEBRTC_STUB(GetVersion, (char version[1024]));
@@ -384,7 +420,19 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&));
   WEBRTC_STUB_CONST(GetReceiveCodecStastistics, (const int,
       unsigned int&, unsigned int&));
-  WEBRTC_STUB_CONST(GetCodecTargetBitrate, (const int, unsigned int*));
+  WEBRTC_FUNC_CONST(GetCodecTargetBitrate, (const int channel,
+      unsigned int* codec_target_bitrate)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+
+    std::map<int, Channel*>::const_iterator it = channels_.find(channel);
+    if (it->second->send) {
+      // Assume the encoder produces the expected rate.
+      *codec_target_bitrate = it->second->send_video_bitrate_;
+    } else {
+      *codec_target_bitrate = 0;
+    }
+    return 0;
+  }
   virtual unsigned int GetDiscardedPackets(const int channel) const {
     return 0;
   }
@@ -657,10 +705,48 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&, unsigned int&, int&));
   WEBRTC_STUB_CONST(GetRTPStatistics, (const int, unsigned int&, unsigned int&,
       unsigned int&, unsigned int&));
-  WEBRTC_STUB_CONST(GetBandwidthUsage, (const int, unsigned int&,
-      unsigned int&, unsigned int&, unsigned int&));
-  WEBRTC_STUB_CONST(GetEstimatedSendBandwidth, (const int, unsigned int*));
-  WEBRTC_STUB_CONST(GetEstimatedReceiveBandwidth, (const int, unsigned int*));
+  WEBRTC_FUNC_CONST(GetBandwidthUsage, (const int channel,
+      unsigned int& total_bitrate, unsigned int& video_bitrate,
+      unsigned int& fec_bitrate, unsigned int& nack_bitrate)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    std::map<int, Channel*>::const_iterator it = channels_.find(channel);
+    if (it->second->send) {
+      video_bitrate = it->second->send_video_bitrate_;
+      fec_bitrate = it->second->send_fec_bitrate_;
+      nack_bitrate = it->second->send_nack_bitrate_;
+      total_bitrate = video_bitrate + fec_bitrate + nack_bitrate;
+    } else {
+      total_bitrate = 0;
+      video_bitrate = 0;
+      fec_bitrate = 0;
+      nack_bitrate = 0;
+    }
+    return 0;
+  }
+  WEBRTC_FUNC_CONST(GetEstimatedSendBandwidth, (const int channel,
+      unsigned int* send_bandwidth_estimate)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    std::map<int, Channel*>::const_iterator it = channels_.find(channel);
+    // Assume the current video, fec and nack bitrate sums up to our estimate.
+    if (it->second->send) {
+      *send_bandwidth_estimate = it->second->send_bandwidth_;
+    } else {
+      *send_bandwidth_estimate = 0;
+    }
+    return 0;
+  }
+  WEBRTC_FUNC_CONST(GetEstimatedReceiveBandwidth, (const int channel,
+      unsigned int* receive_bandwidth_estimate)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    std::map<int, Channel*>::const_iterator it = channels_.find(channel);
+    if (it->second->receive_) {
+    // For simplicity, assume all channels receive half of max send rate.
+      *receive_bandwidth_estimate = it->second->receive_bandwidth_;
+    } else {
+      *receive_bandwidth_estimate = 0;
+    }
+    return 0;
+  }
   WEBRTC_STUB_CONST(SetOverUseDetectorOptions,
       (const webrtc::OverUseDetectorOptions&));
 

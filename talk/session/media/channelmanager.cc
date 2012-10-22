@@ -156,6 +156,14 @@ struct LoggingOptions : public talk_base::MessageData {
   std::string filter;
 };
 
+struct CaptureStateParams : public talk_base::MessageData {
+  CaptureStateParams(cricket::VideoCapturer* c, cricket::CaptureState s)
+      : capturer(c),
+        state(s) {}
+  cricket::VideoCapturer* capturer;
+  cricket::CaptureState state;
+};
+
 struct CaptureParams : public talk_base::MessageData {
   explicit CaptureParams(bool c) : capture(c), result(false) {}
   bool capture;
@@ -243,6 +251,8 @@ void ChannelManager::Construct(MediaEngineInterface* me,
   // Camera is started asynchronously, request callbacks when startup
   // completes to be able to forward them to the rendering manager.
   media_engine_->SignalVideoCaptureStateChange.connect(
+      this, &ChannelManager::OnVideoCaptureStateChange);
+  capture_manager_->SignalCapturerStateChange.connect(
       this, &ChannelManager::OnVideoCaptureStateChange);
 }
 
@@ -729,8 +739,8 @@ bool ChannelManager::SetVideoOptions_w(const Device* cam_device) {
   }
 
   // No need to do anything if the same device is passed more than once.
-  if (video_capturer_.get() &&
-      (video_capturer_->GetId() == cam_device->id)) {
+  if (video_capturer_ &&
+      video_capturer_->GetId() == cam_device->id) {
     // No change, return success.
     return true;
   }
@@ -983,7 +993,7 @@ void ChannelManager::OnVideoCaptureStateChange(VideoCapturer* capturer,
   // screencast.
   capturing_ = result == CS_RUNNING;
   main_thread_->Post(this, MSG_VIDEOCAPTURESTATE,
-                     new talk_base::TypedMessageData<CaptureState>(result));
+                     new CaptureStateParams(capturer, result));
 }
 
 void ChannelManager::OnMessage(talk_base::Message* message) {
@@ -1092,10 +1102,9 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
       break;
     }
     case MSG_VIDEOCAPTURESTATE: {
-      talk_base::TypedMessageData<CaptureState>* data =
-          static_cast<talk_base::TypedMessageData<CaptureState>*>(
-              message->pdata);
-      SignalVideoCaptureStateChange(data->data());
+      CaptureStateParams* data =
+          static_cast<CaptureStateParams*>(message->pdata);
+      SignalVideoCaptureStateChange(data->capturer, data->state);
       delete data;
       break;
     }

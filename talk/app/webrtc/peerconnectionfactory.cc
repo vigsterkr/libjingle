@@ -28,11 +28,13 @@
 #include "talk/app/webrtc/peerconnectionfactory.h"
 
 #include "talk/app/webrtc/audiotrack.h"
+#include "talk/app/webrtc/localvideosource.h"
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
 #include "talk/app/webrtc/peerconnection.h"
 #include "talk/app/webrtc/peerconnectionproxy.h"
 #include "talk/app/webrtc/portallocatorfactory.h"
+#include "talk/app/webrtc/videosourceproxy.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/media/devices/dummydevicemanager.h"
 #include "talk/media/webrtc/webrtcmediaengine.h"
@@ -76,11 +78,23 @@ struct CreatePeerConnectionParamsDeprecated : public talk_base::MessageData {
   webrtc::PeerConnectionObserver* observer;
 };
 
+struct CreateVideoSourceParams : public talk_base::MessageData {
+  CreateVideoSourceParams(cricket::VideoCapturer* capturer,
+                          const webrtc::MediaConstraintsInterface* constraints)
+      : capturer(capturer),
+        constraints(constraints) {
+  }
+  cricket::VideoCapturer* capturer;
+  const webrtc::MediaConstraintsInterface* constraints;
+  scoped_refptr<webrtc::VideoSourceInterface> source;
+};
+
 enum {
   MSG_INIT_FACTORY = 1,
   MSG_TERMINATE_FACTORY,
   MSG_CREATE_PEERCONNECTION,
   MSG_CREATE_PEERCONNECTION_JSEP00,
+  MSG_CREATE_VIDEOSOURCE,
 };
 
 }  // namespace
@@ -181,6 +195,12 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
                                                      pdata->observer);
       break;
     }
+    case MSG_CREATE_VIDEOSOURCE: {
+      CreateVideoSourceParams* pdata =
+          static_cast<CreateVideoSourceParams*> (msg->pdata);
+      pdata->source = CreateVideoSource_s(pdata->capturer, pdata->constraints);
+      break;
+    }
   }
 }
 
@@ -189,7 +209,7 @@ bool PeerConnectionFactory::Initialize_s() {
 
   if (owns_ptrs_) {
     allocator_factory_ = PortAllocatorFactory::Create(worker_thread_);
-    if (allocator_factory_.get() == NULL)
+    if (!allocator_factory_)
       return false;
   }
 
@@ -216,6 +236,17 @@ void PeerConnectionFactory::Terminate_s() {
     allocator_factory_ = NULL;
   }
 }
+
+talk_base::scoped_refptr<VideoSourceInterface>
+PeerConnectionFactory::CreateVideoSource_s(
+    cricket::VideoCapturer* capturer,
+    const MediaConstraintsInterface* constraints) {
+  talk_base::scoped_refptr<LocalVideoSource> source(
+      LocalVideoSource::Create(channel_manager_.get(), capturer,
+                               constraints));
+  return VideoSourceProxy::Create(signaling_thread_, source);
+}
+
 
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
@@ -262,7 +293,7 @@ PeerConnectionFactory::CreatePeerConnection_s(
     const std::string& configuration,
     PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
-  ASSERT(allocator_factory || allocator_factory_.get());
+  ASSERT(allocator_factory || allocator_factory_);
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
 
@@ -282,7 +313,7 @@ PeerConnectionFactory::CreatePeerConnection_s(
     const MediaConstraintsInterface* constraints,
     PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
-  ASSERT(allocator_factory || allocator_factory_.get());
+  ASSERT(allocator_factory || allocator_factory_);
   talk_base::RefCountedObject<PeerConnection>* pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
   if (!pc->Initialize(
@@ -306,9 +337,11 @@ talk_base::scoped_refptr<VideoSourceInterface>
 PeerConnectionFactory::CreateVideoSource(
     cricket::VideoCapturer* capturer,
     const MediaConstraintsInterface* constraints) {
-  // TODO(perkj): Make sure source starts the capture device and take
-  // constraints into consideration.
-  return LocalVideoSource::Create(capturer);
+
+  CreateVideoSourceParams params(capturer,
+                                 constraints);
+  signaling_thread_->Send(this, MSG_CREATE_VIDEOSOURCE, &params);
+  return params.source;
 }
 
 talk_base::scoped_refptr<VideoTrackInterface>

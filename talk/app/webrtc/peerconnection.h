@@ -50,6 +50,8 @@ typedef std::vector<PortAllocatorFactoryInterface::TurnConfiguration>
 // the PeerConnection functionality.
 class PeerConnection : public PeerConnectionInterface,
                        public RemoteMediaStreamObserver,
+                       public IceCandidateObserver,
+                       public talk_base::MessageHandler,
                        public sigslot::has_slots<> {
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
@@ -106,10 +108,19 @@ class PeerConnection : public PeerConnectionInterface,
 
  protected:
   virtual ~PeerConnection();
+
  private:
-    // Implements RemoteMediaStreamObserver.
+  // Implements MessageHandler.
+  virtual void OnMessage(talk_base::Message* msg);
+
+  // Implements RemoteMediaStreamObserver.
   virtual void OnAddStream(MediaStreamInterface* stream);
   virtual void OnRemoveStream(MediaStreamInterface* stream);
+
+  // Implements IceCandidateObserver
+  virtual void OnIceChange();
+  virtual void OnIceCandidate(const IceCandidateInterface* candidate);
+  virtual void OnIceComplete();
 
   // Signals from WebRtcSession.
   void OnSessionStateChange(cricket::BaseSession* session,

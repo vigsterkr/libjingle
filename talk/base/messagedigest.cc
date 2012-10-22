@@ -79,7 +79,7 @@ size_t ComputeDigest(MessageDigest* digest, const void* input, size_t in_len,
 size_t ComputeDigest(const std::string& alg, const void* input, size_t in_len,
                      void* output, size_t out_len) {
   scoped_ptr<MessageDigest> digest(MessageDigestFactory::Create(alg));
-  return (digest.get()) ?
+  return (digest) ?
       ComputeDigest(digest.get(), input, in_len, output, out_len) :
       0;
 }
@@ -94,7 +94,7 @@ std::string ComputeDigest(MessageDigest* digest, const std::string& input) {
 bool ComputeDigest(const std::string& alg, const std::string& input,
                    std::string* output) {
   scoped_ptr<MessageDigest> digest(MessageDigestFactory::Create(alg));
-  if (!digest.get()) {
+  if (!digest) {
     return false;
   }
   *output = ComputeDigest(digest.get(), input);
@@ -149,7 +149,7 @@ size_t ComputeHmac(const std::string& alg, const void* key, size_t key_len,
                    const void* input, size_t in_len,
                    void* output, size_t out_len) {
   scoped_ptr<MessageDigest> digest(MessageDigestFactory::Create(alg));
-  if (!digest.get()) {
+  if (!digest) {
     return 0;
   }
   return ComputeHmac(digest.get(), key, key_len,
@@ -167,7 +167,7 @@ std::string ComputeHmac(MessageDigest* digest, const std::string& key,
 bool ComputeHmac(const std::string& alg, const std::string& key,
                  const std::string& input, std::string* output) {
   scoped_ptr<MessageDigest> digest(MessageDigestFactory::Create(alg));
-  if (!digest.get()) {
+  if (!digest) {
     return false;
   }
   *output = ComputeHmac(digest.get(), key, input);

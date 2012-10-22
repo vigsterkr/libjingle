@@ -134,7 +134,7 @@ bool FakeVideoCaptureModule::Init(I420FrameSource* frame_source) {
   SetSize(kStartWidth, kStartHeight);
   impl_ = webrtc::VideoCaptureFactory::Create(0,  // id
                                               video_capture_);
-  if (impl_.get() == NULL) {
+  if (!impl_) {
     return false;
   }
   if (video_capture_ == NULL) {

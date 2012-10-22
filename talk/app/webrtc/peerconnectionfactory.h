@@ -98,6 +98,9 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
  private:
   bool Initialize_s();
   void Terminate_s();
+  talk_base::scoped_refptr<VideoSourceInterface> CreateVideoSource_s(
+      cricket::VideoCapturer* capturer,
+      const MediaConstraintsInterface* constraints);
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
       const std::string& configuration,
       PortAllocatorFactoryInterface* allocator_factory,

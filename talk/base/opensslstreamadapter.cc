@@ -202,7 +202,7 @@ OpenSSLStreamAdapter::~OpenSSLStreamAdapter() {
 }
 
 void OpenSSLStreamAdapter::SetIdentity(SSLIdentity* identity) {
-  ASSERT(identity_.get() == NULL);
+  ASSERT(!identity_);
   identity_.reset(static_cast<OpenSSLIdentity*>(identity));
 }
 
@@ -211,7 +211,7 @@ void OpenSSLStreamAdapter::SetServerRole(SSLRole role) {
 }
 
 void OpenSSLStreamAdapter::SetPeerCertificate(SSLCertificate* cert) {
-  ASSERT(peer_certificate_.get() == NULL);
+  ASSERT(!peer_certificate_);
   ASSERT(peer_certificate_digest_algorithm_.empty());
   ASSERT(ssl_server_name_.empty());
   peer_certificate_.reset(static_cast<OpenSSLCertificate*>(cert));
@@ -222,7 +222,7 @@ bool OpenSSLStreamAdapter::SetPeerCertificateDigest(const std::string
                                                     const unsigned char*
                                                     digest_val,
                                                     size_t digest_len) {
-  ASSERT(peer_certificate_.get() == NULL);
+  ASSERT(!peer_certificate_);
   ASSERT(peer_certificate_digest_algorithm_.size() == 0);
   ASSERT(ssl_server_name_.empty());
   size_t expected_len;
@@ -604,7 +604,7 @@ int OpenSSLStreamAdapter::BeginSSL() {
   // The underlying stream has open. If we are in peer-to-peer mode
   // then a peer certificate must have been specified by now.
   ASSERT(!ssl_server_name_.empty() ||
-         peer_certificate_.get() != NULL ||
+         peer_certificate_ ||
          !peer_certificate_digest_algorithm_.empty());
   LOG(LS_INFO) << "BeginSSL: "
                << (!ssl_server_name_.empty() ? ssl_server_name_ :
@@ -653,8 +653,8 @@ int OpenSSLStreamAdapter::ContinueSSL() {
       LOG(LS_INFO) << " -- success";
 
       if (!SSLPostConnectionCheck(ssl_, ssl_server_name_.c_str(),
-                                  peer_certificate_.get() != NULL
-                                  ? peer_certificate_->x509() : NULL,
+                                  peer_certificate_ ?
+                                      peer_certificate_->x509() : NULL,
                                   peer_certificate_digest_algorithm_)) {
         LOG(LS_ERROR) << "TLS post connection check failed";
         return -1;
@@ -758,12 +758,12 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
   if (ctx == NULL)
     return NULL;
 
-  if (identity_.get() && !identity_->ConfigureIdentity(ctx)) {
+  if (identity_ && !identity_->ConfigureIdentity(ctx)) {
     SSL_CTX_free(ctx);
     return NULL;
   }
 
-  if (peer_certificate_.get() == NULL) {  // traditional mode
+  if (!peer_certificate_) {  // traditional mode
     // Add the root cert to the SSL context
     if (!OpenSSLAdapter::ConfigureTrustedRootCertificates(ctx)) {
       SSL_CTX_free(ctx);
@@ -771,7 +771,7 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
     }
   }
 
-  if (peer_certificate_.get() != NULL && role_ == SSL_SERVER)
+  if (peer_certificate_ && role_ == SSL_SERVER)
     // we must specify which client cert to ask for
     SSL_CTX_add_client_CA(ctx, peer_certificate_->x509());
 
@@ -826,7 +826,7 @@ int OpenSSLStreamAdapter::SSLVerifyCallback(int ok, X509_STORE_CTX* store) {
   // specified, so the libraries knows of no certificate to accept,
   // and therefore it will necessarily call here on the first cert it
   // tries to verify.
-  if (!ok && stream->peer_certificate_.get() != NULL) {
+  if (!ok && stream->peer_certificate_) {
     X509* cert = X509_STORE_CTX_get_current_cert(store);
     int err = X509_STORE_CTX_get_error(store);
     // peer-to-peer mode: allow the certificate to be self-signed,

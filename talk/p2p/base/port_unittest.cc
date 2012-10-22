@@ -133,7 +133,7 @@ class TestPort : public Port {
   IceMessage* last_stun_msg() { return last_stun_msg_.get(); }
   int last_stun_error_code() {
     int code = 0;
-    if (last_stun_msg_.get()) {
+    if (last_stun_msg_) {
       const StunErrorCodeAttribute* error_attr = last_stun_msg_->GetErrorCode();
       if (error_attr) {
         code = error_attr->code();
@@ -221,7 +221,10 @@ class TestChannel : public sigslot::has_slots<> {
     remote_request_.reset();
   }
   void Ping() {
-    conn_->Ping(0);
+    Ping(0);
+  }
+  void Ping(uint32 now) {
+    conn_->Ping(now);
   }
   void Stop() {
     conn_->SignalDestroyed.connect(this, &TestChannel::OnDestroyed);
@@ -564,7 +567,7 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
 
       // First connection may not be writable if the first ping did not get
       // through.  So we will have to do another.
-      if (ch1.conn()->write_state() == Connection::STATE_WRITE_CONNECT) {
+      if (ch1.conn()->write_state() == Connection::STATE_WRITE_INIT) {
         ch1.Ping();
         EXPECT_EQ_WAIT(Connection::STATE_WRITABLE, ch1.conn()->write_state(),
                        kTimeout);
@@ -579,7 +582,7 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
       // able to get a ping from it. This gives us the real source address.
       ch1.Ping();
       EXPECT_TRUE_WAIT(!ch2.remote_address().IsNil(), kTimeout);
-      EXPECT_EQ(Connection::STATE_READ_TIMEOUT, ch2.conn()->read_state());
+      EXPECT_EQ(Connection::STATE_READ_INIT, ch2.conn()->read_state());
       EXPECT_TRUE(ch1.remote_address().IsNil());
 
       // Pick up the actual address and establish the connection.
@@ -592,7 +595,7 @@ void PortTest::TestConnectivity(const char* name1, Port* port1,
       // The new ping came in, but from an unexpected address. This will happen
       // when the destination NAT is symmetric.
       EXPECT_FALSE(ch1.remote_address().IsNil());
-      EXPECT_EQ(Connection::STATE_READ_TIMEOUT, ch1.conn()->read_state());
+      EXPECT_EQ(Connection::STATE_READ_INIT, ch1.conn()->read_state());
 
       // Update our address and complete the connection.
       ch1.AcceptConnection();
@@ -1249,6 +1252,13 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   msg = rport->last_stun_msg();
   ASSERT_TRUE(msg != NULL);
   EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
+
+  // Response should mirror outstanding ping count of zero.
+  const StunUInt32Attribute* retransmit_attr =
+      msg->GetUInt32(STUN_ATTR_RETRANSMIT_COUNT);
+  ASSERT_TRUE(retransmit_attr != NULL);
+  EXPECT_EQ(0U, retransmit_attr->value());
+
   EXPECT_FALSE(msg->IsLegacy());
   const StunAddressAttribute* addr_attr = msg->GetAddress(
       STUN_ATTR_XOR_MAPPED_ADDRESS);
@@ -1906,6 +1916,74 @@ TEST_F(PortTest, TestConnectionPriority) {
 #else
   EXPECT_EQ(0x1EE9FC003D0ALLU, rconn->priority());
 #endif
+}
+
+TEST_F(PortTest, TestWritableState) {
+  UDPPort* port1 = CreateUdpPort(kLocalAddr1);
+  UDPPort* port2 = CreateUdpPort(kLocalAddr2);
+
+  // Set up channels.
+  TestChannel ch1(port1, port2);
+  TestChannel ch2(port2, port1);
+
+  // Acquire addresses.
+  ch1.Start();
+  ch2.Start();
+  ASSERT_EQ_WAIT(1, ch1.address_count(), kTimeout);
+  ASSERT_EQ_WAIT(1, ch2.address_count(), kTimeout);
+
+  // Send a ping from src to dst.
+  ch1.CreateConnection();
+  ASSERT_TRUE(ch1.conn() != NULL);
+  EXPECT_EQ(Connection::STATE_WRITE_INIT, ch1.conn()->write_state());
+  EXPECT_TRUE_WAIT(ch1.conn()->connected(), kTimeout);  // for TCP connect
+  ch1.Ping();
+  WAIT(!ch2.remote_address().IsNil(), kTimeout);
+
+  // Data should be unsendable until the connection is accepted.
+  char data[] = "abcd";
+  int data_size = ARRAY_SIZE(data);
+  EXPECT_EQ(SOCKET_ERROR, ch1.conn()->Send(data, data_size));
+
+  // Accept the connection to return the binding response, transition to
+  // writable, and allow data to be sent.
+  ch2.AcceptConnection();
+  EXPECT_EQ_WAIT(Connection::STATE_WRITABLE, ch1.conn()->write_state(),
+                 kTimeout);
+  EXPECT_EQ(data_size, ch1.conn()->Send(data, data_size));
+
+  // Ask the connection to update state as if enough time has passed to lose
+  // full writability and 5 pings went unresponded to. We'll accomplish the
+  // latter by sending pings but not pumping messages.
+  for (uint32 i = 1; i <= CONNECTION_WRITE_CONNECT_FAILURES; ++i) {
+    ch1.Ping(i);
+  }
+  uint32 unreliable_timeout_delay = CONNECTION_WRITE_CONNECT_TIMEOUT + 500u;
+  ch1.conn()->UpdateState(unreliable_timeout_delay);
+  EXPECT_EQ(Connection::STATE_WRITE_UNRELIABLE, ch1.conn()->write_state());
+
+  // Data should be able to be sent in this state.
+  EXPECT_EQ(data_size, ch1.conn()->Send(data, data_size));
+
+  // And now allow the other side to process the pings and send binding
+  // responses.
+  EXPECT_EQ_WAIT(Connection::STATE_WRITABLE, ch1.conn()->write_state(),
+                 kTimeout);
+
+  // Wait long enough for a full timeout (past however long we've already
+  // waited).
+  for (uint32 i = 1; i <= CONNECTION_WRITE_CONNECT_FAILURES; ++i) {
+    ch1.Ping(unreliable_timeout_delay + i);
+  }
+  ch1.conn()->UpdateState(unreliable_timeout_delay + CONNECTION_WRITE_TIMEOUT +
+                          500u);
+  EXPECT_EQ(Connection::STATE_WRITE_TIMEOUT, ch1.conn()->write_state());
+
+  // Now that the connection has completely timed out, data send should fail.
+  EXPECT_EQ(SOCKET_ERROR, ch1.conn()->Send(data, data_size));
+
+  ch1.Stop();
+  ch2.Stop();
 }
 
 // TODO(ronghuawu): Add unit tests to verify the RelayEntry::OnConnect.

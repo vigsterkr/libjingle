@@ -39,6 +39,11 @@ CaptureRenderAdapter::CaptureRenderAdapter(VideoCapturer* video_capturer)
 }
 
 CaptureRenderAdapter::~CaptureRenderAdapter() {
+  // Have to disconnect here since |video_capturer_| lives on past the
+  // destruction of this object.
+  if (video_capturer_) {
+    video_capturer_->SignalVideoFrame.disconnect(this);
+  }
 }
 
 CaptureRenderAdapter* CaptureRenderAdapter::Create(

@@ -485,7 +485,7 @@ bool HttpClient::BeginCacheFile() {
   }
 
   scoped_ptr<StreamInterface> stream(cache_->WriteResource(id, kCacheBody));
-  if (!stream.get()) {
+  if (!stream) {
     LOG_F(LS_ERROR) << "Couldn't open body cache";
     return false;
   }
@@ -504,7 +504,7 @@ bool HttpClient::BeginCacheFile() {
 
 HttpError HttpClient::WriteCacheHeaders(const std::string& id) {
   scoped_ptr<StreamInterface> stream(cache_->WriteResource(id, kCacheHeader));
-  if (!stream.get()) {
+  if (!stream) {
     LOG_F(LS_ERROR) << "Couldn't open header cache";
     return HE_CACHE;
   }
@@ -581,7 +581,7 @@ bool HttpClient::CheckCache() {
 
 HttpError HttpClient::ReadCacheHeaders(const std::string& id, bool override) {
   scoped_ptr<StreamInterface> stream(cache_->ReadResource(id, kCacheHeader));
-  if (!stream.get()) {
+  if (!stream) {
     return HE_CACHE;
   }
 
@@ -604,7 +604,7 @@ HttpError HttpClient::ReadCacheBody(const std::string& id) {
 
   size_t data_size;
   scoped_ptr<StreamInterface> stream(cache_->ReadResource(id, kCacheBody));
-  if (!stream.get() || !stream->GetAvailable(&data_size)) {
+  if (!stream || !stream->GetAvailable(&data_size)) {
     LOG_F(LS_ERROR) << "Unavailable cache body";
     error = HE_CACHE;
   } else {
@@ -613,7 +613,7 @@ HttpError HttpClient::ReadCacheBody(const std::string& id) {
 
   if ((HE_NONE == error)
       && (HV_HEAD != request().verb)
-      && (NULL != response().document.get())) {
+      && response().document) {
     char buffer[1024 * 64];
     StreamResult result = Flow(stream.get(), buffer, ARRAY_SIZE(buffer),
                                response().document.get());
@@ -673,7 +673,7 @@ HttpError HttpClient::OnHeaderAvailable(bool ignore_data, bool chunked,
   // TODO: by default, only write response documents with a success code.
   SignalHeaderAvailable(this, !ignore_data, ignore_data ? 0 : data_size);
   if (!ignore_data && !chunked && (data_size != SIZE_UNKNOWN)
-      && response().document.get()) {
+      && response().document) {
     // Attempt to pre-allocate space for the downloaded data.
     if (!response().document->ReserveSize(data_size)) {
       return HE_OVERFLOW;
@@ -733,7 +733,7 @@ void HttpClient::onHttpComplete(HttpMode mode, HttpError err) {
     // received anything meaningful from the server, so we are eligible for a
     // retry.
     ++attempt_;
-    if (request().document.get() && !request().document->Rewind()) {
+    if (request().document && !request().document->Rewind()) {
       // Unable to replay the request document.
       err = HE_STREAM;
     } else {
@@ -766,7 +766,7 @@ void HttpClient::onHttpComplete(HttpMode mode, HttpError err) {
         request().clearHeader(HH_CONTENT_TYPE);
         request().clearHeader(HH_CONTENT_LENGTH);
         request().document.reset();
-      } else if (request().document.get() && !request().document->Rewind()) {
+      } else if (request().document && !request().document->Rewind()) {
         // Unable to replay the request document.
         ASSERT(REDIRECT_ALWAYS == redirect_action_);
         err = HE_STREAM;
@@ -795,7 +795,7 @@ void HttpClient::onHttpComplete(HttpMode mode, HttpError err) {
         context_.reset(context);
         if (res == HAR_RESPONSE) {
           request().setHeader(HH_PROXY_AUTHORIZATION, authorization);
-          if (request().document.get() && !request().document->Rewind()) {
+          if (request().document && !request().document->Rewind()) {
             err = HE_STREAM;
           } else {
             // Explicitly do not reset the HttpAuthContext

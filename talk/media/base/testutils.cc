@@ -294,7 +294,7 @@ bool LoadPlanarYuvTestImage(const std::string& prefix,
   talk_base::scoped_ptr<talk_base::FileStream> stream(
       talk_base::Filesystem::OpenFile(talk_base::Pathname(
           GetTestFilePath(ss.str())), "rb"));
-  if (!stream.get()) {
+  if (!stream) {
     return false;
   }
 

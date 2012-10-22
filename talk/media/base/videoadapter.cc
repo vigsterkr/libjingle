@@ -222,12 +222,12 @@ bool VideoAdapter::StretchToOutputFrame(const VideoFrame* in_frame) {
   // Create and stretch the output frame if it has not been created yet or its
   // size is not same as the expected.
   bool stretched = false;
-  if (!output_frame_.get() ||
+  if (!output_frame_ ||
       output_frame_->GetWidth() != static_cast<size_t>(output_width) ||
       output_frame_->GetHeight() != static_cast<size_t>(output_height)) {
     output_frame_.reset(
         in_frame->Stretch(output_width, output_height, true, true));
-    if (!output_frame_.get()) {
+    if (!output_frame_) {
       LOG(LS_WARNING) << "Adapter failed to stretch frame to "
                       << output_width << "x" << output_height;
       return false;
@@ -382,6 +382,7 @@ void CoordinatedVideoAdapter::OnCpuLoadUpdated(
       } else {
           LOG(LS_VERBOSE) << "VAdapt CPU load high but do not downgrade "
                              "because maximum downgrades reached";
+          SignalCpuAdaptationUnable();
       }
       break;
     case UPGRADE:

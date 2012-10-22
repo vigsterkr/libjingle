@@ -66,6 +66,27 @@ class MockVideoProvider : public VideoProviderInterface {
   MOCK_METHOD2(SetVideoSend, void(const std::string& name, bool enable));
 };
 
+class FakeVideoSource : public Notifier<VideoSourceInterface> {
+ public:
+  static talk_base::scoped_refptr<FakeVideoSource> Create() {
+    return new talk_base::RefCountedObject<FakeVideoSource>();
+  }
+  virtual cricket::VideoCapturer* GetVideoCapturer() {
+    return &fake_capturer_;
+  }
+  virtual void AddSink(cricket::VideoRenderer* output) {}
+  virtual void RemoveSink(cricket::VideoRenderer* output) {}
+  virtual SourceState state() const { return state_; }
+
+ protected:
+  FakeVideoSource() : state_(kLive) {}
+  ~FakeVideoSource() {}
+
+ private:
+  cricket::FakeVideoCapturer fake_capturer_;
+  SourceState state_;
+};
+
 class MediaStreamHandlerTest : public testing::Test {
  public:
   MediaStreamHandlerTest()
@@ -76,7 +97,7 @@ class MediaStreamHandlerTest : public testing::Test {
     collection_ = StreamCollection::Create();
     stream_ = MediaStream::Create(kStreamLabel1);
     talk_base::scoped_refptr<VideoSourceInterface> source(
-        LocalVideoSource::Create(new cricket::FakeVideoCapturer()));
+        FakeVideoSource::Create());
     video_track_ = VideoTrack::Create(kVideoTrackLabel, source);
     EXPECT_TRUE(stream_->AddTrack(video_track_));
     audio_track_ = AudioTrack::Create(kAudioTrackLabel,

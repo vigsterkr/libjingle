@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/media/base/videocommon.h"
 #include "talk/media/base/videoframe.h"
 
 #include <cstring>
@@ -35,12 +34,54 @@
 #include "libyuv/planar_functions.h"
 #include "libyuv/scale.h"
 #endif
+
 #include "talk/base/logging.h"
+#include "talk/media/base/videocommon.h"
 
 namespace cricket {
 
 // Round to 2 pixels because Chroma channels are half size.
 #define ROUNDTO2(v) (v & ~1)
+
+talk_base::StreamResult VideoFrame::Write(talk_base::StreamInterface* stream,
+                                          int* error) {
+  talk_base::StreamResult result = talk_base::SR_SUCCESS;
+  const uint8* in_y = GetYPlane();
+  const uint8* in_u = GetUPlane();
+  const uint8* in_v = GetVPlane();
+  if (!in_y || !in_u || !in_v) {
+    return result;  // Nothing to write.
+  }
+  const int32 y_pitch = GetYPitch();
+  const int32 u_pitch = GetUPitch();
+  const int32 v_pitch = GetVPitch();
+  const size_t width = GetWidth();
+  const size_t height = GetHeight();
+  const size_t half_width = (width + 1) >> 1;
+  const size_t half_height = (height + 1) >> 1;
+  // Write Y.
+  for (size_t row = 0; row < height; ++row) {
+    result = stream->Write(in_y + row * y_pitch, width, NULL, error);
+    if (result != talk_base::SR_SUCCESS) {
+      return result;
+    }
+  }
+  // Write U.
+  for (size_t row = 0; row < half_height; ++row) {
+    result = stream->Write(in_u + row * u_pitch, half_width, NULL, error);
+    if (result != talk_base::SR_SUCCESS) {
+      return result;
+    }
+  }
+  // Write V.
+  for (size_t row = 0; row < half_height; ++row) {
+    result = stream->Write(in_v + row * v_pitch, half_width, NULL, error);
+    if (result != talk_base::SR_SUCCESS) {
+      return result;
+    }
+  }
+  return result;
+}
 
 // TODO(fbarchard): Handle odd width/height with rounding.
 void VideoFrame::StretchToPlanes(

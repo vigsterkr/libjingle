@@ -186,7 +186,7 @@ class ChannelManager : public talk_base::MessageHandler,
   bool GetAudioOutputDevices(std::vector<std::string>* names);
   bool GetVideoCaptureDevices(std::vector<std::string>* names);
   sigslot::repeater0<> SignalDevicesChange;
-  sigslot::signal1<CaptureState> SignalVideoCaptureStateChange;
+  sigslot::signal2<VideoCapturer*, CaptureState> SignalVideoCaptureStateChange;
 
   // Returns the current selected device. Note: Subtly different from
   // GetVideoOptions(). See member video_device_ for more details.

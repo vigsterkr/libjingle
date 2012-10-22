@@ -48,8 +48,11 @@ enum StunMessageType {
   STUN_BINDING_ERROR_RESPONSE     = 0x0111,
 };
 
-// These are the types of STUN attributes defined in RFC 5389. Next to each is
-// the name of the class (T is StunTAttribute) that implements that type.
+// These are all known STUN attributes, defined in RFC 5389 and elsewhere.
+// Next to each is the name of the class (T is StunTAttribute) that implements
+// that type.
+// RETRANSMIT_COUNT is the number of outstanding pings without a response at
+// the time the packet is generated.
 enum StunAttributeType {
   STUN_ATTR_MAPPED_ADDRESS        = 0x0001,  // Address
   STUN_ATTR_USERNAME              = 0x0006,  // ByteString
@@ -61,8 +64,12 @@ enum StunAttributeType {
   STUN_ATTR_XOR_MAPPED_ADDRESS    = 0x0020,  // XorAddress
   STUN_ATTR_SOFTWARE              = 0x8022,  // ByteString
   STUN_ATTR_ALTERNATE_SERVER      = 0x8023,  // ByteString
-  STUN_ATTR_FINGERPRINT           = 0x8028   // UInt32
+  STUN_ATTR_FINGERPRINT           = 0x8028,  // UInt32
+  STUN_ATTR_RETRANSMIT_COUNT      = 0xFF00   // UInt32
 };
+
+
+
 
 // These are the types of the values associated with the attributes above.
 // This allows us to perform some basic validation when reading or adding

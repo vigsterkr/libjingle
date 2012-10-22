@@ -473,6 +473,11 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     // overridden in specialized classes
   }
 
+  void SetOptimisticDataSend(bool optimistic_data_send) {
+    channel1_->set_optimistic_data_send(optimistic_data_send);
+    channel2_->set_optimistic_data_send(optimistic_data_send);
+  }
+
   // Creates a cricket::SessionDescription with one MediaContent and one stream.
   // kPcmuCodec is used as audio codec and kH264Codec is used as video codec.
   cricket::SessionDescription* CreateSessionDescriptionWithStream(uint32 ssrc) {
@@ -1338,13 +1343,51 @@ class ChannelTest : public testing::Test, public sigslot::has_slots<> {
     EXPECT_TRUE(CheckNoRtp1());
     EXPECT_TRUE(CheckNoRtp2());
 
-    GetTransport1()->SetDestination(NULL);
+    // Lose writability, with optimistic send
+    SetOptimisticDataSend(true);
+    GetTransport1()->SetWritable(false);
     EXPECT_TRUE(media_channel1_->sending());
+    EXPECT_TRUE(SendRtp1());
+    EXPECT_TRUE(SendRtp2());
+    EXPECT_TRUE(CheckRtp1());
+    EXPECT_TRUE(CheckRtp2());
+    EXPECT_TRUE(CheckNoRtp1());
+    EXPECT_TRUE(CheckNoRtp2());
+
+    // Check again with optimistic send off, which should fail.
+    SetOptimisticDataSend(false);
     EXPECT_FALSE(SendRtp1());
     EXPECT_TRUE(SendRtp2());
     EXPECT_TRUE(CheckRtp1());
     EXPECT_TRUE(CheckNoRtp2());
 
+    // Regain writability
+    GetTransport1()->SetWritable(true);
+    EXPECT_TRUE(media_channel1_->sending());
+    EXPECT_TRUE(SendRtp1());
+    EXPECT_TRUE(SendRtp2());
+    EXPECT_TRUE(CheckRtp1());
+    EXPECT_TRUE(CheckRtp2());
+    EXPECT_TRUE(CheckNoRtp1());
+    EXPECT_TRUE(CheckNoRtp2());
+
+    // Lose writability completely
+    GetTransport1()->SetDestination(NULL);
+    EXPECT_TRUE(media_channel1_->sending());
+
+    // Should fail regardless of optimistic send at this point.
+    SetOptimisticDataSend(true);
+    EXPECT_FALSE(SendRtp1());
+    EXPECT_TRUE(SendRtp2());
+    EXPECT_TRUE(CheckRtp1());
+    EXPECT_TRUE(CheckNoRtp2());
+    SetOptimisticDataSend(false);
+    EXPECT_FALSE(SendRtp1());
+    EXPECT_TRUE(SendRtp2());
+    EXPECT_TRUE(CheckRtp1());
+    EXPECT_TRUE(CheckNoRtp2());
+
+    // Gain writability back
     GetTransport1()->SetDestination(GetTransport2());
     EXPECT_TRUE(media_channel1_->sending());
     EXPECT_TRUE(SendRtp1());

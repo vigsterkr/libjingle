@@ -70,7 +70,7 @@ TEST(DBusMonitorTest, StartStopStartStop) {
   DBusSigFilterTest filter;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter));
 
     EXPECT_TRUE(monitor->StopMonitoring());
@@ -102,7 +102,7 @@ TEST(DBusMonitorTest, ReceivedNameAcquiredSignal) {
   DBusSigFilterTest filter;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter));
 
     EXPECT_TRUE(monitor->StartMonitoring());
@@ -119,7 +119,7 @@ TEST(DBusMonitorTest, ConcurrentMonitors) {
   DBusSigFilterTest filter1;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor1;
   monitor1.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor1.get()) {
+  if (monitor1) {
     EXPECT_TRUE(monitor1->AddFilter(&filter1));
     DBusSigFilterTest filter2;
     talk_base::scoped_ptr<talk_base::DBusMonitor> monitor2;
@@ -148,7 +148,7 @@ TEST(DBusMonitorTest, ConcurrentFilters) {
   DBusSigFilterTest filter2;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter1));
     EXPECT_TRUE(monitor->AddFilter(&filter2));
 
@@ -170,7 +170,7 @@ TEST(DBusMonitorTest, NoAddFilterIfRunning) {
   DBusSigFilterTest filter2;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter1));
 
     EXPECT_TRUE(monitor->StartMonitoring());
@@ -189,7 +189,7 @@ TEST(DBusMonitorTest, AddFilterAfterStop) {
   DBusSigFilterTest filter2;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter1));
     EXPECT_TRUE(monitor->StartMonitoring());
     EXPECT_EQ_WAIT(DBusMonitor::DMS_RUNNING, monitor->GetStatus(), kTimeoutMs);
@@ -213,7 +213,7 @@ TEST(DBusMonitorTest, StopRightAfterStart) {
   DBusSigFilterTest filter;
   talk_base::scoped_ptr<talk_base::DBusMonitor> monitor;
   monitor.reset(talk_base::DBusMonitor::Create(DBUS_BUS_SYSTEM));
-  if (monitor.get()) {
+  if (monitor) {
     EXPECT_TRUE(monitor->AddFilter(&filter));
 
     EXPECT_TRUE(monitor->StartMonitoring());

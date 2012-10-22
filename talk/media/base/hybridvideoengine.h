@@ -161,13 +161,13 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
   HybridVideoMediaChannel* CreateChannel(VoiceMediaChannel* channel) {
     talk_base::scoped_ptr<VideoMediaChannel> channel1(
         video1_.CreateChannel(channel));
-    if (!channel1.get()) {
+    if (!channel1) {
       LOG(LS_ERROR) << "Failed to create VideoMediaChannel1";
       return NULL;
     }
     talk_base::scoped_ptr<VideoMediaChannel> channel2(
         video2_.CreateChannel(channel));
-    if (!channel2.get()) {
+    if (!channel2) {
       LOG(LS_ERROR) << "Failed to create VideoMediaChannel2";
       return NULL;
     }

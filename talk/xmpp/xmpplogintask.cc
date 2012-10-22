@@ -213,7 +213,7 @@ XmppLoginTask::Advance() {
 
         // No recognized auth mechanism - that's an error
         sasl_mech_.reset(pctx_->GetSaslMechanism(choice));
-        if (sasl_mech_.get() == NULL) {
+        if (!sasl_mech_) {
           return Failure(XmppEngine::ERROR_AUTH);
         }
 

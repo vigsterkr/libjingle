@@ -522,6 +522,13 @@ void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
 bool WebRtcSession::SetCaptureDevice(const std::string& name,
                                      cricket::VideoCapturer* camera) {
   ASSERT(signaling_thread()->IsCurrent());
+
+  if (!video_channel_.get()) {
+    // |video_channel_| doesnt't exist. Probably because the remote end doesnt't
+    // support video.
+    LOG(LS_WARNING) << "Video not used in this call.";
+    return false;
+  }
   uint32 ssrc = 0;
   if (!VERIFY(GetVideoSsrcByName(BaseSession::local_description(),
                                  name, &ssrc) || camera == NULL)) {
@@ -529,19 +536,10 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
     return false;
   }
 
-  // TODO(perkj): Refactor this when there is support for multiple cameras.
-  if (!channel_manager_->SetVideoCapturer(camera)) {
+  if (!video_channel_->SetCapturer(ssrc, camera)) {
     LOG(LS_ERROR) << "Failed to set capture device.";
     return false;
   }
-
-  const bool start_capture = (camera != NULL);
-  bool ret = channel_manager_->SetVideoCapture(start_capture);
-  if (!ret) {
-    LOG(LS_ERROR) << "Failed to start the capture device.";
-    return false;
-  }
-
   return true;
 }
 

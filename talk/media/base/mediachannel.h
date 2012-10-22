@@ -200,6 +200,7 @@ class SoundclipMedia {
 };
 
 struct RtpHeaderExtension {
+  RtpHeaderExtension() : id(0) {}
   RtpHeaderExtension(const std::string& u, int i) : uri(u), id(i) {}
   std::string uri;
   int id;
@@ -610,6 +611,7 @@ class VideoMediaChannel : public MediaChannel {
     ERROR_REC_DEVICE_REMOVED,             // Device is removed.
     ERROR_REC_SRTP_ERROR,                 // Generic sender SRTP failure.
     ERROR_REC_SRTP_AUTH_FAILED,           // Failed to authenticate packets.
+    ERROR_REC_CPU_MAX_CANT_DOWNGRADE,     // Can't downgrade capture anymore.
     ERROR_PLAY_SRTP_ERROR = 200,          // Generic receiver SRTP failure.
     ERROR_PLAY_SRTP_AUTH_FAILED,          // Failed to authenticate packets.
     ERROR_PLAY_SRTP_REPLAY,               // Packet replay detected.

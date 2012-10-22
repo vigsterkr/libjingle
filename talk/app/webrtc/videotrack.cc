@@ -38,6 +38,13 @@ VideoTrack::VideoTrack(const std::string& label,
                        VideoSourceInterface* video_source)
     : MediaStreamTrack<VideoTrackInterface>(label),
       video_source_(video_source) {
+  if (video_source_)
+    video_source_->AddSink(FrameInput());
+}
+
+VideoTrack::~VideoTrack() {
+  if (video_source_)
+    video_source_->RemoveSink(FrameInput());
 }
 
 std::string VideoTrack::kind() const {
@@ -61,19 +68,6 @@ talk_base::scoped_refptr<VideoTrack> VideoTrack::Create(
   talk_base::RefCountedObject<VideoTrack>* track =
       new talk_base::RefCountedObject<VideoTrack>(label, source);
   return track;
-}
-
-LocalVideoSource::LocalVideoSource(cricket::VideoCapturer* capturer)
-    : video_capturer_(capturer) {
-}
-
-LocalVideoSource::~LocalVideoSource() {
-  delete video_capturer_;
-}
-
-talk_base::scoped_refptr<LocalVideoSource> LocalVideoSource::Create(
-    cricket::VideoCapturer* capturer) {
-  return new talk_base::RefCountedObject<LocalVideoSource>(capturer);
 }
 
 }  // namespace webrtc

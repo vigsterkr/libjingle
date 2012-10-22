@@ -25,41 +25,31 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_APP_WEBRTC_VIDEOTRACK_H_
-#define TALK_APP_WEBRTC_VIDEOTRACK_H_
+#ifndef TALK_APP_WEBRTC_VIDEOSOURCEINTERFACE_H_
+#define TALK_APP_WEBRTC_VIDEOSOURCEINTERFACE_H_
 
-#include <string>
-
-#include "talk/app/webrtc/mediastreamtrack.h"
-#include "talk/app/webrtc/videosourceinterface.h"
-#include "talk/app/webrtc/videotrackrenderers.h"
-#include "talk/base/scoped_ref_ptr.h"
+#include "talk/app/webrtc/mediastreaminterface.h"
 
 namespace webrtc {
 
-class VideoTrack : public MediaStreamTrack<VideoTrackInterface> {
+// VideoSourceInterface is a reference counted source used for VideoTracks.
+// The same source can be used in multiple VideoTracks.
+// The methods are only supposed to be called by the PeerConnection
+// implementation.
+class VideoSourceInterface : public MediaSourceInterface {
  public:
-  static talk_base::scoped_refptr<VideoTrack> Create(
-      const std::string& label, VideoSourceInterface* source);
-
-  virtual void AddRenderer(VideoRendererInterface* renderer);
-  virtual void RemoveRenderer(VideoRendererInterface* renderer);
-  virtual cricket::VideoRenderer* FrameInput();
-  virtual VideoSourceInterface* GetSource() const {
-    return video_source_.get();
-  }
-
-  virtual std::string kind() const;
+  // Get access to the source implementation of cricket::VideoCapturer.
+  // This can be used for receiving frames and state notifications.
+  // But it should not be used for starting or stopping capturing.
+  virtual cricket::VideoCapturer* GetVideoCapturer() = 0;
+  // Adds |output| to the source to receive frames.
+  virtual void AddSink(cricket::VideoRenderer* output) = 0;
+  virtual void RemoveSink(cricket::VideoRenderer* output) = 0;
 
  protected:
-  VideoTrack(const std::string& label, VideoSourceInterface* video_source);
-  ~VideoTrack();
-
- private:
-  VideoTrackRenderers renderers_;
-  talk_base::scoped_refptr<VideoSourceInterface> video_source_;
+  virtual ~VideoSourceInterface() {}
 };
 
 }  // namespace webrtc
 
-#endif  // TALK_APP_WEBRTC_VIDEOTRACK_H_
+#endif  // TALK_APP_WEBRTC_VIDEOSOURCEINTERFACE_H_
