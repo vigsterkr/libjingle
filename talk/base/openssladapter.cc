@@ -248,7 +248,8 @@ bool OpenSSLAdapter::InitializeSSLThread() {
   for (int i = 0; i < CRYPTO_num_locks(); ++i)
     MUTEX_SETUP(mutex_buf[i]);
 
-  // we need to cast our id_function to return an unsigned long -- pthread_t is a pointer
+  // we need to cast our id_function to return an unsigned long -- pthread_t is
+  // a pointer
   CRYPTO_set_id_callback(id_function);
   CRYPTO_set_locking_callback(locking_function);
   CRYPTO_set_dynlock_create_callback(dyn_create_function);
@@ -857,20 +858,22 @@ OpenSSLAdapter::SSLVerifyCallback(int ok, X509_STORE_CTX* store) {
 
 bool OpenSSLAdapter::ConfigureTrustedRootCertificates(SSL_CTX* ctx) {
   // Add the root cert that we care about to the SSL context
-#if OPENSSL_VERSION_NUMBER >= 0x0090800fL
-   const unsigned char* cert_buffer
-#else
-   unsigned char* cert_buffer
-#endif
-    = Equifax_Secure_Certificate_Authority_certificate;
-  size_t cert_buffer_len =
-      sizeof(Equifax_Secure_Certificate_Authority_certificate);
-  X509* cert = d2i_X509(NULL, &cert_buffer, cert_buffer_len);
-  if (cert == NULL)
-    return false;
-  bool success = X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx), cert) != 0;
-  X509_free(cert);
-  return success;
+  int count_of_added_certs = 0;
+  for (int i = 0; i < ARRAY_SIZE(kSSLCertCertificateList); i++) {
+    const unsigned char* cert_buffer = kSSLCertCertificateList[i];
+    size_t cert_buffer_len = kSSLCertCertificateSizeList[i];
+    X509* cert = d2i_X509(NULL, &cert_buffer, cert_buffer_len);
+    if (cert) {
+      int return_value = X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx), cert);
+      if (return_value == 0) {
+        LOG(LS_WARNING) << "Unable to add certificate.";
+      } else {
+        count_of_added_certs++;
+      }
+      X509_free(cert);
+    }
+  }
+  return count_of_added_certs > 0;
 }
 
 SSL_CTX*

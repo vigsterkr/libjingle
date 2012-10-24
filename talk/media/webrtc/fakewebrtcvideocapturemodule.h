@@ -86,6 +86,7 @@ class FakeWebRtcVideoCaptureModule : public webrtc::VideoCaptureModule {
     running_ = false;
     return 0;
   }
+#ifndef USE_WEBRTC_DEV_BRANCH
   virtual WebRtc_Word32 StartSendImage(const webrtc::VideoFrame& frame,
                                        WebRtc_Word32 framerate) {
     return -1;  // not implemented
@@ -93,6 +94,7 @@ class FakeWebRtcVideoCaptureModule : public webrtc::VideoCaptureModule {
   virtual WebRtc_Word32 StopSendImage() {
     return 0;
   }
+#endif
   virtual const char* CurrentDeviceName() const {
     return NULL;  // not implemented
   }

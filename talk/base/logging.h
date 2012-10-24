@@ -149,6 +149,10 @@ class LogMessage {
   // instance is created.
   static uint32 LogStartTime();
 
+  // Returns the wall clock equivalent of |LogStartTime|, in seconds from the
+  // epoch.
+  static uint32 WallClockStartTime();
+
   // These are attributes which apply to all logging channels
   //  LogContext: Display the file and line number of the message
   static void LogContext(int min_sev);

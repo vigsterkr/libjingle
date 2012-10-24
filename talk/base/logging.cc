@@ -43,6 +43,8 @@ static const char kLibjingle[] = "libjingle";
 static const int kMaxLogLineSize = 1024 - 60;
 #endif  // OSX || ANDROID
 
+#include <time.h>
+
 #include <iostream>
 #include <iomanip>
 #include <limits.h>
@@ -125,6 +127,9 @@ LogMessage::LogMessage(const char* file, int line, LoggingSeverity sev,
 #ifndef ANDROID
   if (timestamp_) {
     uint32 time = TimeSince(LogStartTime());
+    // Also ensure WallClockStartTime is initialized, so that it matches
+    // LogStartTime.
+    WallClockStartTime();
     print_stream_ << "[" << std::setfill('0') << std::setw(3) << (time / 1000)
                   << ":" << std::setw(3) << (time % 1000) << std::setfill(' ')
                   << "] ";
@@ -220,6 +225,11 @@ LogMessage::~LogMessage() {
 uint32 LogMessage::LogStartTime() {
   static const uint32 g_start = Time();
   return g_start;
+}
+
+uint32 LogMessage::WallClockStartTime() {
+  static const uint32 g_start_wallclock = time(NULL);
+  return g_start_wallclock;
 }
 
 void LogMessage::LogContext(int min_sev) {

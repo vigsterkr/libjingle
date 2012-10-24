@@ -114,6 +114,13 @@ TEST(LogTest, MultipleThreads) {
   EXPECT_EQ(sev, LogMessage::GetLogToStream(NULL));
 }
 
+
+TEST(LogTest, WallClockStartTime) {
+  uint32 time = LogMessage::WallClockStartTime();
+  // Expect the time to be in a sensible range, e.g. > 2012-01-01.
+  EXPECT_GT(time, 1325376000u);
+}
+
 // Test the time required to write 1000 80-character logs to an unbuffered file.
 TEST(LogTest, Perf) {
   Pathname path;

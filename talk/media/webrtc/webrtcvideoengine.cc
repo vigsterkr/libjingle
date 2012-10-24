@@ -1893,7 +1893,9 @@ bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
     engine_->IncrementFrameListeners();
   }
   const int64 timestamp = send_channel->last_frame_time_stamp();
-  QueueBlackFrame(ssrc, timestamp, send_codec_->maxFramerate);
+  if (send_codec_) {
+    QueueBlackFrame(ssrc, timestamp, send_codec_->maxFramerate);
+  }
   return true;
 }
 
