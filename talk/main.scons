@@ -15,6 +15,7 @@
 #
 #
 #
+
 import talk
 import os
 import platform
@@ -347,7 +348,6 @@ posix_env.Append(
     'HASH_NAMESPACE=__gnu_cxx',
     'POSIX',
     'DISABLE_DYNAMIC_CAST',
-    'HAVE_OPENSSL_SSL_H=1',
     # The POSIX standard says we have to define this.
     '_REENTRANT',
   ],
@@ -373,6 +373,14 @@ posix_env.Append(
     '-fno-rtti',
   ],
 )
+
+# Switch-hit between NSS and OpenSSL
+if 'NSS_BUILD_PLATFORM' in root_env['ENV']:
+   posix_env.AppendUnique(CPPDEFINES=['HAVE_NSS_SSL_H=1',
+                                      'NSS_SSL_RELATIVE_PATH'])
+else:
+   posix_env.AppendUnique(CPPDEFINES=['HAVE_OPENSSL_SSL_H=1'])
+ 
 
 #-------------------------------------------------------------------------------
 # M A C OSX
@@ -422,6 +430,12 @@ mac_env.Append(
     'QTKit',
   ]
 )
+
+if 'NSS_BUILD_PLATFORM' in root_env['ENV']:
+  mac_env.AppendUnique(LINKFLAGS = ['-Lthird_party/mozilla/dist/' + root_env['ENV']['NSS_BUILD_PLATFORM'] + '/lib'])
+else:
+  mac_env.AppendUnique(LINKFLAGS = ['-Lthird_party/openssl'])
+                       
 
 # add debug flags to environment
 def mac_debug_include(env):

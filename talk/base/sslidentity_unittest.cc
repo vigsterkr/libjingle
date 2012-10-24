@@ -29,6 +29,7 @@
 #include <string>
 
 #include "talk/base/gunit.h"
+#include "talk/base/ssladapter.h"
 #include "talk/base/sslidentity.h"
 
 const char kTestCertificate[] = "-----BEGIN CERTIFICATE-----\n"
@@ -58,6 +59,10 @@ class SSLIdentityTest : public testing::Test {
   }
 
   ~SSLIdentityTest() {
+  }
+
+  static void SetUpTestCase() {
+    talk_base::InitializeSSL();
   }
 
   virtual void SetUp() {

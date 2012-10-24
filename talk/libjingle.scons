@@ -70,6 +70,24 @@ talk.Library(env, name = "srtp",
                "/wd4702",
              ],
 )
+# Set up the SSL/TLS includes
+if 'NSS_BUILD_PLATFORM' in env['ENV']:
+             SSL_INCLUDES = [
+               "third_party/mozilla/dist/public/nss",
+               "third_party/mozilla/dist/" + env['ENV']['NSS_BUILD_PLATFORM']+ "/include"
+             ]
+             SSL_LIBS = [
+		 "ssl3",
+		 "nss3",
+		 "nssutil3",
+		 "plc4",
+		 "plds4",
+		 "nspr4",
+             ]
+else:
+             SSL_INCLUDES = ["third_party/openssl/include"]
+             SSL_LIBS = ["crypto", "ssl"]
+
 talk.Library(env, name = "jingle",
              lin_packages = [
                "x11",
@@ -98,10 +116,7 @@ talk.Library(env, name = "jingle",
                  "pthread",
                  "rt",
                ],
-               'mac_libs': [
-                 "-lcrypto",
-                 "-lssl",
-               ],
+               'mac_libs': SSL_LIBS,
                'win_libs': [
                  "winmm.lib",
                ],
@@ -173,6 +188,8 @@ talk.Library(env, name = "jingle",
                "base/nattypes.cc",
                "base/nethelpers.cc",
                "base/network.cc",
+               "base/nssidentity.cc",
+               "base/nssstreamadapter.cc",
                "base/openssladapter.cc",
                "base/openssldigest.cc",
                "base/opensslidentity.cc",
@@ -197,6 +214,7 @@ talk.Library(env, name = "jingle",
                "base/sslsocketfactory.cc",
                "base/sslidentity.cc",
                "base/sslstreamadapter.cc",
+               "base/sslstreamadapterhelper.cc",
                "base/stream.cc",
                "base/stringencode.cc",
                "base/stringutils.cc",
@@ -326,8 +344,7 @@ talk.Library(env, name = "jingle",
                "third_party/gtest/include",
                "third_party/srtp/include",
                "third_party/srtp/crypto/include",
-               "third_party/openssl/include",
-             ],
+             ] + SSL_INCLUDES,
              win_srcs = [
                "base/diskcache_win32.cc",
                "base/schanneladapter.cc",
@@ -409,10 +426,7 @@ talk.App(env, name = "login",
            "examples/login/xmppthread.cc",
            "examples/login/login_main.cc",
          ],
-         posix_libs = [
-           "crypto",
-           "ssl",
-         ],
+         posix_libs = SSL_LIBS,
          lin_libs = [
            "videorenderer",
          ],
@@ -435,10 +449,7 @@ talk.App(env, name = "call",
            "strmiids.lib",
            "winmm.lib",
          ],
-         posix_libs = [
-           "crypto",
-           "ssl",
-         ],
+         posix_libs = SSL_LIBS,
          lin_libs = [
            "videorenderer",
          ],
@@ -583,10 +594,7 @@ talk.Unittest(env, name = "p2p",
                 "IOKit",
                 "QTKit",
               ],
-              mac_libs = [
-                "crypto",
-                "ssl",
-              ],
+              mac_libs = SSL_LIBS,
               cppdefines = [
                 "EXPAT_RELATIVE_PATH",
                 "GTEST_RELATIVE_PATH",
@@ -676,10 +684,8 @@ talk.Unittest(env, name = "sound",
               srcs = [
                 "sound/automaticallychosensoundsystem_unittest.cc",
               ],
-              mac_libs = [
-                "crypto",
-                "ssl",
-              ],
+              mac_libs = SSL_LIBS,
+
               includedirs = [
                 "third_party/gtest/include",
                 "third_party/expat-2.0.1/lib",
@@ -705,10 +711,7 @@ talk.Unittest(env, name = "xmllite",
                 "xmllite/xmlparser_unittest.cc",
                 "xmllite/xmlprinter_unittest.cc",
               ],
-              mac_libs = [
-                "crypto",
-                "ssl",
-              ],
+              mac_libs = SSL_LIBS,
               includedirs = [
                 "third_party/gtest/include",
                 "third_party/expat-2.0.1/lib",
@@ -722,10 +725,7 @@ talk.Unittest(env, name = "xmllite",
               ],
 )
 talk.Unittest(env, name = "xmpp",
-              mac_libs = [
-                "crypto",
-                "ssl",
-              ],
+              mac_libs = SSL_LIBS,
               cppdefines = [
                 "EXPAT_RELATIVE_PATH",
                 "GTEST_RELATIVE_PATH",

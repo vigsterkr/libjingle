@@ -27,12 +27,14 @@
  */
 
 
-#include <string>
+#include <algorithm>
 #include <set>
+#include <string>
 
 #include "talk/base/gunit.h"
 #include "talk/base/helpers.h"
 #include "talk/base/ssladapter.h"
+#include "talk/base/sslconfig.h"
 #include "talk/base/sslidentity.h"
 #include "talk/base/sslstreamadapter.h"
 #include "talk/base/stream.h"
@@ -146,13 +148,11 @@ class SSLStreamAdapterTestBase : public testing::Test,
       client_ssl_(talk_base::SSLStreamAdapter::Create(client_stream_)),
       server_ssl_(talk_base::SSLStreamAdapter::Create(server_stream_)),
       client_identity_(NULL), server_identity_(NULL),
-      delay_(0), mtu_(1460), loss_(0), lose_first_packet_(false), dtls_(dtls),
+      delay_(0), mtu_(1460), loss_(0), lose_first_packet_(false),
+      damage_(false), dtls_(dtls),
       handshake_wait_(5000), identities_set_(false) {
     // Set use of the test RNG to get predictable loss patterns.
     talk_base::SetRandomTestMode(true);
-
-    LOG(LS_INFO) << "Setup";
-    talk_base::InitializeSSL();
 
     // Set up the slots
     client_ssl_->SignalEvent.connect(this, &SSLStreamAdapterTestBase::OnEvent);
@@ -168,6 +168,10 @@ class SSLStreamAdapterTestBase : public testing::Test,
   ~SSLStreamAdapterTestBase() {
     // Put it back for the next test.
     talk_base::SetRandomTestMode(false);
+  }
+
+  static void SetUpTestCase() {
+    talk_base::InitializeSSL();
   }
 
   virtual void OnEvent(talk_base::StreamInterface *stream, int sig, int err) {
@@ -286,6 +290,20 @@ class SSLStreamAdapterTestBase : public testing::Test,
       return talk_base::SR_SUCCESS;
     }
 
+    // Optionally damage application data (type 23). Note that we don't damage
+    // handshake packets and we damage the last byte to keep the header
+    // intact but break the MAC.
+    if (damage_ && (*static_cast<const unsigned char *>(data) == 23)) {
+      std::vector<char> buf(data_len);
+
+      LOG(LS_INFO) << "Damaging packet";
+
+      memcpy(buf.data(), data, data_len);
+      buf[data_len - 1]++;
+
+      return from->WriteData(buf.data(), data_len, written, error);
+    }
+
     return from->WriteData(data, data_len, written, error);
   }
 
@@ -301,6 +319,10 @@ class SSLStreamAdapterTestBase : public testing::Test,
 
   void SetLoss(int percent) {
     loss_ = percent;
+  }
+
+  void SetDamage() {
+    damage_ = true;
   }
 
   void SetMtu(size_t mtu) {
@@ -363,6 +385,7 @@ class SSLStreamAdapterTestBase : public testing::Test,
   size_t mtu_;
   int loss_;
   bool lose_first_packet_;
+  bool damage_;
   bool dtls_;
   int handshake_wait_;
   bool identities_set_;
@@ -399,6 +422,7 @@ class SSLStreamAdapterTestTLS : public SSLStreamAdapterTestBase {
 
     // Now check the data
     recv_stream_.GetSize(&received);
+
     EXPECT_EQ(static_cast<size_t>(size), received);
     EXPECT_EQ(0, memcmp(send_stream_.GetBuffer(),
                         recv_stream_.GetBuffer(), size));
@@ -449,9 +473,9 @@ class SSLStreamAdapterTestTLS : public SSLStreamAdapterTestBase {
     for (;;) {
       r = stream->Read(buffer, sizeof(buffer), &bread, &err2);
 
-      if (r == talk_base::SR_ERROR) {
+      if (r == talk_base::SR_ERROR || r == talk_base::SR_EOS) {
         // Unfortunately, errors are the way that the stream adapter
-        // signals close right now
+        // signals close in OpenSSL
         stream->Close();
         return;
       }
@@ -545,8 +569,11 @@ class SSLStreamAdapterTestDTLS : public SSLStreamAdapterTestBase {
     EXPECT_TRUE_WAIT(sent_ == count_, 10000);
     LOG(LS_INFO) << "sent_ == " << sent_;
 
-    if (loss_ == 0) {
-      EXPECT_TRUE_WAIT(static_cast<size_t>(sent_) == received_.size(), 1000);
+    if (damage_) {
+      WAIT(false, 2000);
+      EXPECT_EQ(0U, received_.size());
+    } else if (loss_ == 0) {
+        EXPECT_EQ_WAIT(static_cast<size_t>(sent_), received_.size(), 1000);
     } else {
       LOG(LS_INFO) << "Sent " << sent_ << " packets; received " <<
           received_.size();
@@ -582,6 +609,25 @@ talk_base::StreamResult SSLDummyStream::Write(const void* data, size_t data_len,
 
 
 // Basic tests: TLS
+
+// Test that we cannot read/write if we have not yet handshaked.
+// This test only applies to NSS because OpenSSL has passthrough
+// semantics for I/O before the handshake is started.
+#if SSL_USE_NSS
+TEST_F(SSLStreamAdapterTestTLS, TestNoReadWriteBeforeConnect) {
+  talk_base::StreamResult rv;
+  char block[kBlockSize];
+  size_t dummy;
+
+  rv = client_ssl_->Write(block, sizeof(block), &dummy, NULL);
+  ASSERT_EQ(talk_base::SR_BLOCK, rv);
+
+  rv = client_ssl_->Read(block, sizeof(block), &dummy, NULL);
+  ASSERT_EQ(talk_base::SR_BLOCK, rv);
+}
+#endif
+
+
 // Test that we can make a handshake work
 TEST_F(SSLStreamAdapterTestTLS, TestTLSConnect) {
   TestHandshake();
@@ -591,6 +637,25 @@ TEST_F(SSLStreamAdapterTestTLS, TestTLSConnect) {
 TEST_F(SSLStreamAdapterTestTLS, TestTLSTransfer) {
   TestHandshake();
   TestTransfer(100000);
+};
+
+// Test read-write after close.
+TEST_F(SSLStreamAdapterTestTLS, ReadWriteAfterClose) {
+  TestHandshake();
+  TestTransfer(100000);
+  client_ssl_->Close();
+
+  talk_base::StreamResult rv;
+  char block[kBlockSize];
+  size_t dummy;
+
+  // It's an error to write after closed.
+  rv = client_ssl_->Write(block, sizeof(block), &dummy, NULL);
+  ASSERT_EQ(talk_base::SR_ERROR, rv);
+
+  // But after closed read gives you EOS.
+  rv = client_ssl_->Read(block, sizeof(block), &dummy, NULL);
+  ASSERT_EQ(talk_base::SR_EOS, rv);
 };
 
 // Test a handshake with a bogus peer digest
@@ -642,6 +707,7 @@ TEST_F(SSLStreamAdapterTestDTLS,
 TEST_F(SSLStreamAdapterTestDTLS, TestDTLSConnectWithSmallMtu) {
   MAYBE_SKIP_TEST(HaveDtls);
   SetMtu(700);
+  SetHandshakeWait(20000);
   TestHandshake();
 };
 
@@ -656,6 +722,14 @@ TEST_F(SSLStreamAdapterTestDTLS, TestDTLSTransferWithLoss) {
   MAYBE_SKIP_TEST(HaveDtls);
   TestHandshake();
   SetLoss(10);
+  TestTransfer(100);
+};
+
+TEST_F(SSLStreamAdapterTestDTLS, TestDTLSTransferWithDamage) {
+  MAYBE_SKIP_TEST(HaveDtls);
+  SetDamage();  // Must be called first because first packet
+                // write happens at end of handshake.
+  TestHandshake();
   TestTransfer(100);
 };
 

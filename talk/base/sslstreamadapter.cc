@@ -34,33 +34,40 @@
 
 #if SSL_USE_SCHANNEL
 
+// SChannel support for DTLS and peer-to-peer mode are not
+// done.
 #elif SSL_USE_OPENSSL  // && !SSL_USE_SCHANNEL
 
 #include "talk/base/opensslstreamadapter.h"
 
-#endif  // SSL_USE_OPENSSL && !SSL_USE_SCHANNEL
+#elif SSL_USE_NSS      // && !SSL_USE_SCHANNEL && !SSL_USE_OPENSSL
+
+#include "talk/base/nssstreamadapter.h"
+
+#endif  // !SSL_USE_OPENSSL && !SSL_USE_SCHANNEL && !SSL_USE_NSS
 
 ///////////////////////////////////////////////////////////////////////////////
 
 namespace talk_base {
 
 SSLStreamAdapter* SSLStreamAdapter::Create(StreamInterface* stream) {
-#if 0
-  return new SChannelStreamAdapter(stream);
-#elif SSL_USE_OPENSSL  // && !SSL_USE_SCHANNEL
-  return new OpenSSLStreamAdapter(stream);
-#else  // !SSL_USE_OPENSSL && !SSL_USE_SCHANNEL
-  LOG(LS_WARNING) << "No SSLStreamAdapter implementation exists.";
+#if SSL_USE_SCHANNEL
   return NULL;
-#endif  // !SSL_USE_OPENSSL && !SSL_USE_SCHANNEL
+#elif SSL_USE_OPENSSL  // !SSL_USE_SCHANNEL
+  return new OpenSSLStreamAdapter(stream);
+#elif SSL_USE_NSS     //  !SSL_USE_SCHANNEL && !SSL_USE_OPENSSL
+  return new NSSStreamAdapter(stream);
+#else  // !SSL_USE_SCHANNEL && !SSL_USE_OPENSSL && !SSL_USE_NSS
+  return NULL;
+#endif
 }
 
 // Note: this matches the logic above with SCHANNEL dominating
-#if SSL_USE_SCHANNEL || !SSL_USE_OPENSSL
+#if SSL_USE_SCHANNEL
 bool SSLStreamAdapter::HaveDtls() { return false; }
 bool SSLStreamAdapter::HaveDtlsSrtp() { return false; }
 bool SSLStreamAdapter::HaveExporter() { return false; }
-#else
+#elif SSL_USE_OPENSSL
 bool SSLStreamAdapter::HaveDtls() {
   return OpenSSLStreamAdapter::HaveDtls();
 }
@@ -70,7 +77,17 @@ bool SSLStreamAdapter::HaveDtlsSrtp() {
 bool SSLStreamAdapter::HaveExporter() {
   return OpenSSLStreamAdapter::HaveExporter();
 }
-#endif  // !SSL_USE_OPENSSL && !SSL_USE_SCHANNEL
+#elif SSL_USE_NSS
+bool SSLStreamAdapter::HaveDtls() {
+  return NSSStreamAdapter::HaveDtls();
+}
+bool SSLStreamAdapter::HaveDtlsSrtp() {
+  return NSSStreamAdapter::HaveDtlsSrtp();
+}
+bool SSLStreamAdapter::HaveExporter() {
+  return NSSStreamAdapter::HaveExporter();
+}
+#endif  // !SSL_USE_SCHANNEL && !SSL_USE_OPENSSL && !SSL_USE_NSS
 
 ///////////////////////////////////////////////////////////////////////////////
 
