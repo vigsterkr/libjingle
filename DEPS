@@ -8,7 +8,8 @@ vars = {
 
   "googlecode_url": "http://%s.googlecode.com/svn",
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
-  "chromium_revision": "156439",
+  "chromium_revision": "164065",
+  "webrtc_revision": "2961",
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
@@ -20,20 +21,51 @@ deps = {
   "build":
     Var("chromium_trunk") + "/src/build@" + Var("chromium_revision"),
 
-  "third_party/gtest":
-    From("chromium_deps", "src/testing/gtest"),
+  # Needed by common.gypi.
+  "google_apis/build":
+    Var("chromium_trunk") + "/src/google_apis/build@" + Var("chromium_revision"),
 
   "third_party/expat":
     Var("chromium_trunk") + "/src/third_party/expat@" + Var("chromium_revision"),
-  
-  "third_party/libsrtp/":
-    From("chromium_deps", "src/third_party/libsrtp"),
+
+  "third_party/gtest":
+    From("chromium_deps", "src/testing/gtest"),
 
   "third_party/icu/":
     From("chromium_deps", "src/third_party/icu"),
 
+  "third_party/libjpeg_turbo/":
+    From("chromium_deps", "src/third_party/libjpeg_turbo"),
+
+  "third_party/libsrtp/":
+    From("chromium_deps", "src/third_party/libsrtp"),
+
+  "third_party/libvpx":
+    From("chromium_deps", "src/third_party/libvpx"),
+
+  "third_party/libyuv/":
+    From("chromium_deps", "src/third_party/libyuv"),
+
+  "third_party/opus":
+    Var("chromium_trunk") + "/src/third_party/opus@163910",
+
+  "third_party/opus/src":
+    Var("chromium_trunk") + "/deps/third_party/opus@162558",
+
+  "third_party/protobuf":
+    Var("chromium_trunk") + "/src/third_party/protobuf@" + Var("chromium_revision"),
+
   "third_party/sqlite/":
     Var("chromium_trunk") + "/src/third_party/sqlite@" + Var("chromium_revision"),
+ 
+  "third_party/yasm":
+    Var("chromium_trunk") + "/src/third_party/yasm@" + Var("chromium_revision"),
+
+  "third_party/yasm/source/patched-yasm":
+    From("chromium_deps", "src/third_party/yasm/source/patched-yasm"),
+ 
+  "third_party/webrtc":
+    (Var("googlecode_url") % "webrtc") + "/stable/src@" + Var("webrtc_revision"),
 
   "tools/clang":
     Var("chromium_trunk") + "/src/tools/clang@" + Var("chromium_revision"),
@@ -54,9 +86,13 @@ deps = {
 
 deps_os = {
   "win": {
-    # Use stripped down version of Cygwin (required by GYP) from webrtc.
+    # Use our own, stripped down, version of Cygwin (required by GYP).
     "third_party/cygwin":
-      (Var("googlecode_url") % "webrtc") + "/deps/third_party/cygwin",
+      (Var("googlecode_url") % "webrtc") + "/deps/third_party/cygwin@2672",
+
+    # Used by libjpeg-turbo.
+    "third_party/yasm/binaries":
+      From("chromium_deps", "src/third_party/yasm/binaries"),
 
     # NSS, for SSLClientSocketNSS.
     "third_party/nss":

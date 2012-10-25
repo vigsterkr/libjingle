@@ -184,6 +184,7 @@
               '-ldl',
               '-lrt',
               '-lssl',
+              '-lXext',
               '-lX11',
               '-lXcomposite',
               '-lXrender',
@@ -294,6 +295,12 @@
       'target_name': 'libjingle_media',
       'type': 'static_library',
       'dependencies': [
+        '<(DEPTH)/third_party/libyuv/libyuv.gyp:libyuv',
+        '<(DEPTH)/third_party/webrtc/modules/modules.gyp:video_capture_module',
+        '<(DEPTH)/third_party/webrtc/modules/modules.gyp:video_render_module',
+        '<(DEPTH)/third_party/webrtc/video_engine/video_engine.gyp:video_engine_core',
+        '<(DEPTH)/third_party/webrtc/voice_engine/voice_engine.gyp:voice_engine_core',
+        '<(DEPTH)/third_party/webrtc/system_wrappers/source/system_wrappers.gyp:system_wrappers',
         'libjingle',
         'libjingle_sound',
       ],
@@ -316,6 +323,19 @@
         'media/base/videoframe.cc',
         'media/devices/devicemanager.cc',
         'media/devices/filevideocapturer.cc',
+        'media/webrtc/webrtcpassthroughrender.cc',
+        'media/webrtc/webrtcpassthroughrender.h',
+        'media/webrtc/webrtcvideocapturer.cc',
+        'media/webrtc/webrtcvideocapturer.h',
+        'media/webrtc/webrtcvideoengine.cc',
+        'media/webrtc/webrtcvideoengine.h',
+        'media/webrtc/webrtcvideoframe.cc',
+        'media/webrtc/webrtcvideoframe.h',
+        'media/webrtc/webrtcvie.h',
+        'media/webrtc/webrtcvoe.h',
+        'media/webrtc/webrtcvoiceengine.cc',
+        'media/webrtc/webrtcvoiceengine.h',
+        'media/webrtc/webrtccommon.h',
       ],
       'conditions': [
         ['OS=="linux"', {
@@ -330,6 +350,11 @@
           ],
           'cflags': [
             '<!@(pkg-config --cflags gtk+-2.0)',
+          ],
+          'libraries': [
+            '-lrt',
+            '-lXext',
+            '-lX11',
           ],
         }],
         ['OS=="win"', {
@@ -364,7 +389,10 @@
           'link_settings': {
             'xcode_settings': {
               'OTHER_LDFLAGS': [
+                '-framework Cocoa',
                 '-framework CoreAudio',
+                '-framework CoreVideo',
+                '-framework OpenGL',
                 '-framework QTKit',
               ],
             },
@@ -443,5 +471,34 @@
         'session/media/typingmonitor.cc',
       ],
     },  # target libjingle_p2p
+    {
+      'target_name': 'libjingle_peerconnection',
+      'type': 'static_library',
+      'dependencies': [
+        'libjingle',
+        'libjingle_media',
+        'libjingle_p2p',
+      ],
+      'sources': [
+        'app/webrtc/audiotrack.cc',
+        'app/webrtc/jsepicecandidate.cc',
+        'app/webrtc/jsepsessiondescription.cc',
+        'app/webrtc/localvideosource.cc',
+        'app/webrtc/mediastream.cc',
+        'app/webrtc/mediastreamhandler.cc',
+        'app/webrtc/mediastreamproxy.cc',
+        'app/webrtc/mediastreamsignaling.cc',
+        'app/webrtc/mediastreamtrackproxy.cc',
+        'app/webrtc/peerconnectionfactory.cc',
+        'app/webrtc/peerconnection.cc',
+        'app/webrtc/peerconnectionproxy.cc',
+        'app/webrtc/portallocatorfactory.cc',
+        'app/webrtc/videosourceproxy.cc',
+        'app/webrtc/videotrack.cc',
+        'app/webrtc/videotrackrenderers.cc',
+        'app/webrtc/webrtcsdp.cc',
+        'app/webrtc/webrtcsession.cc',
+      ],
+    },  # target libjingle_peerconnection
   ],
 }

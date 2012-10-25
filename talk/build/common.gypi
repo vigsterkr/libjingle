@@ -38,6 +38,7 @@
   'target_defaults': {
     'include_dirs': [
       '../..',
+      '../../third_party/webrtc',
     ],
     'defines': [
       'EXPAT_RELATIVE_PATH',
@@ -51,6 +52,11 @@
       'FEATURE_ENABLE_VOICEMAIL',
       'FEATURE_ENABLE_PSTN',
       'HAVE_SRTP',
+      'HAVE_WEBRTC_VIDEO',
+      'HAVE_WEBRTC_VOICE',
+      # TODO(ronghuawu): Remove this once libjingle is updated to use the new
+      # webrtc.
+      'USE_WEBRTC_DEV_BRANCH',
     ],
     'conditions': [
       ['OS=="linux"', {

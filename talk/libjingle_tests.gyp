@@ -297,5 +297,37 @@
         }],
       ],
     },  # target libjingle_p2p_unittest
+    {
+      'target_name': 'libjingle_peerconnection_unittest',
+      'type': 'executable',
+      'dependencies': [
+        'gunit',
+        'libjingle.gyp:libjingle',
+        'libjingle.gyp:libjingle_p2p',
+        'libjingle.gyp:libjingle_peerconnection',
+        'libjingle_unittest_main',
+      ],
+      # TODO(ronghuawu): Reenable below unit tests that require gmock.
+      'sources': [
+        'app/webrtc/test/fakeaudiocapturemodule.cc',
+        'app/webrtc/test/fakeaudiocapturemodule_unittest.cc',
+        'app/webrtc/test/fakevideocapturemodule.cc',
+        'app/webrtc/test/fileframesource.cc',
+        'app/webrtc/test/i420framesource.cc',
+        'app/webrtc/test/staticframesource.cc',
+        'app/webrtc/jsepsessiondescription_unittest.cc',
+        'app/webrtc/localvideosource_unittest.cc',
+        # 'app/webrtc/mediastream_unittest.cc',
+        # 'app/webrtc/mediastreamhandler_unittest.cc',
+        'app/webrtc/mediastreamsignaling_unittest.cc',
+        'app/webrtc/peerconnectioninterface_unittest.cc',
+        'app/webrtc/peerconnection_unittest.cc',
+        'app/webrtc/peerconnectionfactory_unittest.cc',
+        # 'app/webrtc/peerconnectionproxy_unittest.cc',
+        'app/webrtc/videotrack_unittest.cc',
+        'app/webrtc/webrtcsdp_unittest.cc',
+        'app/webrtc/webrtcsession_unittest.cc',
+      ],
+    },  # target libjingle_peerconnection_unittest
   ],
 }
