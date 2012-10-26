@@ -399,14 +399,14 @@ class WebRtcSessionTest : public testing::Test {
     ASSERT_TRUE(audio != NULL);
     ASSERT_EQ(expected, audio->description.identity_fingerprint.get() != NULL);
     if (expected) {
-      ASSERT_EQ(talk_base::DIGEST_SHA_256, audio->description.
+      ASSERT_EQ(std::string(talk_base::DIGEST_SHA_256), audio->description.
                 identity_fingerprint->algorithm);
     }
     const TransportInfo* video = sdp->GetTransportInfoByName("video");
     ASSERT_TRUE(video != NULL);
     ASSERT_EQ(expected, video->description.identity_fingerprint.get() != NULL);
     if (expected) {
-      ASSERT_EQ(talk_base::DIGEST_SHA_256, video->description.
+      ASSERT_EQ(std::string(talk_base::DIGEST_SHA_256), video->description.
                 identity_fingerprint->algorithm);
     }
 
