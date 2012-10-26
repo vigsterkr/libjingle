@@ -43,6 +43,7 @@ extern const char DIGEST_SHA_512[];
 // A general class for computing hashes.
 class MessageDigest {
  public:
+  enum { kMaxSize = 64 };  // Maximum known size (SHA-512)
   virtual ~MessageDigest() {}
   // Returns the digest output size (e.g. 16 bytes for MD5).
   virtual size_t Size() const = 0;

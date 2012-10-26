@@ -31,7 +31,9 @@
 #include "talk/app/webrtc/webrtcsdp.h"
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
+#include "talk/base/messagedigest.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/sslfingerprint.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/constants.h"
@@ -71,14 +73,23 @@ typedef std::vector<Candidate> Candidates;
 static const uint32 kCandidatePriority = 2130706432U;  // pref = 1.0
 static const char kCandidateUfragVoice[] = "ufrag_voice";
 static const char kCandidatePwdVoice[] = "pwd_voice";
+static const char kAttributeIcePwdVoice[] = "a=ice-pwd:pwd_voice\r\n";
 static const char kCandidateUfragVideo[] = "ufrag_video";
 static const char kCandidatePwdVideo[] = "pwd_video";
+static const char kAttributeIcePwdVideo[] = "a=ice-pwd:pwd_video\r\n";
 static const uint32 kCandidateGeneration = 2;
 static const char kCandidateFoundation1[] = "a0+B/1";
 static const char kCandidateFoundation2[] = "a0+B/2";
 static const char kCandidateFoundation3[] = "a0+B/3";
 static const char kCandidateFoundation4[] = "a0+B/4";
+static const char kFingerprint[] = "a=fingerprint:sha-1 "
+    "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
 
+static const uint8_t kIdentityDigest[] = {0x4A,0xAD,0xB9,0xB1,
+                                          0x3F,0x82,0x18,0x3B,
+                                          0x54,0x02,0x12,0xDF,
+                                          0x3E,0x5D,0x49,0x6B,
+                                          0x19,0xE5,0x7C,0xAB};
 // Reference sdp string
 static const char kSdpFullString[] =
     "v=0\r\n"
@@ -297,7 +308,7 @@ static void ReplaceRejected(bool audio_rejected, bool video_rejected,
 class WebRtcSdpTest : public testing::Test {
  public:
   WebRtcSdpTest()
-     : jdesc_("dummy") {
+      : jdesc_("dummy") {
     // AudioContentDescription
     talk_base::scoped_ptr<AudioContentDescription> audio(
         new AudioContentDescription());
@@ -358,14 +369,16 @@ class WebRtcSdpTest : public testing::Test {
                                            TransportOptions(),
                                            kCandidateUfragVoice,
                                            kCandidatePwdVoice,
-                                           NULL, Candidates()))));
+                                           NULL,
+                                           Candidates()))));
     EXPECT_TRUE(desc_.AddTransportInfo(
         TransportInfo(kVideoContentName,
                       TransportDescription(NS_JINGLE_ICE_UDP,
                                            TransportOptions(),
                                            kCandidateUfragVideo,
                                            kCandidatePwdVideo,
-                                           NULL, Candidates()))));
+                                           NULL,
+                                           Candidates()))));
 
     // v4 host
     int port = 1234;
@@ -690,7 +703,8 @@ class WebRtcSdpTest : public testing::Test {
     TransportInfo transport_info(content_name,
                                  TransportDescription(NS_JINGLE_ICE_UDP,
                                                       TransportOptions(),
-                                                      ufrag, pwd, NULL,
+                                                      ufrag, pwd,
+                                                      NULL,
                                                       Candidates()));
     SessionDescription* desc =
         const_cast<SessionDescription*>(jdesc->description());
@@ -718,6 +732,30 @@ class WebRtcSdpTest : public testing::Test {
     desc_.RemoveTransportInfoByName(content_name);
     transport_info.description.transport_options = transport_options;
     desc_.AddTransportInfo(transport_info);
+  }
+
+  void AddFingerprint() {
+    desc_.RemoveTransportInfoByName(kAudioContentName);
+    desc_.RemoveTransportInfoByName(kVideoContentName);
+    talk_base::SSLFingerprint fingerprint(talk_base::DIGEST_SHA_1,
+                                          kIdentityDigest,
+                                          sizeof(kIdentityDigest));
+    EXPECT_TRUE(desc_.AddTransportInfo(
+        TransportInfo(kAudioContentName,
+                      TransportDescription(NS_JINGLE_ICE_UDP,
+                                           TransportOptions(),
+                                           kCandidateUfragVoice,
+                                           kCandidatePwdVoice,
+                                           &fingerprint,
+                                           Candidates()))));
+    EXPECT_TRUE(desc_.AddTransportInfo(
+        TransportInfo(kVideoContentName,
+                      TransportDescription(NS_JINGLE_ICE_UDP,
+                                           TransportOptions(),
+                                           kCandidateUfragVideo,
+                                           kCandidatePwdVideo,
+                                           &fingerprint,
+                                           Candidates()))));
   }
 
   bool TestSerializeDirection(cricket::MediaContentDirection direction) {
@@ -825,6 +863,22 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionEmpty) {
   EXPECT_EQ("", webrtc::SdpSerialize(jdesc_empty));
 }
 
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithFingerprint) {
+  AddFingerprint();
+  JsepSessionDescription jdesc_with_fingerprint("dummy");
+  ASSERT_TRUE(jdesc_with_fingerprint.Initialize(desc_.Copy(),
+                                                kSessionId, kSessionVersion));
+  std::string message = webrtc::SdpSerialize(jdesc_with_fingerprint);
+
+  std::string sdp_with_fingerprint = kSdpString;
+  InjectAfter(kAttributeIcePwdVoice,
+              kFingerprint, &sdp_with_fingerprint);
+  InjectAfter(kAttributeIcePwdVideo,
+              kFingerprint, &sdp_with_fingerprint);
+
+  EXPECT_EQ(sdp_with_fingerprint, message);
+}
+
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
   JsepSessionDescription jdesc_no_candidates("dummy");
@@ -864,10 +918,10 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithIceOptions) {
                                 jdesc_.session_version()));
   std::string message = webrtc::SdpSerialize(jdesc_);
   std::string sdp_with_ice_options = kSdpFullString;
-  InjectAfter("a=ice-pwd:pwd_voice\r\n",
+  InjectAfter(kAttributeIcePwdVoice,
               "a=ice-options:iceoption1 iceoption3\r\n",
               &sdp_with_ice_options);
-  InjectAfter("a=ice-pwd:pwd_video\r\n",
+  InjectAfter(kAttributeIcePwdVideo,
               "a=ice-options:iceoption2 iceoption3\r\n",
               &sdp_with_ice_options);
   EXPECT_EQ(sdp_with_ice_options, message);
@@ -920,6 +974,25 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithoutCandidates) {
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_no_candidates, new_jdesc));
 }
 
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithFingerprint) {
+  // JsepSessionDescription with DTLS fingerprint.
+  AddFingerprint();
+  JsepSessionDescription new_jdesc("dummy");
+  ASSERT_TRUE(new_jdesc.Initialize(desc_.Copy(),
+                                   jdesc_.session_id(),
+                                   jdesc_.session_version()));
+
+  JsepSessionDescription jdesc_with_fingerprint("dummy");
+  std::string sdp_with_fingerprint = kSdpString;
+  InjectAfter(kAttributeIcePwdVoice, kFingerprint, &sdp_with_fingerprint);
+  InjectAfter(kAttributeIcePwdVideo,
+              kFingerprint,
+              &sdp_with_fingerprint);
+  EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_fingerprint,
+                                     &jdesc_with_fingerprint));
+  EXPECT_TRUE(CompareJsepSessionDescription(jdesc_with_fingerprint, new_jdesc));
+}
+
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
   JsepSessionDescription jdesc_with_bundle("dummy");
   std::string sdp_with_bundle = kSdpFullString;
@@ -943,10 +1016,10 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithIceOptions) {
   InjectAfter("t=0 0\r\n",
               "a=ice-options:iceoption3\r\n",
               &sdp_with_ice_options);
-  InjectAfter("a=ice-pwd:pwd_voice\r\n",
+  InjectAfter(kAttributeIcePwdVoice,
               "a=ice-options:iceoption1\r\n",
               &sdp_with_ice_options);
-  InjectAfter("a=ice-pwd:pwd_video\r\n",
+  InjectAfter(kAttributeIcePwdVideo,
               "a=ice-options:iceoption2\r\n",
               &sdp_with_ice_options);
   EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_ice_options,
@@ -1071,19 +1144,35 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
   const char kSdpInvalidLine1[] = " =candidate";
   const char kSdpInvalidLine2[] = "a+candidate";
   const char kSdpInvalidLine3[] = "a= candidate";
-
+  // Broken fingerprint.
+  const char kSdpInvalidLine4[] = "a=fingerprint:sha-1 "
+      "4AAD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
+  // Extra field.
+  const char kSdpInvalidLine5[] = "a=fingerprint:sha-1 "
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB XXX\r\n";
+  // Missing space.
+  const char kSdpInvalidLine6[] = "a=fingerprint:sha-1"
+      "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
+      
   // Broken session description
-  EXPECT_EQ(false, ReplaceAndTryToParse("v=", kSdpDestroyer));
-  EXPECT_EQ(false, ReplaceAndTryToParse("o=", kSdpDestroyer));
-  EXPECT_EQ(false, ReplaceAndTryToParse("s=-", kSdpDestroyer));
+  EXPECT_FALSE(ReplaceAndTryToParse("v=", kSdpDestroyer));
+  EXPECT_FALSE(ReplaceAndTryToParse("o=", kSdpDestroyer));
+  EXPECT_FALSE(ReplaceAndTryToParse("s=-", kSdpDestroyer));
   // Broken time description
-  EXPECT_EQ(false, ReplaceAndTryToParse("t=", kSdpDestroyer));
+  EXPECT_FALSE(ReplaceAndTryToParse("t=", kSdpDestroyer));
 
   // Broken media description
-  EXPECT_EQ(false, ReplaceAndTryToParse("m=video", kSdpDestroyer));
+  EXPECT_FALSE(ReplaceAndTryToParse("m=video", kSdpDestroyer));
 
   // Invalid lines
-  EXPECT_EQ(false, ReplaceAndTryToParse("a=candidate", kSdpInvalidLine1));
-  EXPECT_EQ(false, ReplaceAndTryToParse("a=candidate", kSdpInvalidLine2));
-  EXPECT_EQ(false, ReplaceAndTryToParse("a=candidate", kSdpInvalidLine3));
+  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine1));
+  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine2));
+  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine3));
+
+  // Bogus fingerprint replacing a=sendrev. We selected this attribute
+  // because it's orthogonal to what we are replacing and hence
+  // safe.
+  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine4));
+  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine5));
+  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine6));
 }

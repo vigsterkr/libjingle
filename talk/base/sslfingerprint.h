@@ -33,7 +33,9 @@
 
 #include "talk/base/buffer.h"
 #include "talk/base/helpers.h"
+#include "talk/base/messagedigest.h"
 #include "talk/base/sslidentity.h"
+#include "talk/base/stringencode.h"
 
 namespace talk_base {
 
@@ -55,6 +57,28 @@ struct SSLFingerprint {
     return new SSLFingerprint(algorithm, digest_val, digest_len);
   }
 
+  static SSLFingerprint* CreateFromRfc4572(const std::string& algorithm,
+                                           const std::string& fingerprint) {
+    if (algorithm.empty())
+      return NULL;
+
+    if (fingerprint.empty())
+      return NULL;
+
+    size_t value_len;
+    char value[talk_base::MessageDigest::kMaxSize];
+    value_len = talk_base::hex_decode_with_delimiter(value, sizeof(value),
+                                                     fingerprint.c_str(),
+                                                     fingerprint.length(),
+                                                     ':');
+    if (!value_len)
+      return NULL;
+
+    return new SSLFingerprint(algorithm,
+                              reinterpret_cast<uint8_t*>(value),
+                              value_len);
+  }
+
   SSLFingerprint(const std::string& algorithm, const uint8* digest_in,
                  size_t digest_len) : algorithm(algorithm) {
     digest.SetData(digest_in, digest_len);
@@ -64,6 +88,15 @@ struct SSLFingerprint {
   bool operator==(const SSLFingerprint& other) const {
     return algorithm == other.algorithm &&
            digest == other.digest;
+  }
+
+  std::string GetRfc4752Fingerprint() const {
+    std::string fingerprint =
+        talk_base::hex_encode_with_delimiter(
+            digest.data(), digest.length(), ':');
+    std::transform(fingerprint.begin(), fingerprint.end(),
+                   fingerprint.begin(), ::toupper);
+    return fingerprint;
   }
 
   std::string algorithm;

@@ -910,6 +910,10 @@ bool BaseChannel::SetupDtlsSrtp(bool rtcp_channel) {
     return false;
   }
 
+  LOG(LS_INFO) << "Installing keys from DTLS-SRTP on "
+               << content_name() << " "
+               << PacketType(rtcp_channel);
+
   // OK, we're now doing DTLS (RFC 5764)
   std::vector<unsigned char> dtls_buffer(SRTP_MASTER_KEY_KEY_LEN * 2 +
                                          SRTP_MASTER_KEY_SALT_LEN * 2);

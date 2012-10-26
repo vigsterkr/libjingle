@@ -101,6 +101,31 @@ static void InjectAfter(const std::string& line,
                              tmp.c_str(), tmp.length(), message);
 }
 
+class FakeConstraints : public webrtc::MediaConstraintsInterface {
+ public:
+  virtual const Constraints& GetMandatory() const {
+    return mandatory_;
+  }
+
+  virtual const Constraints& GetOptional() const {
+    return optional_;
+  }
+
+  void AddMandatory(const std::string& key, const std::string& value) {
+    mandatory_.push_back(Constraint(key, value));
+  }
+
+  void AddOptional(const std::string& key, const std::string& value) {
+    optional_.push_back(Constraint(key, value));
+  }
+
+  virtual ~FakeConstraints() {}
+
+ private:
+  std::vector<Constraint> mandatory_;
+  std::vector<Constraint> optional_;
+};
+
 class MockCandidateObserver : public webrtc::IceCandidateObserver {
  public:
   MockCandidateObserver()
@@ -260,7 +285,7 @@ class WebRtcSessionTest : public testing::Test {
         &observer_,
         &mediastream_signaling_));
 
-    EXPECT_TRUE(session_->Initialize(NULL));
+    EXPECT_TRUE(session_->Initialize(constraints_.get()));
     mediastream_signaling_.UseOptionsReceiveOnly();
   }
 
@@ -269,6 +294,15 @@ class WebRtcSessionTest : public testing::Test {
     std::vector<cricket::AudioCodec> codecs;
     codecs.push_back(kTelephoneEventCodec);
     media_engine_->SetAudioCodecs(codecs);
+    Init();
+  }
+
+  void InitWithDtls() {
+    constraints_.reset(new FakeConstraints());
+    constraints_->AddOptional(
+        webrtc::MediaConstraintsInterface::kEnableDtlsSrtp,
+        webrtc::MediaConstraintsInterface::kValueTrue);
+
     Init();
   }
 
@@ -346,6 +380,36 @@ class WebRtcSessionTest : public testing::Test {
             content->description);
     ASSERT_TRUE(video_content != NULL);
     ASSERT_EQ(0U, video_content->cryptos().size());
+  }
+
+  // Set the internal fake description factories to do DTLS-SRTP.
+  void SetFactoryDtlsSrtp() {
+    desc_factory_->set_secure(cricket::SEC_REQUIRED);  
+    std::string identity_name = "WebRTC" +
+        talk_base::ToString(talk_base::CreateRandomId());
+    tdesc_factory_->set_identity(talk_base::SSLIdentity::Generate(
+        identity_name));
+    tdesc_factory_->set_digest_algorithm(talk_base::DIGEST_SHA_256);
+    tdesc_factory_->set_secure(cricket::SEC_ENABLED);
+  }
+
+  void VerifyFingerprintStatus(const cricket::SessionDescription* sdp,
+                               bool expected) {
+    const TransportInfo* audio = sdp->GetTransportInfoByName("audio");
+    ASSERT_TRUE(audio != NULL);
+    ASSERT_EQ(expected, audio->description.identity_fingerprint.get() != NULL);
+    if (expected) {
+      ASSERT_EQ(talk_base::DIGEST_SHA_256, audio->description.
+                identity_fingerprint->algorithm);
+    }
+    const TransportInfo* video = sdp->GetTransportInfoByName("video");
+    ASSERT_TRUE(video != NULL);
+    ASSERT_EQ(expected, video->description.identity_fingerprint.get() != NULL);
+    if (expected) {
+      ASSERT_EQ(talk_base::DIGEST_SHA_256, video->description.
+                identity_fingerprint->algorithm);
+    }
+
   }
 
   void VerifyAnswerFromNonCryptoOffer() {
@@ -547,15 +611,21 @@ class WebRtcSessionTest : public testing::Test {
   cricket::TestStunServer stun_server_;
   talk_base::FakeNetworkManager network_manager_;
   cricket::BasicPortAllocator allocator_;
+  talk_base::scoped_ptr<FakeConstraints> constraints_;
   FakeMediaStreamSignaling mediastream_signaling_;
   talk_base::scoped_ptr<WebRtcSessionForTest> session_;
   MockCandidateObserver observer_;
   cricket::FakeVideoMediaChannel* video_channel_;
   cricket::FakeVoiceMediaChannel* voice_channel_;
+
 };
 
 TEST_F(WebRtcSessionTest, TestInitialize) {
   WebRtcSessionTest::Init();
+}
+
+TEST_F(WebRtcSessionTest, TestInitializeWithDtls) {
+  WebRtcSessionTest::InitWithDtls();
 }
 
 TEST_F(WebRtcSessionTest, TestSessionCandidates) {
@@ -757,6 +827,74 @@ TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
   // the offer.
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
   EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+}
+
+// Test that we can create and set an offer with a DTLS fingerprint.
+TEST_F(WebRtcSessionTest, DISABLED_CreateSetDtlsOffer) {
+  WebRtcSessionTest::InitWithDtls();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  ASSERT_TRUE(offer != NULL);
+  VerifyFingerprintStatus(offer->description(), true);
+  // SetLocalDescription will take the ownership of the offer.
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                            offer));
+}
+
+// Test that we can process an offer with a DTLS fingerprint
+// and that we return an answer with a fingerprint.
+TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
+  WebRtcSessionTest::InitWithDtls();
+  SetFactoryDtlsSrtp();
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  JsepSessionDescription* offer = CreateOfferSessionDescription(options);
+  ASSERT_TRUE(offer != NULL);
+  VerifyFingerprintStatus(offer->description(), true);
+
+  // SetRemoteDescription will take the ownership of
+  // the offer.
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+
+  // Verify that we get a crypto fingerprint in the answer.
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  ASSERT_TRUE(answer != NULL);
+  VerifyFingerprintStatus(answer->description(), true);
+  // Check that we don't have an a=crypto line in the answer.
+#if 0
+  // Broken for now.
+  VerifyNoCryptoParams(answer->description());
+#endif
+
+  // Now set the local description.
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer));
+}
+
+// Test that if the other side didn't offer a fingerprint, we don't
+// either.
+TEST_F(WebRtcSessionTest, ReceiveNoDtlsOfferCreateAnswer) {
+  WebRtcSessionTest::InitWithDtls();
+  desc_factory_->set_secure(cricket::SEC_REQUIRED);
+  cricket::MediaSessionOptions options;
+  options.has_video = true;
+  JsepSessionDescription* offer = CreateOfferSessionDescription(options);
+  ASSERT_TRUE(offer != NULL);
+  VerifyFingerprintStatus(offer->description(), false);
+
+  // SetRemoteDescription will take the ownership of
+  // the offer.
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+
+  // Verify that we don't get a crypto fingerprint in the answer.
+  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
+                                                               offer);
+  ASSERT_TRUE(answer != NULL);
+  VerifyFingerprintStatus(answer->description(), false);
+
+  // Now set the local description.
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer));
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {

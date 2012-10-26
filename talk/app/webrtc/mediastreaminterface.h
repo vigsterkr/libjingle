@@ -236,6 +236,9 @@ class MediaConstraintsInterface {
   static const char kMaxFrameRate[];  // maxFrameRate
   static const char kMinFrameRate[];  // minFrameRate
 
+  // Temporary pseudo-constraints used to enable DTLS-SRTP
+  static const char kEnableDtlsSrtp[];  // Enable DTLS-SRTP
+  static const char kValueTrue[];  // "true"
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface
   virtual ~MediaConstraintsInterface() {}

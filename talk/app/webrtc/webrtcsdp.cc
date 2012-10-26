@@ -34,6 +34,7 @@
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/base/logging.h"
+#include "talk/base/messagedigest.h"
 #include "talk/base/stringutils.h"
 #include "talk/media/base/codec.h"
 #include "talk/media/base/cryptoparams.h"
@@ -105,6 +106,7 @@ static const char kAttributeCandidateRport[] = "rport";
 static const char kAttributeCandidateUsername[] = "username";
 static const char kAttributeCandidatePassword[] = "password";
 static const char kAttributeCandidateGeneration[] = "generation";
+static const char kAttributeFingerprint[] = "fingerprint";
 static const char kAttributeRtpmap[] = "rtpmap";
 static const char kAttributeRtcp[] = "rtcp";
 static const char kAttributeIceUfrag[] = "ice-ufrag";
@@ -190,11 +192,9 @@ static bool ParseContent(const std::string& message,
                          const MediaType media_type,
                          int mline_index,
                          size_t* pos,
-                         ContentDescription* content,
                          std::string* content_name,
-                         std::string* media_ice_ufrag,
-                         std::string* media_ice_pwd,
-                         TransportOptions* media_transport_options,
+                         ContentDescription* content,
+                         TransportDescription* transport,
                          std::vector<JsepIceCandidate*>* candidates);
 static bool ParseSsrcAttribute(const std::string& line,
                                MediaContentDescription* media_desc);
@@ -206,6 +206,8 @@ static bool ParseRtpmapAttribute(const std::string& line,
 static bool ParseCandidate(const std::string& message, Candidate* candidate);
 static bool ParseIceOptions(const std::string& line,
                             TransportOptions* transport_options);
+static bool ParseFingerprintAttribute(const std::string& line,
+                                      talk_base::SSLFingerprint** fingerprint);
 
 // Helper functions
 #define LOG_PREFIX_PARSING_ERROR(line_type) LOG(LS_ERROR) \
@@ -583,7 +585,7 @@ bool SdpDeserialize(const std::string& message,
                     JsepSessionDescription* jdesc) {
   std::string session_id;
   std::string session_version;
-  TransportDescription session_td;
+  TransportDescription session_td(NS_JINGLE_ICE_UDP, Candidates());
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
   size_t current_pos = 0;
@@ -829,6 +831,22 @@ void BuildMediaDescription(const ContentInfo* content_info,
 
     // draft-petithuguenin-mmusic-ice-attributes-level-03
     BuildIceOptions(transport_info->description.transport_options, message);
+
+    // RFC 4572
+    // fingerprint-attribute  =  
+    //   "fingerprint" ":" hash-func SP fingerprint
+    talk_base::SSLFingerprint* fp = // Reduce typing.
+        transport_info->description.identity_fingerprint.get();
+    
+    if (fp) {
+      // Insert the fingerprint attribute.
+      InitAttrLine(kAttributeFingerprint, &os);
+      os << kSdpDelimiterColon
+         << fp->algorithm << kSdpDelimiterSpace
+         << fp->GetRfc4752Fingerprint();
+
+      AddLine(os.str(), message);
+    }
   }
 
   // RFC 3264
@@ -1124,6 +1142,19 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
+    } else if (HasAttribute(line, kAttributeFingerprint)) {
+      if (session_td->identity_fingerprint.get()) {
+        LOG(LS_ERROR) <<
+            "Can't have multiple fingerprint attributes at the same level";
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      talk_base::SSLFingerprint* fingerprint = NULL;
+      if (!ParseFingerprintAttribute(line, &fingerprint)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      session_td->identity_fingerprint.reset(fingerprint);
     }
   }
 
@@ -1154,16 +1185,55 @@ bool ParseGroupAttribute(const std::string& line,
   return true;
 }
 
+static bool ParseFingerprintAttribute(const std::string& line,
+                                      talk_base::SSLFingerprint** fingerprint) {
+  if (!IsLineType(line, kLineTypeAttributes) ||
+      !HasAttribute(line, kAttributeFingerprint)) {
+    // Must start with a=fingerprint line.
+    return false;
+  }
+
+  std::vector<std::string> fields;
+  talk_base::split(line.substr(kLinePrefixLength),
+                   kSdpDelimiterSpace, &fields);
+
+  if (fields.size() != 2) {
+    LOG(LS_ERROR) 
+        << "The a=fingerprint line has the wrong number of fields: "
+        << line;
+    return false;
+  }
+
+  // The first field here is "fingerprint:<hash>.
+  std::string algorithm;
+  if (!GetValue(fields[0], kAttributeFingerprint, &algorithm)) {
+    LOG(LS_ERROR)
+        << "Could not parse the a=fingerprint line: " << line;
+    return false;
+  }
+
+  // Downcase the algorithm. Note that we don't need to downcase the
+  // fingerprint because hex_decode can handle upper-case.
+  std::transform(algorithm.begin(), algorithm.end(), algorithm.begin(),
+                 ::tolower);
+
+  // The second field is the digest value. De-hexify it.
+  *fingerprint = talk_base::SSLFingerprint::CreateFromRfc4572(
+      algorithm, fields[1]);
+  if (!*fingerprint) {
+    LOG_LINE_PARSING_ERROR(line);
+    return false;
+  }
+
+  return true;
+}
+
 bool ParseMediaDescription(const std::string& message,
                            const TransportDescription& session_td,
                            size_t* pos,
                            cricket::SessionDescription* desc,
                            std::vector<JsepIceCandidate*>* candidates) {
   ASSERT(desc != NULL);
-
-  std::string media_ice_ufrag;
-  std::string media_ice_pwd;
-  TransportOptions media_transport_options;
   std::string line;
   int mline_index = -1;
 
@@ -1205,32 +1275,24 @@ bool ParseMediaDescription(const std::string& message,
       rejected = true;
     }
 
-    // RFC 5245
-    // Whether present at the session or media-level, there MUST be an
-    // ice-pwd and ice-ufrag attribute for each media stream.
-    // If we didn't get the username and password from the media level,
-    // then use the one from session level.
-    media_ice_ufrag = session_td.ice_ufrag;
-    media_ice_pwd = session_td.ice_pwd;
+    // Make a temporary TransportDescription based on |session_td|.
+    // Some of this gets overwritten by ParseContent.
+    TransportDescription transport(NS_JINGLE_ICE_UDP,
+                                   session_td.transport_options,
+                                   session_td.ice_ufrag,
+                                   session_td.ice_pwd,
+                                   session_td.identity_fingerprint.get(),
+                                   Candidates());                                   
 
-    // Use the session level ice options as the base of media level ice options.
-    media_transport_options = session_td.transport_options;
-
-    if (!ParseContent(message, media_type, mline_index, pos, content,
-                      &content_name, &media_ice_ufrag, &media_ice_pwd,
-                      &media_transport_options,
-                      candidates))
+    if (!ParseContent(message, media_type, mline_index, pos,
+                      &content_name, content, &transport, candidates))
       return false;
 
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected, content);
+
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".
-    TransportInfo transport_info(content_name,
-                                 TransportDescription(NS_JINGLE_ICE_UDP,
-                                                      media_transport_options,
-                                                      media_ice_ufrag,
-                                                      media_ice_pwd,
-                                                      NULL,
-                                                      Candidates()));
+    TransportInfo transport_info(content_name, transport);
+
     if (!desc->AddTransportInfo(transport_info)) {
       LOG(LS_ERROR) << "Failed to AddTransportInfo with content name: "
                     << content_name;
@@ -1244,15 +1306,13 @@ bool ParseContent(const std::string& message,
                   const MediaType media_type,
                   int mline_index,
                   size_t* pos,
-                  ContentDescription* content,
                   std::string* content_name,
-                  std::string* media_ice_ufrag,
-                  std::string* media_ice_pwd,
-                  TransportOptions* media_transport_options,
+                  ContentDescription* content,
+                  TransportDescription* transport,
                   std::vector<JsepIceCandidate*>* candidates) {
   ASSERT(content != NULL);
   ASSERT(content_name != NULL);
-  ASSERT(candidates != NULL);
+  ASSERT(transport != NULL);
 
   // The media level "ice-ufrag" and "ice-pwd".
   // The candidates before update the media level "ice-pwd" and "ice-ufrag".
@@ -1316,17 +1376,17 @@ bool ParseContent(const std::string& message,
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceUfrag)) {
-      if (!GetValue(line, kAttributeIceUfrag, media_ice_ufrag)) {
+      if (!GetValue(line, kAttributeIceUfrag, &transport->ice_ufrag)) {
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
     } else if (HasAttribute(line, kAttributeIcePwd)) {
-      if (!GetValue(line, kAttributeIcePwd, media_ice_pwd)) {
+      if (!GetValue(line, kAttributeIcePwd, &transport->ice_pwd)) {
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceOption)) {
-      if (!ParseIceOptions(line, media_transport_options)) {
+      if (!ParseIceOptions(line, &transport->transport_options)) {
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
@@ -1338,6 +1398,14 @@ bool ParseContent(const std::string& message,
       media_desc->set_direction(cricket::MD_INACTIVE);
     } else if (HasAttribute(line, kAttributeSendRecv)) {
       media_desc->set_direction(cricket::MD_SENDRECV);
+    } else if (HasAttribute(line, kAttributeFingerprint)) {
+      talk_base::SSLFingerprint* fingerprint = NULL;
+
+      if (!ParseFingerprintAttribute(line, &fingerprint)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      transport->identity_fingerprint.reset(fingerprint);
     } else {
       // Only parse lines that we are interested of.
       LOG(LS_INFO) << "Ignored line: " << line;
@@ -1349,9 +1417,9 @@ bool ParseContent(const std::string& message,
   for (Candidates::iterator it = candidates_orig.begin();
        it != candidates_orig.end(); ++it) {
     ASSERT((*it).username().empty());
-    (*it).set_username(*media_ice_ufrag);
+    (*it).set_username(transport->ice_ufrag);
     ASSERT((*it).password().empty());
-    (*it).set_password(*media_ice_pwd);
+    (*it).set_password(transport->ice_pwd);
     candidates->push_back(
         new JsepIceCandidate(mline_id, mline_index, *it));
   }
