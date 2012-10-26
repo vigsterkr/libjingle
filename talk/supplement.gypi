@@ -14,17 +14,13 @@
   },
   'target_defaults': {
     'conditions': [
-      ['OS=="mac"', {
-        'conditions': [
-          ['clang==1', {
-            'xcode_settings': {
-              'WARNING_CFLAGS': [
-                # TODO(ronghuawu): Remove once crbug/156530 is fixed.
-                '-Wno-unknown-warning-option',
-              ],
-            },
-          }],
-        ],
+      ['OS=="mac" and clang==1', {
+        'xcode_settings': {
+          'WARNING_CFLAGS': [
+            # TODO(ronghuawu): Remove once crbug/156530 is fixed.
+            '-Wno-unknown-warning-option',
+          ],
+        },
       }],
     ],
   }, # target_defaults
