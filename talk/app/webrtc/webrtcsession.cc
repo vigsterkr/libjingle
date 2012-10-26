@@ -78,6 +78,22 @@ static const char kDefaultVideoCodecName[] = "VP8";
 static const int kDefaultVideoCodecWidth = 640;
 static const int kDefaultVideoCodecHeight = 480;
 
+// Compares |answer| against |offer|. Comparision is done
+// for number of m-lines in answer against offer. If matches true will be
+// returned otherwise false.
+static bool VerifyMediaDescriptions(
+    const SessionDescription* answer, const SessionDescription* offer) {
+  if (offer->contents().size() != answer->contents().size())
+    return false;
+
+  for (size_t i = 0; i < offer->contents().size(); ++i) {
+    if ((offer->contents()[i].name) != answer->contents()[i].name) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static void CopyCandidatesFromSessionDescription(
     const SessionDescriptionInterface* source_desc,
     SessionDescriptionInterface* dest_desc) {
@@ -358,6 +374,10 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     const SessionDescriptionInterface* offer) {
   cricket::MediaSessionOptions options =
       mediastream_signaling_->GetMediaSessionOptions(hints);
+  if (!offer) {
+    LOG(LS_ERROR) << "Offer can't be NULL in CreateAnswer.";
+    return NULL;
+  }
   if (!ValidStreams(options.streams)) {
     LOG(LS_ERROR) << "CreateAnswer called with invalid media streams.";
     return NULL;
@@ -407,6 +427,13 @@ bool WebRtcSession::SetLocalDescription(Action action,
     return false;
   }
 
+  if (action == kAnswer && !VerifyMediaDescriptions(
+      desc->description(), remote_description()->description())) {
+    LOG(LS_ERROR) << "Offer and answer descriptions m-lines are not matching."
+                  << " Rejecting answer.";
+    return false;
+  }
+
   // Update the initiator flag if this session is the initiator.
   if (state() == STATE_INIT && action == kOffer) {
     set_initiator(true);
@@ -444,6 +471,13 @@ bool WebRtcSession::SetRemoteDescription(Action action,
     LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
                   <<" description";
     delete desc;
+    return false;
+  }
+
+  if (action == kAnswer && !VerifyMediaDescriptions(
+      desc->description(), local_description()->description())) {
+    LOG(LS_ERROR) << "Offer and answer descriptions m-lines are not matching. "
+                  << "Rejecting answer.";
     return false;
   }
 

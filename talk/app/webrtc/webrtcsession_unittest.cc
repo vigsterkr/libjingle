@@ -1736,3 +1736,71 @@ TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
   EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
                                               answer_with_gice));
 }
+
+// Verifing local offer and remote answer have matching m-lines as per RFC 3264.
+TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                            offer));
+  SessionDescriptionInterface* answer =
+     session_->CreateAnswer(MediaHints(), offer);
+
+  cricket::SessionDescription* answer_copy = answer->description()->Copy();
+  answer_copy->RemoveContentByName("video");
+  JsepSessionDescription* modified_answer =
+      new JsepSessionDescription(JsepSessionDescription::kAnswer);
+
+  EXPECT_TRUE(modified_answer->Initialize(answer_copy,
+                                          answer->session_id(),
+                                          answer->session_version()));
+  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                             modified_answer));
+
+  // Modifying content names.
+  std::string sdp;
+  EXPECT_TRUE(answer->ToString(&sdp));
+  const std::string kAudioMid = "a=mid:audio";
+  const std::string kAudioMidReplaceStr = "a=mid:audio_content_name";
+
+  // Replacing |audio| with |audio_content_name|.
+  talk_base::replace_substrs(kAudioMid.c_str(), kAudioMid.length(),
+                             kAudioMidReplaceStr.c_str(),
+                             kAudioMidReplaceStr.length(),
+                             &sdp);
+
+  JsepSessionDescription* modified_answer1(new JsepSessionDescription(
+      JsepSessionDescription::kAnswer));
+  EXPECT_TRUE(modified_answer1->Initialize(sdp));
+  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                              modified_answer1));
+
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+                                             answer));
+}
+
+// Verifying remote offer and local answer have matching m-lines as per
+// RFC 3264.
+TEST_F(WebRtcSessionTest, TestIncorrectMLinesInLocalAnswer) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer,
+                                             offer));
+  SessionDescriptionInterface* answer =
+     session_->CreateAnswer(MediaHints(), offer);
+
+  cricket::SessionDescription* answer_copy = answer->description()->Copy();
+  answer_copy->RemoveContentByName("video");
+  JsepSessionDescription* modified_answer =
+      new JsepSessionDescription(JsepSessionDescription::kAnswer);
+
+  EXPECT_TRUE(modified_answer->Initialize(answer_copy,
+                                          answer->session_id(),
+                                          answer->session_version()));
+  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                             modified_answer));
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
+                                            answer));
+}

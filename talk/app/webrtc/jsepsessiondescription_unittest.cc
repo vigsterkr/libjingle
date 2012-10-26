@@ -143,6 +143,7 @@ TEST_F(JsepSessionDescriptionTest, AddCandidateWithoutMid) {
   candidate_.set_username(kCandidateUfragVoice);
   candidate_.set_password(kCandidatePwdVoice);
   EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
+  EXPECT_EQ(0, ice_candidate->sdp_mline_index());
   EXPECT_EQ(0u, jsep_desc_->candidates(1)->count());
 }
 
@@ -159,6 +160,8 @@ TEST_F(JsepSessionDescriptionTest, AddCandidateWithMid) {
   candidate_.set_username(kCandidateUfragVideo);
   candidate_.set_password(kCandidatePwdVideo);
   EXPECT_TRUE(ice_candidate->candidate().IsEquivalent(candidate_));
+  // The mline index should have been updated according to mid.
+  EXPECT_EQ(1, ice_candidate->sdp_mline_index());
 }
 
 TEST_F(JsepSessionDescriptionTest, AddCandidateAlreadyHasUfrag) {

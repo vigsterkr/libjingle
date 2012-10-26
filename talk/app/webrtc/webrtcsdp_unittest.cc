@@ -578,6 +578,10 @@ class WebRtcSdpTest : public testing::Test {
       EXPECT_EQ(c1.framerate, c2.framerate);
     }
 
+    // bandwidth
+    EXPECT_EQ(acd1->bandwidth(), acd2->bandwidth());
+    EXPECT_EQ(vcd1->bandwidth(), vcd2->bandwidth());
+
     // streams
     EXPECT_EQ(acd1->streams(), acd2->streams());
     EXPECT_EQ(vcd1->streams(), vcd2->streams());
@@ -904,6 +908,22 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBundle) {
   EXPECT_EQ(sdp_with_bundle, message);
 }
 
+TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBandwidth) {
+  const ContentInfo* content_info = GetFirstVideoContent(&desc_);
+  VideoContentDescription* video_content_description =
+      static_cast<VideoContentDescription*>(content_info->description);
+  video_content_description->set_bandwidth(100 * 1000);
+  ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
+                                jdesc_.session_id(),
+                                jdesc_.session_version()));
+  std::string message = webrtc::SdpSerialize(jdesc_);
+  std::string sdp_with_bandwidth = kSdpFullString;
+  InjectAfter("a=mid:video_content_name\r\n",
+              "b=AS:100\r\n",
+              &sdp_with_bandwidth);
+  EXPECT_EQ(sdp_with_bandwidth, message);
+}
+
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithIceOptions) {
   TransportOptions transport_options;
   transport_options.push_back(kIceOption1);
@@ -1008,6 +1028,24 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
                                 jdesc_.session_id(),
                                 jdesc_.session_version()));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_bundle));
+}
+
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBandwidth) {
+  JsepSessionDescription jdesc_with_bandwidth("dummy");
+  std::string sdp_with_bandwidth = kSdpFullString;
+  InjectAfter("a=mid:video_content_name\r\n",
+              "b=AS:100\r\n",
+              &sdp_with_bandwidth);
+  EXPECT_TRUE(
+      webrtc::SdpDeserialize(sdp_with_bandwidth, &jdesc_with_bandwidth));
+  const ContentInfo* content_info = GetFirstVideoContent(&desc_);
+  VideoContentDescription* video_content_description =
+      static_cast<VideoContentDescription*>(content_info->description);
+  video_content_description->set_bandwidth(100 * 1000);
+  ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
+                                jdesc_.session_id(),
+                                jdesc_.session_version()));
+  EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc_with_bandwidth));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithIceOptions) {

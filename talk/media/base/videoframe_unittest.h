@@ -66,7 +66,7 @@ class VideoFrameTest : public testing::Test {
   static const int kWidth = 1280;
   static const int kHeight = 720;
   static const int kAlignment = 16;
-  static const int kMinWidthAll = 1; // constants for ConstructYUY2AllSizes.
+  static const int kMinWidthAll = 1;  // Constants for ConstructYUY2AllSizes.
   static const int kMinHeightAll = 1;
   static const int kMaxWidthAll = 17;
   static const int kMaxHeightAll = 23;
@@ -323,7 +323,7 @@ class VideoFrameTest : public testing::Test {
         }
         if ((y + 1) < height) {
           frame->GetYPlane()[stride_y * (y + 1) + x] = yuv[2][0];
-          if ((x + 1) < width ) {
+          if ((x + 1) < width) {
             frame->GetYPlane()[stride_y * (y + 1) + x + 1] = yuv[3][0];
           }
         }
@@ -665,8 +665,8 @@ class VideoFrameTest : public testing::Test {
     talk_base::scoped_ptr<talk_base::MemoryStream> ms(
         CreateRgbSample(cricket::FOURCC_ARGB, kWidth * 10, kHeight / 10));
     ASSERT_TRUE(ms.get() != NULL);
-    EXPECT_TRUE(ConvertRgb(ms.get(), cricket::FOURCC_ARGB, kWidth * 10, kHeight / 10,
-                           &frame1));
+    EXPECT_TRUE(ConvertRgb(ms.get(), cricket::FOURCC_ARGB,
+                           kWidth * 10, kHeight / 10, &frame1));
     EXPECT_TRUE(LoadFrame(ms.get(), cricket::FOURCC_ARGB,
                           kWidth * 10, kHeight / 10, &frame2));
     EXPECT_TRUE(IsEqual(frame1, frame2, 2));
@@ -1013,15 +1013,15 @@ void Construct##FOURCC##Rotate##ROTATE() {                                     \
   // Test Black, White and Grey pixels.
   void ConstructARGBBlackWhitePixel() {
     T frame;
-    uint8 pixel[10 * 4] = { 0, 0, 0, 255, // Black.
+    uint8 pixel[10 * 4] = { 0, 0, 0, 255,  // Black.
                             0, 0, 0, 255,
-                            64, 64, 64, 255, // Dark Grey.
+                            64, 64, 64, 255,  // Dark Grey.
                             64, 64, 64, 255,
-                            128, 128, 128, 255, // Grey.
+                            128, 128, 128, 255,  // Grey.
                             128, 128, 128, 255,
-                            196, 196, 196, 255, // Light Grey.
+                            196, 196, 196, 255,  // Light Grey.
                             196, 196, 196, 255,
-                            255, 255, 255, 255, // White.
+                            255, 255, 255, 255,  // White.
                             255, 255, 255, 255 };
 
     for (int i = 0; i < repeat_; ++i) {
@@ -1162,17 +1162,21 @@ void Construct##FOURCC##Rotate##ROTATE() {                                     \
 
     // Allocate a buffer with end page aligned.
     const int kPadToHeapSized = 16 * 1024 * 1024;
-    uint8* page_buffer = reinterpret_cast<uint8*>(malloc(
-        (data_size + kPadToHeapSized + 4095) & ~4095));
-    uint8* data_ptr = page_buffer + kPadToHeapSized +
-        (-(static_cast<int>(data_size)) & 4095);
+    talk_base::scoped_array<uint8> page_buffer(
+        new uint8[((data_size + kPadToHeapSized + 4095) & ~4095)]);
+    uint8* data_ptr = page_buffer.get();
+    if (!data_ptr) {
+      LOG(LS_WARNING) << "Failed to allocate memory for ValidateFrame test.";
+      EXPECT_FALSE(expected_result);  // NULL is okay if failure was expected.
+      return;
+    }
+    data_ptr += kPadToHeapSized + (-(static_cast<int>(data_size)) & 4095);
     memcpy(data_ptr, sample, talk_base::_min(data_size, sample_size));
     for (int i = 0; i < repeat_; ++i) {
       EXPECT_EQ(expected_result, frame.Validate(fourcc, kWidth, kHeight,
                                                 data_ptr,
                                                 sample_size + size_adjust));
     }
-    free(page_buffer);
   }
 
   // Test validate for I420 MJPG buffer.
@@ -2033,6 +2037,25 @@ void Construct##FOURCC##Rotate##ROTATE() {                                     \
       EXPECT_EQ(out_size, frame.CopyToBuffer(out.get(), out_size));
     }
     EXPECT_EQ(0, memcmp(out.get(), ms->GetBuffer(), out_size));
+  }
+
+  void Write() {
+    T frame;
+    talk_base::scoped_ptr<talk_base::MemoryStream> ms(
+        LoadSample(kImageFilename));
+    talk_base::MemoryStream ms2;
+    size_t size;
+    ASSERT_TRUE(ms->GetSize(&size));
+    ASSERT_TRUE(ms2.ReserveSize(size));
+    ASSERT_TRUE(LoadFrame(ms.get(), cricket::FOURCC_I420, kWidth, kHeight,
+                          &frame));
+    for (int i = 0; i < repeat_; ++i) {
+      ms2.SetPosition(0u);  // Useful when repeat_ > 1.
+      int error;
+      EXPECT_EQ(talk_base::SR_SUCCESS, frame.Write(&ms2, &error));
+    }
+    size_t out_size = cricket::VideoFrame::SizeOf(kWidth, kHeight);
+    EXPECT_EQ(0, memcmp(ms2.GetBuffer(), ms->GetBuffer(), out_size));
   }
 
   void CopyToBuffer1Pixel() {

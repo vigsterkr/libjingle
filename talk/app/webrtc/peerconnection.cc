@@ -72,7 +72,11 @@ enum ServiceType {
 };
 
 enum {
-  MSG_ICECHANGE = 0,
+  MSG_CREATE_SESSIONDESCRIPTION_SUCCESS = 0,
+  MSG_CREATE_SESSIONDESCRIPTION_FAILED,
+  MSG_SET_SESSIONDESCRIPTION_SUCCESS,
+  MSG_SET_SESSIONDESCRIPTION_FAILED,
+  MSG_ICECHANGE,
   MSG_ICECANDIDATE,
   MSG_ICECOMPLETE,
 };
@@ -82,6 +86,27 @@ struct CandidateMsg : public talk_base::MessageData {
       : candidate(candidate) {
   }
   const webrtc::JsepIceCandidate* candidate;
+};
+
+struct CreateSessionDescriptionMsg : public talk_base::MessageData {
+  explicit CreateSessionDescriptionMsg(
+      webrtc::CreateSessionDescriptionObserver* observer)
+      : observer(observer) {
+  }
+
+  talk_base::scoped_refptr<webrtc::CreateSessionDescriptionObserver> observer;
+  std::string error;
+  talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> description;
+};
+
+struct SetSessionDescriptionMsg : public talk_base::MessageData {
+  explicit SetSessionDescriptionMsg(
+      webrtc::SetSessionDescriptionObserver* observer)
+      : observer(observer) {
+  }
+
+  talk_base::scoped_refptr<webrtc::SetSessionDescriptionObserver> observer;
+  std::string error;
 };
 
 typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
@@ -425,21 +450,23 @@ SessionDescriptionInterface* PeerConnection::CreateOffer(
 
 void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
                                  const MediaConstraintsInterface* constraints) {
-  if (!observer) {
+  if (!VERIFY(observer != NULL)) {
     LOG(LS_ERROR) << "CreateOffer - observer is NULL.";
     return;
   }
-  talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
-      observer;
+
+  CreateSessionDescriptionMsg* msg = new CreateSessionDescriptionMsg(observer);
   // TODO(perkj): Take |constraints| into consideration.
-  SessionDescriptionInterface* desc =
-      CreateOffer(MediaHints(true, true));
-  if (!desc) {
-    std::string error = "CreateOffer failed.";
-    observer_copy->OnFailure(error);
+  msg->description.reset(
+      session_->CreateOffer(MediaHints(true, true)));
+
+  if (!msg->description) {
+    msg->error = "CreateOffer failed.";
+    signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_FAILED, msg);
     return;
   }
-  observer_copy->OnSuccess(desc);
+
+  signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_SUCCESS, msg);
 }
 
 SessionDescriptionInterface* PeerConnection::CreateAnswer(
@@ -451,32 +478,37 @@ SessionDescriptionInterface* PeerConnection::CreateAnswer(
 void PeerConnection::CreateAnswer(
     CreateSessionDescriptionObserver* observer,
     const MediaConstraintsInterface* constraints) {
-  if (!observer) {
+  if (!VERIFY(observer != NULL)) {
     LOG(LS_ERROR) << "CreateAnswer - observer is NULL.";
     return;
   }
-  talk_base::scoped_refptr<CreateSessionDescriptionObserver> observer_copy =
-      observer;
+
+  CreateSessionDescriptionMsg* msg = new CreateSessionDescriptionMsg(observer);
+  // TODO(perkj): This checks should be done by the session. Not here.
+  // Clean this up once the old Jsep API has been removed.
   const SessionDescriptionInterface* offer = session_->remote_description();
   std::string error;
   if (!offer) {
-    error = "CreateAnswer can't be called before SetRemoteDescription.";
-    observer_copy->OnFailure(error);
-    return;
-  } else if (offer->type() != JsepSessionDescription::kOffer) {
-    error = "CreateAnswer failed because remote_description is not an offer.";
-    observer_copy->OnFailure(error);
+    msg->error = "CreateAnswer can't be called before SetRemoteDescription.";
+    signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_FAILED, msg);
     return;
   }
+  if (offer->type() != JsepSessionDescription::kOffer) {
+    msg->error =
+        "CreateAnswer failed because remote_description is not an offer.";
+    signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_FAILED, msg);
+    return;
+  }
+
   // TODO(perkj): Take |constraints| into consideration.
-  SessionDescriptionInterface* desc =
-      CreateAnswer(MediaHints(true, true), offer);
-  if (!desc) {
-    error = "CreateAnswer failed.";
-    observer_copy->OnFailure(error);
+  msg->description.reset(CreateAnswer(MediaHints(true, true), offer));
+  if (!msg->description) {
+    msg->error = "CreateAnswer failed.";
+    signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_FAILED, msg);
     return;
   }
-  observer_copy->OnSuccess(desc);
+
+  signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_SUCCESS, msg);
 }
 
 bool PeerConnection::SetLocalDescription(Action action,
@@ -489,27 +521,22 @@ bool PeerConnection::SetLocalDescription(Action action,
 void PeerConnection::SetLocalDescription(
     SetSessionDescriptionObserver* observer,
     SessionDescriptionInterface* desc) {
-  if (!observer) {
+  if (!VERIFY(observer != NULL)) {
     LOG(LS_ERROR) << "SetLocalDescription - observer is NULL.";
     return;
   }
-  talk_base::scoped_refptr<SetSessionDescriptionObserver> observer_copy =
-      observer;
-  std::string error;
   if (!desc) {
-    error = "SessionDescription is NULL.";
-    observer_copy->OnFailure(error);
+    PostSetSessionDescriptionFailure(observer, "SessionDescription is NULL.");
     return;
   }
-
   if (!SetLocalDescription(JsepSessionDescription::GetAction(desc->type()),
                            desc)) {
-    error = "SetLocalDescription failed.";
-    observer_copy->OnFailure(error);
+    PostSetSessionDescriptionFailure(observer, "SetLocalDescription failed.");
     return;
   }
-
-  observer_copy->OnSuccess();
+  stream_handler_->CommitLocalStreams(local_media_streams_);
+  SetSessionDescriptionMsg* msg =  new SetSessionDescriptionMsg(observer);
+  signaling_thread()->Post(this, MSG_SET_SESSIONDESCRIPTION_SUCCESS, msg);
 }
 
 bool PeerConnection::SetRemoteDescription(Action action,
@@ -520,23 +547,30 @@ bool PeerConnection::SetRemoteDescription(Action action,
 void PeerConnection::SetRemoteDescription(
     SetSessionDescriptionObserver* observer,
     SessionDescriptionInterface* desc) {
-  bool result = false;
-  if (desc) {
-    result = SetRemoteDescription(
-        JsepSessionDescription::GetAction(desc->type()), desc);
-  }
-  if (!observer) {
+  if (!VERIFY(observer != NULL)) {
     LOG(LS_ERROR) << "SetRemoteDescription - observer is NULL.";
     return;
   }
-  talk_base::scoped_refptr<SetSessionDescriptionObserver> observer_copy =
-      observer;
-  if (!result) {
-    std::string error = "SetRemoteDescription failed.";
-    observer_copy->OnFailure(error);
+
+  if (!desc) {
+    PostSetSessionDescriptionFailure(observer, "SessionDescription is NULL.");
     return;
   }
-  observer_copy->OnSuccess();
+  if (!SetRemoteDescription(JsepSessionDescription::GetAction(desc->type()),
+                            desc)) {
+    PostSetSessionDescriptionFailure(observer, "SetRemoteDescription failed.");
+    return;
+  }
+  SetSessionDescriptionMsg* msg  = new SetSessionDescriptionMsg(observer);
+  signaling_thread()->Post(this, MSG_SET_SESSIONDESCRIPTION_SUCCESS, msg);
+}
+
+void PeerConnection::PostSetSessionDescriptionFailure(
+    SetSessionDescriptionObserver* observer,
+    const std::string& error) {
+  SetSessionDescriptionMsg* msg  = new SetSessionDescriptionMsg(observer);
+  msg->error = error;
+  signaling_thread()->Post(this, MSG_SET_SESSIONDESCRIPTION_FAILED, msg);
 }
 
 bool PeerConnection::UpdateIce(const IceServers& configuration,
@@ -584,6 +618,34 @@ void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
 
 void PeerConnection::OnMessage(talk_base::Message* msg) {
   switch (msg->message_id) {
+    case MSG_CREATE_SESSIONDESCRIPTION_SUCCESS: {
+      CreateSessionDescriptionMsg* param =
+          static_cast<CreateSessionDescriptionMsg*>(msg->pdata);
+      param->observer->OnSuccess(param->description.release());
+      delete param;
+      break;
+    }
+    case MSG_CREATE_SESSIONDESCRIPTION_FAILED: {
+      CreateSessionDescriptionMsg* param =
+          static_cast<CreateSessionDescriptionMsg*>(msg->pdata);
+      param->observer->OnFailure(param->error);
+      delete param;
+      break;
+    }
+    case MSG_SET_SESSIONDESCRIPTION_SUCCESS: {
+      SetSessionDescriptionMsg* param =
+          static_cast<SetSessionDescriptionMsg*>(msg->pdata);
+      param->observer->OnSuccess();
+      delete param;
+      break;
+    }
+    case MSG_SET_SESSIONDESCRIPTION_FAILED: {
+      SetSessionDescriptionMsg* param =
+          static_cast<SetSessionDescriptionMsg*>(msg->pdata);
+      param->observer->OnFailure(param->error);
+      delete param;
+      break;
+    }
     case MSG_ICECHANGE: {
       observer_->OnIceChange();
       break;
@@ -600,6 +662,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
       break;
     }
     default:
+      ASSERT(!"Not implemented");
       break;
   }
 }

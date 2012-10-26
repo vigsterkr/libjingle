@@ -152,6 +152,9 @@ static const char kMediaProtocolSavpf[] = "RTP/SAVPF";
 static const char kDefaultAddress[] = "0.0.0.0";
 static const char kDefaultPort[] = "1";
 
+// RFC 3556
+static const char kApplicationSpecificMaximum[] = "AS";
+
 // Default Video resolution.
 // TODO: Implement negotiation of video resolution.
 static const int kDefaultVideoWidth = 640;
@@ -876,6 +879,14 @@ void BuildMediaDescription(const ContentInfo* content_info,
   os << kSdpDelimiterColon << content_info->name;
   AddLine(os.str(), message);
 
+  // RFC 4566
+  // b=AS:<bandwidth>
+  if (media_desc->bandwidth() >= 1000) {
+    InitLine(kLineTypeSessionBandwidth, kApplicationSpecificMaximum, &os);
+    os << kSdpDelimiterColon << (media_desc->bandwidth() / 1000);
+    AddLine(os.str(), message);
+  }
+
   // RFC 5761
   // a=rtcp-mux
   if (media_desc->rtcp_mux()) {
@@ -1334,14 +1345,30 @@ bool ParseContent(const std::string& message,
       continue;
     }
 
+    MediaContentDescription* media_desc =
+        static_cast<MediaContentDescription*> (content);
+
+    // RFC 4566
+    // b=* (zero or more bandwidth information lines)
+    if (IsLineType(line, kLineTypeSessionBandwidth)) {
+      std::string bandwidth;
+      if (HasAttribute(line, kApplicationSpecificMaximum)) {
+        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth)) {
+          LOG_LINE_PARSING_ERROR(line);
+          return false;
+        } else {
+          media_desc->set_bandwidth(
+              talk_base::FromString<int>(bandwidth) * 1000);
+        }
+      }
+      continue;
+    }
+
     if (!IsLineType(line, kLineTypeAttributes)) {
       // TODO: Handle other lines if needed.
       LOG(LS_INFO) << "Ignored line: " << line;
       continue;
     }
-
-    MediaContentDescription* media_desc =
-        static_cast<MediaContentDescription*> (content);
 
     if (HasAttribute(line, kAttributeMid)) {
       // RFC 3388

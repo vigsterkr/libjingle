@@ -118,17 +118,6 @@ class FakeVideoCaptureModule
     return 0;
   }
 
-#ifndef USE_WEBRTC_DEV_BRANCH
-  virtual WebRtc_Word32 StartSendImage(const webrtc::VideoFrame& videoFrame,
-                                       WebRtc_Word32 frameRate = 1) {
-    return impl_->StartSendImage(videoFrame, frameRate = 1);
-  }
-
-  virtual WebRtc_Word32 StopSendImage() {
-    return impl_->StopSendImage();
-  }
-#endif
-
   virtual const char* CurrentDeviceName() const {
     return impl_->CurrentDeviceName();
   }

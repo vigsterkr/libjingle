@@ -129,7 +129,7 @@ bool JsepSessionDescription::AddCandidate(
 
   candidate_collection_[mediasection_index].add(
        new JsepIceCandidate(candidate->sdp_mid(),
-                            candidate->sdp_mline_index(),
+                            mediasection_index,
                             updated_candidate));
   return true;
 }

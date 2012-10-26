@@ -56,7 +56,6 @@ class PeerConnection : public PeerConnectionInterface,
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
 
-
   bool Initialize(const std::string& configuration,  // Deprecated JSEP00
                   webrtc::PortAllocatorFactoryInterface* allocator_factory,
                   PeerConnectionObserver* observer);
@@ -136,6 +135,9 @@ class PeerConnection : public PeerConnectionInterface,
   talk_base::Thread* signaling_thread() const {
     return factory_->signaling_thread();
   }
+
+  void PostSetSessionDescriptionFailure(SetSessionDescriptionObserver* observer,
+                                        const std::string& error);
 
   // Storing the factory as a scoped reference pointer ensures that the memory
   // in the PeerConnectionFactoryImpl remains available as long as the
