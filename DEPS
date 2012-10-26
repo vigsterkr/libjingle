@@ -34,6 +34,9 @@ deps = {
   "third_party/icu/":
     From("chromium_deps", "src/third_party/icu"),
 
+  "third_party/libjpeg":
+    Var("chromium_trunk") + "/src/third_party/libjpeg@" + Var("chromium_revision"),
+
   "third_party/libjpeg_turbo/":
     From("chromium_deps", "src/third_party/libjpeg_turbo"),
 
