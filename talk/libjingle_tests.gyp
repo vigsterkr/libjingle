@@ -311,10 +311,6 @@
       'sources': [
         'app/webrtc/test/fakeaudiocapturemodule.cc',
         'app/webrtc/test/fakeaudiocapturemodule_unittest.cc',
-        'app/webrtc/test/fakevideocapturemodule.cc',
-        'app/webrtc/test/fileframesource.cc',
-        'app/webrtc/test/i420framesource.cc',
-        'app/webrtc/test/staticframesource.cc',
         'app/webrtc/jsepsessiondescription_unittest.cc',
         'app/webrtc/localvideosource_unittest.cc',
         # 'app/webrtc/mediastream_unittest.cc',
