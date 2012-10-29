@@ -33,7 +33,7 @@
 //#include "talk/base/sslconfig.h"
 #if defined(SSL_USE_OPENSSL)
 #include <openssl/rand.h>
-#elif defined(SSL_USE_NSS)
+#elif defined(SSL_USE_NSS_RNG)
 #include "pk11func.h"
 #else
 #ifdef WIN32
@@ -95,7 +95,7 @@ class SecureRandomGenerator : public RandomGenerator {
   bool inited_;
 };
 
-#elif defined(SSL_USE_NSS)
+#elif defined(SSL_USE_NSS_RNG)
 // The NSS RNG.
 class SecureRandomGenerator : public RandomGenerator {
  public:

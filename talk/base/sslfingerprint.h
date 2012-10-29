@@ -29,6 +29,7 @@
 #ifndef TALK_BASE_SSLFINGERPRINT_H_
 #define TALK_BASE_SSLFINGERPRINT_H_
 
+#include <ctype.h>
 #include <string>
 
 #include "talk/base/buffer.h"
