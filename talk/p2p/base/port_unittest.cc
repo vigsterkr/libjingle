@@ -43,7 +43,6 @@
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/tcpport.h"
-#include "talk/p2p/base/udpport.h"
 #include "talk/p2p/base/teststunserver.h"
 #include "talk/p2p/base/testrelayserver.h"
 #include "talk/p2p/base/transport.h"
@@ -144,12 +143,12 @@ class TestPort : public Port {
 
   virtual void PrepareAddress() {
     talk_base::SocketAddress addr(ip(), min_port());
-    AddAddress(addr, addr, "udp", true);
+    AddAddress(addr, addr, "udp", Type(), type_preference(), true);
   }
 
   // Exposed for testing candidate building.
   void AddCandidateAddress(const talk_base::SocketAddress& addr) {
-    AddAddress(addr, addr, "udp", false);
+    AddAddress(addr, addr, "udp", Type(), type_preference(), false);
   }
 
   virtual Connection* CreateConnection(const Candidate& remote_candidate,
@@ -398,9 +397,9 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
   }
   StunPort* CreateStunPort(const SocketAddress& addr,
                            talk_base::PacketSocketFactory* factory) {
-    StunPort* port =  StunPort::Create(main_, factory, &network_,
-                                       addr.ipaddr(), 0, 0,
-                                       username_, password_, kStunAddr);
+    StunPort* port = StunPort::Create(main_, factory, &network_,
+                                      addr.ipaddr(), 0, 0,
+                                      username_, password_, kStunAddr);
     port->SetIceProtocolType(ice_protocol_);
     return port;
   }
@@ -1253,11 +1252,12 @@ TEST_F(PortTest, TestSendStunMessageAsIce) {
   ASSERT_TRUE(msg != NULL);
   EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
 
+  // TODO(thaloun): Disabled per b/7423258
   // Response should mirror outstanding ping count of zero.
-  const StunUInt32Attribute* retransmit_attr =
-      msg->GetUInt32(STUN_ATTR_RETRANSMIT_COUNT);
-  ASSERT_TRUE(retransmit_attr != NULL);
-  EXPECT_EQ(0U, retransmit_attr->value());
+  // const StunUInt32Attribute* retransmit_attr =
+  //     msg->GetUInt32(STUN_ATTR_RETRANSMIT_COUNT);
+  // ASSERT_TRUE(retransmit_attr != NULL);
+  // EXPECT_EQ(0U, retransmit_attr->value());
 
   EXPECT_FALSE(msg->IsLegacy());
   const StunAddressAttribute* addr_attr = msg->GetAddress(

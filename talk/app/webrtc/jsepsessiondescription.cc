@@ -56,6 +56,13 @@ const char SessionDescriptionInterface::kOffer[] = "offer";
 const char SessionDescriptionInterface::kPrAnswer[] = "pranswer";
 const char SessionDescriptionInterface::kAnswer[] = "answer";
 
+const int JsepSessionDescription::kDefaultVideoCodecId = 100;
+const int JsepSessionDescription::kDefaultVideoCodecFramerate = 30;
+const char JsepSessionDescription::kDefaultVideoCodecName[] = "VP8";
+const int JsepSessionDescription::kMaxVideoCodecWidth = 1280;
+const int JsepSessionDescription::kMaxVideoCodecHeight = 720;
+const int JsepSessionDescription::kDefaultVideoCodecPreference = 0;
+
 // TODO(perkj): Remove CreateSessionDescription(const std::string& sdp) once
 // JSEP00 is removed.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {

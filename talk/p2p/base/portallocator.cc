@@ -31,7 +31,7 @@
 
 namespace cricket {
 
-PortAllocatorSession::PortAllocatorSession(const std::string content_name,
+PortAllocatorSession::PortAllocatorSession(const std::string& content_name,
                                            int component,
                                            const std::string& ice_ufrag,
                                            const std::string& ice_pwd,

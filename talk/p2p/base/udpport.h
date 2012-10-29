@@ -28,69 +28,7 @@
 #ifndef TALK_P2P_BASE_UDPPORT_H_
 #define TALK_P2P_BASE_UDPPORT_H_
 
-#include <string>
-
-#include "talk/p2p/base/port.h"
-
-namespace talk_base {
-class Thread;
-class Network;
-class SocketAddress;
-}
-
-namespace cricket {
-
-// Communicates using a local UDP port.
-class UDPPort : public Port {
- public:
-  static UDPPort* Create(talk_base::Thread* thread,
-                         talk_base::PacketSocketFactory* factory,
-                         talk_base::Network* network,
-                         const talk_base::IPAddress& ip,
-                         int min_port, int max_port,
-                         const std::string& username,
-                         const std::string& password) {
-    UDPPort* port = new UDPPort(thread, factory, network,
-                                ip, min_port, max_port, username, password);
-    if (!port->Init()) {
-      delete port;
-      port = NULL;
-    }
-    return port;
-  }
-  virtual ~UDPPort();
-
-  virtual void PrepareAddress();
-  virtual Connection* CreateConnection(const Candidate& address,
-                                       CandidateOrigin origin);
-
-  virtual int SetOption(talk_base::Socket::Option opt, int value);
-  virtual int GetError();
-
- protected:
-  UDPPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
-          talk_base::Network* network, const talk_base::IPAddress& ip,
-          int min_port, int max_port,
-          const std::string& username, const std::string& password);
-  bool Init();
-
-  // Handles sending using the local UDP socket.
-  virtual int SendTo(const void* data, size_t size,
-                     const talk_base::SocketAddress& remote_addr, bool payload);
-
-  void OnAddressReady(talk_base::AsyncPacketSocket* socket,
-                      const talk_base::SocketAddress& address);
-
-  // Dispatches the given packet to the port or connection as appropriate.
-  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                    const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr);
-
- private:
-  talk_base::AsyncPacketSocket* socket_;
-  int error_;
-};
-
-}  // namespace cricket
+// StunPort will be handling UDPPort functionality.
+#include "talk/p2p/base/stunport.h"
 
 #endif  // TALK_P2P_BASE_UDPPORT_H_

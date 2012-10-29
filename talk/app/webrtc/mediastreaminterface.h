@@ -236,9 +236,19 @@ class MediaConstraintsInterface {
   static const char kMaxFrameRate[];  // maxFrameRate
   static const char kMinFrameRate[];  // minFrameRate
 
+  // Constraint keys for CreateOffer / CreateAnswer
+  // Specified by the W3C PeerConnection spec
+  static const char kOfferToReceiveVideo[];  // OfferToReceiveVideo
+  static const char kOfferToReceiveAudio[];  // OfferToReceiveAudio
+
+  // Constraints values.
+  static const char kTrue[];  // true
+  static const char kFalse[];  // false
+
   // Temporary pseudo-constraints used to enable DTLS-SRTP
   static const char kEnableDtlsSrtp[];  // Enable DTLS-SRTP
   static const char kValueTrue[];  // "true"
+
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface
   virtual ~MediaConstraintsInterface() {}

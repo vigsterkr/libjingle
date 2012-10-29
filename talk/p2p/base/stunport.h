@@ -31,9 +31,10 @@
 #include <string>
 
 #include "talk/base/asyncpacketsocket.h"
-#include "talk/p2p/base/udpport.h"
+#include "talk/p2p/base/port.h"
 #include "talk/p2p/base/stunrequest.h"
 
+// TODO(mallinath) - Rename stunport.cc|h to udpport.cc|h.
 namespace talk_base {
 class AsyncResolver;
 class SignalThread;
@@ -42,7 +43,112 @@ class SignalThread;
 namespace cricket {
 
 // Communicates using the address on the outside of a NAT.
-class StunPort : public Port {
+class UDPPort : public Port {
+ public:
+  static UDPPort* Create(talk_base::Thread* thread,
+                         talk_base::Network* network,
+                         talk_base::AsyncPacketSocket* socket,
+                         const std::string& username,
+                         const std::string& password) {
+    UDPPort* port = new UDPPort(thread, network, socket, username, password);
+    if (!port->Init()) {
+      delete port;
+      port = NULL;
+    }
+    return port;
+  }
+
+  static UDPPort* Create(talk_base::Thread* thread,
+                         talk_base::PacketSocketFactory* factory,
+                         talk_base::Network* network,
+                         const talk_base::IPAddress& ip,
+                         int min_port, int max_port,
+                         const std::string& username,
+                         const std::string& password) {
+    UDPPort* port = new UDPPort(thread, factory, network,
+                                 ip, min_port, max_port,
+                                 username, password);
+    if (!port->Init()) {
+      delete port;
+      port = NULL;
+    }
+    return port;
+  }
+  virtual ~UDPPort();
+
+  talk_base::SocketAddress GetLocalAddress() const {
+    return socket_->GetLocalAddress();
+  }
+
+  const talk_base::SocketAddress& server_addr() const { return server_addr_; }
+  void set_server_addr(const talk_base::SocketAddress& addr) {
+    server_addr_ = addr;
+  }
+
+  const talk_base::SocketAddress& server_addr2() const { return server_addr2_; }
+  void set_server_addr2(const talk_base::SocketAddress& addr) {
+    server_addr2_ = addr;
+  }
+
+  virtual void PrepareAddress();
+
+  virtual Connection* CreateConnection(const Candidate& address,
+                                       CandidateOrigin origin);
+  virtual int SetOption(talk_base::Socket::Option opt, int value);
+  virtual int GetError();
+
+  virtual bool HandleIncomingPacket(
+      talk_base::AsyncPacketSocket* socket, const char* data, size_t size,
+      const talk_base::SocketAddress& remote_addr) {
+    // All packets given to UDP port will be consumed.
+    OnReadPacket(socket, data, size, remote_addr);
+    return true;
+  }
+
+ protected:
+  UDPPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
+          talk_base::Network* network, const talk_base::IPAddress& ip,
+          int min_port, int max_port,
+          const std::string& username, const std::string& password);
+
+  UDPPort(talk_base::Thread* thread, talk_base::Network* network,
+          talk_base::AsyncPacketSocket* socket,
+          const std::string& username, const std::string& password);
+
+  bool Init();
+
+  virtual int SendTo(const void* data, size_t size,
+                     const talk_base::SocketAddress& addr, bool payload);
+
+  void OnLocalAddressReady(talk_base::AsyncPacketSocket* socket,
+                           const talk_base::SocketAddress& address);
+  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                    const char* data, size_t size,
+                    const talk_base::SocketAddress& remote_addr);
+
+  // This method will send STUN binding request if STUN server address is set.
+  void MaybePrepareStunCandidate();
+
+  void SendStunBindingRequest();
+
+ private:
+  // DNS resolution of the STUN server.
+  void ResolveStunAddress();
+  void OnResolveResult(talk_base::SignalThread* thread);
+  // Sends STUN requests to the server.
+  void OnSendPacket(const void* data, size_t size, StunRequest* req);
+
+  talk_base::SocketAddress server_addr_;
+  talk_base::SocketAddress server_addr2_;
+  StunRequestManager requests_;
+  talk_base::AsyncPacketSocket* socket_;
+  int error_;
+  talk_base::AsyncResolver* resolver_;
+
+  friend class StunBindingRequest;
+};
+
+class StunPort : public UDPPort {
  public:
   static StunPort* Create(talk_base::Thread* thread,
                           talk_base::PacketSocketFactory* factory,
@@ -61,65 +167,25 @@ class StunPort : public Port {
     }
     return port;
   }
-  virtual ~StunPort();
 
-  talk_base::SocketAddress GetLocalAddress() const {
-    return socket_->GetLocalAddress();
+  virtual ~StunPort() {}
+
+  virtual void PrepareAddress() {
+    SendStunBindingRequest();
   }
-
-  const talk_base::SocketAddress& server_addr() const { return server_addr_; }
-  void set_server_addr(const talk_base::SocketAddress& addr) {
-    server_addr_ = addr;
-  }
-
-  const talk_base::SocketAddress& server_addr2() const { return server_addr2_; }
-  void set_server_addr2(const talk_base::SocketAddress& addr) {
-    server_addr2_ = addr;
-  }
-
-  virtual void PrepareAddress();
-
-  // This will contact the secondary server and signal another candidate
-  // address for this port (which may be the same as the first address).
-  void PrepareSecondaryAddress();
-
-  virtual Connection* CreateConnection(const Candidate& address,
-                                       CandidateOrigin origin);
-  virtual int SetOption(talk_base::Socket::Option opt, int value);
-  virtual int GetError();
 
  protected:
   StunPort(talk_base::Thread* thread, talk_base::PacketSocketFactory* factory,
            talk_base::Network* network, const talk_base::IPAddress& ip,
            int min_port, int max_port,
            const std::string& username, const std::string& password,
-           const talk_base::SocketAddress& server_addr);
-  bool Init();
-
-  virtual int SendTo(const void* data, size_t size,
-                     const talk_base::SocketAddress& addr, bool payload);
-
-  void OnAddressReady(talk_base::AsyncPacketSocket* socket,
-                      const talk_base::SocketAddress& address);
-  void OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                    const char* data, size_t size,
-                    const talk_base::SocketAddress& remote_addr);
-
- private:
-  // DNS resolution of the STUN server.
-  void ResolveStunAddress();
-  void OnResolveResult(talk_base::SignalThread* thread);
-  // Sends STUN requests to the server.
-  void OnSendPacket(const void* data, size_t size, StunRequest* req);
-
-  talk_base::SocketAddress server_addr_;
-  talk_base::SocketAddress server_addr2_;
-  StunRequestManager requests_;
-  talk_base::AsyncPacketSocket* socket_;
-  int error_;
-  talk_base::AsyncResolver* resolver_;
-
-  friend class StunPortBindingRequest;
+           const talk_base::SocketAddress& server_address)
+     : UDPPort(thread, factory, network, ip, min_port, max_port, username,
+               password) {
+    // UDPPort will set these to local udp, updating these to STUN.
+    set_type(STUN_PORT_TYPE);
+    set_server_addr(server_address);
+  }
 };
 
 }  // namespace cricket

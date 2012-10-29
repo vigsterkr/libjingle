@@ -138,11 +138,34 @@ bool StringToProto(const char* value, ProtocolType* proto) {
   return false;
 }
 
+Port::Port(talk_base::Thread* thread, talk_base::Network* network,
+           const talk_base::IPAddress& ip,
+           const std::string& username_fragment, const std::string& password)
+    : thread_(thread),
+      factory_(NULL),
+      type_preference_(0),
+      network_(network),
+      ip_(ip),
+      min_port_(0),
+      max_port_(0),
+      component_(ICE_CANDIDATE_COMPONENT_DEFAULT),
+      generation_(0),
+      ice_username_fragment_(username_fragment),
+      password_(password),
+      lifetime_(LT_PRESTART),
+      enable_port_packets_(false),
+      ice_protocol_(ICEPROTO_GOOGLE),
+      role_(ROLE_UNKNOWN),
+      tiebreaker_(0),
+      shared_socket_(true) {
+  Construct();
+}
+
 Port::Port(talk_base::Thread* thread, const std::string& type,
            const uint32 preference, talk_base::PacketSocketFactory* factory,
            talk_base::Network* network, const talk_base::IPAddress& ip,
-           int min_port, int max_port,
-           const std::string& username_fragment, const std::string& password)
+           int min_port, int max_port, const std::string& username_fragment,
+           const std::string& password)
     : thread_(thread),
       factory_(factory),
       type_(type),
@@ -159,8 +182,13 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       enable_port_packets_(false),
       ice_protocol_(ICEPROTO_GOOGLE),
       role_(ROLE_UNKNOWN),
-      tiebreaker_(0) {
+      tiebreaker_(0),
+      shared_socket_(false) {
   ASSERT(factory_ != NULL);
+  Construct();
+}
+
+void Port::Construct() {
   // If the username_fragment and password are empty, we should just create one.
   if (ice_username_fragment_.empty()) {
     ASSERT(password_.empty());
@@ -211,14 +239,16 @@ std::string Port::ComputeFoundation(
 void Port::AddAddress(const talk_base::SocketAddress& address,
                       const talk_base::SocketAddress& base_address,
                       const std::string& protocol,
+                      const std::string& type,
+                      uint32 type_preference,
                       bool final) {
   Candidate c;
   c.set_id(talk_base::CreateRandomString(8));
   c.set_component(component_);
-  c.set_type(type_);
+  c.set_type(type);
   c.set_protocol(protocol);
   c.set_address(address);
-  c.set_priority(c.GetPriority(type_preference_));
+  c.set_priority(c.GetPriority(type_preference));
   c.set_username(username_fragment());
   c.set_password(password_);
   c.set_network_name(network_->name());
@@ -693,9 +723,11 @@ class ConnectionRequest : public StunRequest {
     request->AddAttribute(
         new StunByteStringAttribute(STUN_ATTR_USERNAME, username));
 
+    // Disabling golden-ping since it breaks Android clients. b/7423258
+    // TODO(thaloun): Reenable conditionally for remote clients that support it.
     // connection_ already holds this ping, so subtract one from count.
-    request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_RETRANSMIT_COUNT,
-        connection_->pings_since_last_response_.size() - 1));
+    // request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_RETRANSMIT_COUNT,
+    //    connection_->pings_since_last_response_.size() - 1));
 
     // Adding ICE-specific attributes to the STUN request message.
     if (connection_->port()->IceProtocol() == ICEPROTO_RFC5245) {

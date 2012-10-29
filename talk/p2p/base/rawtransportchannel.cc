@@ -165,11 +165,6 @@ void RawTransportChannel::OnPortReady(
 
   if (port->Type() == STUN_PORT_TYPE) {
     stun_port_ = static_cast<StunPort*>(port);
-
-#if defined(FEATURE_ENABLE_STUN_CLASSIFICATION)
-    // We need a secondary address to determine the NAT type.
-    stun_port_->PrepareSecondaryAddress();
-#endif
   } else if (port->Type() == RELAY_PORT_TYPE) {
     relay_port_ = static_cast<RelayPort*>(port);
   } else {

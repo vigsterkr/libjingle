@@ -100,10 +100,14 @@ void PortAllocatorSessionMuxer::OnPortDestroyed(PortInterface* port) {
 
 void PortAllocatorSessionMuxer::OnSessionProxyDestroyed(
     PortAllocatorSession* proxy) {
+
   std::vector<PortAllocatorSessionProxy*>::iterator it =
       std::find(session_proxies_.begin(), session_proxies_.end(), proxy);
-  if (it != session_proxies_.end())
+  if (it != session_proxies_.end()) {
+    worker_thread_->Clear(this, MSG_SEND_ALLOCATION_DONE);
+    worker_thread_->Clear(this, MSG_SEND_ALLOCATED_PORTS);
     session_proxies_.erase(it);
+  }
 
   if (session_proxies_.empty()) {
     // Destroy PortAllocatorSession and its associated muxer object if all

@@ -226,7 +226,8 @@ void RelayPort::AddExternalAddress(const ProtocolAddress& addr, bool final) {
       return;
     }
   }
-  AddAddress(addr.address, addr.address, proto_name, final);
+  AddAddress(addr.address, addr.address, proto_name,
+             RELAY_PORT_TYPE, ICE_TYPE_PREFERENCE_RELAY, final);
 }
 
 void RelayPort::SetReady() {

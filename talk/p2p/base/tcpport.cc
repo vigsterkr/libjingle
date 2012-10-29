@@ -114,13 +114,14 @@ void TCPPort::PrepareAddress() {
     if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND ||
         socket_->GetState() == talk_base::AsyncPacketSocket::STATE_CLOSED)
       AddAddress(socket_->GetLocalAddress(), socket_->GetLocalAddress(),
-                 "tcp", true);
+                 "tcp", LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST_TCP, true);
   } else {
     LOG_J(LS_INFO, this) << "Not listening due to firewall restrictions.";
     // Note: We still add the address, since otherwise the remote side won't
     // recognize our incoming TCP connections.
     AddAddress(talk_base::SocketAddress(ip(), 0),
-               talk_base::SocketAddress(ip(), 0), "tcp", true);
+               talk_base::SocketAddress(ip(), 0), "tcp",
+               LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST_TCP, true);
   }
 }
 
@@ -204,7 +205,9 @@ void TCPPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
 
 void TCPPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
                              const talk_base::SocketAddress& address) {
-  AddAddress(address, address, "tcp", true);
+  AddAddress(address, address, "tcp",
+             LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST_TCP,
+             true);
 }
 
 TCPConnection::TCPConnection(TCPPort* port, const Candidate& candidate,

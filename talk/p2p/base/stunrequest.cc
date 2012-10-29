@@ -122,11 +122,11 @@ bool StunRequestManager::CheckResponse(const char* data, size_t size) {
   // Parse the STUN message and continue processing as usual.
 
   talk_base::ByteBuffer buf(data, size);
-  StunMessage msg;
-  if (!msg.Read(&buf))
+  talk_base::scoped_ptr<StunMessage> response(iter->second->msg_->CreateNew());
+  if (!response->Read(&buf))
     return false;
 
-  return CheckResponse(&msg);
+  return CheckResponse(response.get());
 }
 
 StunRequest::StunRequest()

@@ -90,6 +90,12 @@ typedef std::map<int, TransportChannelProxy*> ChannelMap;
 class TransportProxy : public sigslot::has_slots<>,
                        public CandidateTranslator {
  public:
+  enum TransportState {
+    STATE_INIT,
+    STATE_CONNECTING,
+    STATE_NEGOTIATED
+  };
+
   TransportProxy(
       const std::string& sid,
       const std::string& content_name,
@@ -117,6 +123,7 @@ class TransportProxy : public sigslot::has_slots<>,
   Transport* impl() const { return transport_->get(); }
 
   std::string type() const;
+  TransportState state() const { return state_; }
   bool negotiated() const { return state_ == STATE_NEGOTIATED; }
   const Candidates& sent_candidates() const { return sent_candidates_; }
   const Candidates& unsent_candidates() const { return unsent_candidates_; }
@@ -169,12 +176,6 @@ class TransportProxy : public sigslot::has_slots<>,
                    const std::vector<Candidate>&> SignalCandidatesReady;
 
  private:
-  enum TransportState {
-    STATE_INIT,
-    STATE_CONNECTING,
-    STATE_NEGOTIATED
-  };
-
   TransportChannelProxy* GetChannelProxy(int component) const;
   TransportChannelProxy* GetChannelProxyByName(const std::string& name) const;
   void ReplaceChannelProxyImpl(TransportChannelProxy* channel_proxy,

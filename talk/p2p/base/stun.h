@@ -68,9 +68,6 @@ enum StunAttributeType {
   STUN_ATTR_RETRANSMIT_COUNT      = 0xFF00   // UInt32
 };
 
-
-
-
 // These are the types of the values associated with the attributes above.
 // This allows us to perform some basic validation when reading or adding
 // attributes. Note that these values are for our own use, and not defined in
@@ -186,6 +183,7 @@ class StunMessage {
                                        const std::string& password);
   // Adds a MESSAGE-INTEGRITY attribute that is valid for the current message.
   bool AddMessageIntegrity(const std::string& password);
+  bool AddMessageIntegrity(const char* key, size_t keylen);
 
   // Verifies that a given buffer is STUN by checking for a correct FINGERPRINT.
   static bool ValidateFingerprint(const char* data, size_t size);
@@ -200,6 +198,9 @@ class StunMessage {
   // Writes this object into a STUN packet. The return value indicates whether
   // this was successful.
   bool Write(talk_base::ByteBuffer* buf) const;
+
+  // Creates an empty message. Overridable by derived classes.
+  virtual StunMessage* CreateNew() const { return new StunMessage(); }
 
  protected:
   // Verifies that the given attribute is allowed for this message.
@@ -484,6 +485,12 @@ int GetStunResponseType(int request_type);
 // Returns -1 if |request_type| is not a valid request type.
 int GetStunErrorResponseType(int request_type);
 
+// Returns whether a given response is a success type.
+bool IsStunResponseType(int response_type);
+
+// Returns whether a given response is an error type.
+bool IsStunErrorResponseType(int response_type);
+
 // TODO: Move the TURN/ICE stuff below out to separate files.
 extern const char TURN_MAGIC_COOKIE_VALUE[4];
 
@@ -500,7 +507,7 @@ enum RelayMessageType {
   STUN_SEND_REQUEST                 = 0x0004,
   STUN_SEND_RESPONSE                = 0x0104,
   STUN_SEND_ERROR_RESPONSE          = 0x0114,
-  STUN_DATA_INDICATION              = 0x0115
+  STUN_DATA_INDICATION              = 0x0115,
 };
 
 // "GTURN"-specific STUN attributes.
@@ -512,7 +519,7 @@ enum RelayAttributeType {
   STUN_ATTR_DESTINATION_ADDRESS   = 0x0011,  // Address
   STUN_ATTR_SOURCE_ADDRESS2       = 0x0012,  // Address
   STUN_ATTR_DATA                  = 0x0013,  // ByteString
-  STUN_ATTR_OPTIONS               = 0x8001   // UInt32
+  STUN_ATTR_OPTIONS               = 0x8001,  // UInt32
 };
 
 // A "GTURN" STUN message.
@@ -530,6 +537,51 @@ class RelayMessage : public StunMessage {
       default: return StunMessage::GetAttributeValueType(type);
     }
   }
+  virtual StunMessage* CreateNew() const { return new RelayMessage(); }
+};
+
+// Defined in TURN RFC 5766.
+enum TurnMessageType {
+  TURN_REFRESH_REQUEST              = 0x0004,
+  TURN_SEND_INDICATION              = 0x0006,
+  TURN_DATA_INDICATION              = 0x0007,
+  TURN_CREATE_PERMISSION_REQUEST    = 0x0008,
+  TURN_CHANNEL_BIND_REQUEST         = 0x0009
+};
+
+enum TurnAttributeType {
+  STUN_ATTR_CHANNEL_NUMBER        = 0x000C,  // UInt32
+  STUN_ATTR_TURN_LIFETIME         = 0x000d,  // UInt32
+  STUN_ATTR_XOR_PEER_ADDRESS      = 0x0012,  // XorAddress
+  // TODO(mallinath) - Uncomment after RelayAttributes are renamed.
+  // STUN_ATTR_DATA               = 0x0013,  // ByteString
+  STUN_ATTR_XOR_RELAYED_ADDRESS   = 0x0016,  // XorAddress
+  STUN_ATTR_EVEN_PORT             = 0x0018,  // ByteString, 1 byte.
+  STUN_ATTR_REQUESTED_TRANSPORT   = 0x0019,  // UInt32
+  STUN_ATTR_DONT_FRAGMENT         = 0x001A,  // No content, Length = 0
+  STUN_ATTR_RESERVATION_TOKEN     = 0x0022,  // ByteString, 8 bytes.
+  // TODO(mallinath) - Rename STUN_ATTR_TURN_LIFETIME to STUN_ATTR_LIFETIME and
+  // STUN_ATTR_TURN_DATA to STUN_ATTR_DATA. Also rename RelayMessage attributes
+  // by appending G to attribute name.
+};
+
+class TurnMessage : public StunMessage {
+ protected:
+  virtual StunAttributeValueType GetAttributeValueType(int type) const {
+    switch (type) {
+      case STUN_ATTR_CHANNEL_NUMBER:      return STUN_VALUE_UINT32;
+      case STUN_ATTR_TURN_LIFETIME:       return STUN_VALUE_UINT32;
+      case STUN_ATTR_XOR_PEER_ADDRESS:    return STUN_VALUE_XOR_ADDRESS;
+      case STUN_ATTR_DATA:                return STUN_VALUE_BYTE_STRING;
+      case STUN_ATTR_XOR_RELAYED_ADDRESS: return STUN_VALUE_XOR_ADDRESS;
+      case STUN_ATTR_EVEN_PORT:           return STUN_VALUE_BYTE_STRING;
+      case STUN_ATTR_REQUESTED_TRANSPORT: return STUN_VALUE_UINT32;
+      case STUN_ATTR_DONT_FRAGMENT:       return STUN_VALUE_BYTE_STRING;
+      case STUN_ATTR_RESERVATION_TOKEN:   return STUN_VALUE_BYTE_STRING;
+      default: return StunMessage::GetAttributeValueType(type);
+    }
+  }
+  virtual StunMessage* CreateNew() const { return new TurnMessage(); }
 };
 
 // RFC 5245 ICE STUN attributes.
@@ -552,6 +604,7 @@ class IceMessage : public StunMessage {
       default: return StunMessage::GetAttributeValueType(type);
     }
   }
+  virtual StunMessage* CreateNew() const { return new IceMessage(); }
 };
 
 }  // namespace cricket

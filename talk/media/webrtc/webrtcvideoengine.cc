@@ -2109,39 +2109,7 @@ bool WebRtcVideoMediaChannel::GetStats(VideoMediaInfo* info) {
 
 bool WebRtcVideoMediaChannel::SetCapturer(uint32 ssrc,
                                           VideoCapturer* capturer) {
-  if (ssrc == 0) {
-    // Allow ssrc 0 for legacy reasons. Let it mean if there is only one send
-    // stream set capturer for that stream. Alternative implementation is to
-    // set the capturer for all send streams. This might open up a can of worms
-    // though since this should be phased out.
-    LOG(LS_WARNING) << "Use of SSRC = 0 is deprecated when setting capturer."
-                    << "please provide the SSRC for the stream to set the"
-                    << "capturer.";
-    if (send_channels_.size() == 1) {
-      StreamParams* stream_params =
-          send_channels_.begin()->second->stream_params();
-      if (!stream_params) {
-        return false;
-      }
-      const uint32 default_ssrc = stream_params->first_ssrc();
-      LOG(LS_INFO) << "The SSRC of this call was:" << default_ssrc;
-      if (!default_ssrc) {
-        return false;
-      }
-      return SetCapturer(default_ssrc, capturer);
-    } else if (send_channels_.empty()) {
-      LOG(LS_WARNING) << "No send streams registered";
-      return false;
-    } else {
-      LOG(LS_WARNING) << "SSRC = 0 is ambiguous. Following local SSRCs have"
-                      << "been registered (which one correpsonds to 0?): ";
-      for (SendChannelMap::const_iterator iter = send_channels_.begin();
-           iter != send_channels_.end(); ++iter) {
-        LOG(LS_WARNING) << iter->second << ",";
-      }
-      return false;
-    }
-  }
+  ASSERT(ssrc != 0);
   if (!capturer) {
     return RemoveCapturer(ssrc);
   }

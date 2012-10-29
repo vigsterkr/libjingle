@@ -88,8 +88,13 @@ class WebRtcSession : public cricket::BaseSession,
 
   // Implements JsepInterface.
   virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
+  virtual SessionDescriptionInterface* CreateOffer(
+      const MediaConstraintsInterface* constraints);
   virtual SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
+      const SessionDescriptionInterface* offer);
+  virtual SessionDescriptionInterface* CreateAnswer(
+      const MediaConstraintsInterface* constraints,
       const SessionDescriptionInterface* offer);
   virtual bool StartIce(IceOptions options) { return true;}
   virtual bool SetLocalDescription(Action action,

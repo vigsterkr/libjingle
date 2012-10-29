@@ -41,9 +41,6 @@
 #include "talk/p2p/base/candidate.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/port.h"
-#include "talk/p2p/base/relayport.h"
-#include "talk/p2p/base/stunport.h"
-#include "talk/p2p/base/udpport.h"
 #include "talk/session/media/mediasession.h"
 #include "talk/session/media/mediasessionclient.h"
 
@@ -58,7 +55,9 @@ using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
 using cricket::MediaContentDescription;
 using cricket::MediaType;
 using cricket::NS_JINGLE_ICE_UDP;
+using cricket::SsrcGroup;
 using cricket::StreamParams;
+using cricket::StreamParamsVec;
 using cricket::TransportDescription;
 using cricket::TransportOptions;
 using cricket::TransportInfo;
@@ -96,8 +95,13 @@ static const char kAttributeMid[] = "mid";
 static const char kAttributeRtcpMux[] = "rtcp-mux";
 static const char kAttributeSsrc[] = "ssrc";
 static const char kSsrcAttributeCname[] = "cname";
+static const char kSsrcAttributeMsid[] = "msid";
+static const char kDefaultMsid[] = "default";
+static const char kMsidAppdataAudio[] = "a";
+static const char kMsidAppdataVideo[] = "v";
 static const char kSsrcAttributeMslabel[] = "mslabel";
 static const char kSSrcAttributeLabel[] = "label";
+static const char kAttributeSsrcGroup[] = "ssrc-group";
 static const char kAttributeCrypto[] = "crypto";
 static const char kAttributeCandidate[] = "candidate";
 static const char kAttributeCandidateTyp[] = "typ";
@@ -155,13 +159,27 @@ static const char kDefaultPort[] = "1";
 // RFC 3556
 static const char kApplicationSpecificMaximum[] = "AS";
 
-// Default Video resolution.
-// TODO: Implement negotiation of video resolution.
-static const int kDefaultVideoWidth = 640;
-static const int kDefaultVideoHeight = 480;
-static const int kDefaultVideoFrameRate = 30;
-static const int kDefaultVideoPreference = 0;
 static const int kDefaultVideoClockrate = 90000;
+
+struct SsrcInfo {
+  SsrcInfo()
+      : msid_identifier(kDefaultMsid),
+        // TODO(ronghuawu): What should we do if the appdata doesn't appear?
+        // Create random string (which will be used as track label later)?
+        msid_appdata(talk_base::CreateRandomString(8)) {
+  }
+  uint32 ssrc_id;
+  std::string cname;
+  std::string msid_identifier;
+  std::string msid_appdata;
+
+  // For backward compatibility.
+  // TODO(ronghuawu): Remove below 2 fields once all the clients support msid.
+  std::string label;
+  std::string mslabel;
+};
+typedef std::vector<SsrcInfo> SsrcInfoVec;
+typedef std::vector<SsrcGroup> SsrcGroupVec;
 
 // Serializes the passed in SessionDescription to a SDP string.
 // desc - The SessionDescription object to be serialized.
@@ -200,7 +218,9 @@ static bool ParseContent(const std::string& message,
                          TransportDescription* transport,
                          std::vector<JsepIceCandidate*>* candidates);
 static bool ParseSsrcAttribute(const std::string& line,
-                               MediaContentDescription* media_desc);
+                               SsrcInfoVec* ssrc_infos);
+static bool ParseSsrcGroupAttribute(const std::string& line,
+                                    SsrcGroupVec* ssrc_groups);
 static bool ParseCryptoAttribute(const std::string& line,
                                  MediaContentDescription* media_desc);
 static bool ParseRtpmapAttribute(const std::string& line,
@@ -356,6 +376,71 @@ static bool GetValue(const std::string& message, const std::string& attribute,
     return false;
   }
   return true;
+}
+
+// Get the track's position within the MediaStream it belongs to.
+// For the first track, the function will return 0.
+static int GetTrackPosition(const StreamParams& track,
+                            const StreamParamsVec& tracks) {
+  int position = -1;
+  for (size_t i = 0; i < tracks.size(); ++i) {
+    if (tracks[i].sync_label == track.sync_label) {
+      ++position;
+    }
+    if (tracks[i].name == track.name) {
+      // Found
+      break;
+    }
+  }
+  return position;
+}
+
+void CreateTracksFromSsrcInfos(const SsrcInfoVec& ssrc_infos,
+                               StreamParamsVec* tracks) {
+  ASSERT(tracks != NULL);
+  for (SsrcInfoVec::const_iterator ssrc_info = ssrc_infos.begin();
+       ssrc_info != ssrc_infos.end(); ++ssrc_info) {
+    if (ssrc_info->cname.empty()) {
+      continue;
+    }
+
+    std::string sync_label;
+    std::string name;
+    if (ssrc_info->msid_identifier == kDefaultMsid &&
+        !ssrc_info->mslabel.empty()) {
+      // If there's no msid and there's mslabel, we consider this is a sdp from
+      // a older version of client that doesn't support msid.
+      // In that case, we use the mslabel and label to construct the track.
+      sync_label = ssrc_info->mslabel;
+      name = ssrc_info->label;
+    } else {
+      sync_label = ssrc_info->msid_identifier;
+      // Combine msid_identifier and msid_appdata to make the label name unique
+      // across the media streams.
+      name = ssrc_info->msid_identifier;
+      name.append(ssrc_info->msid_appdata);
+    }
+    if (sync_label.empty() || name.empty()) {
+      ASSERT(false);
+      continue;
+    }
+
+    StreamParamsVec::iterator track = tracks->begin();
+    for (; track != tracks->end(); ++track) {
+      if (track->name == name) {
+        break;
+      }
+    }
+    if (track == tracks->end()) {
+      // If we don't find an existing track, create a new one.
+      tracks->push_back(StreamParams());
+      track = tracks->end() - 1;
+    }
+    track->add_ssrc(ssrc_info->ssrc_id);
+    track->cname = ssrc_info->cname;
+    track->sync_label = sync_label;
+    track->name = name;
+  }
 }
 
 // RFC 5245
@@ -912,28 +997,62 @@ void BuildMediaDescription(const ContentInfo* content_info,
   // a=rtpmap:<payload type> <encoding name>/<clock rate>
   // [/<encodingparameters>]
   BuildRtpMap(media_desc, media_type, message);
-
-  // RFC 5576 and draft-alvestrand-rtcweb-msid
-  // a=ssrc:<ssrc-id> <attribute>:<value>
-  // a=ssrc:<ssrc-id> cname:<value>
-  // draft-alvestrand-rtcweb-mid-01
-  // a=ssrc:<ssrc-id> mslabel:<value>
-
-  // The label isn't yet defined.
-  // a=ssrc:<ssrc-id> label:<value>
-  for (cricket::StreamParamsVec::const_iterator it =
-           media_desc->streams().begin();
-       it != media_desc->streams().end(); ++it) {
+  for (StreamParamsVec::const_iterator track = media_desc->streams().begin();
+       track != media_desc->streams().end(); ++track) {
     // Require that the track belongs to a media stream,
     // ie the sync_label is set. This extra check is necessary since the
     // MediaContentDescription always contains a streamparam with an ssrc even
     // if no track or media stream have been created.
-    if (it->sync_label.empty()) continue;
+    if (track->sync_label.empty()) continue;
 
-    AddSsrcLine(it->first_ssrc(), kSsrcAttributeCname, it->cname, message);
-    AddSsrcLine(it->first_ssrc(), kSsrcAttributeMslabel,
-                it->sync_label, message);
-    AddSsrcLine(it->first_ssrc(), kSSrcAttributeLabel, it->name, message);
+    // Build the ssrc-group lines.
+    for (size_t i = 0; i < track->ssrc_groups.size(); ++i) {
+      // RFC 5576
+      // a=ssrc-group:<semantics> <ssrc-id> ...
+      if (track->ssrc_groups[i].ssrcs.empty()) {
+        continue;
+      }
+      std::ostringstream os;
+      InitAttrLine(kAttributeSsrcGroup, &os);
+      os << kSdpDelimiterColon << track->ssrc_groups[i].semantics;
+      std::vector<uint32>::const_iterator ssrc =
+          track->ssrc_groups[i].ssrcs.begin();
+      for (; ssrc != track->ssrc_groups[i].ssrcs.end(); ++ssrc) {
+        os << kSdpDelimiterSpace << talk_base::ToString<uint32>(*ssrc);
+      }
+      AddLine(os.str(), message);
+    }
+
+    // Build the ssrc lines for each ssrc.
+    for (size_t i = 0; i < track->ssrcs.size(); ++i) {
+      uint32 ssrc = track->ssrcs[i];
+      // RFC 5576
+      // a=ssrc:<ssrc-id> cname:<value>
+      AddSsrcLine(ssrc, kSsrcAttributeCname,
+                  track->cname, message);
+
+      // draft-alvestrand-mmusic-msid-00
+      // a=ssrc:<ssrc-id> msid:identifier [appdata]
+      int position = GetTrackPosition(*track, media_desc->streams());
+      ASSERT(position >= 0);
+      std::string appdata =
+          (type == kMediaTypeAudio) ? kMsidAppdataAudio : kMsidAppdataVideo;
+      appdata.append(talk_base::ToString<int>(position));
+      std::ostringstream os;
+      InitAttrLine(kAttributeSsrc, &os);
+      os << kSdpDelimiterColon << ssrc << kSdpDelimiterSpace
+         << kSsrcAttributeMsid << kSdpDelimiterColon << track->sync_label
+         << kSdpDelimiterSpace << appdata;
+      AddLine(os.str(), message);
+
+      // TODO(ronghuawu): Remove below code which is for backward compatibility.
+      // draft-alvestrand-rtcweb-mid-01
+      // a=ssrc:<ssrc-id> mslabel:<value>
+      // The label isn't yet defined.
+      // a=ssrc:<ssrc-id> label:<value>
+      AddSsrcLine(ssrc, kSsrcAttributeMslabel, track->sync_label, message);
+      AddSsrcLine(ssrc, kSSrcAttributeLabel, track->name, message);
+    }
   }
 }
 
@@ -1330,6 +1449,14 @@ bool ParseContent(const std::string& message,
   Candidates candidates_orig;
   std::string line;
   std::string mline_id;
+  // Tracks created out of the ssrc attributes.
+  StreamParamsVec tracks;
+  SsrcInfoVec ssrc_infos;
+  SsrcGroupVec ssrc_groups;
+
+  MediaContentDescription* media_desc =
+      static_cast<MediaContentDescription*>(content);
+
   // Loop until the next m line
   while (!IsLineType(message, kLineTypeMedia, *pos)) {
     if (!GetLine(message, pos, &line)) {
@@ -1340,8 +1467,17 @@ bool ParseContent(const std::string& message,
       }
     }
 
-    if (!content) {
-      // Unsupported media type, just skip it.
+    if (IsLineType(line, kLineTypeSessionBandwidth)) {
+      std::string bandwidth;
+      if (HasAttribute(line, kApplicationSpecificMaximum)) {
+        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth)) {
+          LOG_LINE_PARSING_ERROR(line);
+          return false;
+        } else {
+          media_desc->set_bandwidth(
+              talk_base::FromString<int>(bandwidth) * 1000);
+        }
+      }
       continue;
     }
 
@@ -1380,8 +1516,13 @@ bool ParseContent(const std::string& message,
       continue;
     } else if (HasAttribute(line, kAttributeRtcpMux)) {
       media_desc->set_rtcp_mux(true);
+    } else if (HasAttribute(line, kAttributeSsrcGroup)) {
+      if (!ParseSsrcGroupAttribute(line, &ssrc_groups)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
     } else if (HasAttribute(line, kAttributeSsrc)) {
-      if (!ParseSsrcAttribute(line, media_desc)) {
+      if (!ParseSsrcAttribute(line, &ssrc_infos)) {
         LOG_LINE_PARSING_ERROR(line);
         return false;
       }
@@ -1439,6 +1580,31 @@ bool ParseContent(const std::string& message,
       continue;
     }
   }
+
+  // Create tracks from the |ssrc_infos|.
+  CreateTracksFromSsrcInfos(ssrc_infos, &tracks);
+
+  // Add the ssrc group to the track.
+  for (SsrcGroupVec::iterator ssrc_group = ssrc_groups.begin();
+      ssrc_group != ssrc_groups.end(); ++ssrc_group) {
+    if (ssrc_group->ssrcs.empty()) {
+      continue;
+    }
+    uint32 ssrc = ssrc_group->ssrcs.front();
+    for (StreamParamsVec::iterator track = tracks.begin();
+         track != tracks.end(); ++track) {
+      if (track->has_ssrc(ssrc)) {
+        track->ssrc_groups.push_back(*ssrc_group);
+      }
+    }
+  }
+
+  // Add the new tracks to the |media_desc|.
+  for (StreamParamsVec::iterator track = tracks.begin();
+       track != tracks.end(); ++track) {
+    media_desc->AddStream(*track);
+  }
+
   // RFC 5245
   // Update the candidates with the media level "ice-pwd" and "ice-ufrag".
   for (Candidates::iterator it = candidates_orig.begin();
@@ -1453,9 +1619,8 @@ bool ParseContent(const std::string& message,
   return true;
 }
 
-bool ParseSsrcAttribute(const std::string& line,
-                        MediaContentDescription* media_desc) {
-  ASSERT(media_desc != NULL);
+bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
+  ASSERT(ssrc_infos != NULL);
   // RFC 5576
   // a=ssrc:<ssrc-id> <attribute>
   // a=ssrc:<ssrc-id> <attribute>:<value>
@@ -1474,13 +1639,6 @@ bool ParseSsrcAttribute(const std::string& line,
   }
   uint32 ssrc_id = talk_base::FromString<uint32>(ssrc_id_s);
 
-  // RFC 5576
-  // cname:<value>
-  // draft-alvestrand-rtcweb-mid-01
-  // mslabel:<value>
-
-  // The label isn't yet defined.
-  // label:<value>
   std::string attribute;
   std::string value;
   if (!SplitByDelimiter(field2, kSdpDelimiterColon,
@@ -1488,34 +1646,71 @@ bool ParseSsrcAttribute(const std::string& line,
     return false;
   }
 
-  cricket::StreamParamsVec& streams = media_desc->mutable_streams();
-  StreamParams* new_stream_pointer = NULL;
-  bool found = false;
-  for (cricket::StreamParamsVec::iterator it = streams.begin();
-       it != streams.end(); ++it) {
-    if (it->has_ssrc(ssrc_id)) {
-      new_stream_pointer = &(*it);
-      found = true;
+  // Check if there's already an item for this |ssrc_id|. Create a new one if
+  // there isn't.
+  SsrcInfoVec::iterator ssrc_info = ssrc_infos->begin();
+  for (; ssrc_info != ssrc_infos->end(); ++ssrc_info) {
+    if (ssrc_info->ssrc_id == ssrc_id) {
       break;
     }
   }
-  if (!found) {
-    ASSERT(new_stream_pointer == NULL);
-    new_stream_pointer = new StreamParams();
-    new_stream_pointer->ssrcs.push_back(ssrc_id);
+  if (ssrc_info == ssrc_infos->end()) {
+    SsrcInfo info;
+    info.ssrc_id = ssrc_id;
+    ssrc_infos->push_back(info);
+    ssrc_info = ssrc_infos->end() - 1;
   }
-  if (attribute.compare(kSsrcAttributeCname) == 0) {
-    new_stream_pointer->cname = value;
-  } else if (attribute.compare(kSsrcAttributeMslabel) == 0) {
-    new_stream_pointer->sync_label = value;
-  } else if (attribute.compare(kSSrcAttributeLabel) == 0) {
-    new_stream_pointer->name = value;
+
+  // Store the info to the |ssrc_info|.
+  if (attribute == kSsrcAttributeCname) {
+    // RFC 5576
+    // cname:<value>
+    ssrc_info->cname = value;
+  } else if (attribute == kSsrcAttributeMsid) {
+    // draft-alvestrand-mmusic-msid-00
+    // "msid:" identifier [ " " appdata ]
+    std::vector<std::string> fields;
+    talk_base::split(value, kSdpDelimiterSpace, &fields);
+    if (fields.size() < 1 || fields.size() > 2) {
+      return false;
+    }
+    ssrc_info->msid_identifier = fields[0];
+    if (fields.size() == 2) {
+      ssrc_info->msid_appdata = fields[1];
+    }
+  } else if (attribute == kSsrcAttributeMslabel) {
+    // draft-alvestrand-rtcweb-mid-01
+    // mslabel:<value>
+    ssrc_info->mslabel = value;
+  } else if (attribute == kSSrcAttributeLabel) {
+    // The label isn't defined.
+    // label:<value>
+    ssrc_info->label = value;
   }
-  if (!found) {
-    // This is a new stream.
-    media_desc->AddStream(*new_stream_pointer);
-    delete new_stream_pointer;
+  return true;
+}
+
+bool ParseSsrcGroupAttribute(const std::string& line,
+                             SsrcGroupVec* ssrc_groups) {
+  ASSERT(ssrc_groups != NULL);
+  // RFC 5576
+  // a=ssrc-group:<semantics> <ssrc-id> ...
+  std::vector<std::string> fields;
+  talk_base::split(line.substr(kLinePrefixLength),
+                   kSdpDelimiterSpace, &fields);
+  if (fields.size() < 2) {
+    return false;
   }
+  std::string semantics;
+  if (!GetValue(fields[0], kAttributeSsrcGroup, &semantics)) {
+    return false;
+  }
+  std::vector<uint32> ssrcs;
+  for (size_t i = 1; i < fields.size(); ++i) {
+    uint32 ssrc = talk_base::FromString<uint32>(fields[i]);
+    ssrcs.push_back(ssrc);
+  }
+  ssrc_groups->push_back(SsrcGroup(semantics, ssrcs));
   return true;
 }
 
@@ -1568,12 +1763,14 @@ bool ParseRtpmapAttribute(const std::string& line,
   if (media_type == cricket::MEDIA_TYPE_VIDEO) {
     VideoContentDescription* video_desc =
         static_cast<VideoContentDescription*>(media_desc);
-    // TODO: We will send resolution in SDP. For now, use VGA.
-    video_desc->AddCodec(cricket::VideoCodec(payload_type, encoding_name,
-                                             kDefaultVideoWidth,
-                                             kDefaultVideoHeight,
-                                             kDefaultVideoFrameRate,
-                                             kDefaultVideoPreference));
+    // TODO: We will send resolution in SDP. For now use
+    // JsepSessionDescription::kMaxVideoCodecWidth and kMaxVideoCodecHeight.
+    video_desc->AddCodec(cricket::VideoCodec(
+        payload_type, encoding_name,
+        JsepSessionDescription::kMaxVideoCodecWidth,
+        JsepSessionDescription::kMaxVideoCodecHeight,
+        JsepSessionDescription::kDefaultVideoCodecFramerate,
+        JsepSessionDescription::kDefaultVideoCodecPreference));
   } else if (media_type == cricket::MEDIA_TYPE_AUDIO) {
     // RFC 4566
     // For audio streams, <encoding parameters> indicates the number

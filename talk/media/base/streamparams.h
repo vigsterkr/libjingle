@@ -49,7 +49,6 @@ namespace cricket {
 
 extern const char kFecSsrcGroupSemantics[];
 extern const char kFidSsrcGroupSemantics[];
-extern const char kSimSsrcGroupSemantics[];
 extern const char kRtxSsrcGroupSemantics[];
 
 struct SsrcGroup {

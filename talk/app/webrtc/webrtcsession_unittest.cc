@@ -28,6 +28,7 @@
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
+#include "talk/app/webrtc/test/fakeconstraints.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/fakenetwork.h"
 #include "talk/base/firewallsocketserver.h"
@@ -59,6 +60,7 @@ using cricket::TransportInfo;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
 using webrtc::IceCandidateCollection;
+using webrtc::FakeConstraints;
 using webrtc::MediaHints;
 using webrtc::JsepInterface;
 using webrtc::JsepSessionDescription;
@@ -86,6 +88,7 @@ static const char kMediaContentName0[] = "audio";
 
 // Media index of candidates belonging to the second media content.
 static const int kMediaContentIndex1 = 1;
+static const char kMediaContentName1[] = "video";
 
 static const int kIceCandidatesTimeout = 10000;
 
@@ -100,31 +103,6 @@ static void InjectAfter(const std::string& line,
   talk_base::replace_substrs(line.c_str(), line.length(),
                              tmp.c_str(), tmp.length(), message);
 }
-
-class FakeConstraints : public webrtc::MediaConstraintsInterface {
- public:
-  virtual const Constraints& GetMandatory() const {
-    return mandatory_;
-  }
-
-  virtual const Constraints& GetOptional() const {
-    return optional_;
-  }
-
-  void AddMandatory(const std::string& key, const std::string& value) {
-    mandatory_.push_back(Constraint(key, value));
-  }
-
-  void AddOptional(const std::string& key, const std::string& value) {
-    optional_.push_back(Constraint(key, value));
-  }
-
-  virtual ~FakeConstraints() {}
-
- private:
-  std::vector<Constraint> mandatory_;
-  std::vector<Constraint> optional_;
-};
 
 class MockCandidateObserver : public webrtc::IceCandidateObserver {
  public:
@@ -180,15 +158,23 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
  public:
   FakeMediaStreamSignaling() :
     webrtc::MediaStreamSignaling(talk_base::Thread::Current(), this) {
+    options_.has_audio = false;
+    options_.has_video = false;
   }
 
   // Overrides GetMediaSessionOptions in MediaStreamSignaling.
-  // Instead of depending on MediaStreams this version of GetMediaSessionOptions
-  // returns the options decided by MediaSessionOptions set in one of the below
-  // UseOptions functions.
+  // This function returns MediaSessionOptions based on what UseOptions...
+  // function  that have been called previous to this call.
+  // The MediaSessionOptions.has_audio and MediaSessionOptions.had_video is true
+  // if |hints| request it to be true or if a track of the type have been added.
+  // This is the same behavior as the real  MediaStreamSignaling
+  // implementation.
   virtual cricket::MediaSessionOptions GetMediaSessionOptions(
         const MediaHints& hints) const {
-    return options_;
+    cricket::MediaSessionOptions options = options_;
+    options.has_audio = options_.has_audio || hints.has_audio();
+    options.has_video = options_.has_video || hints.has_video();
+    return options;
   }
 
   void UseOptionsWithStream1(bool bundle = false) {
@@ -196,6 +182,8 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
     options.bundle_enabled = bundle;
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack1, kStream1);
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack1, kStream1);
+    options.has_audio = true;
+    options.has_video = true;
     options_ = options;
   }
 
@@ -204,6 +192,8 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
     options.bundle_enabled = bundle;
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack2, kStream2);
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack2, kStream2);
+    options.has_audio = true;
+    options.has_video = true;
     options_ = options;
   }
 
@@ -213,11 +203,14 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack1, kStream1);
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack2, kStream2);
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack2, kStream2);
+    options.has_audio = true;
+    options.has_video = true;
     options_ = options;
   }
 
   void UseOptionsReceiveOnly() {
     cricket::MediaSessionOptions options;
+    options.has_audio = true;
     options.has_video = true;
     options_ = options;
   }
@@ -225,6 +218,7 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
   void UseOptionsAudioOnly() {
     cricket::MediaSessionOptions options;
     options.AddStream(cricket::MEDIA_TYPE_AUDIO, kAudioTrack2, kStream2);
+    options.has_audio = true;
     options.has_video = false;
     options_ = options;
   }
@@ -233,6 +227,7 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
     cricket::MediaSessionOptions options;
     options.AddStream(cricket::MEDIA_TYPE_VIDEO, kVideoTrack2, kStream2);
     options.has_audio = false;
+    options.has_video = true;
     options_ = options;
   }
 
@@ -286,7 +281,6 @@ class WebRtcSessionTest : public testing::Test {
         &mediastream_signaling_));
 
     EXPECT_TRUE(session_->Initialize(constraints_.get()));
-    mediastream_signaling_.UseOptionsReceiveOnly();
   }
 
   void InitWithDtmfCodec() {
@@ -444,9 +438,8 @@ class WebRtcSessionTest : public testing::Test {
   // Call mediastream_signaling_.UseOptionsWithStreamX() before this function
   // to decide which streams to create.
   void SetRemoteAndLocalSessionDescription() {
-    SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-    SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
-                                                                 offer);
+    SessionDescriptionInterface* offer = session_->CreateOffer(NULL);
+    SessionDescriptionInterface* answer = session_->CreateAnswer(NULL, offer);
     EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
     EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
   }
@@ -597,6 +590,15 @@ class WebRtcSessionTest : public testing::Test {
     const cricket::Transport* transport = session_->GetTransport(content_name);
     ASSERT_TRUE(transport != NULL);
     EXPECT_EQ(protocol, transport->protocol());
+  }
+
+  // Create a remote offer with audio and video content.
+  JsepSessionDescription* CreateRemoteOffer() {
+    cricket::MediaSessionOptions options;
+    options.has_audio = true;
+    options.has_video = true;
+    desc_factory_->set_secure(cricket::SEC_REQUIRED);
+    return CreateOfferSessionDescription(options);
   }
 
   cricket::FakeMediaEngine* media_engine_;
@@ -1056,7 +1058,7 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   candidate1.set_component(1);
   JsepIceCandidate ice_candidate1(kMediaContentName0, kMediaContentIndex0,
                                   candidate1);
-
+  mediastream_signaling_.UseOptionsWithStream1();
   SetRemoteAndLocalSessionDescription();
 
   EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate1));
@@ -1105,6 +1107,7 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
 TEST_F(WebRtcSessionTest, TestLocalCandidatesAddedToSessionDescription) {
   AddInterface(kClientAddr1);
   WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
   SetRemoteAndLocalSessionDescription();
 
   const SessionDescriptionInterface* local_desc = session_->local_description();
@@ -1273,6 +1276,189 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
   // and answer.
   ASSERT_TRUE((video_channel_ = media_engine_->GetVideoChannel(0)) != NULL);
   ASSERT_TRUE((voice_channel_ = media_engine_->GetVoiceChannel(0)) != NULL);
+}
+
+// Test that an offer contains the correct media content descriptions based on
+// the send streams when no constraints have been set.
+TEST_F(WebRtcSessionTest, CreateOfferWithoutConstraintsOrStreams) {
+  WebRtcSessionTest::Init();
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(NULL));
+  ASSERT_TRUE(offer != NULL);
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+}
+
+// Test that an offer contains the correct media content descriptions based on
+// the send streams when no constraints have been set.
+TEST_F(WebRtcSessionTest, CreateOfferWithoutConstraints) {
+  WebRtcSessionTest::Init();
+  // Test Audio only offer.
+  mediastream_signaling_.UseOptionsAudioOnly();
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+        session_->CreateOffer(NULL));
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(offer->description());
+  EXPECT_TRUE(content != NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+
+  // Test Audio / Video offer.
+  mediastream_signaling_.UseOptionsWithStream1();
+  offer.reset(session_->CreateOffer(NULL));
+  content = cricket::GetFirstAudioContent(offer->description());
+  EXPECT_TRUE(content != NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content != NULL);
+}
+
+// Test that an offer contains no media content descriptions if
+// kOfferToReceiveVideo and kOfferToReceiveAudio constraints are set to false.
+TEST_F(WebRtcSessionTest, CreateOfferWithConstraintsWithoutStreams) {
+  WebRtcSessionTest::Init();
+  webrtc::FakeConstraints constraints_no_receive;
+  constraints_no_receive.SetMandatoryReceiveAudio(false);
+  constraints_no_receive.SetMandatoryReceiveVideo(false);
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(&constraints_no_receive));
+  ASSERT_TRUE(offer != NULL);
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+}
+
+// Test that an offer contains only audio media content descriptions if
+// kOfferToReceiveAudio constraints are set to true.
+TEST_F(WebRtcSessionTest, CreateAudioOnlyOfferWithConstraints) {
+  WebRtcSessionTest::Init();
+  webrtc::FakeConstraints constraints_audio_only;
+  constraints_audio_only.SetMandatoryReceiveAudio(true);
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+        session_->CreateOffer(&constraints_audio_only));
+
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(offer->description());
+  EXPECT_TRUE(content != NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content == NULL);
+}
+
+// Test that an offer contains audio and video media content descriptions if
+// kOfferToReceiveAudio and kOfferToReceiveVideo constraints are set to true.
+TEST_F(WebRtcSessionTest, CreateOfferWithConstraints) {
+  WebRtcSessionTest::Init();
+  // Test Audio / Video offer.
+  webrtc::FakeConstraints constraints_audio_video;
+  constraints_audio_video.SetMandatoryReceiveAudio(true);
+  constraints_audio_video.SetMandatoryReceiveVideo(true);
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(&constraints_audio_video));
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(offer->description());
+
+  EXPECT_TRUE(content != NULL);
+  content = cricket::GetFirstVideoContent(offer->description());
+  EXPECT_TRUE(content != NULL);
+
+  // TODO(perkj): Should the direction be set to SEND_ONLY if
+  // The constraints is set to not receive audio or video but a track is added?
+}
+
+// Test that an answer contains the correct media content descriptions when no
+// constraints have been set.
+TEST_F(WebRtcSessionTest, CreateAnswerWithoutConstraintsOrStreams) {
+  WebRtcSessionTest::Init();
+  // Create a remote offer with audio and video content.
+  talk_base::scoped_ptr<JsepSessionDescription> offer(CreateRemoteOffer());
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+      session_->CreateAnswer(NULL, offer.get()));
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
+
+  content = cricket::GetFirstVideoContent(offer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
+}
+
+// Test that an answer contains the correct media content descriptions when no
+// constraints have been set.
+TEST_F(WebRtcSessionTest, CreateAnswerWithoutConstraints) {
+  WebRtcSessionTest::Init();
+  // Create a remote offer with audio and video content.
+  talk_base::scoped_ptr<JsepSessionDescription> offer(CreateRemoteOffer());
+
+  // Test with a stream with tracks.
+  mediastream_signaling_.UseOptionsWithStream1();
+  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+      session_->CreateAnswer(NULL, offer.get()));
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
+
+  content = cricket::GetFirstVideoContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
+}
+
+// Test that an answer contains the correct media content descriptions when
+// constraints have been set but no stream is sent.
+TEST_F(WebRtcSessionTest, CreateAnswerWithConstraintsWithoutStreams) {
+  WebRtcSessionTest::Init();
+  // Create a remote offer with audio and video content.
+  talk_base::scoped_ptr<JsepSessionDescription> offer(CreateRemoteOffer());
+
+  webrtc::FakeConstraints constraints_no_receive;
+  constraints_no_receive.SetMandatoryReceiveAudio(false);
+  constraints_no_receive.SetMandatoryReceiveVideo(false);
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+      session_->CreateAnswer(&constraints_no_receive, offer.get()));
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_TRUE(content->rejected);
+
+  content = cricket::GetFirstVideoContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_TRUE(content->rejected);
+}
+
+// Test that an answer contains the correct media content descriptions when
+// constraints have been set and streams are sent.
+TEST_F(WebRtcSessionTest, CreateAnswerWithConstraints) {
+  WebRtcSessionTest::Init();
+  // Create a remote offer with audio and video content.
+  talk_base::scoped_ptr<JsepSessionDescription> offer(CreateRemoteOffer());
+
+  webrtc::FakeConstraints constraints_no_receive;
+  constraints_no_receive.SetMandatoryReceiveAudio(false);
+  constraints_no_receive.SetMandatoryReceiveVideo(false);
+
+  // Test with a stream with tracks.
+  mediastream_signaling_.UseOptionsWithStream1();
+  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+      session_->CreateAnswer(&constraints_no_receive, offer.get()));
+
+  // TODO(perkj): Should the direction be set to SEND_ONLY?
+  const cricket::ContentInfo* content =
+      cricket::GetFirstAudioContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
+
+  // TODO(perkj): Should the direction be set to SEND_ONLY?
+  content = cricket::GetFirstVideoContent(answer->description());
+  ASSERT_TRUE(content != NULL);
+  EXPECT_FALSE(content->rejected);
 }
 
 // This test verifies the call setup when remote answer with audio only and
@@ -1804,3 +1990,36 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInLocalAnswer) {
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
                                             answer));
 }
+
+// This test verifies that WebRtcSession does not start candidate allocation
+// before SetLocalDescription is called.
+TEST_F(WebRtcSessionTest, TestIceStartAfterSetLocalDescriptionOnly) {
+  WebRtcSessionTest::Init();
+  SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
+  cricket::Candidate candidate;
+  candidate.set_component(1);
+  JsepIceCandidate ice_candidate(kMediaContentName0, kMediaContentIndex0,
+                                 candidate);
+  EXPECT_TRUE(offer->AddCandidate(&ice_candidate));
+  cricket::Candidate candidate1;
+  candidate1.set_component(1);
+  JsepIceCandidate ice_candidate1(kMediaContentName1, kMediaContentIndex1,
+                                  candidate1);
+  EXPECT_TRUE(offer->AddCandidate(&ice_candidate1));
+  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  ASSERT_TRUE(session_->GetTransportProxy("audio") != NULL);
+  ASSERT_TRUE(session_->GetTransportProxy("video") != NULL);
+
+  // Pump for 1 second and verify that no candidates are generated.
+  talk_base::Thread::Current()->ProcessMessages(1000);
+  EXPECT_TRUE(observer_.mline_0_candidates_.empty());
+  EXPECT_TRUE(observer_.mline_1_candidates_.empty());
+
+  SessionDescriptionInterface* answer =
+      session_->CreateAnswer(MediaHints(), offer);
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->GetTransportProxy("audio")->negotiated());
+  EXPECT_TRUE(session_->GetTransportProxy("video")->negotiated());
+  EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+}
+

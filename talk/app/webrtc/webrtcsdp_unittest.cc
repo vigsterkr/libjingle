@@ -37,9 +37,6 @@
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/p2p/base/constants.h"
-#include "talk/p2p/base/relayport.h"
-#include "talk/p2p/base/stunport.h"
-#include "talk/p2p/base/udpport.h"
 #include "talk/session/media/mediasession.h"
 
 using cricket::AudioCodec;
@@ -50,6 +47,7 @@ using cricket::CryptoParams;
 using cricket::ContentGroup;
 using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
 using cricket::ICE_CANDIDATE_COMPONENT_RTP;
+using cricket::kFecSsrcGroupSemantics;
 using cricket::LOCAL_PORT_TYPE;
 using cricket::NS_JINGLE_ICE_UDP;
 using cricket::NS_JINGLE_RTP;
@@ -123,11 +121,13 @@ static const char kSdpFullString[] =
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
+    "a=ssrc:1 msid:local_stream_1 a0\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
-    "a=ssrc:1 label:local_audio_1\r\n"
+    "a=ssrc:1 label:local_stream_1a0\r\n"
     "a=ssrc:4 cname:stream_2_cname\r\n"
+    "a=ssrc:4 msid:local_stream_2 a0\r\n"
     "a=ssrc:4 mslabel:local_stream_2\r\n"
-    "a=ssrc:4 label:local_audio_2\r\n"
+    "a=ssrc:4 label:local_stream_2a0\r\n"
     "m=video 3457 RTP/SAVPF 120\r\n"
     "c=IN IP4 74.125.224.39\r\n"
     "a=rtcp:3456 IN IP4 74.125.224.39\r\n"
@@ -150,14 +150,22 @@ static const char kSdpFullString[] =
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
+    "a=ssrc:2 msid:local_stream_1 v0\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
-    "a=ssrc:2 label:local_video_1\r\n"
+    "a=ssrc:2 label:local_stream_1v0\r\n"
     "a=ssrc:3 cname:stream_1_cname\r\n"
+    "a=ssrc:3 msid:local_stream_1 v1\r\n"
     "a=ssrc:3 mslabel:local_stream_1\r\n"
-    "a=ssrc:3 label:local_video_2\r\n"
+    "a=ssrc:3 label:local_stream_1v1\r\n"
+    "a=ssrc-group:FEC 5 6\r\n"
     "a=ssrc:5 cname:stream_2_cname\r\n"
+    "a=ssrc:5 msid:local_stream_2 v0\r\n"
     "a=ssrc:5 mslabel:local_stream_2\r\n"
-    "a=ssrc:5 label:local_video_3\r\n";
+    "a=ssrc:5 label:local_stream_2v0\r\n"
+    "a=ssrc:6 cname:stream_2_cname\r\n"
+    "a=ssrc:6 msid:local_stream_2 v0\r\n"
+    "a=ssrc:6 mslabel:local_stream_2\r\n"
+    "a=ssrc:6 label:local_stream_2v0\r\n";
 
 // SDP reference string without the candidates.
 static const char kSdpString[] =
@@ -178,11 +186,13 @@ static const char kSdpString[] =
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
+    "a=ssrc:1 msid:local_stream_1 a0\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
-    "a=ssrc:1 label:local_audio_1\r\n"
+    "a=ssrc:1 label:local_stream_1a0\r\n"
     "a=ssrc:4 cname:stream_2_cname\r\n"
+    "a=ssrc:4 msid:local_stream_2 a0\r\n"
     "a=ssrc:4 mslabel:local_stream_2\r\n"
-    "a=ssrc:4 label:local_audio_2\r\n"
+    "a=ssrc:4 label:local_stream_2a0\r\n"
     "m=video 1 RTP/SAVPF 120\r\n"
     "c=IN IP4 0.0.0.0\r\n"
     "a=rtcp:1 IN IP4 0.0.0.0\r\n"
@@ -193,14 +203,22 @@ static const char kSdpString[] =
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
+    "a=ssrc:2 msid:local_stream_1 v0\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
-    "a=ssrc:2 label:local_video_1\r\n"
+    "a=ssrc:2 label:local_stream_1v0\r\n"
     "a=ssrc:3 cname:stream_1_cname\r\n"
+    "a=ssrc:3 msid:local_stream_1 v1\r\n"
     "a=ssrc:3 mslabel:local_stream_1\r\n"
-    "a=ssrc:3 label:local_video_2\r\n"
+    "a=ssrc:3 label:local_stream_1v1\r\n"
+    "a=ssrc-group:FEC 5 6\r\n"
     "a=ssrc:5 cname:stream_2_cname\r\n"
+    "a=ssrc:5 msid:local_stream_2 v0\r\n"
     "a=ssrc:5 mslabel:local_stream_2\r\n"
-    "a=ssrc:5 label:local_video_3\r\n";
+    "a=ssrc:5 label:local_stream_2v0\r\n"
+    "a=ssrc:6 cname:stream_2_cname\r\n"
+    "a=ssrc:6 msid:local_stream_2 v0\r\n"
+    "a=ssrc:6 mslabel:local_stream_2\r\n"
+    "a=ssrc:6 label:local_stream_2v0\r\n";
 
 // One candidate reference string.
 static const char kSdpOneCandidate[] =
@@ -228,24 +246,28 @@ static const char kVideoContentName[] = "video_content_name";
 // MediaStream 1
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStream1Cname[] = "stream_1_cname";
-static const char kAudioTrackLabel1[] = "local_audio_1";
+static const char kAudioTrackLabel1[] = "local_stream_1a0";
 static const uint32 kAudioTrack1Ssrc = 1;
-static const char kVideoTrackLabel1[] = "local_video_1";
+static const char kVideoTrackLabel1[] = "local_stream_1v0";
 static const uint32 kVideoTrack1Ssrc = 2;
-static const char kVideoTrackLabel2[] = "local_video_2";
+static const char kVideoTrackLabel2[] = "local_stream_1v1";
 static const uint32 kVideoTrack2Ssrc = 3;
 
 // MediaStream 2
 static const char kStreamLabel2[] = "local_stream_2";
 static const char kStream2Cname[] = "stream_2_cname";
-static const char kAudioTrackLabel2[] = "local_audio_2";
+static const char kAudioTrackLabel2[] = "local_stream_2a0";
 static const uint32 kAudioTrack2Ssrc = 4;
-static const char kVideoTrackLabel3[] = "local_video_3";
+static const char kVideoTrackLabel3[] = "local_stream_2v0";
 static const uint32 kVideoTrack3Ssrc = 5;
+static const uint32 kVideoTrack4Ssrc = 6;
 
 // Candidate
 static const char kDummyMid[] = "dummy_mid";
 static const int kDummyIndex = 123;
+
+// Misc
+static const char kDummyString[] = "dummy";
 
 // Helper functions
 
@@ -266,7 +288,7 @@ static void Replace(const std::string& line,
 }
 
 static bool ReplaceAndTryToParse(const char* search, const char* replace) {
-  JsepSessionDescription desc("dummy");
+  JsepSessionDescription desc(kDummyString);
   std::string sdp = kSdpFullString;
   Replace(search, replace, &sdp);
   return webrtc::SdpDeserialize(sdp, &desc);
@@ -308,7 +330,7 @@ static void ReplaceRejected(bool audio_rejected, bool video_rejected,
 class WebRtcSdpTest : public testing::Test {
  public:
   WebRtcSdpTest()
-      : jdesc_("dummy") {
+     : jdesc_(kDummyString) {
     // AudioContentDescription
     talk_base::scoped_ptr<AudioContentDescription> audio(
         new AudioContentDescription());
@@ -355,10 +377,20 @@ class WebRtcSdpTest : public testing::Test {
     video_stream3.cname = kStream2Cname;
     video_stream3.sync_label = kStreamLabel2;
     video_stream3.ssrcs.push_back(kVideoTrack3Ssrc);
+    video_stream3.ssrcs.push_back(kVideoTrack4Ssrc);
+    cricket::SsrcGroup ssrc_group(kFecSsrcGroupSemantics, video_stream3.ssrcs);
+    video_stream3.ssrc_groups.push_back(ssrc_group);
     video->AddStream(video_stream3);
     video->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_80",
         "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32", ""));
-    video->AddCodec(VideoCodec(120, "VP8", 640, 480, 30, 0));
+    video->AddCodec(VideoCodec(
+        120,
+        JsepSessionDescription::kDefaultVideoCodecName,
+        JsepSessionDescription::kMaxVideoCodecWidth,
+        JsepSessionDescription::kMaxVideoCodecHeight,
+        JsepSessionDescription::kDefaultVideoCodecFramerate,
+        JsepSessionDescription::kDefaultVideoCodecPreference));
+
     desc_.AddContent(kVideoContentName, NS_JINGLE_RTP,
                      video.release());
 
@@ -805,7 +837,7 @@ class WebRtcSdpTest : public testing::Test {
   bool TestDeserializeDirection(cricket::MediaContentDirection direction) {
     std::string new_sdp = kSdpFullString;
     ReplaceDirection(direction, &new_sdp);
-    JsepSessionDescription new_jdesc("dummy");
+    JsepSessionDescription new_jdesc(kDummyString);
 
     EXPECT_TRUE(webrtc::SdpDeserialize(new_sdp,
                                        &new_jdesc));
@@ -863,7 +895,7 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescription) {
 }
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionEmpty) {
-  JsepSessionDescription jdesc_empty("dummy");
+  JsepSessionDescription jdesc_empty(kDummyString);
   EXPECT_EQ("", webrtc::SdpSerialize(jdesc_empty));
 }
 
@@ -885,7 +917,7 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithFingerprint) {
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
-  JsepSessionDescription jdesc_no_candidates("dummy");
+  JsepSessionDescription jdesc_no_candidates(kDummyString);
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
                                              kSessionId, kSessionVersion));
   std::string message = webrtc::SdpSerialize(jdesc_no_candidates);
@@ -977,7 +1009,7 @@ TEST_F(WebRtcSdpTest, SerializeCandidates) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescription) {
-  JsepSessionDescription jdesc("dummy");
+  JsepSessionDescription jdesc(kDummyString);
   // Deserialize
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpFullString, &jdesc));
   // Verify
@@ -986,10 +1018,10 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescription) {
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithoutCandidates) {
   // JsepSessionDescription with desc but without candidates.
-  JsepSessionDescription jdesc_no_candidates("dummy");
+  JsepSessionDescription jdesc_no_candidates(kDummyString);
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
                                              kSessionId, kSessionVersion));
-  JsepSessionDescription new_jdesc("dummy");
+  JsepSessionDescription new_jdesc(kDummyString);
   EXPECT_TRUE(webrtc::SdpDeserialize(kSdpString, &new_jdesc));
   EXPECT_TRUE(CompareJsepSessionDescription(jdesc_no_candidates, new_jdesc));
 }
@@ -1014,7 +1046,7 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithFingerprint) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
-  JsepSessionDescription jdesc_with_bundle("dummy");
+  JsepSessionDescription jdesc_with_bundle(kDummyString);
   std::string sdp_with_bundle = kSdpFullString;
   InjectAfter("t=0 0\r\n",
               "a=group:BUNDLE audio_content_name video_content_name\r\n",
@@ -1031,7 +1063,7 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBundle) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBandwidth) {
-  JsepSessionDescription jdesc_with_bandwidth("dummy");
+  JsepSessionDescription jdesc_with_bandwidth(kDummyString);
   std::string sdp_with_bandwidth = kSdpFullString;
   InjectAfter("a=mid:video_content_name\r\n",
               "b=AS:100\r\n",
@@ -1049,7 +1081,7 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBandwidth) {
 }
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithIceOptions) {
-  JsepSessionDescription jdesc_with_ice_options("dummy");
+  JsepSessionDescription jdesc_with_ice_options(kDummyString);
   std::string sdp_with_ice_options = kSdpFullString;
   InjectAfter("t=0 0\r\n",
               "a=ice-options:iceoption3\r\n",
@@ -1078,7 +1110,7 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithIceOptions) {
 
 TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithUfragPwd) {
   // Remove the original ice-ufrag and ice-pwd
-  JsepSessionDescription jdesc_with_ufrag_pwd("dummy");
+  JsepSessionDescription jdesc_with_ufrag_pwd(kDummyString);
   std::string sdp_with_ufrag_pwd = kSdpFullString;
   EXPECT_TRUE(RemoveCandidateUfragPwd(&sdp_with_ufrag_pwd));
   // Add session level ufrag and pwd
@@ -1122,6 +1154,18 @@ TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedVideo) {
 
 TEST_F(WebRtcSdpTest, DeSerializeJsepSessionDescriptionWithRejectedAudioVideo) {
   EXPECT_TRUE(TestDeserializeRejected(true, true));
+}
+
+// Tests that we can still handle the sdp uses mslabel and label instead of
+// msid for backward compatibility.
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithoutMsid) {
+  JsepSessionDescription jdesc(kDummyString);
+  std::string sdp_without_msid = kSdpFullString;
+  Replace("msid", "xmsid", &sdp_without_msid);
+  // Deserialize
+  EXPECT_TRUE(webrtc::SdpDeserialize(sdp_without_msid, &jdesc));
+  // Verify
+  EXPECT_TRUE(CompareJsepSessionDescription(jdesc_, jdesc));
 }
 
 TEST_F(WebRtcSdpTest, DeserializeCandidate) {

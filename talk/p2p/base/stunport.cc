@@ -42,15 +42,15 @@ const int RETRY_DELAY = 50;             // 50ms, from ICE spec
 const int RETRY_TIMEOUT = 50 * 1000;    // ICE says 50 secs
 
 // Handles a binding request sent to the STUN server.
-class StunPortBindingRequest : public StunRequest {
+class StunBindingRequest : public StunRequest {
  public:
-  StunPortBindingRequest(StunPort* port, bool keep_alive,
+  StunBindingRequest(UDPPort* port, bool keep_alive,
                          const talk_base::SocketAddress& addr)
     : port_(port), keep_alive_(keep_alive), server_addr_(addr) {
     start_time_ = talk_base::Time();
   }
 
-  virtual ~StunPortBindingRequest() {
+  virtual ~StunBindingRequest() {
   }
 
   const talk_base::SocketAddress& server_addr() const { return server_addr_; }
@@ -69,14 +69,15 @@ class StunPortBindingRequest : public StunRequest {
       LOG(LS_ERROR) << "Binding address has bad family";
     } else {
       talk_base::SocketAddress addr(addr_attr->ipaddr(), addr_attr->port());
-      port_->AddAddress(addr, port_->socket_->GetLocalAddress(), "udp", true);
+      port_->AddAddress(addr, port_->socket_->GetLocalAddress(), "udp",
+                        STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_SRFLX, true);
     }
 
     // We will do a keep-alive regardless of whether this request suceeds.
     // This should have almost no impact on network usage.
     if (keep_alive_) {
       port_->requests_.SendDelayed(
-          new StunPortBindingRequest(port_, true, server_addr_),
+          new StunBindingRequest(port_, true, server_addr_),
           KEEPALIVE_DELAY);
     }
   }
@@ -97,7 +98,7 @@ class StunPortBindingRequest : public StunRequest {
     if (keep_alive_
         && (talk_base::TimeSince(start_time_) <= RETRY_TIMEOUT)) {
       port_->requests_.SendDelayed(
-          new StunPortBindingRequest(port_, true, server_addr_),
+          new StunBindingRequest(port_, true, server_addr_),
           KEEPALIVE_DELAY);
     }
   }
@@ -112,77 +113,88 @@ class StunPortBindingRequest : public StunRequest {
     if (keep_alive_
         && (talk_base::TimeSince(start_time_) <= RETRY_TIMEOUT)) {
       port_->requests_.SendDelayed(
-          new StunPortBindingRequest(port_, true, server_addr_),
+          new StunBindingRequest(port_, true, server_addr_),
           RETRY_DELAY);
     }
   }
 
  private:
-  StunPort* port_;
+  UDPPort* port_;
   bool keep_alive_;
   talk_base::SocketAddress server_addr_;
   uint32 start_time_;
 };
 
-StunPort::StunPort(talk_base::Thread* thread,
+UDPPort::UDPPort(talk_base::Thread* thread,
+                 talk_base::Network* network,
+                 talk_base::AsyncPacketSocket* socket,
+                 const std::string& username, const std::string& password)
+    : Port(thread, network, socket->GetLocalAddress().ipaddr(),
+           username, password),
+      requests_(thread),
+      socket_(socket),
+      error_(0),
+      resolver_(NULL) {
+}
+
+UDPPort::UDPPort(talk_base::Thread* thread,
                    talk_base::PacketSocketFactory* factory,
                    talk_base::Network* network,
                    const talk_base::IPAddress& ip, int min_port, int max_port,
-                   const std::string& username, const std::string& password,
-                   const talk_base::SocketAddress& server_addr)
-    : Port(thread, STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_SRFLX,
+                   const std::string& username, const std::string& password)
+    : Port(thread, LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST,
            factory, network, ip, min_port, max_port,
            username, password),
-      server_addr_(server_addr),
       requests_(thread),
       socket_(NULL),
       error_(0),
       resolver_(NULL) {
-  requests_.SignalSendPacket.connect(this, &StunPort::OnSendPacket);
 }
 
-bool StunPort::Init() {
-  socket_ = socket_factory()->CreateUdpSocket(
-      talk_base::SocketAddress(ip(), 0), min_port(), max_port());
-  if (!socket_) {
-    LOG_J(LS_WARNING, this) << "UDP socket creation failed";
-    return false;
+bool UDPPort::Init() {
+  if (!SharedSocket()) {
+    ASSERT(socket_ == NULL);
+    socket_ = socket_factory()->CreateUdpSocket(
+        talk_base::SocketAddress(ip(), 0), min_port(), max_port());
+    if (!socket_) {
+      LOG_J(LS_WARNING, this) << "UDP socket creation failed";
+      return false;
+    }
+    socket_->SignalReadPacket.connect(this, &UDPPort::OnReadPacket);
   }
-  socket_->SignalAddressReady.connect(this, &StunPort::OnAddressReady);
-  socket_->SignalReadPacket.connect(this, &StunPort::OnReadPacket);
+  socket_->SignalAddressReady.connect(this, &UDPPort::OnLocalAddressReady);
+  requests_.SignalSendPacket.connect(this, &UDPPort::OnSendPacket);
   return true;
 }
 
-StunPort::~StunPort() {
+UDPPort::~UDPPort() {
   if (resolver_) {
     resolver_->Destroy(false);
   }
-  delete socket_;
+  if (!SharedSocket())
+    delete socket_;
 }
 
-void StunPort::PrepareAddress() {
+void UDPPort::PrepareAddress() {
   ASSERT(requests_.empty());
-
-  // We will keep pinging the stun server to make sure our NAT pin-hole stays
-  // open during the call.
-  // TODO: Support multiple stun servers, or make ResolveStunAddress find a
-  // server with the correct family, or something similar.
-  if (server_addr_.IsUnresolved()) {
-    ResolveStunAddress();
-  } else if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND) {
-    if (server_addr_.family() == ip().family()) {
-      requests_.Send(new StunPortBindingRequest(this, true, server_addr_));
-    }
+  if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND) {
+    AddAddress(socket_->GetLocalAddress(), socket_->GetLocalAddress(), "udp",
+               LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST, false);
+    MaybePrepareStunCandidate();
   }
 }
 
-void StunPort::PrepareSecondaryAddress() {
-  // DNS resolution of the secondary address is not currently supported.
-  ASSERT(!server_addr2_.IsNil());
-  requests_.Send(new StunPortBindingRequest(this, false, server_addr2_));
+void UDPPort::MaybePrepareStunCandidate() {
+  // Sending binding request to the STUN server if address is available to
+  // prepare STUN candidate.
+  if (!server_addr_.IsNil()) {
+    SendStunBindingRequest();
+  } else {
+    SignalAddressReady(this);
+  }
 }
 
-Connection* StunPort::CreateConnection(const Candidate& address,
+Connection* UDPPort::CreateConnection(const Candidate& address,
                                        CandidateOrigin origin) {
   if (address.protocol() != "udp")
     return NULL;
@@ -191,12 +203,17 @@ Connection* StunPort::CreateConnection(const Candidate& address,
     return NULL;
   }
 
+  if (SharedSocket() && Candidates()[0].type() != LOCAL_PORT_TYPE) {
+    ASSERT(false);
+    return NULL;
+  }
+
   Connection* conn = new ProxyConnection(this, 0, address);
   AddConnection(conn);
   return conn;
 }
 
-int StunPort::SendTo(const void* data, size_t size,
+int UDPPort::SendTo(const void* data, size_t size,
                      const talk_base::SocketAddress& addr, bool payload) {
   int sent = socket_->SendTo(data, size, addr);
   if (sent < 0) {
@@ -207,22 +224,24 @@ int StunPort::SendTo(const void* data, size_t size,
   return sent;
 }
 
-int StunPort::SetOption(talk_base::Socket::Option opt, int value) {
+int UDPPort::SetOption(talk_base::Socket::Option opt, int value) {
   return socket_->SetOption(opt, value);
 }
 
-int StunPort::GetError() {
+int UDPPort::GetError() {
   return error_;
 }
 
-void StunPort::OnAddressReady(talk_base::AsyncPacketSocket* socket,
-                              const talk_base::SocketAddress& address) {
-  PrepareAddress();
+void UDPPort::OnLocalAddressReady(talk_base::AsyncPacketSocket* socket,
+                                  const talk_base::SocketAddress& address) {
+  AddAddress(address, address, "udp", LOCAL_PORT_TYPE,
+             ICE_TYPE_PREFERENCE_HOST, false);
+  MaybePrepareStunCandidate();
 }
 
-void StunPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
-                            const char* data, size_t size,
-                            const talk_base::SocketAddress& remote_addr) {
+void UDPPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
+                           const char* data, size_t size,
+                           const talk_base::SocketAddress& remote_addr) {
   ASSERT(socket == socket_);
 
   // Look for a response from the STUN server.
@@ -242,31 +261,51 @@ void StunPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   }
 }
 
-void StunPort::ResolveStunAddress() {
+void UDPPort::SendStunBindingRequest() {
+  // We will keep pinging the stun server to make sure our NAT pin-hole stays
+  // open during the call.
+  // TODO: Support multiple stun servers, or make ResolveStunAddress find a
+  // server with the correct family, or something similar.
+  ASSERT(requests_.empty());
+  if (server_addr_.IsUnresolved()) {
+    ResolveStunAddress();
+  } else if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND) {
+    if (server_addr_.family() == ip().family()) {
+      requests_.Send(new StunBindingRequest(this, true, server_addr_));
+    }
+  }
+}
+
+void UDPPort::ResolveStunAddress() {
   if (resolver_)
     return;
 
   resolver_ = new talk_base::AsyncResolver();
-  resolver_->SignalWorkDone.connect(this, &StunPort::OnResolveResult);
+  resolver_->SignalWorkDone.connect(this, &UDPPort::OnResolveResult);
   resolver_->set_address(server_addr_);
   resolver_->Start();
 }
 
-void StunPort::OnResolveResult(talk_base::SignalThread* t) {
+void UDPPort::OnResolveResult(talk_base::SignalThread* t) {
   ASSERT(t == resolver_);
   if (resolver_->error() != 0) {
     LOG_J(LS_WARNING, this) << "StunPort: stun host lookup received error "
                             << resolver_->error();
-    SignalAddressError(this);
+    if (!SharedSocket()) {
+      SignalAddressError(this);
+    } else {
+      // If socket is shared, we should process local udp candidate.
+      SignalAddressReady(this);
+    }
   }
 
   server_addr_ = resolver_->address();
-  PrepareAddress();
+  SendStunBindingRequest();
 }
 
 // TODO: merge this with SendTo above.
-void StunPort::OnSendPacket(const void* data, size_t size, StunRequest* req) {
-  StunPortBindingRequest* sreq = static_cast<StunPortBindingRequest*>(req);
+void UDPPort::OnSendPacket(const void* data, size_t size, StunRequest* req) {
+  StunBindingRequest* sreq = static_cast<StunBindingRequest*>(req);
   if (socket_->SendTo(data, size, sreq->server_addr()) < 0)
     PLOG(LERROR, socket_->GetError()) << "sendto";
 }

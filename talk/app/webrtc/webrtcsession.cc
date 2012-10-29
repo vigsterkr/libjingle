@@ -61,6 +61,11 @@ static const uint64 kInitSessionVersion = 2;
 // We allow 30 seconds to establish a connection, otherwise it's an error.
 static const int kCallSetupTimeout = 30 * 1000;
 
+// Supported MediaConstraints.
+const char MediaConstraintsInterface::kOfferToReceiveAudio[] =
+    "OfferToReceiveAudio";
+const char MediaConstraintsInterface::kOfferToReceiveVideo[] =
+    "OfferToReceiveVideo";
 // DTLS-SRTP pseudo-constraints.
 const char MediaConstraintsInterface::kEnableDtlsSrtp[] =
     "DtlsSrtpKeyAgreement";
@@ -70,13 +75,8 @@ const char MediaConstraintsInterface::kValueTrue[] = "true";
 // Chosen to make the certificates more readable.
 const char kWebRTCIdentityPrefix[] = "WebRTC";
 
-// Constants for setting the default encoder size.
-// TODO: Implement proper negotiation of video resolution.
-static const int kDefaultVideoCodecId = 100;
-static const int kDefaultVideoCodecFramerate = 30;
-static const char kDefaultVideoCodecName[] = "VP8";
-static const int kDefaultVideoCodecWidth = 640;
-static const int kDefaultVideoCodecHeight = 480;
+const char MediaConstraintsInterface::kTrue[] = "true";
+const char MediaConstraintsInterface::kFalse[] = "false";
 
 // Compares |answer| against |offer|. Comparision is done
 // for number of m-lines in answer against offer. If matches true will be
@@ -316,9 +316,13 @@ bool WebRtcSession::Initialize(const MediaConstraintsInterface* constraints) {
   // Make sure SessionDescriptions only contains the StreamParams we negotiate.
   session_desc_factory_.set_add_legacy_streams(false);
 
-  const cricket::VideoCodec default_codec(kDefaultVideoCodecId,
-      kDefaultVideoCodecName, kDefaultVideoCodecWidth, kDefaultVideoCodecHeight,
-      kDefaultVideoCodecFramerate, 0);
+  const cricket::VideoCodec default_codec(
+      JsepSessionDescription::kDefaultVideoCodecId,
+      JsepSessionDescription::kDefaultVideoCodecName,
+      JsepSessionDescription::kMaxVideoCodecWidth,
+      JsepSessionDescription::kMaxVideoCodecHeight,
+      JsepSessionDescription::kDefaultVideoCodecFramerate,
+      JsepSessionDescription::kDefaultVideoCodecPreference);
   channel_manager_->SetDefaultVideoEncoderConfig(
       cricket::VideoEncoderConfig(default_codec));
   return true;
@@ -328,6 +332,13 @@ bool WebRtcSession::StartCandidatesAllocation() {
   // SpeculativelyConnectTransportChannels, will call ConnectChannels method
   // from TransportProxy to start gathering ice candidates.
   SpeculativelyConnectAllTransportChannels();
+  if (!saved_candidates_.empty()) {
+    // If there are saved candidates which arrived before local description is
+    // set, copy those to remote description.
+    CopySavedCandidates(remote_desc_.get());
+  }
+  // Push remote candidates present in remote description to transport channels.
+  UseCandidatesInSessionDescription(remote_desc_.get());
   return true;
 }
 
@@ -369,6 +380,25 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   return offer;
 }
 
+SessionDescriptionInterface* WebRtcSession::CreateOffer(
+    const MediaConstraintsInterface* constraints) {
+  bool receive_audio = false;
+  std::string value;
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveAudio,
+                     &value, NULL)) {
+    receive_audio = (value == MediaConstraintsInterface::kTrue);
+  }
+  bool receive_video = false;
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveVideo,
+                     &value, NULL)) {
+    receive_video = (value == MediaConstraintsInterface::kTrue);
+  }
+
+  return CreateOffer(MediaHints(receive_audio, receive_video));
+}
+
 SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     const MediaHints& hints,
     const SessionDescriptionInterface* offer) {
@@ -403,6 +433,25 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   if (local_description())
     CopyCandidatesFromSessionDescription(local_description(), answer);
   return answer;
+}
+
+SessionDescriptionInterface* WebRtcSession::CreateAnswer(
+    const MediaConstraintsInterface* constraints,
+    const SessionDescriptionInterface* offer) {
+  bool receive_audio = true;
+  std::string value;
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveAudio,
+                     &value, NULL)) {
+    receive_audio = (value == MediaConstraintsInterface::kTrue);
+  }
+  bool receive_video = true;
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveVideo,
+                     &value, NULL)) {
+    receive_video = (value == MediaConstraintsInterface::kTrue);
+  }
+  return CreateAnswer(MediaHints(receive_audio, receive_video), offer);
 }
 
 bool WebRtcSession::SetLocalDescription(Action action,
@@ -501,7 +550,6 @@ bool WebRtcSession::SetRemoteDescription(Action action,
 
   // NOTE: Candidates allocation will be initiated only when SetLocalDescription
   // is called.
-
   set_remote_description(desc->description()->Copy());
   if (!UpdateSessionState(action, cricket::CS_REMOTE, desc->description())) {
     return false;
@@ -509,8 +557,7 @@ bool WebRtcSession::SetRemoteDescription(Action action,
 
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
-  // Use all candidates in this new session description.
-  if (!UseCandidatesInSessionDescription(desc)) {
+  if (local_description() && !UseCandidatesInSessionDescription(desc)) {
     LOG(LS_ERROR) << "SetRemoteDescription: Argument |desc| contains "
                   << "invalid candidates";
     delete desc;
@@ -572,7 +619,7 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
     return false;
   }
 
-  if (!remote_description()) {
+  if (!local_description() || !remote_description()) {
     LOG(LS_INFO) << "ProcessIceMessage: Remote description not set, "
                  << "save the candidate for later use.";
     saved_candidates_.push_back(

@@ -79,6 +79,15 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   // TODO(perkj): Remove this once webrtcsession is updated to jsep01.
   static JsepInterface::Action GetAction(const std::string& type);
 
+  // Default video encoder settings. The resolution is the max resolution.
+  // TODO(perkj): Implement proper negotiation of video resolution.
+  static const int kDefaultVideoCodecId;
+  static const int kDefaultVideoCodecFramerate;
+  static const char kDefaultVideoCodecName[];
+  static const int kMaxVideoCodecWidth;
+  static const int kMaxVideoCodecHeight;
+  static const int kDefaultVideoCodecPreference;
+
  private:
   talk_base::scoped_ptr<cricket::SessionDescription> description_;
   std::string session_id_;

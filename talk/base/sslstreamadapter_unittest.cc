@@ -298,10 +298,10 @@ class SSLStreamAdapterTestBase : public testing::Test,
 
       LOG(LS_INFO) << "Damaging packet";
 
-      memcpy(buf.data(), data, data_len);
+      memcpy(&buf[0], data, data_len);
       buf[data_len - 1]++;
 
-      return from->WriteData(buf.data(), data_len, written, error);
+      return from->WriteData(&buf[0], data_len, written, error);
     }
 
     return from->WriteData(data, data_len, written, error);

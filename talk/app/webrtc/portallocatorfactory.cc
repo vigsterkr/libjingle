@@ -57,38 +57,29 @@ PortAllocatorFactory::~PortAllocatorFactory() {}
 cricket::PortAllocator* PortAllocatorFactory::CreatePortAllocator(
     const std::vector<StunConfiguration>& stun,
     const std::vector<TurnConfiguration>& turn) {
-
-  scoped_ptr<cricket::HttpPortAllocator> allocator(
-      new cricket::HttpPortAllocator(
-          network_manager_.get(), socket_factory_.get(), kUserAgent));
-
   std::vector<talk_base::SocketAddress> stun_hosts;
   typedef std::vector<StunConfiguration>::const_iterator StunIt;
   for (StunIt stun_it = stun.begin(); stun_it != stun.end(); ++stun_it) {
     stun_hosts.push_back(stun_it->server);
   }
-  allocator->SetStunHosts(stun_hosts);
 
-  if (turn.size() > 0)
-    LOG(LS_INFO) << "Not using turn server params";
-
-  // TODO - Enable TURN support once WebRtcSession can handle
-  // relay candidates.
-#if 0
-  std::vector<std::string> relay_hosts;
-  typedef std::vector<TurnConfiguration>::const_iterator TurnIt;
-  for (TurnIt turn_it = turn.begin(); turn_it != turn.end(); ++turn_it) {
-    relay_hosts.push_back(turn_it->server.hostname());
+  talk_base::SocketAddress stun_addr;
+  if (!stun_hosts.empty()) {
+    stun_addr = stun_hosts.front();
   }
-  allocator->SetRelayHosts(relay_hosts);
+  scoped_ptr<cricket::BasicPortAllocator> allocator(
+      new cricket::BasicPortAllocator(
+          network_manager_.get(), socket_factory_.get(), stun_addr));
 
-  // Currently we can only set the password of one relay server.
-  // Use the password of the first server. User name can currently not be set.
-  // TODO: See above limitations.
-  if (turn.size() > 0)
-    allocator->SetRelayToken(turn[0].password);
-#endif
-
+  if (turn.size() > 0) {
+    cricket::RelayCredentials credentials(turn[0].username, turn[0].password);
+    std::map<std::string, talk_base::SocketAddress> turn_hosts;
+    cricket::RelayServerConfig relay_server;
+    relay_server.ports.push_back(cricket::ProtocolAddress(
+        turn[0].server, cricket::PROTO_UDP));
+    relay_server.credentials = credentials;
+    allocator->AddRelay(relay_server);
+  }
   return allocator.release();
 }
 

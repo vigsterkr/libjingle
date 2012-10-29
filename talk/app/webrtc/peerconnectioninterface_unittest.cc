@@ -477,6 +477,7 @@ TEST_F(PeerConnectionInterfaceTest, IceCandidates) {
   EXPECT_FALSE(pc_->AddIceCandidate(observer_.last_candidate_.get()));
   // SetRemoteDescription takes ownership of offer.
   SessionDescriptionInterface* offer = NULL;
+  AddStream(kStreamLabel1);
   EXPECT_TRUE(DoCreateOffer(&offer));
   EXPECT_TRUE(DoSetRemoteDescription(offer));
 

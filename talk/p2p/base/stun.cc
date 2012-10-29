@@ -216,6 +216,11 @@ bool StunMessage::ValidateMessageIntegrity(const char* data, size_t size,
 }
 
 bool StunMessage::AddMessageIntegrity(const std::string& password) {
+  return AddMessageIntegrity(password.c_str(), password.size());
+}
+
+bool StunMessage::AddMessageIntegrity(const char* key,
+                                      size_t keylen) {
   // Add the attribute with a dummy value. Since this is a known attribute, it
   // can't fail.
   StunByteStringAttribute* msg_integrity_attr =
@@ -232,7 +237,7 @@ bool StunMessage::AddMessageIntegrity(const std::string& password) {
       kStunAttributeHeaderSize - msg_integrity_attr->length();
   char hmac[kStunMessageIntegritySize];
   size_t ret = talk_base::ComputeHmac(talk_base::DIGEST_SHA_1,
-                                      password.c_str(), password.size(),
+                                      key, keylen,
                                       buf.Data(), msg_len_for_hmac,
                                       hmac, sizeof(hmac));
   ASSERT(ret == sizeof(hmac));
@@ -380,19 +385,19 @@ bool StunMessage::Write(ByteBuffer* buf) const {
 
 StunAttributeValueType StunMessage::GetAttributeValueType(int type) const {
   switch (type) {
-    case STUN_ATTR_MAPPED_ADDRESS:     return STUN_VALUE_ADDRESS;
-    case STUN_ATTR_USERNAME:           return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_MESSAGE_INTEGRITY:  return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_ERROR_CODE:         return STUN_VALUE_ERROR_CODE;
-    case STUN_ATTR_UNKNOWN_ATTRIBUTES: return STUN_VALUE_UINT16_LIST;
-    case STUN_ATTR_REALM:              return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_NONCE:              return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_XOR_MAPPED_ADDRESS: return STUN_VALUE_XOR_ADDRESS;
-    case STUN_ATTR_SOFTWARE:           return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_ALTERNATE_SERVER:   return STUN_VALUE_BYTE_STRING;
-    case STUN_ATTR_FINGERPRINT:        return STUN_VALUE_UINT32;
-    case STUN_ATTR_RETRANSMIT_COUNT:   return STUN_VALUE_UINT32;
-    default:                           return STUN_VALUE_UNKNOWN;
+    case STUN_ATTR_MAPPED_ADDRESS:      return STUN_VALUE_ADDRESS;
+    case STUN_ATTR_USERNAME:            return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_MESSAGE_INTEGRITY:   return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_ERROR_CODE:          return STUN_VALUE_ERROR_CODE;
+    case STUN_ATTR_UNKNOWN_ATTRIBUTES:  return STUN_VALUE_UINT16_LIST;
+    case STUN_ATTR_REALM:               return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_NONCE:               return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_XOR_MAPPED_ADDRESS:  return STUN_VALUE_XOR_ADDRESS;
+    case STUN_ATTR_SOFTWARE:            return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_ALTERNATE_SERVER:    return STUN_VALUE_BYTE_STRING;
+    case STUN_ATTR_FINGERPRINT:         return STUN_VALUE_UINT32;
+    case STUN_ATTR_RETRANSMIT_COUNT:    return STUN_VALUE_UINT32;
+    default:                            return STUN_VALUE_UNKNOWN;
   }
 }
 
@@ -872,6 +877,14 @@ int GetStunResponseType(int request_type) {
 
 int GetStunErrorResponseType(int request_type) {
   return (request_type & 0x110) ? -1 : request_type | 0x110;
+}
+
+bool IsStunResponseType(int response_type) {
+  return ((response_type & 0x110) == 0x100);
+}
+
+bool IsStunErrorResponseType(int response_type) {
+  return ((response_type & 0x110) == 0x110);
 }
 
 }  // namespace cricket

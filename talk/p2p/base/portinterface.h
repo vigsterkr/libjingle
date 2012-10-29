@@ -70,6 +70,8 @@ class PortInterface {
   virtual void SetTiebreaker(uint64 tiebreaker) = 0;
   virtual uint64 Tiebreaker() const = 0;
 
+  virtual bool SharedSocket() const = 0;
+
   // PrepareAddress will attempt to get an address for this port that other
   // clients can send to.  It may take some time before the address is ready.
   // Once it is ready, we will send SignalAddressReady.  If errors are

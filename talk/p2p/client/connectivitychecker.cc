@@ -378,7 +378,7 @@ void ConnectivityChecker::CreateRelayPorts(
         nic_info->ssltcp.start_time_ms = now;
 
         // Add the addresses of this protocol.
-        PortConfiguration::PortList::const_iterator relay_port;
+        PortList::const_iterator relay_port;
         for (relay_port = relay->ports.begin();
              relay_port != relay->ports.end();
              ++relay_port) {

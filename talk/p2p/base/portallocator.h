@@ -52,6 +52,8 @@ const uint32 PORTALLOCATOR_ENABLE_SHAKER = 0x10;
 const uint32 PORTALLOCATOR_ENABLE_BUNDLE = 0x20;
 const uint32 PORTALLOCATOR_ENABLE_IPV6 = 0x40;
 const uint32 PORTALLOCATOR_ENABLE_SHARED_UFRAG = 0x80;
+const uint32 PORTALLOCATOR_ENABLE_SHARED_SOCKET = 0x100;
+const uint32 PORTALLOCATOR_ENABLE_TURN = 0x200;
 
 const uint32 kDefaultPortAllocatorFlags = 0;
 
@@ -60,7 +62,8 @@ class PortAllocatorSessionMuxer;
 class PortAllocatorSession : public sigslot::has_slots<> {
  public:
   // Content name passed in mostly for logging and debugging.
-  PortAllocatorSession(const std::string content_name,
+  // TODO(mallinath) - Change username and password to ice_ufrag and ice_pwd.
+  PortAllocatorSession(const std::string& content_name,
                        int component,
                        const std::string& username,
                        const std::string& password,

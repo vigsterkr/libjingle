@@ -33,25 +33,28 @@
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/test/fakeaudiocapturemodule.h"
-#include "talk/app/webrtc/test/fakevideocapturemodule.h"
+#include "talk/app/webrtc/test/fakeconstraints.h"
 #include "talk/app/webrtc/test/fakevideotrackrenderer.h"
+#include "talk/app/webrtc/test/fakeperiodicvideocapturer.h"
+#include "talk/app/webrtc/videosourceinterface.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
-#include "talk/media/webrtc/webrtcvideocapturer.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/media/mediasession.h"
 
 using cricket::ContentInfo;
 using cricket::MediaContentDescription;
+using webrtc::MediaConstraintsInterface;
 using webrtc::MediaHints;
 using webrtc::SessionDescriptionInterface;
 
 static const int kMaxWaitMs = 1000;
 
-static void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
-                       std::list<webrtc::VideoTrackInterface*>* video_tracks) {
+static void GetAllVideoTracks(
+    webrtc::MediaStreamInterface* media_stream,
+    std::list<webrtc::VideoTrackInterface*>* video_tracks) {
   webrtc::VideoTracks* track_list = media_stream->video_tracks();
   for (size_t i = 0; i < track_list->count(); ++i) {
     webrtc::VideoTrackInterface* track = track_list->at(i);
@@ -59,40 +62,11 @@ static void GetAllVideoTracks(webrtc::MediaStreamInterface* media_stream,
   }
 }
 
-// TODO(perkj): Refactor this test to use a cricket::FakeVideoCapturer instead.
-static cricket::VideoCapturer* CreateVideoCapturer(webrtc::
-                                                   VideoCaptureModule* vcm) {
-  cricket::WebRtcVideoCapturer* video_capturer =
-      new cricket::WebRtcVideoCapturer;
-  if (!video_capturer->Init(vcm)) {
-    delete video_capturer;
-    video_capturer = NULL;
-  }
-  return video_capturer;
-}
-
 class SignalingMessageReceiver {
  public:
-  // Returns the number of rendered frames.
-  virtual int num_rendered_frames() = 0;
-
-  // Makes it possible for the remote side to decide when to start capturing.
-  // This makes it possible to wait with capturing until a renderer has been
-  // added.
-  virtual void StartCapturing() = 0;
-
  protected:
   SignalingMessageReceiver() {}
   virtual ~SignalingMessageReceiver() {}
-};
-
-class RoapMessageReceiver : public SignalingMessageReceiver {
- public:
-  virtual void ReceiveMessage(const std::string& msg)  = 0;
-
- protected:
-  RoapMessageReceiver() {}
-  virtual ~RoapMessageReceiver() {}
 };
 
 class JsepMessageReceiver : public SignalingMessageReceiver {
@@ -117,49 +91,37 @@ class PeerConnectionTestClientBase
 
   virtual void StartSession()  = 0;
 
+  virtual void SetVideoConstraints(
+      const webrtc::FakeConstraints& video_constraint) {
+    video_constraints_ = video_constraint;
+  }
+
   void AddMediaStream() {
     if (video_track_) {
       // Tracks have already been set up.
       return;
     }
-    // TODO: the default audio device module is used regardless of
-    // the second parameter to the CreateLocalAudioTrack(..) call. Pass the
-    // fake ADM anyways in case the local track is used in the future.
-    talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
-        peer_connection_factory_->CreateLocalAudioTrack(
-            "audio_track",
-            fake_audio_capture_module_));
-
-    CreateLocalVideoTrack();
-
     talk_base::scoped_refptr<webrtc::LocalMediaStreamInterface> stream =
         peer_connection_factory_->CreateLocalMediaStream("stream_label");
 
-    if (hints_.has_audio()) {
+    if (can_receive_audio()) {
+      // TODO(perkj): Test audio source when it is implemented. Currently audio
+      // always use the default input.
+      talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+              peer_connection_factory_->CreateAudioTrack("audio_track", NULL));
       stream->AddTrack(audio_track);
     }
-    if (hints_.has_video()) {
+    if (can_receive_video()) {
+      CreateLocalVideoTrack();
       stream->AddTrack(video_track_);
     }
 
     EXPECT_TRUE(peer_connection_->AddStream(stream, NULL));
   }
 
-  void StartCapturing() {
-    if (fake_video_capture_module_ != NULL) {
-      fake_video_capture_module_->StartCapturing();
-    }
-  }
-
   bool SessionActive() {
     return peer_connection_->ready_state() ==
         webrtc::PeerConnectionInterface::kActive;
-  }
-
-  void StopSession() {
-    if (fake_video_capture_module_ != NULL) {
-      fake_video_capture_module_->StopCapturing();
-    }
   }
 
   void set_signaling_message_receiver(
@@ -168,125 +130,48 @@ class PeerConnectionTestClientBase
   }
 
   bool AudioFramesReceivedCheck(int number_of_frames) const {
-    return number_of_frames < fake_audio_capture_module_->frames_received();
+    return number_of_frames <= fake_audio_capture_module_->frames_received();
   }
 
   bool VideoFramesReceivedCheck(int number_of_frames) {
-    if (number_of_frames > signaling_message_receiver_->num_rendered_frames()) {
-      return false;
-    } else {
-      EXPECT_LT(number_of_frames, fake_video_capture_module_->sent_frames());
+    if (!fake_video_renderer_) {
+      return number_of_frames <= 0;
     }
-    return true;
-  }
-
-  // Verify we got local candidates for each m line.
-  bool VerifyLocalCandidates() {
-    const cricket::SessionDescription* local_desc =
-        peer_connection_->local_description()->description();
-    const cricket::SessionDescription* remote_desc =
-        peer_connection_->remote_description()->description();
-    // The local bundle_group will by default have audio and video in it. So
-    // we are more care of what is in the remote bundle group.
-    const cricket::ContentGroup* bundle_group =
-        remote_desc->GetGroupByName(cricket::GROUP_TYPE_BUNDLE);
-
-    // Use the first accepted content from |bundle_group| as the selected
-    // content for bundle.
-    std::string selected_content_name;
-    if (bundle_group) {
-      while (bundle_group->FirstContentName()) {
-        const std::string* content_name = bundle_group->FirstContentName();
-        if (!local_desc->GetContentByName(*content_name)->rejected &&
-            !remote_desc->GetContentByName(*content_name)->rejected) {
-          selected_content_name = *content_name;
-          break;
-        } else {
-          const_cast<cricket::ContentGroup*>(bundle_group)->RemoveContentName(
-              *content_name);
-        }
-      }
-    }
-
-    // Verify that we have candidates for the accepted content.
-    int selected_candidates_index = -1;
-    size_t number_of_mediasections =
-        peer_connection_->local_description()->number_of_mediasections();
-    for (size_t i = 0; i < number_of_mediasections; ++i) {
-      const webrtc::IceCandidateCollection* candidates =
-          peer_connection_->local_description()->candidates(i);
-      if (!local_desc->contents()[i].rejected &&
-          !remote_desc->contents()[i].rejected) {
-        // If the content is not rejected,
-        // we should have some candidates for it.
-        EXPECT_GT(candidates->count(), 0u);
-        if (local_desc->contents()[i].name == selected_content_name) {
-          selected_candidates_index = i;
-        }
-      } else {
-        EXPECT_EQ(0u, candidates->count());
-      }
-    }
-
-    // Verify that all the contents in the |bundle_group| should have the same
-    // candidates as the selected content has.
-    if (bundle_group && (selected_candidates_index != -1)) {
-      const webrtc::IceCandidateCollection* selected_candidates =
-          peer_connection_->local_description()->candidates(
-              selected_candidates_index);
-      for (size_t i = 0; i < number_of_mediasections; ++i) {
-        if (bundle_group->HasContentName(remote_desc->contents()[i].name)) {
-          const webrtc::IceCandidateCollection* candidates =
-              peer_connection_->local_description()->candidates(i);
-          if (!local_desc->contents()[i].rejected &&
-              !remote_desc->contents()[i].rejected) {
-            // The candidates in |candidates| should be the same as the
-            // candidates in |selected_candidates|.
-            EXPECT_EQ(selected_candidates->count(), candidates->count());
-            // This is assuming the order of the candidates are the same. But
-            // for testing, this should be fine.
-            for (size_t j = 0; j < candidates->count(); ++j) {
-              EXPECT_TRUE(selected_candidates->at(j)->candidate().IsEquivalent(
-                  candidates->at(j)->candidate()));
-            }
-          }
-        }
-      }
-    }
-    return true;
+    return number_of_frames <= fake_video_renderer_->num_rendered_frames();
   }
 
   // Verify the CanSendDtmf and SendDtmf interfaces.
-  bool VerifySendDtmf() {
+  void VerifySendDtmf() {
     // An invalid audio track can't send dtmf.
     EXPECT_FALSE(peer_connection_->CanSendDtmf(NULL));
 
-    if (hints_.has_audio() && remote_hints_.has_audio()) {
-      // The local audio track should be able to send dtmf.
-      const webrtc::AudioTrackInterface* send_track =
-          peer_connection_->local_streams()->at(0)->audio_tracks()->at(0);
-      EXPECT_TRUE(peer_connection_->CanSendDtmf(send_track));
+    // The local audio track should be able to send dtmf.
+    const webrtc::AudioTrackInterface* send_track =
+        peer_connection_->local_streams()->at(0)->audio_tracks()->at(0);
+    EXPECT_TRUE(peer_connection_->CanSendDtmf(send_track));
 
-      // The duration can not be more than 6000 or less than 70.
-      EXPECT_FALSE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                              30, NULL));
-      EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                             100, NULL));
-
-      // Play the dtmf at the same time.
-      const webrtc::AudioTrackInterface* play_track =
-          peer_connection_->remote_streams()->at(0)->audio_tracks()->at(0);
-      EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                             100, play_track));
-    }
-    return true;
+    // The duration can not be more than 6000 or less than 70.
+    EXPECT_FALSE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                            30, NULL));
+    EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                           100, NULL));
+    // Play the dtmf at the same time.
+    const webrtc::AudioTrackInterface* play_track =
+        peer_connection_->remote_streams()->at(0)->audio_tracks()->at(0);
+    EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
+                                           100, play_track));
+    // TODO(perkj): Talk to ronghuawu about how to verify if a DTMF tone is
+    // received or not.
   }
 
-  virtual int num_rendered_frames() {
-    if (!fake_video_renderer_) {
-      return 0;
-    }
-    return fake_video_renderer_->num_rendered_frames();
+  int rendered_width() {
+    EXPECT_TRUE(fake_video_renderer_.get() != NULL);
+    return fake_video_renderer_ ? fake_video_renderer_->width() : 1;
+  }
+
+  int rendered_height() {
+    EXPECT_TRUE(fake_video_renderer_.get() != NULL);
+    return fake_video_renderer_ ? fake_video_renderer_->height() : 1;
   }
 
   // PeerConnectionObserver callbacks.
@@ -295,24 +180,13 @@ class PeerConnectionTestClientBase
   virtual void OnSignalingMessage(const std::string& /*msg*/) {}
   virtual void OnStateChange(StateType /*state_changed*/) {}
   virtual void OnAddStream(webrtc::MediaStreamInterface* media_stream) {
-    if (!hints_.has_video() || !remote_hints_.has_video()) {
-      return;
-    }
     std::list<webrtc::VideoTrackInterface*> video_tracks;
     GetAllVideoTracks(media_stream, &video_tracks);
     // Currently only one video track is supported.
     // TODO: enable multiple video tracks.
-    EXPECT_EQ(1u, video_tracks.size());
     if (video_tracks.size() > 0) {
       fake_video_renderer_.reset(
           new webrtc::FakeVideoTrackRenderer(video_tracks.front()));
-    }
-    // The video renderer has been added. Tell the far end to start capturing
-    // frames. That way the number of captured frames should be equal to number
-    // of rendered frames.
-    if (signaling_message_receiver_ != NULL) {
-      signaling_message_receiver_->StartCapturing();
-      return;
     }
   }
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* /*media_stream*/) {}
@@ -323,12 +197,9 @@ class PeerConnectionTestClientBase
   virtual void OnIceComplete() {}
 
  protected:
-  PeerConnectionTestClientBase(const std::string& id, const MediaHints& hints,
-                               const MediaHints& remote_hints)
+  explicit PeerConnectionTestClientBase(const std::string& id)
       : id_(id),
-        hints_(hints),
-        remote_hints_(remote_hints),
-        fake_video_capture_module_(NULL),
+        periodic_video_capturer_(NULL),
         fake_video_renderer_(NULL),
         signaling_message_receiver_(NULL) {
   }
@@ -365,12 +236,8 @@ class PeerConnectionTestClientBase
   webrtc::PeerConnectionInterface* peer_connection() {
     return peer_connection_.get();
   }
-  const MediaHints& hints() const {
-    return hints_;
-  }
-  const MediaHints& remote_hints() const {
-    return remote_hints_;
-  }
+  virtual bool can_receive_audio() = 0;
+  virtual bool can_receive_video() = 0;
   const std::string& id() const { return id_; }
 
  private:
@@ -386,16 +253,15 @@ class PeerConnectionTestClientBase
   }
 
   void CreateLocalVideoTrack() {
-    fake_video_capture_module_ = FakeVideoCaptureModule::Create(
-        talk_base::Thread::Current());
-    // TODO: Use FakeVideoCapturer instead of FakeVideoCaptureModule.
-    video_track_ = peer_connection_factory_->CreateLocalVideoTrack(
-        "video_track", CreateVideoCapturer(fake_video_capture_module_));
+    periodic_video_capturer_ = new webrtc::FakePeriodicVideoCapturer();
+    talk_base::scoped_refptr<webrtc::VideoSourceInterface> source =
+        peer_connection_factory_->CreateVideoSource(periodic_video_capturer_,
+                                                    &video_constraints_);
+    video_track_ = peer_connection_factory_->CreateVideoTrack(
+        "video_track", source);
   }
 
   std::string id_;
-  MediaHints hints_;
-  MediaHints remote_hints_;
   talk_base::scoped_refptr<webrtc::PortAllocatorFactoryInterface>
       allocator_factory_;
   talk_base::scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
@@ -408,9 +274,10 @@ class PeerConnectionTestClientBase
   talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track_;
   // Needed to keep track of number of frames send.
   talk_base::scoped_refptr<FakeAudioCaptureModule> fake_audio_capture_module_;
-  FakeVideoCaptureModule* fake_video_capture_module_;
+  webrtc::FakePeriodicVideoCapturer* periodic_video_capturer_;
   // Needed to keep track of number of frames received.
   talk_base::scoped_ptr<webrtc::FakeVideoTrackRenderer> fake_video_renderer_;
+  webrtc::FakeConstraints video_constraints_;
 
   // For remote peer communication.
   MessageReceiver* signaling_message_receiver_;
@@ -419,10 +286,8 @@ class PeerConnectionTestClientBase
 class Jsep00TestClient
     : public PeerConnectionTestClientBase<JsepMessageReceiver> {
  public:
-  static Jsep00TestClient* CreateClient(const std::string& id,
-                                        const MediaHints& hints,
-                                        const MediaHints& remote_hints) {
-    Jsep00TestClient* client(new Jsep00TestClient(id, hints, remote_hints));
+  static Jsep00TestClient* CreateClient(const std::string& id) {
+    Jsep00TestClient* client(new Jsep00TestClient(id));
     if (!client->Init()) {
       delete client;
       return NULL;
@@ -472,15 +337,22 @@ class Jsep00TestClient
     signaling_message_receiver()->ReceiveIceMessage(candidate->sdp_mid(),
         candidate->sdp_mline_index(), ice_sdp);
   }
+
+  virtual bool can_receive_audio() { return hints_.has_audio(); }
+  virtual bool can_receive_video() { return hints_.has_video(); }
+
+  void SetHints(const MediaHints& local, const MediaHints& remote) {
+    hints_ = local;
+    remote_hints_ = remote;
+  }
+
   virtual void OnIceComplete() {
     LOG(INFO) << "OnIceComplete";
   }
 
  protected:
-  Jsep00TestClient(const std::string& id, const MediaHints& hints,
-                   const MediaHints& remote_hints)
-    : PeerConnectionTestClientBase<JsepMessageReceiver>(id, hints,
-                                                        remote_hints) {}
+  explicit Jsep00TestClient(const std::string& id)
+    : PeerConnectionTestClientBase<JsepMessageReceiver>(id) {}
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
       CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory) {
@@ -498,11 +370,11 @@ class Jsep00TestClient
       AddMediaStream();
     }
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> answer(
-        peer_connection()->CreateAnswer(hints(),
+        peer_connection()->CreateAnswer(hints_,
                                         desc.get()));
     ASSERT_TRUE(answer);
     // Verify that we have the rejected flag set properly.
-    if (hints().has_audio() && !remote_hints().has_audio()) {
+    if (hints_.has_audio() && !remote_hints_.has_audio()) {
       const ContentInfo* audio_content =
           GetFirstAudioContent(answer->description());
       const MediaContentDescription* media_desc =
@@ -512,7 +384,7 @@ class Jsep00TestClient
       // Below EXPECT_EQ is just our implementation, not required by RFC.
       EXPECT_EQ(cricket::MD_INACTIVE, media_desc->direction());
     }
-    if (hints().has_video() && !remote_hints().has_video()) {
+    if (hints_.has_video() && !remote_hints_.has_video()) {
       const ContentInfo* video_content =
           GetFirstVideoContent(answer->description());
       const MediaContentDescription* media_desc =
@@ -544,6 +416,10 @@ class Jsep00TestClient
     EXPECT_TRUE(peer_connection()->SetRemoteDescription(
         webrtc::PeerConnectionInterface::kAnswer, desc.release()));
   }
+
+ private:
+  MediaHints hints_;
+  MediaHints remote_hints_;
 };
 
 class MockCreateSessionDescriptionObserver
@@ -600,10 +476,8 @@ class MockSetSessionDescriptionObserver
 class JsepTestClient
     : public PeerConnectionTestClientBase<JsepMessageReceiver> {
  public:
-  static JsepTestClient* CreateClient(const std::string& id,
-                                      const MediaHints& hints,
-                                      const MediaHints& remote_hints) {
-    JsepTestClient* client(new JsepTestClient(id, hints, remote_hints));
+  static JsepTestClient* CreateClient(const std::string& id) {
+    JsepTestClient* client(new JsepTestClient(id));
     if (!client->Init()) {
       delete client;
       return NULL;
@@ -652,15 +526,19 @@ class JsepTestClient
     signaling_message_receiver()->ReceiveIceMessage(candidate->sdp_mid(),
         candidate->sdp_mline_index(), ice_sdp);
   }
+
+  // TODO(perkj) Implement constraints for rejecting audio.
+  virtual bool can_receive_audio() { return true; }
+  // TODO(perkj) Implement constraints for rejecting video.
+  virtual bool can_receive_video() { return true; }
+
   virtual void OnIceComplete() {
     LOG(INFO) << id() << "OnIceComplete";
   }
 
  protected:
-  JsepTestClient(const std::string& id, const MediaHints& hints,
-      const MediaHints& remote_hints)
-      : PeerConnectionTestClientBase<JsepMessageReceiver>(id, hints,
-                                                          remote_hints) {}
+  explicit JsepTestClient(const std::string& id)
+      : PeerConnectionTestClientBase<JsepMessageReceiver>(id) {}
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
       CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory) {
@@ -781,14 +659,18 @@ class P2PTestConductor : public testing::Test {
     return initiating_client_->VideoFramesReceivedCheck(frames_received) &&
         receiving_client_->VideoFramesReceivedCheck(frames_received);
   }
-  bool VerifyLocalCandidates() {
-    return initiating_client_->VerifyLocalCandidates() &&
-        receiving_client_->VerifyLocalCandidates();
+  void VerifySendDtmf() {
+    initiating_client_->VerifySendDtmf();
+    receiving_client_->VerifySendDtmf();
   }
-  bool VerifySendDtmf() {
-    return initiating_client_->VerifySendDtmf() &&
-        receiving_client_->VerifySendDtmf();
+
+  void VerifyRenderedSize(int width, int height) {
+    EXPECT_EQ(width, receiving_client()->rendered_width());
+    EXPECT_EQ(height, receiving_client()->rendered_height());
+    EXPECT_EQ(width, initializing_client()->rendered_width());
+    EXPECT_EQ(height, initializing_client()->rendered_height());
   }
+
   ~P2PTestConductor() {
     if (initiating_client_) {
       initiating_client_->set_signaling_message_receiver(NULL);
@@ -798,11 +680,9 @@ class P2PTestConductor : public testing::Test {
     }
   }
 
-  bool CreateTestClients(const MediaHints& hints0, const MediaHints& hints1) {
-    initiating_client_.reset(SignalingClass::CreateClient("Caller: ", hints0,
-                                                          hints1));
-    receiving_client_.reset(SignalingClass::CreateClient("Callee: ", hints1,
-                                                         hints0));
+  bool CreateTestClients() {
+    initiating_client_.reset(SignalingClass::CreateClient("Caller: "));
+    receiving_client_.reset(SignalingClass::CreateClient("Callee: "));
     if (!initiating_client_ || !receiving_client_) {
       return false;
     }
@@ -820,20 +700,22 @@ class P2PTestConductor : public testing::Test {
     return true;
   }
 
-  bool StopSession() {
-    if (!IsInitialized()) {
-      return false;
-    }
-    initiating_client_->StopSession();
-    receiving_client_->StopSession();
-    return true;
+  void SetHints(const MediaHints& init_hints,
+                const MediaHints& receiving_hints) {
+    initiating_client_->SetHints(init_hints, receiving_hints);
+    receiving_client_->SetHints(receiving_hints, init_hints);
+  }
+
+  void SetVideoConstraints(const webrtc::FakeConstraints& init_constraints,
+                           const webrtc::FakeConstraints& recv_constraints) {
+    initiating_client_->SetVideoConstraints(init_constraints);
+    receiving_client_->SetVideoConstraints(recv_constraints);
   }
 
   // This test sets up a call between two parties. Both parties send static
   // frames to each other. Once the test is finished the number of sent frames
   // is compared to the number of received frames.
-  void LocalP2PTest(const MediaHints& hints0, const MediaHints& hints1) {
-    ASSERT_TRUE(CreateTestClients(hints0, hints1));
+  void LocalP2PTest() {
     EXPECT_TRUE(StartSession());
     const int kMaxWaitForActivationMs = 5000;
     // Assert true is used here since next tests are guaranteed to fail and
@@ -844,20 +726,21 @@ class P2PTestConductor : public testing::Test {
     int kEndAudioFrameCount = 10;
     int kEndVideoFrameCount = 10;
     const int kMaxWaitForFramesMs = 5000;
-    // TODO(ronghuawu): Add test to covert the case of sendonly and recvonly.
-    if (!hints0.has_audio() || !hints1.has_audio()) {
+    // TODO(ronghuawu): Add test to cover the case of sendonly and recvonly.
+    if (!initiating_client_->can_receive_audio() ||
+        !receiving_client_->can_receive_audio()) {
       kEndAudioFrameCount = -1;
     }
-    if (!hints0.has_video() || !hints1.has_video()) {
+    if (!initiating_client_->can_receive_video() ||
+        !receiving_client_->can_receive_video()) {
       kEndVideoFrameCount = -1;
     }
     EXPECT_TRUE_WAIT(FramesNotPending(kEndAudioFrameCount, kEndVideoFrameCount),
                      kMaxWaitForFramesMs);
-    const int kMaxWaitForCandidatesMs = 5000;
-    EXPECT_TRUE_WAIT(VerifyLocalCandidates(), kMaxWaitForCandidatesMs);
-    VerifySendDtmf();
-    EXPECT_TRUE(StopSession());
   }
+
+  SignalingClass* initializing_client() { return initiating_client_.get(); }
+  SignalingClass* receiving_client() { return receiving_client_.get(); }
 
  private:
   bool IsInitialized() const {
@@ -873,7 +756,8 @@ typedef P2PTestConductor<JsepTestClient> JsepPeerConnectionP2PTestClient;
 
 // This test sets up a Jsep call with deprecated jsep apis between two parties.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {
-  LocalP2PTest(MediaHints(), MediaHints());
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
 }
 
 // This test sets up a Jsep call between two parties, and the callee only
@@ -881,24 +765,65 @@ TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {
 // TODO(ronghuawu): Add these tests for Jsep01 once the
 // MediaConstraintsInterface is ready.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerVideo) {
-  LocalP2PTest(MediaHints(), MediaHints(false, true));
+  ASSERT_TRUE(CreateTestClients());
+  SetHints(MediaHints(), MediaHints(false, true));
+  LocalP2PTest();
 }
 
 // This test sets up a Jsep call between two parties, and the callee only
 // has audio.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerAudio) {
-  LocalP2PTest(MediaHints(), MediaHints(true, false));
+  ASSERT_TRUE(CreateTestClients());
+  SetHints(MediaHints(), MediaHints(true, false));
+  LocalP2PTest();
 }
 
 // This test sets up a Jsep call between two parties, and the callee has neither
 // audio or video.
 TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerNone) {
-  LocalP2PTest(MediaHints(), MediaHints(false, false));
+  ASSERT_TRUE(CreateTestClients());
+  SetHints(MediaHints(), MediaHints(false, false));
+  LocalP2PTest();
 }
 
-// This test sets up a Jsep call between two parties.
-// TODO(perkj): Re-enable when
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDtmf) {
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
+  VerifySendDtmf();
+  VerifyRenderedSize(640, 480);
+}
+
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTest16To9) {
+  ASSERT_TRUE(CreateTestClients());
+  webrtc::FakeConstraints constraint;
+  double requested_ratio = 640.0/360;
+  constraint.SetMandatoryMinAspectRatio(requested_ratio);
+  SetVideoConstraints(constraint, constraint);
+  LocalP2PTest();
+
+  ASSERT_LE(0, initializing_client()->rendered_height());
+  double initiating_video_ratio =
+      static_cast<double> (initializing_client()->rendered_width()) /
+      initializing_client()->rendered_height();
+  EXPECT_LE(requested_ratio, initiating_video_ratio);
+
+  ASSERT_LE(0, receiving_client()->rendered_height());
+  double receiving_video_ratio =
+      static_cast<double> (receiving_client()->rendered_width()) /
+      receiving_client()->rendered_height();
+  EXPECT_LE(requested_ratio, receiving_video_ratio);
+}
+
+// This test sets up a Jsep call between two parties and test that the
+// received video has a resolution of 1280*720.
+// TODO(mallinath): Enable when
 // http://code.google.com/p/webrtc/issues/detail?id=981 is fixed.
-TEST_F(JsepPeerConnectionP2PTestClient, DISABLED_LocalP2PTest) {
-  LocalP2PTest(MediaHints(), MediaHints());
+TEST_F(JsepPeerConnectionP2PTestClient, DISABLED_LocalP2PTest1280By720) {
+  ASSERT_TRUE(CreateTestClients());
+  webrtc::FakeConstraints constraint;
+  constraint.SetMandatoryMinWidth(1280);
+  constraint.SetMandatoryMinHeight(720);
+  SetVideoConstraints(constraint, constraint);
+  LocalP2PTest();
+  VerifyRenderedSize(1280, 720);
 }

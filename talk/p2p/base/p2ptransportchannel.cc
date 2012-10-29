@@ -424,9 +424,10 @@ void P2PTransportChannel::OnUnknownAddress(
     // candidate. So that all the new candidates created here will be the
     // peer-reflexive candidate.
     std::string type = port->Type();
-    if (type == RELAY_PORT_TYPE) {
+    if (type == RELAY_PORT_TYPE || port->SharedSocket()) {
       type = STUN_PORT_TYPE;
     }
+
     // TODO: Change the preference to the preference of
     // the peer-reflexive candidate when it's ready.
     // For now just default to a STUN preference.

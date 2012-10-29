@@ -33,7 +33,6 @@ namespace cricket {
 
 const char kFecSsrcGroupSemantics[] = "FEC";
 const char kFidSsrcGroupSemantics[] = "FID";
-const char kSimSsrcGroupSemantics[] = "SIM";
 const char kRtxSsrcGroupSemantics[] = "RTX";
 
 static std::string SsrcsToString(const std::vector<uint32>& ssrcs) {

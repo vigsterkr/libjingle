@@ -77,6 +77,11 @@ uint64 PortProxy::Tiebreaker() const {
   return impl_->Tiebreaker();
 }
 
+bool PortProxy::SharedSocket() const {
+  ASSERT(impl_ != NULL);
+  return impl_->SharedSocket();
+}
+
 void PortProxy::PrepareAddress() {
   ASSERT(impl_ != NULL);
   impl_->PrepareAddress();
