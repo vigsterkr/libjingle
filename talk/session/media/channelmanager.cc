@@ -753,7 +753,7 @@ VideoCapturer* ChannelManager::CreateVideoCapturer() {
     if (!camera_device_.empty()) {
       LOG(LS_WARNING) << "Device manager can't find camera: " << camera_device_;
     }
-    return false;
+    return NULL;
   }
   return device_manager_->CreateVideoCapturer(device);
 }

@@ -9,7 +9,7 @@ vars = {
   "googlecode_url": "http://%s.googlecode.com/svn",
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
   "chromium_revision": "164065",
-  "webrtc_revision": "2961",
+  "webrtc_revision": "3036",
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
@@ -68,7 +68,7 @@ deps = {
     From("chromium_deps", "src/third_party/yasm/source/patched-yasm"),
  
   "third_party/webrtc":
-    (Var("googlecode_url") % "webrtc") + "/stable/src@" + Var("webrtc_revision"),
+    (Var("googlecode_url") % "webrtc") + "/stable/webrtc@" + Var("webrtc_revision"),
 
   "tools/clang":
     Var("chromium_trunk") + "/src/tools/clang@" + Var("chromium_revision"),
