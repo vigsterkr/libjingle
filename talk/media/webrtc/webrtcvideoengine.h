@@ -137,6 +137,8 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   void IncrementFrameListeners();
   void DecrementFrameListeners();
 
+  VideoFormat GetStartCaptureFormat() const { return default_codec_format_; }
+
  protected:
   // When a video processor registers with the engine.
   // SignalMediaFrame will be invoked for every video frame.

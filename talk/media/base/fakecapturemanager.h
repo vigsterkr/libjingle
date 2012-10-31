@@ -25,19 +25,52 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/media/base/constants.h"
+#ifndef TALK_MEDIA_BASE_FAKECAPTUREMANAGER_H_
+#define TALK_MEDIA_BASE_FAKECAPTUREMANAGER_H_
 
-#include <string>
+#include "talk/media/base/capturemanager.h"
 
 namespace cricket {
 
-const int kVideoCodecClockrate = 90000;
-const int kDataCodecClockrate = 90000;
-const int kDataMaxBandwidth = 30720;  // bps
+class FakeCaptureManager : public CaptureManager {
+ public:
+  FakeCaptureManager() {}
+  ~FakeCaptureManager() {}
 
-const char* kRtxCodecName = "rtx";
-
-const char* kCodecParamAssociatedPayloadType = "apt";
-
+  virtual bool StartVideoCapture(VideoCapturer* video_capturer,
+                                 const VideoFormat& desired_format) {
+    if (!video_capturer) {
+      return false;
+    }
+    video_capturer->Start(desired_format);
+    return true;
+  }
+  virtual bool StopVideoCapture(VideoCapturer* video_capturer,
+                                const VideoFormat& format) {
+    if (!video_capturer) {
+      return false;
+    }
+    video_capturer->Stop();
+    return true;
+  }
+  virtual bool AddVideoRenderer(VideoCapturer* video_capturer,
+                                VideoRenderer* video_renderer) {
+    return true;
+  }
+  virtual bool RemoveVideoRenderer(VideoCapturer* video_capturer,
+                                   VideoRenderer* video_renderer) {
+    return true;
+  }
+  virtual bool AddVideoProcessor(VideoCapturer* video_capturer,
+                                 VideoProcessor* video_processor) {
+    return true;
+  }
+  virtual bool RemoveVideoProcessor(VideoCapturer* video_capturer,
+                                    VideoProcessor* video_processor) {
+    return true;
+  }
+};
 
 }  // namespace cricket
+
+#endif  // TALK_MEDIA_BASE_FAKECAPTUREMANAGER_H_

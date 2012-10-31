@@ -123,6 +123,9 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
     send_to_voicemail_ = send_to_voicemail;
   }
   bool send_to_voicemail() { return send_to_voicemail_; }
+  const VoiceMediaInfo& last_voice_media_info() const {
+    return last_voice_media_info_;
+  }
 
   // Sets a flag on the chatapp that will redirect the call to voicemail once
   // the call has been terminated
@@ -260,6 +263,8 @@ class Call : public talk_base::MessageHandler, public sigslot::has_slots<> {
   // bit or start the next tone playing.
   std::deque<int> queued_dtmf_;
   bool playing_dtmf_;
+
+  VoiceMediaInfo last_voice_media_info_;
 
   friend class MediaSessionClient;
 };

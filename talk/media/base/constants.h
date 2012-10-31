@@ -38,6 +38,11 @@ extern const int kVideoCodecClockrate;
 extern const int kDataCodecClockrate;
 extern const int kDataMaxBandwidth;  // bps
 
+extern const char* kRtxCodecName;
+
+// Codec parameter: associated payload type
+extern const char* kCodecParamAssociatedPayloadType;
+
 }  // namespace cricket
 
 #endif  // TALK_MEDIA_BASE_CONSTANTS_H_

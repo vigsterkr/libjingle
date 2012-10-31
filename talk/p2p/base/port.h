@@ -155,12 +155,18 @@ class Port : public PortInterface, public talk_base::MessageHandler,
     type_preference_ = preference;
   }
 
-  void set_related_address(const talk_base::SocketAddress& address) {
-    related_address_ = address;
+  bool send_retransmit_count_attribute() const {
+    return send_retransmit_count_attribute_;
+  }
+  void set_send_retransmit_count_attribute(bool enable) {
+    send_retransmit_count_attribute_ = enable;
   }
 
   const talk_base::SocketAddress& related_address() const {
     return related_address_;
+  }
+  void set_related_address(const talk_base::SocketAddress& address) {
+    related_address_ = address;
   }
 
   // Identifies the generation that this port was created in.
@@ -311,6 +317,7 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   talk_base::PacketSocketFactory* factory_;
   std::string type_;
   uint32 type_preference_;
+  bool send_retransmit_count_attribute_;
   talk_base::Network* network_;
   talk_base::IPAddress ip_;
   int min_port_;

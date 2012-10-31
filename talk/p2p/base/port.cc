@@ -144,6 +144,7 @@ Port::Port(talk_base::Thread* thread, talk_base::Network* network,
     : thread_(thread),
       factory_(NULL),
       type_preference_(0),
+      send_retransmit_count_attribute_(false),
       network_(network),
       ip_(ip),
       min_port_(0),
@@ -170,6 +171,7 @@ Port::Port(talk_base::Thread* thread, const std::string& type,
       factory_(factory),
       type_(type),
       type_preference_(preference),
+      send_retransmit_count_attribute_(false),
       network_(network),
       ip_(ip),
       min_port_(min_port),
@@ -723,11 +725,11 @@ class ConnectionRequest : public StunRequest {
     request->AddAttribute(
         new StunByteStringAttribute(STUN_ATTR_USERNAME, username));
 
-    // Disabling golden-ping since it breaks Android clients. b/7423258
-    // TODO(thaloun): Reenable conditionally for remote clients that support it.
     // connection_ already holds this ping, so subtract one from count.
-    // request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_RETRANSMIT_COUNT,
-    //    connection_->pings_since_last_response_.size() - 1));
+    if (connection_->port()->send_retransmit_count_attribute()) {
+      request->AddAttribute(new StunUInt32Attribute(STUN_ATTR_RETRANSMIT_COUNT,
+          connection_->pings_since_last_response_.size() - 1));
+    }
 
     // Adding ICE-specific attributes to the STUN request message.
     if (connection_->port()->IceProtocol() == ICEPROTO_RFC5245) {
@@ -1072,7 +1074,8 @@ void Connection::UpdateState(uint32 now) {
     set_write_state(STATE_WRITE_UNRELIABLE);
   }
 
-  if ((write_state_ == STATE_WRITE_UNRELIABLE) &&
+  if ((write_state_ == STATE_WRITE_UNRELIABLE ||
+       write_state_ == STATE_WRITE_INIT) &&
       TooLongWithoutResponse(pings_since_last_response_,
                              CONNECTION_WRITE_TIMEOUT,
                              now)) {

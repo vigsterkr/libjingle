@@ -41,6 +41,7 @@
 
 #include <algorithm>
 #include <string>
+#include <set>
 #include <vector>
 
 #include "talk/base/basictypes.h"
@@ -77,6 +78,7 @@ struct StreamParams {
     stream.ssrcs.push_back(ssrc);
     return stream;
   }
+
   bool operator==(const StreamParams& other) const {
     return (nick == other.nick &&
             name == other.name &&
@@ -123,13 +125,17 @@ struct StreamParams {
     return NULL;
   }
 
-  // Convenience function to add an RTX ssrc for a primary_ssrc
+  // Convenience function to add an FID ssrc for a primary_ssrc
   // that's already been added.
-  bool AddRtxSsrc(uint32 primary_ssrc, uint32 rtx_ssrc);
+  inline bool AddFidSsrc(uint32 primary_ssrc, uint32 fid_ssrc) {
+    return AddSecondarySsrc(kFidSsrcGroupSemantics, primary_ssrc, fid_ssrc);
+  }
 
-  // Convenience function to lookup the RTX ssrc for a primary_ssrc.
-  // Returns false if primary_ssrc not found or RTX not defined for it.
-  bool GetRtxSsrc(uint32 primary_ssrc, uint32* rtx_ssrc) const;
+  // Convenience function to lookup the FID ssrc for a primary_ssrc.
+  // Returns false if primary_ssrc not found or FID not defined for it.
+  inline bool GetFidSsrc(uint32 primary_ssrc, uint32* fid_ssrc) const {
+    return GetSecondarySsrc(kFidSsrcGroupSemantics, primary_ssrc, fid_ssrc);
+  }
 
   std::string ToString() const;
 
@@ -147,6 +153,12 @@ struct StreamParams {
   std::string display;
   std::string cname;  // RTCP CNAME
   std::string sync_label;  // Friendly name of cname.
+
+ private:
+  bool AddSecondarySsrc(const std::string& semantics, uint32 primary_ssrc,
+                        uint32 secondary_ssrc);
+  bool GetSecondarySsrc(const std::string& semantics, uint32 primary_ssrc,
+                        uint32* secondary_ssrc) const;
 };
 
 typedef std::vector<StreamParams> StreamParamsVec;

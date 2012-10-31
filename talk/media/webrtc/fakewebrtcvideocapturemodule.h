@@ -127,6 +127,12 @@ class FakeWebRtcVideoCaptureModule : public webrtc::VideoCaptureModule {
     return 0;
   }
 
+#ifdef USE_WEBRTC_DEV_BRANCH
+  bool SendFrame(int w, int h) {
+    // TODO(mikhal): Implement using I420VideoFrame.
+    return false;
+  }
+#else
   bool SendFrame(int w, int h) {
     if (!running_) return false;
     webrtc::VideoFrame sample;
@@ -142,6 +148,7 @@ class FakeWebRtcVideoCaptureModule : public webrtc::VideoCaptureModule {
     }
     return true;
   }
+#endif
 
   const webrtc::VideoCaptureCapability& cap() const {
     return cap_;

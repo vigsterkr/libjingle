@@ -170,6 +170,9 @@ class MediaEngineInterface {
                                         VoiceProcessor* video_processor,
                                         MediaProcessorDirection direction) = 0;
 
+
+  virtual VideoFormat GetStartCaptureFormat() const = 0;
+
   sigslot::repeater2<VideoCapturer*, CaptureState>
       SignalVideoCaptureStateChange;
 };
@@ -289,6 +292,9 @@ class CompositeMediaEngine : public MediaEngineInterface {
                                         MediaProcessorDirection direction) {
     return voice_.UnregisterProcessor(ssrc, processor, direction);
   }
+  virtual VideoFormat GetStartCaptureFormat() const {
+    return video_.GetStartCaptureFormat();
+  }
 
  protected:
   VOICE voice_;
@@ -356,6 +362,7 @@ class NullVideoEngine {
   void SetLogging(int min_sev, const char* filter) {}
   bool RegisterProcessor(VideoProcessor* video_processor) { return true; }
   bool UnregisterProcessor(VideoProcessor* video_processor) { return true; }
+  VideoFormat GetStartCaptureFormat() const { return VideoFormat(); }
   bool SetVideoCapturer(VideoCapturer* capturer) { return true; }
   VideoCapturer* GetVideoCapturer() const { return NULL; }
 

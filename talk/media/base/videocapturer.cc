@@ -41,7 +41,7 @@ namespace cricket {
 
 static const int64 kMaxDistance = ~(static_cast<int64>(1) << 63);
 static const int64 kMinDesirableFps = static_cast<int64>(14);
-
+static const int kYU12Penalty = 16;  // Needs to be higher than MJPG index.
 typedef talk_base::TypedMessageData<CaptureState> StateChangeParams;
 
 /////////////////////////////////////////////////////////////////////
@@ -223,6 +223,14 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
     for (size_t i = 0; i < preferred_fourccs.size(); ++i) {
       if (supported_fourcc == CanonicalFourCC(preferred_fourccs[i])) {
         delta_fourcc = i;
+#ifdef LINUX
+        // For HD avoid YU12 which is a software conversion and has 2 bugs
+        // b/7326348 b/6960899.  Reenable when fixed.
+        if (supported.height >= 720 && (supported_fourcc == FOURCC_YU12 ||
+            supported_fourcc == FOURCC_YV12)) {
+          delta_fourcc += kYU12Penalty;
+        }
+#endif
         break;
       }
     }

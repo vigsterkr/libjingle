@@ -112,6 +112,7 @@ const char* CALL_COMMANDS =
 "  vmute             Stops sending video.\n"
 "  vunmute           Re-starts sending video.\n"
 "  dtmf              Sends a DTMF tone.\n"
+"  stats             Print voice stats for the current call.\n"
 "  quit              Quits the application.\n"
 "";
 
@@ -296,6 +297,8 @@ void CallClient::ParseLine(const std::string& line) {
     } else if ((command == "dtmf") && (words.size() == 2)) {
       int ev = std::string("0123456789*#").find(words[1][0]);
       call_->PressDTMF(ev);
+    } else if (command == "stats") {
+      PrintStats();
     } else {
       console_->PrintLine(CALL_COMMANDS);
       if (InMuc()) {
@@ -585,9 +588,7 @@ void CallClient::OnSessionState(cricket::Call* call,
     console_->PrintLine("calling...");
   } else if (state == cricket::Session::STATE_RECEIVEDACCEPT) {
     console_->PrintLine("call answered");
-    if (call_->has_data()) {
-      call_->SignalDataReceived.connect(this, &CallClient::OnDataReceived);
-    }
+    SetupAcceptedCall();
   } else if (state == cricket::Session::STATE_RECEIVEDREJECT) {
     console_->PrintLine("call not answered");
   } else if (state == cricket::Session::STATE_INPROGRESS) {
@@ -1056,10 +1057,14 @@ void CallClient::Accept(const cricket::CallOptions& options) {
     call_->SetLocalRenderer(local_renderer_);
     RenderAllStreams(call_, session, true);
   }
+  SetupAcceptedCall();
+  incoming_call_ = false;
+}
+
+void CallClient::SetupAcceptedCall() {
   if (call_->has_data()) {
     call_->SignalDataReceived.connect(this, &CallClient::OnDataReceived);
   }
-  incoming_call_ = false;
 }
 
 void CallClient::Reject() {
@@ -1556,4 +1561,24 @@ bool CallClient::SelectFirstDesktopScreencastId(
 
   *screencastid = cricket::ScreencastId(desktops[0].id());
   return true;
+}
+
+void CallClient::PrintStats() const {
+  const cricket::VoiceMediaInfo& vmi = call_->last_voice_media_info();
+
+  for (std::vector<cricket::VoiceSenderInfo>::const_iterator it =
+       vmi.senders.begin(); it != vmi.senders.end(); ++it) {
+    console_->PrintLine("Sender: ssrc=%u codec='%s' bytes=%d packets=%d "
+                        "rtt=%d jitter=%d",
+                        it->ssrc, it->codec_name.c_str(), it->bytes_sent,
+                        it->packets_sent, it->rtt_ms, it->jitter_ms);
+  }
+
+  for (std::vector<cricket::VoiceReceiverInfo>::const_iterator it =
+       vmi.receivers.begin(); it != vmi.receivers.end(); ++it) {
+    console_->PrintLine("Receiver: ssrc=%u bytes=%d packets=%d "
+                        "jitter=%d loss=%.2f",
+                        it->ssrc, it->bytes_rcvd, it->packets_rcvd,
+                        it->jitter_ms, it->fraction_lost);
+  }
 }

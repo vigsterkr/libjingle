@@ -214,6 +214,9 @@ class HybridVideoEngine : public HybridVideoEngineInterface {
     return video1_.UnregisterProcessor(video_processor) &&
         video2_.UnregisterProcessor(video_processor);
   }
+  VideoFormat GetStartCaptureFormat() const {
+    return video2_.GetStartCaptureFormat();
+  }
 
   // TODO(juberti): Remove these functions after we do the capturer refactoring.
   // For now they are set to always use the second engine for capturing, which

@@ -870,6 +870,9 @@ class FakeVideoEngine : public FakeBaseEngine {
     processor_ = NULL;
     return true;
   }
+  VideoFormat GetStartCaptureFormat() const {
+    return VideoFormat();
+  }
 
   sigslot::signal2<VideoCapturer*, CaptureState> SignalCaptureStateChange;
 

@@ -192,6 +192,11 @@ class MediaContentDescription : public ContentDescription {
   void AddLegacyStream(uint32 ssrc) {
     streams_.push_back(StreamParams::CreateLegacy(ssrc));
   }
+  void AddLegacyStream(uint32 ssrc, uint32 fid_ssrc) {
+    StreamParams sp = StreamParams::CreateLegacy(ssrc);
+    sp.AddFidSsrc(ssrc, fid_ssrc);
+    streams_.push_back(sp);
+  }
   // Sets the CNAME of all StreamParams if it have not been set.
   // This can be used to set the CNAME of legacy streams.
   void SetCnameIfEmpty(const std::string& cname) {

@@ -321,16 +321,25 @@ bool WebRtcVideoCapturer::GetPreferredFourccs(
   return true;
 }
 
+#ifdef USE_WEBRTC_DEV_BRANCH
+void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
+    webrtc::I420VideoFrame& sample) {
+#else
 void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
     webrtc::VideoFrame& sample, webrtc::VideoCodecType codec_type) {
-  ASSERT(IsRunning());
   ASSERT(codec_type == webrtc::kVideoCodecUnknown);
+#endif
+  ASSERT(IsRunning());
 
   ++captured_frames_;
   // Log the size and pixel aspect ratio of the first captured frame.
   if (1 == captured_frames_) {
     LOG(LS_INFO) << "Captured frame size "
+#ifdef USE_WEBRTC_DEV_BRANCH
+                 << sample.width() << "x" << sample.height()
+#else
                  << sample.Width() << "x" << sample.Height()
+#endif
                  << ". Expected format " << GetCaptureFormat()->ToString();
   }
 
@@ -345,6 +354,11 @@ void WebRtcVideoCapturer::OnCaptureDelayChanged(
 }
 
 // WebRtcCapturedFrame
+#ifdef USE_WEBRTC_DEV_BRANCH
+WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::I420VideoFrame& sample) {
+  // TODO(mikhal): Implement using I420VideoFrame.
+}
+#else
 WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
   width = sample.Width();
   height = sample.Height();
@@ -358,6 +372,7 @@ WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
   data_size = sample.Length();
   data = const_cast<WebRtc_UWord8*>(sample.Buffer());
 }
+#endif
 
 }  // namespace cricket
 

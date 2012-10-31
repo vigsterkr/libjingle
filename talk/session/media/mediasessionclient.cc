@@ -34,6 +34,7 @@
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
 #include "talk/media/base/cryptoparams.h"
+#include "talk/media/base/capturemanager.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/parsing.h"
 #include "talk/session/media/mediamessages.h"
@@ -65,7 +66,8 @@ MediaSessionClient::MediaSessionClient(
       focus_call_(NULL),
       channel_manager_(new ChannelManager(
           media_engine, data_media_engine,
-          device_manager, session_manager_->worker_thread())),
+          device_manager, new CaptureManager(),
+          session_manager_->worker_thread())),
       desc_factory_(channel_manager_,
                     session_manager_->transport_desc_factory()) {
   Construct();
@@ -494,6 +496,7 @@ bool ParseJingleVideoCodec(const buzz::XmlElement* elem, VideoCodec* codec) {
   int framerate = FindWithDefault(paramap, PAYLOADTYPE_PARAMETER_FRAMERATE, 0);
 
   *codec = VideoCodec(id, name, width, height, framerate, 0);
+  codec->params = paramap;
   return true;
 }
 
@@ -779,8 +782,9 @@ buzz::XmlElement* CreateGingleVideoContentElem(
   return elem;
 }
 
+template <class T>
 buzz::XmlElement* CreatePayloadTypeParameterElem(
-    const std::string& name, int value) {
+    const std::string& name, T value) {
   buzz::XmlElement* elem = new buzz::XmlElement(QN_PARAMETER);
 
   elem->AddAttr(QN_PAYLOADTYPE_PARAMETER_NAME, name);
@@ -819,6 +823,12 @@ buzz::XmlElement* CreateJingleVideoCodecElem(const VideoCodec& codec) {
       PAYLOADTYPE_PARAMETER_HEIGHT, codec.height));
   elem->AddElement(CreatePayloadTypeParameterElem(
       PAYLOADTYPE_PARAMETER_FRAMERATE, codec.framerate));
+  CodecParameterMap::const_iterator param_iter;
+  for (param_iter = codec.params.begin(); param_iter != codec.params.end();
+       ++param_iter) {
+    elem->AddElement(CreatePayloadTypeParameterElem(param_iter->first,
+                                                    param_iter->second));
+  }
 
   return elem;
 }

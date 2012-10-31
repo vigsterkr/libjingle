@@ -83,11 +83,11 @@ static const char kCandidateFoundation4[] = "a0+B/4";
 static const char kFingerprint[] = "a=fingerprint:sha-1 "
     "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
 
-static const uint8_t kIdentityDigest[] = {0x4A,0xAD,0xB9,0xB1,
-                                          0x3F,0x82,0x18,0x3B,
-                                          0x54,0x02,0x12,0xDF,
-                                          0x3E,0x5D,0x49,0x6B,
-                                          0x19,0xE5,0x7C,0xAB};
+static const uint8 kIdentityDigest[] = {0x4A,0xAD,0xB9,0xB1,
+                                        0x3F,0x82,0x18,0x3B,
+                                        0x54,0x02,0x12,0xDF,
+                                        0x3E,0x5D,0x49,0x6B,
+                                        0x19,0xE5,0x7C,0xAB};
 // Reference sdp string
 static const char kSdpFullString[] =
     "v=0\r\n"
@@ -1235,7 +1235,7 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
   // Missing space.
   const char kSdpInvalidLine6[] = "a=fingerprint:sha-1"
       "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
-      
+
   // Broken session description
   EXPECT_FALSE(ReplaceAndTryToParse("v=", kSdpDestroyer));
   EXPECT_FALSE(ReplaceAndTryToParse("o=", kSdpDestroyer));

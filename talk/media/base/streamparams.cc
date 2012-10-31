@@ -97,27 +97,31 @@ std::string StreamParams::ToString() const {
   return ost.str();
 }
 
-bool StreamParams::AddRtxSsrc(uint32 primary_ssrc, uint32 rtx_ssrc) {
+bool StreamParams::AddSecondarySsrc(const std::string& semantics,
+                                    uint32 primary_ssrc,
+                                    uint32 secondary_ssrc) {
   if (!has_ssrc(primary_ssrc)) {
     return false;
   }
 
-  ssrcs.push_back(rtx_ssrc);
+  ssrcs.push_back(secondary_ssrc);
   std::vector<uint32> ssrc_vector;
   ssrc_vector.push_back(primary_ssrc);
-  ssrc_vector.push_back(rtx_ssrc);
-  SsrcGroup rtx_group = SsrcGroup(kRtxSsrcGroupSemantics, ssrc_vector);
-  ssrc_groups.push_back(rtx_group);
+  ssrc_vector.push_back(secondary_ssrc);
+  SsrcGroup ssrc_group = SsrcGroup(semantics, ssrc_vector);
+  ssrc_groups.push_back(ssrc_group);
   return true;
 }
 
-bool StreamParams::GetRtxSsrc(uint32 primary_ssrc, uint32* rtx_ssrc) const {
+bool StreamParams::GetSecondarySsrc(const std::string& semantics,
+                                    uint32 primary_ssrc,
+                                    uint32* secondary_ssrc) const {
   for (std::vector<SsrcGroup>::const_iterator it = ssrc_groups.begin();
        it != ssrc_groups.end(); ++it) {
-    if (it->has_semantics(kRtxSsrcGroupSemantics) &&
+    if (it->has_semantics(semantics) &&
           it->ssrcs.size() >= 2 &&
           it->ssrcs[0] == primary_ssrc) {
-      *rtx_ssrc = it->ssrcs[1];
+      *secondary_ssrc = it->ssrcs[1];
       return true;
     }
   }

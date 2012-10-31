@@ -76,7 +76,7 @@ struct SSLFingerprint {
       return NULL;
 
     return new SSLFingerprint(algorithm,
-                              reinterpret_cast<uint8_t*>(value),
+                              reinterpret_cast<uint8*>(value),
                               value_len);
   }
 

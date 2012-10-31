@@ -78,6 +78,7 @@ enum {
   MSG_STOPVIDEOCAPTURE = 30,
   MSG_ADDVIDEORENDERER = 31,
   MSG_REMOVEVIDEORENDERER = 32,
+  MSG_GETSTARTCAPTUREFORMAT = 33,
 };
 
 static const int kNotSetOutputVolume = -1;
@@ -204,34 +205,42 @@ struct VideoCapturerRendererParams : public talk_base::MessageData {
   bool result;
 };
 
+struct StartCaptureParams  : public talk_base::MessageData {
+  StartCaptureParams() : video_format() {}
+  VideoFormat video_format;
+};
+
 ChannelManager::ChannelManager(talk_base::Thread* worker_thread) {
   Construct(MediaEngineFactory::Create(),
             new RtpDataEngine(),
             cricket::DeviceManagerFactory::Create(),
+            new CaptureManager(),
             worker_thread);
 }
 
 ChannelManager::ChannelManager(MediaEngineInterface* me,
                                DataEngineInterface* dme,
                                DeviceManagerInterface* dm,
+                               CaptureManager* cm,
                                talk_base::Thread* worker_thread) {
-  Construct(me, dme, dm, worker_thread);
+  Construct(me, dme, dm, cm, worker_thread);
 }
 
 ChannelManager::ChannelManager(MediaEngineInterface* me,
                                DeviceManagerInterface* dm,
                                talk_base::Thread* worker_thread) {
-  Construct(me, new RtpDataEngine(), dm, worker_thread);
+  Construct(me, new RtpDataEngine(), dm, new CaptureManager(), worker_thread);
 }
 
 void ChannelManager::Construct(MediaEngineInterface* me,
                                DataEngineInterface* dme,
                                DeviceManagerInterface* dm,
+                               CaptureManager* cm,
                                talk_base::Thread* worker_thread) {
   media_engine_.reset(me);
   data_media_engine_.reset(dme);
   device_manager_.reset(dm);
-  capture_manager_.reset(new CaptureManager());
+  capture_manager_.reset(cm);
   initialized_ = false;
   main_thread_ = talk_base::Thread::Current();
   worker_thread_ = worker_thread;
@@ -676,6 +685,18 @@ bool ChannelManager::SetOutputVolume_w(int level) {
   return media_engine_->SetOutputVolume(level);
 }
 
+bool ChannelManager::IsSameCapturer(const std::string& capturer_name,
+                                    VideoCapturer* capturer) {
+  if (capturer == NULL) {
+    return false;
+  }
+  Device device;
+  if (!device_manager_->GetVideoCaptureDevice(capturer_name, &device)) {
+    return false;
+  }
+  return capturer->GetId() == device.id;
+}
+
 bool ChannelManager::GetVideoOptions(std::string* cam_name) {
   if (camera_device_.empty()) {
     // Initialize camera_device_ with default.
@@ -726,37 +747,25 @@ bool ChannelManager::SetVideoOptions(const std::string& cam_name) {
   return ret;
 }
 
+VideoCapturer* ChannelManager::CreateVideoCapturer() {
+  Device device;
+  if (!device_manager_->GetVideoCaptureDevice(camera_device_, &device)) {
+    if (!camera_device_.empty()) {
+      LOG(LS_WARNING) << "Device manager can't find camera: " << camera_device_;
+    }
+    return false;
+  }
+  return device_manager_->CreateVideoCapturer(device);
+}
+
 bool ChannelManager::SetVideoOptions_w(const Device* cam_device) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   ASSERT(initialized_);
 
   if (!cam_device) {
     video_device_name_.clear();
-    media_engine_->SetVideoCapturer(NULL);
-    video_capturer_.reset(NULL);
-    LOG(LS_INFO) << "Camera set to NULL";
     return true;
   }
-
-  // No need to do anything if the same device is passed more than once.
-  if (video_capturer_ &&
-      video_capturer_->GetId() == cam_device->id) {
-    // No change, return success.
-    return true;
-  }
-  VideoCapturer* video_capturer = device_manager_->CreateVideoCapturer(
-      *cam_device);
-  if (!video_capturer) {
-    return false;
-  }
-
-  // Register the new video_capturer.
-  if (!media_engine_->SetVideoCapturer(video_capturer)) {
-    delete video_capturer;
-    return false;
-  }
-  // Capturer successfully updated.
-  video_capturer_.reset(video_capturer);
   video_device_name_ = cam_device->name;
   return true;
 }
@@ -1164,6 +1173,12 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
       data->result = RemoveVideoRenderer_w(data->capturer, data->renderer);
       break;
     }
+    case MSG_GETSTARTCAPTUREFORMAT: {
+      StartCaptureParams* data =
+          static_cast<StartCaptureParams*>(message->pdata);
+      data->video_format = GetStartCaptureFormat_w();
+      break;
+    }
   }
 }
 
@@ -1203,6 +1218,16 @@ bool ChannelManager::GetVideoCaptureDevices(std::vector<std::string>* names) {
     GetDeviceNames(devs, names);
 
   return ret;
+}
+
+VideoFormat ChannelManager::GetStartCaptureFormat() {
+  StartCaptureParams params;
+  Send(MSG_GETSTARTCAPTUREFORMAT, &params);
+  return params.video_format;
+}
+
+VideoFormat ChannelManager::GetStartCaptureFormat_w() {
+  return media_engine_->GetStartCaptureFormat();
 }
 
 }  // namespace cricket

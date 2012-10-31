@@ -29,6 +29,7 @@
 #define TALK_MEDIA_BASE_FAKENETWORKINTERFACE_H_
 
 #include <vector>
+#include <map>
 
 #include "talk/base/buffer.h"
 #include "talk/base/byteorder.h"
@@ -120,6 +121,11 @@ class FakeNetworkInterface : public MediaChannel::NetworkInterface,
     return new talk_base::Buffer(rtcp_packets_[index]);
   }
 
+  // Indicate that |n|'th packet for |ssrc| should be dropped.
+  void AddPacketDrop(uint32 ssrc, uint32 n) {
+    drop_map_[ssrc].insert(n);
+  }
+
   int sendbuf_size() const { return sendbuf_size_; }
   int recvbuf_size() const { return recvbuf_size_; }
 
@@ -131,7 +137,17 @@ class FakeNetworkInterface : public MediaChannel::NetworkInterface,
     if (!GetRtpSsrc(packet->data(), packet->length(), &cur_ssrc)) {
       return false;
     }
-    sent_ssrcs_.insert(cur_ssrc);
+    sent_ssrcs_[cur_ssrc]++;
+
+    // Check if we need to drop this packet.
+    std::map<uint32, std::set<uint32> >::iterator itr =
+      drop_map_.find(cur_ssrc);
+    if (itr != drop_map_.end() &&
+        itr->second.count(sent_ssrcs_[cur_ssrc]) > 0) {
+        // "Drop" the packet.
+        return true;
+    }
+
     rtp_packets_.push_back(*packet);
     if (conf_) {
       talk_base::Buffer buffer_copy(*packet);
@@ -216,8 +232,11 @@ class FakeNetworkInterface : public MediaChannel::NetworkInterface,
   bool conf_;
   // The ssrcs used in sending out packets in conference mode.
   std::vector<uint32> conf_sent_ssrcs_;
-  // All ssrcs received from SendPacket().
-  std::set<uint32> sent_ssrcs_;
+  // Map to track counts of packets that have been sent per ssrc.
+  // This includes packets that are dropped.
+  std::map<uint32, uint32> sent_ssrcs_;
+  // Map to track packet-number that needs to be dropped per ssrc.
+  std::map<uint32, std::set<uint32> > drop_map_;
   talk_base::CriticalSection crit_;
   std::vector<talk_base::Buffer> rtp_packets_;
   std::vector<talk_base::Buffer> rtcp_packets_;

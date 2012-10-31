@@ -65,6 +65,7 @@ class ChannelManager : public talk_base::MessageHandler,
   ChannelManager(MediaEngineInterface* me,
                  DataEngineInterface* dme,
                  DeviceManagerInterface* dm,
+                 CaptureManager* cm,
                  talk_base::Thread* worker);
   // Same as above, but gives an easier default DataEngine.
   ChannelManager(MediaEngineInterface* me,
@@ -135,7 +136,11 @@ class ChannelManager : public talk_base::MessageHandler,
                        const std::string& wave_out_device, int opts);
   bool GetOutputVolume(int* level);
   bool SetOutputVolume(int level);
+  bool IsSameCapturer(const std::string& capturer_name,
+                      VideoCapturer* capturer);
   bool GetVideoOptions(std::string* cam_device);
+  // Create capturer based on what has been set in SetVideoOptions().
+  VideoCapturer* CreateVideoCapturer();
   bool SetVideoOptions(const std::string& cam_device);
   bool SetDefaultVideoEncoderConfig(const VideoEncoderConfig& config);
 
@@ -193,6 +198,9 @@ class ChannelManager : public talk_base::MessageHandler,
   // This API is mainly a hook used by unittests.
   const std::string& video_device_name() const { return video_device_name_; }
 
+  // TODO(hellner): Remove this function once the engine capturer has been
+  // removed.
+  VideoFormat GetStartCaptureFormat();
  protected:
   // Adds non-transient parameters which can only be changed through the
   // options store.
@@ -210,6 +218,7 @@ class ChannelManager : public talk_base::MessageHandler,
   void Construct(MediaEngineInterface* me,
                  DataEngineInterface* dme,
                  DeviceManagerInterface* dm,
+                 CaptureManager* cm,
                  talk_base::Thread* worker_thread);
   bool Send(uint32 id, talk_base::MessageData* pdata);
   void Terminate_w();
@@ -259,7 +268,7 @@ class ChannelManager : public talk_base::MessageHandler,
                           const VideoFormat& video_format);
   bool AddVideoRenderer_w(VideoCapturer* capturer, VideoRenderer* renderer);
   bool RemoveVideoRenderer_w(VideoCapturer* capturer, VideoRenderer* renderer);
-
+  VideoFormat GetStartCaptureFormat_w();
 
   void OnMessage(talk_base::Message *message);
 

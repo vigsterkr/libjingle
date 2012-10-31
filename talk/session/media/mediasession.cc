@@ -207,13 +207,21 @@ static bool GenerateCname(const StreamParamsVec& params_vec,
   return true;
 }
 
-// Generate a new SSRC and make sure it does not exist in params_vec.
-static uint32 GenerateSsrc(const StreamParamsVec& params_vec) {
-  uint32 ssrc = 0;
-  do {
-    ssrc = talk_base::CreateRandomNonZeroId();
-  } while (GetStreamBySsrc(params_vec, ssrc, NULL));
-  return ssrc;
+// Generate random SSRC values that are not already present in |params_vec|.
+// Either 2 or 1 ssrcs will be generated based on |include_rtx_stream| being
+// true or false. The generated values are added to |ssrcs|.
+static void GenerateSsrcs(const StreamParamsVec& params_vec,
+                          bool include_rtx_stream,
+                          std::vector<uint32>& ssrcs) {
+  unsigned int num_ssrcs = include_rtx_stream ? 2 : 1;
+  for (unsigned int i = 0; i < num_ssrcs; i++) {
+    uint32 candidate;
+    do {
+      candidate = talk_base::CreateRandomNonZeroId();
+    } while (GetStreamBySsrc(params_vec, candidate, NULL) ||
+             std::count(ssrcs.begin(), ssrcs.end(), candidate) > 0);
+    ssrcs.push_back(candidate);
+  }
 }
 
 // Finds all StreamParams of all media types and attach them to stream_params.
@@ -243,13 +251,32 @@ static void GetCurrentStreamParams(const SessionDescription* sdesc,
 
 // Adds a StreamParams for each Stream in Streams with media type
 // media_type to content_description.
-// current_parms - All currently known StreamParams of any media type.
+// |current_params| - All currently known StreamParams of any media type.
+template <class C>
 static bool AddStreamParams(
     MediaType media_type,
     const MediaSessionOptions::Streams& streams,
     StreamParamsVec* current_streams,
-    MediaContentDescription* content_description) {
-  for (MediaSessionOptions::Streams::const_iterator stream_it = streams.begin();
+    MediaContentDescriptionImpl<C>* content_description,
+    const bool add_legacy_stream) {
+  const bool include_rtx_stream =
+    ContainsRtxCodec(content_description->codecs());
+
+  if (streams.empty() && add_legacy_stream) {
+    // TODO(perkj): Remove this legacy stream when all apps use StreamParams.
+    std::vector<uint32> ssrcs;
+    GenerateSsrcs(*current_streams, include_rtx_stream, ssrcs);
+    if (include_rtx_stream) {
+      content_description->AddLegacyStream(ssrcs[0], ssrcs[1]);
+      content_description->set_multistream(true);
+    } else {
+      content_description->AddLegacyStream(ssrcs[0]);
+    }
+    return true;
+  }
+
+  MediaSessionOptions::Streams::const_iterator stream_it;
+  for (stream_it = streams.begin();
        stream_it != streams.end(); ++stream_it) {
     if (stream_it->type != media_type)
       continue;  // Wrong media type.
@@ -266,12 +293,16 @@ static bool AddStreamParams(
                          &cname)) {
         return false;
       }
-      uint32 ssrc = GenerateSsrc(*current_streams);
-      // TODO(perkj): Generate the more complex types of stream_params.
 
+      std::vector<uint32> ssrcs;
+      GenerateSsrcs(*current_streams, include_rtx_stream, ssrcs);
       StreamParams stream_param;
       stream_param.name = stream_it->name;
-      stream_param.ssrcs.push_back(ssrc);
+      stream_param.ssrcs.push_back(ssrcs[0]);
+      if (include_rtx_stream) {
+        stream_param.AddFidSsrc(ssrcs[0], ssrcs[1]);
+        content_description->set_multistream(true);
+      }
       stream_param.cname = cname;
       stream_param.sync_label = stream_it->sync_label;
       content_description->AddStream(stream_param);
@@ -422,6 +453,17 @@ static bool UpdateCryptoParamsForBundle(const ContentGroup& bundle_group,
   return true;
 }
 
+template <class C>
+static bool ContainsRtxCodec(const std::vector<C>& codecs) {
+  typename std::vector<C>::const_iterator itr;
+  for (itr = codecs.begin(); itr != codecs.end(); ++itr) {
+    if (stricmp(itr->name.c_str(), kRtxCodecName) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Create a media content to be offered in a session-initiate,
 // according to the given options.rtcp_mux, options.is_muc,
 // options.streams, codecs, crypto, and streams.  If we don't
@@ -447,13 +489,9 @@ static bool CreateMediaContentOffer(
   offer->set_multistream(options.is_muc);
 
   if (!AddStreamParams(
-          offer->type(), options.streams, current_streams, offer)) {
+          offer->type(), options.streams, current_streams,
+          offer, add_legacy_stream)) {
     return false;
-  }
-
-  if (options.streams.empty() && add_legacy_stream) {
-    // TODO(perkj): Remove this legacy stream when all apps use StreamParams.
-    offer->AddLegacyStream(talk_base::CreateRandomNonZeroId());
   }
 
 #ifdef HAVE_SRTP
@@ -537,13 +575,9 @@ static bool CreateMediaContentAnswer(
   }
 
   if (!AddStreamParams(
-          answer->type(), options.streams, current_streams, answer)) {
+          answer->type(), options.streams, current_streams,
+          answer, add_legacy_stream)) {
     return false;  // Something went seriously wrong.
-  }
-
-  if (options.streams.empty() && add_legacy_stream) {
-    // TODO(perkj): Remove this legacy stream when all apps use StreamParams.
-    answer->AddLegacyStream(talk_base::CreateRandomNonZeroId());
   }
 
   return true;

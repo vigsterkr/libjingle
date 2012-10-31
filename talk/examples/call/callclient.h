@@ -60,12 +60,12 @@ class XmlElement;
 class HangoutPubSubClient;
 struct AvailableMediaEntry;
 struct MucRoomInfo;
-}
+}  // namespace buzz
 
 namespace talk_base {
 class Thread;
 class NetworkManager;
-}
+}  // namespace talk_base
 
 namespace cricket {
 class PortAllocator;
@@ -76,7 +76,7 @@ class SessionManagerTask;
 struct CallOptions;
 struct MediaStreams;
 struct StreamParams;
-}
+}  // namespace cricket
 
 struct RosterItem {
   buzz::Jid jid;
@@ -290,6 +290,9 @@ class CallClient: public sigslot::has_slots<> {
   void AddSession(cricket::Session* session) {
     sessions_[call_->id()].push_back(session);
   }
+
+  void PrintStats() const;
+  void SetupAcceptedCall();
 
   typedef std::map<std::string, RosterItem> RosterMap;
 

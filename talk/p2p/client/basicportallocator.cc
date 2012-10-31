@@ -529,6 +529,8 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
   port->set_generation(generation());
   if (allocator_->proxy().type != talk_base::PROXY_NONE)
     port->set_proxy(allocator_->user_agent(), allocator_->proxy());
+  port->set_send_retransmit_count_attribute((allocator_->flags() &
+      PORTALLOCATOR_ENABLE_STUN_RETRANSMIT_ATTRIBUTE) != 0);
 
   PortData data;
   data.port = port;

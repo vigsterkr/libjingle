@@ -129,32 +129,32 @@ TEST(StreamParams, EqualNotEqual) {
   }
 }
 
-TEST(StreamParams, RTXFunctions) {
-  uint32 rtx_ssrc;
+TEST(StreamParams, FidFunctions) {
+  uint32 fid_ssrc;
 
   cricket::StreamParams sp = cricket::StreamParams::CreateLegacy(1);
-  EXPECT_FALSE(sp.AddRtxSsrc(10, 20));
-  EXPECT_TRUE(sp.AddRtxSsrc(1, 2));
-  EXPECT_TRUE(sp.GetRtxSsrc(1, &rtx_ssrc));
-  EXPECT_EQ(2u, rtx_ssrc);
-  EXPECT_FALSE(sp.GetRtxSsrc(15, &rtx_ssrc));
+  EXPECT_FALSE(sp.AddFidSsrc(10, 20));
+  EXPECT_TRUE(sp.AddFidSsrc(1, 2));
+  EXPECT_TRUE(sp.GetFidSsrc(1, &fid_ssrc));
+  EXPECT_EQ(2u, fid_ssrc);
+  EXPECT_FALSE(sp.GetFidSsrc(15, &fid_ssrc));
 
   sp.add_ssrc(20);
-  sp.AddRtxSsrc(20, 30);
-  EXPECT_TRUE(sp.GetRtxSsrc(20, &rtx_ssrc));
-  EXPECT_EQ(30u, rtx_ssrc);
+  sp.AddFidSsrc(20, 30);
+  EXPECT_TRUE(sp.GetFidSsrc(20, &fid_ssrc));
+  EXPECT_EQ(30u, fid_ssrc);
 
   // Manually create SsrcGroup to test bounds-checking
-  // in GetRtxSsrc. We construct an invalid StreamParams
+  // in GetSecondarySsrc. We construct an invalid StreamParams
   // for this.
-  std::vector<uint32> rtx_vector;
-  rtx_vector.push_back(13);
-  cricket::SsrcGroup invalid_rtx_group(cricket::kRtxSsrcGroupSemantics,
-                                        rtx_vector);
+  std::vector<uint32> fid_vector;
+  fid_vector.push_back(13);
+  cricket::SsrcGroup invalid_fid_group(cricket::kFidSsrcGroupSemantics,
+                                        fid_vector);
   cricket::StreamParams sp_invalid;
   sp_invalid.add_ssrc(13);
-  sp_invalid.ssrc_groups.push_back(invalid_rtx_group);
-  EXPECT_FALSE(sp_invalid.GetRtxSsrc(13, &rtx_ssrc));
+  sp_invalid.ssrc_groups.push_back(invalid_fid_group);
+  EXPECT_FALSE(sp_invalid.GetFidSsrc(13, &fid_ssrc));
 }
 
 TEST(StreamParams, ToString) {

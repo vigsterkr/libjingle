@@ -91,22 +91,22 @@ class VideoCapturerState {
 class CaptureManager : public sigslot::has_slots<> {
  public:
   CaptureManager() {}
-  ~CaptureManager();
+  virtual ~CaptureManager();
 
-  bool StartVideoCapture(VideoCapturer* video_capturer,
-                         const VideoFormat& desired_format);
-  bool StopVideoCapture(VideoCapturer* video_capturer,
-                        const VideoFormat& format);
+  virtual bool StartVideoCapture(VideoCapturer* video_capturer,
+                                 const VideoFormat& desired_format);
+  virtual bool StopVideoCapture(VideoCapturer* video_capturer,
+                                const VideoFormat& format);
 
-  bool AddVideoRenderer(VideoCapturer* video_capturer,
-                        VideoRenderer* video_renderer);
-  bool RemoveVideoRenderer(VideoCapturer* video_capturer,
-                           VideoRenderer* video_renderer);
+  virtual bool AddVideoRenderer(VideoCapturer* video_capturer,
+                                VideoRenderer* video_renderer);
+  virtual bool RemoveVideoRenderer(VideoCapturer* video_capturer,
+                                   VideoRenderer* video_renderer);
 
-  bool AddVideoProcessor(VideoCapturer* video_capturer,
-                         VideoProcessor* video_processor);
-  bool RemoveVideoProcessor(VideoCapturer* video_capturer,
-                            VideoProcessor* video_processor);
+  virtual bool AddVideoProcessor(VideoCapturer* video_capturer,
+                                 VideoProcessor* video_processor);
+  virtual bool RemoveVideoProcessor(VideoCapturer* video_capturer,
+                                    VideoProcessor* video_processor);
 
   sigslot::repeater2<VideoCapturer*, CaptureState> SignalCapturerStateChange;
 

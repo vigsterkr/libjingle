@@ -110,7 +110,11 @@ class WebRtcPassthroughRender : public webrtc::VideoRender {
 
   virtual WebRtc_Word32 GetLastRenderedFrame(
       const WebRtc_UWord32 stream_id,
+#ifdef USE_WEBRTC_DEV_BRANCH
+      webrtc::I420VideoFrame &frame) const {
+#else
       webrtc::VideoFrame &frame) const {
+#endif
     return -1;
   }
 
@@ -186,13 +190,21 @@ class WebRtcPassthroughRender : public webrtc::VideoRender {
 
   virtual WebRtc_Word32 SetStartImage(
       const WebRtc_UWord32 stream_id,
+#ifdef USE_WEBRTC_DEV_BRANCH
+      const webrtc::I420VideoFrame& videoFrame) {
+#else
       const webrtc::VideoFrame& videoFrame) {
+#endif
     return -1;
   }
 
   virtual WebRtc_Word32 SetTimeoutImage(
       const WebRtc_UWord32 stream_id,
+#ifdef USE_WEBRTC_DEV_BRANCH
+      const webrtc::I420VideoFrame& videoFrame,
+#else
       const webrtc::VideoFrame& videoFrame,
+#endif
       const WebRtc_UWord32 timeout) {
     return -1;
   }

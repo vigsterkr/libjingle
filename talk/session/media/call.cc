@@ -721,6 +721,7 @@ void Call::OnConnectionMonitor(VoiceChannel* channel,
 }
 
 void Call::OnMediaMonitor(VoiceChannel* channel, const VoiceMediaInfo& info) {
+  last_voice_media_info_ = info;
   SignalMediaMonitor(this, info);
 }
 
