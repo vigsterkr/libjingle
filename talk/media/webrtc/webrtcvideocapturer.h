@@ -33,10 +33,10 @@
 
 #include "talk/base/messagehandler.h"
 #include "talk/media/base/videocapturer.h"
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_capture/main/interface/video_capture.h"
+#ifdef USE_WEBRTC_DEV_BRANCH
+#include "webrtc/modules/video_capture/include/video_capture.h"
 #else
-#include "third_party/webrtc/modules/video_capture/main/interface/video_capture.h"
+#include "webrtc/modules/video_capture/main/interface/video_capture.h"
 #endif
 
 namespace cricket {

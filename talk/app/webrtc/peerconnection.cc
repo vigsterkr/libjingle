@@ -258,6 +258,8 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
         address = turn_tokens[1];
         turn_config->push_back(TurnConfiguration(address, port,
                                                  username, server.password));
+        // STUN functionality is part of TURN.
+        stun_config->push_back(StunConfiguration(address, port));
         break;
       }
       case INVALID:

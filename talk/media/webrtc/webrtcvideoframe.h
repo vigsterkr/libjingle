@@ -28,17 +28,12 @@
 #ifndef TALK_MEDIA_WEBRTCVIDEOFRAME_H_
 #define TALK_MEDIA_WEBRTCVIDEOFRAME_H_
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "common_types.h"
-#include "modules/interface/module_common_types.h"
-#else
-#include "third_party/webrtc/common_types.h"
-#include "third_party/webrtc/modules/interface/module_common_types.h"
-#endif
 #include "talk/base/buffer.h"
 #include "talk/base/refcount.h"
 #include "talk/base/scoped_ref_ptr.h"
 #include "talk/media/base/videoframe.h"
+#include "webrtc/common_types.h"
+#include "webrtc/modules/interface/module_common_types.h"
 
 namespace cricket {
 

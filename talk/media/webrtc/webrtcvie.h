@@ -31,34 +31,23 @@
 
 #include "talk/base/common.h"
 #include "talk/media/webrtc/webrtccommon.h"
-
-#ifdef WEBRTC_RELATIVE_PATH
-#include "common_types.h"
-#include "modules/interface/module_common_types.h"
-#include "modules/video_capture/main/interface/video_capture.h"
-#include "modules/video_render/main/interface/video_render.h"
-#include "video_engine/include/vie_base.h"
-#include "video_engine/include/vie_capture.h"
-#include "video_engine/include/vie_codec.h"
-#include "video_engine/include/vie_errors.h"
-#include "video_engine/include/vie_image_process.h"
-#include "video_engine/include/vie_network.h"
-#include "video_engine/include/vie_render.h"
-#include "video_engine/include/vie_rtp_rtcp.h"
+#include "webrtc/common_types.h"
+#include "webrtc/modules/interface/module_common_types.h"
+#ifdef USE_WEBRTC_DEV_BRANCH
+#include "webrtc/modules/video_capture/include/video_capture.h"
+#include "webrtc/modules/video_render/include/video_render.h"
 #else
-#include "third_party/webrtc/common_types.h"
-#include "third_party/webrtc/modules/interface/module_common_types.h"
-#include "third_party/webrtc/modules/video_capture/main/interface/video_capture.h"
-#include "third_party/webrtc/modules/video_render/main/interface/video_render.h"
-#include "third_party/webrtc/video_engine/include/vie_base.h"
-#include "third_party/webrtc/video_engine/include/vie_capture.h"
-#include "third_party/webrtc/video_engine/include/vie_codec.h"
-#include "third_party/webrtc/video_engine/include/vie_errors.h"
-#include "third_party/webrtc/video_engine/include/vie_image_process.h"
-#include "third_party/webrtc/video_engine/include/vie_network.h"
-#include "third_party/webrtc/video_engine/include/vie_render.h"
-#include "third_party/webrtc/video_engine/include/vie_rtp_rtcp.h"
-#endif  // WEBRTC_RELATIVE_PATH
+#include "webrtc/modules/video_capture/main/interface/video_capture.h"
+#include "webrtc/modules/video_render/main/interface/video_render.h"
+#endif
+#include "webrtc/video_engine/include/vie_base.h"
+#include "webrtc/video_engine/include/vie_capture.h"
+#include "webrtc/video_engine/include/vie_codec.h"
+#include "webrtc/video_engine/include/vie_errors.h"
+#include "webrtc/video_engine/include/vie_image_process.h"
+#include "webrtc/video_engine/include/vie_network.h"
+#include "webrtc/video_engine/include/vie_render.h"
+#include "webrtc/video_engine/include/vie_rtp_rtcp.h"
 
 namespace cricket {
 

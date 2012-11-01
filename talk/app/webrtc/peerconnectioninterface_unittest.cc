@@ -31,6 +31,7 @@
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
+#include "talk/app/webrtc/test/fakeconstraints.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
@@ -51,6 +52,10 @@ static const char kTurnAddressOnly[] = "TURN address";
 static const char kTurnInvalidPort[] = "TURN address:-1";
 static const char kTurnAddressPortAndMore1[] = "TURN address:port:more";
 static const char kTurnAddressPortAndMore2[] = "TURN address:port more";
+static const char kTurnIceServerUri[] = "turn:user@turn.example.org";
+static const char kTurnUsername[] = "user";
+static const char kTurnPassword[] = "password";
+static const char kTurnHostname[] = "turn.example.org";
 static const uint32 kTimeout = 5000U;
 
 using talk_base::scoped_ptr;
@@ -295,6 +300,26 @@ class PeerConnectionInterfaceTest : public testing::Test {
                                             &observer_);
     EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
+    webrtc::JsepInterface::IceServer ice_server;
+    ice_server.uri = kTurnIceServerUri;
+    ice_server.password = kTurnPassword;
+    webrtc::JsepInterface::IceServers servers;
+    servers.push_back(ice_server);
+    webrtc::FakeConstraints constrints;
+    pc_ = pc_factory_->CreatePeerConnection(servers,
+                                            &constrints,
+                                            port_allocator_factory_.get(),
+                                            &observer_);
+    EXPECT_EQ(1u, port_allocator_factory_->stun_configs().size());
+    EXPECT_EQ(1u, port_allocator_factory_->turn_configs().size());
+    EXPECT_EQ(kTurnUsername,
+              port_allocator_factory_->turn_configs()[0].username);
+    EXPECT_EQ(kTurnPassword,
+              port_allocator_factory_->turn_configs()[0].password);
+    EXPECT_EQ(kTurnHostname,
+              port_allocator_factory_->turn_configs()[0].server.hostname());
+    EXPECT_EQ(kTurnHostname,
+              port_allocator_factory_->stun_configs()[0].server.hostname());
   }
 
   void AddStream(const std::string& label) {

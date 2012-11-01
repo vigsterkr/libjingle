@@ -36,11 +36,7 @@
 #include "talk/media/base/videocommon.h"
 #include "talk/media/webrtc/webrtccommon.h"
 #include "talk/session/media/channel.h"
-#ifdef WEBRTC_RELATIVE_PATH
-#include "video_engine/include/vie_base.h"
-#else
-#include "third_party/webrtc/video_engine/include/vie_base.h"
-#endif  // WEBRTC_RELATIVE_PATH
+#include "webrtc/video_engine/include/vie_base.h"
 
 namespace webrtc {
 class VideoCaptureModule;

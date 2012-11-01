@@ -30,12 +30,12 @@
 
 #include <map>
 
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_render/main/interface/video_render.h"
-#else
-#include "third_party/webrtc/modules/video_render/main/interface/video_render.h"
-#endif
 #include "talk/base/criticalsection.h"
+#ifdef USE_WEBRTC_DEV_BRANCH
+#include "webrtc/modules/video_render/include/video_render.h"
+#else
+#include "webrtc/modules/video_render/main/interface/video_render.h"
+#endif
 
 namespace cricket {
 class PassthroughStream;

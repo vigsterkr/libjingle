@@ -42,11 +42,6 @@
 #include "talk/media/webrtc/webrtccommon.h"
 #include "talk/media/webrtc/webrtcvoe.h"
 #include "talk/session/media/channel.h"
-#ifdef WEBRTC_RELATIVE_PATH
-#include "voice_engine/include/voe_base.h"
-#else
-#include "third_party/webrtc/voice_engine/include/voe_base.h"
-#endif  // WEBRTC_RELATIVE_PATH
 
 
 namespace cricket {

@@ -38,10 +38,10 @@
 #include "talk/media/webrtc/webrtcvideoframe.h"
 
 #include "talk/base/win32.h"  // Need this to #include the impl files.
-#ifdef WEBRTC_RELATIVE_PATH
-#include "modules/video_capture/main/interface/video_capture_factory.h"
+#ifdef USE_WEBRTC_DEV_BRANCH
+#include "webrtc/modules/video_capture/include/video_capture_factory.h"
 #else
-#include "third_party/webrtc/modules/video_capture/main/interface/video_capture_factory.h"
+#include "webrtc/modules/video_capture/main/interface/video_capture_factory.h"
 #endif
 
 namespace cricket {
