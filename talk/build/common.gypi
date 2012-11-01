@@ -38,6 +38,7 @@
   'target_defaults': {
     'include_dirs': [
       '../..',
+      '../../third_party',
       '../../third_party/webrtc',
     ],
     'defines': [
