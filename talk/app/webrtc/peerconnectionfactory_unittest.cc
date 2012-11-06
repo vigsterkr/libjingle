@@ -26,13 +26,27 @@
 #include <string>
 
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
-#include "talk/app/webrtc/mediastream.h"
+#include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnectionfactory.h"
+#include "talk/app/webrtc/videosourceinterface.h"
+#include "talk/app/webrtc/test/fakevideotrackrenderer.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/thread.h"
+#include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/webrtc/webrtccommon.h"
 #include "talk/media/webrtc/webrtcvoe.h"
+
+using webrtc::FakeVideoTrackRenderer;
+using webrtc::MediaStreamInterface;
+using webrtc::PeerConnectionFactoryInterface;
+using webrtc::PeerConnectionInterface;
+using webrtc::PeerConnectionObserver;
+using webrtc::PortAllocatorFactoryInterface;
+using webrtc::VideoSourceInterface;
+using webrtc::VideoTrackInterface;
+
+namespace {
 
 static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
 
@@ -40,9 +54,6 @@ static const char kStunIceServer[] = "stun:stun.l.google.com:19302";
 static const char kTurnIceServer[] = "turn:test@test.com:1234";
 static const char kInvalidTurnIceServer[] = "turn:test.com:1234";
 static const char kTurnPassword[] = "turnpassword";
-
-
-namespace webrtc {
 
 class NullPeerConnectionObserver : public PeerConnectionObserver {
  public:
@@ -58,10 +69,27 @@ class NullPeerConnectionObserver : public PeerConnectionObserver {
   virtual void OnIceComplete() {}
 };
 
-TEST(PeerConnectionFactory, CreatePCUsingInternalModules) {
+}  // namespace
+
+class PeerConnectionFactoryTest : public testing::Test {
+  void SetUp() {
+    factory_ = webrtc::CreatePeerConnectionFactory(talk_base::Thread::Current(),
+                                                   talk_base::Thread::Current(),
+                                                   NULL);
+
+    ASSERT_TRUE(factory_.get() != NULL);
+    allocator_factory_ =  webrtc::FakePortAllocatorFactory::Create();
+  }
+
+ protected:
+  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory_;
+  NullPeerConnectionObserver observer_;
+  talk_base::scoped_refptr<PortAllocatorFactoryInterface> allocator_factory_;
+};
+
+TEST(PeerConnectionFactoryTestInternal, CreatePCUsingInternalModules) {
   talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
-      CreatePeerConnectionFactory());
-  ASSERT_TRUE(factory.get() != NULL);
+      webrtc::CreatePeerConnectionFactory());
 
   NullPeerConnectionObserver observer;
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
@@ -70,12 +98,7 @@ TEST(PeerConnectionFactory, CreatePCUsingInternalModules) {
   EXPECT_TRUE(pc.get() != NULL);
 }
 
-TEST(PeerConnectionFactory, CreatePCUsingIceServers) {
-  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
-      CreatePeerConnectionFactory());
-  ASSERT_TRUE(factory.get() != NULL);
-
-  NullPeerConnectionObserver observer;
+TEST_F(PeerConnectionFactoryTest, CreatePCUsingIceServers) {
   webrtc::JsepInterface::IceServers ice_servers;
   webrtc::JsepInterface::IceServer ice_server;
   ice_server.uri = kStunIceServer;
@@ -84,44 +107,54 @@ TEST(PeerConnectionFactory, CreatePCUsingIceServers) {
   ice_server.password = kTurnPassword;
   ice_servers.push_back(ice_server);
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(ice_servers, NULL, &observer));
-
+      factory_->CreatePeerConnection(ice_servers, NULL,
+                                     allocator_factory_.get(),
+                                     &observer_));
   EXPECT_TRUE(pc.get() != NULL);
 }
 
-TEST(PeerConnectionFactory, CreatePCUsingInvalidTurnUrl) {
-  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory(
-      CreatePeerConnectionFactory());
-  ASSERT_TRUE(factory.get() != NULL);
-
-  NullPeerConnectionObserver observer;
+TEST_F(PeerConnectionFactoryTest, CreatePCUsingInvalidTurnUrl) {
   webrtc::JsepInterface::IceServers ice_servers;
   webrtc::JsepInterface::IceServer ice_server;
   ice_server.uri = kInvalidTurnIceServer;
   ice_server.password = kTurnPassword;
   ice_servers.push_back(ice_server);
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(ice_servers, NULL, &observer));
-
+      factory_->CreatePeerConnection(ice_servers, NULL,
+                                     allocator_factory_.get(),
+                                     &observer_));
   EXPECT_TRUE(pc.get() == NULL);
 }
 
-TEST(PeerConnectionFactory, CreatePCUsingExternalModules) {
-  talk_base::scoped_refptr<PortAllocatorFactoryInterface> allocator_factory(
-      FakePortAllocatorFactory::Create());
-
-  talk_base::scoped_refptr<PeerConnectionFactoryInterface> factory =
-      CreatePeerConnectionFactory(talk_base::Thread::Current(),
-                                  talk_base::Thread::Current(),
-                                  NULL);
-  ASSERT_TRUE(factory.get() != NULL);
-
-  NullPeerConnectionObserver observer;
+TEST_F(PeerConnectionFactoryTest, CreatePCUsingExternalModules) {
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(kStunConfiguration,
-                                    allocator_factory.get(),
-                                    &observer));
+      factory_->CreatePeerConnection(kStunConfiguration,
+                                     allocator_factory_,
+                                     &observer_));
   EXPECT_TRUE(pc.get() != NULL);
 }
 
-}  // namespace webrtc
+TEST_F(PeerConnectionFactoryTest, LocalRendering) {
+  cricket::FakeVideoCapturer* capturer = new cricket::FakeVideoCapturer();
+  // The source take ownership of |capturer|.
+  talk_base::scoped_refptr<VideoSourceInterface> source(
+      factory_->CreateVideoSource(capturer, NULL));
+  ASSERT_TRUE(source.get() != NULL);
+  talk_base::scoped_refptr<VideoTrackInterface> track(
+      factory_->CreateVideoTrack("testlabel", source));
+  ASSERT_TRUE(track.get() != NULL);
+  FakeVideoTrackRenderer local_renderer(track);
+
+  EXPECT_EQ(0, local_renderer.num_rendered_frames());
+  EXPECT_TRUE(capturer->CaptureFrame());
+  EXPECT_EQ(1, local_renderer.num_rendered_frames());
+
+  track->set_enabled(false);
+  EXPECT_TRUE(capturer->CaptureFrame());
+  EXPECT_EQ(1, local_renderer.num_rendered_frames());
+
+  track->set_enabled(true);
+  EXPECT_TRUE(capturer->CaptureFrame());
+  EXPECT_EQ(2, local_renderer.num_rendered_frames());
+}
+

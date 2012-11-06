@@ -30,7 +30,8 @@ namespace webrtc {
 
 VideoTrackRenderers::VideoTrackRenderers()
     : width_(0),
-      height_(0) {
+      height_(0),
+      enabled_(true) {
 }
 
 VideoTrackRenderers::~VideoTrackRenderers() {
@@ -57,6 +58,11 @@ void VideoTrackRenderers::RemoveRenderer(VideoRendererInterface* renderer) {
   }
 }
 
+void VideoTrackRenderers::SetEnabled(bool enable) {
+  talk_base::CritScope cs(&critical_section_);
+  enabled_ = enable;
+}
+
 bool VideoTrackRenderers::SetSize(int width, int height, int reserved) {
   talk_base::CritScope cs(&critical_section_);
   width_ = width;
@@ -71,6 +77,9 @@ bool VideoTrackRenderers::SetSize(int width, int height, int reserved) {
 
 bool VideoTrackRenderers::RenderFrame(const cricket::VideoFrame* frame) {
   talk_base::CritScope cs(&critical_section_);
+  if (!enabled_) {
+    return true;
+  }
   std::vector<RenderObserver>::iterator it = renderers_.begin();
   for (; it != renderers_.end(); ++it) {
     if (!it->size_set_) {

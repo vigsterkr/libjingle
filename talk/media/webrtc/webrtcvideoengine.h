@@ -66,7 +66,6 @@ struct CapturedFrame;
 struct Device;
 
 class WebRtcVideoEngine : public sigslot::has_slots<>,
-                          public webrtc::ViEBaseObserver,
                           public webrtc::TraceCallback {
  public:
   // Creates the WebRtcVideoEngine with internal VideoCaptureModule.
@@ -162,8 +161,6 @@ class WebRtcVideoEngine : public sigslot::has_slots<>,
   bool InitVideoEngine();
   bool SetCapturer(VideoCapturer* capturer);
 
-  // webrtc::ViEBaseObserver implementation.
-  virtual void PerformanceAlarm(const unsigned int cpu_load);
   // webrtc::TraceCallback implementation.
   virtual void Print(const webrtc::TraceLevel level, const char* trace_string,
                      const int length);
@@ -237,11 +234,12 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   virtual bool SetOptions(int options);
   virtual int GetOptions() const { return options_; }
   virtual void SetInterface(NetworkInterface* iface);
+  virtual void UpdateAspectRatio(int ratio_w, int ratio_h);
 
   // Public functions for use by tests and other specialized code.
   uint32 send_ssrc() const { return 0; }
   bool GetRenderer(uint32 ssrc, VideoRenderer** renderer);
-  bool SendFrame(uint32 ssrc, const VideoFrame* frame, bool is_screencast);
+  void SendFrame(VideoCapturer* capturer, const VideoFrame* frame);
   bool SendFrame(WebRtcVideoChannelSendInfo* channel_info,
                  const VideoFrame* frame, bool is_screencast);
 
@@ -366,6 +364,11 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   int send_max_bitrate_;
   bool sending_;
   std::vector<RtpHeaderExtension> send_extensions_;
+
+  // The aspect ratio that the channel desires. 0 means there is no desired
+  // aspect ratio
+  int ratio_w_;
+  int ratio_h_;
 };
 
 }  // namespace cricket

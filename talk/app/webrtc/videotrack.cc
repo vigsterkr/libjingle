@@ -63,6 +63,11 @@ cricket::VideoRenderer* VideoTrack::FrameInput() {
   return &renderers_;
 }
 
+bool VideoTrack::set_enabled(bool enable) {
+  renderers_.SetEnabled(enable);
+  return MediaStreamTrack<VideoTrackInterface>::set_enabled(enable);
+}
+
 talk_base::scoped_refptr<VideoTrack> VideoTrack::Create(
     const std::string& label, VideoSourceInterface* source) {
   talk_base::RefCountedObject<VideoTrack>* track =

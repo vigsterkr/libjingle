@@ -82,6 +82,7 @@ VideoCapturer::VideoCapturer(talk_base::Thread* thread)
 }
 
 void VideoCapturer::Construct() {
+  ClearAspectRatio();
   capture_state_ = CS_STOPPED;
   SignalFrameCaptured.connect(this, &VideoCapturer::OnFrameCaptured);
 }
@@ -96,6 +97,16 @@ bool VideoCapturer::StartCapturing(const VideoFormat& capture_format) {
     SetCaptureState(result);
   }
   return true;
+}
+
+void VideoCapturer::UpdateAspectRatio(int ratio_w, int ratio_h) {
+  ratio_w_ = ratio_w;
+  ratio_h_ = ratio_h;
+}
+
+void VideoCapturer::ClearAspectRatio() {
+  ratio_w_ = 0;
+  ratio_h_ = 0;
 }
 
 void VideoCapturer::SetSupportedFormats(
@@ -159,6 +170,20 @@ bool VideoCapturer::RemoveVideoProcessor(VideoProcessor* video_processor) {
   return true;
 }
 
+void VideoCapturer::GetDesiredResolution(const CapturedFrame* frame,
+                                         int* cropped_width,
+                                         int* cropped_height) {
+  *cropped_width = frame->width;
+  *cropped_height = frame->height;
+  if ((ratio_w_ == 0) || (ratio_h_ == 0)) {
+    return;
+  }
+  ComputeCrop(ratio_w_, ratio_h_,
+              frame->width, abs(frame->height),
+              frame->pixel_width, frame->pixel_height,
+              frame->rotation, cropped_width, cropped_height);
+}
+
 void VideoCapturer::OnFrameCaptured(VideoCapturer*,
                                     const CapturedFrame* captured_frame) {
   if (SignalVideoFrame.is_empty()) {
@@ -168,11 +193,13 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
 #define VIDEO_FRAME_NAME WebRtcVideoFrame
 #endif
 #if defined(VIDEO_FRAME_NAME)
+  int desired_width = 0;
+  int desired_height = 0;
+  GetDesiredResolution(captured_frame, &desired_width, &desired_height);
   VIDEO_FRAME_NAME i420_frame;
-  if (!i420_frame.Init(captured_frame, captured_frame->width,
-                       captured_frame->height)) {
+  if (!i420_frame.Init(captured_frame, desired_width, desired_height)) {
     LOG(LS_ERROR) << "Couldn't convert to I420! "
-                  << captured_frame->width << " x " << captured_frame->height;
+                  << desired_width << " x " << desired_height;
     return;
   }
   if (!ApplyProcessors(&i420_frame)) {
@@ -289,13 +316,12 @@ int64 VideoCapturer::GetFormatDistance(const VideoFormat& desired,
 }
 
 bool VideoCapturer::ApplyProcessors(VideoFrame* video_frame) {
-  const uint32 dummy_ssrc = 0;
   bool drop_frame = false;
   talk_base::CritScope cs(&crit_);
   for (VideoProcessors::iterator iter = video_processors_.begin();
        iter != video_processors_.end();
        ++iter) {
-    (*iter)->OnFrame(dummy_ssrc, video_frame, &drop_frame);
+    (*iter)->OnFrame(kDummyVideoSsrc, video_frame, &drop_frame);
     if (drop_frame) {
       return false;
     }

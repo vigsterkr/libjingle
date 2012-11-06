@@ -1355,7 +1355,6 @@ class VideoMediaChannelTest : public testing::Test,
         0);
     // WebRTC implementation will drop frames if pushed to quickly. Wait the
     // interval time to avoid that.
-    const int time_between_send = TimeBetweenSend(DefaultCodec());
     // Set up the stream associated with the engine.
     EXPECT_TRUE(channel_->AddRecvStream(
         cricket::StreamParams::CreateLegacy(kSsrc)));
@@ -1396,22 +1395,12 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_TRUE(SetSend(true));
     EXPECT_TRUE(channel_->SetRender(true));
     // Test capturer associated with engine.
-    EXPECT_EQ(0, renderer_.num_rendered_frames());
-    EXPECT_TRUE(SendFrame());
-    EXPECT_FRAME_WAIT(1, 640, 400, kTimeout);
-    // Test additional stream and capturer.
-    // Send a frame on engine's capturer, should still work.
-    EXPECT_TRUE(WaitAndSendFrame(time_between_send));
-    EXPECT_FRAME_WAIT(2, 640, 400, kTimeout);
-    // Capture a frame with additional capturer1, frames should be received
     EXPECT_TRUE(capturer1->CaptureCustomFrame(1024, 768, cricket::FOURCC_I420));
     EXPECT_FRAME_ON_RENDERER_WAIT(renderer1, 1, 1024, 768, kTimeout);
     // Capture a frame with additional capturer2, frames should be received
     EXPECT_TRUE(capturer2->CaptureCustomFrame(1024, 768, cricket::FOURCC_I420));
     EXPECT_FRAME_ON_RENDERER_WAIT(renderer2, 1, 1024, 768, kTimeout);
     EXPECT_FALSE(channel_->SetCapturer(kSsrc, NULL));
-    EXPECT_TRUE(WaitAndSendFrame(time_between_send));
-    EXPECT_FRAME_WAIT(3, 640, 400, kTimeout);
     // The capturers must be unregistered here as it runs out of it's scope
     // next.
     EXPECT_TRUE(channel_->SetCapturer(1, NULL));

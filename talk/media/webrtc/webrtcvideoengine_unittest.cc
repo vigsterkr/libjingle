@@ -106,7 +106,9 @@ class WebRtcVideoEngineTestFake : public testing::Test {
                     pixel.get(), size, 1, 1, 0, 0, 0)) {
       return false;
     }
-    return channel_->SendFrame(0u, &frame, false);
+    cricket::FakeVideoCapturer capturer;
+    channel_->SendFrame(&capturer, &frame);
+    return true;
   }
   void VerifyVP8SendCodec(int channel_num,
                           unsigned int width,

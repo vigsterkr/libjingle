@@ -162,7 +162,6 @@ class WebRtcVoiceEngineTestFake : public testing::Test {
     EXPECT_TRUE(voe_.WasPlayDtmfToneCalled(4, 145));
   }
 
-
  protected:
   cricket::FakeWebRtcVoiceEngine voe_;
   cricket::FakeWebRtcVoiceEngine voe_sc_;

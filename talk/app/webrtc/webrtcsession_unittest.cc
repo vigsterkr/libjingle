@@ -788,7 +788,6 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
 // crypto enabled.
 TEST_F(WebRtcSessionTest, SetNonCryptoOffer) {
   WebRtcSessionTest::Init();
-
   desc_factory_->set_secure(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
@@ -1817,7 +1816,6 @@ TEST_F(WebRtcSessionTest, TestHandleBackwardCompatibility) {
 
 TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
@@ -1841,7 +1839,6 @@ TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
 
 TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
@@ -1856,7 +1853,6 @@ TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
 
 TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
@@ -1880,7 +1876,6 @@ TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
 
 TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
@@ -1896,7 +1891,6 @@ TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
 
 TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   cricket::MediaSessionOptions options;
   options.has_video = true;
   talk_base::scoped_ptr<SessionDescriptionInterface> offer(
@@ -1926,7 +1920,6 @@ TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
 // Verifing local offer and remote answer have matching m-lines as per RFC 3264.
 TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
                                             offer));
@@ -1970,7 +1963,6 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
 // RFC 3264.
 TEST_F(WebRtcSessionTest, TestIncorrectMLinesInLocalAnswer) {
   WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer,
                                              offer));

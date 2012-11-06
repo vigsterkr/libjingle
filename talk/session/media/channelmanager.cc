@@ -172,9 +172,9 @@ struct CaptureParams : public talk_base::MessageData {
 };
 
 struct VideoProcessorParams : public talk_base::MessageData {
-  VideoProcessorParams(uint32 s, VideoProcessor* p)
-      : ssrc(s), processor(p), result(false) {}
-  uint32 ssrc;
+  VideoProcessorParams(VideoCapturer* c, VideoProcessor* p)
+      : capturer(c), processor(p), result(false) {}
+  VideoCapturer* capturer;
   VideoProcessor* processor;
   bool result;
 };
@@ -889,26 +889,28 @@ void ChannelManager::SetMediaLogging_w(bool video, int level,
 // voice and video engines to do the real work. Once the capturer refactoring
 // is done, we will access the capturer using the ssrc (similar to how the
 // renderer is accessed today) and register with it directly.
-bool ChannelManager::RegisterVideoProcessor(uint32 ssrc,
+bool ChannelManager::RegisterVideoProcessor(VideoCapturer* capturer,
                                             VideoProcessor* processor) {
-  VideoProcessorParams processor_params(ssrc, processor);
+  VideoProcessorParams processor_params(capturer, processor);
   return (Send(MSG_REGISTERVIDEOPROCESSOR, &processor_params) &&
       processor_params.result);
 }
-bool ChannelManager::RegisterVideoProcessor_w(uint32 ssrc,
+bool ChannelManager::RegisterVideoProcessor_w(VideoCapturer* capturer,
                                               VideoProcessor* processor) {
-  return media_engine_->RegisterVideoProcessor(processor);
+  media_engine_->RegisterVideoProcessor(processor);
+  return capture_manager_->AddVideoProcessor(capturer, processor);
 }
 
-bool ChannelManager::UnregisterVideoProcessor(uint32 ssrc,
+bool ChannelManager::UnregisterVideoProcessor(VideoCapturer* capturer,
                                               VideoProcessor* processor) {
-  VideoProcessorParams processor_params(ssrc, processor);
+  VideoProcessorParams processor_params(capturer, processor);
   return (Send(MSG_UNREGISTERVIDEOPROCESSOR, &processor_params) &&
       processor_params.result);
 }
-bool ChannelManager::UnregisterVideoProcessor_w(uint32 ssrc,
+bool ChannelManager::UnregisterVideoProcessor_w(VideoCapturer* capturer,
                                                 VideoProcessor* processor) {
-  return media_engine_->UnregisterVideoProcessor(processor);
+  media_engine_->UnregisterVideoProcessor(processor);
+  return capture_manager_->RemoveVideoProcessor(capturer, processor);
 }
 
 bool ChannelManager::RegisterVoiceProcessor(
@@ -1124,13 +1126,14 @@ void ChannelManager::OnMessage(talk_base::Message* message) {
     case MSG_REGISTERVIDEOPROCESSOR: {
       VideoProcessorParams* data =
           static_cast<VideoProcessorParams*>(message->pdata);
-      data->result = RegisterVideoProcessor_w(data->ssrc, data->processor);
+      data->result = RegisterVideoProcessor_w(data->capturer, data->processor);
       break;
     }
     case MSG_UNREGISTERVIDEOPROCESSOR: {
       VideoProcessorParams* data =
           static_cast<VideoProcessorParams*>(message->pdata);
-      data->result = UnregisterVideoProcessor_w(data->ssrc, data->processor);
+      data->result = UnregisterVideoProcessor_w(data->capturer,
+                                                data->processor);
       break;
     }
     case MSG_REGISTERVOICEPROCESSOR: {

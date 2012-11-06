@@ -52,6 +52,7 @@ class VideoTrackRenderers : public cricket::VideoRenderer {
 
   void AddRenderer(VideoRendererInterface* renderer);
   void RemoveRenderer(VideoRendererInterface* renderer);
+  void SetEnabled(bool enable);
 
  private:
   struct RenderObserver {
@@ -65,6 +66,7 @@ class VideoTrackRenderers : public cricket::VideoRenderer {
 
   int width_;
   int height_;
+  bool enabled_;
   std::vector<RenderObserver> renderers_;
 
   talk_base::CriticalSection critical_section_;  // Protects the above variables

@@ -49,7 +49,6 @@
 #include "talk/media/base/voiceprocessor.h"
 #include "talk/media/webrtc/webrtcvoe.h"
 
-
 #ifdef WIN32
 #include <objbase.h>  // NOLINT
 #endif
@@ -559,13 +558,13 @@ bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
     }
   }
 
-    bool auto_gain_control;
-    if (options.auto_gain_control.Get(&auto_gain_control)) {
-      if (voep->SetAgcStatus(auto_gain_control, options.agc_mode) == -1) {
-        LOG_RTCERR2(SetAgcStatus, auto_gain_control, options.agc_mode);
-        return false;
-      }
+  bool auto_gain_control;
+  if (options.auto_gain_control.Get(&auto_gain_control)) {
+    if (voep->SetAgcStatus(auto_gain_control, options.agc_mode) == -1) {
+      LOG_RTCERR2(SetAgcStatus, auto_gain_control, options.agc_mode);
+      return false;
     }
+  }
 
   bool noise_suppression;
   if (options.noise_suppression.Get(&noise_suppression)) {

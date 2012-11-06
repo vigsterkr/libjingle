@@ -38,6 +38,9 @@ namespace webrtc {
 
 class FakeConstraints : public webrtc::MediaConstraintsInterface {
  public:
+  FakeConstraints() { }
+  virtual ~FakeConstraints() { }
+
   virtual const Constraints& GetMandatory() const {
     return mandatory_;
   }
@@ -89,10 +92,38 @@ class FakeConstraints : public webrtc::MediaConstraintsInterface {
     }
   }
 
-  virtual ~FakeConstraints() {
+  bool FindConstraint(const std::string& key, std::string* value,
+                      bool* mandatory) {
+    if (FindConstraint(mandatory_, key, value)) {
+      if (mandatory)
+        *mandatory = true;
+      return true;
+    }
+
+    if (FindConstraint(optional_, key, value)) {
+      if (mandatory)
+        *mandatory = false;
+      return true;
+    }
+    return false;
   }
 
  private:
+  bool FindConstraint(
+      const MediaConstraintsInterface::Constraints& constraints,
+      const std::string& key, std::string* value) {
+    MediaConstraintsInterface::Constraints::const_iterator iter =
+        constraints.begin();
+    for (; iter != constraints.end(); ++iter) {
+      if (iter->key == key) {
+        if (value)
+          *value = iter->value;
+        return true;
+      }
+    }
+    return false;
+  }
+
   std::vector<Constraint> mandatory_;
   std::vector<Constraint> optional_;
 };

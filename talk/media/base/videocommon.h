@@ -35,6 +35,13 @@
 
 namespace cricket {
 
+// TODO(janahan): For now, a hard-coded ssrc is used as the video ssrc.
+// This is because when the video frame is passed to the mediaprocessor for
+// processing, it doesn't have the correct ssrc. Since currently only Tx
+// Video processing is supported, this is ok. When we switch over to trigger
+// from capturer, this should be fixed and this const removed.
+const uint32 kDummyVideoSsrc = 0xFFFFFFFF;
+
 // Minimum interval is 10k fps.
 #define FPS_TO_INTERVAL(fps) \
     (fps ? talk_base::kNumNanosecsPerSec / fps : \

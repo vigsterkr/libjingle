@@ -164,9 +164,9 @@ class ChannelManager : public talk_base::MessageHandler,
   // as well as Tx and Rx side for Voice processing.
   // (The Rx Video processing will go throug the simplerenderingmanager,
   //  to be implemented).
-  bool RegisterVideoProcessor(uint32 ssrc,
+  bool RegisterVideoProcessor(VideoCapturer* capturer,
                               VideoProcessor* processor);
-  bool UnregisterVideoProcessor(uint32 ssrc,
+  bool UnregisterVideoProcessor(VideoCapturer* capturer,
                                 VideoProcessor* processor);
   bool RegisterVoiceProcessor(uint32 ssrc,
                               VoiceProcessor* processor,
@@ -248,9 +248,9 @@ class ChannelManager : public talk_base::MessageHandler,
   void SetMediaLogging_w(bool video, int level, const char* filter);
   void OnVideoCaptureStateChange(VideoCapturer* capturer,
                                  CaptureState result);
-  bool RegisterVideoProcessor_w(uint32 ssrc,
+  bool RegisterVideoProcessor_w(VideoCapturer* capturer,
                                 VideoProcessor* processor);
-  bool UnregisterVideoProcessor_w(uint32 ssrc,
+  bool UnregisterVideoProcessor_w(VideoCapturer* capturer,
                                   VideoProcessor* processor);
   bool RegisterVoiceProcessor_w(uint32 ssrc,
                                 VoiceProcessor* processor,

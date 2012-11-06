@@ -525,24 +525,18 @@ TEST_F(ChannelManagerTest, SetVideoCapture) {
 TEST_F(ChannelManagerTest, RegisterProcessors) {
   cricket::FakeMediaProcessor fmp;
   EXPECT_TRUE(cm_->Init());
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 
-  EXPECT_TRUE(cm_->RegisterVideoProcessor(1, &fmp));
-  EXPECT_TRUE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 
-  EXPECT_TRUE(cm_->UnregisterVideoProcessor(1, &fmp));
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 
   EXPECT_TRUE(cm_->RegisterVoiceProcessor(1,
                                           &fmp,
                                           cricket::MPD_RX));
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_TRUE(fme_->voice_processor_registered(cricket::MPD_RX));
 
@@ -550,21 +544,18 @@ TEST_F(ChannelManagerTest, RegisterProcessors) {
   EXPECT_TRUE(cm_->UnregisterVoiceProcessor(1,
                                             &fmp,
                                             cricket::MPD_RX));
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 
   EXPECT_TRUE(cm_->RegisterVoiceProcessor(1,
                                           &fmp,
                                           cricket::MPD_TX));
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_TRUE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 
   EXPECT_TRUE(cm_->UnregisterVoiceProcessor(1,
                                             &fmp,
                                             cricket::MPD_TX));
-  EXPECT_FALSE(fme_->video_processor_registered());
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_TX));
   EXPECT_FALSE(fme_->voice_processor_registered(cricket::MPD_RX));
 }

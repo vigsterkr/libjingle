@@ -164,6 +164,31 @@ class PeerConnectionTestClientBase
     // received or not.
   }
 
+  // Verifies that the SessionDescription have rejected the appropriate media
+  // content.
+  void VerifySessionDescription() {
+    ASSERT_TRUE(peer_connection_->remote_description() != NULL);
+    ASSERT_TRUE(peer_connection_->local_description() != NULL);
+    const cricket::SessionDescription* remote_desc =
+        peer_connection_->remote_description()->description();
+    const cricket::SessionDescription* local_desc =
+        peer_connection_->local_description()->description();
+
+    const ContentInfo* remote_audio_content = GetFirstAudioContent(remote_desc);
+    if (remote_audio_content) {
+      const ContentInfo* audio_content =
+          GetFirstAudioContent(local_desc);
+      EXPECT_EQ(can_receive_audio(), !audio_content->rejected);
+    }
+
+    const ContentInfo* remote_video_content = GetFirstVideoContent(remote_desc);
+    if (remote_video_content) {
+      const ContentInfo* video_content =
+          GetFirstVideoContent(local_desc);
+      EXPECT_EQ(can_receive_video(), !video_content->rejected);
+    }
+  }
+
   int rendered_width() {
     EXPECT_TRUE(fake_video_renderer_.get() != NULL);
     return fake_video_renderer_ ? fake_video_renderer_->width() : 1;
@@ -341,9 +366,8 @@ class Jsep00TestClient
   virtual bool can_receive_audio() { return hints_.has_audio(); }
   virtual bool can_receive_video() { return hints_.has_video(); }
 
-  void SetHints(const MediaHints& local, const MediaHints& remote) {
-    hints_ = local;
-    remote_hints_ = remote;
+  void SetHints(const MediaHints& hints) {
+    hints_ = hints;
   }
 
   virtual void OnIceComplete() {
@@ -373,27 +397,6 @@ class Jsep00TestClient
         peer_connection()->CreateAnswer(hints_,
                                         desc.get()));
     ASSERT_TRUE(answer);
-    // Verify that we have the rejected flag set properly.
-    if (hints_.has_audio() && !remote_hints_.has_audio()) {
-      const ContentInfo* audio_content =
-          GetFirstAudioContent(answer->description());
-      const MediaContentDescription* media_desc =
-          static_cast<const MediaContentDescription*> (
-              audio_content->description);
-      EXPECT_TRUE(audio_content->rejected);
-      // Below EXPECT_EQ is just our implementation, not required by RFC.
-      EXPECT_EQ(cricket::MD_INACTIVE, media_desc->direction());
-    }
-    if (hints_.has_video() && !remote_hints_.has_video()) {
-      const ContentInfo* video_content =
-          GetFirstVideoContent(answer->description());
-      const MediaContentDescription* media_desc =
-          static_cast<const MediaContentDescription*> (
-              video_content->description);
-      EXPECT_TRUE(video_content->rejected);
-      // Below EXPECT_EQ is just our implementation, not required by RFC.
-      EXPECT_EQ(cricket::MD_INACTIVE, media_desc->direction());
-    }
     std::string sdp;
     EXPECT_TRUE(answer->ToString(&sdp));
     EXPECT_TRUE(peer_connection()->SetRemoteDescription(
@@ -410,7 +413,7 @@ class Jsep00TestClient
   }
 
   void HandleIncomingAnswer(const std::string& msg) {
-    LOG(INFO) << id() << "HandleIncomingOffer ";
+    LOG(INFO) << id() << "HandleIncomingAnswer ";
     talk_base::scoped_ptr<webrtc::SessionDescriptionInterface> desc(
            webrtc::CreateSessionDescription(msg));
     EXPECT_TRUE(peer_connection()->SetRemoteDescription(
@@ -419,7 +422,6 @@ class Jsep00TestClient
 
  private:
   MediaHints hints_;
-  MediaHints remote_hints_;
 };
 
 class MockCreateSessionDescriptionObserver
@@ -527,10 +529,30 @@ class JsepTestClient
         candidate->sdp_mline_index(), ice_sdp);
   }
 
-  // TODO(perkj) Implement constraints for rejecting audio.
-  virtual bool can_receive_audio() { return true; }
-  // TODO(perkj) Implement constraints for rejecting video.
-  virtual bool can_receive_video() { return true; }
+  void SetReceiveAudioVideo(bool audio, bool video) {
+    session_description_constraints_.SetMandatoryReceiveAudio(audio);
+    session_description_constraints_.SetMandatoryReceiveVideo(video);
+    ASSERT_EQ(audio, can_receive_audio());
+    ASSERT_EQ(video, can_receive_video());
+  }
+
+  virtual bool can_receive_audio() {
+    std::string value;
+    if (!session_description_constraints_.FindConstraint(
+        MediaConstraintsInterface::kOfferToReceiveAudio, &value, NULL)) {
+      return true;
+    }
+    return value == MediaConstraintsInterface::kTrue;
+  }
+
+  virtual bool can_receive_video() {
+    std::string value;
+    if (!session_description_constraints_.FindConstraint(
+        MediaConstraintsInterface::kOfferToReceiveVideo, &value, NULL)) {
+      return true;
+    }
+    return value == MediaConstraintsInterface::kTrue;
+  }
 
   virtual void OnIceComplete() {
     LOG(INFO) << id() << "OnIceComplete";
@@ -584,9 +606,11 @@ class JsepTestClient
         observer(new talk_base::RefCountedObject<
             MockCreateSessionDescriptionObserver>());
     if (offer) {
-      peer_connection()->CreateOffer(observer, NULL);
+      peer_connection()->CreateOffer(observer,
+                                     &session_description_constraints_);
     } else {
-      peer_connection()->CreateAnswer(observer, NULL);
+      peer_connection()->CreateAnswer(observer,
+                                      &session_description_constraints_);
     }
     EXPECT_EQ_WAIT(true, observer->called(), kMaxWaitMs);
     *desc = observer->release_desc();
@@ -631,6 +655,9 @@ class JsepTestClient
     EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
     return observer->result();
   }
+
+ private:
+  webrtc::FakeConstraints session_description_constraints_;
 };
 
 template <typename SignalingClass>
@@ -702,8 +729,8 @@ class P2PTestConductor : public testing::Test {
 
   void SetHints(const MediaHints& init_hints,
                 const MediaHints& receiving_hints) {
-    initiating_client_->SetHints(init_hints, receiving_hints);
-    receiving_client_->SetHints(receiving_hints, init_hints);
+    initiating_client_->SetHints(init_hints);
+    receiving_client_->SetHints(receiving_hints);
   }
 
   void SetVideoConstraints(const webrtc::FakeConstraints& init_constraints,
@@ -722,6 +749,8 @@ class P2PTestConductor : public testing::Test {
     // would eat up 5 seconds.
     ASSERT_TRUE(IsInitialized());
     ASSERT_TRUE_WAIT(SessionActive(), kMaxWaitForActivationMs);
+    initiating_client_->VerifySessionDescription();
+    receiving_client_->VerifySessionDescription();
 
     int kEndAudioFrameCount = 10;
     int kEndVideoFrameCount = 10;
@@ -762,9 +791,9 @@ TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTest) {
 
 // This test sets up a Jsep call between two parties, and the callee only
 // has video.
-// TODO(ronghuawu): Add these tests for Jsep01 once the
-// MediaConstraintsInterface is ready.
-TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerVideo) {
+// TODO(perkj): Disabled due to
+// http://code.google.com/p/webrtc/issues/detail?id=1060
+TEST_F(Jsep00PeerConnectionP2PTestClient, DISABLED_LocalP2PTestAnswerVideo) {
   ASSERT_TRUE(CreateTestClients());
   SetHints(MediaHints(), MediaHints(false, true));
   LocalP2PTest();
@@ -786,6 +815,7 @@ TEST_F(Jsep00PeerConnectionP2PTestClient, LocalP2PTestAnswerNone) {
   LocalP2PTest();
 }
 
+// This test sets up a Jsep call between two parties and test Dtmf.
 TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDtmf) {
   ASSERT_TRUE(CreateTestClients());
   LocalP2PTest();
@@ -793,6 +823,8 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDtmf) {
   VerifyRenderedSize(640, 480);
 }
 
+// This test sets up a Jsep call between two parties and test that we can get a
+// video aspect ratio of 16:9.
 TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTest16To9) {
   ASSERT_TRUE(CreateTestClients());
   webrtc::FakeConstraints constraint;
@@ -826,4 +858,30 @@ TEST_F(JsepPeerConnectionP2PTestClient, DISABLED_LocalP2PTest1280By720) {
   SetVideoConstraints(constraint, constraint);
   LocalP2PTest();
   VerifyRenderedSize(1280, 720);
+}
+
+// This test sets up a Jsep call between two parties, and the callee only
+// accept to receive video.
+// TODO(perkj): Disabled due to
+// http://code.google.com/p/webrtc/issues/detail?id=1060
+TEST_F(JsepPeerConnectionP2PTestClient, DISABLED_LocalP2PTestAnswerVideo) {
+  ASSERT_TRUE(CreateTestClients());
+  receiving_client()->SetReceiveAudioVideo(false, true);
+  LocalP2PTest();
+}
+
+// This test sets up a Jsep call between two parties, and the callee only
+// accept to receive audio.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestAnswerAudio) {
+  ASSERT_TRUE(CreateTestClients());
+  receiving_client()->SetReceiveAudioVideo(true, false);
+  LocalP2PTest();
+}
+
+// This test sets up a Jsep call between two parties, and the callee reject both
+// audio and video.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestAnswerNone) {
+  ASSERT_TRUE(CreateTestClients());
+  receiving_client()->SetReceiveAudioVideo(false, false);
+  LocalP2PTest();
 }

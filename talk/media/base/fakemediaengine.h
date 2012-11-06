@@ -533,6 +533,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   virtual int GetOptions() const {
     return options_;
   }
+  virtual void UpdateAspectRatio(int ratio_w, int ratio_h) {}
   void set_sent_intra_frame(bool v) { sent_intra_frame_ = v; }
   bool sent_intra_frame() const { return sent_intra_frame_; }
   void set_requested_intra_frame(bool v) { requested_intra_frame_ = v; }

@@ -160,6 +160,7 @@ bool HybridVideoMediaChannel::SetSendCodecs(
   if (!return_value) {
     return false;
   }
+  active_channel_->UpdateAspectRatio(send_codec.width, send_codec.height);
   engine_->OnNewSendResolution(send_codec.width, send_codec.height);
   return true;
 }
@@ -291,6 +292,10 @@ void HybridVideoMediaChannel::OnRtcpReceived(talk_base::Buffer* packet) {
   } else {
     LOG(LS_INFO) << "HybridVideoChannel: Eating early RTCP packet";
   }
+}
+
+void HybridVideoMediaChannel::UpdateAspectRatio(int ratio_w, int ratio_h) {
+  if (active_channel_) active_channel_->UpdateAspectRatio(ratio_w, ratio_h);
 }
 
 bool HybridVideoMediaChannel::SelectActiveChannel(

@@ -170,6 +170,12 @@ class VideoCapturer
   //   CS_FAILED:    if the capturer failes to start..
   //   CS_NO_DEVICE: if the capturer has no device and fails to start.
   virtual CaptureState Start(const VideoFormat& capture_format) = 0;
+  // Sets the desired aspect ratio. If the capturer is capturing at another
+  // aspect ratio it will crop the width or the height so that asked for
+  // aspect ratio is acheived. Note that ratio_w and ratio_h do not need to be
+  // relatively prime.
+  void UpdateAspectRatio(int ratio_w, int ratio_h);
+  void ClearAspectRatio();
 
   // Get the current capture format, which is set by the Start() call.
   // Note that the width and height of the captured frames may differ from the
@@ -252,11 +258,17 @@ class VideoCapturer
   // this frame should be dropped as it has not applied all processors.
   bool ApplyProcessors(VideoFrame* video_frame);
 
+  void GetDesiredResolution(const CapturedFrame* frame,
+                            int* captured_width, int* captured_height);
+
   talk_base::Thread* thread_;
   std::string id_;
   CaptureState capture_state_;
   talk_base::scoped_ptr<VideoFormat> capture_format_;
   talk_base::scoped_ptr<std::vector<VideoFormat> > supported_formats_;
+
+  int ratio_w_;
+  int ratio_h_;
 
   talk_base::CriticalSection crit_;
   VideoProcessors video_processors_;

@@ -275,6 +275,7 @@ class FileVideoChannel : public VideoMediaChannel {
     return true;
   }
   virtual int GetOptions() const { return options_; }
+  virtual void UpdateAspectRatio(int ratio_w, int ratio_h) {}
 
  private:
   uint32 send_ssrc_;

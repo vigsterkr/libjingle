@@ -48,13 +48,6 @@
 
 namespace cricket {
 
-// TODO(janahan): For now, a hard-coded ssrc is used as the video ssrc.
-// This is because when the video frame is passed to the mediaprocessor for
-// processing, it doesn't have the correct ssrc. Since currently only Tx
-// Video processing is supported, this is ok. When we switch over to trigger
-// from capturer, this should be fixed and this const removed.
-const uint32 kDummyVideoSsrc = 0xFFFFFFFF;
-
 class VideoCapturer;
 
 // MediaEngineInterface is an abstraction of a media engine which can be

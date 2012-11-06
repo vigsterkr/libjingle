@@ -54,14 +54,15 @@ typedef __int64 int64;
 #define INT64_F "I64"
 #else  // COMPILER_MSVC
 // On Mac OS X, cssmconfig.h defines uint64 as uint64_t
+// TODO(fbarchard): Use long long for compatibility with chromium on BSD/OSX.
 #if defined(OSX)
 typedef uint64_t uint64;
 typedef int64_t int64;
 #ifndef INT64_C
-#define INT64_C(x) x ## L
+#define INT64_C(x) x ## LL
 #endif
 #ifndef UINT64_C
-#define UINT64_C(x) x ## UL
+#define UINT64_C(x) x ## ULL
 #endif
 #define INT64_F "l"
 #elif defined(__LP64__)

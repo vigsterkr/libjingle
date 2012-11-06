@@ -647,6 +647,7 @@ class VideoMediaChannel : public MediaChannel {
   // Sets the media options to use.
   virtual bool SetOptions(int options) { return false; }
   virtual int GetOptions() const { return 0; }
+  virtual void UpdateAspectRatio(int ratio_w, int ratio_h) = 0;
 
   // Signals events from the currently active window.
   sigslot::signal2<uint32, Error> SignalMediaError;
