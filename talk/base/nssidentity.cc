@@ -200,8 +200,11 @@ bool NSSCertificate::GetDigestObject(const std::string &algorithm,
 
   if (algorithm == DIGEST_SHA_1) {
     hash_type = HASH_AlgSHA1;
+  // HASH_AlgSHA224 is not supported in the chromium linux build system.
+#if 0
   } else if (algorithm == DIGEST_SHA_224) {
     hash_type = HASH_AlgSHA224;
+#endif
   } else if (algorithm == DIGEST_SHA_256) {
     hash_type = HASH_AlgSHA256;
   } else if (algorithm == DIGEST_SHA_384) {
@@ -233,7 +236,7 @@ NSSIdentity *NSSIdentity::Generate(const std::string &common_name) {
   NSSKeyPair *keypair = NSSKeyPair::Generate();
   SECItem inner_der;
   SECStatus rv;
-  PRArenaPool *arena;
+  PLArenaPool* arena;
   SECItem signed_cert;
   PRTime not_before, not_after;
   PRTime now = PR_Now();

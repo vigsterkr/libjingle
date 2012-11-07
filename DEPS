@@ -25,6 +25,9 @@ deps = {
   "google_apis/build":
     Var("chromium_trunk") + "/src/google_apis/build@" + Var("chromium_revision"),
 
+  "net/third_party/nss":
+    Var("chromium_trunk") + "/src/net/third_party/nss@" + Var("chromium_revision"),
+
   "third_party/expat":
     Var("chromium_trunk") + "/src/third_party/expat@" + Var("chromium_revision"),
 
@@ -69,6 +72,9 @@ deps = {
  
   "third_party/webrtc":
     (Var("googlecode_url") % "webrtc") + "/stable/webrtc@" + Var("webrtc_revision"),
+
+  "third_party/zlib":
+    Var("chromium_trunk") + "/src/third_party/zlib@" + Var("chromium_revision"),
 
   "tools/clang":
     Var("chromium_trunk") + "/src/tools/clang@" + Var("chromium_revision"),

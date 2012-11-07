@@ -131,7 +131,12 @@ TEST_F(SSLIdentityTest, DigestSHA1) {
   TestDigest(talk_base::DIGEST_SHA_1, 20, kTestCertSha1);
 }
 
+// HASH_AlgSHA224 is not supported in the chromium linux build.
+#if SSL_USE_NSS
+TEST_F(SSLIdentityTest, DISABLED_DigestSHA224) {
+#else
 TEST_F(SSLIdentityTest, DigestSHA224) {
+#endif
   TestDigest(talk_base::DIGEST_SHA_224, 28);
 }
 

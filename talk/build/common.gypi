@@ -52,9 +52,12 @@
       'FEATURE_ENABLE_SSL',
       'FEATURE_ENABLE_VOICEMAIL',
       'FEATURE_ENABLE_PSTN',
+      # TODO(eric): enable HAVE_NSS_SSL_H and SSL_USE_NSS they are once ready.
+      # 'HAVE_NSS_SSL_H=1',
       'HAVE_SRTP',
       'HAVE_WEBRTC_VIDEO',
       'HAVE_WEBRTC_VOICE',
+      # 'SSL_USE_NSS',
       # TODO(ronghuawu): Remove this once libjingle is updated to use the new
       # webrtc.
       'USE_WEBRTC_DEV_BRANCH',

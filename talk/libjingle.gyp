@@ -50,6 +50,7 @@
       'type': 'static_library',
       'dependencies': [
         '<(DEPTH)/third_party/expat/expat.gyp:expat',
+        # '<(DEPTH)/net/third_party/nss/ssl.gyp:libssl',
       ],
       'export_dependent_settings': [
         '<(DEPTH)/third_party/expat/expat.gyp:expat',
@@ -94,6 +95,8 @@
         'base/nattypes.cc',
         'base/nethelpers.cc',
         'base/network.cc',
+        'base/nssidentity.cc',
+        'base/nssstreamadapter.cc',
         'base/optionsfile.cc',
         'base/pathutils.cc',
         'base/physicalsocketserver.cc',
@@ -114,6 +117,7 @@
         'base/sslsocketfactory.cc',
         'base/sslidentity.cc',
         'base/sslstreamadapter.cc',
+        'base/sslstreamadapterhelper.cc',
         'base/stream.cc',
         'base/stringencode.cc',
         'base/stringutils.cc',
