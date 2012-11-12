@@ -33,13 +33,8 @@
 #include "talk/media/webrtc/webrtccommon.h"
 #include "webrtc/common_types.h"
 #include "webrtc/modules/interface/module_common_types.h"
-#ifdef USE_WEBRTC_DEV_BRANCH
 #include "webrtc/modules/video_capture/include/video_capture.h"
 #include "webrtc/modules/video_render/include/video_render.h"
-#else
-#include "webrtc/modules/video_capture/main/interface/video_capture.h"
-#include "webrtc/modules/video_render/main/interface/video_render.h"
-#endif
 #include "webrtc/video_engine/include/vie_base.h"
 #include "webrtc/video_engine/include/vie_capture.h"
 #include "webrtc/video_engine/include/vie_codec.h"

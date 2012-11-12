@@ -41,11 +41,16 @@ using talk_base::ByteBuffer;
 
 namespace cricket {
 
-const char STUN_ERROR_REASON_BAD_REQUEST[] = "BAD REQUEST";
-const char STUN_ERROR_REASON_UNAUTHORIZED[] = "UNAUTHORIZED";
-const char STUN_ERROR_REASON_STALE_CREDENTIALS[] = "STALE CREDENTIALS";
-const char STUN_ERROR_REASON_SERVER_ERROR[] = "SERVER ERROR";
-const char STUN_ERROR_REASON_ROLE_CONFLICT[] = "ROLE CONFLICT";
+const char STUN_ERROR_REASON_BAD_REQUEST[] = "Bad Request";
+const char STUN_ERROR_REASON_UNAUTHORIZED[] = "Unauthorized";
+const char STUN_ERROR_REASON_FORBIDDEN[] = "Forbidden";
+const char STUN_ERROR_REASON_STALE_CREDENTIALS[] = "Stale Credentials";
+const char STUN_ERROR_REASON_ALLOCATION_MISMATCH[] = "Allocation Mismatch";
+const char STUN_ERROR_REASON_STALE_NONCE[] = "Stale Nonce";
+const char STUN_ERROR_REASON_WRONG_CREDENTIALS[] = "Wrong Credentials";
+const char STUN_ERROR_REASON_UNSUPPORTED_PROTOCOL[] = "Unsupported Protocol";
+const char STUN_ERROR_REASON_ROLE_CONFLICT[] = "Role Conflict";
+const char STUN_ERROR_REASON_SERVER_ERROR[] = "Server Error";
 
 const char TURN_MAGIC_COOKIE_VALUE[] = { '\x72', '\xC6', '\x4B', '\xC6' };
 const char EMPTY_TRANSACTION_ID[] = "0000000000000000";
@@ -871,20 +876,53 @@ bool StunUInt16ListAttribute::Write(ByteBuffer* buf) const {
   return true;
 }
 
-int GetStunResponseType(int request_type) {
-  return (request_type & 0x110) ? -1 : request_type | 0x100;
+int GetStunSuccessResponseType(int req_type) {
+  return IsStunRequestType(req_type) ? (req_type | 0x100) : -1;
 }
 
-int GetStunErrorResponseType(int request_type) {
-  return (request_type & 0x110) ? -1 : request_type | 0x110;
+int GetStunErrorResponseType(int req_type) {
+  return IsStunRequestType(req_type) ? (req_type | 0x110) : -1;
 }
 
-bool IsStunResponseType(int response_type) {
-  return ((response_type & 0x110) == 0x100);
+bool IsStunRequestType(int msg_type) {
+  return ((msg_type & kStunTypeMask) == 0x000);
 }
 
-bool IsStunErrorResponseType(int response_type) {
-  return ((response_type & 0x110) == 0x110);
+bool IsStunIndicationType(int msg_type) {
+  return ((msg_type & kStunTypeMask) == 0x010);
+}
+
+bool IsStunSuccessResponseType(int msg_type) {
+  return ((msg_type & kStunTypeMask) == 0x100);
+}
+
+bool IsStunErrorResponseType(int msg_type) {
+  return ((msg_type & kStunTypeMask) == 0x110);
+}
+
+bool ComputeStunCredentialHash(const std::string& username,
+                               const std::string& realm,
+                               const std::string& password,
+                               std::string* hash) {
+  // http://tools.ietf.org/html/rfc5389#section-15.4
+  // long-term credentials will be calculated using the key and key is
+  // key = MD5(username ":" realm ":" SASLprep(password))
+  std::string input = username;
+  input += ':';
+  input += realm;
+  input += ':';
+  input += password;
+
+  char digest[talk_base::MessageDigest::kMaxSize];
+  size_t size = talk_base::ComputeDigest(
+      talk_base::DIGEST_MD5, input.c_str(), input.size(),
+      digest, sizeof(digest));
+  if (size == 0) {
+    return false;
+  }
+
+  *hash = std::string(digest, size);
+  return true;
 }
 
 }  // namespace cricket

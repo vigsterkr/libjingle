@@ -72,6 +72,11 @@ class FakeConstraints : public webrtc::MediaConstraintsInterface {
                  talk_base::ToString<int>(height));
   }
 
+  void SetOptionalMaxWidth(int width) {
+    AddOptional(MediaConstraintsInterface::kMaxWidth,
+                talk_base::ToString<int>(width));
+  }
+
   void SetMandatoryReceiveAudio(bool enable) {
     if (enable) {
       AddMandatory(MediaConstraintsInterface::kOfferToReceiveAudio,

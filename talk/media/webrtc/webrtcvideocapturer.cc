@@ -38,11 +38,7 @@
 #include "talk/media/webrtc/webrtcvideoframe.h"
 
 #include "talk/base/win32.h"  // Need this to #include the impl files.
-#ifdef USE_WEBRTC_DEV_BRANCH
 #include "webrtc/modules/video_capture/include/video_capture_factory.h"
-#else
-#include "webrtc/modules/video_capture/main/interface/video_capture_factory.h"
-#endif
 
 namespace cricket {
 
@@ -321,30 +317,31 @@ bool WebRtcVideoCapturer::GetPreferredFourccs(
   return true;
 }
 
-#ifdef USE_WEBRTC_DEV_BRANCH
 void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
     webrtc::I420VideoFrame& sample) {
-#else
-void WebRtcVideoCapturer::OnIncomingCapturedFrame(const WebRtc_Word32 id,
-    webrtc::VideoFrame& sample, webrtc::VideoCodecType codec_type) {
-  ASSERT(codec_type == webrtc::kVideoCodecUnknown);
-#endif
   ASSERT(IsRunning());
 
   ++captured_frames_;
   // Log the size and pixel aspect ratio of the first captured frame.
   if (1 == captured_frames_) {
     LOG(LS_INFO) << "Captured frame size "
-#ifdef USE_WEBRTC_DEV_BRANCH
                  << sample.width() << "x" << sample.height()
-#else
-                 << sample.Width() << "x" << sample.Height()
-#endif
                  << ". Expected format " << GetCaptureFormat()->ToString();
   }
 
   // Signal down stream components on captured frame.
-  WebRtcCapturedFrame frame(sample);
+  // The CapturedFrame class doesn't support planes. We have to ExtractBuffer
+  // to one block for it.
+  int length = webrtc::CalcBufferSize(webrtc::kI420,
+                                      sample.width(), sample.height());
+  if (!captured_frame_.get() ||
+      captured_frame_->length() != static_cast<size_t>(length)) {
+    captured_frame_.reset(new FrameBuffer(length));
+  }
+  // TODO(ronghuawu): Refactor the WebRtcVideoFrame to avoid memory copy.
+  webrtc::ExtractBuffer(sample, length,
+                        reinterpret_cast<uint8_t*>(captured_frame_->data()));
+  WebRtcCapturedFrame frame(sample, captured_frame_->data(), length);
   SignalFrameCaptured(this, &frame);
 }
 
@@ -354,25 +351,21 @@ void WebRtcVideoCapturer::OnCaptureDelayChanged(
 }
 
 // WebRtcCapturedFrame
-#ifdef USE_WEBRTC_DEV_BRANCH
-WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::I420VideoFrame& sample) {
-  // TODO(mikhal): Implement using I420VideoFrame.
-}
-#else
-WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::VideoFrame& sample) {
-  width = sample.Width();
-  height = sample.Height();
+WebRtcCapturedFrame::WebRtcCapturedFrame(const webrtc::I420VideoFrame& sample,
+                                         void* buffer,
+                                         int length) {
+  width = sample.width();
+  height = sample.height();
   fourcc = FOURCC_I420;
-  // TODO(fbarchard): Support pixel aspect ratio (for OSX).
+  // TODO(hellner): Support pixel aspect ratio (for OSX).
   pixel_width = 1;
   pixel_height = 1;
   // Convert units from VideoFrame RenderTimeMs to CapturedFrame (nanoseconds).
-  elapsed_time = sample.RenderTimeMs() * talk_base::kNumNanosecsPerMillisec;
+  elapsed_time = sample.render_time_ms() * talk_base::kNumNanosecsPerMillisec;
   time_stamp = elapsed_time;
-  data_size = sample.Length();
-  data = const_cast<WebRtc_UWord8*>(sample.Buffer());
+  data_size = length;
+  data = buffer;
 }
-#endif
 
 }  // namespace cricket
 

@@ -272,26 +272,22 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
 }
 
 // Check if we can send |new_stream| on a PeerConnection.
-// Currently only one audio and one video track is supported per PeerConnection.
+// Currently only one audio but multiple video track is supported per
+// PeerConnection.
 bool CanAddLocalMediaStream(webrtc::StreamCollectionInterface* current_streams,
                             webrtc::MediaStreamInterface* new_stream) {
   if (!new_stream || !current_streams)
     return false;
 
   bool audio_track_exist = false;
-  bool video_track_exist = false;
   for (size_t j = 0; j < current_streams->count(); ++j) {
     if (!audio_track_exist) {
       audio_track_exist = current_streams->at(j)->audio_tracks()->count() > 0;
     }
-    if (!video_track_exist) {
-      video_track_exist = current_streams->at(j)->video_tracks()->count() > 0;
-    }
   }
-  if ((audio_track_exist && (new_stream->audio_tracks()->count() > 0)) ||
-      (video_track_exist && (new_stream->video_tracks()->count() > 0))) {
-    LOG(LS_ERROR) << "AddStream - Currently only one audio track and one"
-                  << "video track is supported per PeerConnection.";
+  if (audio_track_exist && (new_stream->audio_tracks()->count() > 0)) {
+    LOG(LS_ERROR) << "AddStream - Currently only one audio track is supported"
+                  << "per PeerConnection.";
     return false;
   }
   return true;
@@ -351,10 +347,11 @@ bool PeerConnection::DoInitialize(
   port_allocator_.reset(
       allocator_factory->CreatePortAllocator(stun_config, turn_config));
   // To handle both internal and externally created port allocator, we will
-  // enable BUNDLE here.
+  // enable BUNDLE here. Also enabling TURN and disable legacy relay service.
   port_allocator_->set_flags(cricket::PORTALLOCATOR_ENABLE_BUNDLE |
                              cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
                              cricket::PORTALLOCATOR_ENABLE_SHARED_SOCKET |
+                             cricket::PORTALLOCATOR_DISABLE_RELAY |
                              cricket::PORTALLOCATOR_ENABLE_TURN);
 
   mediastream_signaling_.reset(new MediaStreamSignaling(

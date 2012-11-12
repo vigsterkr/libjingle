@@ -91,13 +91,14 @@ bool StunRequestManager::CheckResponse(StunMessage* msg) {
     return false;
 
   StunRequest* request = iter->second;
-  if (msg->type() == GetStunResponseType(request->type())) {
+  if (msg->type() == GetStunSuccessResponseType(request->type())) {
     request->OnResponse(msg);
   } else if (msg->type() == GetStunErrorResponseType(request->type())) {
     request->OnErrorResponse(msg);
   } else {
     LOG(LERROR) << "Received response with wrong type: " << msg->type()
-               << " (expecting " << GetStunResponseType(request->type()) << ")";
+                << " (expecting "
+                << GetStunSuccessResponseType(request->type()) << ")";
     return false;
   }
 

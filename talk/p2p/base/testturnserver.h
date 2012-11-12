@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004 Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,26 +25,37 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_MEDIA_BASE_VIDEOPROCESSOR_H_
-#define TALK_MEDIA_BASE_VIDEOPROCESSOR_H_
+#ifndef TALK_P2P_BASE_TESTTURNSERVER_H_
+#define TALK_P2P_BASE_TESTTURNSERVER_H_
 
-#include "talk/base/sigslot.h"
-#include "talk/media/base/videoframe.h"
+#include "talk/base/asyncudpsocket.h"
+#include "talk/base/basicpacketsocketfactory.h"
+#include "talk/base/thread.h"
+#include "talk/p2p/base/turnserver.h"
 
 namespace cricket {
 
-class VideoProcessor : public sigslot::has_slots<> {
+static const char kTestRealm[] = "example.org";
+static const char kTestSoftware[] = "TestTurnServer";
+
+class TestTurnServer {
  public:
-  virtual ~VideoProcessor() {}
-  // Contents of frame may be manipulated by the processor.
-  // The processed data is expected to be the same size as the
-  // original data. VideoProcessors may be chained together and may decide
-  // that the current frame should be dropped. If *drop_frame is true,
-  // the current processor should skip processing. If the current processor
-  // decides it cannot process the current frame in a timely manner, it may set
-  // *drop_frame = true and the frame will be dropped.
-  virtual void OnFrame(uint32 ssrc, VideoFrame* frame, bool* drop_frame) = 0;
+  TestTurnServer(talk_base::Thread* thread,
+                 const talk_base::SocketAddress& udp_int_addr,
+                 const talk_base::SocketAddress& udp_ext_addr)
+     : server_(thread) {
+    server_.AddInternalServerSocket(talk_base::AsyncUDPSocket::Create(
+        thread->socketserver(), udp_int_addr));
+    server_.SetExternalSocketFactory(new talk_base::BasicPacketSocketFactory(),
+        udp_ext_addr);
+    server_.set_realm(kTestRealm);
+    server_.set_software(kTestSoftware);
+  }
+
+ private:
+  TurnServer server_;
 };
 
 }  // namespace cricket
-#endif  // TALK_MEDIA_BASE_VIDEOPROCESSOR_H_
+
+#endif  // TALK_P2P_BASE_TESTTURNSERVER_H_

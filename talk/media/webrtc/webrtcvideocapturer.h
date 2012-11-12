@@ -33,11 +33,9 @@
 
 #include "talk/base/messagehandler.h"
 #include "talk/media/base/videocapturer.h"
-#ifdef USE_WEBRTC_DEV_BRANCH
+#include "talk/media/webrtc/webrtcvideoframe.h"
+#include "webrtc/common_video/libyuv/include/webrtc_libyuv.h"
 #include "webrtc/modules/video_capture/include/video_capture.h"
-#else
-#include "webrtc/modules/video_capture/main/interface/video_capture.h"
-#endif
 
 namespace cricket {
 
@@ -77,34 +75,25 @@ class WebRtcVideoCapturer : public VideoCapturer,
   virtual bool GetPreferredFourccs(std::vector<uint32>* fourccs);
 
  private:
-#ifdef USE_WEBRTC_DEV_BRANCH
   // Callback when a frame is captured by camera.
   virtual void OnIncomingCapturedFrame(const WebRtc_Word32 id,
                                        webrtc::I420VideoFrame& frame);
   virtual void OnIncomingCapturedEncodedFrame(const WebRtc_Word32 id,
                                               webrtc::VideoFrame& frame) {
   }
-#else
-  // Callback when a frame is captured by camera.
-  virtual void OnIncomingCapturedFrame(const WebRtc_Word32 id,
-                                       webrtc::VideoFrame& frame,
-                                       webrtc::VideoCodecType type);
-#endif
   virtual void OnCaptureDelayChanged(const WebRtc_Word32 id,
                                      const WebRtc_Word32 delay);
 
   talk_base::scoped_ptr<WebRtcVcmFactoryInterface> factory_;
   webrtc::VideoCaptureModule* module_;
   int captured_frames_;
+  talk_base::scoped_ptr<FrameBuffer> captured_frame_;
 };
 
 struct WebRtcCapturedFrame : public CapturedFrame {
  public:
-#ifdef USE_WEBRTC_DEV_BRANCH
-  explicit WebRtcCapturedFrame(const webrtc::I420VideoFrame& frame);
-#else
-  explicit WebRtcCapturedFrame(const webrtc::VideoFrame& frame);
-#endif
+  WebRtcCapturedFrame(const webrtc::I420VideoFrame& frame,
+                      void* buffer, int length);
 };
 
 }  // namespace cricket

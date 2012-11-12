@@ -450,6 +450,7 @@
         'p2p/base/transportdescriptionfactory.cc',
         'p2p/base/transportdescriptionfactory.h',
         'p2p/base/turnport.cc',
+        'p2p/base/turnserver.cc',
         'p2p/client/basicportallocator.cc',
         'p2p/client/connectivitychecker.cc',
         'p2p/client/httpportallocator.cc',

@@ -41,7 +41,6 @@
 
 namespace cricket {
 
-static const int PROTOCOL_UDP = 0x11;
 // TODO(juberti): Move to stun.h when relay messages have been renamed.
 static const int TURN_ALLOCATE_REQUEST = STUN_ALLOCATE_REQUEST;
 static const int TURN_ALLOCATE_ERROR_RESPONSE = STUN_ALLOCATE_ERROR_RESPONSE;
@@ -119,6 +118,7 @@ class TurnChannelBindRequest : public StunRequest {
 // a channel for this remote destination to reduce the overhead of sending data.
 class TurnEntry : public sigslot::has_slots<> {
  public:
+  enum BindState { STATE_UNBOUND, STATE_BINDING, STATE_BOUND };
   TurnEntry(TurnPort* port, int channel_id,
             const talk_base::SocketAddress& ext_addr);
 
@@ -126,7 +126,7 @@ class TurnEntry : public sigslot::has_slots<> {
 
   int channel_id() const { return channel_id_; }
   const talk_base::SocketAddress& address() const { return ext_addr_; }
-  bool locked() const { return locked_; }
+  BindState state() const { return state_; }
 
   // Sends a packet to the given destination address.
   // This will wrap the packet in STUN if necessary.
@@ -141,7 +141,7 @@ class TurnEntry : public sigslot::has_slots<> {
   TurnPort* port_;
   int channel_id_;
   talk_base::SocketAddress ext_addr_;
-  bool locked_;
+  BindState state_;
 };
 
 TurnPort::TurnPort(talk_base::Thread* thread,
@@ -217,7 +217,7 @@ Connection* TurnPort::CreateConnection(const Candidate& address,
   // Create an entry, if needed, so we can get our permissions set up correctly.
   CreateEntry(address.address());
 
-  // TODO(juberti): This will need to change if we start gathering STUN
+  // TODO(juberti): The '0' index will need to change if we start gathering STUN
   // candidates on this port.
   ProxyConnection* conn = new ProxyConnection(this, 0, address);
   AddConnection(conn);
@@ -271,17 +271,16 @@ void TurnPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   ASSERT(socket == socket_.get());
   ASSERT(remote_addr == server_address_);
 
-  // The message must be at least the size of a message type +
+  // The message must be at least the size of a channel header.
   if (size < TURN_CHANNEL_HEADER_SIZE) {
-    LOG(LS_WARNING) << "Received TURN message that was too short";
+    LOG_J(LS_WARNING, this) << "Received TURN message that was too short";
     return;
   }
 
   // Check the message type, to see if is a Channel Data message.
-  uint16 msg_type;
-  memcpy(&msg_type, data, sizeof(msg_type));
-  msg_type = talk_base::NetworkToHost16(msg_type);
-
+  // The message will either be channel data, a TURN data indication, or
+  // a response to a previous request.
+  uint16 msg_type = talk_base::GetBE16(data);
   if (IsTurnChannelData(msg_type)) {
     HandleChannelData(msg_type, data, size);
   } else if (msg_type == TURN_DATA_INDICATION) {
@@ -289,10 +288,10 @@ void TurnPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   } else {
     // This must be a response for one of our requests.
     // Check success responses, but not errors, for MESSAGE-INTEGRITY.
-    if (IsStunResponseType(msg_type) &&
+    if (IsStunSuccessResponseType(msg_type) &&
         !StunMessage::ValidateMessageIntegrity(data, size, hash())) {
-      LOG(LS_WARNING) << "Received TURN message with invalid "
-                      << "message integrity, msg_type=" << msg_type;
+      LOG_J(LS_WARNING, this) << "Received TURN message with invalid "
+                              << "message integrity, msg_type=" << msg_type;
       return;
     }
     request_manager_.CheckResponse(data, size);
@@ -312,7 +311,7 @@ void TurnPort::ResolveTurnAddress() {
 void TurnPort::OnResolveResult(talk_base::SignalThread* signal_thread) {
   ASSERT(signal_thread == resolver_);
   if (resolver_->error() != 0) {
-    LOG_J(LS_WARNING, this) << "TurnPort: turn host lookup received error "
+    LOG_J(LS_WARNING, this) << "TURN host lookup received error "
                             << resolver_->error();
     SignalAddressError(this);
     return;
@@ -325,7 +324,8 @@ void TurnPort::OnResolveResult(talk_base::SignalThread* signal_thread) {
 void TurnPort::OnSendStunPacket(const void* data, size_t size,
                                 StunRequest* request) {
   if (Send(data, size) < 0) {
-    LOG(LS_ERROR) << "Failed to send TURN message, err=" << socket_->GetError();
+    LOG_J(LS_ERROR, this) << "Failed to send TURN message, err="
+                          << socket_->GetError();
   }
 }
 
@@ -342,43 +342,45 @@ void TurnPort::OnAllocateError() {
 }
 
 void TurnPort::HandleDataIndication(const char* data, size_t size) {
+  // Read in the message, and process according to RFC5766, Section 10.4.
   talk_base::ByteBuffer buf(data, size);
   TurnMessage msg;
   if (!msg.Read(&buf)) {
-    LOG(LS_WARNING) << "Received invalid TURN data indication";
+    LOG_J(LS_WARNING, this) << "Received invalid TURN data indication";
     return;
   }
 
+  // Check mandatory attributes.
   const StunAddressAttribute* addr_attr =
       msg.GetAddress(STUN_ATTR_XOR_PEER_ADDRESS);
   if (!addr_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_XOR_PEER_ADDRESS attribute in "
-                    << "data indication.";
+    LOG_J(LS_WARNING, this) << "Missing STUN_ATTR_XOR_PEER_ADDRESS attribute "
+                            << "in data indication.";
     return;
   }
 
   const StunByteStringAttribute* data_attr =
       msg.GetByteString(STUN_ATTR_DATA);
   if (!data_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_DATA attribute in "
-                    << "data indication.";
+    LOG_J(LS_WARNING, this) << "Missing STUN_ATTR_DATA attribute in "
+                            << "data indication.";
     return;
   }
 
+  // Verify that the data came from somewhere we think we have a permission for.
   talk_base::SocketAddress ext_addr(addr_attr->GetAddress());
-  TurnEntry* entry = FindEntry(ext_addr);
-  if (!entry) {
-    LOG(LS_WARNING) << "Received TURN data indication with invalid "
-                    << "peer address, addr=" << ext_addr.ToString();\
+  if (!HasPermission(ext_addr.ipaddr())) {
+    LOG_J(LS_WARNING, this) << "Received TURN data indication with invalid "
+                            << "peer address, addr=" << ext_addr.ToString();
     return;
   }
 
-  DispatchPacket(data_attr->bytes(), data_attr->length(), entry->address(),
-                 PROTO_UDP);
+  DispatchPacket(data_attr->bytes(), data_attr->length(), ext_addr, PROTO_UDP);
 }
 
 void TurnPort::HandleChannelData(int channel_id, const char* data,
                                  size_t size) {
+  // Read the message, and process according to RFC5766, Section 11.6.
   //    0                   1                   2                   3
   //    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
   //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -393,19 +395,18 @@ void TurnPort::HandleChannelData(int channel_id, const char* data,
   //   +-------------------------------+
 
   // Extract header fields from the message.
-  uint16 len;
-  memcpy(&len, data + 2, sizeof(len));
-  len = talk_base::NetworkToHost16(len);
+  uint16 len = talk_base::GetBE16(data + 2);
   if (len != size - TURN_CHANNEL_HEADER_SIZE) {
-    LOG(LS_WARNING) << "Received TURN channel data message with "
-                    << "incorrect length, len=" << len;
+    LOG_J(LS_WARNING, this) << "Received TURN channel data message with "
+                            << "incorrect length, len=" << len;
     return;
   }
 
+  // Ensure this is a channel we know about.
   TurnEntry* entry = FindEntry(channel_id);
   if (!entry) {
-    LOG(LS_WARNING) << "Received TURN channel data message for invalid "
-                    << "channel, channel_id=" << channel_id;
+    LOG_J(LS_WARNING, this) << "Received TURN channel data message for invalid "
+                            << "channel, channel_id=" << channel_id;
     return;
   }
 
@@ -425,8 +426,8 @@ void TurnPort::DispatchPacket(const char* data, size_t size,
 bool TurnPort::ScheduleRefresh(int lifetime) {
   // Lifetime is in seconds; we schedule a refresh for one minute less.
   if (lifetime < 2 * 60) {
-    LOG(LS_WARNING) << "Received response with lifetime that was too short, "
-                    << "lifetime=" << lifetime;
+    LOG_J(LS_WARNING, this) << "Received response with lifetime that was "
+                            << "too short, lifetime=" << lifetime;
     return false;
   }
 
@@ -455,46 +456,34 @@ int TurnPort::Send(const void* data, size_t len) {
 }
 
 void TurnPort::UpdateHash() {
-  // http://tools.ietf.org/html/rfc5389#section-15.4
-  // long-term credentials will be calculated using the key and key is
-  // key = MD5(username ":" realm ":" SASLprep(password))
-
-  std::string input = credentials_.username;
-  input.append(":");
-  input.append(realm_);
-  input.append(":");
-  input.append(credentials_.password);
-
-  // TODO(juberti): replace with [talk_base::MessageDigest::kMaxSize];
-  char buf[16];
-  size_t retval = talk_base::ComputeDigest(talk_base::DIGEST_MD5,
-      input.c_str(), input.size(), buf, sizeof(buf));
-  ASSERT(retval == sizeof(buf));
-  hash_ = std::string(buf, retval);
+  VERIFY(ComputeStunCredentialHash(credentials_.username, realm_,
+                                   credentials_.password, &hash_));
 }
 
-TurnEntry* TurnPort::FindEntry(const talk_base::SocketAddress& addr) {
-  TurnEntry* entry = NULL;
-  for (std::list<TurnEntry*>::iterator it = entries_.begin();
-       it != entries_.end(); ++it) {
-    if ((*it)->address() == addr) {
-      entry = *it;
-      break;
-    }
-  }
-  return entry;
+static bool MatchesIP(TurnEntry* e, talk_base::IPAddress ipaddr) {
+  return e->address().ipaddr() == ipaddr;
+}
+bool TurnPort::HasPermission(const talk_base::IPAddress& ipaddr) const {
+  return (std::find_if(entries_.begin(), entries_.end(),
+      std::bind2nd(std::ptr_fun(MatchesIP), ipaddr)) != entries_.end());
 }
 
-TurnEntry* TurnPort::FindEntry(int channel_id) {
-  TurnEntry* entry = NULL;
-  for (std::list<TurnEntry*>::iterator it = entries_.begin();
-       it != entries_.end(); ++it) {
-    if ((*it)->channel_id() == channel_id) {
-      entry = *it;
-      break;
-    }
-  }
-  return entry;
+static bool MatchesAddress(TurnEntry* e, talk_base::SocketAddress addr) {
+  return e->address() == addr;
+}
+TurnEntry* TurnPort::FindEntry(const talk_base::SocketAddress& addr) const {
+  EntryList::const_iterator it = std::find_if(entries_.begin(), entries_.end(),
+      std::bind2nd(std::ptr_fun(MatchesAddress), addr));
+  return (it != entries_.end()) ? *it : NULL;
+}
+
+static bool MatchesChannelId(TurnEntry* e, int id) {
+  return e->channel_id() == id;
+}
+TurnEntry* TurnPort::FindEntry(int channel_id) const {
+  EntryList::const_iterator it = std::find_if(entries_.begin(), entries_.end(),
+      std::bind2nd(std::ptr_fun(MatchesChannelId), channel_id));
+  return (it != entries_.end()) ? *it : NULL;
 }
 
 TurnEntry* TurnPort::CreateEntry(const talk_base::SocketAddress& addr) {
@@ -517,11 +506,11 @@ TurnAllocateRequest::TurnAllocateRequest(TurnPort* port)
 }
 
 void TurnAllocateRequest::Prepare(StunMessage* request) {
+  // Create the request as indicated in RFC 5766, Section 6.1.
   request->SetType(TURN_ALLOCATE_REQUEST);
-
   StunUInt32Attribute* transport_attr = StunAttribute::CreateUInt32(
       STUN_ATTR_REQUESTED_TRANSPORT);
-  transport_attr->SetValue(PROTOCOL_UDP << 24);
+  transport_attr->SetValue(IPPROTO_UDP << 24);
   VERIFY(request->AddAttribute(transport_attr));
   if (!port_->hash().empty()) {
     port_->AddRequestAuthInfo(request);
@@ -529,38 +518,41 @@ void TurnAllocateRequest::Prepare(StunMessage* request) {
 }
 
 void TurnAllocateRequest::OnResponse(StunMessage* response) {
-  // TODO(mallinath) - Use mapped address for STUN candidate.
+  // Check mandatory attributes as indicated in RFC5766, Section 6.3.
   const StunAddressAttribute* mapped_attr =
       response->GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
   if (!mapped_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_XOR_MAPPED_ADDRESS attribute in "
-                    << "allocate success response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_XOR_MAPPED_ADDRESS "
+                             << "attribute in allocate success response";
     return;
   }
 
+  // TODO(mallinath) - Use mapped address for STUN candidate.
   port_->OnStunAddress(mapped_attr->GetAddress());
 
   const StunAddressAttribute* relayed_attr =
       response->GetAddress(STUN_ATTR_XOR_RELAYED_ADDRESS);
   if (!relayed_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_XOR_RELAYED_ADDRESS attribute in "
-                    << "allocate success response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_XOR_RELAYED_ADDRESS "
+                             << "attribute in allocate success response";
     return;
   }
 
   const StunUInt32Attribute* lifetime_attr =
       response->GetUInt32(STUN_ATTR_TURN_LIFETIME);
   if (!lifetime_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_TURN_LIFETIME attribute in "
-                    << "allocate success response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_TURN_LIFETIME attribute in "
+                             << "allocate success response";
     return;
   }
 
+  // Notify the port the allocate succeeded, and schedule a refresh request.
   port_->OnAllocateSuccess(relayed_attr->GetAddress());
   port_->ScheduleRefresh(lifetime_attr->value());
 }
 
 void TurnAllocateRequest::OnErrorResponse(StunMessage* response) {
+  // Process error response according to RFC5766, Section 6.4.
   const StunErrorCodeAttribute* errorcode = response->GetErrorCode();
   switch (errorcode->code()) {
     case STUN_ERROR_UNAUTHORIZED:       // Unauthrorized.
@@ -568,27 +560,31 @@ void TurnAllocateRequest::OnErrorResponse(StunMessage* response) {
       OnAuthChallenge(response, errorcode->code());
       break;
     default:
-      LOG(LS_WARNING) << "Allocate response error, code=" << errorcode->code();
+      LOG_J(LS_WARNING, port_) << "Allocate response error, code="
+                               << errorcode->code();
       port_->OnAllocateError();
   }
 }
 
 void TurnAllocateRequest::OnTimeout() {
-  LOG(LS_WARNING) << "Allocate response timeout";
+  LOG_J(LS_WARNING, port_) << "Allocate response timeout";
 }
 
 void TurnAllocateRequest::OnAuthChallenge(StunMessage* response, int code) {
+  // If we failed to authenticate even after we sent our credentials, fail hard.
   if (code == STUN_ERROR_UNAUTHORIZED && !port_->hash().empty()) {
-    LOG(LS_ERROR) << "Failed to authenticate with the server after challenge.";
+    LOG_J(LS_WARNING, port_) << "Failed to authenticate with the server "
+                             << "after challenge.";
     port_->OnAllocateError();
     return;
   }
 
+  // Check the mandatory attributes.
   const StunByteStringAttribute* realm_attr =
       response->GetByteString(STUN_ATTR_REALM);
   if (!realm_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_REALM attribute in "
-                    << "allocate unauthorized response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_REALM attribute in "
+                             << "allocate unauthorized response.";
     return;
   }
   port_->set_realm(realm_attr->GetString());
@@ -596,13 +592,13 @@ void TurnAllocateRequest::OnAuthChallenge(StunMessage* response, int code) {
   const StunByteStringAttribute* nonce_attr =
       response->GetByteString(STUN_ATTR_NONCE);
   if (!nonce_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_NONCE attribute in "
-                    << "allocate unauthorized response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_NONCE attribute in "
+                             << "allocate unauthorized response.";
     return;
   }
   port_->set_nonce(nonce_attr->GetString());
 
-  // Sending AllocationRequest with received realm and nonce values.
+  // Send another allocate request, with the received realm and nonce values.
   port_->SendRequest(new TurnAllocateRequest(port_), 0);
 }
 
@@ -612,24 +608,28 @@ TurnRefreshRequest::TurnRefreshRequest(TurnPort* port)
 }
 
 void TurnRefreshRequest::Prepare(StunMessage* request) {
+  // Create the request as indicated in RFC 5766, Section 7.1.
+  // No attributes need to be included.
   request->SetType(TURN_REFRESH_REQUEST);
   port_->AddRequestAuthInfo(request);
 }
 
 void TurnRefreshRequest::OnResponse(StunMessage* response) {
+  // Check mandatory attributes as indicated in RFC5766, Section 7.3.
   const StunUInt32Attribute* lifetime_attr =
       response->GetUInt32(STUN_ATTR_TURN_LIFETIME);
   if (!lifetime_attr) {
-    LOG(LS_WARNING) << "Missing STUN_ATTR_TURN_LIFETIME attribute in "
-                    << "refresh success response.";
+    LOG_J(LS_WARNING, port_) << "Missing STUN_ATTR_TURN_LIFETIME attribute in "
+                             << "refresh success response.";
     return;
   }
 
+  // Schedule a refresh based on the returned lifetime value.
   port_->ScheduleRefresh(lifetime_attr->value());
 }
 
 void TurnRefreshRequest::OnErrorResponse(StunMessage* response) {
-  // Handle 437 error response.
+  // TODO(juberti): Handle 437 error response as a success.
 }
 
 void TurnRefreshRequest::OnTimeout() {
@@ -645,6 +645,7 @@ TurnCreatePermissionRequest::TurnCreatePermissionRequest(
 }
 
 void TurnCreatePermissionRequest::Prepare(StunMessage* request) {
+  // Create the request as indicated in RFC5766, Section 9.1.
   request->SetType(TURN_CREATE_PERMISSION_REQUEST);
   VERIFY(request->AddAttribute(new StunXorAddressAttribute(
       STUN_ATTR_XOR_PEER_ADDRESS, ext_addr_)));
@@ -660,7 +661,7 @@ void TurnCreatePermissionRequest::OnErrorResponse(StunMessage* response) {
 }
 
 void TurnCreatePermissionRequest::OnTimeout() {
-  LOG(LS_WARNING) << "Create permission timeout";
+  LOG_J(LS_WARNING, port_) << "Create permission timeout";
 }
 
 TurnChannelBindRequest::TurnChannelBindRequest(
@@ -674,6 +675,7 @@ TurnChannelBindRequest::TurnChannelBindRequest(
 }
 
 void TurnChannelBindRequest::Prepare(StunMessage* request) {
+  // Create the request as indicated in RFC5766, Section 11.1.
   request->SetType(TURN_CHANNEL_BIND_REQUEST);
   VERIFY(request->AddAttribute(new StunUInt32Attribute(
       STUN_ATTR_CHANNEL_NUMBER, channel_id_ << 16)));
@@ -695,7 +697,7 @@ void TurnChannelBindRequest::OnErrorResponse(StunMessage* response) {
 }
 
 void TurnChannelBindRequest::OnTimeout() {
-  LOG(LS_WARNING) << "Channel bind timeout";
+  LOG_J(LS_WARNING, port_) << "Channel bind timeout";
 }
 
 TurnEntry::TurnEntry(TurnPort* port, int channel_id,
@@ -703,14 +705,14 @@ TurnEntry::TurnEntry(TurnPort* port, int channel_id,
     : port_(port),
       channel_id_(channel_id),
       ext_addr_(ext_addr),
-      locked_(false) {
+      state_(STATE_UNBOUND) {
   port_->SendRequest(new TurnCreatePermissionRequest(
       port_, this, ext_addr_), 0);
 }
 
 int TurnEntry::Send(const void* data, size_t size, bool payload) {
   talk_base::ByteBuffer buf;
-  if (!locked_) {
+  if (state_ != STATE_BOUND) {
     // If we haven't bound the channel yet, we have to use a Send Indication.
     TurnMessage msg;
     msg.SetType(TURN_SEND_INDICATION);
@@ -723,9 +725,10 @@ int TurnEntry::Send(const void* data, size_t size, bool payload) {
     VERIFY(msg.Write(&buf));
 
     // If we're sending real data, request a channel bind that we can use later.
-    if (payload) {
+    if (state_ == STATE_UNBOUND && payload) {
       port_->SendRequest(new TurnChannelBindRequest(
           port_, this, channel_id_, ext_addr_), 0);
+      state_ = STATE_BINDING;
     }
   } else {
     // If the channel is bound, we can send the data as a Channel Message.
@@ -737,22 +740,27 @@ int TurnEntry::Send(const void* data, size_t size, bool payload) {
 }
 
 void TurnEntry::OnCreatePermissionSuccess() {
-  LOG(LS_INFO) << "Create perm for " << ext_addr_.ToString() << " succeeded";
+  LOG_J(LS_INFO, port_) << "Create permission for " << ext_addr_.ToString()
+                        << " succeeded";
 }
 
 void TurnEntry::OnCreatePermissionError() {
-  LOG(LS_INFO) << "Create perm for " << ext_addr_.ToString() << " failed";
+  LOG_J(LS_WARNING, port_) << "Create permission for " << ext_addr_.ToString()
+                           << " failed";
 }
 
 void TurnEntry::OnChannelBindSuccess() {
-  LOG(LS_INFO) << "Channel bind for " << ext_addr_.ToString() << " succeeded";
-  locked_ = true;
+  LOG_J(LS_INFO, port_) << "Channel bind for " << ext_addr_.ToString()
+                        << " succeeded";
+  ASSERT(state_ == STATE_BINDING);
+  state_ = STATE_BOUND;
 }
 
 void TurnEntry::OnChannelBindError() {
   // TODO(mallinath) - Implement handling of error response for channel
   // bind request as per http://tools.ietf.org/html/rfc5766#section-11.3
-  LOG(LS_WARNING) << "Channel bind for " << ext_addr_.ToString() << " failed";
+  LOG_J(LS_WARNING, port_) << "Channel bind for " << ext_addr_.ToString()
+                           << " failed";
 }
 
 }  // namespace cricket

@@ -30,6 +30,7 @@
 #include "talk/base/bytebuffer.h"
 #include "talk/base/gunit.h"
 #include "talk/base/logging.h"
+#include "talk/base/messagedigest.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/socketaddress.h"
 #include "talk/p2p/base/stun.h"
@@ -289,18 +290,33 @@ static const unsigned char kRtcpPacket[] = {
 };
 
 // RFC5769 Test Vectors
-// Software name:  "STUN test client" (without quotes)
+// Software name (request):  "STUN test client" (without quotes)
+// Software name (response): "test vector" (without quotes)
 // Username:  "evtj:h6vY" (without quotes)
 // Password:  "VOkJxbRl1RmTxUk/WvJxBt" (without quotes)
 static const unsigned char kRfc5769SampleMsgTransactionId[] = {
-  0xb7, 0xe7, 0xa7, 0x01,
-  0xbc, 0x34, 0xd6, 0x86,
-  0xfa, 0x87, 0xdf, 0xae
+  0xb7, 0xe7, 0xa7, 0x01, 0xbc, 0x34, 0xd6, 0x86, 0xfa, 0x87, 0xdf, 0xae
 };
-static const char kRfc5769SampleMsgSoftware[] = "STUN test client";
+static const char kRfc5769SampleMsgClientSoftware[] = "STUN test client";
+static const char kRfc5769SampleMsgServerSoftware[] = "test vector";
 static const char kRfc5769SampleMsgUsername[] = "evtj:h6vY";
 static const char kRfc5769SampleMsgPassword[] = "VOkJxbRl1RmTxUk/WvJxBt";
+static const talk_base::SocketAddress kRfc5769SampleMsgMappedAddress(
+    "192.0.2.1", 32853);
+static const talk_base::SocketAddress kRfc5769SampleMsgIPv6MappedAddress(
+    "2001:db8:1234:5678:11:2233:4455:6677", 32853);
 
+static const unsigned char kRfc5769SampleMsgWithAuthTransactionId[] = {
+  0x78, 0xad, 0x34, 0x33, 0xc6, 0xad, 0x72, 0xc0, 0x29, 0xda, 0x41, 0x2e
+};
+static const char kRfc5769SampleMsgWithAuthUsername[] =
+    "\xe3\x83\x9e\xe3\x83\x88\xe3\x83\xaa\xe3\x83\x83\xe3\x82\xaf\xe3\x82\xb9";
+static const char kRfc5769SampleMsgWithAuthPassword[] = "TheMatrIX";
+static const char kRfc5769SampleMsgWithAuthNonce[] =
+    "f//499k954d6OL34oL9FSTvy64sA";
+static const char kRfc5769SampleMsgWithAuthRealm[] = "example.org";
+
+// 2.1.  Sample Request
 static const unsigned char kRfc5769SampleRequest[] = {
   0x00, 0x01, 0x00, 0x58,   //    Request type and message length
   0x21, 0x12, 0xa4, 0x42,   //    Magic cookie
@@ -331,6 +347,7 @@ static const unsigned char kRfc5769SampleRequest[] = {
   0xe5, 0x7a, 0x3b, 0xcf    //    CRC32 fingerprint
 };
 
+// 2.2.  Sample IPv4 Response
 static const unsigned char kRfc5769SampleResponse[] = {
   0x01, 0x01, 0x00, 0x3c,  //     Response type and message length
   0x21, 0x12, 0xa4, 0x42,  //     Magic cookie
@@ -354,7 +371,8 @@ static const unsigned char kRfc5769SampleResponse[] = {
   0xc0, 0x7d, 0x4c, 0x96   //    CRC32 fingerprint
 };
 
-static const unsigned char kRfc5769SampleIPv6Response[] = {
+// 2.3.  Sample IPv6 Response
+static const unsigned char kRfc5769SampleResponseIPv6[] = {
   0x01, 0x01, 0x00, 0x48,  //    Response type and message length
   0x21, 0x12, 0xa4, 0x42,  //    Magic cookie
   0xb7, 0xe7, 0xa7, 0x01,  // }
@@ -378,6 +396,39 @@ static const unsigned char kRfc5769SampleIPv6Response[] = {
   0xbf, 0xe3, 0xed, 0x41,  // }
   0x80, 0x28, 0x00, 0x04,  //    FINGERPRINT attribute header
   0xc8, 0xfb, 0x0b, 0x4c   //    CRC32 fingerprint
+};
+
+// 2.4.  Sample Request with Long-Term Authentication
+static const unsigned char kRfc5769SampleRequestLongTermAuth[] = {
+  0x00, 0x01, 0x00, 0x60,  //    Request type and message length
+  0x21, 0x12, 0xa4, 0x42,  //    Magic cookie
+  0x78, 0xad, 0x34, 0x33,  // }
+  0xc6, 0xad, 0x72, 0xc0,  // }  Transaction ID
+  0x29, 0xda, 0x41, 0x2e,  // }
+  0x00, 0x06, 0x00, 0x12,  //    USERNAME attribute header
+  0xe3, 0x83, 0x9e, 0xe3,  // }
+  0x83, 0x88, 0xe3, 0x83,  // }
+  0xaa, 0xe3, 0x83, 0x83,  // }  Username value (18 bytes) and padding (2 bytes)
+  0xe3, 0x82, 0xaf, 0xe3,  // }
+  0x82, 0xb9, 0x00, 0x00,  // }
+  0x00, 0x15, 0x00, 0x1c,  //    NONCE attribute header
+  0x66, 0x2f, 0x2f, 0x34,  // }
+  0x39, 0x39, 0x6b, 0x39,  // }
+  0x35, 0x34, 0x64, 0x36,  // }
+  0x4f, 0x4c, 0x33, 0x34,  // }  Nonce value
+  0x6f, 0x4c, 0x39, 0x46,  // }
+  0x53, 0x54, 0x76, 0x79,  // }
+  0x36, 0x34, 0x73, 0x41,  // }
+  0x00, 0x14, 0x00, 0x0b,  //    REALM attribute header
+  0x65, 0x78, 0x61, 0x6d,  // }
+  0x70, 0x6c, 0x65, 0x2e,  // }  Realm value (11 bytes) and padding (1 byte)
+  0x6f, 0x72, 0x67, 0x00,  // }
+  0x00, 0x08, 0x00, 0x14,  //    MESSAGE-INTEGRITY attribute header
+  0xf6, 0x70, 0x24, 0x65,  // }
+  0x6d, 0xd6, 0x4a, 0x3e,  // }
+  0x02, 0xb8, 0xe0, 0x71,  // }  HMAC-SHA1 fingerprint
+  0x2e, 0x85, 0xc9, 0xa2,  // }
+  0x8c, 0xa8, 0x96, 0x66   // }
 };
 
 // Length parameter is changed to 0x38 from 0x58.
@@ -492,6 +543,31 @@ const int kTestMessagePort4 = 40444;
 
 #define ReadStunMessage(X, Y) ReadStunMessageTestCase(X, Y, sizeof(Y));
 
+// Test that the GetStun*Type and IsStun*Type methods work as expected.
+TEST_F(StunTest, MessageTypes) {
+  EXPECT_EQ(STUN_BINDING_RESPONSE,
+      GetStunSuccessResponseType(STUN_BINDING_REQUEST));
+  EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE,
+      GetStunErrorResponseType(STUN_BINDING_REQUEST));
+  EXPECT_EQ(-1, GetStunSuccessResponseType(STUN_BINDING_INDICATION));
+  EXPECT_EQ(-1, GetStunSuccessResponseType(STUN_BINDING_RESPONSE));
+  EXPECT_EQ(-1, GetStunSuccessResponseType(STUN_BINDING_ERROR_RESPONSE));
+  EXPECT_EQ(-1, GetStunErrorResponseType(STUN_BINDING_INDICATION));
+  EXPECT_EQ(-1, GetStunErrorResponseType(STUN_BINDING_RESPONSE));
+  EXPECT_EQ(-1, GetStunErrorResponseType(STUN_BINDING_ERROR_RESPONSE));
+
+  int types[] = {
+    STUN_BINDING_REQUEST, STUN_BINDING_INDICATION,
+    STUN_BINDING_RESPONSE, STUN_BINDING_ERROR_RESPONSE
+  };
+  for (int i = 0; i < ARRAY_SIZE(types); ++i) {
+    EXPECT_EQ(i == 0, IsStunRequestType(types[i]));
+    EXPECT_EQ(i == 1, IsStunIndicationType(types[i]));
+    EXPECT_EQ(i == 2, IsStunSuccessResponseType(types[i]));
+    EXPECT_EQ(i == 3, IsStunErrorResponseType(types[i]));
+  }
+}
+
 TEST_F(StunTest, ReadMessageWithIPv4AddressAttribute) {
   StunMessage msg;
   size_t size = ReadStunMessage(&msg, kStunMessageWithIPv4MappedAddress);
@@ -570,22 +646,95 @@ TEST_F(StunTest, ReadRfc5769RequestMessage) {
   const StunByteStringAttribute* software =
       msg.GetByteString(STUN_ATTR_SOFTWARE);
   ASSERT_TRUE(software != NULL);
-  EXPECT_EQ(kRfc5769SampleMsgSoftware, software->GetString());
+  EXPECT_EQ(kRfc5769SampleMsgClientSoftware, software->GetString());
 
   const StunByteStringAttribute* username =
       msg.GetByteString(STUN_ATTR_USERNAME);
   ASSERT_TRUE(username != NULL);
   EXPECT_EQ(kRfc5769SampleMsgUsername, username->GetString());
 
-  const StunByteStringAttribute* mi =
-      msg.GetByteString(STUN_ATTR_MESSAGE_INTEGRITY);
-  ASSERT_TRUE(mi != NULL);
-  // actual M-I value checked in a later test
+  // Actual M-I value checked in a later test.
+  ASSERT_TRUE(msg.GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) != NULL);
 
+  // Fingerprint checked in a later test, but double-check the value here.
   const StunUInt32Attribute* fingerprint =
       msg.GetUInt32(STUN_ATTR_FINGERPRINT);
   ASSERT_TRUE(fingerprint != NULL);
   EXPECT_EQ(0xe57a3bcf, fingerprint->value());
+}
+
+// Read the RFC5389 fields from the RFC5769 sample STUN response.
+TEST_F(StunTest, ReadRfc5769ResponseMessage) {
+  StunMessage msg;
+  size_t size = ReadStunMessage(&msg, kRfc5769SampleResponse);
+  CheckStunHeader(msg, STUN_BINDING_RESPONSE, size);
+  CheckStunTransactionID(msg, kRfc5769SampleMsgTransactionId,
+                         kStunTransactionIdLength);
+
+  const StunByteStringAttribute* software =
+      msg.GetByteString(STUN_ATTR_SOFTWARE);
+  ASSERT_TRUE(software != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgServerSoftware, software->GetString());
+
+  const StunAddressAttribute* mapped_address =
+      msg.GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+  ASSERT_TRUE(mapped_address != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgMappedAddress, mapped_address->GetAddress());
+
+  // Actual M-I and fingerprint checked in later tests.
+  ASSERT_TRUE(msg.GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) != NULL);
+  ASSERT_TRUE(msg.GetUInt32(STUN_ATTR_FINGERPRINT) != NULL);
+}
+
+// Read the RFC5389 fields from the RFC5769 sample STUN response for IPv6.
+TEST_F(StunTest, ReadRfc5769ResponseMessageIPv6) {
+  StunMessage msg;
+  size_t size = ReadStunMessage(&msg, kRfc5769SampleResponseIPv6);
+  CheckStunHeader(msg, STUN_BINDING_RESPONSE, size);
+  CheckStunTransactionID(msg, kRfc5769SampleMsgTransactionId,
+                         kStunTransactionIdLength);
+
+  const StunByteStringAttribute* software =
+      msg.GetByteString(STUN_ATTR_SOFTWARE);
+  ASSERT_TRUE(software != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgServerSoftware, software->GetString());
+
+  const StunAddressAttribute* mapped_address =
+      msg.GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+  ASSERT_TRUE(mapped_address != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgIPv6MappedAddress, mapped_address->GetAddress());
+
+  // Actual M-I and fingerprint checked in later tests.
+  ASSERT_TRUE(msg.GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) != NULL);
+  ASSERT_TRUE(msg.GetUInt32(STUN_ATTR_FINGERPRINT) != NULL);
+}
+
+// Read the RFC5389 fields from the RFC5769 sample STUN response with auth.
+TEST_F(StunTest, ReadRfc5769RequestMessageLongTermAuth) {
+  StunMessage msg;
+  size_t size = ReadStunMessage(&msg, kRfc5769SampleRequestLongTermAuth);
+  CheckStunHeader(msg, STUN_BINDING_REQUEST, size);
+  CheckStunTransactionID(msg, kRfc5769SampleMsgWithAuthTransactionId,
+                         kStunTransactionIdLength);
+
+  const StunByteStringAttribute* username =
+      msg.GetByteString(STUN_ATTR_USERNAME);
+  ASSERT_TRUE(username != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgWithAuthUsername, username->GetString());
+
+  const StunByteStringAttribute* nonce =
+      msg.GetByteString(STUN_ATTR_NONCE);
+  ASSERT_TRUE(nonce != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgWithAuthNonce, nonce->GetString());
+
+  const StunByteStringAttribute* realm =
+      msg.GetByteString(STUN_ATTR_REALM);
+  ASSERT_TRUE(realm != NULL);
+  EXPECT_EQ(kRfc5769SampleMsgWithAuthRealm, realm->GetString());
+
+  // No fingerprint, actual M-I checked in later tests.
+  ASSERT_TRUE(msg.GetByteString(STUN_ATTR_MESSAGE_INTEGRITY) != NULL);
+  ASSERT_TRUE(msg.GetUInt32(STUN_ATTR_FINGERPRINT) == NULL);
 }
 
 // The RFC3489 packet in this test is the same as
@@ -1008,6 +1157,7 @@ TEST_F(StunTest, FailToReadRtcpPacket) {
 
 // Check our STUN message validation code against the RFC5769 test messages.
 TEST_F(StunTest, ValidateMessageIntegrity) {
+  // Try the messages from RFC 5769.
   EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kRfc5769SampleRequest),
       sizeof(kRfc5769SampleRequest),
@@ -1027,14 +1177,27 @@ TEST_F(StunTest, ValidateMessageIntegrity) {
       "InvalidPassword"));
 
   EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
-      reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
-      sizeof(kRfc5769SampleIPv6Response),
+      reinterpret_cast<const char*>(kRfc5769SampleResponseIPv6),
+      sizeof(kRfc5769SampleResponseIPv6),
       kRfc5769SampleMsgPassword));
   EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
-      reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
-      sizeof(kRfc5769SampleIPv6Response),
+      reinterpret_cast<const char*>(kRfc5769SampleResponseIPv6),
+      sizeof(kRfc5769SampleResponseIPv6),
       "InvalidPassword"));
 
+  // We first need to compute the key for the long-term authentication HMAC.
+  std::string key;
+  ComputeStunCredentialHash(kRfc5769SampleMsgWithAuthUsername,
+      kRfc5769SampleMsgWithAuthRealm, kRfc5769SampleMsgWithAuthPassword, &key);
+  EXPECT_TRUE(StunMessage::ValidateMessageIntegrity(
+      reinterpret_cast<const char*>(kRfc5769SampleRequestLongTermAuth),
+      sizeof(kRfc5769SampleRequestLongTermAuth), key));
+  EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
+      reinterpret_cast<const char*>(kRfc5769SampleRequestLongTermAuth),
+      sizeof(kRfc5769SampleRequestLongTermAuth),
+      "InvalidPassword"));
+
+  // Try some edge cases.
   EXPECT_FALSE(StunMessage::ValidateMessageIntegrity(
       reinterpret_cast<const char*>(kStunMessageWithZeroLength),
       sizeof(kStunMessageWithZeroLength),
@@ -1111,8 +1274,8 @@ TEST_F(StunTest, ValidateFingerprint) {
       reinterpret_cast<const char*>(kRfc5769SampleResponse),
       sizeof(kRfc5769SampleResponse)));
   EXPECT_TRUE(StunMessage::ValidateFingerprint(
-      reinterpret_cast<const char*>(kRfc5769SampleIPv6Response),
-      sizeof(kRfc5769SampleIPv6Response)));
+      reinterpret_cast<const char*>(kRfc5769SampleResponseIPv6),
+      sizeof(kRfc5769SampleResponseIPv6)));
 
   EXPECT_FALSE(StunMessage::ValidateFingerprint(
       reinterpret_cast<const char*>(kStunMessageWithZeroLength),

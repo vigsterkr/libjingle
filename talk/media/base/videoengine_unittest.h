@@ -1279,13 +1279,14 @@ class VideoMediaChannelTest : public testing::Test,
 
   // Tests that we can add and remove capturers and frames are sent out properly
   void AddRemoveCapturer() {
-    const int time_between_send = TimeBetweenSend(DefaultCodec());
+    const cricket::VideoCodec codec(DefaultCodec());
+    const int time_between_send = TimeBetweenSend(codec);
     EXPECT_TRUE(SetDefaultCodec());
     EXPECT_TRUE(SetSend(true));
     EXPECT_TRUE(channel_->SetRender(true));
     EXPECT_EQ(0, renderer_.num_rendered_frames());
     EXPECT_TRUE(SendFrame());
-    EXPECT_FRAME_WAIT(1, 640, 400, kTimeout);
+    EXPECT_FRAME_WAIT(1, codec.width, codec.height, kTimeout);
     talk_base::scoped_ptr<cricket::FakeVideoCapturer> capturer(
         new cricket::FakeVideoCapturer);
     capturer->SetScreencast(true);
@@ -1323,7 +1324,9 @@ class VideoMediaChannelTest : public testing::Test,
     EXPECT_FALSE(renderer_.black_frame());
     EXPECT_TRUE(channel_->SetCapturer(kSsrc, NULL));
     // Make sure a black frame is generated as no new frame is captured.
-    EXPECT_FRAME_WAIT(5, format.width, format.height, kTimeout);
+    // A black frame is not screencast which means that the resolution
+    // should be the resolution of send codec.
+    EXPECT_FRAME_WAIT(5, codec.width, codec.height, kTimeout);
   }
 
   // Tests that if RemoveCapturer is called without a capturer ever being

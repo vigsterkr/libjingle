@@ -143,8 +143,7 @@ TEST_F(PortAllocatorSessionProxyTest, TestBasic) {
   delete channel;
 }
 
-// Disabling test since its flaky on Pulse. b/6776750
-TEST_F(PortAllocatorSessionProxyTest, DISABLED_TestLateBinding) {
+TEST_F(PortAllocatorSessionProxyTest, TestLateBinding) {
   TestSessionChannel* channel1 = CreateChannel();
   EXPECT_EQ_WAIT(1, channel1->candidates_count(), 1000);
   EXPECT_EQ(1, channel1->ports_count());
@@ -159,7 +158,7 @@ TEST_F(PortAllocatorSessionProxyTest, DISABLED_TestLateBinding) {
   EXPECT_TRUE(channel2->IsGettingAllPorts());
   EXPECT_EQ_WAIT(1, channel2->candidates_count(), 1000);
   EXPECT_EQ(1, channel2->ports_count());
-  EXPECT_TRUE(channel2->allocation_complete());
+  EXPECT_TRUE_WAIT(channel2->allocation_complete(), 1000);
   EXPECT_EQ(1, session_.port_config_count());
   delete channel1;
   delete channel2;

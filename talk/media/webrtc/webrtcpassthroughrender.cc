@@ -44,11 +44,7 @@ class PassthroughStream: public webrtc::VideoRenderCallback {
   virtual ~PassthroughStream() {
   }
   virtual WebRtc_Word32 RenderFrame(const WebRtc_UWord32 stream_id,
-#ifdef USE_WEBRTC_DEV_BRANCH
                                     webrtc::I420VideoFrame& videoFrame) {
-#else
-                                    webrtc::VideoFrame& videoFrame) {
-#endif
     talk_base::CritScope cs(&stream_critical_);
     // Send frame for rendering directly
     if (running_ && renderer_) {

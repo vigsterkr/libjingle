@@ -42,10 +42,10 @@ namespace cricket {
 
 // These are the types of STUN messages defined in RFC 5389.
 enum StunMessageType {
-  STUN_BINDING_REQUEST            = 0x0001,
-  STUN_BINDING_INDICATION         = 0x0010,
-  STUN_BINDING_RESPONSE           = 0x0101,
-  STUN_BINDING_ERROR_RESPONSE     = 0x0111,
+  STUN_BINDING_REQUEST                  = 0x0001,
+  STUN_BINDING_INDICATION               = 0x0010,
+  STUN_BINDING_RESPONSE                 = 0x0101,
+  STUN_BINDING_ERROR_RESPONSE           = 0x0111,
 };
 
 // These are all known STUN attributes, defined in RFC 5389 and elsewhere.
@@ -54,18 +54,18 @@ enum StunMessageType {
 // RETRANSMIT_COUNT is the number of outstanding pings without a response at
 // the time the packet is generated.
 enum StunAttributeType {
-  STUN_ATTR_MAPPED_ADDRESS        = 0x0001,  // Address
-  STUN_ATTR_USERNAME              = 0x0006,  // ByteString
-  STUN_ATTR_MESSAGE_INTEGRITY     = 0x0008,  // ByteString, 20 bytes
-  STUN_ATTR_ERROR_CODE            = 0x0009,  // ErrorCode
-  STUN_ATTR_UNKNOWN_ATTRIBUTES    = 0x000a,  // UInt16List
-  STUN_ATTR_REALM                 = 0x0014,  // ByteString
-  STUN_ATTR_NONCE                 = 0x0015,  // ByteString
-  STUN_ATTR_XOR_MAPPED_ADDRESS    = 0x0020,  // XorAddress
-  STUN_ATTR_SOFTWARE              = 0x8022,  // ByteString
-  STUN_ATTR_ALTERNATE_SERVER      = 0x8023,  // ByteString
-  STUN_ATTR_FINGERPRINT           = 0x8028,  // UInt32
-  STUN_ATTR_RETRANSMIT_COUNT      = 0xFF00   // UInt32
+  STUN_ATTR_MAPPED_ADDRESS              = 0x0001,  // Address
+  STUN_ATTR_USERNAME                    = 0x0006,  // ByteString
+  STUN_ATTR_MESSAGE_INTEGRITY           = 0x0008,  // ByteString, 20 bytes
+  STUN_ATTR_ERROR_CODE                  = 0x0009,  // ErrorCode
+  STUN_ATTR_UNKNOWN_ATTRIBUTES          = 0x000a,  // UInt16List
+  STUN_ATTR_REALM                       = 0x0014,  // ByteString
+  STUN_ATTR_NONCE                       = 0x0015,  // ByteString
+  STUN_ATTR_XOR_MAPPED_ADDRESS          = 0x0020,  // XorAddress
+  STUN_ATTR_SOFTWARE                    = 0x8022,  // ByteString
+  STUN_ATTR_ALTERNATE_SERVER            = 0x8023,  // ByteString
+  STUN_ATTR_FINGERPRINT                 = 0x8028,  // UInt32
+  STUN_ATTR_RETRANSMIT_COUNT            = 0xFF00   // UInt32
 };
 
 // These are the types of the values associated with the attributes above.
@@ -73,35 +73,34 @@ enum StunAttributeType {
 // attributes. Note that these values are for our own use, and not defined in
 // RFC 5389.
 enum StunAttributeValueType {
-  STUN_VALUE_UNKNOWN              = 0,
-  STUN_VALUE_ADDRESS              = 1,
-  STUN_VALUE_XOR_ADDRESS          = 2,
-  STUN_VALUE_UINT32               = 3,
-  STUN_VALUE_UINT64               = 4,
-  STUN_VALUE_BYTE_STRING          = 5,
-  STUN_VALUE_ERROR_CODE           = 6,
-  STUN_VALUE_UINT16_LIST          = 7
+  STUN_VALUE_UNKNOWN                    = 0,
+  STUN_VALUE_ADDRESS                    = 1,
+  STUN_VALUE_XOR_ADDRESS                = 2,
+  STUN_VALUE_UINT32                     = 3,
+  STUN_VALUE_UINT64                     = 4,
+  STUN_VALUE_BYTE_STRING                = 5,
+  STUN_VALUE_ERROR_CODE                 = 6,
+  STUN_VALUE_UINT16_LIST                = 7
 };
 
 // These are the types of STUN addresses defined in RFC 5389.
 enum StunAddressFamily {
   // NB: UNDEF is not part of the STUN spec.
-  STUN_ADDRESS_UNDEF             = 0,
-  STUN_ADDRESS_IPV4              = 1,
-  STUN_ADDRESS_IPV6              = 2
+  STUN_ADDRESS_UNDEF                    = 0,
+  STUN_ADDRESS_IPV4                     = 1,
+  STUN_ADDRESS_IPV6                     = 2
 };
 
 // These are the types of STUN error codes defined in RFC 5389.
 enum StunErrorCode {
-  STUN_ERROR_TRY_ALTERNATE        = 300,
-  STUN_ERROR_BAD_REQUEST          = 400,
-  STUN_ERROR_UNAUTHORIZED         = 401,
-  STUN_ERROR_UNKNOWN_ATTRIBUTE    = 420,
-  STUN_ERROR_STALE_CREDENTIALS    = 430,
-  STUN_ERROR_STALE_NONCE          = 438,
-  STUN_ERROR_ROLE_CONFLICT        = 487,
-  STUN_ERROR_SERVER_ERROR         = 500,
-  STUN_ERROR_GLOBAL_FAILURE       = 600
+  STUN_ERROR_TRY_ALTERNATE              = 300,
+  STUN_ERROR_BAD_REQUEST                = 400,
+  STUN_ERROR_UNAUTHORIZED               = 401,
+  STUN_ERROR_UNKNOWN_ATTRIBUTE          = 420,
+  STUN_ERROR_STALE_CREDENTIALS          = 430,  // GICE only
+  STUN_ERROR_STALE_NONCE                = 438,
+  STUN_ERROR_SERVER_ERROR               = 500,
+  STUN_ERROR_GLOBAL_FAILURE             = 600
 };
 
 // Strings for the error codes above.
@@ -109,8 +108,11 @@ extern const char STUN_ERROR_REASON_BAD_REQUEST[];
 extern const char STUN_ERROR_REASON_UNAUTHORIZED[];
 extern const char STUN_ERROR_REASON_UNKNOWN_ATTRIBUTE[];
 extern const char STUN_ERROR_REASON_STALE_CREDENTIALS[];
+extern const char STUN_ERROR_REASON_STALE_NONCE[];
 extern const char STUN_ERROR_REASON_SERVER_ERROR[];
-extern const char STUN_ERROR_REASON_ROLE_CONFLICT[];
+
+// The mask used to determine whether a STUN message is a request/response etc.
+const uint32 kStunTypeMask = 0x0110;
 
 // STUN Attribute header length.
 const size_t kStunAttributeHeaderSize = 4;
@@ -479,17 +481,27 @@ class StunUInt16ListAttribute : public StunAttribute {
 
 // Returns the (successful) response type for the given request type.
 // Returns -1 if |request_type| is not a valid request type.
-int GetStunResponseType(int request_type);
+int GetStunSuccessResponseType(int request_type);
 
 // Returns the error response type for the given request type.
 // Returns -1 if |request_type| is not a valid request type.
 int GetStunErrorResponseType(int request_type);
 
+// Returns whether a given message is a request type.
+bool IsStunRequestType(int msg_type);
+
+// Returns whether a given message is an indication type.
+bool IsStunIndicationType(int msg_type);
+
 // Returns whether a given response is a success type.
-bool IsStunResponseType(int response_type);
+bool IsStunSuccessResponseType(int msg_type);
 
 // Returns whether a given response is an error type.
-bool IsStunErrorResponseType(int response_type);
+bool IsStunErrorResponseType(int msg_type);
+
+// Computes the STUN long-term credential hash.
+bool ComputeStunCredentialHash(const std::string& username,
+    const std::string& realm, const std::string& password, std::string* hash);
 
 // TODO: Move the TURN/ICE stuff below out to separate files.
 extern const char TURN_MAGIC_COOKIE_VALUE[4];
@@ -498,28 +510,26 @@ extern const char TURN_MAGIC_COOKIE_VALUE[4];
 // TODO: Rename these methods to GTURN_ to make it clear they aren't
 // part of standard STUN/TURN.
 enum RelayMessageType {
-  STUN_SHARED_SECRET_REQUEST        = 0x0002,
-  STUN_SHARED_SECRET_RESPONSE       = 0x0102,
-  STUN_SHARED_SECRET_ERROR_RESPONSE = 0x0112,
-  STUN_ALLOCATE_REQUEST             = 0x0003,
-  STUN_ALLOCATE_RESPONSE            = 0x0103,
-  STUN_ALLOCATE_ERROR_RESPONSE      = 0x0113,
-  STUN_SEND_REQUEST                 = 0x0004,
-  STUN_SEND_RESPONSE                = 0x0104,
-  STUN_SEND_ERROR_RESPONSE          = 0x0114,
-  STUN_DATA_INDICATION              = 0x0115,
+  // For now, using the same defs from TurnMessageType below.
+  // STUN_ALLOCATE_REQUEST              = 0x0003,
+  // STUN_ALLOCATE_RESPONSE             = 0x0103,
+  // STUN_ALLOCATE_ERROR_RESPONSE       = 0x0113,
+  STUN_SEND_REQUEST                     = 0x0004,
+  STUN_SEND_RESPONSE                    = 0x0104,
+  STUN_SEND_ERROR_RESPONSE              = 0x0114,
+  STUN_DATA_INDICATION                  = 0x0115,
 };
 
 // "GTURN"-specific STUN attributes.
 // TODO: Rename these attributes to GTURN_ to avoid conflicts.
 enum RelayAttributeType {
-  STUN_ATTR_LIFETIME              = 0x000d,  // UInt32
-  STUN_ATTR_MAGIC_COOKIE          = 0x000f,  // ByteString, 4 bytes
-  STUN_ATTR_BANDWIDTH             = 0x0010,  // UInt32
-  STUN_ATTR_DESTINATION_ADDRESS   = 0x0011,  // Address
-  STUN_ATTR_SOURCE_ADDRESS2       = 0x0012,  // Address
-  STUN_ATTR_DATA                  = 0x0013,  // ByteString
-  STUN_ATTR_OPTIONS               = 0x8001,  // UInt32
+  STUN_ATTR_LIFETIME                    = 0x000d,  // UInt32
+  STUN_ATTR_MAGIC_COOKIE                = 0x000f,  // ByteString, 4 bytes
+  STUN_ATTR_BANDWIDTH                   = 0x0010,  // UInt32
+  STUN_ATTR_DESTINATION_ADDRESS         = 0x0011,  // Address
+  STUN_ATTR_SOURCE_ADDRESS2             = 0x0012,  // Address
+  STUN_ATTR_DATA                        = 0x0013,  // ByteString
+  STUN_ATTR_OPTIONS                     = 0x8001,  // UInt32
 };
 
 // A "GTURN" STUN message.
@@ -542,29 +552,49 @@ class RelayMessage : public StunMessage {
 
 // Defined in TURN RFC 5766.
 enum TurnMessageType {
-  TURN_REFRESH_REQUEST              = 0x0004,
-  TURN_SEND_INDICATION              = 0x0006,
-  TURN_DATA_INDICATION              = 0x0007,
-  TURN_CREATE_PERMISSION_REQUEST    = 0x0008,
-  TURN_CHANNEL_BIND_REQUEST         = 0x0009
+  STUN_ALLOCATE_REQUEST                 = 0x0003,
+  STUN_ALLOCATE_RESPONSE                = 0x0103,
+  STUN_ALLOCATE_ERROR_RESPONSE          = 0x0113,
+  TURN_REFRESH_REQUEST                  = 0x0004,
+  TURN_REFRESH_RESPONSE                 = 0x0104,
+  TURN_REFRESH_ERROR_RESPONSE           = 0x0114,
+  TURN_SEND_INDICATION                  = 0x0016,
+  TURN_DATA_INDICATION                  = 0x0017,
+  TURN_CREATE_PERMISSION_REQUEST        = 0x0008,
+  TURN_CREATE_PERMISSION_RESPONSE       = 0x0108,
+  TURN_CREATE_PERMISSION_ERROR_RESPONSE = 0x0118,
+  TURN_CHANNEL_BIND_REQUEST             = 0x0009,
+  TURN_CHANNEL_BIND_RESPONSE            = 0x0109,
+  TURN_CHANNEL_BIND_ERROR_RESPONSE      = 0x0119,
 };
 
 enum TurnAttributeType {
-  STUN_ATTR_CHANNEL_NUMBER        = 0x000C,  // UInt32
-  STUN_ATTR_TURN_LIFETIME         = 0x000d,  // UInt32
-  STUN_ATTR_XOR_PEER_ADDRESS      = 0x0012,  // XorAddress
+  STUN_ATTR_CHANNEL_NUMBER              = 0x000C,  // UInt32
+  STUN_ATTR_TURN_LIFETIME               = 0x000d,  // UInt32
+  STUN_ATTR_XOR_PEER_ADDRESS            = 0x0012,  // XorAddress
   // TODO(mallinath) - Uncomment after RelayAttributes are renamed.
-  // STUN_ATTR_DATA               = 0x0013,  // ByteString
-  STUN_ATTR_XOR_RELAYED_ADDRESS   = 0x0016,  // XorAddress
-  STUN_ATTR_EVEN_PORT             = 0x0018,  // ByteString, 1 byte.
-  STUN_ATTR_REQUESTED_TRANSPORT   = 0x0019,  // UInt32
-  STUN_ATTR_DONT_FRAGMENT         = 0x001A,  // No content, Length = 0
-  STUN_ATTR_RESERVATION_TOKEN     = 0x0022,  // ByteString, 8 bytes.
+  // STUN_ATTR_DATA                     = 0x0013,  // ByteString
+  STUN_ATTR_XOR_RELAYED_ADDRESS         = 0x0016,  // XorAddress
+  STUN_ATTR_EVEN_PORT                   = 0x0018,  // ByteString, 1 byte.
+  STUN_ATTR_REQUESTED_TRANSPORT         = 0x0019,  // UInt32
+  STUN_ATTR_DONT_FRAGMENT               = 0x001A,  // No content, Length = 0
+  STUN_ATTR_RESERVATION_TOKEN           = 0x0022,  // ByteString, 8 bytes.
   // TODO(mallinath) - Rename STUN_ATTR_TURN_LIFETIME to STUN_ATTR_LIFETIME and
   // STUN_ATTR_TURN_DATA to STUN_ATTR_DATA. Also rename RelayMessage attributes
   // by appending G to attribute name.
 };
 
+// RFC 5766-defined errors.
+enum TurnErrorType {
+  STUN_ERROR_FORBIDDEN                  = 403,
+  STUN_ERROR_ALLOCATION_MISMATCH        = 437,
+  STUN_ERROR_WRONG_CREDENTIALS          = 441,
+  STUN_ERROR_UNSUPPORTED_PROTOCOL       = 442
+};
+extern const char STUN_ERROR_REASON_FORBIDDEN[];
+extern const char STUN_ERROR_REASON_ALLOCATION_MISMATCH[];
+extern const char STUN_ERROR_REASON_WRONG_CREDENTIALS[];
+extern const char STUN_ERROR_REASON_UNSUPPORTED_PROTOCOL[];
 class TurnMessage : public StunMessage {
  protected:
   virtual StunAttributeValueType GetAttributeValueType(int type) const {
@@ -586,11 +616,17 @@ class TurnMessage : public StunMessage {
 
 // RFC 5245 ICE STUN attributes.
 enum IceAttributeType {
-  STUN_ATTR_PRIORITY              = 0x0024,  // UInt32
-  STUN_ATTR_USE_CANDIDATE         = 0x0025,  // No content, Length = 0
-  STUN_ATTR_ICE_CONTROLLED        = 0x8029,  // UInt64
-  STUN_ATTR_ICE_CONTROLLING       = 0x802A   // UInt64
+  STUN_ATTR_PRIORITY                    = 0x0024,  // UInt32
+  STUN_ATTR_USE_CANDIDATE               = 0x0025,  // No content, Length = 0
+  STUN_ATTR_ICE_CONTROLLED              = 0x8029,  // UInt64
+  STUN_ATTR_ICE_CONTROLLING             = 0x802A   // UInt64
 };
+
+// RFC 5245-defined errors.
+enum IceErrorCode {
+  STUN_ERROR_ROLE_CONFLICT              = 487,
+};
+extern const char STUN_ERROR_REASON_ROLE_CONFLICT[];
 
 // A RFC 5245 ICE STUN message.
 class IceMessage : public StunMessage {

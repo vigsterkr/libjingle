@@ -127,28 +127,18 @@ class FakeWebRtcVideoCaptureModule : public webrtc::VideoCaptureModule {
     return 0;
   }
 
-#ifdef USE_WEBRTC_DEV_BRANCH
-  bool SendFrame(int w, int h) {
-    // TODO(mikhal): Implement using I420VideoFrame.
-    return false;
-  }
-#else
   bool SendFrame(int w, int h) {
     if (!running_) return false;
-    webrtc::VideoFrame sample;
-    sample.SetWidth(w);
-    sample.SetHeight(h);
-    if (sample.VerifyAndAllocate(I420_SIZE(w, h)) == -1 ||
-        sample.SetLength(sample.Size()) == -1) {
+    webrtc::I420VideoFrame sample;
+    // Setting stride based on width.
+    if (sample.CreateEmptyFrame(w, h, w, (w + 1) / 2, (w + 1) / 2) < 0) {
       return false;
     }
     if (callback_) {
-      callback_->OnIncomingCapturedFrame(id_, sample,
-                                         webrtc::kVideoCodecUnknown);
+      callback_->OnIncomingCapturedFrame(id_, sample);
     }
     return true;
   }
-#endif
 
   const webrtc::VideoCaptureCapability& cap() const {
     return cap_;

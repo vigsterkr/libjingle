@@ -1800,9 +1800,15 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
     return false;
   }
   WebRtcVideoChannelSendInfo* send_channel = send_channels_[ssrc_key];
+  VideoCapturer* capturer = send_channel->video_capturer();
+  if (capturer != NULL) {
+    capturer->SignalFrameCaptured.disconnect(this);
+    capturer->SignalVideoFrame.disconnect(this);
+    send_channel->set_video_capturer(NULL);
+  }
+
   int channel_id = send_channel->channel_id();
   int capture_id = send_channel->capture_id();
-
   if (engine()->vie()->codec()->DeregisterEncoderObserver(
           channel_id) != 0) {
     LOG_RTCERR1(DeregisterEncoderObserver, channel_id);
@@ -1874,6 +1880,7 @@ bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
     return false;
   }
   capturer->SignalFrameCaptured.disconnect(this);
+  capturer->SignalVideoFrame.disconnect(this);
   send_channel->set_video_capturer(NULL);
   if (send_channel->sending()) {
     engine_->IncrementFrameListeners();
@@ -3032,10 +3039,12 @@ void WebRtcVideoMediaChannel::FlushBlackFrame(uint32 ssrc, int64 timestamp) {
       return;
     }
     WebRtcVideoFrame black_frame;
-    if (!black_frame.InitToBlack(last_frame_width, last_frame_height, 1, 1,
+    // Black frame is not screencast.
+    const bool screencasting = false;
+    if (!black_frame.InitToBlack(send_codec_->width, send_codec_->height, 1, 1,
                                  last_frame_elapsed_time,
                                  last_frame_time_stamp) ||
-        !SendFrame(send_channel, &black_frame, true)) {
+        !SendFrame(send_channel, &black_frame, screencasting)) {
       LOG(LS_ERROR) << "Failed to send black frame.";
     }
   }

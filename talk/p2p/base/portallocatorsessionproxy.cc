@@ -104,8 +104,6 @@ void PortAllocatorSessionMuxer::OnSessionProxyDestroyed(
   std::vector<PortAllocatorSessionProxy*>::iterator it =
       std::find(session_proxies_.begin(), session_proxies_.end(), proxy);
   if (it != session_proxies_.end()) {
-    worker_thread_->Clear(this, MSG_SEND_ALLOCATION_DONE);
-    worker_thread_->Clear(this, MSG_SEND_ALLOCATED_PORTS);
     session_proxies_.erase(it);
   }
 
@@ -135,19 +133,27 @@ void PortAllocatorSessionMuxer::OnMessage(talk_base::Message *pmsg) {
 
 void PortAllocatorSessionMuxer::SendAllocationDone_w(
     PortAllocatorSessionProxy* proxy) {
-  proxy->OnCandidatesAllocationDone(session_.get());
+  std::vector<PortAllocatorSessionProxy*>::iterator iter =
+      std::find(session_proxies_.begin(), session_proxies_.end(), proxy);
+  if (iter != session_proxies_.end()) {
+    proxy->OnCandidatesAllocationDone(session_.get());
+  }
 }
 
 void PortAllocatorSessionMuxer::SendAllocatedPorts_w(
     PortAllocatorSessionProxy* proxy) {
-  for (size_t i = 0; i < ports_.size(); ++i) {
-    PortInterface* port = ports_[i];
-    proxy->OnPortReady(session_.get(), port);
-    // If port already has candidates, send this to the clients of proxy
-    // session. This can happen if proxy is created later than the actual
-    // implementation.
-    if (!port->Candidates().empty()) {
-      proxy->OnCandidatesReady(session_.get(), port->Candidates());
+  std::vector<PortAllocatorSessionProxy*>::iterator iter =
+      std::find(session_proxies_.begin(), session_proxies_.end(), proxy);
+  if (iter != session_proxies_.end()) {
+    for (size_t i = 0; i < ports_.size(); ++i) {
+      PortInterface* port = ports_[i];
+      proxy->OnPortReady(session_.get(), port);
+      // If port already has candidates, send this to the clients of proxy
+      // session. This can happen if proxy is created later than the actual
+      // implementation.
+      if (!port->Candidates().empty()) {
+        proxy->OnCandidatesReady(session_.get(), port->Candidates());
+      }
     }
   }
 }
@@ -228,7 +234,6 @@ void PortAllocatorSessionProxy::OnCandidatesReady(
     new_local_candidate.set_component(component_);
     our_candidates.push_back(new_local_candidate);
   }
-
   SignalCandidatesReady(this, our_candidates);
 }
 

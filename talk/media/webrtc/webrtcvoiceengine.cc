@@ -117,6 +117,7 @@ const WebRtcVoiceEngine::CodecPref WebRtcVoiceEngine::kCodecPrefs[] = {
   { "ILBC",   8000,   1, 102 },
   { "PCMU",   8000,   1, 0 },
   { "PCMA",   8000,   1, 8 },
+  { "CN",     48000,  1, 107 },
   { "CN",     32000,  1, 106 },
   { "CN",     16000,  1, 105 },
   { "CN",     8000,   1, 13 },
