@@ -195,7 +195,7 @@ TEST_F(RelayServerTest, TestBadRequest) {
   SendRaw1(bad, std::strlen(bad));
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() == NULL);
+  ASSERT_TRUE(!res);
 }
 
 // Send an allocate request without a username and verify it is rejected.
@@ -206,7 +206,7 @@ TEST_F(RelayServerTest, TestAllocateNoUsername) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_ALLOCATE_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -226,7 +226,7 @@ TEST_F(RelayServerTest, TestBindingRequest) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -247,7 +247,7 @@ TEST_F(RelayServerTest, TestAllocate) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_ALLOCATE_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -277,7 +277,7 @@ TEST_F(RelayServerTest, TestReallocate) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_ALLOCATE_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -306,7 +306,7 @@ TEST_F(RelayServerTest, TestRemoteBind) {
   Send2(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_DATA_INDICATION, res->type());
 
   const StunByteStringAttribute* recv_data =
@@ -352,7 +352,7 @@ TEST_F(RelayServerTest, TestSendRequestMissingUsername) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_SEND_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -376,7 +376,7 @@ TEST_F(RelayServerTest, TestSendRequestBadUsername) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_SEND_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -401,7 +401,7 @@ TEST_F(RelayServerTest, TestSendRequestNoDestinationAddress) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_SEND_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -426,7 +426,7 @@ TEST_F(RelayServerTest, TestSendRequestNoData) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_SEND_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -450,7 +450,7 @@ TEST_F(RelayServerTest, TestSendRequestWrongType) {
   Send1(req.get());
   res.reset(Receive1());
 
-  ASSERT_TRUE(res.get() != NULL);
+  ASSERT_TRUE(res);
   EXPECT_EQ(STUN_BINDING_ERROR_RESPONSE, res->type());
   EXPECT_EQ(req->transaction_id(), res->transaction_id());
 
@@ -484,7 +484,7 @@ TEST_F(RelayServerTest, TestSendRaw) {
     SendRaw2(msg2, std::strlen(msg2));
     res.reset(Receive1());
 
-    ASSERT_TRUE(res.get() != NULL);
+    ASSERT_TRUE(res);
     EXPECT_EQ(STUN_DATA_INDICATION, res->type());
 
     const StunAddressAttribute* src_addr =

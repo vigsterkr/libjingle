@@ -43,9 +43,11 @@
 #include "talk/p2p/base/relayport.h"
 #include "talk/p2p/base/stunport.h"
 #include "talk/p2p/base/tcpport.h"
-#include "talk/p2p/base/teststunserver.h"
 #include "talk/p2p/base/testrelayserver.h"
+#include "talk/p2p/base/teststunserver.h"
+#include "talk/p2p/base/testturnserver.h"
 #include "talk/p2p/base/transport.h"
+#include "talk/p2p/base/turnport.h"
 
 using talk_base::AsyncPacketSocket;
 using talk_base::ByteBuffer;
@@ -61,20 +63,21 @@ using talk_base::SocketAddress;
 using namespace cricket;
 
 static const int kTimeout = 1000;
-static const SocketAddress kLocalAddr1 = SocketAddress("192.168.1.2", 0);
-static const SocketAddress kLocalAddr2 = SocketAddress("192.168.1.3", 0);
-static const SocketAddress kNatAddr1 = SocketAddress("77.77.77.77",
-                                                    talk_base::NAT_SERVER_PORT);
-static const SocketAddress kNatAddr2 = SocketAddress("88.88.88.88",
-                                                    talk_base::NAT_SERVER_PORT);
-static const SocketAddress kStunAddr = SocketAddress("99.99.99.1",
-                                                     STUN_SERVER_PORT);
+static const SocketAddress kLocalAddr1("192.168.1.2", 0);
+static const SocketAddress kLocalAddr2("192.168.1.3", 0);
+static const SocketAddress kNatAddr1("77.77.77.77", talk_base::NAT_SERVER_PORT);
+static const SocketAddress kNatAddr2("88.88.88.88", talk_base::NAT_SERVER_PORT);
+static const SocketAddress kStunAddr("99.99.99.1", STUN_SERVER_PORT);
 static const SocketAddress kRelayUdpIntAddr("99.99.99.2", 5000);
 static const SocketAddress kRelayUdpExtAddr("99.99.99.3", 5001);
 static const SocketAddress kRelayTcpIntAddr("99.99.99.2", 5002);
 static const SocketAddress kRelayTcpExtAddr("99.99.99.3", 5003);
 static const SocketAddress kRelaySslTcpIntAddr("99.99.99.2", 5004);
 static const SocketAddress kRelaySslTcpExtAddr("99.99.99.3", 5005);
+static const SocketAddress kTurnUdpIntAddr("99.99.99.4", STUN_SERVER_PORT);
+static const SocketAddress kTurnUdpExtAddr("99.99.99.5", 0);
+static const RelayCredentials kRelayCredentials("test", "test");
+
 // TODO: Update these when RFC5245 is completely supported.
 // Magic value of 30 is from RFC3484, for IPv4 addresses.
 static const uint32 kDefaultPrflxPriority = ICE_TYPE_PREFERENCE_PRFLX << 24 |
@@ -295,6 +298,7 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
         nat_socket_factory1_(&nat_factory1_),
         nat_socket_factory2_(&nat_factory2_),
         stun_server_(main_, kStunAddr),
+        turn_server_(main_, kTurnUdpIntAddr, kTurnUdpExtAddr),
         relay_server_(main_, kRelayUdpIntAddr, kRelayUdpExtAddr,
                       kRelayTcpIntAddr, kRelayTcpExtAddr,
                       kRelaySslTcpIntAddr, kRelaySslTcpExtAddr),
@@ -312,63 +316,64 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
   }
 
   void TestLocalToLocal() {
-    UDPPort* port1 = CreateUdpPort(kLocalAddr1);
-    UDPPort* port2 = CreateUdpPort(kLocalAddr2);
+    Port* port1 = CreateUdpPort(kLocalAddr1);
+    Port* port2 = CreateUdpPort(kLocalAddr2);
     TestConnectivity("udp", port1, "udp", port2, true, true, true, true);
   }
-  void TestLocalToStun(NATType type) {
-    UDPPort* port1 = CreateUdpPort(kLocalAddr1);
-    nat_server2_.reset(CreateNatServer(kNatAddr2, type));
-    StunPort* port2 = CreateStunPort(kLocalAddr2, &nat_socket_factory2_);
-    TestConnectivity("udp", port1, StunName(type), port2,
-                     type == NAT_OPEN_CONE, true, type != NAT_SYMMETRIC, true);
+  void TestLocalToStun(NATType ntype) {
+    Port* port1 = CreateUdpPort(kLocalAddr1);
+    nat_server2_.reset(CreateNatServer(kNatAddr2, ntype));
+    Port* port2 = CreateStunPort(kLocalAddr2, &nat_socket_factory2_);
+    TestConnectivity("udp", port1, StunName(ntype), port2,
+                     ntype == NAT_OPEN_CONE, true,
+                     ntype != NAT_SYMMETRIC, true);
   }
-  void TestLocalToRelay(ProtocolType proto) {
-    UDPPort* port1 = CreateUdpPort(kLocalAddr1);
-    RelayPort* port2 = CreateRelayPort(kLocalAddr2, proto, PROTO_UDP);
-    TestConnectivity("udp", port1, RelayName(proto), port2,
-                     true, true, true, true);
+  void TestLocalToRelay(RelayType rtype, ProtocolType proto) {
+    Port* port1 = CreateUdpPort(kLocalAddr1);
+    Port* port2 = CreateRelayPort(kLocalAddr2, rtype, proto, PROTO_UDP);
+    TestConnectivity("udp", port1, RelayName(rtype, proto), port2,
+                     rtype == RELAY_GTURN, true, true, true);
   }
-  void TestStunToLocal(NATType type) {
-    nat_server1_.reset(CreateNatServer(kNatAddr1, type));
-    StunPort* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
-    UDPPort* port2 = CreateUdpPort(kLocalAddr2);
-    TestConnectivity(StunName(type), port1, "udp", port2,
-                     true, type != NAT_SYMMETRIC, true, true);
+  void TestStunToLocal(NATType ntype) {
+    nat_server1_.reset(CreateNatServer(kNatAddr1, ntype));
+    Port* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
+    Port* port2 = CreateUdpPort(kLocalAddr2);
+    TestConnectivity(StunName(ntype), port1, "udp", port2,
+                     true, ntype != NAT_SYMMETRIC, true, true);
   }
-  void TestStunToStun(NATType type1, NATType type2) {
-    nat_server1_.reset(CreateNatServer(kNatAddr1, type1));
-    StunPort* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
-    nat_server2_.reset(CreateNatServer(kNatAddr2, type2));
-    StunPort* port2 = CreateStunPort(kLocalAddr2, &nat_socket_factory2_);
-    TestConnectivity(StunName(type1), port1, StunName(type2), port2,
-                     type2 == NAT_OPEN_CONE,
-                     type1 != NAT_SYMMETRIC, type2 != NAT_SYMMETRIC,
-                     type1 + type2 < (NAT_PORT_RESTRICTED + NAT_SYMMETRIC));
+  void TestStunToStun(NATType ntype1, NATType ntype2) {
+    nat_server1_.reset(CreateNatServer(kNatAddr1, ntype1));
+    Port* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
+    nat_server2_.reset(CreateNatServer(kNatAddr2, ntype2));
+    Port* port2 = CreateStunPort(kLocalAddr2, &nat_socket_factory2_);
+    TestConnectivity(StunName(ntype1), port1, StunName(ntype2), port2,
+                     ntype2 == NAT_OPEN_CONE,
+                     ntype1 != NAT_SYMMETRIC, ntype2 != NAT_SYMMETRIC,
+                     ntype1 + ntype2 < (NAT_PORT_RESTRICTED + NAT_SYMMETRIC));
   }
-  void TestStunToRelay(NATType type, ProtocolType proto) {
-    nat_server1_.reset(CreateNatServer(kNatAddr1, type));
-    StunPort* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
-    RelayPort* port2 = CreateRelayPort(kLocalAddr2, proto, PROTO_UDP);
-    TestConnectivity(StunName(type), port1, RelayName(proto), port2,
-                     true, type != NAT_SYMMETRIC, true, true);
+  void TestStunToRelay(NATType ntype, RelayType rtype, ProtocolType proto) {
+    nat_server1_.reset(CreateNatServer(kNatAddr1, ntype));
+    Port* port1 = CreateStunPort(kLocalAddr1, &nat_socket_factory1_);
+    Port* port2 = CreateRelayPort(kLocalAddr2, rtype, proto, PROTO_UDP);
+    TestConnectivity(StunName(ntype), port1, RelayName(rtype, proto), port2,
+                     rtype == RELAY_GTURN, ntype != NAT_SYMMETRIC, true, true);
   }
   void TestTcpToTcp() {
-    TCPPort* port1 = CreateTcpPort(kLocalAddr1);
-    TCPPort* port2 = CreateTcpPort(kLocalAddr2);
+    Port* port1 = CreateTcpPort(kLocalAddr1);
+    Port* port2 = CreateTcpPort(kLocalAddr2);
     TestConnectivity("tcp", port1, "tcp", port2, true, false, true, true);
   }
-  void TestTcpToRelay(ProtocolType proto) {
-    TCPPort* port1 = CreateTcpPort(kLocalAddr1);
-    RelayPort* port2 = CreateRelayPort(kLocalAddr2, proto, PROTO_TCP);
-    TestConnectivity("tcp", port1, RelayName(proto), port2,
-                     true, false, true, true);
+  void TestTcpToRelay(RelayType rtype, ProtocolType proto) {
+    Port* port1 = CreateTcpPort(kLocalAddr1);
+    Port* port2 = CreateRelayPort(kLocalAddr2, rtype, proto, PROTO_TCP);
+    TestConnectivity("tcp", port1, RelayName(rtype, proto), port2,
+                     rtype == RELAY_GTURN, false, true, true);
   }
-  void TestSslTcpToRelay(ProtocolType proto) {
-    TCPPort* port1 = CreateTcpPort(kLocalAddr1);
-    RelayPort* port2 = CreateRelayPort(kLocalAddr2, proto, PROTO_SSLTCP);
-    TestConnectivity("ssltcp", port1, RelayName(proto), port2,
-                     true, false, true, true);
+  void TestSslTcpToRelay(RelayType rtype, ProtocolType proto) {
+    Port* port1 = CreateTcpPort(kLocalAddr1);
+    Port* port2 = CreateRelayPort(kLocalAddr2, rtype, proto, PROTO_SSLTCP);
+    TestConnectivity("ssltcp", port1, RelayName(rtype, proto), port2,
+                     rtype == RELAY_GTURN, false, true, true);
   }
 
   // helpers for above functions
@@ -377,8 +382,8 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
   }
   UDPPort* CreateUdpPort(const SocketAddress& addr,
                          PacketSocketFactory* socket_factory) {
-    UDPPort* port =  UDPPort::Create(main_, socket_factory, &network_,
-                                     addr.ipaddr(), 0, 0, username_, password_);
+    UDPPort* port = UDPPort::Create(main_, socket_factory, &network_,
+                                    addr.ipaddr(), 0, 0, username_, password_);
     port->SetIceProtocolType(ice_protocol_);
     return port;
   }
@@ -388,10 +393,10 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
     return port;
   }
   TCPPort* CreateTcpPort(const SocketAddress& addr,
-                         PacketSocketFactory* socket_factory) {
-    TCPPort* port =  TCPPort::Create(main_, socket_factory, &network_,
-                                     addr.ipaddr(), 0, 0, username_, password_,
-                                     true);
+                        PacketSocketFactory* socket_factory) {
+    TCPPort* port = TCPPort::Create(main_, socket_factory, &network_,
+                                    addr.ipaddr(), 0, 0, username_, password_,
+                                    true);
     port->SetIceProtocolType(ice_protocol_);
     return port;
   }
@@ -403,15 +408,32 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
     port->SetIceProtocolType(ice_protocol_);
     return port;
   }
-  RelayPort* CreateRelayPort(const SocketAddress& addr,
+  Port* CreateRelayPort(const SocketAddress& addr, RelayType rtype,
+                        ProtocolType int_proto, ProtocolType ext_proto) {
+    if (rtype == RELAY_TURN) {
+      return CreateTurnPort(addr, int_proto, ext_proto);
+    } else {
+      return CreateGturnPort(addr, int_proto, ext_proto);
+    }
+  }
+  TurnPort* CreateTurnPort(const SocketAddress& addr,
+                           ProtocolType int_proto, ProtocolType ext_proto) {
+    TurnPort* port = TurnPort::Create(main_, &socket_factory_, &network_,
+                                      addr.ipaddr(), 0, 0,
+                                      username_, password_, kTurnUdpIntAddr,
+                                      kRelayCredentials);
+    port->SetIceProtocolType(ice_protocol_);
+    return port;
+  }
+  RelayPort* CreateGturnPort(const SocketAddress& addr,
                              ProtocolType int_proto, ProtocolType ext_proto) {
-    RelayPort* port = CreateRelayPort(addr);
+    RelayPort* port = CreateGturnPort(addr);
     SocketAddress addrs[] =
         { kRelayUdpIntAddr, kRelayTcpIntAddr, kRelaySslTcpIntAddr };
     port->AddServerAddress(ProtocolAddress(addrs[int_proto], int_proto));
     return port;
   }
-  RelayPort* CreateRelayPort(const SocketAddress& addr) {
+  RelayPort* CreateGturnPort(const SocketAddress& addr) {
     RelayPort* port = RelayPort::Create(main_, &socket_factory_, &network_,
                                         addr.ipaddr(), 0, 0,
                                         username_, password_);
@@ -433,12 +455,21 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
       default:                  return "stun(?)";
     }
   }
-  static const char* RelayName(ProtocolType type) {
-    switch (type) {
-      case PROTO_UDP:           return "relay(udp)";
-      case PROTO_TCP:           return "relay(tcp)";
-      case PROTO_SSLTCP:        return "relay(ssltcp)";
-      default:                  return "relay(?)";
+  static const char* RelayName(RelayType type, ProtocolType proto) {
+    if (type == RELAY_TURN) {
+      switch (proto) {
+        case PROTO_UDP:           return "turn(udp)";
+        case PROTO_TCP:           return "turn(tcp)";
+        case PROTO_SSLTCP:        return "turn(ssltcp)";
+        default:                  return "turn(?)";
+      }
+    } else {
+      switch (proto) {
+        case PROTO_UDP:           return "gturn(udp)";
+        case PROTO_TCP:           return "gturn(tcp)";
+        case PROTO_SSLTCP:        return "gturn(ssltcp)";
+        default:                  return "gturn(?)";
+      }
     }
   }
 
@@ -496,6 +527,7 @@ class PortTest : public testing::Test, public sigslot::has_slots<> {
   talk_base::BasicPacketSocketFactory nat_socket_factory1_;
   talk_base::BasicPacketSocketFactory nat_socket_factory2_;
   TestStunServer stun_server_;
+  TestTurnServer turn_server_;
   TestRelayServer relay_server_;
   std::string username_;
   std::string password_;
@@ -745,16 +777,20 @@ TEST_F(PortTest, TestLocalToSymNat) {
   TestLocalToStun(NAT_SYMMETRIC);
 }
 
-TEST_F(PortTest, TestLocalToRelay) {
-  TestLocalToRelay(PROTO_UDP);
+TEST_F(PortTest, TestLocalToTurn) {
+  TestLocalToRelay(RELAY_TURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestLocalToTcpRelay) {
-  TestLocalToRelay(PROTO_TCP);
+TEST_F(PortTest, TestLocalToGturn) {
+  TestLocalToRelay(RELAY_GTURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestLocalToSslTcpRelay) {
-  TestLocalToRelay(PROTO_SSLTCP);
+TEST_F(PortTest, TestLocalToTcpGturn) {
+  TestLocalToRelay(RELAY_GTURN, PROTO_TCP);
+}
+
+TEST_F(PortTest, TestLocalToSslTcpGturn) {
+  TestLocalToRelay(RELAY_GTURN, PROTO_SSLTCP);
 }
 
 // Cone NAT -> XXXX
@@ -778,12 +814,16 @@ TEST_F(PortTest, TestConeNatToSymNat) {
   TestStunToStun(NAT_OPEN_CONE, NAT_SYMMETRIC);
 }
 
-TEST_F(PortTest, TestConeNatToRelay) {
-  TestStunToRelay(NAT_OPEN_CONE, PROTO_UDP);
+TEST_F(PortTest, TestConeNatToTurn) {
+  TestStunToRelay(NAT_OPEN_CONE, RELAY_TURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestConeNatToTcpRelay) {
-  TestStunToRelay(NAT_OPEN_CONE, PROTO_TCP);
+TEST_F(PortTest, TestConeNatToGturn) {
+  TestStunToRelay(NAT_OPEN_CONE, RELAY_GTURN, PROTO_UDP);
+}
+
+TEST_F(PortTest, TestConeNatToTcpGturn) {
+  TestStunToRelay(NAT_OPEN_CONE, RELAY_GTURN, PROTO_TCP);
 }
 
 // Address-restricted NAT -> XXXX
@@ -807,12 +847,16 @@ TEST_F(PortTest, TestARNatToSymNat) {
   TestStunToStun(NAT_ADDR_RESTRICTED, NAT_SYMMETRIC);
 }
 
-TEST_F(PortTest, TestARNatToRelay) {
-  TestStunToRelay(NAT_ADDR_RESTRICTED, PROTO_UDP);
+TEST_F(PortTest, TestARNatToTurn) {
+  TestStunToRelay(NAT_ADDR_RESTRICTED, RELAY_TURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestARNATNatToTcpRelay) {
-  TestStunToRelay(NAT_ADDR_RESTRICTED, PROTO_TCP);
+TEST_F(PortTest, TestARNatToGturn) {
+  TestStunToRelay(NAT_ADDR_RESTRICTED, RELAY_GTURN, PROTO_UDP);
+}
+
+TEST_F(PortTest, TestARNATNatToTcpGturn) {
+  TestStunToRelay(NAT_ADDR_RESTRICTED, RELAY_GTURN, PROTO_TCP);
 }
 
 // Port-restricted NAT -> XXXX
@@ -837,12 +881,16 @@ TEST_F(PortTest, TestPRNatToSymNat) {
   TestStunToStun(NAT_PORT_RESTRICTED, NAT_SYMMETRIC);
 }
 
-TEST_F(PortTest, TestPRNatToRelay) {
-  TestStunToRelay(NAT_PORT_RESTRICTED, PROTO_UDP);
+TEST_F(PortTest, TestPRNatToTurn) {
+  TestStunToRelay(NAT_PORT_RESTRICTED, RELAY_TURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestPRNatToTcpRelay) {
-  TestStunToRelay(NAT_PORT_RESTRICTED, PROTO_TCP);
+TEST_F(PortTest, TestPRNatToGturn) {
+  TestStunToRelay(NAT_PORT_RESTRICTED, RELAY_GTURN, PROTO_UDP);
+}
+
+TEST_F(PortTest, TestPRNatToTcpGturn) {
+  TestStunToRelay(NAT_PORT_RESTRICTED, RELAY_GTURN, PROTO_TCP);
 }
 
 // Symmetric NAT -> XXXX
@@ -868,12 +916,16 @@ TEST_F(PortTest, TestSymNatToSymNat) {
   TestStunToStun(NAT_SYMMETRIC, NAT_SYMMETRIC);
 }
 
-TEST_F(PortTest, TestSymNatToRelay) {
-  TestStunToRelay(NAT_SYMMETRIC, PROTO_UDP);
+TEST_F(PortTest, TestSymNatToTurn) {
+  TestStunToRelay(NAT_SYMMETRIC, RELAY_TURN, PROTO_UDP);
 }
 
-TEST_F(PortTest, TestSymNatToTcpRelay) {
-  TestStunToRelay(NAT_SYMMETRIC, PROTO_TCP);
+TEST_F(PortTest, TestSymNatToGturn) {
+  TestStunToRelay(NAT_SYMMETRIC, RELAY_GTURN, PROTO_UDP);
+}
+
+TEST_F(PortTest, TestSymNatToTcpGturn) {
+  TestStunToRelay(NAT_SYMMETRIC, RELAY_GTURN, PROTO_TCP);
 }
 
 // Outbound TCP -> XXXX
@@ -1861,7 +1913,7 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
             testport->Candidates()[0].foundation());
   EXPECT_EQ_WAIT(testport->Candidates()[0].related_address().ipaddr(),
                  kLocalAddr2.ipaddr(), kTimeout);
-  talk_base::scoped_ptr<RelayPort> relayport(CreateRelayPort(kLocalAddr2));
+  talk_base::scoped_ptr<RelayPort> relayport(CreateGturnPort(kLocalAddr2));
   relayport->AddExternalAddress(ProtocolAddress(kRelayUdpIntAddr, PROTO_UDP));
   relayport->AddExternalAddress(ProtocolAddress(kRelayTcpIntAddr, PROTO_TCP));
   relayport->AddExternalAddress(

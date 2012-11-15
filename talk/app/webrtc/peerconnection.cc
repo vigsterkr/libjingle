@@ -39,28 +39,16 @@
 
 namespace {
 
-// The number of tokens in the config string.
-static const size_t kConfigTokens = 2;
 // The min number of tokens in the ice uri.
 static const size_t kMinIceUriTokens = 2;
 // The min number of tokens must present in Turn host uri.
 // e.g. user@turn.example.org
 static const size_t kTurnHostTokensNum = 2;
-// Only the STUN or TURN server address appears in the config string.
-static const size_t kConfigAddress = 1;
-// Both of the STUN or TURN server address and port appear in the config string.
-static const size_t kConfigAddressAndPort = 2;
-static const size_t kServiceCount = 5;
 // The default stun port.
 static const int kDefaultPort = 3478;
 
-// Deprecated (jsep00)
 // NOTE: Must be in the same order as the ServiceType enum.
-static const char* kValidServiceTypes[kServiceCount] = {
-    "STUN", "STUNS", "TURN", "TURNS", "INVALID" };
-
-// NOTE: Must be in the same order as the ServiceType enum.
-static const char* kValidIceServiceTypes[kServiceCount] = {
+static const char* kValidIceServiceTypes[] = {
     "stun", "stuns", "turn", "turns", "invalid" };
 
 enum ServiceType {
@@ -114,74 +102,6 @@ typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
 typedef webrtc::PortAllocatorFactoryInterface::TurnConfiguration
     TurnConfiguration;
 
-bool static ParseConfigString(const std::string& config,
-                              std::vector<StunConfiguration>* stun_config,
-                              std::vector<TurnConfiguration>* turn_config) {
-  std::vector<std::string> tokens;
-  talk_base::tokenize(config, ' ', &tokens);
-
-  if (tokens.size() != kConfigTokens) {
-    LOG(WARNING) << "Invalid config string";
-    return false;
-  }
-
-  ServiceType service_type = INVALID;
-
-  const std::string& type = tokens[0];
-  for (size_t i = 0; i < kServiceCount; ++i) {
-    if (type.compare(kValidServiceTypes[i]) == 0) {
-      service_type = static_cast<ServiceType>(i);
-      break;
-    }
-  }
-
-  if (service_type == INVALID) {
-    LOG(WARNING) << "Invalid service type: " << type;
-    return false;
-  }
-  std::string service_address = tokens[1];
-
-  std::string address;
-  int port;
-  tokens.clear();
-  talk_base::tokenize(service_address, ':', &tokens);
-  if (tokens.size() != kConfigAddress &&
-      tokens.size() != kConfigAddressAndPort) {
-    LOG(WARNING) << "Invalid server address and port: " << service_address;
-    return false;
-  }
-
-  if (tokens.size() == kConfigAddress) {
-    address = tokens[0];
-    port = kDefaultPort;
-  } else {
-    address = tokens[0];
-    port = talk_base::FromString<int>(tokens[1]);
-    if (port <= 0 || port > 0xffff) {
-      LOG(WARNING) << "Invalid port: " << tokens[1];
-      return false;
-    }
-  }
-
-  // TODO: Currently the specification does not tell us how to parse
-  // multiple addresses, username and password from the configuration string.
-  switch (service_type) {
-    case STUN:
-      stun_config->push_back(StunConfiguration(address, port));
-      break;
-    case TURN:
-      turn_config->push_back(TurnConfiguration(address, port, "", ""));
-      break;
-    case TURNS:
-    case STUNS:
-    case INVALID:
-    default:
-      LOG(WARNING) << "Configuration not supported";
-      return false;
-  }
-  return true;
-}
-
 bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
                      std::vector<StunConfiguration>* stun_config,
                      std::vector<TurnConfiguration>* turn_config) {
@@ -219,7 +139,7 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
     }
     ServiceType service_type = INVALID;
     const std::string& type = tokens[0];
-    for (size_t i = 0; i < kServiceCount; ++i) {
+    for (size_t i = 0; i < ARRAY_SIZE(kValidIceServiceTypes); ++i) {
       if (type.compare(kValidIceServiceTypes[i]) == 0) {
         service_type = static_cast<ServiceType>(i);
         break;
@@ -309,17 +229,6 @@ PeerConnection::~PeerConnection() {
 }
 
 bool PeerConnection::Initialize(
-    const std::string& configuration,
-    webrtc::PortAllocatorFactoryInterface* allocator_factory,
-    PeerConnectionObserver* observer) {
-  std::vector<PortAllocatorFactoryInterface::StunConfiguration> stun_config;
-  std::vector<PortAllocatorFactoryInterface::TurnConfiguration> turn_config;
-  ParseConfigString(configuration, &stun_config, &turn_config);
-  return DoInitialize(stun_config, turn_config, NULL,
-                      allocator_factory, observer);
-}
-
-bool PeerConnection::Initialize(
     const JsepInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     webrtc::PortAllocatorFactoryInterface* allocator_factory,
@@ -350,9 +259,7 @@ bool PeerConnection::DoInitialize(
   // enable BUNDLE here. Also enabling TURN and disable legacy relay service.
   port_allocator_->set_flags(cricket::PORTALLOCATOR_ENABLE_BUNDLE |
                              cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
-                             cricket::PORTALLOCATOR_ENABLE_SHARED_SOCKET |
-                             cricket::PORTALLOCATOR_DISABLE_RELAY |
-                             cricket::PORTALLOCATOR_ENABLE_TURN);
+                             cricket::PORTALLOCATOR_ENABLE_SHARED_SOCKET);
 
   mediastream_signaling_.reset(new MediaStreamSignaling(
       factory_->signaling_thread(), this));
@@ -385,10 +292,6 @@ PeerConnection::local_streams() {
 talk_base::scoped_refptr<StreamCollectionInterface>
 PeerConnection::remote_streams() {
   return mediastream_signaling_->remote_streams();
-}
-
-void PeerConnection::AddStream(LocalMediaStreamInterface* local_stream) {
-  AddStream(local_stream, NULL);
 }
 
 bool PeerConnection::AddStream(MediaStreamInterface* local_stream,

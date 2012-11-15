@@ -93,7 +93,6 @@ enum {
   MSG_INIT_FACTORY = 1,
   MSG_TERMINATE_FACTORY,
   MSG_CREATE_PEERCONNECTION,
-  MSG_CREATE_PEERCONNECTION_JSEP00,
   MSG_CREATE_VIDEOSOURCE,
 };
 
@@ -187,14 +186,6 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
                                                      pdata->observer);
       break;
     }
-    case MSG_CREATE_PEERCONNECTION_JSEP00: {
-      CreatePeerConnectionParamsDeprecated* pdata =
-          static_cast<CreatePeerConnectionParamsDeprecated*> (msg->pdata);
-      pdata->peerconnection = CreatePeerConnection_s(pdata->configuration,
-                                                     pdata->allocator_factory,
-                                                     pdata->observer);
-      break;
-    }
     case MSG_CREATE_VIDEOSOURCE: {
       CreateVideoSourceParams* pdata =
           static_cast<CreateVideoSourceParams*> (msg->pdata);
@@ -247,18 +238,6 @@ PeerConnectionFactory::CreateVideoSource_s(
   return VideoSourceProxy::Create(signaling_thread_, source);
 }
 
-
-scoped_refptr<PeerConnectionInterface>
-PeerConnectionFactory::CreatePeerConnection(
-    const std::string& config,
-    PortAllocatorFactoryInterface* allocator_factory,
-    PeerConnectionObserver* observer) {
-  CreatePeerConnectionParamsDeprecated params(config, allocator_factory,
-                                              observer);
-  signaling_thread_->Send(this, MSG_CREATE_PEERCONNECTION_JSEP00, &params);
-  return params.peerconnection;
-}
-
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const JsepInterface::IceServers& configuration,
@@ -271,40 +250,12 @@ PeerConnectionFactory::CreatePeerConnection(
   return params.peerconnection;
 }
 
-
-scoped_refptr<PeerConnectionInterface>
-PeerConnectionFactory::CreatePeerConnection(
-    const std::string& configuration,
-    PeerConnectionObserver* observer) {
-
-  return CreatePeerConnection(configuration, NULL, observer);
-}
-
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
     const JsepInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     PeerConnectionObserver* observer) {
   return CreatePeerConnection(configuration, constraints, NULL, observer);
-}
-
-scoped_refptr<PeerConnectionInterface>
-PeerConnectionFactory::CreatePeerConnection_s(
-    const std::string& configuration,
-    PortAllocatorFactoryInterface* allocator_factory,
-    PeerConnectionObserver* observer) {
-  ASSERT(allocator_factory || allocator_factory_);
-  talk_base::RefCountedObject<PeerConnection>* pc(
-      new talk_base::RefCountedObject<PeerConnection>(this));
-
-  if (!pc->Initialize(
-      configuration,
-      allocator_factory ? allocator_factory : allocator_factory_.get(),
-      observer)) {
-    delete pc;
-    return NULL;
-  }
-  return PeerConnectionProxy::Create(signaling_thread(), pc);
 }
 
 talk_base::scoped_refptr<PeerConnectionInterface>

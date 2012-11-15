@@ -73,8 +73,7 @@ cricket::PortAllocator* PortAllocatorFactory::CreatePortAllocator(
 
   if (turn.size() > 0) {
     cricket::RelayCredentials credentials(turn[0].username, turn[0].password);
-    std::map<std::string, talk_base::SocketAddress> turn_hosts;
-    cricket::RelayServerConfig relay_server;
+    cricket::RelayServerConfig relay_server(cricket::RELAY_TURN);
     relay_server.ports.push_back(cricket::ProtocolAddress(
         turn[0].server, cricket::PROTO_UDP));
     relay_server.credentials = credentials;

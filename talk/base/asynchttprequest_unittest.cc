@@ -153,7 +153,7 @@ TEST_F(AsyncHttpRequestTest, TestGetSuccess) {
   EXPECT_TRUE_WAIT(done(), 5000);
   std::string response;
   EXPECT_EQ(200U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->Rewind();
   req->response().document->ReadLine(&response);
   EXPECT_EQ(kServerResponse, response);
@@ -168,7 +168,7 @@ TEST_F(AsyncHttpRequestTest, TestGetNotFound) {
   EXPECT_TRUE_WAIT(done(), 5000);
   size_t size;
   EXPECT_EQ(404U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->GetSize(&size);
   EXPECT_EQ(0U, size);
   req->Release();
@@ -184,7 +184,7 @@ TEST_F(AsyncHttpRequestTest, TestGetToNonServer) {
   EXPECT_TRUE_WAIT(done(), 10000);
   size_t size;
   EXPECT_EQ(500U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->GetSize(&size);
   EXPECT_EQ(0U, size);
   req->Release();
@@ -198,7 +198,7 @@ TEST_F(AsyncHttpRequestTest, TestGetToInvalidHostname) {
   EXPECT_TRUE_WAIT(done(), 5000);
   size_t size;
   EXPECT_EQ(500U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->GetSize(&size);
   EXPECT_EQ(0U, size);
   req->Release();
@@ -212,7 +212,7 @@ TEST_F(AsyncHttpRequestTest, TestPostSuccess) {
   EXPECT_TRUE_WAIT(done(), 5000);
   std::string response;
   EXPECT_EQ(200U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->Rewind();
   req->response().document->ReadLine(&response);
   EXPECT_EQ("4321dcba", response);
@@ -240,7 +240,7 @@ TEST_F(AsyncHttpRequestTest, TestGetSuccessDelay) {
   EXPECT_TRUE_WAIT(done(), 5000);
   std::string response;
   EXPECT_EQ(200U, req->response().scode);
-  ASSERT_TRUE(req->response().document.get() != NULL);
+  ASSERT_TRUE(req->response().document);
   req->response().document->Rewind();
   req->response().document->ReadLine(&response);
   EXPECT_EQ(kServerResponse, response);

@@ -426,7 +426,7 @@ HttpBase::send(HttpData* data) {
   len_ = 0;
   ignore_data_ = chunk_data_ = false;
 
-  if (data_->document.get()) {
+  if (data_->document) {
     data_->document->SignalEvent.connect(this, &HttpBase::OnDocumentEvent);
   }
 
@@ -619,7 +619,7 @@ HttpBase::flush_data() {
       send_required = queue_headers();
     }
 
-    if (!send_required && (NULL != data_->document.get())) {
+    if (!send_required && data_->document) {
       // Next, attempt to queue document data.
 
       const size_t kChunkDigits = 8;
@@ -685,7 +685,7 @@ HttpBase::flush_data() {
 
     if (0 == len_) {
       // No data currently available to send.
-      if (NULL == data_->document.get()) {
+      if (!data_->document) {
         // If there is no source document, that means we're done.
         do_complete();
       }
@@ -745,7 +745,7 @@ HttpBase::do_complete(HttpError err) {
   ASSERT(mode_ != HM_NONE);
   HttpMode mode = mode_;
   mode_ = HM_NONE;
-  if (data_ && data_->document.get()) {
+  if (data_ && data_->document) {
     data_->document->SignalEvent.disconnect(this);
   }
   data_ = NULL;
@@ -846,7 +846,7 @@ HttpBase::ProcessHeaderComplete(bool chunked, size_t& data_size,
     // The request must not be aborted as a result of this callback.
     ASSERT(NULL != data_);
   }
-  if ((HE_NONE == *error) && (NULL != data_->document.get())) {
+  if ((HE_NONE == *error) && data_->document) {
     data_->document->SignalEvent.connect(this, &HttpBase::OnDocumentEvent);
   }
   if (HE_NONE != *error) {
@@ -865,7 +865,7 @@ HttpBase::ProcessData(const char* data, size_t len, size_t& read,
 #ifndef ANDROID
   LOG_F(LS_VERBOSE) << "data: " << std::string(data, len);
 #endif // ANDROID
-  if (ignore_data_ || !data_->document.get()) {
+  if (ignore_data_ || !data_->document) {
     read = len;
     return PR_CONTINUE;
   }

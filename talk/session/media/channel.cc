@@ -510,7 +510,7 @@ void BaseChannel::StartConnectionMonitor(int cms) {
 }
 
 void BaseChannel::StopConnectionMonitor() {
-  if (socket_monitor_.get()) {
+  if (socket_monitor_) {
     socket_monitor_->Stop();
     socket_monitor_.reset();
   }
@@ -2444,7 +2444,7 @@ void DataChannel::StartMediaMonitor(int cms) {
 }
 
 void DataChannel::StopMediaMonitor() {
-  if (media_monitor_.get()) {
+  if (media_monitor_) {
     media_monitor_->Stop();
     media_monitor_->SignalUpdate.disconnect(this);
     media_monitor_.reset();

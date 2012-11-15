@@ -238,10 +238,10 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
 }
 
 WebRtcSession::~WebRtcSession() {
-  if (voice_channel_.get()) {
+  if (voice_channel_) {
     channel_manager_->DestroyVoiceChannel(voice_channel_.release());
   }
-  if (video_channel_.get()) {
+  if (video_channel_) {
     channel_manager_->DestroyVideoChannel(video_channel_.release());
   }
   for (size_t i = 0; i < saved_candidates_.size(); ++i) {
@@ -257,7 +257,7 @@ static bool FindConstraint(const MediaConstraintsInterface::Constraints&
     if (iter->key == key) {
       if (value)
         *value = iter->value;
-      
+
       return true;
     }
   }
@@ -269,7 +269,7 @@ static bool FindConstraint(const MediaConstraintsInterface* constraints,
   const std::string& key, std::string* value, bool* mandatory) {
   if (!constraints)
     return false;
- 
+
   if (FindConstraint(constraints->GetMandatory(), key, value)) {
     if (mandatory)
       *mandatory = true;
@@ -308,7 +308,7 @@ bool WebRtcSession::Initialize(const MediaConstraintsInterface* constraints) {
     LOG(LS_INFO) << "Finished generating identity";
     set_identity(transport_desc_factory_.identity());
     transport_desc_factory_.set_digest_algorithm(talk_base::DIGEST_SHA_256);
-    
+
     transport_desc_factory_.set_secure(cricket::SEC_ENABLED);
   }
 #endif
@@ -639,7 +639,7 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
 
 void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!voice_channel_.get()) {
+  if (!voice_channel_) {
     LOG(LS_ERROR) << "SetAudioPlayout: No audio channel exists.";
     return;
   }
@@ -654,7 +654,7 @@ void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {
 
 void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!voice_channel_.get()) {
+  if (!voice_channel_) {
     LOG(LS_ERROR) << "SetAudioSend: No audio channel exists.";
     return;
   }
@@ -695,7 +695,7 @@ void WebRtcSession::SetVideoPlayout(const std::string& name,
                                     bool enable,
                                     cricket::VideoRenderer* renderer) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!video_channel_.get()) {
+  if (!video_channel_) {
     LOG(LS_ERROR) << "SetVideoPlayout: No video channel exists.";
     return;
   }
@@ -712,7 +712,7 @@ void WebRtcSession::SetVideoPlayout(const std::string& name,
 
 void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!video_channel_.get()) {
+  if (!video_channel_) {
     LOG(LS_ERROR) << "SetVideoSend: No video channel exists.";
     return;
   }
@@ -727,7 +727,7 @@ void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
 
 bool WebRtcSession::CanSendDtmf(const std::string& name) {
   ASSERT(signaling_thread()->IsCurrent());
-  if (!voice_channel_.get()) {
+  if (!voice_channel_) {
     LOG(LS_ERROR) << "SendDtmf: No audio channel exists.";
     return false;
   }
@@ -752,7 +752,7 @@ bool WebRtcSession::SendDtmf(const std::string& send_name,
                     << "than 70.";
     return false;
   }
-  if (!voice_channel_.get()) {
+  if (!voice_channel_) {
     LOG(LS_ERROR) << "SendDtmf: No audio channel exists.";
     return false;
   }
@@ -873,10 +873,10 @@ void WebRtcSession::OnCandidatesAllocationDone() {
 
 // Enabling voice and video channel.
 void WebRtcSession::EnableChannels() {
-  if (voice_channel_.get() && !voice_channel_->enabled())
+  if (voice_channel_ && !voice_channel_->enabled())
     voice_channel_->Enable(true);
 
-  if (video_channel_.get() && !video_channel_->enabled())
+  if (video_channel_ && !video_channel_->enabled())
     video_channel_->Enable(true);
 }
 
@@ -897,7 +897,7 @@ void WebRtcSession::ProcessNewLocalCandidate(
     if (ice_observer_) {
       ice_observer_->OnIceCandidate(&candidate);
     }
-    if (local_desc_.get()) {
+    if (local_desc_) {
       local_desc_->AddCandidate(&candidate);
     }
   }
@@ -969,7 +969,7 @@ void WebRtcSession::RemoveUnusedChannelsAndTransports(
 
   const cricket::ContentInfo* voice_info =
       cricket::GetFirstAudioContent(desc);
-  if ((!voice_info || voice_info->rejected) && voice_channel_.get()) {
+  if ((!voice_info || voice_info->rejected) && voice_channel_) {
     const std::string content_name = voice_channel_->content_name();
     channel_manager_->DestroyVoiceChannel(voice_channel_.release());
     DestroyTransportProxy(content_name);
@@ -977,7 +977,7 @@ void WebRtcSession::RemoveUnusedChannelsAndTransports(
 
   const cricket::ContentInfo* video_info =
       cricket::GetFirstVideoContent(desc);
-  if ((!video_info || video_info->rejected) && video_channel_.get()) {
+  if ((!video_info || video_info->rejected) && video_channel_) {
     const std::string content_name = video_channel_->content_name();
     channel_manager_->DestroyVideoChannel(video_channel_.release());
     DestroyTransportProxy(content_name);
@@ -995,7 +995,7 @@ bool WebRtcSession::CreateChannels(Action action,
 
   // Creating the media channels and transport proxies.
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
-  if (voice && !voice->rejected && !voice_channel_.get()) {
+  if (voice && !voice->rejected && !voice_channel_) {
     if (!CreateVoiceChannel(desc)) {
       LOG(LS_ERROR) << "Failed to create voice channel.";
       return false;
@@ -1003,7 +1003,7 @@ bool WebRtcSession::CreateChannels(Action action,
   }
 
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
-  if (video && !video->rejected && !video_channel_.get()) {
+  if (video && !video->rejected && !video_channel_) {
     if (!CreateVideoChannel(desc)) {
       LOG(LS_ERROR) << "Failed to create video channel.";
       return false;
@@ -1017,14 +1017,14 @@ bool WebRtcSession::CreateVoiceChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
   voice_channel_.reset(channel_manager_->CreateVoiceChannel(
       this, voice->name, true));
-  return voice_channel_.get() ? true : false;
+  return voice_channel_ ? true : false;
 }
 
 bool WebRtcSession::CreateVideoChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
   video_channel_.reset(channel_manager_->CreateVideoChannel(
       this, video->name, true, voice_channel_.get()));
-  return video_channel_.get() ? true : false;
+  return video_channel_ ? true : false;
 }
 
 void WebRtcSession::CopySavedCandidates(

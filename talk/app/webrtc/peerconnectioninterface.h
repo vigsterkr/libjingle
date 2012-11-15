@@ -155,12 +155,6 @@ class PeerConnectionInterface : public JsepInterface,
   virtual talk_base::scoped_refptr<StreamCollectionInterface>
       remote_streams() = 0;
 
-  // Add a new local stream.
-  // Note that a SessionDescription negotiation is needed before the
-  // remote peer can receive the stream.
-  // Deprecated (jsep00)
-  virtual void AddStream(LocalMediaStreamInterface* stream) = 0;
-
   // Add a new MediaStream to be sent on this PeerConnection.
   // Note that a SessionDescription negotiation is needed before the
   // remote peer can receive the stream.
@@ -246,18 +240,9 @@ class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
 // argument.
 class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
  public:
-  // Deprecated (jsep00)
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const std::string& config,
-                           PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
-                           PeerConnectionObserver* observer) = 0;
-  // Deprecated (jsep00)
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const std::string& config,
-                           PortAllocatorFactoryInterface* allocator_factory,
                            PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,

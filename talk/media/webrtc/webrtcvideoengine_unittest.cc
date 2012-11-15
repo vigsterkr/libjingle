@@ -262,6 +262,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecsRejectBadFormat) {
   // Verify SetSendCodecs failed and send codec is not changed on engine.
   EXPECT_FALSE(channel_->SetSendCodecs(codec_list));
   webrtc::VideoCodec gcodec;
+  // Set plType to something other than the value to test against ensuring
+  // that failure will happen if it is not changed.
+  gcodec.plType = 1;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.plType);
 
@@ -271,6 +274,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecsRejectBadFormat) {
 
   // Verify SetSendCodecs failed and send codec is not changed on engine.
   EXPECT_FALSE(channel_->SetSendCodecs(codec_list));
+  // Set plType to something other than the value to test against ensuring
+  // that failure will happen if it is not changed.
+  gcodec.plType = 1;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.plType);
 }
@@ -289,6 +295,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetSendCodecsRejectBadCodec) {
   // Verify SetSendCodecs failed and send codec is not changed on engine.
   EXPECT_FALSE(channel_->SetSendCodecs(codec_list));
   webrtc::VideoCodec gcodec;
+  // Set plType to something other than the value to test against ensuring
+  // that failure will happen if it is not changed.
+  gcodec.plType = 1;
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.plType);
 }

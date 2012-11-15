@@ -41,17 +41,10 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
                               public talk_base::MessageHandler {
  public:
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const std::string& config,
-                           PeerConnectionObserver* observer);
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
                            PeerConnectionObserver* observer);
 
-  virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const std::string& config,
-                           PortAllocatorFactoryInterface* allocator_factory,
-                           PeerConnectionObserver* observer);
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
       CreatePeerConnection(const JsepInterface::IceServers& configuration,
                            const MediaConstraintsInterface* constraints,
@@ -101,10 +94,6 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   talk_base::scoped_refptr<VideoSourceInterface> CreateVideoSource_s(
       cricket::VideoCapturer* capturer,
       const MediaConstraintsInterface* constraints);
-  talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
-      const std::string& configuration,
-      PortAllocatorFactoryInterface* allocator_factory,
-      PeerConnectionObserver* observer);
   talk_base::scoped_refptr<PeerConnectionInterface> CreatePeerConnection_s(
       const JsepInterface::IceServers& configuration,
       const MediaConstraintsInterface* constraints,

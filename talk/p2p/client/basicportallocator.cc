@@ -65,10 +65,6 @@ const int PHASE_SSLTCP = 3;
 
 const int kNumPhases = 4;
 
-// Modifiers of the above constants
-const int RELAY_PRIMARY_PRIORITY_MODIFIER = 0;  // pref = 0.0
-const int RELAY_BACKUP_PRIORITY_MODIFIER = -419430400;  // pref = -0.2
-
 const char UDP_PROTOCOL_NAME[] = "udp";
 
 // Returns the phase in which a given local candidate (or rather, the port that
@@ -155,15 +151,7 @@ class AllocationSequence : public talk_base::MessageHandler,
 
   void EnableProtocol(ProtocolType proto);
   bool ProtocolEnabled(ProtocolType proto) const;
-  void AddCandidates(int count) {
-    allocated_candidates_ += count;
-  }
 
-  // Returns true if AllocationSequence has got all expect candidates.
-  bool HasAllCandidates() {
-    return (state_ == kCompleted &&
-            allocated_candidates_ == expected_candidates_);
-  }
   // Signal from AllocationSequence, when it's done with allocating ports.
   // This signal is useful, when port allocation fails which doesn't result
   // in any candidates. Using this signal BasicPortAllocatorSession can send
@@ -171,10 +159,6 @@ class AllocationSequence : public talk_base::MessageHandler,
   // BasicPortAllocatorSession doesn't have any event to trigger signal. This
   // can also be achieved by starting timer in BPAS.
   sigslot::signal1<AllocationSequence*> SignalPortAllocationComplete;
-  // Decrement expected candidate after STUN error.
-  void RemoveCandidates(int count) {
-    expected_candidates_ -= count;
-  }
 
  private:
   typedef std::vector<ProtocolType> ProtocolList;
@@ -186,7 +170,8 @@ class AllocationSequence : public talk_base::MessageHandler,
   void CreateTCPPorts();
   void CreateStunPorts();
   void CreateRelayPorts();
-  void CreateTurnPorts();
+  void CreateGturnPort(const RelayServerConfig& config);
+  void CreateTurnPort(const RelayServerConfig& config);
   bool running() { return state_ == kRunning; }
 
   void OnReadPacket(talk_base::AsyncPacketSocket* socket,
@@ -203,13 +188,10 @@ class AllocationSequence : public talk_base::MessageHandler,
   int step_of_phase_[kNumPhases];
   uint32 flags_;
   ProtocolList protocols_;
-  int allocated_candidates_;
-  int expected_candidates_;
   talk_base::scoped_ptr<talk_base::AsyncPacketSocket> udp_socket_;
   // Keeping a list of all UDP based ports.
   std::deque<Port*> ports;
 };
-
 
 // BasicPortAllocator
 BasicPortAllocator::BasicPortAllocator(
@@ -247,10 +229,17 @@ BasicPortAllocator::BasicPortAllocator(
     const talk_base::SocketAddress& relay_address_ssl)
     : network_manager_(network_manager),
       socket_factory_(NULL),
-      stun_address_(stun_address),
-      relay_address_udp_(relay_address_udp),
-      relay_address_tcp_(relay_address_tcp),
-      relay_address_ssl_(relay_address_ssl) {
+      stun_address_(stun_address) {
+
+  RelayServerConfig config(RELAY_GTURN);
+  if (!relay_address_udp.IsAny())
+    config.ports.push_back(ProtocolAddress(relay_address_udp, PROTO_UDP));
+  if (!relay_address_tcp.IsAny())
+    config.ports.push_back(ProtocolAddress(relay_address_tcp, PROTO_TCP));
+  if (!relay_address_ssl.IsAny())
+    config.ports.push_back(ProtocolAddress(relay_address_ssl, PROTO_SSLTCP));
+  AddRelay(config);
+
   Construct();
 }
 
@@ -389,25 +378,9 @@ void BasicPortAllocatorSession::GetPortConfigurations() {
                                                     username(),
                                                     password());
 
-  // TODO(mallinath) - Merge relay_addres_xxx_ values into RelayServerConfig.
-  PortList ports;
-  RelayCredentials credentials;
-  if (!(allocator_->flags() & PORTALLOCATOR_ENABLE_TURN)) {
-    if (!allocator_->relay_address_udp().IsAny())
-      ports.push_back(ProtocolAddress(
-          allocator_->relay_address_udp(), PROTO_UDP));
-    if (!allocator_->relay_address_tcp().IsAny())
-      ports.push_back(ProtocolAddress(
-          allocator_->relay_address_tcp(), PROTO_TCP));
-    if (!allocator_->relay_address_ssl().IsAny())
-      ports.push_back(ProtocolAddress(
-          allocator_->relay_address_ssl(), PROTO_SSLTCP));
-  } else {
-    ports = allocator_->relays().front().ports;
-    credentials = allocator_->relays().front().credentials;
+  for (size_t i = 0; i < allocator_->relays().size(); ++i) {
+    config->AddRelay(allocator_->relays()[i]);
   }
-
-  config->AddRelay(ports, credentials, RELAY_PRIMARY_PRIORITY_MODIFIER);
   ConfigReady(config);
 }
 
@@ -532,10 +505,7 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
   port->set_send_retransmit_count_attribute((allocator_->flags() &
       PORTALLOCATOR_ENABLE_STUN_RETRANSMIT_ATTRIBUTE) != 0);
 
-  PortData data;
-  data.port = port;
-  data.sequence = seq;
-  data.ready = false;
+  PortData data(port, seq);
   ports_.push_back(data);
 
   port->SignalAddressReady.connect(this,
@@ -559,9 +529,9 @@ void BasicPortAllocatorSession::OnAddressReady(Port *port) {
   std::vector<PortData>::iterator it
     = std::find(ports_.begin(), ports_.end(), port);
   ASSERT(it != ports_.end());
-  if (it->ready)
+  if (it->ready())
     return;
-  it->ready = true;
+  it->state = STATE_READY;
   SignalPortReady(this, port);
 
   // Only accumulate the candidates whose protocol has been enabled
@@ -578,12 +548,6 @@ void BasicPortAllocatorSession::OnAddressReady(Port *port) {
 
   if (!candidates.empty()) {
     SignalCandidatesReady(this, candidates);
-
-    for (std::vector<PortData>::iterator iter = ports_.begin();
-        iter != ports_.end(); ++iter) {
-      if (port == iter->port)
-        iter->sequence->AddCandidates(candidates.size());
-    }
     MaybeSignalCandidatesAllocationDone();
   }
 }
@@ -593,7 +557,7 @@ void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
   std::vector<Candidate> candidates;
   for (std::vector<PortData>::iterator it = ports_.begin();
        it != ports_.end(); ++it) {
-    if (!it->ready || (it->sequence != seq))
+    if (!it->ready() || (it->sequence != seq))
       continue;
 
     const std::vector<Candidate>& potentials = it->port->Candidates();
@@ -609,11 +573,7 @@ void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
 
   if (!candidates.empty()) {
     SignalCandidatesReady(this, candidates);
-
-    seq->AddCandidates(candidates.size());
-    MaybeSignalCandidatesAllocationDone();
   }
-
 }
 
 void BasicPortAllocatorSession::OnPortAllocationComplete(
@@ -632,12 +592,14 @@ void BasicPortAllocatorSession::MaybeSignalCandidatesAllocationDone() {
   if (!allocation_sequences_created_)
     return;
 
-  // Check ICE candidate allocation status of each allocated sequence object.
-  for (size_t i = 0; i < sequences_.size(); ++i) {
-    if (!sequences_[i]->HasAllCandidates())
+  // If all allocated ports are in ready state, session must have got all
+  // expected candidates. Session will trigger candidates allocation complete
+  // signal.
+  for (std::vector<PortData>::iterator it = ports_.begin();
+       it != ports_.end(); ++it) {
+    if (!it->allocation_complete())
       return;
   }
-
   SignalCandidatesAllocationDone(this);
 }
 
@@ -662,10 +624,8 @@ void BasicPortAllocatorSession::OnAddressError(Port* port) {
       std::find(ports_.begin(), ports_.end(), port);
   ASSERT(iter != ports_.end());
   // SignalAddressError is currently sent from StunPort. But this signal
-  // itself is generic. If sent from RelayPort, it needs special handling as it
-  // have more than one candidate.
-  if (port->Type() != RELAY_PORT_TYPE)
-    iter->sequence->RemoveCandidates(1);
+  // itself is generic.
+  iter->state = STATE_ERROR;
   // Send candidate allocation complete signal if all other expected candidates
   // are already received.
   MaybeSignalCandidatesAllocationDone();
@@ -690,7 +650,7 @@ void BasicPortAllocatorSession::OnShake() {
   std::vector<Connection*> connections;
 
   for (size_t i = 0; i < ports_.size(); ++i) {
-    if (ports_[i].ready)
+    if (ports_[i].ready())
       ports.push_back(ports_[i].port);
   }
 
@@ -726,8 +686,6 @@ AllocationSequence::AllocationSequence(BasicPortAllocatorSession* session,
       state_(kInit),
       step_(0),
       flags_(flags),
-      allocated_candidates_(0),
-      expected_candidates_(0),
       udp_socket_(NULL) {
   // All of the phases up until the best-writable phase so far run in step 0.
   // The other phases follow sequentially in the steps after that.  If there is
@@ -834,7 +792,6 @@ void AllocationSequence::OnMessage(talk_base::Message* msg) {
       break;
 
     case PHASE_RELAY:
-      CreateTurnPorts();
       CreateRelayPorts();
       break;
 
@@ -910,9 +867,6 @@ void AllocationSequence::CreateUDPPorts() {
 
   if (port) {
     ports.push_back(port);
-    // Increment expected candidate count.
-    ++expected_candidates_;
-
     // If shared socket is enabled, STUN candidate will be allocated by the
     // UDPPort.
     if (IsFlagSet(PORTALLOCATOR_ENABLE_SHARED_SOCKET) &&
@@ -924,7 +878,6 @@ void AllocationSequence::CreateUDPPorts() {
         return;
       }
       port->set_server_addr(config_->stun_address);
-      ++expected_candidates_;
     }
 
     session_->AddAllocatedPort(port, this);
@@ -946,8 +899,6 @@ void AllocationSequence::CreateTCPPorts() {
                                session_->username(), session_->password(),
                                session_->allocator()->allow_tcp_listen());
   if (port) {
-    // Increment expected candidate count.
-    ++expected_candidates_;
     session_->AddAllocatedPort(port, this);
     // Since TCPPort is not created using shared socket, |port| will not be
     // added to the dequeue.
@@ -983,8 +934,6 @@ void AllocationSequence::CreateStunPorts() {
                                 session_->username(), session_->password(),
                                 config_->stun_address);
   if (port) {
-    // Increment expected candidate count.
-    ++expected_candidates_;
     session_->AddAllocatedPort(port, this);
     // Since StunPort is not created using shared socket, |port| will not be
     // added to the dequeue.
@@ -1009,75 +958,68 @@ void AllocationSequence::CreateRelayPorts() {
   PortConfiguration::RelayList::const_iterator relay;
   for (relay = config_->relays.begin();
        relay != config_->relays.end(); ++relay) {
-    RelayPort* port = RelayPort::Create(session_->network_thread(),
-                                        session_->socket_factory(),
-                                        network_, ip_,
-                                        session_->allocator()->min_port(),
-                                        session_->allocator()->max_port(),
-                                        config_->username, config_->password);
-    if (port) {
-      // Since RelayPort is not created using shared socket, |port| will not be
-      // added to the dequeue.
-      // Note: We must add the allocated port before we add addresses because
-      //       the latter will create candidates that need name and preference
-      //       settings.  However, we also can't prepare the address (normally
-      //       done by AddAllocatedPort) until we have these addresses.  So we
-      //       wait to do that until below.
-      session_->AddAllocatedPort(port, this, false);
-
-      // Add the addresses of this protocol.
-      PortList::const_iterator relay_port;
-      for (relay_port = relay->ports.begin();
-            relay_port != relay->ports.end();
-            ++relay_port) {
-        port->AddServerAddress(*relay_port);
-        port->AddExternalAddress(*relay_port);
-        // Increment expected candidate count.
-        ++expected_candidates_;
-      }
-      // Increment expected candidate count for external server.
-      ++expected_candidates_;
-      // Start fetching an address for this port.
-      port->PrepareAddress();
+    if (relay->type == RELAY_GTURN) {
+      CreateGturnPort(*relay);
+    } else if (relay->type == RELAY_TURN) {
+      CreateTurnPort(*relay);
+    } else {
+      ASSERT(false);
     }
   }
 }
 
-void AllocationSequence::CreateTurnPorts() {
-  if (!IsFlagSet(PORTALLOCATOR_ENABLE_TURN)) {
-    LOG(LS_VERBOSE) << "AllocationSequence: TURN ports disabled, skipping.";
-    return;
-  }
-
-  // If BasicPortAllocatorSession::OnAllocate left TURN ports enabled then we
-  // ought to have an address for them here.
-  if (!(config_ && !config_->relays.empty())) {
-    LOG(LS_ERROR) << "AllocationSequence: No TURN server configured, skipping.";
-    return;
-  }
-
-  PortConfiguration::RelayList::const_iterator relay;
-  for (relay = config_->relays.begin();
-       relay != config_->relays.end(); ++relay) {
-
-    if (relay->ports.empty())
-      continue;
-
-    const talk_base::SocketAddress turn_server_addr =
-        relay->ports.front().address;
-    TurnPort* port = TurnPort::Create(session_->network_thread(),
+void AllocationSequence::CreateGturnPort(const RelayServerConfig& config) {
+  // TODO(mallinath) - Rename RelayPort to GTurnPort.
+  RelayPort* port = RelayPort::Create(session_->network_thread(),
                                       session_->socket_factory(),
                                       network_, ip_,
                                       session_->allocator()->min_port(),
                                       session_->allocator()->max_port(),
-                                      session_->username(),
-                                      session_->password(),
-                                      turn_server_addr,
-                                      relay->credentials);
-    if (port) {
-      // Increment expected candidate count.
-      ++expected_candidates_;
-      session_->AddAllocatedPort(port, this);
+                                      config_->username, config_->password);
+  if (port) {
+    // Since RelayPort is not created using shared socket, |port| will not be
+    // added to the dequeue.
+    // Note: We must add the allocated port before we add addresses because
+    //       the latter will create candidates that need name and preference
+    //       settings.  However, we also can't prepare the address (normally
+    //       done by AddAllocatedPort) until we have these addresses.  So we
+    //       wait to do that until below.
+    session_->AddAllocatedPort(port, this, false);
+
+    // Add the addresses of this protocol.
+    PortList::const_iterator relay_port;
+    for (relay_port = config.ports.begin();
+         relay_port != config.ports.end();
+         ++relay_port) {
+      port->AddServerAddress(*relay_port);
+      port->AddExternalAddress(*relay_port);
+    }
+    // Start fetching an address for this port.
+    port->PrepareAddress();
+  }
+}
+
+void AllocationSequence::CreateTurnPort(const RelayServerConfig& config) {
+  PortList::const_iterator relay_port;
+  for (relay_port = config.ports.begin();
+       relay_port != config.ports.end(); ++relay_port) {
+    if (relay_port->proto == PROTO_UDP) {
+      TurnPort* port = TurnPort::Create(session_->network_thread(),
+                                        session_->socket_factory(),
+                                        network_, ip_,
+                                        session_->allocator()->min_port(),
+                                        session_->allocator()->max_port(),
+                                        session_->username(),
+                                        session_->password(),
+                                        relay_port->address,
+                                        config.credentials);
+      if (port) {
+        session_->AddAllocatedPort(port, this);
+      }
+    } else {
+      LOG(LS_WARNING) << ProtoToString(relay_port->proto)
+                      << " server address: " << relay_port->address.ToString()
+                      << " is not currently supported.";
     }
   }
 }
@@ -1113,14 +1055,8 @@ PortConfiguration::PortConfiguration(
       password(password) {
 }
 
-void PortConfiguration::AddRelay(const PortList& ports,
-                                 const RelayCredentials& credentials,
-                                 int priority_modifier) {
-  RelayServerConfig relay;
-  relay.ports = ports;
-  relay.credentials = credentials;
-  relay.priority_modifier = priority_modifier;
-  relays.push_back(relay);
+void PortConfiguration::AddRelay(const RelayServerConfig& config) {
+  relays.push_back(config);
 }
 
 bool PortConfiguration::SupportsProtocol(

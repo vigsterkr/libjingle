@@ -158,7 +158,7 @@ static std::string GetVideoDeviceNameK2_6(const std::string& device_meta_path) {
   talk_base::scoped_ptr<talk_base::FileStream> device_meta_stream(
       talk_base::Filesystem::OpenFile(device_meta_path, "r"));
 
-  if (device_meta_stream.get() != NULL) {
+  if (device_meta_stream) {
     if (device_meta_stream->ReadLine(&device_name) != talk_base::SR_SUCCESS) {
       LOG(LS_ERROR) << "Failed to read V4L2 device meta " << device_meta_path;
     }

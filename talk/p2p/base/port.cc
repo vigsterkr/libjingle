@@ -291,7 +291,7 @@ void Port::OnReadPacket(
   if (!GetStunMessage(data, size, addr, msg.accept(), &remote_username)) {
     LOG_J(LS_ERROR, this) << "Received non-STUN packet from unknown address ("
                           << addr.ToString() << ")";
-  } else if (!msg.get()) {
+  } else if (!msg) {
     // STUN message handled already
   } else if (msg->type() == STUN_BINDING_REQUEST) {
     // Check for role conflicts.
@@ -916,7 +916,7 @@ void Connection::OnReadPacket(const char* data, size_t size) {
       LOG_J(LS_WARNING, this)
         << "Received non-STUN packet from an unreadable connection.";
     }
-  } else if (!msg.get()) {
+  } else if (!msg) {
     // The packet was STUN, but failed a check and was handled internally.
   } else {
     // The packet is STUN and passed the Port checks.

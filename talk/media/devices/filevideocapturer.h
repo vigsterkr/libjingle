@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "talk/base/stream.h"
+#include "talk/base/stringutils.h"
 #include "talk/media/base/videocapturer.h"
 
 namespace talk_base {
@@ -79,12 +80,14 @@ class FileVideoCapturer : public VideoCapturer {
   // Determines if the given device is actually a video file, to be captured
   // with a FileVideoCapturer.
   static bool IsFileVideoCapturerDevice(const Device& device) {
-    return device.id == kVideoFileDeviceName;
+    return talk_base::starts_with(device.id.c_str(), kVideoFileDevicePrefix);
   }
 
   // Creates a fake device for the given filename.
   static Device CreateFileVideoCapturerDevice(const std::string& filename) {
-    return Device(filename, kVideoFileDeviceName);
+    std::stringstream id;
+    id << kVideoFileDevicePrefix << filename;
+    return Device(filename, id.str());
   }
 
   // Set how many times to repeat reading the file. Repeat forever if the
@@ -134,7 +137,7 @@ class FileVideoCapturer : public VideoCapturer {
  private:
   class FileReadThread;  // Forward declaration, defined in .cc.
 
-  static const char* kVideoFileDeviceName;
+  static const char* kVideoFileDevicePrefix;
   talk_base::FileStream video_file_;
   CapturedFrame captured_frame_;
   // The number of bytes allocated buffer for captured_frame_.data.

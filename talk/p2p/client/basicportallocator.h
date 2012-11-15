@@ -54,10 +54,11 @@ struct RelayCredentials {
 
 typedef std::vector<ProtocolAddress> PortList;
 struct RelayServerConfig {
+  RelayServerConfig(RelayType type) : type(type) {}
+
+  RelayType type;
   PortList ports;
   RelayCredentials credentials;
-  int priority_modifier;  // added to the protocol modifier to get the
-                          // priority for this particular server
 };
 
 class BasicPortAllocator : public PortAllocator {
@@ -84,17 +85,7 @@ class BasicPortAllocator : public PortAllocator {
   const talk_base::SocketAddress& stun_address() const {
     return stun_address_;
   }
-  // TODO(mallinath) - Deprecate relay_addres_xxx() methods and use
-  // relays() and AddRelay() methods defined below.
-  const talk_base::SocketAddress& relay_address_udp() const {
-    return relay_address_udp_;
-  }
-  const talk_base::SocketAddress& relay_address_tcp() const {
-    return relay_address_tcp_;
-  }
-  const talk_base::SocketAddress& relay_address_ssl() const {
-    return relay_address_ssl_;
-  }
+
   const std::vector<RelayServerConfig>& relays() const {
     return relays_;
   }
@@ -130,9 +121,6 @@ class BasicPortAllocator : public PortAllocator {
   talk_base::NetworkManager* network_manager_;
   talk_base::PacketSocketFactory* socket_factory_;
   const talk_base::SocketAddress stun_address_;
-  const talk_base::SocketAddress relay_address_udp_;
-  const talk_base::SocketAddress relay_address_tcp_;
-  const talk_base::SocketAddress relay_address_ssl_;
   std::vector<RelayServerConfig> relays_;
   int best_writable_phase_;
   bool allow_tcp_listen_;
@@ -205,12 +193,28 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   std::vector<PortConfiguration*> configs_;
   std::vector<AllocationSequence*> sequences_;
 
+  enum PortState {
+    STATE_INIT,   // No candidates allocated yet.
+    STATE_READY,  // All candidates allocated and ready for process.
+    STATE_ERROR   // Error in gathering candidates.
+  };
+
   struct PortData {
+    PortData() : port(NULL), sequence(NULL), state(STATE_INIT) {}
+    PortData(Port* port, AllocationSequence* seq)
+        : port(port), sequence(seq), state(STATE_INIT) {
+    }
+
     Port* port;
     AllocationSequence* sequence;
-    bool ready;
+    PortState state;
 
     bool operator==(Port* rhs) const { return (port == rhs); }
+    bool ready() const { return state == STATE_READY; }
+    bool allocation_complete() const {
+      // Returns true if candidates allocation is success or failure.
+      return ((state == STATE_READY) || (state == STATE_ERROR));
+    }
   };
   std::vector<PortData> ports_;
 
@@ -231,8 +235,7 @@ struct PortConfiguration : public talk_base::MessageData {
                     const std::string& password);
 
   // Adds another relay server, with the given ports and modifier, to the list.
-  void AddRelay(const PortList& ports, const RelayCredentials& credentials,
-                int priority_modifier);
+  void AddRelay(const RelayServerConfig& config);
 
   // Determines whether the given relay server supports the given protocol.
   static bool SupportsProtocol(const RelayServerConfig& relay,

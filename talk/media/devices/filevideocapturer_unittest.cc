@@ -197,6 +197,7 @@ TEST_F(FileVideoCapturerTest, TestFileDevices) {
   EXPECT_TRUE(
       cricket::FileVideoCapturer::IsFileVideoCapturerDevice(file_device));
   EXPECT_TRUE(capturer_->Init(file_device));
+  EXPECT_EQ(file_device.id, capturer_->GetId());
 }
 
 }  // unnamed namespace

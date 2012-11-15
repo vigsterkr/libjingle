@@ -173,17 +173,6 @@ TEST_F(PeerConnectionProxyTest, remote_streams) {
               pc_proxy_->remote_streams());
 }
 
-TEST_F(PeerConnectionProxyTest, AddStreamJSEP00) {
-  LocalMediaStreamInterface* fake_stream =
-      GetFakePointer1<LocalMediaStreamInterface>();
-  EXPECT_CALL(*pc_, AddStream(fake_stream))
-      .Times(Exactly(1))
-      .WillOnce(InvokeWithoutArgs(
-          this,
-          &PeerConnectionProxyTest::CheckThread));
-  pc_proxy_->AddStream(fake_stream);
-}
-
 TEST_F(PeerConnectionProxyTest, AddStream) {
   MediaStreamInterface* fake_stream =
       GetFakePointer1<MediaStreamInterface>();

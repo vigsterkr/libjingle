@@ -27,7 +27,7 @@
 
 #include "talk/p2p/base/turnport.h"
 
-#include <stdio.h>
+#include <functional>
 
 #include "talk/base/asyncpacketsocket.h"
 #include "talk/base/byteorder.h"

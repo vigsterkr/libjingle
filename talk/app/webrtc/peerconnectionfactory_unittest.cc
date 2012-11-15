@@ -48,8 +48,6 @@ using webrtc::VideoTrackInterface;
 
 namespace {
 
-static const char kStunConfiguration[] = "STUN stun.l.google.com:19302";
-
 static const char kStunIceServer[] = "stun:stun.l.google.com:19302";
 static const char kTurnIceServer[] = "turn:test@test.com:1234";
 static const char kInvalidTurnIceServer[] = "turn:test.com:1234";
@@ -92,8 +90,10 @@ TEST(PeerConnectionFactoryTestInternal, CreatePCUsingInternalModules) {
       webrtc::CreatePeerConnectionFactory());
 
   NullPeerConnectionObserver observer;
+  webrtc::JsepInterface::IceServers servers;
+
   talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory->CreatePeerConnection(kStunConfiguration, &observer));
+      factory->CreatePeerConnection(servers, NULL, &observer));
 
   EXPECT_TRUE(pc.get() != NULL);
 }
@@ -126,13 +126,6 @@ TEST_F(PeerConnectionFactoryTest, CreatePCUsingInvalidTurnUrl) {
   EXPECT_TRUE(pc.get() == NULL);
 }
 
-TEST_F(PeerConnectionFactoryTest, CreatePCUsingExternalModules) {
-  talk_base::scoped_refptr<PeerConnectionInterface> pc(
-      factory_->CreatePeerConnection(kStunConfiguration,
-                                     allocator_factory_,
-                                     &observer_));
-  EXPECT_TRUE(pc.get() != NULL);
-}
 
 TEST_F(PeerConnectionFactoryTest, LocalRendering) {
   cricket::FakeVideoCapturer* capturer = new cricket::FakeVideoCapturer();

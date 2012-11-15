@@ -227,7 +227,7 @@ void SocketTest::ConnectInternal(const IPAddress& loopback) {
   // Server has pending connection, accept it.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   EXPECT_FALSE(accept_addr.IsNil());
   EXPECT_EQ(accepted->GetRemoteAddress(), accept_addr);
 
@@ -276,7 +276,7 @@ void SocketTest::ConnectWithDnsLookupInternal(const IPAddress& loopback,
   // Server has pending connection, accept it.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   EXPECT_FALSE(accept_addr.IsNil());
   EXPECT_EQ(accepted->GetRemoteAddress(), accept_addr);
 
@@ -397,7 +397,7 @@ void SocketTest::ConnectWhileNotClosedInternal(const IPAddress& loopback) {
   SocketAddress accept_addr;
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   EXPECT_FALSE(accept_addr.IsNil());
 
   // Check the states and addresses.
@@ -472,7 +472,7 @@ void SocketTest::ClientCloseDuringConnectInternal(const IPAddress& loopback) {
 
   // The connection should still be able to be accepted.
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
   EXPECT_EQ(AsyncSocket::CS_CONNECTED, accepted->GetState());
 
@@ -507,7 +507,7 @@ void SocketTest::ServerCloseInternal(const IPAddress& loopback) {
   // Accept connection.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
 
   // Both sides are now connected.
@@ -582,7 +582,7 @@ void SocketTest::CloseInClosedCallbackInternal(const IPAddress& loopback) {
   // Accept connection.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
 
   // Both sides are now connected.
@@ -631,7 +631,7 @@ void SocketTest::SocketServerWaitInternal(const IPAddress& loopback) {
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
 
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
   EXPECT_EQ(AsyncSocket::CS_CONNECTED, accepted->GetState());
   EXPECT_EQ(server->GetLocalAddress(), accepted->GetLocalAddress());
@@ -695,7 +695,7 @@ void SocketTest::TcpInternal(const IPAddress& loopback) {
   // Accept connection.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
 
   // Both sides are now connected.
@@ -805,7 +805,7 @@ void SocketTest::SingleFlowControlCallbackInternal(const IPAddress& loopback) {
   // Accept connection.
   EXPECT_TRUE_WAIT((sink.Check(server.get(), testing::SSE_READ)), kTimeout);
   scoped_ptr<AsyncSocket> accepted(server->Accept(&accept_addr));
-  ASSERT_TRUE(NULL != accepted.get());
+  ASSERT_TRUE(accepted);
   sink.Monitor(accepted.get());
 
   // Both sides are now connected.

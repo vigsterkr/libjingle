@@ -130,7 +130,8 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
                              const SocketAddress& addr) {
     return (c.component() == component && c.type() == type &&
         c.protocol() == proto && c.address().ipaddr() == addr.ipaddr() &&
-        (addr.port() == 0 || (c.address().port() == addr.port())));
+        ((addr.port() == 0 && (c.address().port() != 0)) ||
+        (c.address().port() == addr.port())));
   }
   static bool CheckPort(const talk_base::SocketAddress& addr,
                         int min_port, int max_port) {
@@ -159,6 +160,20 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
     }
   }
 
+  bool HasRelayAddress(const cricket::ProtocolAddress& proto_addr) {
+    for (size_t i = 0; i < allocator_->relays().size(); ++i) {
+      cricket::RelayServerConfig server_config = allocator_->relays()[i];
+      cricket::PortList::const_iterator relay_port;
+      for (relay_port = server_config.ports.begin();
+          relay_port != server_config.ports.end(); ++relay_port) {
+        if (proto_addr.address == relay_port->address &&
+            proto_addr.proto == relay_port->proto)
+          return true;
+      }
+    }
+    return false;
+  }
+
   talk_base::scoped_ptr<talk_base::PhysicalSocketServer> pss_;
   talk_base::scoped_ptr<talk_base::VirtualSocketServer> vss_;
   talk_base::scoped_ptr<talk_base::FirewallSocketServer> fss_;
@@ -177,9 +192,17 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
 TEST_F(PortAllocatorTest, TestBasic) {
   EXPECT_EQ(&network_manager_, allocator().network_manager());
   EXPECT_EQ(kStunAddr, allocator().stun_address());
-  EXPECT_EQ(kRelayUdpIntAddr, allocator().relay_address_udp());
-  EXPECT_EQ(kRelayTcpIntAddr, allocator().relay_address_tcp());
-  EXPECT_EQ(kRelaySslTcpIntAddr, allocator().relay_address_ssl());
+  ASSERT_EQ(1u, allocator().relays().size());
+  EXPECT_EQ(cricket::RELAY_GTURN, allocator().relays()[0].type);
+  // Empty relay credentials are used for GTURN.
+  EXPECT_TRUE(allocator().relays()[0].credentials.username.empty());
+  EXPECT_TRUE(allocator().relays()[0].credentials.password.empty());
+  EXPECT_TRUE(HasRelayAddress(cricket::ProtocolAddress(
+      kRelayUdpIntAddr, cricket::PROTO_UDP)));
+  EXPECT_TRUE(HasRelayAddress(cricket::ProtocolAddress(
+      kRelayTcpIntAddr, cricket::PROTO_TCP)));
+  EXPECT_TRUE(HasRelayAddress(cricket::ProtocolAddress(
+      kRelaySslTcpIntAddr, cricket::PROTO_SSLTCP)));
   EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
 }
 
@@ -470,6 +493,7 @@ TEST_F(PortAllocatorTest, TestEnableSharedUfrag) {
   EXPECT_EQ(kIceUfrag0, candidates_[1].username());
   EXPECT_EQ(kIcePwd0, candidates_[0].password());
   EXPECT_EQ(kIcePwd0, candidates_[1].password());
+  EXPECT_TRUE(candidate_allocation_done_);
 }
 
 // Test that when the PORTALLOCATOR_ENABLE_SHARED_UFRAG isn't enabled we got
@@ -493,6 +517,25 @@ TEST_F(PortAllocatorTest, TestDisableSharedUfrag) {
   EXPECT_NE(kIcePwd0, candidates_[0].password());
   EXPECT_NE(kIcePwd0, candidates_[1].password());
   EXPECT_NE(candidates_[0].password(), candidates_[1].password());
+  EXPECT_TRUE(candidate_allocation_done_);
+}
+
+// Test that when PORTALLOCATOR_ENABLE_SHARED_SOCKET is enabled only one port
+// is allocated for udp and stun and there can be one candidate (local)
+// if stun candidate is same as local candidate which will be the case in a
+// public network like the below test.
+TEST_F(PortAllocatorTest, TestEnableSharedSocket) {
+  allocator().set_flags(allocator().flags() |
+                        cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
+                        cricket::PORTALLOCATOR_ENABLE_SHARED_SOCKET);
+  AddInterface(kClientAddr);
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->GetInitialPorts();
+  ASSERT_EQ_WAIT(1U, candidates_.size(), 1000);
+  EXPECT_PRED5(CheckCandidate, candidates_[0],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "local", "udp", kClientAddr);
+  EXPECT_EQ(1U, ports_.size());
+  EXPECT_TRUE(candidate_allocation_done_);
 }
 
 // Test that the httpportallocator correctly maintains its lists of stun and

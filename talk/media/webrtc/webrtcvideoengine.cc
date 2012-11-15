@@ -1875,6 +1875,9 @@ void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
 
 bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
   WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
+  if (!send_channel) {
+    return false;
+  }
   VideoCapturer* capturer = send_channel->video_capturer();
   if (capturer == NULL) {
     return false;

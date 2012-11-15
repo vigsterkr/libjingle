@@ -56,16 +56,12 @@ class PeerConnection : public PeerConnectionInterface,
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
 
-  bool Initialize(const std::string& configuration,  // Deprecated JSEP00
-                  webrtc::PortAllocatorFactoryInterface* allocator_factory,
-                  PeerConnectionObserver* observer);
   bool Initialize(const JsepInterface::IceServers& configuration,
                   const MediaConstraintsInterface* constraints,
                   webrtc::PortAllocatorFactoryInterface* allocator_factory,
                   PeerConnectionObserver* observer);
   virtual talk_base::scoped_refptr<StreamCollectionInterface> local_streams();
   virtual talk_base::scoped_refptr<StreamCollectionInterface> remote_streams();
-  virtual void AddStream(LocalMediaStreamInterface* stream);
   virtual bool AddStream(MediaStreamInterface* local_stream,
                          const MediaConstraintsInterface* constraints);
   virtual void RemoveStream(MediaStreamInterface* local_stream);

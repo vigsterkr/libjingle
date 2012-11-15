@@ -31,7 +31,6 @@ namespace {
 
 enum {
   MSG_ADDSTREAM = 1,
-  MSG_ADDSTREAMJSEP00,
   MSG_REMOVESTREAM,
   MSG_RETURNLOCALMEDIASTREAMS,
   MSG_RETURNREMOTEMEDIASTREAMS,
@@ -66,9 +65,6 @@ struct MediaStreamParams : public talk_base::MessageData {
   const webrtc::MediaConstraintsInterface* constraints;
   bool result;
 };
-
-typedef talk_base::TypedMessageData<webrtc::LocalMediaStreamInterface*>
-    LocalMediaStreamParams;
 
 struct IceConfigurationParams : public talk_base::MessageData {
   IceConfigurationParams()
@@ -203,15 +199,6 @@ PeerConnectionProxy::remote_streams() {
     return msg.streams;
   }
   return peerconnection_->remote_streams();
-}
-
-void PeerConnectionProxy::AddStream(LocalMediaStreamInterface* local_stream) {
-  if (!signaling_thread_->IsCurrent()) {
-    LocalMediaStreamParams msg(local_stream);
-    signaling_thread_->Send(this, MSG_ADDSTREAMJSEP00, &msg);
-    return;
-  }
-  peerconnection_->AddStream(local_stream);
 }
 
 bool PeerConnectionProxy::AddStream(
@@ -442,12 +429,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       MediaStreamParams* param(static_cast<MediaStreamParams*> (data));
       param->result = peerconnection_->AddStream(param->stream,
                                                  param->constraints);
-      break;
-    }
-    case MSG_ADDSTREAMJSEP00: {
-      LocalMediaStreamParams* param(
-          static_cast<LocalMediaStreamParams*> (data));
-      peerconnection_->AddStream(param->data());
       break;
     }
     case MSG_REMOVESTREAM: {

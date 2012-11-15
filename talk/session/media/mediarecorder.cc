@@ -62,13 +62,13 @@ bool RtpDumpSink::Enable(bool enable) {
   recording_ = enable;
 
   // Create a file and the RTP writer if we have not done yet.
-  if (recording_ && !writer_.get()) {
-    if (!stream_.get()) {
+  if (recording_ && !writer_) {
+    if (!stream_) {
       return false;
     }
     writer_.reset(new RtpDumpWriter(stream_.get()));
     writer_->set_packet_filter(packet_filter_);
-  } else if (!recording_ && stream_.get()) {
+  } else if (!recording_ && stream_) {
     stream_->Flush();
   }
   return true;
@@ -77,7 +77,7 @@ bool RtpDumpSink::Enable(bool enable) {
 void RtpDumpSink::OnPacket(const void* data, size_t size, bool rtcp) {
   talk_base::CritScope cs(&critical_section_);
 
-  if (recording_ && writer_.get()) {
+  if (recording_ && writer_) {
     size_t current_size;
     if (writer_->GetDumpSize(&current_size) &&
         current_size + RtpDumpPacket::kHeaderLength + size <= max_size_) {
@@ -93,14 +93,14 @@ void RtpDumpSink::OnPacket(const void* data, size_t size, bool rtcp) {
 void RtpDumpSink::set_packet_filter(int filter) {
   talk_base::CritScope cs(&critical_section_);
   packet_filter_ = filter;
-  if (writer_.get()) {
+  if (writer_) {
     writer_->set_packet_filter(packet_filter_);
   }
 }
 
 void RtpDumpSink::Flush() {
   talk_base::CritScope cs(&critical_section_);
-  if (stream_.get()) {
+  if (stream_) {
     stream_->Flush();
   }
 }

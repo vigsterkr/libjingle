@@ -69,12 +69,12 @@ class SSLIdentityTest : public testing::Test {
     identity1_.reset(talk_base::SSLIdentity::Generate("test1"));
     identity2_.reset(talk_base::SSLIdentity::Generate("test2"));
 
-    ASSERT_TRUE(identity1_.get() != NULL);
-    ASSERT_TRUE(identity2_.get() != NULL);
+    ASSERT_TRUE(identity1_);
+    ASSERT_TRUE(identity2_);
 
     test_cert_.reset(
         talk_base::SSLCertificate::FromPEMString(kTestCertificate, 0));
-    ASSERT_TRUE(test_cert_.get() != NULL);
+    ASSERT_TRUE(test_cert_);
   }
 
   void TestDigest(const std::string &algorithm, size_t expected_len,
@@ -109,7 +109,7 @@ class SSLIdentityTest : public testing::Test {
     EXPECT_NE(0, memcmp(digest1, digest2, expected_len));
 
     // If we have an expected hash for the test cert, check it.
-    if (expected_digest != NULL) {
+    if (expected_digest) {
       unsigned char digest3[64];
       size_t digest3_len;
 

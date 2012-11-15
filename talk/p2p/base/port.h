@@ -73,6 +73,10 @@ const uint32 CONNECTION_WRITE_CONNECT_FAILURES = 5;
 // This is the length of time that we wait for a ping response to come back.
 const int CONNECTION_RESPONSE_TIMEOUT = 5 * 1000;   // 5 seconds
 
+enum RelayType {
+  RELAY_GTURN,   // Legacy google relay service.
+  RELAY_TURN     // Standard (TURN) relay service.
+};
 
 enum IcePriorityValue {
   ICE_TYPE_PREFERENCE_RELAY = 0,

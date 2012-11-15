@@ -144,7 +144,7 @@ class FileVideoCapturer::FileReadThread
 // Implementation of class FileVideoCapturer
 /////////////////////////////////////////////////////////////////////
 static const int64 kNumNanoSecsPerMilliSec = 1000000;
-const char* FileVideoCapturer::kVideoFileDeviceName = "video-file";
+const char* FileVideoCapturer::kVideoFileDevicePrefix = "video-file:";
 
 FileVideoCapturer::FileVideoCapturer()
     : frame_buffer_size_(0),
@@ -164,10 +164,7 @@ bool FileVideoCapturer::Init(const Device& device) {
   if (!FileVideoCapturer::IsFileVideoCapturerDevice(device)) {
     return false;
   }
-  return Init(device.name);
-}
-
-bool FileVideoCapturer::Init(const std::string& filename) {
+  std::string filename(device.name);
   if (IsRunning()) {
     LOG(LS_ERROR) << "The file video capturer is already running";
     return false;
@@ -201,9 +198,13 @@ bool FileVideoCapturer::Init(const std::string& filename) {
   std::vector<VideoFormat> supported;
   supported.push_back(format);
 
-  SetId(filename);
+  SetId(device.id);
   SetSupportedFormats(supported);
   return true;
+}
+
+bool FileVideoCapturer::Init(const std::string& filename) {
+  return Init(FileVideoCapturer::CreateFileVideoCapturerDevice(filename));
 }
 
 CaptureState FileVideoCapturer::Start(const VideoFormat& capture_format) {

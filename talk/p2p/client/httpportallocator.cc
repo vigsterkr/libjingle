@@ -213,22 +213,20 @@ void HttpPortAllocatorSessionBase::ReceiveSessionResponse(
                                                     map["username"],
                                                     map["password"]);
 
-  PortList ports;
+  RelayServerConfig relay_config(RELAY_GTURN);
   if (!relay_udp_port.empty()) {
     talk_base::SocketAddress address(relay_ip, atoi(relay_udp_port.c_str()));
-    ports.push_back(ProtocolAddress(address, PROTO_UDP));
+    relay_config.ports.push_back(ProtocolAddress(address, PROTO_UDP));
   }
   if (!relay_tcp_port.empty()) {
     talk_base::SocketAddress address(relay_ip, atoi(relay_tcp_port.c_str()));
-    ports.push_back(ProtocolAddress(address, PROTO_TCP));
+    relay_config.ports.push_back(ProtocolAddress(address, PROTO_TCP));
   }
   if (!relay_ssltcp_port.empty()) {
     talk_base::SocketAddress address(relay_ip, atoi(relay_ssltcp_port.c_str()));
-    ports.push_back(ProtocolAddress(address, PROTO_SSLTCP));
+    relay_config.ports.push_back(ProtocolAddress(address, PROTO_SSLTCP));
   }
-  // Adding empty credentials.
-  RelayCredentials credentials;
-  config->AddRelay(ports, credentials, 0);
+  config->AddRelay(relay_config);
   ConfigReady(config);
 }
 
