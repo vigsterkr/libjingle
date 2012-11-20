@@ -47,6 +47,21 @@ namespace cricket {
 
 using talk_base::scoped_ptr;
 
+static bool IsMediaContent(const ContentInfo* content) {
+  return (content && content->type == NS_JINGLE_RTP);
+}
+
+static bool IsMediaContentOfType(const ContentInfo* content,
+                                 MediaType media_type) {
+  if (!IsMediaContent(content)) {
+    return false;
+  }
+
+  const MediaContentDescription* mdesc =
+      static_cast<const MediaContentDescription*>(content->description);
+  return mdesc && mdesc->type() == media_type;
+}
+
 static bool CreateCryptoParams(int tag, const std::string& cipher,
                                CryptoParams *out) {
   std::string key;
@@ -232,10 +247,8 @@ static void GetCurrentStreamParams(const SessionDescription* sdesc,
 
   const ContentInfos& contents = sdesc->contents();
   for (ContentInfos::const_iterator content = contents.begin();
-       content != contents.end(); content++) {
-    if (!IsAudioContent(&*content) &&
-        !IsVideoContent(&*content) &&
-        !IsDataContent(&*content)) {
+       content != contents.end(); ++content) {
+    if (!IsMediaContent(&*content)) {
       continue;
     }
     const MediaContentDescription* media =
@@ -317,57 +330,58 @@ static bool AddStreamParams(
   return true;
 }
 
-// Updates the transport infos of the |description| according to the given
+// Updates the transport infos of the |sdesc| according to the given
 // |bundle_group|. The transport infos of the content names within the
 // |bundle_group| should be updated to use the ufrag and pwd of the first
 // content within the |bundle_group|.
 static bool UpdateTransportInfoForBundle(const ContentGroup& bundle_group,
-                                         SessionDescription* description) {
-  if (!description) {
+                                         SessionDescription* sdesc) {
+  // The bundle should not be empty.
+  if (!sdesc || !bundle_group.FirstContentName()) {
     return false;
   }
 
-  if (!bundle_group.FirstContentName()) {
-    return false;
-  }
-
-  const std::string selected_content_name = *bundle_group.FirstContentName();
+  // We should definitely have a transport for the first content.
+  std::string selected_content_name = *bundle_group.FirstContentName();
   const TransportInfo* selected_transport_info =
-      description->GetTransportInfoByName(selected_content_name);
+      sdesc->GetTransportInfoByName(selected_content_name);
   if (!selected_transport_info) {
     return false;
   }
+
+  // Set the other contents to use the same ICE credentials.
   const std::string selected_ufrag =
       selected_transport_info->description.ice_ufrag;
   const std::string selected_pwd =
       selected_transport_info->description.ice_pwd;
-
-  for (TransportInfos::iterator iter =
-           description->transport_infos().begin();
-       iter != description->transport_infos().end(); ++iter) {
-    if (bundle_group.HasContentName(iter->content_name) &&
-        iter->content_name != selected_content_name) {
-      iter->description.ice_ufrag = selected_ufrag;
-      iter->description.ice_pwd = selected_pwd;
+  for (TransportInfos::iterator it =
+           sdesc->transport_infos().begin();
+       it != sdesc->transport_infos().end(); ++it) {
+    if (bundle_group.HasContentName(it->content_name) &&
+        it->content_name != selected_content_name) {
+      it->description.ice_ufrag = selected_ufrag;
+      it->description.ice_pwd = selected_pwd;
     }
   }
   return true;
 }
 
-// Gets the CryptoParamsVec of the given |content_name| from |description|, and
+// Gets the CryptoParamsVec of the given |content_name| from |sdesc|, and
 // sets it to |cryptos|.
-static bool GetCryptosByName(const SessionDescription* description,
+static bool GetCryptosByName(const SessionDescription* sdesc,
                              const std::string& content_name,
                              CryptoParamsVec* cryptos) {
-  if (!description || !cryptos) {
+  if (!sdesc || !cryptos) {
     return false;
   }
+
+  const ContentInfo* content = sdesc->GetContentByName(content_name);
+  if (!IsMediaContent(content) || !content->description) {
+    return false;
+  }
+
   const MediaContentDescription* media_desc =
-      static_cast<const MediaContentDescription*> (
-          description->GetContentDescriptionByName(content_name));
-  if (!media_desc) {
-    return false;
-  }
+      static_cast<const MediaContentDescription*>(content->description);
   *cryptos = media_desc->cryptos();
   return true;
 }
@@ -379,9 +393,9 @@ static bool CryptoNotFound(const CryptoParams crypto,
   if (filter == NULL) {
     return true;
   }
-  for (CryptoParamsVec::const_iterator iter = filter->begin();
-       iter != filter->end(); ++iter) {
-    if (iter->cipher_suite == crypto.cipher_suite) {
+  for (CryptoParamsVec::const_iterator it = filter->begin();
+       it != filter->end(); ++it) {
+    if (it->cipher_suite == crypto.cipher_suite) {
       return false;
     }
   }
@@ -402,24 +416,40 @@ static void PruneCryptos(const CryptoParamsVec& filter,
                         target_cryptos->end());
 }
 
-// Updates the crypto parameters of the |description| according to the given
+// Checks each content to see if it has negotiated a secure transport.
+// If so, strips the now-redundant crypto params for that content.
+static void RemoveCryptoParamsIfSecureTransport(SessionDescription* sdesc) {
+  for (ContentInfos::iterator content = sdesc->contents().begin();
+       content != sdesc->contents().end(); ++content) {
+    const TransportDescription* tdesc =
+        sdesc->GetTransportDescriptionByName(content->name);
+    if (IsMediaContent(&*content) && tdesc && tdesc->identity_fingerprint) {
+      MediaContentDescription* mdesc =
+          static_cast<MediaContentDescription*>(content->description);
+      mdesc->set_cryptos(CryptoParamsVec());
+    }
+  }
+}
+
+// Updates the crypto parameters of the |sdesc| according to the given
 // |bundle_group|. The crypto parameters of all the contents within the
 // |bundle_group| should be updated to use the common subset of the
 // available cryptos.
 static bool UpdateCryptoParamsForBundle(const ContentGroup& bundle_group,
-                                        SessionDescription* description) {
-  const std::set<std::string> content_names = bundle_group.content_types();
-  if (content_names.empty()) {
+                                        SessionDescription* sdesc) {
+  // The bundle should not be empty.
+  if (!sdesc || !bundle_group.FirstContentName()) {
     return false;
   }
 
   // Get the common cryptos.
+  const ContentNames& content_names = bundle_group.content_names();
   CryptoParamsVec common_cryptos;
-  for (std::set<std::string>::const_iterator iter = content_names.begin();
-       iter != content_names.end(); ++iter) {
-    if (iter == content_names.begin()) {
+  for (ContentNames::const_iterator it = content_names.begin();
+       it != content_names.end(); ++it) {
+    if (it == content_names.begin()) {
       // Initial the common_cryptos with the first content in the bundle group.
-      if (!GetCryptosByName(description, *iter, &common_cryptos)) {
+      if (!GetCryptosByName(sdesc, *it, &common_cryptos)) {
         return false;
       }
       if (common_cryptos.empty()) {
@@ -428,7 +458,7 @@ static bool UpdateCryptoParamsForBundle(const ContentGroup& bundle_group,
       }
     } else {
       CryptoParamsVec cryptos;
-      if (!GetCryptosByName(description, *iter, &cryptos)) {
+      if (!GetCryptosByName(sdesc, *it, &cryptos)) {
         return false;
       }
       PruneCryptos(cryptos, &common_cryptos);
@@ -440,24 +470,26 @@ static bool UpdateCryptoParamsForBundle(const ContentGroup& bundle_group,
   }
 
   // Update to use the common cryptos.
-  for (std::set<std::string>::const_iterator iter = content_names.begin();
-       iter != content_names.end(); ++iter) {
-    MediaContentDescription* media_desc =
-        static_cast<MediaContentDescription*> (
-            description->GetContentDescriptionByName(*iter));
-    if (!media_desc) {
-      return false;
+  for (ContentNames::const_iterator it = content_names.begin();
+       it != content_names.end(); ++it) {
+    ContentInfo* content = sdesc->GetContentByName(*it);
+    if (IsMediaContent(content)) {
+      MediaContentDescription* media_desc =
+          static_cast<MediaContentDescription*>(content->description);
+      if (!media_desc) {
+        return false;
+      }
+      media_desc->set_cryptos(common_cryptos);
     }
-    media_desc->set_cryptos(common_cryptos);
   }
   return true;
 }
 
 template <class C>
 static bool ContainsRtxCodec(const std::vector<C>& codecs) {
-  typename std::vector<C>::const_iterator itr;
-  for (itr = codecs.begin(); itr != codecs.end(); ++itr) {
-    if (stricmp(itr->name.c_str(), kRtxCodecName) == 0) {
+  typename std::vector<C>::const_iterator it;
+  for (it = codecs.begin(); it != codecs.end(); ++it) {
+    if (stricmp(it->name.c_str(), kRtxCodecName) == 0) {
       return true;
     }
   }
@@ -631,15 +663,14 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const SessionDescription* current_description) const {
   scoped_ptr<SessionDescription> offer(new SessionDescription());
 
-  ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
 
+  // Handle m=audio.
   if (options.has_audio) {
     scoped_ptr<AudioContentDescription> audio(new AudioContentDescription());
     std::vector<std::string> crypto_suites;
     GetSupportedAudioCryptoSuites(&crypto_suites);
-
     if (!CreateMediaContentOffer(
             options,
             audio_codecs_,
@@ -651,23 +682,19 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
             audio.get())) {
       return NULL;
     }
+
     audio->set_lang(lang_);
     offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio.release());
-    bundle_group.AddContentName(CN_AUDIO);
-
     if (!AddTransportOffer(CN_AUDIO, current_description, offer.get())) {
-      LOG(LS_ERROR)
-          << "CreateOffer failed to AddTransportOffer, content name="
-          << CN_AUDIO;
       return NULL;
     }
   }
 
+  // Handle m=video.
   if (options.has_video) {
     scoped_ptr<VideoContentDescription> video(new VideoContentDescription());
     std::vector<std::string> crypto_suites;
     GetSupportedVideoCryptoSuites(&crypto_suites);
-
     if (!CreateMediaContentOffer(
             options,
             video_codecs_,
@@ -682,35 +709,16 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
 
     video->set_bandwidth(options.video_bandwidth);
     offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video.release());
-    bundle_group.AddContentName(CN_VIDEO);
-
     if (!AddTransportOffer(CN_VIDEO, current_description, offer.get())) {
-      LOG(LS_ERROR)
-          << "CreateOffer failed to AddTransportOffer, content name="
-          << CN_VIDEO;
       return NULL;
     }
   }
 
-  // Only update bundle info if there's at least one content in the
-  // |bundle_group|.
-  if (options.bundle_enabled && bundle_group.FirstContentName()) {
-    offer->AddGroup(bundle_group);
-    if (!UpdateTransportInfoForBundle(bundle_group, offer.get())) {
-      LOG(LS_ERROR) << "CreateOffer failed to UpdateTransportInfoForBundle.";
-      return NULL;
-    }
-    if (!UpdateCryptoParamsForBundle(bundle_group, offer.get())) {
-      LOG(LS_ERROR) << "CreateOffer failed to UpdateCryptoParamsForBundle.";
-      return NULL;
-    }
-  }
-
+  // Handle m=data.
   if (options.has_data) {
     scoped_ptr<DataContentDescription> data(new DataContentDescription());
     std::vector<std::string> crypto_suites;
     GetSupportedDataCryptoSuites(&crypto_suites);
-
     if (!CreateMediaContentOffer(
             options,
             data_codecs_,
@@ -725,6 +733,28 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
 
     data->set_bandwidth(options.data_bandwidth);
     offer->AddContent(CN_DATA, NS_JINGLE_RTP, data.release());
+    if (!AddTransportOffer(CN_DATA, current_description, offer.get())) {
+      return NULL;
+    }
+  }
+
+  // Bundle the contents together, if we've been asked to do so, and update any
+  // parameters that need to be tweaked for BUNDLE.
+  if (options.bundle_enabled) {
+    ContentGroup offer_bundle(GROUP_TYPE_BUNDLE);
+    for (ContentInfos::const_iterator content = offer->contents().begin();
+       content != offer->contents().end(); ++content) {
+      offer_bundle.AddContentName(content->name);
+    }
+    offer->AddGroup(offer_bundle);
+    if (!UpdateTransportInfoForBundle(offer_bundle, offer.get())) {
+      LOG(LS_ERROR) << "CreateOffer failed to UpdateTransportInfoForBundle.";
+      return NULL;
+    }
+    if (!UpdateCryptoParamsForBundle(offer_bundle, offer.get())) {
+      LOG(LS_ERROR) << "CreateOffer failed to UpdateCryptoParamsForBundle.";
+      return NULL;
+    }
   }
 
   return offer.release();
@@ -736,16 +766,12 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   // The answer contains the intersection of the codecs in the offer with the
   // codecs we support, ordered by our local preference. As indicated by
   // XEP-0167, we retain the same payload ids from the offer in the answer.
-  scoped_ptr<SessionDescription> accept(new SessionDescription());
-
-  const ContentGroup* received_bundle_group =
-      offer->GetGroupByName(GROUP_TYPE_BUNDLE);
-
-  ContentGroup bundle_group(GROUP_TYPE_BUNDLE);
+  scoped_ptr<SessionDescription> answer(new SessionDescription());
 
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
 
+  // Handle m=audio.
   const ContentInfo* audio_content = GetFirstAudioContent(offer);
   if (audio_content) {
     scoped_ptr<AudioContentDescription> audio_answer(
@@ -762,35 +788,25 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             audio_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    bool rejected = true;
-    if (options.has_audio) {
-      rejected = false;
-      // Add to group info if this content name is part of the BUNDLE.
-      if (received_bundle_group &&
-          received_bundle_group->HasContentName(audio_content->name))
-        bundle_group.AddContentName(audio_content->name);
 
+    bool rejected = !options.has_audio;
+    if (!rejected) {
       if (!AddTransportAnswer(audio_content->name, offer,
-                              current_description, accept.get())) {
-        LOG(LS_ERROR)
-            << "CreateAnswer failed to AddTransportAnswer, content name="
-            << audio_content->name;
+                              current_description, answer.get())) {
         return NULL;
       }
     } else {
       // RFC 3264
-      // The answer MUST contain exactly the same number of "m=" lines as the
-      // offer.
-      // So even if we want to reject a content type, we should still have an
-      // entry for it.
+      // The answer MUST contain the same number of m-lines as the offer.
       LOG(LS_INFO) << "Audio is not supported in the answer.";
     }
-    accept->AddContent(audio_content->name, audio_content->type, rejected,
+    answer->AddContent(audio_content->name, audio_content->type, rejected,
                        audio_answer.release());
   } else {
     LOG(LS_INFO) << "Audio is not available in the offer.";
   }
 
+  // Handle m=video.
   const ContentInfo* video_content = GetFirstVideoContent(offer);
   if (video_content) {
     scoped_ptr<VideoContentDescription> video_answer(
@@ -805,51 +821,27 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             &current_streams,
             add_legacy_,
             video_answer.get())) {
-      return NULL;  // Fails the session setup.
+      return NULL;
     }
-    bool rejected = true;
-    if (options.has_video) {
-      rejected = false;
-      if (received_bundle_group &&
-          received_bundle_group->HasContentName(video_content->name))
-        bundle_group.AddContentName(video_content->name);
-
+    bool rejected = !options.has_video;
+    if (!rejected) {
       if (!AddTransportAnswer(video_content->name, offer,
-                              current_description, accept.get())) {
-        LOG(LS_ERROR)
-            << "CreateAnswer failed to AddTransportAnswer, content name="
-            << video_content->name;
+                              current_description, answer.get())) {
         return NULL;
       }
       video_answer->set_bandwidth(options.video_bandwidth);
     } else {
       // RFC 3264
-      // The answer MUST contain exactly the same number of "m=" lines as the
-      // offer.
+      // The answer MUST contain the same number of m-lines as the offer.
       LOG(LS_INFO) << "Video is not supported in the answer.";
     }
-    accept->AddContent(video_content->name, video_content->type, rejected,
+    answer->AddContent(video_content->name, video_content->type, rejected,
                        video_answer.release());
   } else {
     LOG(LS_INFO) << "Video is not available in the offer.";
   }
 
-  // Only update bundle info if there's at least one content in the
-  // |bundle_group|.
-  if (options.bundle_enabled && offer->HasGroup(GROUP_TYPE_BUNDLE) &&
-      bundle_group.FirstContentName()) {
-    accept->AddGroup(bundle_group);
-    if (!UpdateTransportInfoForBundle(bundle_group, accept.get())) {
-      LOG(LS_ERROR) << "CreateAnswer failed to UpdateTransportInfoForBundle.";
-      return NULL;
-    }
-
-    if (!UpdateCryptoParamsForBundle(bundle_group, accept.get())) {
-      LOG(LS_ERROR) << "CreateAnswer failed to UpdateCryptoParamsForBundle.";
-      return NULL;
-    }
-  }
-
+  // Handle m=data.
   const ContentInfo* data_content = GetFirstDataContent(offer);
   if (data_content) {
     scoped_ptr<DataContentDescription> data_answer(
@@ -866,23 +858,56 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             data_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    bool rejected = true;
-    if (options.has_data) {
-      rejected = false;
+    bool rejected = !options.has_data;
+    if (!rejected) {
       data_answer->set_bandwidth(options.data_bandwidth);
+      if (!AddTransportAnswer(data_content->name, offer,
+                              current_description, answer.get())) {
+        return NULL;
+      }
     } else {
       // RFC 3264
-      // The answer MUST contain exactly the same number of "m=" lines as the
-      // offer.
+      // The answer MUST contain the same number of m-lines as the offer.
       LOG(LS_INFO) << "Data is not supported in the answer.";
     }
-    accept->AddContent(data_content->name, data_content->type, rejected,
+    answer->AddContent(data_content->name, data_content->type, rejected,
                        data_answer.release());
   } else {
     LOG(LS_INFO) << "Data is not available in the offer.";
   }
 
-  return accept.release();
+  // Strip SDES info for any contents that have negotiated secure transport.
+  RemoveCryptoParamsIfSecureTransport(answer.get());
+
+  // If the offer supports BUNDLE, and we want to use it too, create a BUNDLE
+  // group in the answer with the appropriate content names.
+  if (offer->HasGroup(GROUP_TYPE_BUNDLE) && options.bundle_enabled) {
+    const ContentGroup* offer_bundle = offer->GetGroupByName(GROUP_TYPE_BUNDLE);
+    ContentGroup answer_bundle(GROUP_TYPE_BUNDLE);
+    for (ContentInfos::const_iterator content = answer->contents().begin();
+       content != answer->contents().end(); ++content) {
+      if (!content->rejected && offer_bundle->HasContentName(content->name)) {
+        answer_bundle.AddContentName(content->name);
+      }
+    }
+    if (answer_bundle.FirstContentName()) {
+      answer->AddGroup(answer_bundle);
+
+      // Share the same ICE credentials and crypto params across all contents,
+      // as BUNDLE requires.
+      if (!UpdateTransportInfoForBundle(answer_bundle, answer.get())) {
+        LOG(LS_ERROR) << "CreateAnswer failed to UpdateTransportInfoForBundle.";
+        return NULL;
+      }
+
+      if (!UpdateCryptoParamsForBundle(answer_bundle, answer.get())) {
+        LOG(LS_ERROR) << "CreateAnswer failed to UpdateCryptoParamsForBundle.";
+        return NULL;
+      }
+    }
+  }
+
+  return answer.release();
 }
 
 // Gets the TransportInfo of the given |content_name| from the
@@ -905,14 +930,19 @@ bool MediaSessionDescriptionFactory::AddTransportOffer(
   const std::string& content_name,
   const SessionDescription* current_desc,
   SessionDescription* offer_desc) const {
-   if (!transport_desc_factory_)
+  if (!transport_desc_factory_)
      return false;
   const TransportDescription* current_tdesc =
       GetTransportDescription(content_name, current_desc);
   talk_base::scoped_ptr<TransportDescription> new_tdesc(
       transport_desc_factory_->CreateOffer(current_tdesc));
-  return (new_tdesc.get() != NULL &&
+  bool ret = (new_tdesc.get() != NULL &&
       offer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
+  if (!ret) {
+    LOG(LS_ERROR)
+        << "Failed to AddTransportOffer, content name=" << content_name;
+  }
+  return ret;
 }
 
 bool MediaSessionDescriptionFactory::AddTransportAnswer(
@@ -928,37 +958,32 @@ bool MediaSessionDescriptionFactory::AddTransportAnswer(
       GetTransportDescription(content_name, current_desc);
   talk_base::scoped_ptr<TransportDescription> new_tdesc(
       transport_desc_factory_->CreateAnswer(offer_tdesc, current_tdesc));
-  return (new_tdesc.get() != NULL &&
+  bool ret = (new_tdesc.get() != NULL &&
       answer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
-}
-
-static bool IsMediaContent(const ContentInfo* content, MediaType media_type) {
-  if (content == NULL || content->type != NS_JINGLE_RTP) {
-    return false;
+  if (!ret) {
+    LOG(LS_ERROR)
+        << "Failed to AddTransportAnswer, content name=" << content_name;
   }
-
-  const MediaContentDescription* media =
-      static_cast<const MediaContentDescription*>(content->description);
-  return media->type() == media_type;
+  return ret;
 }
 
 bool IsAudioContent(const ContentInfo* content) {
-  return IsMediaContent(content, MEDIA_TYPE_AUDIO);
+  return IsMediaContentOfType(content, MEDIA_TYPE_AUDIO);
 }
 
 bool IsVideoContent(const ContentInfo* content) {
-  return IsMediaContent(content, MEDIA_TYPE_VIDEO);
+  return IsMediaContentOfType(content, MEDIA_TYPE_VIDEO);
 }
 
 bool IsDataContent(const ContentInfo* content) {
-  return IsMediaContent(content, MEDIA_TYPE_DATA);
+  return IsMediaContentOfType(content, MEDIA_TYPE_DATA);
 }
 
 static const ContentInfo* GetFirstMediaContent(const ContentInfos& contents,
                                                MediaType media_type) {
   for (ContentInfos::const_iterator content = contents.begin();
        content != contents.end(); content++) {
-    if (IsMediaContent(&*content, media_type)) {
+    if (IsMediaContentOfType(&*content, media_type)) {
       return &*content;
     }
   }

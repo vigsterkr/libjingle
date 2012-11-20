@@ -45,7 +45,7 @@ using webrtc::VideoSourceInterface;
 namespace {
 
 // Max wait time for a test.
-const int kMaxWaitMs = 10;
+const int kMaxWaitMs = 100;
 
 }  // anonymous namespace
 

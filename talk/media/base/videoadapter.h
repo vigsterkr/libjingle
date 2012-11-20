@@ -23,7 +23,7 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef TALK_MEDIA_BASE_VIDEOADAPTER_H_
+#ifndef TALK_MEDIA_BASE_VIDEOADAPTER_H_  // NOLINT
 #define TALK_MEDIA_BASE_VIDEOADAPTER_H_
 
 #include "talk/base/criticalsection.h"
@@ -64,6 +64,7 @@ class VideoAdapter {
 
  protected:
   float FindClosestScale(int width, int height, int target_num_pixels);
+  float FindLowerScale(int width, int height, int target_num_pixels);
 
  private:
   bool StretchToOutputFrame(const VideoFrame* in_frame);
@@ -165,4 +166,4 @@ class CoordinatedVideoAdapter
 
 }  // namespace cricket
 
-#endif  // TALK_MEDIA_BASE_VIDEOADAPTER_H_
+#endif  // TALK_MEDIA_BASE_VIDEOADAPTER_H_  // NOLINT

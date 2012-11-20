@@ -29,8 +29,7 @@
 
 #include <limits>
 
-// TODO(juberti): Re-enable this once the OpenSSL build issues are fixed.
-//#include "talk/base/sslconfig.h"
+#include "talk/base/sslconfig.h"
 #if defined(SSL_USE_OPENSSL)
 #include <openssl/rand.h>
 #elif defined(SSL_USE_NSS_RNG)
@@ -155,35 +154,8 @@ class SecureRandomGenerator : public RandomGenerator {
 };
 
 #else
-// TODO(ronghuawu): Remove the old RNG.
-class SecureRandomGenerator : public RandomGenerator {
- public:
-  SecureRandomGenerator() : seed_(1) {
-  }
-  ~SecureRandomGenerator() {
-  }
-  virtual bool Init(const void* seed, size_t len) {
-    uint32 hash = 0;
-    for (size_t i = 0; i < len; ++i) {
-      hash = ((hash << 2) + hash) + static_cast<const char*>(seed)[i];
-    }
 
-    seed_ = Time() ^ hash;
-    return true;
-  }
-  virtual bool Generate(void* buf, size_t len) {
-    for (size_t i = 0; i < len; ++i) {
-      static_cast<uint8*>(buf)[i] = static_cast<uint8>(GetRandom());
-    }
-    return true;
-  }
-
- private:
-  int GetRandom() {
-    return ((seed_ = seed_ * 214013L + 2531011L) >> 16) & 0x7fff;
-  }
-  int seed_;
-};
+#error No SSL implementation has been selected!
 
 #endif  // WIN32
 #endif

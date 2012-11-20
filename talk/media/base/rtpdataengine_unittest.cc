@@ -190,6 +190,42 @@ TEST_F(RtpDataMediaChannelTest, SetUnknownCodecs) {
   EXPECT_FALSE(dmc->SetRecvCodecs(mixed_codecs));
 }
 
+TEST_F(RtpDataMediaChannelTest, AddRemoveSendStream) {
+  talk_base::scoped_ptr<cricket::RtpDataMediaChannel> dmc(CreateChannel());
+
+  cricket::SendDataParams params;
+  params.ssrc = 42;
+
+  cricket::StreamParams stream1;
+  stream1.add_ssrc(41);
+  EXPECT_TRUE(dmc->AddSendStream(stream1));
+  cricket::StreamParams stream2;
+  stream2.add_ssrc(42);
+  EXPECT_TRUE(dmc->AddSendStream(stream2));
+
+  EXPECT_TRUE(dmc->RemoveSendStream(41));
+  EXPECT_TRUE(dmc->RemoveSendStream(42));
+  EXPECT_FALSE(dmc->RemoveSendStream(43));
+}
+
+TEST_F(RtpDataMediaChannelTest, AddRemoveRecvStream) {
+  talk_base::scoped_ptr<cricket::RtpDataMediaChannel> dmc(CreateChannel());
+
+  cricket::SendDataParams params;
+  params.ssrc = 42;
+
+  cricket::StreamParams stream1;
+  stream1.add_ssrc(41);
+  EXPECT_TRUE(dmc->AddRecvStream(stream1));
+  cricket::StreamParams stream2;
+  stream2.add_ssrc(42);
+  EXPECT_TRUE(dmc->AddRecvStream(stream2));
+  EXPECT_FALSE(dmc->AddRecvStream(stream2));
+
+  EXPECT_TRUE(dmc->RemoveRecvStream(41));
+  EXPECT_TRUE(dmc->RemoveRecvStream(42));
+}
+
 TEST_F(RtpDataMediaChannelTest, SendData) {
   talk_base::scoped_ptr<cricket::RtpDataMediaChannel> dmc(CreateChannel());
 

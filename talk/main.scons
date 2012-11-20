@@ -473,10 +473,6 @@ def mac_common_include_x86_64(env):
       '-m64',
       '-fPIC',
     ],
-        '-isysroot',
-        '/Developer/SDKs/MacOSX' + ver + '.sdk'
-        '-isysroot',
-        '/Developer/SDKs/MacOSX' + ver + '.sdk'
     CPPDEFINES = [
       'ARCH_CPU_64_BITS',
       'CARBON_DEPRECATED',

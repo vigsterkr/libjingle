@@ -44,29 +44,30 @@ static const float kMediumProcessThreshold = 0.10f;
 
 // TODO(fbarchard): Consider making scale factor table settable, to allow
 // application to select quality vs performance tradeoff.
+// TODO(fbarchard): Add framerate scaling to tables for 1/2 framerate.
 // List of scale factors that adapter will scale by.
 #if defined(IOS) || defined(ANDROID)
-// Mobile needs 1/4 scale for VGA (640x360) to QQVGA (160x90)
-// or 1/4 scale for HVGA (480x270) to QQHVGA (120x67)
+// Mobile needs 1/4 scale for VGA (640 x 360) to QQVGA (160 x 90)
+// or 1/4 scale for HVGA (480 x 270) to QQHVGA (120 x 67)
 static const int kMinNumPixels = 120 * 67;
 static float kScaleFactors[] = {
-  1.f, // full size
-  3.f/4.f, // 3/4 scale
-  1.f/2.f, // 1/2 scale
-  3.f/8.f, // 3/8 scale
-  1.f/4.f, // 1/4 scale
+  1.f,  // full size
+  3.f / 4.f,  // 3/4 scale
+  1.f / 2.f,  // 1/2 scale
+  3.f / 8.f,  // 3/8 scale
+  1.f / 4.f,  // 1/4 scale
 };
 #else
-// PC needs 1/8 scale for HD (1280x720) to QQVGA (160x90)
+// PC needs 1/8 scale for HD (1280 x 720) to QQVGA (160 x 90)
 static const int kMinNumPixels = 160 * 100;
 static float kScaleFactors[] = {
-  1.f, // full size
-  3.f/4.f, // 3/4 scale
-  1.f/2.f, // 1/2 scale
-  3.f/8.f, // 3/8 scale
-  1.f/4.f, // 1/4 scale
-  3.f/16.f, // 3/16 scale
-  1.f/8.f // 1/8 scale
+  1.f,  // full size
+  3.f / 4.f,  // 3/4 scale
+  1.f / 2.f,  // 1/2 scale
+  3.f / 8.f,  // 3/8 scale
+  1.f / 4.f,  // 1/4 scale
+  3.f / 16.f,  // 3/16 scale
+  1.f / 8.f  // 1/8 scale
 };
 #endif
 
@@ -78,7 +79,7 @@ float VideoAdapter::FindClosestScale(int width, int height,
     return 0.f;
   }
   int best_distance = INT_MAX;
-  int best_index = 0;  // default to unscaled
+  int best_index = 0;  // Default to unscaled.
   for (size_t i = 0u; i < ARRAY_SIZE(kScaleFactors); ++i) {
     int test_num_pixels = static_cast<int>(width * kScaleFactors[i] *
                                            height * kScaleFactors[i]);
@@ -89,7 +90,32 @@ float VideoAdapter::FindClosestScale(int width, int height,
     if (diff < best_distance) {
       best_distance = diff;
       best_index = i;
-      if (!best_distance) { // Found exact match
+      if (!best_distance) {  // Found exact match
+        break;
+      }
+    }
+  }
+  return kScaleFactors[best_index];
+}
+
+
+// Find scale factor that applied to width and height, produces less than
+// num_pixels.
+float VideoAdapter::FindLowerScale(int width, int height,
+                                   int target_num_pixels) {
+  if (!target_num_pixels) {
+    return 0.f;
+  }
+  int best_distance = INT_MAX;
+  int best_index = 0;  // Default to unscaled.
+  for (size_t i = 0u; i < ARRAY_SIZE(kScaleFactors); ++i) {
+    int test_num_pixels = static_cast<int>(width * kScaleFactors[i] *
+                                           height * kScaleFactors[i]);
+    int diff = target_num_pixels - test_num_pixels;
+    if (diff >= 0 && diff < best_distance) {
+      best_distance = diff;
+      best_index = i;
+      if (!best_distance) {  // Found exact match.
         break;
       }
     }
@@ -445,13 +471,25 @@ bool CoordinatedVideoAdapter::IsMinimumFormat(int pixels) {
 
 // Called by all coordinators when there is a change.
 bool CoordinatedVideoAdapter::AdaptToMinimumFormat() {
+  VideoFormat new_output = output_format();
+  VideoFormat input = input_format();
+  if (input_format().IsSize0x0()) {
+    input = new_output;
+  }
   int old_num_pixels = GetOutputNumPixels();
-  // Get the min of the formats that the server, encoder, and cpu wants.
+  // Find resolution that respects ViewRequest or less pixels.
   int min_num_pixels = view_desired_num_pixels_;
+  if (!input.IsSize0x0()) {
+    float scale = FindLowerScale(input.width, input.height, min_num_pixels);
+    min_num_pixels =
+        static_cast<int>(input.width * input.height * scale * scale);
+  }
+  // Reduce resolution further, if necessary, based on encoder bandwidth (GD).
   if (encoder_desired_num_pixels_ &&
       (encoder_desired_num_pixels_ < min_num_pixels)) {
     min_num_pixels = encoder_desired_num_pixels_;
   }
+  // Reduce resolution further, if necessary, based on CPU.
   if (cpu_adaptation_ && cpu_desired_num_pixels_ &&
       (cpu_desired_num_pixels_ < min_num_pixels)) {
     min_num_pixels = cpu_desired_num_pixels_;
@@ -469,16 +507,9 @@ bool CoordinatedVideoAdapter::AdaptToMinimumFormat() {
   // and set that for output resolution.  This is not needed for VideoAdapter,
   // but provides feedback to unittests and users on expected resolution.
   // Actual resolution is based on input frame.
-  VideoFormat new_output = output_format();
-  VideoFormat input = input_format();
-  if (input_format().IsSize0x0()) {
-    input = new_output;
-  }
   float scale = 1.0f;
   if (!input.IsSize0x0()) {
-    scale = FindClosestScale(input.width,
-                             input.height,
-                             min_num_pixels);
+    scale = FindClosestScale(input.width, input.height, min_num_pixels);
   }
   new_output.width = static_cast<int>(input.width * scale);
   new_output.height = static_cast<int>(input.height * scale);

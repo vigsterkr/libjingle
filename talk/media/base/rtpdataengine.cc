@@ -189,11 +189,11 @@ bool RtpDataMediaChannel::AddSendStream(const StreamParams& stream) {
 
 bool RtpDataMediaChannel::RemoveSendStream(uint32 ssrc) {
   StreamParams found_stream;
-  if (GetStreamBySsrc(send_streams_, ssrc, &found_stream)) {
+  if (!GetStreamBySsrc(send_streams_, ssrc, &found_stream)) {
     return false;
   }
 
-  RemoveStreamBySsrc(&recv_streams_, ssrc);
+  RemoveStreamBySsrc(&send_streams_, ssrc);
   delete rtp_clock_by_send_ssrc_[ssrc];
   rtp_clock_by_send_ssrc_.erase(ssrc);
   return true;

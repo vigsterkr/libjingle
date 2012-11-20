@@ -37,7 +37,7 @@
 namespace cricket {
 
 static TransportProtocol kDefaultProtocol = ICEPROTO_GOOGLE;
-static const char* kDefaultDigestAlg = talk_base::DIGEST_SHA_256;
+static const char* kDefaultDigestAlg = talk_base::DIGEST_SHA_1;
 
 TransportDescriptionFactory::TransportDescriptionFactory()
     : protocol_(kDefaultProtocol),

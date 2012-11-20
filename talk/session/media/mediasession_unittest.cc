@@ -29,6 +29,8 @@
 #include <vector>
 
 #include "talk/base/gunit.h"
+#include "talk/base/fakesslidentity.h"
+#include "talk/base/messagedigest.h"
 #include "talk/media/base/codec.h"
 #include "talk/media/base/testutils.h"
 #include "talk/p2p/base/constants.h"
@@ -78,6 +80,7 @@ using cricket::NS_JINGLE_RTP;
 using cricket::MEDIA_TYPE_AUDIO;
 using cricket::MEDIA_TYPE_VIDEO;
 using cricket::MEDIA_TYPE_DATA;
+using cricket::SEC_DISABLED;
 using cricket::SEC_ENABLED;
 using cricket::CS_AES_CM_128_HMAC_SHA1_32;
 using cricket::CS_AES_CM_128_HMAC_SHA1_80;
@@ -147,13 +150,16 @@ static const char kDataTrack3[] = "data_3";
 
 class MediaSessionDescriptionFactoryTest : public testing::Test {
  public:
-  MediaSessionDescriptionFactoryTest() : f1_(&tdf1_), f2_(&tdf2_) {
+  MediaSessionDescriptionFactoryTest()
+      : f1_(&tdf1_), f2_(&tdf2_), id1_("id1"), id2_("id2") {
     f1_.set_audio_codecs(MAKE_VECTOR(kAudioCodecs1));
     f1_.set_video_codecs(MAKE_VECTOR(kVideoCodecs1));
     f1_.set_data_codecs(MAKE_VECTOR(kDataCodecs1));
     f2_.set_audio_codecs(MAKE_VECTOR(kAudioCodecs2));
     f2_.set_video_codecs(MAKE_VECTOR(kVideoCodecs2));
     f2_.set_data_codecs(MAKE_VECTOR(kDataCodecs2));
+    tdf1_.set_identity(&id1_);
+    tdf2_.set_identity(&id2_);
   }
 
 
@@ -245,6 +251,7 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
     MediaSessionOptions options;
     options.has_audio = true;
     options.has_video = true;
+    options.has_data = true;
     talk_base::scoped_ptr<SessionDescription> ref_desc;
     talk_base::scoped_ptr<SessionDescription> desc;
     if (offer) {
@@ -293,6 +300,8 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
   MediaSessionDescriptionFactory f2_;
   TransportDescriptionFactory tdf1_;
   TransportDescriptionFactory tdf2_;
+  talk_base::FakeSSLIdentity id1_;
+  talk_base::FakeSSLIdentity id2_;
 };
 
 // Create a typical audio offer, and ensure it matches what we expect.
@@ -998,18 +1007,20 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferAudioCurrent) {
   TestTransportInfo(true, options, true);
 }
 
-TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferAudioVideo) {
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferMultimedia) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   TestTransportInfo(true, options, false);
 }
 
 TEST_F(MediaSessionDescriptionFactoryTest,
-    TestTransportInfoOfferAudioVideoCurrent) {
+    TestTransportInfoOfferMultimediaCurrent) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   TestTransportInfo(true, options, true);
 }
 
@@ -1017,6 +1028,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferBundle) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   options.bundle_enabled = true;
   TestTransportInfo(true, options, false);
 }
@@ -1026,6 +1038,7 @@ TEST_F(MediaSessionDescriptionFactoryTest,
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   options.bundle_enabled = true;
   TestTransportInfo(true, options, true);
 }
@@ -1043,18 +1056,20 @@ TEST_F(MediaSessionDescriptionFactoryTest,
   TestTransportInfo(false, options, true);
 }
 
-TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerAudioVideo) {
+TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerMultimedia) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   TestTransportInfo(false, options, false);
 }
 
 TEST_F(MediaSessionDescriptionFactoryTest,
-    TestTransportInfoAnswerAudioVideoCurrent) {
+    TestTransportInfoAnswerMultimediaCurrent) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   TestTransportInfo(false, options, true);
 }
 
@@ -1062,6 +1077,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoAnswerBundle) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   options.bundle_enabled = true;
   TestTransportInfo(false, options, false);
 }
@@ -1071,10 +1087,10 @@ TEST_F(MediaSessionDescriptionFactoryTest,
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
+  options.has_data = true;
   options.bundle_enabled = true;
   TestTransportInfo(false, options, true);
 }
-
 
 // Create an offer with bundle enabled and verify the crypto parameters are
 // the common set of the available cryptos.
@@ -1086,4 +1102,82 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoWithOfferBundle) {
 // the common set of the available cryptos.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoWithAnswerBundle) {
   TestCryptoWithBundle(false);
+}
+
+// Test that we include both SDES and DTLS in the offer, but only include SDES
+// in the answer if DTLS isn't negotiated.
+TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoDtls) {
+  f1_.set_secure(SEC_ENABLED);
+  f2_.set_secure(SEC_ENABLED);
+  tdf1_.set_secure(SEC_ENABLED);
+  tdf2_.set_secure(SEC_DISABLED);
+  MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  talk_base::scoped_ptr<SessionDescription> offer, answer;
+  const cricket::MediaContentDescription* audio_media_desc;
+  const cricket::MediaContentDescription* video_media_desc;
+  const cricket::TransportDescription* audio_trans_desc;
+  const cricket::TransportDescription* video_trans_desc;
+
+  // Generate an offer with SDES and DTLS support.
+  offer.reset(f1_.CreateOffer(options, NULL));
+  ASSERT_TRUE(offer.get() != NULL);
+
+  audio_media_desc = static_cast<const cricket::MediaContentDescription*>(
+      offer->GetContentDescriptionByName("audio"));
+  ASSERT_TRUE(audio_media_desc != NULL);
+  video_media_desc = static_cast<const cricket::MediaContentDescription*> (
+      offer->GetContentDescriptionByName("video"));
+  ASSERT_TRUE(video_media_desc != NULL);
+  EXPECT_EQ(2u, audio_media_desc->cryptos().size());
+  EXPECT_EQ(1u, video_media_desc->cryptos().size());
+
+  audio_trans_desc = offer->GetTransportDescriptionByName("audio");
+  ASSERT_TRUE(audio_trans_desc != NULL);
+  video_trans_desc = offer->GetTransportDescriptionByName("video");
+  ASSERT_TRUE(video_trans_desc != NULL);
+  ASSERT_TRUE(audio_trans_desc->identity_fingerprint.get() != NULL);
+  ASSERT_TRUE(video_trans_desc->identity_fingerprint.get() != NULL);
+
+  // Generate an answer with only SDES support, since tdf2 has crypto disabled.
+  answer.reset(f2_.CreateAnswer(offer.get(), options, NULL));
+  ASSERT_TRUE(answer.get() != NULL);
+
+  audio_media_desc = static_cast<const cricket::MediaContentDescription*> (
+      answer->GetContentDescriptionByName("audio"));
+  ASSERT_TRUE(audio_media_desc != NULL);
+  video_media_desc = static_cast<const cricket::MediaContentDescription*> (
+      answer->GetContentDescriptionByName("video"));
+  ASSERT_TRUE(video_media_desc != NULL);
+  EXPECT_EQ(1u, audio_media_desc->cryptos().size());
+  EXPECT_EQ(1u, video_media_desc->cryptos().size());
+
+  audio_trans_desc = answer->GetTransportDescriptionByName("audio");
+  ASSERT_TRUE(audio_trans_desc != NULL);
+  video_trans_desc = answer->GetTransportDescriptionByName("video");
+  ASSERT_TRUE(video_trans_desc != NULL);
+  ASSERT_TRUE(audio_trans_desc->identity_fingerprint.get() == NULL);
+  ASSERT_TRUE(video_trans_desc->identity_fingerprint.get() == NULL);
+
+  // Enable DTLS; the answer should now only have DTLS support.
+  tdf2_.set_secure(SEC_ENABLED);
+  answer.reset(f2_.CreateAnswer(offer.get(), options, NULL));
+  ASSERT_TRUE(answer.get() != NULL);
+
+  audio_media_desc = static_cast<const cricket::MediaContentDescription*> (
+      answer->GetContentDescriptionByName("audio"));
+  ASSERT_TRUE(audio_media_desc != NULL);
+  video_media_desc = static_cast<const cricket::MediaContentDescription*> (
+      answer->GetContentDescriptionByName("video"));
+  ASSERT_TRUE(video_media_desc != NULL);
+  EXPECT_TRUE(audio_media_desc->cryptos().empty());
+  EXPECT_TRUE(video_media_desc->cryptos().empty());
+
+  audio_trans_desc = answer->GetTransportDescriptionByName("audio");
+  ASSERT_TRUE(audio_trans_desc != NULL);
+  video_trans_desc = answer->GetTransportDescriptionByName("video");
+  ASSERT_TRUE(video_trans_desc != NULL);
+  ASSERT_TRUE(audio_trans_desc->identity_fingerprint.get() != NULL);
+  ASSERT_TRUE(video_trans_desc->identity_fingerprint.get() != NULL);
 }

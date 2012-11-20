@@ -73,7 +73,7 @@ struct CandidateMsg : public talk_base::MessageData {
   explicit CandidateMsg(const webrtc::JsepIceCandidate* candidate)
       : candidate(candidate) {
   }
-  const webrtc::JsepIceCandidate* candidate;
+  talk_base::scoped_ptr<const webrtc::JsepIceCandidate> candidate;
 };
 
 struct CreateSessionDescriptionMsg : public talk_base::MessageData {
@@ -152,9 +152,13 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
     std::string address = tokens[1];
     int port = kDefaultPort;
     if (tokens.size() > kMinIceUriTokens) {
-      port = talk_base::FromString<int>(tokens[2]);
+      if (!talk_base::FromString(tokens[2], &port)) {
+        LOG(LS_WARNING)  << "Failed to parse port string: " << tokens[2];
+        continue;
+      }
+
       if (port <= 0 || port > 0xffff) {
-        LOG(WARNING) << "Invalid port: " << tokens[2];
+        LOG(WARNING) << "Invalid port: " << port;
         continue;
       }
     }
@@ -554,8 +558,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
     }
     case MSG_ICECANDIDATE: {
       CandidateMsg* data = static_cast<CandidateMsg*>(msg->pdata);
-      observer_->OnIceCandidate(data->candidate);
-      delete data->candidate;
+      observer_->OnIceCandidate(data->candidate.get());
       delete data;
       break;
     }

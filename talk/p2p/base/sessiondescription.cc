@@ -34,7 +34,7 @@ namespace cricket {
 ContentInfo* FindContentInfoByName(
     ContentInfos& contents, const std::string& name) {
   for (ContentInfos::iterator content = contents.begin();
-       content != contents.end(); content++) {
+       content != contents.end(); ++content) {
     if (content->name == name) {
       return &(*content);
     }
@@ -45,7 +45,7 @@ ContentInfo* FindContentInfoByName(
 const ContentInfo* FindContentInfoByName(
     const ContentInfos& contents, const std::string& name) {
   for (ContentInfos::const_iterator content = contents.begin();
-       content != contents.end(); content++) {
+       content != contents.end(); ++content) {
     if (content->name == name) {
       return &(*content);
     }
@@ -56,7 +56,7 @@ const ContentInfo* FindContentInfoByName(
 const ContentInfo* FindContentInfoByType(
     const ContentInfos& contents, const std::string& type) {
   for (ContentInfos::const_iterator content = contents.begin();
-       content != contents.end(); content++) {
+       content != contents.end(); ++content) {
     if (content->type == type) {
       return &(*content);
     }
@@ -64,28 +64,29 @@ const ContentInfo* FindContentInfoByType(
   return NULL;
 }
 
-void ContentGroup::AddContentName(const std::string& content_name) {
-  content_types_.insert(content_name);
-}
-
-bool ContentGroup::RemoveContentName(const std::string& content_name) {
-  bool ret = false;
-  std::set<std::string>::iterator iter;
-  iter = content_types_.find(content_name);
-  if (iter != content_types_.end()) {
-    content_types_.erase(iter);
-    ret = true;
-  }
-  return ret;
+const std::string* ContentGroup::FirstContentName() const {
+  return (!content_names_.empty()) ? &(*content_names_.begin()) : NULL;
 }
 
 bool ContentGroup::HasContentName(const std::string& content_name) const {
-  return (content_types_.find(content_name) != content_types_.end());
+  return (std::find(content_names_.begin(), content_names_.end(),
+                    content_name) != content_names_.end());
 }
 
-const std::string* ContentGroup::FirstContentName() const {
-  return (content_types_.begin() != content_types_.end()) ?
-      &(*content_types_.begin()) : NULL;
+void ContentGroup::AddContentName(const std::string& content_name) {
+  if (!HasContentName(content_name)) {
+    content_names_.push_back(content_name);
+  }
+}
+
+bool ContentGroup::RemoveContentName(const std::string& content_name) {
+  ContentNames::iterator iter = std::find(
+      content_names_.begin(), content_names_.end(), content_name);
+  if (iter == content_names_.end()) {
+    return false;
+  }
+  content_names_.erase(iter);
+  return true;
 }
 
 SessionDescription* SessionDescription::Copy() const {
@@ -100,6 +101,11 @@ SessionDescription* SessionDescription::Copy() const {
 
 const ContentInfo* SessionDescription::GetContentByName(
     const std::string& name) const {
+  return FindContentInfoByName(contents_, name);
+}
+
+ContentInfo* SessionDescription::GetContentByName(
+    const std::string& name)  {
   return FindContentInfoByName(contents_, name);
 }
 
