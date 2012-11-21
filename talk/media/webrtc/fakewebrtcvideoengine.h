@@ -355,8 +355,10 @@ class FakeWebRtcVideoEngine
     channels_[channel]->receive_ = false;
     return 0;
   }
+#ifndef USE_WEBRTC_DEV_BRANCH
   WEBRTC_STUB(RegisterObserver, (webrtc::ViEBaseObserver&));
   WEBRTC_STUB(DeregisterObserver, ());
+#endif
   WEBRTC_STUB(GetVersion, (char version[1024]));
   WEBRTC_STUB(LastError, ());
 

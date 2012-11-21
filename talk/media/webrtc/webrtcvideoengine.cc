@@ -1128,8 +1128,13 @@ void WebRtcVideoEngine::DecrementFrameListeners() {
   ASSERT(frame_listeners_ >= 0);
 }
 
+#ifdef USE_WEBRTC_DEV_BRANCH
+void WebRtcVideoEngine::Print(webrtc::TraceLevel level, const char* trace,
+                              int length) {
+#else
 void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
                               const char* trace, const int length) {
+#endif
   talk_base::LoggingSeverity sev = talk_base::LS_VERBOSE;
   if (level == webrtc::kTraceError || level == webrtc::kTraceCritical)
     sev = talk_base::LS_ERROR;
@@ -1492,6 +1497,7 @@ bool WebRtcVideoMediaChannel::RemoveSendStream(uint32 ssrc) {
   }
   // The receive channels depend on the default channel, recycle it instead.
   if (IsDefaultChannel(channel_id)) {
+    SetCapturer(GetDefaultChannelSsrc(), NULL);
     send_channel->ClearStreamParams();
   } else {
     return DeleteSendChannel(ssrc_key);

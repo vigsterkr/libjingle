@@ -116,8 +116,6 @@ class MediaStreamHandlerTest : public testing::Test {
 
   void RemoveLocalStream() {
     collection_->RemoveStream(stream_);
-    EXPECT_CALL(video_provider_, SetCaptureDevice(kVideoTrackLabel,
-                                                  NULL));
     handlers_.CommitLocalStreams(collection_);
   }
 

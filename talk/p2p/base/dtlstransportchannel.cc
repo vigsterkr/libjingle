@@ -147,9 +147,12 @@ bool DtlsTransportChannelWrapper::SetLocalIdentity(talk_base::SSLIdentity*
     return false;
   }
 
-  ASSERT(identity != NULL);
-  local_identity_ = identity;
-  dtls_state_ = STATE_OFFERED;
+  if (identity) {
+    local_identity_ = identity;
+    dtls_state_ = STATE_OFFERED;
+  } else {
+    LOG_J(LS_INFO, this) << "NULL DTLS identity supplied. Not doing DTLS";
+  }
 
   return true;
 }
@@ -234,7 +237,9 @@ bool DtlsTransportChannelWrapper::SetupDtls() {
 
 bool DtlsTransportChannelWrapper::SetSrtpCiphers(const std::vector<std::string>&
                                                  ciphers) {
-  if (dtls_state_ != STATE_OFFERED && dtls_state_ != STATE_ACCEPTED) {
+  // SRTP ciphers must be set before the DTLS handshake starts.
+  if (dtls_state_ != STATE_NONE && dtls_state_ != STATE_OFFERED) {
+    ASSERT(false);
     return false;
   }
 
@@ -464,7 +469,7 @@ bool DtlsTransportChannelWrapper::MaybeStartDtls() {
       dtls_state_ = STATE_CLOSED;
       return false;
     }
-    LOG_J(LS_INFO, this) 
+    LOG_J(LS_INFO, this)
       << "DtlsTransportChannelWrapper: Started DTLS handshake";
 
     dtls_state_ = STATE_STARTED;

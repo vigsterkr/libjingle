@@ -30,13 +30,21 @@
 
 // If no preference has been indicated, default to SChannel on Windows and
 // OpenSSL everywhere else, if it is available.
-#if !defined(SSL_USE_SCHANNEL) && !defined(SSL_USE_OPENSSL) && !defined(SSL_USE_NSS)
-#ifdef WIN32
+#if !defined(SSL_USE_SCHANNEL) && !defined(SSL_USE_OPENSSL) && \
+    !defined(SSL_USE_NSS)
+#if defined(WIN32)
+
 #define SSL_USE_SCHANNEL 1
-#else  // !WIN32
-#define SSL_USE_OPENSSL HAVE_OPENSSL_SSL_H
-#define SSL_USE_NSS HAVE_NSS_SSL_H
-#endif  // !WIN32
+
+#else  // defined(WIN32)
+
+#if defined(HAVE_OPENSSL_SSL_H)
+#define SSL_USE_OPENSSL 1
+#elif defined(HAVE_NSS_SSL_H)
+#define SSL_USE_NSS 1
+#endif
+
+#endif  // !defined(WIN32)
 #endif
 
 #endif  // TALK_BASE_SSLCONFIG_H_

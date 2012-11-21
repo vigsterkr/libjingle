@@ -73,8 +73,8 @@ class MediaStreamSignaling {
 
   // Returns a MediaSessionOptions struct with options decided by |hints| and
   // the local MediaStreams set by SetLocalStreams.
-  virtual cricket::MediaSessionOptions GetMediaSessionOptions(
-      const MediaHints& hints) const;
+  virtual const cricket::MediaSessionOptions& GetMediaSessionOptions(
+      const MediaHints& hints);
 
   // Updates or creates remote MediaStream objects given a
   // remote SessionDescription.
@@ -96,8 +96,10 @@ class MediaStreamSignaling {
   void UpdateRemoteStreamsList(
       const std::vector<cricket::StreamParams>& streams,
       StreamCollection* current_streams);
+  void UpdateSessionOptions();
 
   talk_base::Thread* signaling_thread_;
+  cricket::MediaSessionOptions options_;
   RemoteMediaStreamObserver* stream_observer_;
   talk_base::scoped_refptr<StreamCollectionInterface> local_streams_;
   talk_base::scoped_refptr<StreamCollectionInterface> remote_streams_;

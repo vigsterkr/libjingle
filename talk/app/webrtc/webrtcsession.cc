@@ -488,6 +488,9 @@ bool WebRtcSession::SetLocalDescription(Action action,
     set_initiator(true);
   }
 
+  // Update the MediaContentDescription crypto settings as per the policy set.
+  UpdateSessionDescriptionSecurePolicy(desc->description());
+
   set_local_description(desc->description()->Copy());
   local_desc_.reset(desc);
 
@@ -529,8 +532,6 @@ bool WebRtcSession::SetRemoteDescription(Action action,
                   << "Rejecting answer.";
     return false;
   }
-
-  HandleBackwardCompatibility(desc);
 
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !HasCrypto(desc->description())) {
@@ -580,14 +581,14 @@ bool WebRtcSession::UpdateSessionState(
     if (PushdownTransportDescription(source, cricket::CA_OFFER)) {
       SetState(source == cricket::CS_LOCAL ?
         STATE_SENTINITIATE : STATE_RECEIVEDINITIATE);
-      ret = true;
+      ret = (error() == cricket::BaseSession::ERROR_NONE);
     }
   } else if (action == kPrAnswer) {
     if (PushdownTransportDescription(source, cricket::CA_PRANSWER)) {
       EnableChannels();
       SetState(source == cricket::CS_LOCAL ?
           STATE_SENTPRACCEPT : STATE_RECEIVEDPRACCEPT);
-      ret = true;
+      ret = (error() == cricket::BaseSession::ERROR_NONE);
     }
   } else if (action == kAnswer) {
     // Remove channel and transport proxies, if MediaContentDescription is
@@ -600,7 +601,7 @@ bool WebRtcSession::UpdateSessionState(
       EnableChannels();
       SetState(source == cricket::CS_LOCAL ?
           STATE_SENTACCEPT : STATE_RECEIVEDACCEPT);
-      ret = true;
+      ret = (error() == cricket::BaseSession::ERROR_NONE);
     }
   }
   return ret;
@@ -679,7 +680,7 @@ bool WebRtcSession::SetCaptureDevice(const std::string& name,
   }
   uint32 ssrc = 0;
   if (!VERIFY(GetVideoSsrcByName(BaseSession::local_description(),
-                                 name, &ssrc) || camera == NULL)) {
+                                 name, &ssrc))) {
     LOG(LS_ERROR) << "Trying to set camera device on a unknown  SSRC.";
     return false;
   }
@@ -1040,40 +1041,24 @@ void WebRtcSession::CopySavedCandidates(
   saved_candidates_.clear();
 }
 
-void WebRtcSession::HandleBackwardCompatibility(
-    SessionDescriptionInterface* remote_desc) {
-  if (!remote_desc || !remote_desc->description() ||
-      remote_desc->session_version().empty()) {
+void WebRtcSession::UpdateSessionDescriptionSecurePolicy(
+    SessionDescription* sdesc) {
+  if (!sdesc) {
     return;
   }
 
-  // If the remote description has the init session version smaller than
-  // kInitSessionVersion, we consider it's a older client.
-  const uint64 remote_session_version =
-      talk_base::FromString<uint64>(remote_desc->session_version());
-  if (remote_session_version < kInitSessionVersion) {
-    older_version_remote_peer_ = true;
-  }
-  if (!older_version_remote_peer_) {
-    return;
-  }
-
-  // The RFC 5245 ICE is not supported before this version.
-  SessionDescription* desc = remote_desc->description();
-  const ContentInfos& contents = desc->contents();
-  // Update the TransportType of all the contents to NS_GINGLE_P2P, which means
-  // RFC 5245 ICE is not supported.
-  for (size_t i = 0; i < contents.size(); ++i) {
-    const TransportInfo* transport_info =
-        desc->GetTransportInfoByName(contents[i].name);
-    if (!transport_info) {
-      LOG(LS_WARNING) << "No transport info for content: " << contents[i].name;
-      continue;
+  // Updating the |crypto_required_| in MediaContentDescription to the
+  // appropriate state based on the current security policy.
+  for (cricket::ContentInfos::iterator iter = sdesc->contents().begin();
+       iter != sdesc->contents().end(); ++iter) {
+    if (cricket::IsMediaContent(&*iter)) {
+      MediaContentDescription* mdesc =
+          static_cast<MediaContentDescription*> (iter->description);
+      if (mdesc) {
+        mdesc->set_crypto_required(
+            session_desc_factory_.secure() == cricket::SEC_REQUIRED);
+      }
     }
-    TransportInfo new_transport_info = *transport_info;
-    desc->RemoveTransportInfoByName(contents[i].name);
-    new_transport_info.description.transport_type = cricket::NS_GINGLE_P2P;
-    desc->AddTransportInfo(new_transport_info);
   }
 }
 

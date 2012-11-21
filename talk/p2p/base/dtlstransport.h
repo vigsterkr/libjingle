@@ -29,6 +29,7 @@
 #define TALK_P2P_BASE_DTLSTRANSPORT_H_
 
 #include "talk/p2p/base/dtlstransportchannel.h"
+#include "talk/p2p/base/transport.h"
 
 namespace talk_base {
 class SSLIdentity;
@@ -50,24 +51,70 @@ class DtlsTransport : public Base {
       : Base(signaling_thread, worker_thread, content_name, allocator),
         identity_(identity) {
   }
+
   ~DtlsTransport() {
     Base::DestroyAllChannels();
   }
 
-  virtual DtlsTransportChannelWrapper* CreateTransportChannel(int component) {
-    DtlsTransportChannelWrapper* dtls_channel = new
-        DtlsTransportChannelWrapper(this,
-                                    Base::CreateTransportChannel(component));
-    // Push down the identity, if one exists, to the transport channel.
-    if (identity_) {
-      bool ret = dtls_channel->SetLocalIdentity(identity_);
-      if (!ret) {
-        DestroyTransportChannel(dtls_channel);
-        dtls_channel = NULL;
+  virtual bool ApplyLocalTransportDescription_w(TransportChannelImpl*
+                                                channel) {
+    talk_base::SSLFingerprint* local_fp =
+        Base::local_description()->identity_fingerprint.get();
+
+    if (local_fp) {
+      // Sanity check local fingerprint.
+      if (identity_) {
+        talk_base::scoped_ptr<talk_base::SSLFingerprint> local_fp_tmp(
+            talk_base::SSLFingerprint::Create(local_fp->algorithm,
+                                              identity_));
+        ASSERT(local_fp_tmp.get() != NULL);
+        if (!(*local_fp_tmp == *local_fp)) {
+          LOG(LS_WARNING) << "Local fingerprint does not match identity";
+          return false;
+        }
+      } else {
+        LOG(LS_WARNING)
+            << "Local fingerprint provided but no identity available";
+        return false;
       }
+    } else {
+      identity_ = NULL;
     }
-    return dtls_channel;
+
+    if (!channel->SetLocalIdentity(identity_))
+      return false;
+
+    // Apply the description in the base class.
+    return Base::ApplyLocalTransportDescription_w(channel);
   }
+
+  virtual bool NegotiateTransportDescription_w(ContentAction local_role) {
+    talk_base::SSLFingerprint* local_fp =
+        Base::local_description()->identity_fingerprint.get();
+    talk_base::SSLFingerprint* remote_fp =
+        Base::remote_description()->identity_fingerprint.get();
+
+    if (remote_fp && local_fp) {
+      remote_fingerprint_.reset(new talk_base::SSLFingerprint(*remote_fp));
+    } else if (local_fp && (local_role == CA_ANSWER)) {
+      LOG(LS_ERROR)
+          << "Local fingerprint supplied when caller didn't offer DTLS";
+      return false;
+    } else {
+      // We are not doing DTLS
+      remote_fingerprint_.reset(new talk_base::SSLFingerprint(
+          "", NULL, 0));
+    }
+
+    // Now run the negotiation for the base class.
+    return Base::NegotiateTransportDescription_w(local_role);
+  }
+
+  virtual DtlsTransportChannelWrapper* CreateTransportChannel(int component) {
+    return new DtlsTransportChannelWrapper(
+        this, Base::CreateTransportChannel(component));
+  }
+
   virtual void DestroyTransportChannel(TransportChannelImpl* channel) {
     // Kind of ugly, but this lets us do the exact inverse of the create.
     DtlsTransportChannelWrapper* dtls_channel =
@@ -78,7 +125,18 @@ class DtlsTransport : public Base {
   }
 
  private:
-  talk_base::SSLIdentity *identity_;
+  virtual void ApplyNegotiatedTransportDescription_w(
+      TransportChannelImpl* channel) {
+    channel->SetRemoteFingerprint(
+        remote_fingerprint_->algorithm,
+        reinterpret_cast<const uint8 *>(remote_fingerprint_->
+                                    digest.data()),
+        remote_fingerprint_->digest.length());
+    Base::ApplyNegotiatedTransportDescription_w(channel);
+  }
+
+  talk_base::SSLIdentity* identity_;
+  talk_base::scoped_ptr<talk_base::SSLFingerprint> remote_fingerprint_;
 };
 
 }  // namespace cricket

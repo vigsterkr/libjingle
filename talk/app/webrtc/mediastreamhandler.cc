@@ -107,11 +107,6 @@ LocalVideoTrackHandler::LocalVideoTrackHandler(
 }
 
 LocalVideoTrackHandler::~LocalVideoTrackHandler() {
-  // cricket::VideoCapturer is owned and deleted by
-  // the track. It must be removed from the media stream provider since it is
-  // possible that the tracks reference count is set to zero when
-  // local_video_track_ falls out of scope.
-  provider_->SetCaptureDevice(local_video_track_->label(), NULL);
 }
 
 void LocalVideoTrackHandler::OnStateChanged() {

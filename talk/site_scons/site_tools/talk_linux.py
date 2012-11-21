@@ -41,10 +41,13 @@ def _InternalBuildDebianPackage(env, debian_files, package_files,
   Return:
     A list of the targets (if any).
   """
-  if 0 != subprocess.call(['which', 'dpkg-buildpackage']):
-    print ('dpkg-buildpackage not installed on this system; '
-           'skipping DEB build stage')
-    return []
+  dpkg_buildpackage_cmd = os.environ.get('DPKG_BUILDPACKAGE')
+  if not dpkg_buildpackage_cmd:
+    if 0 != subprocess.call(['which', 'dpkg-buildpackage']):
+      print ('dpkg-buildpackage not installed on this system; '
+             'skipping DEB build stage')
+      return []
+    dpkg_buildpackage_cmd = 'dpkg-buildpackage'
   # Read the control file and changelog file to determine the package name,
   # version, and arch that the Debian build tools will use to name the
   # generated files.
@@ -119,16 +122,17 @@ def _InternalBuildDebianPackage(env, debian_files, package_files,
   # Must explicitly specify -D because -a disables it.
   # Must explicitly specify fakeroot because old dpkg tools don't assume that.
   env.Command(targets, None,
-      """dir=%(dir)s && \
-          cd $$dir && \
-          dpkg-buildpackage -b -uc -a%(arch)s -D -rfakeroot && \
-          cd $$OLDPWD && \
-          for file in %(targets)s; do \
-            mv $$dir/../$$file $$(dirname $TARGET) || exit 1; \
-          done""" %
-      {'dir':env.Dir(deb_build_tree).path,
-       'arch':arch,
-       'targets':' '.join(target_file_names)})
+              """dir=%(dir)s && \
+                  cd $$dir && \
+                  %(build_command)s -b -uc -a%(arch)s -D -rfakeroot && \
+                  cd $$OLDPWD && \
+                  for file in %(targets)s; do \
+                    mv $$dir/../$$file $$(dirname $TARGET) || exit 1; \
+                  done""" %
+              {'dir': env.Dir(deb_build_tree).path,
+               'build_command': dpkg_buildpackage_cmd,
+               'arch': arch,
+               'targets': ' '.join(target_file_names)})
   return targets
 
 
@@ -264,7 +268,7 @@ def GetPackageParams(env, packages):
       'libs': libs,
       'libdirs': libdirs,
       'link_flags': link_flags,
-      'dependent_target_settings' : {
+      'dependent_target_settings': {
           'libs': libs[:],
           'libdirs': libdirs[:],
           'link_flags': link_flags[:],
@@ -292,6 +296,17 @@ def EnableFeatureWherePackagePresent(env, bit, cpp_flag, package):
            'provides the \"%s.pc\" file.') % (package, bit, package)
 
 def GetGccVersion(env):
+  """Gets the gcc version of the target toolchain.
+
+  Args:
+    env: The current SCons environment.
+
+  Returns:
+    A tuple containing the gcc version (major, minor, rev), with empty values
+    if the host is not Linux.
+  """
+  if not env.Bit('host_linux'):
+    return (None, None, None)
   if env.Bit('cross_compile'):
     gcc_command = env['CXX']
   else:

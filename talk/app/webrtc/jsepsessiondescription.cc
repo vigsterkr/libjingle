@@ -93,6 +93,8 @@ bool JsepSessionDescription::Initialize(
     cricket::SessionDescription* description,
     const std::string& session_id,
     const std::string& session_version) {
+  if (!description)
+    return false;
 
   session_id_ = session_id;
   session_version_ = session_version;

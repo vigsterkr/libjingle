@@ -47,10 +47,6 @@ namespace cricket {
 
 using talk_base::scoped_ptr;
 
-static bool IsMediaContent(const ContentInfo* content) {
-  return (content && content->type == NS_JINGLE_RTP);
-}
-
 static bool IsMediaContentOfType(const ContentInfo* content,
                                  MediaType media_type) {
   if (!IsMediaContent(content)) {
@@ -965,6 +961,10 @@ bool MediaSessionDescriptionFactory::AddTransportAnswer(
         << "Failed to AddTransportAnswer, content name=" << content_name;
   }
   return ret;
+}
+
+bool IsMediaContent(const ContentInfo* content) {
+  return (content && content->type == NS_JINGLE_RTP);
 }
 
 bool IsAudioContent(const ContentInfo* content) {

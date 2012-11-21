@@ -1005,8 +1005,14 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
   return false;
 }
 
+#ifdef USE_WEBRTC_DEV_BRANCH
+void WebRtcVoiceEngine::Print(webrtc::TraceLevel level, const char* trace,
+                              int length) {
+#else
 void WebRtcVoiceEngine::Print(const webrtc::TraceLevel level,
                               const char* trace, const int length) {
+#endif
+
   talk_base::LoggingSeverity sev = talk_base::LS_VERBOSE;
   if (level == webrtc::kTraceError || level == webrtc::kTraceCritical)
     sev = talk_base::LS_ERROR;

@@ -1,6 +1,5 @@
 # -*- Python -*-
 #
-#
 # All the helper functions are defined in:
 #  - site_scons/talk.py
 # Use 'import talk' in any .scons file to get access to it.
@@ -16,7 +15,6 @@
 #
 #
 #
-
 import talk
 import os
 import platform
@@ -106,6 +104,9 @@ DeclareBit('have_dbus_glib',
 DeclareBit('have_libpulse',
            'Whether the build system has the libpulse package')
 
+
+root_env.Append(allow_set_but_unused_vars_flag = []);
+root_env.Append(allow_null_conversions_flag = []);
 
 # List all the locales we localize to.
 root_env.AppendUnique(locales = [
@@ -234,6 +235,12 @@ if win_env.Bit('test_signing'):
          '$GOOGLECLIENT/tools/test_key/testkey.pfx').abspath,
      CERTIFICATE_PASSWORD = 'test',
    )
+# timestamp.verisign.com, the default, is flaky, as we found in b/7522613
+# This value is used by signtool.exe, which is called by
+# software_construction_toolkit/files/site_scons/site_tools/code_signing.py
+# Other server options can be seen at
+# http://stackoverflow.com/questions/2872105/alternative-timestamping-services-for-authenticode
+win_env.Replace(TIMESTAMP_SERVER = 'http://timestamp.comodoca.com/authenticode')
 AddTargetGroup('signed_binaries', 'digitally signed binaries can be built')
 
 win_dbg_env = win_env.Clone(
@@ -349,6 +356,7 @@ posix_env.Append(
     'HASH_NAMESPACE=__gnu_cxx',
     'POSIX',
     'DISABLE_DYNAMIC_CAST',
+    'HAVE_OPENSSL_SSL_H=1',
     # The POSIX standard says we have to define this.
     '_REENTRANT',
   ],
@@ -375,14 +383,6 @@ posix_env.Append(
   ],
 )
 
-# Switch-hit between NSS and OpenSSL
-if 'NSS_BUILD_PLATFORM' in root_env['ENV']:
-   posix_env.AppendUnique(CPPDEFINES=['HAVE_NSS_SSL_H=1',
-                                      'NSS_SSL_RELATIVE_PATH'])
-else:
-   posix_env.AppendUnique(CPPDEFINES=['HAVE_OPENSSL_SSL_H=1'])
- 
-
 #-------------------------------------------------------------------------------
 # M A C OSX
 #
@@ -400,6 +400,7 @@ mac_env.SetBits('use_static_openssl')
 # For libjingle we don't specify a sysroot or minimum OS version.
 mac_osx_version_min_32 = ""
 mac_osx_version_min_64 = ""
+sdk_path = ""
 
 # Generic mac environment common to all targets
 mac_env.Append(
@@ -431,12 +432,6 @@ mac_env.Append(
     'QTKit',
   ]
 )
-
-if 'NSS_BUILD_PLATFORM' in root_env['ENV']:
-  mac_env.AppendUnique(LINKFLAGS = ['-Lthird_party/mozilla/dist/' + root_env['ENV']['NSS_BUILD_PLATFORM'] + '/lib'])
-else:
-  mac_env.AppendUnique(LINKFLAGS = ['-Lthird_party/openssl'])
-                       
 
 # add debug flags to environment
 def mac_debug_include(env):
@@ -489,7 +484,6 @@ def mac_common_include_x86_64(env):
 
 def mac_osx_version_min(env, ver):
   if ver != "":
-    sdk_path = '/Developer/SDKs/MacOSX%s.sdk' % ver
     env.Append(
       CCFLAGS = [
         '-mmacosx-version-min=' + ver,
@@ -585,6 +579,18 @@ linux_common_env.EnableFeatureWherePackagePresent('have_dbus_glib',
                                                   'HAVE_DBUS_GLIB',
                                                   'dbus-glib-1')
 
+# gcc 4.6.1 (and later -- 4.6.1 is in Ubuntu oneiric, and 4.6.3 is in
+# precise) -Wall implies -Wunused-but-set-variable and -Wnull-conversions,
+# but this breaks various files in third_party/. The flags are unknown
+# before 4.6; these variables provide a way for targets to conditionally
+# disable them.
+(major, minor, rev) = linux_common_env.GetGccVersion()
+if major > 4 or (major == 4 and minor >= 6):
+  linux_common_env.Append(allow_set_but_unused_vars_flag =
+                          ['-Wno-unused-but-set-variable'])
+  linux_common_env.Append(allow_null_conversions_flag =
+                          ['-Wno-conversion-null'])
+
 def linux_common_include_x86_32(env):
   """Include x86-32 settings into an env based on linux_common."""
   env.Append(
@@ -612,17 +618,16 @@ def linux_common_include_x86_64(env):
 #-------------------------------------------------------------------------------
 # L I N U X -- C R O S S -- B U I L D
 
+sysroot_arg = ' --sysroot=' + str(os.environ.get("SYSROOT"))
 # Cross build requires the following tool names be provided by the environment:
 linux_cross_common_env = linux_common_env.Clone(
   AR = os.environ.get("AR"),
   AS = os.environ.get("AS"),
-  LD = os.environ.get("LD"),
+  LD = str(os.environ.get("LD")) + sysroot_arg,
   NM = os.environ.get("NM"),
   RANLIB = os.environ.get("RANLIB"),
-  CC = str(os.environ.get("CC")) +
-    ' --sysroot=' + str(os.environ.get("SYSROOT")),
-  CXX = str(os.environ.get("CXX")) +
-    ' --sysroot=' + str(os.environ.get("SYSROOT")),
+  CC = str(os.environ.get("CC")) + sysroot_arg,
+  CXX = str(os.environ.get("CXX")) + sysroot_arg,
 )
 linux_cross_common_env.SetBits('cross_compile')
 

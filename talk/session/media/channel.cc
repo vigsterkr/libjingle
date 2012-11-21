@@ -402,7 +402,7 @@ BaseChannel::BaseChannel(talk_base::Thread* thread,
       remote_content_direction_(MD_INACTIVE),
       has_received_packet_(false),
       dtls_keyed_(false),
-      crypto_required_(false) {
+      secure_required_(false) {
   ASSERT(worker_thread_ == talk_base::Thread::Current());
   LOG(LS_INFO) << "Created channel for " << content_name;
 }
@@ -670,7 +670,7 @@ bool BaseChannel::SendPacket(bool rtcp, talk_base::Buffer* packet) {
 
     // Update the length of the packet now that we've added the auth tag.
     packet->SetLength(len);
-  } else if (crypto_required_) {
+  } else if (secure_required_) {
     // This is a double check for something that supposedly can't happen.
     LOG(LS_ERROR) <<
         "Trying to send insecure packet when crypto is required by policy";
@@ -747,7 +747,7 @@ void BaseChannel::HandlePacket(bool rtcp, talk_base::Buffer* packet) {
     }
 
     packet->SetLength(len);
-  } else if (crypto_required_) {
+  } else if (secure_required_) {
     // This is a double check for something that supposedly can't happen.
     LOG(LS_ERROR) <<
         "Trying to receive insecure packet when crypto is required by policy";
@@ -1219,8 +1219,8 @@ bool BaseChannel::UpdateRemoteStreams_w(
 
 bool BaseChannel::SetBaseLocalContent_w(const MediaContentDescription* content,
                                         ContentAction action) {
-  // Cache crypto_required_ for belt and suspenders check on SendPacket
-  crypto_required_ = content->crypto_required();
+  // Cache secure_required_ for belt and suspenders check on SendPacket
+  secure_required_ = content->crypto_required();
   bool ret = UpdateLocalStreams_w(content->streams(), action);
   // Set local SRTP parameters (what we will encrypt with).
   ret &= SetSrtp_w(content->cryptos(), action, CS_LOCAL);

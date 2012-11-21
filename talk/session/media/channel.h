@@ -92,12 +92,14 @@ class BaseChannel
   void set_optimistic_data_send(bool value) { optimistic_data_send_ = value; }
   bool optimistic_data_send() const { return optimistic_data_send_; }
 
-  // This function returns true iff we are using SRTP.
+  // This function returns true if we are using SRTP.
   bool secure() const { return srtp_filter_.IsActive(); }
   // The following function returns true if we are using
   // DTLS-based keying. If you turned off SRTP later, however
   // you could have secure() == false and dtls_secure() == true.
   bool secure_dtls() const { return dtls_keyed_; }
+  // This function returns true if we require secure channel for call setup.
+  bool secure_required() const { return secure_required_; }
 
   bool writable() const { return writable_; }
   bool IsStreamMuted(uint32 ssrc);
@@ -340,7 +342,7 @@ class BaseChannel
   std::set<uint32> muted_streams_;
   bool has_received_packet_;
   bool dtls_keyed_;
-  bool crypto_required_;
+  bool secure_required_;
 };
 
 // VoiceChannel is a specialization that adds support for early media, DTMF,

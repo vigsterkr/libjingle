@@ -270,6 +270,37 @@ class Transport : public talk_base::MessageHandler,
   // Informs the subclass that we received the signaling ready message.
   virtual void OnTransportSignalingReady() {}
 
+  // The current local transport description, for use by derived classes
+  // when performing transport description negotiation.
+  const TransportDescription* local_description() const {
+    return local_description_.get();
+  }
+
+  // The current remote transport description, for use by derived classes
+  // when performing transport description negotiation.
+  const TransportDescription* remote_description() const {
+    return remote_description_.get();
+  }
+
+  // Pushes down the transport parameters from the local description, such
+  // as the ICE ufrag and pwd.
+  // Derived classes can override, but must call the base as well.
+  virtual bool ApplyLocalTransportDescription_w(TransportChannelImpl*
+                                                channel);
+
+  // Negotiates the transport parameters based on the current local and remote
+  // transport description, such at the version of ICE to use, and whether DTLS
+  // should be activated.
+  // Derived classes can negotiate their specific parameters here, but must call
+  // the base as well.
+  virtual bool NegotiateTransportDescription_w(ContentAction local_role);
+
+  // Pushes down the transport parameters obtained via negotiation.
+  // Derived classes can set their specific parameters here, but must call the
+  // base as well.
+  virtual void ApplyNegotiatedTransportDescription_w(
+      TransportChannelImpl* channel);
+
  private:
   struct ChannelMapEntry {
     ChannelMapEntry() : impl_(NULL), candidates_allocated_(false), ref_(0) {}
@@ -354,11 +385,6 @@ class Transport : public talk_base::MessageHandler,
                                       ContentAction action);
   bool SetRemoteTransportDescription_w(const TransportDescription& desc,
                                        ContentAction action);
-  bool ApplyLocalTransportDescription_w(TransportChannelImpl* channel);
-  bool ApplyRemoteTransportDescription_w(TransportChannelImpl* channel);
-  bool NegotiateTransportDescription_w(const TransportDescription* offer,
-                                       const TransportDescription* answer);
-  bool SetTransportType_w();
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;

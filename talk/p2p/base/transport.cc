@@ -177,12 +177,9 @@ TransportChannelImpl* Transport::CreateChannel_w(int component) {
   impl->SetTiebreaker(tiebreaker_);
   if (local_description_) {
     ApplyLocalTransportDescription_w(impl);
-  }
-  if (remote_description_) {
-    ApplyRemoteTransportDescription_w(impl);
-  }
-  if (local_description_ && remote_description_) {
-    impl->SetIceProtocolType(protocol_);
+    if (remote_description_) {
+      ApplyNegotiatedTransportDescription_w(impl);
+    }
   }
 
   impl->SignalReadableState.connect(this, &Transport::OnChannelReadableState);
@@ -565,17 +562,17 @@ bool Transport::SetLocalTransportDescription_w(
   bool ret = true;
   talk_base::CritScope cs(&crit_);
   local_description_.reset(new TransportDescription(desc));
+
   for (ChannelMap::iterator iter = channels_.begin();
        iter != channels_.end(); ++iter) {
     ret &= ApplyLocalTransportDescription_w(iter->second.get());
   }
+  if (!ret)
+    return false;
+
   // If PRANSWER/ANSWER is set, we should decide transport protocol type.
   if (action == CA_PRANSWER || action == CA_ANSWER) {
-    ret = NegotiateTransportDescription_w(remote_description_.get(),
-                                          local_description_.get());
-    if (ret) {
-      SetTransportType_w();
-    }
+    ret &= NegotiateTransportDescription_w(action);
   }
   return ret;
 }
@@ -585,18 +582,12 @@ bool Transport::SetRemoteTransportDescription_w(
   bool ret = true;
   talk_base::CritScope cs(&crit_);
   remote_description_.reset(new TransportDescription(desc));
-  for (ChannelMap::iterator iter = channels_.begin();
-       iter != channels_.end(); ++iter) {
-    ret &= ApplyRemoteTransportDescription_w(iter->second.get());
-  }
+
   // If PRANSWER/ANSWER is set, we should decide transport protocol type.
   if (action == CA_PRANSWER || action == CA_ANSWER) {
-    ret = NegotiateTransportDescription_w(local_description_.get(),
-                                          remote_description_.get());
-    if (ret) {
-      SetTransportType_w();
-    }
+    ret = NegotiateTransportDescription_w(CA_OFFER);
   }
+
   return ret;
 }
 
@@ -606,24 +597,24 @@ bool Transport::ApplyLocalTransportDescription_w(TransportChannelImpl* ch) {
   return true;
 }
 
-bool Transport::ApplyRemoteTransportDescription_w(TransportChannelImpl* ch) {
-  bool ret;
-  talk_base::SSLFingerprint* fp =
-      remote_description_->identity_fingerprint.get();
-  if (fp) {
-    ret = ch->SetRemoteFingerprint(fp->algorithm,
-        reinterpret_cast<uint8*>(fp->digest.data()), fp->digest.length());
-  } else {
-    // Inform the channel that no fingerprint is coming.
-    ret = ch->SetRemoteFingerprint("", NULL, 0);
-  }
-  return ret;
+void Transport::ApplyNegotiatedTransportDescription_w(
+    TransportChannelImpl* channel) {
+  channel->SetIceProtocolType(protocol_);
 }
 
-bool Transport::NegotiateTransportDescription_w(
-    const TransportDescription* offer, const TransportDescription* answer) {
-  ASSERT(offer != NULL);
-  ASSERT(answer != NULL);
+bool Transport::NegotiateTransportDescription_w(ContentAction local_role_) {
+  // TODO(ekr@rtfm.com): This is ICE-specific stuff. Refactor into
+  // P2PTransport.
+  const TransportDescription* offer;
+  const TransportDescription* answer;
+
+  if (local_role_ == CA_OFFER) {
+    offer = local_description_.get();
+    answer = remote_description_.get();
+  } else {
+    offer = remote_description_.get();
+    answer = local_description_.get();
+  }
 
   TransportProtocol offer_proto = GetProtocolFromDescription(offer);
   TransportProtocol answer_proto = GetProtocolFromDescription(answer);
@@ -642,13 +633,16 @@ bool Transport::NegotiateTransportDescription_w(
     return false;
   }
   protocol_ = answer_proto == ICEPROTO_HYBRID ? ICEPROTO_GOOGLE : answer_proto;
-  return true;
-}
 
-bool Transport::SetTransportType_w() {
+  // Now that we have negotiated everything, push it downward.
+  // Note that we cache the result so that if we have race conditions
+  // between future SetRemote/SetLocal invocations and new channel
+  // creation, we have the negotiation state saved until a new
+  // negotiation happens.
   for (ChannelMap::iterator iter = channels_.begin();
-       iter != channels_.end(); ++iter) {
-    iter->second->SetIceProtocolType(protocol_);
+       iter != channels_.end();
+       ++iter) {
+    ApplyNegotiatedTransportDescription_w(iter->second.get());
   }
   return true;
 }

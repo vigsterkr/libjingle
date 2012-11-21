@@ -247,6 +247,18 @@ TEST_F(PortAllocatorTest, TestGetAllPorts) {
   EXPECT_TRUE(candidate_allocation_done_);
 }
 
+// Tests that we can get callback after StopGetAllPorts.
+TEST_F(PortAllocatorTest, TestStopGetAllPorts) {
+  AddInterface(kClientAddr);
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->GetInitialPorts();
+  session_->StartGetAllPorts();
+  ASSERT_EQ_WAIT(2U, candidates_.size(), 1000);
+  EXPECT_EQ(2U, ports_.size());
+  session_->StopGetAllPorts();
+  EXPECT_TRUE_WAIT(candidate_allocation_done_, 1000);
+}
+
 // Test that we restrict client ports appropriately when a port range is set.
 // We check the candidates for udp/stun/tcp ports, and the from address
 // for relay ports.

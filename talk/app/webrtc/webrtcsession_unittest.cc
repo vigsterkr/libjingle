@@ -169,12 +169,11 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
   // if |hints| request it to be true or if a track of the type have been added.
   // This is the same behavior as the real  MediaStreamSignaling
   // implementation.
-  virtual cricket::MediaSessionOptions GetMediaSessionOptions(
-        const MediaHints& hints) const {
-    cricket::MediaSessionOptions options = options_;
-    options.has_audio = options_.has_audio || hints.has_audio();
-    options.has_video = options_.has_video || hints.has_video();
-    return options;
+  virtual const cricket::MediaSessionOptions& GetMediaSessionOptions(
+        const MediaHints& hints) {
+    options_.has_audio |= hints.has_audio();
+    options_.has_video |= hints.has_video();
+    return options_;
   }
 
   void UseOptionsWithStream1(bool bundle = false) {
@@ -403,7 +402,6 @@ class WebRtcSessionTest : public testing::Test {
       ASSERT_EQ(std::string(talk_base::DIGEST_SHA_256), video->description.
                 identity_fingerprint->algorithm);
     }
-
   }
 
   void VerifyAnswerFromNonCryptoOffer() {
@@ -418,7 +416,7 @@ class WebRtcSessionTest : public testing::Test {
     const webrtc::SessionDescriptionInterface* answer =
         session_->CreateAnswer(MediaHints(), offer.get());
     // Answer should be NULL as no crypto params in offer.
-    ASSERT_TRUE(answer->description() == NULL);
+    ASSERT_TRUE(answer == NULL);
   }
 
   void VerifyAnswerFromCryptoOffer() {
@@ -1766,6 +1764,7 @@ TEST_F(WebRtcSessionTest, SendAndPlayDtmf) {
   TestSendDtmf(true);
 }
 
+// This test verifies the |initiator| flag when session initiates the call.
 TEST_F(WebRtcSessionTest, TestInitiatorFlagAsOriginator) {
   WebRtcSessionTest::Init();
   EXPECT_FALSE(session_->initiator());
@@ -1778,6 +1777,7 @@ TEST_F(WebRtcSessionTest, TestInitiatorFlagAsOriginator) {
   EXPECT_TRUE(session_->initiator());
 }
 
+// This test verifies the |initiator| flag when session receives the call.
 TEST_F(WebRtcSessionTest, TestInitiatorFlagAsReceiver) {
   WebRtcSessionTest::Init();
   EXPECT_FALSE(session_->initiator());
@@ -1790,30 +1790,8 @@ TEST_F(WebRtcSessionTest, TestInitiatorFlagAsReceiver) {
   EXPECT_FALSE(session_->initiator());
 }
 
-TEST_F(WebRtcSessionTest, TestHandleBackwardCompatibility) {
-  WebRtcSessionTest::Init();
-  session_->set_secure_policy(cricket::SEC_DISABLED);
-  cricket::MediaSessionOptions options;
-  options.has_video = true;
-  // Use "1" as the session version to indicate a older client.
-  JsepSessionDescription* offer =
-      CreateOfferSessionDescriptionWithVersion(options, "1");
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
-                                                               offer);
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer));
-  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
-  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
-  // The WebRtcSession has remember the fact that the remote client is a older
-  // version client. So even the follow up offer has a session version of "2",
-  // the WebRtcSession will still update the transport type to NS_GINGLE_P2P.
-  offer = CreateOfferSessionDescriptionWithVersion(options, "2");
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
-  VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
-}
-
+// This test verifies the ice protocol type at initiator of the call
+// if |a=ice-options:google-ice| is present in answer.
 TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options;
@@ -1837,6 +1815,8 @@ TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
 }
 
+// This test verifies the ice protocol type at initiator of the call
+// if ICE RFC5245 is supported in answer.
 TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
   WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options;
@@ -1851,6 +1831,8 @@ TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
   VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
 }
 
+// This test verifies the ice protocol type at receiver side of the call if
+// receiver decides to use google-ice.
 TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options;
@@ -1874,6 +1856,8 @@ TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
 }
 
+// This test verifies the ice protocol type at receiver side of the call if
+// receiver decides to use ice RFC 5245.
 TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
   WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options;
@@ -1889,6 +1873,8 @@ TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
   VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
 }
 
+// This test verifies the session state when ICE RFC5245 in offer and
+// ICE google-ice in answer.
 TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
   WebRtcSessionTest::Init();
   cricket::MediaSessionOptions options;
@@ -2015,3 +2001,44 @@ TEST_F(WebRtcSessionTest, TestIceStartAfterSetLocalDescriptionOnly) {
   EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
 }
 
+// This test verifies that crypto parameter is updated in local session
+// description as per security policy set in MediaSessionDescriptionFactory.
+TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescription) {
+  WebRtcSessionTest::Init();
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(MediaHints()));
+
+  // Making sure SetLocalDescription correctly sets crypto value in
+  // SessionDescription object after de-serialization of sdp string. The value
+  // will be set as per MediaSessionDescriptionFactory.
+  std::string offer_str;
+  offer->ToString(&offer_str);
+  JsepSessionDescription *jsep_offer_str =
+      new JsepSessionDescription(JsepSessionDescription::kOffer);
+  EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                            jsep_offer_str));
+  EXPECT_TRUE(session_->voice_channel()->secure_required());
+  EXPECT_TRUE(session_->video_channel()->secure_required());
+}
+
+// This test verifies the crypto parameter when security is disabled.
+TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescriptionWithDisabled) {
+  WebRtcSessionTest::Init();
+  session_->set_secure_policy(cricket::SEC_DISABLED);
+  talk_base::scoped_ptr<SessionDescriptionInterface> offer(
+      session_->CreateOffer(MediaHints()));
+
+  // Making sure SetLocalDescription correctly sets crypto value in
+  // SessionDescription object after de-serialization of sdp string. The value
+  // will be set as per MediaSessionDescriptionFactory.
+  std::string offer_str;
+  offer->ToString(&offer_str);
+  JsepSessionDescription *jsep_offer_str =
+      new JsepSessionDescription(JsepSessionDescription::kOffer);
+  EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
+  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
+                                            jsep_offer_str));
+  EXPECT_FALSE(session_->voice_channel()->secure_required());
+  EXPECT_FALSE(session_->video_channel()->secure_required());
+}

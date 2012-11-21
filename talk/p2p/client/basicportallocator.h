@@ -161,7 +161,7 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
 
  private:
   void OnConfigReady(PortConfiguration* config);
-  void OnConfigTimeout();
+  void OnConfigStop();
   void AllocatePorts();
   void OnAllocate();
   void DoAllocate();

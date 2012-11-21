@@ -43,6 +43,8 @@ MediaStreamSignaling::MediaStreamSignaling(
     : signaling_thread_(signaling_thread),
       stream_observer_(stream_observer),
       remote_streams_(StreamCollection::Create()) {
+  options_.has_video = false;
+  options_.has_audio = false;
 }
 
 MediaStreamSignaling::~MediaStreamSignaling() {
@@ -53,43 +55,18 @@ void MediaStreamSignaling::SetLocalStreams(
   local_streams_ = local_streams;
 }
 
-cricket::MediaSessionOptions
-MediaStreamSignaling::GetMediaSessionOptions(const MediaHints& hints) const {
-  cricket::MediaSessionOptions options;
-  options.has_video = hints.has_video();
-  options.has_audio = hints.has_audio();
-  // Enable BUNDLE feature by default.
-  options.bundle_enabled = true;
-  if (local_streams_ == NULL)
-    return options;
-
-  for (size_t i = 0; i < local_streams_->count(); ++i) {
-    MediaStreamInterface* stream = local_streams_->at(i);
-
-    scoped_refptr<AudioTracks> audio_tracks(stream->audio_tracks());
-    if (audio_tracks->count() > 0) {
-      options.has_audio = true;
-    }
-
-    // For each audio track in the stream, add it to the MediaSessionOptions.
-    for (size_t j = 0; j < audio_tracks->count(); ++j) {
-      scoped_refptr<MediaStreamTrackInterface> track(audio_tracks->at(j));
-      options.AddStream(cricket::MEDIA_TYPE_AUDIO, track->label(),
-                        stream->label());
-    }
-
-    scoped_refptr<VideoTracks> video_tracks(stream->video_tracks());
-    if (video_tracks->count() > 0) {
-      options.has_video = true;
-    }
-    // For each video track in the stream, add it to the MediaSessionOptions.
-    for (size_t j = 0; j <  video_tracks->count(); ++j) {
-      scoped_refptr<MediaStreamTrackInterface> track(video_tracks->at(j));
-      options.AddStream(cricket::MEDIA_TYPE_VIDEO, track->label(),
-                        stream->label());
-    }
-  }
-  return options;
+const cricket::MediaSessionOptions&
+MediaStreamSignaling::GetMediaSessionOptions(const MediaHints& hints) {
+  UpdateSessionOptions();
+  // has_video and has_audio can only change from false to true,
+  // but never change from true to false. This is to make sure CreateOffer and
+  // CreateAnswer dont't remove a media content description that has been
+  // created.
+  options_.has_video |= hints.has_video();
+  options_.has_audio |= hints.has_audio();
+  // Enable BUNDLE feature by default if at least one media content is present.
+  options_.bundle_enabled = options_.has_audio || options_.has_video;
+  return options_;
 }
 
 // Updates or Creates remote MediaStream objects given a
@@ -155,6 +132,39 @@ void MediaStreamSignaling::UpdateRemoteStreams(
   }
   // Prepare for next offer.
   remote_streams_ = current_streams;
+}
+
+void MediaStreamSignaling::UpdateSessionOptions() {
+  options_.streams.clear();
+  if (local_streams_ == NULL)
+    return;
+
+  for (size_t i = 0; i < local_streams_->count(); ++i) {
+    MediaStreamInterface* stream = local_streams_->at(i);
+
+    scoped_refptr<AudioTracks> audio_tracks(stream->audio_tracks());
+    if (audio_tracks->count() > 0) {
+      options_.has_audio = true;
+    }
+
+    // For each audio track in the stream, add it to the MediaSessionOptions.
+    for (size_t j = 0; j < audio_tracks->count(); ++j) {
+      scoped_refptr<MediaStreamTrackInterface> track(audio_tracks->at(j));
+      options_.AddStream(cricket::MEDIA_TYPE_AUDIO, track->label(),
+                         stream->label());
+    }
+
+    scoped_refptr<VideoTracks> video_tracks(stream->video_tracks());
+    if (video_tracks->count() > 0) {
+      options_.has_video = true;
+    }
+    // For each video track in the stream, add it to the MediaSessionOptions.
+    for (size_t j = 0; j < video_tracks->count(); ++j) {
+      scoped_refptr<MediaStreamTrackInterface> track(video_tracks->at(j));
+      options_.AddStream(cricket::MEDIA_TYPE_VIDEO, track->label(),
+                         stream->label());
+    }
+  }
 }
 
 template <typename TrackInterface, typename Track, typename TrackProxy>
