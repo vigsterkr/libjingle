@@ -45,7 +45,7 @@ static const int kMaxLogLineSize = 1024 - 60;
 
 #include <time.h>
 
-#include <iostream>
+#include <ostream>
 #include <iomanip>
 #include <limits.h>
 #include <vector>
@@ -457,8 +457,8 @@ void LogMessage::OutputToDebug(const std::string& str,
     case LS_SENSITIVE:
       __android_log_write(ANDROID_LOG_INFO, kLibjingle, "SENSITIVE");
       if (log_to_stderr) {
-        std::cerr << "SENSITIVE";
-        std::cerr.flush();
+        fprintf(stderr, "SENSITIVE");
+        fflush(stderr);
       }
       return;
     case LS_VERBOSE:
@@ -498,8 +498,8 @@ void LogMessage::OutputToDebug(const std::string& str,
   }
 #endif  // ANDROID
   if (log_to_stderr) {
-    std::cerr << str;
-    std::cerr.flush();
+    fprintf(stderr, "%s", str.c_str());
+    fflush(stderr);
   }
 }
 
