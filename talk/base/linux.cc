@@ -226,7 +226,7 @@ bool ConfigParser::ParseLine(std::string* key, std::string* value) {
   // Parses the next line in the filestream and places the found key-value
   // pair into key and val.
   std::string line;
-  if ((instream_->ReadLine(&line)) == EOF) {
+  if ((instream_->ReadLine(&line)) == SR_EOS) {
     return false;
   }
   std::vector<std::string> tokens;
