@@ -244,10 +244,7 @@ int SystemInfo::GetCurCpus() {
     // they are unintuitive and won't make a difference on a single dword.
     process_mask &= (process_mask - 1);
   }
-#elif defined(OSX)
-  // Find number of _available_ cores
-  cur_cpus = MPProcessorsScheduled();
-#elif defined(IOS)
+#elif defined(OSX) || defined(IOS)
   uint32_t sysctl_value;
   size_t length = sizeof(sysctl_value);
   int error = sysctlbyname("hw.ncpu", &sysctl_value, &length, NULL, 0);

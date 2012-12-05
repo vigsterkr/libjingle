@@ -381,6 +381,8 @@ class VoiceChannel : public BaseChannel {
   // 0 to 15 which corresponding to DTMF event 0-9, *, #, A-D.
   bool InsertDtmf(uint32 ssrc, int event_code, int duration, int flags);
   bool SetOutputScaling(uint32 ssrc, double left, double right);
+  // Get statistics about the current media session.
+  bool GetStats(VoiceMediaInfo* stats);
 
   // Monitoring functions
   sigslot::signal2<VoiceChannel*, const std::vector<ConnectionInfo>&>
@@ -428,6 +430,7 @@ class VoiceChannel : public BaseChannel {
   bool CanInsertDtmf_w();
   bool InsertDtmf_w(uint32 ssrc, int event, int duration, int flags);
   bool SetOutputScaling_w(uint32 ssrc, double left, double right);
+  bool GetStats_w(VoiceMediaInfo* stats);
 
   virtual void OnMessage(talk_base::Message* pmsg);
   virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const;

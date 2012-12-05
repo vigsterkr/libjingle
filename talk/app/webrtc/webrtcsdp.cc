@@ -1483,7 +1483,7 @@ bool ParseMediaDescription(const std::string& message,
       media_desc->SortCodecs();
     } else if (HasAttribute(line, kMediaTypeData)) {
       DataContentDescription* media_desc = new DataContentDescription();
-      content.reset(new DataContentDescription());
+      content.reset(media_desc);
       // Default content name.
       content_name = cricket::CN_DATA;
       if (!ParseContent(message, cricket::MEDIA_TYPE_DATA, mline_index,

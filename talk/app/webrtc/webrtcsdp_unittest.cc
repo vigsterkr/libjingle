@@ -240,7 +240,7 @@ static const char kSdpDataChannelString[] =
     "a=ssrc:10 cname:data_channel_cname\r\n"
     "a=ssrc:10 msid:data_channel d0\r\n"
     "a=ssrc:10 mslabel:data_channel\r\n"
-    "a=ssrc:10 label:data_channel\r\n";
+    "a=ssrc:10 label:data_channeld0\r\n";
 
 // One candidate reference string.
 static const char kSdpOneCandidate[] =
@@ -287,6 +287,7 @@ static const uint32 kVideoTrack4Ssrc = 6;
 
 // DataChannel
 static const char kDataChannelLabel[] = "data_channel";
+static const char kDataChannelMsid[] = "data_channeld0";
 static const char kDataChannelCname[] = "data_channel_cname";
 static const uint32 kDataChannelSsrc = 10;
 
@@ -379,8 +380,8 @@ class WebRtcSdpTest : public testing::Test {
     audio->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_32",
         "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32",
         "dummy_session_params"));
-    audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 1, 0));
-    audio->AddCodec(AudioCodec(104, "CELT", 32000, 0, 2, 0));
+    audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 1, 2));
+    audio->AddCodec(AudioCodec(104, "CELT", 32000, 0, 2, 1));
     desc_.AddContent(kAudioContentName, NS_JINGLE_RTP,
                      audio.release());
 
@@ -562,96 +563,93 @@ class WebRtcSdpTest : public testing::Test {
     }
   }
 
-  bool CompareSessionDescription(const SessionDescription& desc1,
-                                 const SessionDescription& desc2) {
-    const ContentInfo* ac1 = GetFirstAudioContent(&desc1);
-    const AudioContentDescription* acd1 =
-        static_cast<const AudioContentDescription*>(ac1->description);
-    const ContentInfo* vc1 = GetFirstVideoContent(&desc1);
-    const VideoContentDescription* vcd1 =
-        static_cast<const VideoContentDescription*>(vc1->description);
-
-    const ContentInfo* ac2 = GetFirstAudioContent(&desc2);
-    const AudioContentDescription* acd2 =
-        static_cast<const AudioContentDescription*>(ac2->description);
-    const ContentInfo* vc2 = GetFirstVideoContent(&desc2);
-    const VideoContentDescription* vcd2 =
-        static_cast<const VideoContentDescription*>(vc2->description);
-
-    // content name
-    EXPECT_EQ(ac1->name, ac2->name);
-    EXPECT_EQ(vc1->name, vc2->name);
-
+  template <class MCD>
+  void CompareMediaContentDescription(const MCD* cd1,
+                                      const MCD* cd2) {
     // type
-    EXPECT_EQ(ac1->type, ac2->type);
-    EXPECT_EQ(vc1->type, vc2->type);
+    EXPECT_EQ(cd1->type(), cd1->type());
 
     // content direction
-    EXPECT_EQ(acd1->direction(), acd2->direction());
-    EXPECT_EQ(vcd1->direction(), vcd2->direction());
-
-    // rejected
-    EXPECT_EQ(ac1->rejected, ac2->rejected);
-    EXPECT_EQ(vc1->rejected, vc2->rejected);
+    EXPECT_EQ(cd1->direction(), cd2->direction());
 
     // rtcp_mux
-    EXPECT_EQ(acd1->rtcp_mux(), acd2->rtcp_mux());
-    EXPECT_EQ(vcd1->rtcp_mux(), vcd2->rtcp_mux());
+    EXPECT_EQ(cd1->rtcp_mux(), cd2->rtcp_mux());
 
     // cryptos
-    EXPECT_EQ(acd1->cryptos().size(), acd2->cryptos().size());
-    EXPECT_EQ(vcd1->cryptos().size(), vcd2->cryptos().size());
-    if (acd1->cryptos().size() != acd2->cryptos().size() ||
-        vcd1->cryptos().size() != vcd2->cryptos().size()) {
-      return false;
+    EXPECT_EQ(cd1->cryptos().size(), cd2->cryptos().size());
+    if (cd1->cryptos().size() != cd2->cryptos().size()) {
+      ADD_FAILURE();
+      return;
     }
-    for (size_t i = 0; i< acd1->cryptos().size(); ++i) {
-      const CryptoParams c1 = acd1->cryptos().at(i);
-      const CryptoParams c2 = acd2->cryptos().at(i);
-      EXPECT_TRUE(c1.Matches(c2));
-    }
-    for (size_t i = 0; i< vcd1->cryptos().size(); ++i) {
-      const CryptoParams c1 = vcd1->cryptos().at(i);
-      const CryptoParams c2 = vcd2->cryptos().at(i);
+    for (size_t i = 0; i< cd1->cryptos().size(); ++i) {
+      const CryptoParams c1 = cd1->cryptos().at(i);
+      const CryptoParams c2 = cd2->cryptos().at(i);
       EXPECT_TRUE(c1.Matches(c2));
     }
 
     // codecs
-    EXPECT_EQ(acd1->codecs().size(), acd2->codecs().size());
-    if (acd1->codecs().size() != acd2->codecs().size())
-      return false;
-    EXPECT_EQ(vcd1->codecs().size(), vcd2->codecs().size());
-    if (vcd1->codecs().size() != vcd2->codecs().size())
-      return false;
-    for (size_t i = 0; i< acd1->codecs().size(); ++i) {
-      const AudioCodec c1 = acd1->codecs().at(i);
-      const AudioCodec c2 = acd2->codecs().at(i);
-      EXPECT_TRUE(c2.Matches(c1));
-    }
-    for (size_t i = 0; i< vcd1->codecs().size(); ++i) {
-      const VideoCodec c1 = vcd1->codecs().at(i);
-      const VideoCodec c2 = vcd2->codecs().at(i);
-      EXPECT_TRUE(c1.Matches(c2));
-      EXPECT_EQ(c1.id, c2.id);
-      EXPECT_EQ(c1.width, c2.width);
-      EXPECT_EQ(c1.height, c2.height);
-      EXPECT_EQ(c1.framerate, c2.framerate);
-    }
+    EXPECT_EQ(cd1->codecs(), cd2->codecs());
 
     // bandwidth
-    EXPECT_EQ(acd1->bandwidth(), acd2->bandwidth());
-    EXPECT_EQ(vcd1->bandwidth(), vcd2->bandwidth());
+    EXPECT_EQ(cd1->bandwidth(), cd2->bandwidth());
+
 
     // streams
-    EXPECT_EQ(acd1->streams(), acd2->streams());
-    EXPECT_EQ(vcd1->streams(), vcd2->streams());
+    EXPECT_EQ(cd1->streams(), cd2->streams());
+  }
+
+
+  void CompareSessionDescription(const SessionDescription& desc1,
+                                 const SessionDescription& desc2) {
+    // Compare content descriptions.
+    if (desc1.contents().size() != desc2.contents().size()) {
+      ADD_FAILURE();
+      return;
+    }
+    for (size_t i = 0 ; i < desc1.contents().size(); ++i) {
+      const cricket::ContentInfo& c1 = desc1.contents().at(i);
+      const cricket::ContentInfo& c2 = desc2.contents().at(i);
+      // content name
+      EXPECT_EQ(c1.name, c2.name);
+      // content type
+      // Note, ASSERT will return from the function, but will not stop the test.
+      ASSERT_EQ(c1.type, c2.type);
+
+      ASSERT_EQ(IsAudioContent(&c1), IsAudioContent(&c2));
+      if (IsAudioContent(&c1)) {
+        const AudioContentDescription* acd1 =
+            static_cast<const AudioContentDescription*>(c1.description);
+        const AudioContentDescription* acd2 =
+            static_cast<const AudioContentDescription*>(c2.description);
+        CompareMediaContentDescription<AudioContentDescription>(acd1, acd2);
+      }
+
+      ASSERT_EQ(IsVideoContent(&c1), IsVideoContent(&c2));
+      if (IsVideoContent(&c1)) {
+        const VideoContentDescription* vcd1 =
+            static_cast<const VideoContentDescription*>(c1.description);
+        const VideoContentDescription* vcd2 =
+            static_cast<const VideoContentDescription*>(c2.description);
+        CompareMediaContentDescription<VideoContentDescription>(vcd1, vcd2);
+      }
+
+      ASSERT_EQ(IsDataContent(&c1), IsDataContent(&c2));
+      if (IsDataContent(&c1)) {
+        const DataContentDescription* dcd1 =
+            static_cast<const DataContentDescription*>(c1.description);
+        const DataContentDescription* dcd2 =
+            static_cast<const DataContentDescription*>(c2.description);
+        CompareMediaContentDescription<DataContentDescription>(dcd1, dcd2);
+      }
+    }
 
     // group
     const cricket::ContentGroups groups1 = desc1.groups();
     const cricket::ContentGroups groups2 = desc2.groups();
     EXPECT_EQ(groups1.size(), groups1.size());
     if (groups1.size() != groups2.size()) {
-      return false;
+      ADD_FAILURE();
+      return;
     }
     for (size_t i = 0; i < groups1.size(); ++i) {
       const cricket::ContentGroup group1 = groups1.at(i);
@@ -661,7 +659,8 @@ class WebRtcSdpTest : public testing::Test {
       const cricket::ContentNames names2 = group2.content_names();
       EXPECT_EQ(names1.size(), names2.size());
       if (names1.size() != names2.size()) {
-        return false;
+        ADD_FAILURE();
+        return;
       }
       cricket::ContentNames::const_iterator iter1 = names1.begin();
       cricket::ContentNames::const_iterator iter2 = names2.begin();
@@ -675,7 +674,8 @@ class WebRtcSdpTest : public testing::Test {
     const cricket::TransportInfos transports2 = desc2.transport_infos();
     EXPECT_EQ(transports1.size(), transports2.size());
     if (transports1.size() != transports2.size()) {
-      return false;
+      ADD_FAILURE();
+      return;
     }
     for (size_t i = 0; i < transports1.size(); ++i) {
       const cricket::TransportInfo transport1 = transports1.at(i);
@@ -699,7 +699,6 @@ class WebRtcSdpTest : public testing::Test {
       EXPECT_TRUE(CompareCandidates(transport1.description.candidates,
                                     transport2.description.candidates));
     }
-    return true;
   }
 
   bool CompareCandidates(const Candidates& cs1, const Candidates& cs2) {
@@ -719,8 +718,7 @@ class WebRtcSdpTest : public testing::Test {
       const JsepSessionDescription& desc2) {
     EXPECT_EQ(desc1.session_id(), desc2.session_id());
     EXPECT_EQ(desc1.session_version(), desc2.session_version());
-    EXPECT_TRUE(CompareSessionDescription(*desc1.description(),
-                                          *desc2.description()));
+    CompareSessionDescription(*desc1.description(), *desc2.description());
     if (desc1.number_of_mediasections() != desc2.number_of_mediasections())
       return false;
     for (size_t i = 0; i < desc1.number_of_mediasections(); ++i) {
@@ -867,9 +865,9 @@ class WebRtcSdpTest : public testing::Test {
         new DataContentDescription());
     data_desc_ = data.get();
 
-    data_desc_->AddCodec(DataCodec(101, "google-data", 0));
+    data_desc_->AddCodec(DataCodec(101, "google-data", 1));
     StreamParams data_stream;
-    data_stream.name = kDataChannelLabel;
+    data_stream.name = kDataChannelMsid;
     data_stream.cname = kDataChannelCname;
     data_stream.sync_label = kDataChannelLabel;
     data_stream.ssrcs.push_back(kDataChannelSsrc);
@@ -996,10 +994,12 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBundle) {
 }
 
 TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBandwidth) {
-  const ContentInfo* content_info = GetFirstVideoContent(&desc_);
-  VideoContentDescription* video_content_description =
-      static_cast<VideoContentDescription*>(content_info->description);
-  video_content_description->set_bandwidth(100 * 1000);
+  VideoContentDescription* vcd = static_cast<VideoContentDescription*>(
+      GetFirstVideoContent(&desc_)->description);
+  vcd->set_bandwidth(100 * 1000);
+  AudioContentDescription* acd = static_cast<AudioContentDescription*>(
+      GetFirstAudioContent(&desc_)->description);
+  acd->set_bandwidth(50 * 1000);
   ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
                                 jdesc_.session_id(),
                                 jdesc_.session_version()));
@@ -1007,6 +1007,9 @@ TEST_F(WebRtcSdpTest, SerializeJsepSessionDescriptionWithBandwidth) {
   std::string sdp_with_bandwidth = kSdpFullString;
   InjectAfter("a=mid:video_content_name\r\n",
               "b=AS:100\r\n",
+              &sdp_with_bandwidth);
+  InjectAfter("a=mid:audio_content_name\r\n",
+              "b=AS:50\r\n",
               &sdp_with_bandwidth);
   EXPECT_EQ(sdp_with_bandwidth, message);
 }
@@ -1135,12 +1138,17 @@ TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithBandwidth) {
   InjectAfter("a=mid:video_content_name\r\n",
               "b=AS:100\r\n",
               &sdp_with_bandwidth);
+  InjectAfter("a=mid:audio_content_name\r\n",
+              "b=AS:50\r\n",
+              &sdp_with_bandwidth);
   EXPECT_TRUE(
       webrtc::SdpDeserialize(sdp_with_bandwidth, &jdesc_with_bandwidth));
-  const ContentInfo* content_info = GetFirstVideoContent(&desc_);
-  VideoContentDescription* video_content_description =
-      static_cast<VideoContentDescription*>(content_info->description);
-  video_content_description->set_bandwidth(100 * 1000);
+  VideoContentDescription* vcd = static_cast<VideoContentDescription*>(
+      GetFirstVideoContent(&desc_)->description);
+  vcd->set_bandwidth(100 * 1000);
+  AudioContentDescription* acd = static_cast<AudioContentDescription*>(
+      GetFirstAudioContent(&desc_)->description);
+  acd->set_bandwidth(50 * 1000);
   ASSERT_TRUE(jdesc_.Initialize(desc_.Copy(),
                                 jdesc_.session_id(),
                                 jdesc_.session_version()));

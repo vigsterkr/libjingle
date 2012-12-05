@@ -63,6 +63,7 @@ using webrtc::AudioTrackInterface;
 using webrtc::JsepInterface;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::MediaStreamInterface;
+using webrtc::MediaStreamTrackInterface;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
@@ -84,6 +85,8 @@ static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
   *ssrc = media_desc->streams().begin()->first_ssrc();
   return true;
 }
+
+namespace {
 
 class MockPeerConnectionObserver : public PeerConnectionObserver {
  public:
@@ -210,6 +213,27 @@ class MockSetSessionDescriptionObserver
   bool result_;
 };
 
+// TODO(perkj): Move to a common file with test mocks.
+class MockStatsObserver : public webrtc::StatsObserver {
+ public:
+  MockStatsObserver()
+      : called_(false),
+        number_of_reports_(0) {}
+  virtual ~MockStatsObserver() {}
+  virtual void OnComplete(const std::vector<webrtc::StatsReport>& reports) {
+    called_ = true;
+    number_of_reports_ = reports.size();
+  }
+
+  bool called() const { return called_; }
+  size_t number_of_reports() const { return number_of_reports_; }
+
+ private:
+  bool called_;
+  size_t number_of_reports_;
+};
+
+}  // namespace
 
 class PeerConnectionInterfaceTest : public testing::Test {
  protected:
@@ -361,6 +385,25 @@ class PeerConnectionInterfaceTest : public testing::Test {
     return DoSetSessionDescription(desc, false);
   }
 
+  // Calls PeerConnection::GetStats and check the return value.
+  // It does not verify the values in the StatReports since a RTCP packet might
+  // be required.
+  bool DoGetStats(MediaStreamTrackInterface* track) {
+    talk_base::scoped_refptr<MockStatsObserver> observer(
+        new talk_base::RefCountedObject<MockStatsObserver>());
+    if (!pc_->GetStats(observer, track))
+      return false;
+    EXPECT_TRUE_WAIT(observer->called(), kTimeout);
+    return observer->called();
+  }
+
+  void InitiateCall() {
+    CreatePeerConnection();
+    // Create a local stream with audio&video tracks.
+    AddAudioVideoStream(kStreamLabel1, "audio_label", "video_label");
+    CreateOfferReceiveAnswer();
+  }
+
   void ReceiveOfferCreateAnswer() {
     bool first_negotiate = pc_->local_description() == NULL;
     SessionDescriptionInterface* offer = NULL;
@@ -434,9 +477,7 @@ TEST_F(PeerConnectionInterfaceTest, RemoveStream) {
 }
 
 TEST_F(PeerConnectionInterfaceTest, CreateOfferReceiveAnswer) {
-  CreatePeerConnection();
-  AddStream(kStreamLabel1);
-  CreateOfferReceiveAnswer();
+  InitiateCall();
   // Since we answer with the same session description as we offer we can
   // check if OnAddStream have been called.
   EXPECT_EQ_WAIT(kStreamLabel1, observer_.GetLastAddedStreamLabel(), kTimeout);
@@ -454,9 +495,7 @@ TEST_F(PeerConnectionInterfaceTest, ReceiveOfferCreateAnswer) {
 }
 
 TEST_F(PeerConnectionInterfaceTest, Renegotiate) {
-  CreatePeerConnection();
-  AddStream(kStreamLabel1);
-  CreateOfferReceiveAnswer();
+  InitiateCall();
   ASSERT_EQ(1u, pc_->remote_streams()->count());
   pc_->RemoveStream(pc_->local_streams()->at(0));
   CreateOfferReceiveAnswer();
@@ -538,4 +577,34 @@ TEST_F(PeerConnectionInterfaceTest, SsrcInOfferAnswer) {
   EXPECT_TRUE(GetFirstSsrc(GetFirstVideoContent(answer->description()),
                            &video_ssrc));
   EXPECT_NE(audio_ssrc, video_ssrc);
+}
+
+// Test that we can specify a certain track that we want statistics about.
+TEST_F(PeerConnectionInterfaceTest, GetStatsForSpecificTrack) {
+  InitiateCall();
+  ASSERT_LT(0u, pc_->remote_streams()->count());
+  ASSERT_LT(0u, pc_->remote_streams()->at(0)->audio_tracks()->count());
+  scoped_refptr<MediaStreamTrackInterface> remote_audio =
+      pc_->remote_streams()->at(0)->audio_tracks()->at(0);
+  EXPECT_TRUE(DoGetStats(remote_audio));
+
+  // Remove the stream. Since we are sending to our selves the local
+  // and the remote stream is the same.
+  pc_->RemoveStream(pc_->local_streams()->at(0));
+  // Do a re-negotiation.
+  CreateOfferReceiveAnswer();
+
+  ASSERT_EQ(0u, pc_->remote_streams()->count());
+
+  // Test that we still can get statistics for the old track. Even if it is not
+  // sent any longer.
+  EXPECT_TRUE(DoGetStats(remote_audio));
+}
+
+// Test that we don't get statistics for an invalid track.
+TEST_F(PeerConnectionInterfaceTest, GetStatsForInvalidTrack) {
+  InitiateCall();
+  scoped_refptr<AudioTrackInterface> unknown_audio_track(
+      pc_factory_->CreateAudioTrack("unknown track", NULL));
+  EXPECT_FALSE(DoGetStats(unknown_audio_track));
 }

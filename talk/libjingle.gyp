@@ -498,6 +498,7 @@
         'app/webrtc/peerconnection.cc',
         'app/webrtc/peerconnectionproxy.cc',
         'app/webrtc/portallocatorfactory.cc',
+        'app/webrtc/statscollector.cc',
         'app/webrtc/videosourceproxy.cc',
         'app/webrtc/videotrack.cc',
         'app/webrtc/videotrackrenderers.cc',

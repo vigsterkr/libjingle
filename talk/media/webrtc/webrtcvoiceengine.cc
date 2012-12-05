@@ -343,7 +343,7 @@ bool WebRtcVoiceEngine::InitInternal() {
                                static_cast<int>(talk_base::LS_INFO));
   ApplyLogging("");
 
-  // Init WebRtc VoiceEngine, enabling AEC logging if specified in SetLogging.
+  // Init WebRtc VoiceEngine.
   if (voe_wrapper_->base()->Init(adm_) == -1) {
     LOG_RTCERR0_EX(Init, voe_wrapper_->error());
     return false;
@@ -931,11 +931,12 @@ void WebRtcVoiceEngine::ApplyLogging(const std::string& log_filter) {
   int filter = 0;
   switch (log_level_) {
     case talk_base::LS_VERBOSE:
-      filter |= webrtc::kTraceAll;      // fall through
+      filter |= webrtc::kTraceAll;  // fall through
     case talk_base::LS_INFO:
-      filter |= webrtc::kTraceStateInfo;  // fall through
+      filter |= (webrtc::kTraceStateInfo | webrtc::kTraceInfo);  // fall through
     case talk_base::LS_WARNING:
-      filter |= (webrtc::kTraceInfo | webrtc::kTraceWarning);  // fall through
+      // fall through
+      filter |= (webrtc::kTraceTerseInfo | webrtc::kTraceWarning);
     case talk_base::LS_ERROR:
       filter |= (webrtc::kTraceError | webrtc::kTraceCritical);
   }
@@ -991,10 +992,10 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
     "GetRTPStatistics() failed to retrieve RTT from the RTP/RTCP module",
     "SenderInfoReceived No received SR",
     "StatisticsRTP() no statisitics availble",
-    "WebRtc:TransmitMixer::TypingDetection() VE_TYPING_NOISE_WARNING message has been posted",  // NOLINT
-    "WebRtc:TransmitMixer::TypingDetection() pending noise-saturation warning exists",  // NOLINT
-    "WebRtc:GetRecPayloadType() failed to retrieve RX payload type (error=10026)", // NOLINT
-    "WebRtc:StopPlayingFileAsMicrophone() isnot playing (error=8088)",
+    "TransmitMixer::TypingDetection() VE_TYPING_NOISE_WARNING message has been posted",  // NOLINT
+    "TransmitMixer::TypingDetection() pending noise-saturation warning exists",  // NOLINT
+    "GetRecPayloadType() failed to retrieve RX payload type (error=10026)", // NOLINT
+    "StopPlayingFileAsMicrophone() isnot playing (error=8088)",
     NULL
   };
   for (const char* const* p = kTracesToIgnore; *p; ++p) {
@@ -1005,23 +1006,21 @@ bool WebRtcVoiceEngine::ShouldIgnoreTrace(const std::string& trace) {
   return false;
 }
 
-#ifdef USE_WEBRTC_DEV_BRANCH
 void WebRtcVoiceEngine::Print(webrtc::TraceLevel level, const char* trace,
                               int length) {
-#else
-void WebRtcVoiceEngine::Print(const webrtc::TraceLevel level,
-                              const char* trace, const int length) {
-#endif
-
   talk_base::LoggingSeverity sev = talk_base::LS_VERBOSE;
   if (level == webrtc::kTraceError || level == webrtc::kTraceCritical)
     sev = talk_base::LS_ERROR;
-  else if (level == webrtc::kTraceWarning)
+  else if (level == webrtc::kTraceWarning || level == webrtc::kTraceTerseInfo)
     sev = talk_base::LS_WARNING;
   else if (level == webrtc::kTraceStateInfo || level == webrtc::kTraceInfo)
     sev = talk_base::LS_INFO;
 
   if (sev >= log_level_) {
+    if (level == webrtc::kTraceTerseInfo) {
+      // Actually use LS_INFO for TerseInfo.
+      sev = talk_base::LS_INFO;
+    }
     // Skip past boilerplate prefix text
     if (length < 72) {
       std::string msg(trace, length);
@@ -1030,7 +1029,7 @@ void WebRtcVoiceEngine::Print(const webrtc::TraceLevel level,
     } else {
       std::string msg(trace + 71, length - 72);
       if (!ShouldIgnoreTrace(msg)) {
-        LOG_V(sev) << "WebRtc:" << msg;
+        LOG_V(sev) << "webrtc: " << msg;
       }
     }
   }

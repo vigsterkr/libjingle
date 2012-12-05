@@ -52,11 +52,20 @@ class TurnMessage;
 // The default server port for TURN, as specified in RFC5766.
 const int TURN_SERVER_PORT = 3478;
 
+// An interface through which the MD5 credential hash can be retrieved.
+class TurnAuthInterface {
+ public:
+  // Gets HA1 for the specified user and realm.
+  // HA1 = MD5(A1) = MD5(username:realm:password).
+  // Return true if the given username and realm are valid, or false if not.
+  virtual bool GetKey(const std::string& username, const std::string& realm,
+                      std::string* key) = 0;
+};
+
 // The core TURN server class. Give it a socket to listen on via
 // AddInternalServerSocket, and a factory to create external sockets via
 // SetExternalSocketFactory, and it's ready to go.
-// Not yet wired up: the callback to request the password for a user, and
-// TCP support.
+// Not yet wired up: TCP support.
 class TurnServer : public sigslot::has_slots<> {
  public:
   explicit TurnServer(talk_base::Thread* thread);
@@ -69,6 +78,9 @@ class TurnServer : public sigslot::has_slots<> {
   // Gets/sets the value for the SOFTWARE attribute for TURN messages.
   const std::string& software() const { return software_; }
   void set_software(const std::string& software) { software_ = software; }
+
+  // Sets the authentication callback; does not take ownership.
+  void set_auth_hook(TurnAuthInterface* auth_hook) { auth_hook_ = auth_hook; }
 
   // Starts listening for packets from internal clients.
   void AddInternalServerSocket(talk_base::AsyncPacketSocket* socket);
@@ -138,6 +150,7 @@ class TurnServer : public sigslot::has_slots<> {
   std::string nonce_key_;
   std::string realm_;
   std::string software_;
+  TurnAuthInterface* auth_hook_;
   talk_base::scoped_ptr<talk_base::AsyncPacketSocket> server_socket_;
   talk_base::scoped_ptr<talk_base::PacketSocketFactory>
       external_socket_factory_;

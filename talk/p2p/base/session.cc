@@ -1317,7 +1317,6 @@ bool Session::OnRedirectError(const SessionRedirect& redirect,
 }
 
 bool Session::CheckState(State expected, MessageError* error) {
-  ASSERT(state() == expected);
   if (state() != expected) {
     return BadMessage(buzz::QN_STANZA_NOT_ALLOWED,
                       "message not allowed in current state",

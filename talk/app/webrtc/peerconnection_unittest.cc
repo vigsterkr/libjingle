@@ -48,10 +48,12 @@
 using cricket::ContentInfo;
 using cricket::MediaContentDescription;
 using webrtc::MediaConstraintsInterface;
-using webrtc::MediaHints;
+using webrtc::MediaStreamTrackInterface;
+using webrtc::StreamCollectionInterface;
 using webrtc::SessionDescriptionInterface;
 
 static const int kMaxWaitMs = 1000;
+static const int kMaxWaitForStatsMs = 3000;
 static const int kMaxWaitForFramesMs = 5000;
 static const int kEndAudioFrameCount = 10;
 static const int kEndVideoFrameCount = 10;
@@ -80,6 +82,39 @@ class JsepMessageReceiver : public SignalingMessageReceiver {
   virtual ~JsepMessageReceiver() {}
 };
 
+// TODO(perkj): Move to a common file with test mocks.
+class MockStatsObserver : public webrtc::StatsObserver {
+ public:
+  MockStatsObserver()
+      : called_(false) {}
+  virtual ~MockStatsObserver() {}
+  virtual void OnComplete(const std::vector<webrtc::StatsReport>& reports) {
+    called_ = true;
+    reports_ = reports;
+  }
+
+  bool called() const { return called_; }
+  size_t number_of_reports() const { return reports_.size(); }
+
+  int audio_output_level() {
+    if (reports_.empty()) {
+      return 0;
+    }
+    webrtc::StatsElement::Values::const_iterator it =
+        reports_[0].local.values.begin();
+    for (; it != reports_[0].local.values.end(); ++it) {
+      if (it->name == webrtc::StatsElement::kStatsValueNameAudioOutputLevel) {
+        return  talk_base::FromString<int>(it->value);
+      }
+    }
+    return 0;
+  }
+
+ private:
+  bool called_;
+  std::vector<webrtc::StatsReport> reports_;
+};
+
 template <typename MessageReceiver>
 class PeerConnectionTestClientBase
     : public webrtc::PeerConnectionObserver,
@@ -93,7 +128,7 @@ class PeerConnectionTestClientBase
     }
   }
 
-  virtual void StartSession()  = 0;
+  virtual void Negotiate()  = 0;
 
   virtual void SetVideoConstraints(
       const webrtc::FakeConstraints& video_constraint) {
@@ -198,6 +233,14 @@ class PeerConnectionTestClientBase
     }
   }
 
+  int GetAudioOutputLevelStats(webrtc::MediaStreamTrackInterface* track) {
+    talk_base::scoped_refptr<MockStatsObserver>
+    observer(new talk_base::RefCountedObject<MockStatsObserver>());
+    EXPECT_TRUE(peer_connection_->GetStats(observer, track));
+    EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
+    return observer->audio_output_level();
+  }
+
   int rendered_width() {
     EXPECT_FALSE(fake_video_renderers_.empty());
     return fake_video_renderers_.empty() ? 1 :
@@ -214,6 +257,14 @@ class PeerConnectionTestClientBase
     if (!peer_connection())
       return 0;
     return peer_connection()->remote_streams()->count();
+  }
+
+  StreamCollectionInterface* remote_streams() {
+    if (!peer_connection()) {
+      ADD_FAILURE();
+      return NULL;
+    }
+    return peer_connection()->remote_streams();
   }
 
   // PeerConnectionObserver callbacks.
@@ -383,7 +434,7 @@ class JsepTestClient
   }
   ~JsepTestClient() {}
 
-  virtual void StartSession() {
+  virtual void Negotiate() {
     talk_base::scoped_ptr<SessionDescriptionInterface> offer;
     EXPECT_TRUE(DoCreateOffer(offer.use()));
 
@@ -618,14 +669,8 @@ class P2PTestConductor : public testing::Test {
       return false;
     }
     initiating_client_->AddMediaStream(true, true);
-    initiating_client_->StartSession();
+    initiating_client_->Negotiate();
     return true;
-  }
-
-  void SetHints(const MediaHints& init_hints,
-                const MediaHints& receiving_hints) {
-    initiating_client_->SetHints(init_hints);
-    receiving_client_->SetHints(receiving_hints);
   }
 
   void SetVideoConstraints(const webrtc::FakeConstraints& init_constraints,
@@ -753,9 +798,28 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestTwoStreams) {
   SetVideoConstraints(constraint, constraint);
   LocalP2PTest();
   initializing_client()->AddMediaStream(false, true);
-  initializing_client()->StartSession();
+  initializing_client()->Negotiate();
   EXPECT_EQ(2u, receiving_client()->number_of_remote_streams());
   EXPECT_TRUE_WAIT(FramesNotPending(kEndAudioFrameCount,
                                     2 * kEndVideoFrameCount),
                    kMaxWaitForFramesMs);
+}
+
+// Test that we can receive the audio output level from a remote audio track.
+TEST_F(JsepPeerConnectionP2PTestClient, GetAudioOutputLevelStats) {
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
+
+  StreamCollectionInterface* remote_streams =
+      initializing_client()->remote_streams();
+  ASSERT_GT(remote_streams->count(), 0u);
+  ASSERT_GT(remote_streams->at(0)->audio_tracks()->count(), 0u);
+  MediaStreamTrackInterface* remote_audio_track =
+      remote_streams->at(0)->audio_tracks()->at(0);
+
+  // Get the audio output level stats. Note that the level is not available
+  // until a RTCP packet has been received.
+  EXPECT_TRUE_WAIT(
+      initializing_client()->GetAudioOutputLevelStats(remote_audio_track) > 0,
+      kMaxWaitForStatsMs);
 }

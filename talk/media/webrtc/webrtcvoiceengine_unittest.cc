@@ -1890,6 +1890,7 @@ TEST_F(WebRtcVoiceEngineTestFake, SetOutputScaling) {
   EXPECT_DOUBLE_EQ(1, right);
 }
 
+
 // Tests for the actual WebRtc VoE library.
 
 // Tests that the library initializes and shuts down properly.
@@ -1954,6 +1955,8 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   cricket::WebRtcVoiceEngine engine;
   // Check codecs by name.
   EXPECT_TRUE(engine.FindCodec(
+      cricket::AudioCodec(96, "opus", 48000, 0, 1, 0)));
+  EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "CELT", 32000, 0, 2, 0)));
   EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "CELT", 32000, 0, 1, 0)));
@@ -2003,7 +2006,7 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 5000, 0, 1, 0)));
   EXPECT_FALSE(engine.FindCodec(cricket::AudioCodec(0, "", 0, 5000, 1, 0)));
   // Check that there aren't any extra codecs lying around.
-  EXPECT_EQ(14U, engine.codecs().size());
+  EXPECT_EQ(15U, engine.codecs().size());
   // Verify the payload id of common audio codecs, including CN, ISAC, and G722.
   for (std::vector<cricket::AudioCodec>::const_iterator it =
       engine.codecs().begin(); it != engine.codecs().end(); ++it) {

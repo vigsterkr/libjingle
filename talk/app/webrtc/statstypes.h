@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2012, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,47 +25,49 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <memory.h>
+// This file contains structures used for retrieving statistics from an ongoing
+// libjingle session.
 
-#if WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif  // WIN32
+#ifndef TALK_APP_WEBRTC_STATSTYPES_H_
+#define TALK_APP_WEBRTC_STATSTYPES_H_
 
-#if OSX
-#include <CoreServices/CoreServices.h>
-#endif  // OSX
+#include <string>
+#include <vector>
 
-#include <algorithm>
-#include "talk/base/common.h"
-#include "talk/base/logging.h"
+#include "talk/base/basictypes.h"
 
-//////////////////////////////////////////////////////////////////////
-// Assertions
-//////////////////////////////////////////////////////////////////////
+namespace webrtc {
 
-namespace talk_base {
+// StatsElement contains a time stamped list of name/value pairs.
+struct StatsElement {
+  StatsElement() : timestamp(0) { }
+  double timestamp;  // Time since 1970-01-01T00:00:00Z in milliseconds.
+  struct Value {
+    std::string name;
+    std::string value;
+  };
+  typedef std::vector<Value> Values;
+  Values values;
 
-void Break() {
-#if WIN32
-  ::DebugBreak();
-#elif OSX  // !WIN32
-  __asm__("int $3");
-#else // !OSX && !WIN32
-#if _DEBUG_HAVE_BACKTRACE
-  OutputTrace();
-#endif
-  abort();
-#endif // !OSX && !WIN32
-}
+  // StatsValue names
+  static const char kStatsValueNameAudioOutputLevel[];
+};
 
-void LogAssert(const char * function, const char * file, int line,
-               const char * expression) {
-  // TODO - if we put hooks in here, we can do a lot fancier logging
-  LOG(LS_ERROR) << file << "(" << line << ")" << ": ASSERT FAILED: "
-                << expression << " @ " << function;
-}
+// StatsReport contains local and remote StatsElements that pertain to the same
+// object, for instance a SSRC.
+struct StatsReport {
+  std::string id;  // SSRC in decimal for SSRCs
+  std::string type;  // "SSRC" for SSRCs
+  StatsElement local;  // Statistics gathered locally.
+  StatsElement remote;  // Statistics received in a RTCP report.
 
-} // namespace talk_base
+  // StatsReport of |type| = "ssrc" is statistics for a specific rtp stream.
+  // The |id| field is the SSRC in decimal form of the rtp stream.
+  static const char kStatsReportTypeSsrc[];
+};
+
+typedef std::vector<StatsReport> StatsReports;
+
+}  // namespace webrtc
+
+#endif  // TALK_APP_WEBRTC_STATSTYPES_H_

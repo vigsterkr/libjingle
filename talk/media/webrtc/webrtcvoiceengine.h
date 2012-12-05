@@ -223,12 +223,7 @@ class WebRtcVoiceEngine
   // allows us to selectively turn on and off different options easily
   // at any time.
   bool ApplyOptions(const AudioOptions& options);
-#ifdef USE_WEBRTC_DEV_BRANCH
   virtual void Print(webrtc::TraceLevel level, const char* trace, int length);
-#else
-  virtual void Print(const webrtc::TraceLevel level,
-                     const char* trace_string, const int length);
-#endif
   virtual void CallbackOnError(const int channel, const int errCode);
   // Given the device type, name, and id, find device id. Return true and
   // set the output parameter rtc_id if successful.

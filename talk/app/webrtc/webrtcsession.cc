@@ -188,6 +188,41 @@ static bool GetVideoSsrcByName(const SessionDescription* session_description,
   return true;
 }
 
+static bool GetNameBySsrc(const SessionDescription* session_description,
+                          uint32 ssrc, std::string* name) {
+  ASSERT(name != NULL);
+
+  cricket::StreamParams stream_out;
+  const cricket::ContentInfo* audio_info =
+      cricket::GetFirstAudioContent(session_description);
+  if (!audio_info) {
+    return false;
+  }
+  const cricket::MediaContentDescription* audio_content =
+      static_cast<const cricket::MediaContentDescription*>(
+          audio_info->description);
+
+  if (cricket::GetStreamBySsrc(audio_content->streams(), ssrc, &stream_out)) {
+    *name = stream_out.name;
+    return true;
+  }
+
+  const cricket::ContentInfo* video_info =
+      cricket::GetFirstVideoContent(session_description);
+  if (!video_info) {
+    return false;
+  }
+  const cricket::MediaContentDescription* video_content =
+      static_cast<const cricket::MediaContentDescription*>(
+          video_info->description);
+
+  if (cricket::GetStreamBySsrc(video_content->streams(), ssrc, &stream_out)) {
+    *name = stream_out.name;
+    return true;
+  }
+  return false;
+}
+
 // RFC4733
 //  +-------+--------+------+---------+
 //  | Event | Code   | Type | Volume? |
@@ -636,6 +671,18 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   }
 
   return UseCandidatesInSessionDescription(remote_desc_.get());
+}
+
+bool WebRtcSession::GetLocalTrackName(uint32 ssrc, std::string* name) {
+  if (!BaseSession::local_description())
+    return false;
+  return GetNameBySsrc(BaseSession::local_description(), ssrc, name);
+}
+
+bool WebRtcSession::GetRemoteTrackName(uint32 ssrc, std::string* name) {
+  if (!BaseSession::remote_description())
+      return false;
+  return GetNameBySsrc(BaseSession::remote_description(), ssrc, name);
 }
 
 void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {

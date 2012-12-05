@@ -51,6 +51,7 @@ enum {
   MSG_EARLYMEDIATIMEOUT,
   MSG_CANINSERTDTMF,
   MSG_INSERTDTMF,
+  MSG_GETSTATS,
   MSG_SETRENDERER,
   MSG_ADDRECVSTREAM,
   MSG_REMOVERECVSTREAM,
@@ -163,6 +164,15 @@ struct ScaleVolumeMessageData : public talk_base::MessageData {
   double left;
   double right;
   bool result;
+};
+
+struct VoiceStatsMessageData : public talk_base::MessageData {
+  explicit VoiceStatsMessageData(VoiceMediaInfo* stats)
+      : result(false),
+        stats(stats) {
+  }
+  bool result;
+  VoiceMediaInfo* stats;
 };
 
 struct PacketMessageData : public talk_base::MessageData {
@@ -1431,6 +1441,11 @@ bool VoiceChannel::SetOutputScaling(uint32 ssrc, double left, double right) {
   Send(MSG_SCALEVOLUME, &data);
   return data.result;
 }
+bool VoiceChannel::GetStats(VoiceMediaInfo* stats) {
+  VoiceStatsMessageData data(stats);
+  Send(MSG_GETSTATS, &data);
+  return data.result;
+}
 
 void VoiceChannel::StartMediaMonitor(int cms) {
   media_monitor_.reset(new VoiceMediaMonitor(media_channel(), worker_thread(),
@@ -1642,6 +1657,10 @@ bool VoiceChannel::SetOutputScaling_w(uint32 ssrc, double left, double right) {
   return media_channel()->SetOutputScaling(ssrc, left, right);
 }
 
+bool VoiceChannel::GetStats_w(VoiceMediaInfo* stats) {
+  return media_channel()->GetStats(stats);
+}
+
 bool VoiceChannel::SetChannelOptions(const AudioOptions& options) {
   AudioOptionsMessageData data(options);
   Send(MSG_SETCHANNELOPTIONS, &data);
@@ -1686,6 +1705,12 @@ void VoiceChannel::OnMessage(talk_base::Message *pmsg) {
       ScaleVolumeMessageData* data =
           static_cast<ScaleVolumeMessageData*>(pmsg->pdata);
       data->result = SetOutputScaling_w(data->ssrc, data->left, data->right);
+      break;
+    }
+    case MSG_GETSTATS: {
+      VoiceStatsMessageData* data =
+          static_cast<VoiceStatsMessageData*>(pmsg->pdata);
+      data->result = GetStats_w(data->stats);
       break;
     }
     case MSG_CHANNEL_ERROR: {

@@ -72,6 +72,7 @@
 #include <vector>
 
 #include "talk/app/webrtc/jsep.h"
+#include "talk/app/webrtc/statstypes.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/base/socketaddress.h"
 
@@ -92,6 +93,7 @@ class StreamCollectionInterface : public talk_base::RefCountInterface {
   virtual size_t count() = 0;
   virtual MediaStreamInterface* at(size_t index) = 0;
   virtual MediaStreamInterface* find(const std::string& label) = 0;
+
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~StreamCollectionInterface() {}
@@ -123,6 +125,14 @@ class PeerConnectionObserver : public IceCandidateObserver {
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~PeerConnectionObserver() {}
+};
+
+class StatsObserver : public talk_base::RefCountInterface {
+ public:
+  virtual void OnComplete(const std::vector<StatsReport>& reports) = 0;
+
+ protected:
+  virtual ~StatsObserver() {}
 };
 
 class PeerConnectionInterface : public JsepInterface,
@@ -165,6 +175,9 @@ class PeerConnectionInterface : public JsepInterface,
   // Note that a SessionDescription negotiation is need before the
   // remote peer is notified.
   virtual void RemoveStream(MediaStreamInterface* stream) = 0;
+
+  virtual bool GetStats(StatsObserver* observer,
+                        MediaStreamTrackInterface* track) = 0;
 
   // Returns true if the |track| is capable of sending DTMF. Otherwise returns
   // false.

@@ -28,9 +28,12 @@
 #ifndef TALK_P2P_BASE_TESTTURNSERVER_H_
 #define TALK_P2P_BASE_TESTTURNSERVER_H_
 
+#include <string>
+
 #include "talk/base/asyncudpsocket.h"
 #include "talk/base/basicpacketsocketfactory.h"
 #include "talk/base/thread.h"
+#include "talk/p2p/base/stun.h"
 #include "talk/p2p/base/turnserver.h"
 
 namespace cricket {
@@ -38,21 +41,29 @@ namespace cricket {
 static const char kTestRealm[] = "example.org";
 static const char kTestSoftware[] = "TestTurnServer";
 
-class TestTurnServer {
+class TestTurnServer : public TurnAuthInterface {
  public:
   TestTurnServer(talk_base::Thread* thread,
                  const talk_base::SocketAddress& udp_int_addr,
                  const talk_base::SocketAddress& udp_ext_addr)
-     : server_(thread) {
+      : server_(thread) {
     server_.AddInternalServerSocket(talk_base::AsyncUDPSocket::Create(
         thread->socketserver(), udp_int_addr));
     server_.SetExternalSocketFactory(new talk_base::BasicPacketSocketFactory(),
         udp_ext_addr);
     server_.set_realm(kTestRealm);
     server_.set_software(kTestSoftware);
+    server_.set_auth_hook(this);
   }
 
  private:
+  // For this test server, succeed if the password is the same as the username.
+  // Obviously, do not use this in a production environment.
+  virtual bool GetKey(const std::string& username, const std::string& realm,
+                      std::string* key) {
+    return ComputeStunCredentialHash(username, realm, username, key);
+  }
+
   TurnServer server_;
 };
 

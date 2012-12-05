@@ -64,6 +64,7 @@ enum {
   MSG_CREATE_SESSIONDESCRIPTION_FAILED,
   MSG_SET_SESSIONDESCRIPTION_SUCCESS,
   MSG_SET_SESSIONDESCRIPTION_FAILED,
+  MSG_GETSTATS,
   MSG_ICECHANGE,
   MSG_ICECANDIDATE,
   MSG_ICECOMPLETE,
@@ -95,6 +96,14 @@ struct SetSessionDescriptionMsg : public talk_base::MessageData {
 
   talk_base::scoped_refptr<webrtc::SetSessionDescriptionObserver> observer;
   std::string error;
+};
+
+struct GetStatsMsg : public talk_base::MessageData {
+  explicit GetStatsMsg(webrtc::StatsObserver* observer)
+      : observer(observer) {
+  }
+  webrtc::StatsReports reports;
+  talk_base::scoped_refptr<webrtc::StatsObserver> observer;
 };
 
 typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
@@ -275,6 +284,7 @@ bool PeerConnection::DoInitialize(
                                    mediastream_signaling_.get()));
   stream_handler_.reset(new MediaStreamHandlers(session_.get(),
                                                 session_.get()));
+  stats_.set_session(session_.get());
 
   // Initialize the WebRtcSession. It creates transport channels etc.
   if (!session_->Initialize(constraints))
@@ -306,6 +316,7 @@ bool PeerConnection::AddStream(MediaStreamInterface* local_stream,
   // TODO(perkj): Implement support for MediaConstraints in AddStream.
   local_media_streams_->AddStream(local_stream);
   mediastream_signaling_->SetLocalStreams(local_media_streams_);
+  stats_.AddStream(local_stream);
   observer_->OnRenegotiationNeeded();
   return true;
 }
@@ -314,6 +325,22 @@ void PeerConnection::RemoveStream(MediaStreamInterface* remove_stream) {
   local_media_streams_->RemoveStream(remove_stream);
   mediastream_signaling_->SetLocalStreams(local_media_streams_);
   observer_->OnRenegotiationNeeded();
+}
+
+bool PeerConnection::GetStats(StatsObserver* observer,
+                              MediaStreamTrackInterface* track) {
+  if (!VERIFY(observer != NULL)) {
+    LOG(LS_ERROR) << "GetStats - observer is NULL.";
+    return false;
+  }
+
+  stats_.UpdateStats();
+  talk_base::scoped_ptr<GetStatsMsg> msg(new GetStatsMsg(observer));
+  if (!stats_.GetStats(track, &(msg->reports))) {
+    return false;
+  }
+  signaling_thread()->Post(this, MSG_GETSTATS, msg.release());
+  return true;
 }
 
 PeerConnectionInterface::ReadyState PeerConnection::ready_state() {
@@ -435,6 +462,9 @@ void PeerConnection::SetLocalDescription(
     PostSetSessionDescriptionFailure(observer, "SessionDescription is NULL.");
     return;
   }
+  // Update stats here so that we have the most recent stats for tracks and
+  // streams that might be removed by updating the session description.
+  stats_.UpdateStats();
   if (!SetLocalDescription(JsepSessionDescription::GetAction(desc->type()),
                            desc)) {
     PostSetSessionDescriptionFailure(observer, "SetLocalDescription failed.");
@@ -462,6 +492,9 @@ void PeerConnection::SetRemoteDescription(
     PostSetSessionDescriptionFailure(observer, "SessionDescription is NULL.");
     return;
   }
+  // Update stats here so that we have the most recent stats for tracks and
+  // streams that might be removed by updating the session description.
+  stats_.UpdateStats();
   if (!SetRemoteDescription(JsepSessionDescription::GetAction(desc->type()),
                             desc)) {
     PostSetSessionDescriptionFailure(observer, "SetRemoteDescription failed.");
@@ -552,6 +585,12 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
       delete param;
       break;
     }
+    case MSG_GETSTATS: {
+      GetStatsMsg* param = static_cast<GetStatsMsg*>(msg->pdata);
+      param->observer->OnComplete(param->reports);
+      delete param;
+      break;
+    }
     case MSG_ICECHANGE: {
       observer_->OnIceChange();
       break;
@@ -574,6 +613,7 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
 
 void PeerConnection::OnAddStream(MediaStreamInterface* stream) {
   stream_handler_->AddRemoteStream(stream);
+  stats_.AddStream(stream);
   observer_->OnAddStream(stream);
 }
 

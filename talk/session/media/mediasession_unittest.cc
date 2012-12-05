@@ -357,6 +357,40 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoOffer) {
   ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
 }
 
+// Test creating an offer with bundle where the Codecs have the same dynamic
+// RTP playlod type. The test verifies that the offer don't contain the
+// duplicate RTP payload types.
+TEST_F(MediaSessionDescriptionFactoryTest, TestBundleOfferWithSameCodecPlType) {
+  const VideoCodec& offered_video_codec = f2_.video_codecs()[0];
+  const AudioCodec& offered_audio_codec = f2_.audio_codecs()[0];
+  const DataCodec& offered_data_codec = f2_.data_codecs()[0];
+  ASSERT_EQ(offered_video_codec.id, offered_audio_codec.id);
+  ASSERT_EQ(offered_video_codec.id, offered_data_codec.id);
+
+  MediaSessionOptions opts;
+  opts.has_audio = true;
+  opts.has_video = true;
+  opts.has_data = true;
+  opts.bundle_enabled = true;
+  talk_base::scoped_ptr<SessionDescription>
+  offer(f2_.CreateOffer(opts, NULL));
+  const VideoContentDescription* vcd =
+      GetFirstVideoContentDescription(offer.get());
+  const AudioContentDescription* acd =
+      GetFirstAudioContentDescription(offer.get());
+  const DataContentDescription* dcd =
+      GetFirstDataContentDescription(offer.get());
+  ASSERT_TRUE(NULL != vcd);
+  ASSERT_TRUE(NULL != acd);
+  ASSERT_TRUE(NULL != dcd);
+  EXPECT_NE(vcd->codecs()[0].id, acd->codecs()[0].id);
+  EXPECT_NE(vcd->codecs()[0].id, dcd->codecs()[0].id);
+  EXPECT_NE(acd->codecs()[0].id, dcd->codecs()[0].id);
+  EXPECT_EQ(vcd->codecs()[0].name, offered_video_codec.name);
+  EXPECT_EQ(acd->codecs()[0].name, offered_audio_codec.name);
+  EXPECT_EQ(dcd->codecs()[0].name, offered_data_codec.name);
+}
+
 // Create a typical data offer, and ensure it matches what we expect.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataOffer) {
   MediaSessionOptions opts;

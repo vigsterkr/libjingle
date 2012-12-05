@@ -61,7 +61,7 @@ const int JsepSessionDescription::kDefaultVideoCodecFramerate = 30;
 const char JsepSessionDescription::kDefaultVideoCodecName[] = "VP8";
 const int JsepSessionDescription::kMaxVideoCodecWidth = 1280;
 const int JsepSessionDescription::kMaxVideoCodecHeight = 720;
-const int JsepSessionDescription::kDefaultVideoCodecPreference = 0;
+const int JsepSessionDescription::kDefaultVideoCodecPreference = 1;
 
 // TODO(perkj): Remove CreateSessionDescription(const std::string& sdp) once
 // JSEP00 is removed.

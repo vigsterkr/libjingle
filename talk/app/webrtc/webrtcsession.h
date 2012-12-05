@@ -32,6 +32,7 @@
 
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
+#include "talk/app/webrtc/statstypes.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/session.h"
@@ -41,6 +42,7 @@
 namespace cricket {
 
 class ChannelManager;
+class StatsReport;
 class Transport;
 class VideoCapturer;
 class VideoChannel;
@@ -70,10 +72,10 @@ class WebRtcSession : public cricket::BaseSession,
     ice_observer_ = observer;
   }
 
-  const cricket::VoiceChannel* voice_channel() const {
+  cricket::VoiceChannel* voice_channel() {
     return voice_channel_.get();
   }
-  const cricket::VideoChannel* video_channel() const {
+  cricket::VideoChannel* video_channel() {
     return video_channel_.get();
   }
 
@@ -126,6 +128,9 @@ class WebRtcSession : public cricket::BaseSession,
   virtual bool AddIceCandidate(const IceCandidateInterface* candidate) {
     return false;
   }
+
+  bool GetLocalTrackName(uint32 ssrc, std::string* name);
+  bool GetRemoteTrackName(uint32 ssrc, std::string* name);
 
   // AudioMediaProviderInterface implementation.
   virtual void SetAudioPlayout(const std::string& name, bool enable);

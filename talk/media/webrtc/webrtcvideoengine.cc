@@ -486,8 +486,8 @@ class WebRtcVideoChannelSendInfo  {
 const WebRtcVideoEngine::VideoCodecPref
     WebRtcVideoEngine::kVideoCodecPrefs[] = {
     {kVp8PayloadName, 100, 0},
-    {kRedPayloadName, 101, 1},
-    {kFecPayloadName, 102, 2},
+    {kRedPayloadName, 116, 1},
+    {kFecPayloadName, 117, 2},
 };
 
 // The formats are sorted by the descending order of width. We use the order to
@@ -1026,7 +1026,8 @@ void WebRtcVideoEngine::ApplyLogging(const std::string& log_filter) {
     case talk_base::LS_VERBOSE: filter |= webrtc::kTraceAll;
     case talk_base::LS_INFO: filter |=
         webrtc::kTraceStateInfo | webrtc::kTraceInfo;
-    case talk_base::LS_WARNING: filter |= webrtc::kTraceWarning;
+    case talk_base::LS_WARNING: filter |=
+        webrtc::kTraceWarning | webrtc::kTraceTerseInfo;
     case talk_base::LS_ERROR: filter |=
         webrtc::kTraceError | webrtc::kTraceCritical;
   }
@@ -1128,22 +1129,21 @@ void WebRtcVideoEngine::DecrementFrameListeners() {
   ASSERT(frame_listeners_ >= 0);
 }
 
-#ifdef USE_WEBRTC_DEV_BRANCH
 void WebRtcVideoEngine::Print(webrtc::TraceLevel level, const char* trace,
                               int length) {
-#else
-void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
-                              const char* trace, const int length) {
-#endif
   talk_base::LoggingSeverity sev = talk_base::LS_VERBOSE;
   if (level == webrtc::kTraceError || level == webrtc::kTraceCritical)
     sev = talk_base::LS_ERROR;
-  else if (level == webrtc::kTraceWarning)
+  else if (level == webrtc::kTraceWarning || level == webrtc::kTraceTerseInfo)
     sev = talk_base::LS_WARNING;
   else if (level == webrtc::kTraceStateInfo || level == webrtc::kTraceInfo)
     sev = talk_base::LS_INFO;
 
   if (sev >= log_level_) {
+    if (level == webrtc::kTraceTerseInfo) {
+      // Actually use LS_INFO for TerseInfo.
+      sev = talk_base::LS_INFO;
+    }
     // Skip past boilerplate prefix text
     if (length < 72) {
       std::string msg(trace, length);
@@ -1153,7 +1153,7 @@ void WebRtcVideoEngine::Print(const webrtc::TraceLevel level,
       std::string msg(trace + 71, length - 72);
       if (!ShouldIgnoreTrace(msg) &&
           (!voice_engine_ || !voice_engine_->ShouldIgnoreTrace(msg))) {
-        LOG_V(sev) << "WebRtc:" << msg;
+        LOG_V(sev) << "webrtc: " << msg;
       }
     }
   }

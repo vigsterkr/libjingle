@@ -380,8 +380,8 @@ int32_t FakeAudioCaptureModule::SetMicrophoneVolume(uint32_t /*volume*/) {
   return 0;
 }
 
-int32_t FakeAudioCaptureModule::MicrophoneVolume(uint32_t* /*volume*/) const {
-  ASSERT(false);
+int32_t FakeAudioCaptureModule::MicrophoneVolume(uint32_t* volume) const {
+  *volume = current_mic_level_;
   return 0;
 }
 

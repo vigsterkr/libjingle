@@ -52,6 +52,7 @@ enum {
   MSG_PROCESSICEMESSAGEJSEP00,
   MSG_GETLOCALDESCRIPTION,
   MSG_GETREMOTEDESCRIPTION,
+  MSG_GETSTATS,
 };
 
 struct MediaStreamParams : public talk_base::MessageData {
@@ -74,6 +75,18 @@ struct IceConfigurationParams : public talk_base::MessageData {
   }
   const webrtc::JsepInterface::IceServers* configuration;
   const webrtc::MediaConstraintsInterface* constraints;
+  bool result;
+};
+
+struct StatsParams : public talk_base::MessageData {
+  StatsParams(webrtc::StatsObserver* observer,
+              webrtc::MediaStreamTrackInterface* track)
+    : observer(observer),
+      track(track),
+      result(false) {
+    }
+  webrtc::StatsObserver* observer;
+  webrtc::MediaStreamTrackInterface* track;
   bool result;
 };
 
@@ -219,6 +232,16 @@ void PeerConnectionProxy::RemoveStream(MediaStreamInterface* remove_stream) {
     return;
   }
   peerconnection_->RemoveStream(remove_stream);
+}
+
+bool PeerConnectionProxy::GetStats(StatsObserver* observer,
+                                   MediaStreamTrackInterface* track) {
+  if (!signaling_thread_->IsCurrent()) {
+    StatsParams msg(observer, track);
+    signaling_thread_->Send(this, MSG_GETSTATS, &msg);
+    return msg.result;
+  }
+  return peerconnection_->GetStats(observer, track);
 }
 
 PeerConnectionInterface::ReadyState PeerConnectionProxy::ready_state() {
@@ -436,15 +459,18 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       peerconnection_->RemoveStream(param->stream);
       break;
     }
+    case MSG_GETSTATS: {
+      StatsParams* param(static_cast<StatsParams*> (data));
+      param->result = peerconnection_->GetStats(param->observer, param->track);
+      break;
+    }
     case MSG_RETURNLOCALMEDIASTREAMS: {
-      StreamCollectionParams* param(
-          static_cast<StreamCollectionParams*> (data));
+      StreamCollectionParams* param(static_cast<StreamCollectionParams*>(data));
       param->streams = peerconnection_->local_streams();
       break;
     }
     case MSG_RETURNREMOTEMEDIASTREAMS: {
-      StreamCollectionParams* param(
-          static_cast<StreamCollectionParams*> (data));
+      StreamCollectionParams* param(static_cast<StreamCollectionParams*>(data));
       param->streams = peerconnection_->remote_streams();
       break;
     }

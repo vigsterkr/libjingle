@@ -33,6 +33,7 @@
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/peerconnectionfactory.h"
+#include "talk/app/webrtc/statscollector.h"
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/webrtcsession.h"
 #include "talk/base/scoped_ptr.h"
@@ -69,6 +70,9 @@ class PeerConnection : public PeerConnectionInterface,
   virtual bool SendDtmf(const AudioTrackInterface* send_track,
                         const std::string& tones, int duration,
                         const AudioTrackInterface* play_track);
+
+  virtual bool GetStats(StatsObserver* observer,
+                        webrtc::MediaStreamTrackInterface* track);
 
   virtual ReadyState ready_state();
   virtual IceState ice_state();
@@ -152,6 +156,7 @@ class PeerConnection : public PeerConnectionInterface,
   talk_base::scoped_ptr<WebRtcSession> session_;
   talk_base::scoped_ptr<MediaStreamSignaling> mediastream_signaling_;
   talk_base::scoped_ptr<MediaStreamHandlers> stream_handler_;
+  StatsCollector stats_;
 };
 
 }  // namespace webrtc

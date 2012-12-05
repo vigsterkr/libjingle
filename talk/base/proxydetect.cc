@@ -1050,6 +1050,8 @@ bool GetMacProxySettingsFromDictionary(ProxyInfo* proxy,
   return gotProxy;
 }
 
+// TODO(hughv) Update keychain functions. They work on 10.8, but are depricated.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 bool p_putPasswordInProxyInfo(ProxyInfo* proxy) {
   bool result = true;  // by default we assume we're good.
   // for all we know there isn't any password.  We'll set to false

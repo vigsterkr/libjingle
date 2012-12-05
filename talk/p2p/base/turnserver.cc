@@ -200,7 +200,8 @@ static bool InitErrorResponse(const StunMessage* req, int code,
 
 TurnServer::TurnServer(talk_base::Thread* thread)
     : thread_(thread),
-      nonce_key_(talk_base::CreateRandomString(kNonceKeySize)) {
+      nonce_key_(talk_base::CreateRandomString(kNonceKeySize)),
+      auth_hook_(NULL) {
 }
 
 TurnServer::~TurnServer() {
@@ -307,9 +308,8 @@ bool TurnServer::GetKey(const StunMessage* msg, std::string* key) {
     return false;
   }
 
-  // TODO(juberti): Implement the password hook here.
   std::string username = username_attr->GetString();
-  return ComputeStunCredentialHash(username, realm_, username, key);
+  return (auth_hook_ != NULL && auth_hook_->GetKey(username, realm_, key));
 }
 
 bool TurnServer::CheckAuthorization(const Connection& conn,

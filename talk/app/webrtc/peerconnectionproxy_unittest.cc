@@ -56,6 +56,8 @@ class MockPeerConnection : public PeerConnectionInterface {
           const MediaConstraintsInterface* constraints));
   MOCK_METHOD1(RemoveStream,
       void(MediaStreamInterface* stream));
+  MOCK_METHOD2(GetStats,
+      bool(StatsObserver* observer, MediaStreamTrackInterface* track));
   MOCK_METHOD0(ready_state,
       ReadyState());
   MOCK_METHOD0(ice_state,
@@ -193,6 +195,19 @@ TEST_F(PeerConnectionProxyTest, RemoveStream) {
       .Times(Exactly(1))
       .WillOnce(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread));
   pc_proxy_->RemoveStream(fake_stream);
+}
+
+TEST_F(PeerConnectionProxyTest, GetStats) {
+  StatsObserver* fake_stats_observer =
+      GetFakePointer1<StatsObserver>();
+  MediaStreamTrackInterface* fake_track =
+      GetFakePointer2<MediaStreamTrackInterface>();
+  EXPECT_CALL(*pc_, GetStats(fake_stats_observer, fake_track))
+      .Times(Exactly(1))
+      .WillOnce(
+          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
+                Return(true)));
+  EXPECT_TRUE(pc_proxy_->GetStats(fake_stats_observer, fake_track));
 }
 
 TEST_F(PeerConnectionProxyTest, ready_state) {

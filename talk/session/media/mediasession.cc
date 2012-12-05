@@ -258,6 +258,85 @@ static void GetCurrentStreamParams(const SessionDescription* sdesc,
   }
 }
 
+// Helper class used for finding duplicate RTP payload types among audio, video
+// and data codecs. When bundle is used the payload types may not collide.
+class UsedPayloadTypes {
+ public:
+  UsedPayloadTypes() {
+    memset(&payload_types_, 0, sizeof(payload_types_));
+  }
+
+  // Loops through all codecs in |codecs| and changes its payload type if it is
+  // already in use by another codec. Call this methods with all codecs in a
+  // session description to make sure no duplicate payload types exists.
+  template <typename C>
+  void FindAndSetPayloadTypesUsed(C* codecs) {
+    for (typename C::iterator it = codecs->begin(); it != codecs->end(); ++it) {
+      Codec& codec = *it;
+      int pl_type = codec.id;
+      if (IsPayloadTypeUsed(pl_type)) {
+        pl_type = FindUnusedPayloadType();
+        LOG(LS_WARNING) << "Duplicate pl-type found. Reassigning "
+                        << codec.name << " to pl-type " << pl_type;
+        codec.id = pl_type;
+      }
+      SetPayloadTypeUsed(pl_type);
+    }
+  }
+
+ private:
+  static const int kDynamicPayloadTypeMin = 96;
+  static const int kDynamicPayloadTypeMax = 127;
+
+  // Return true if |payload_type| is a dynamic pay load type.
+  bool IsDynamic(int payload_type) {
+    return (payload_type >= kDynamicPayloadTypeMin &&
+        payload_type <= kDynamicPayloadTypeMax);
+  }
+
+  // Returns the first unused dynamic payload-type in reverse order.
+  // This hopefully reduce the risk of more collisions. We want to change the
+  // default pay load types as little as possible.
+  int FindUnusedPayloadType() {
+    int payload_type = kDynamicPayloadTypeMax;
+    for (; payload_type >= kDynamicPayloadTypeMin; --payload_type) {
+      if (payload_types_[payload_type-kDynamicPayloadTypeMin] == 0)
+        break;
+    }
+    ASSERT(payload_type >= kDynamicPayloadTypeMin);  // We have too many Codecs.
+    return payload_type;
+  }
+
+  bool IsPayloadTypeUsed(int payload_type) {
+    if (IsDynamic(payload_type)) {
+      return payload_types_[payload_type -kDynamicPayloadTypeMin] == 1;
+    }
+    // Otherwise this is not a dynamic pl-type and we can't change it.
+    return false;
+  }
+
+  void SetPayloadTypeUsed(int payload_type) {
+    if (IsDynamic(payload_type)) {
+      payload_types_[payload_type -kDynamicPayloadTypeMin] = 1;
+    }
+  }
+
+  typedef int PayloadTypes[kDynamicPayloadTypeMax-kDynamicPayloadTypeMin+1];
+  PayloadTypes payload_types_;
+};
+
+
+// Make sure we don't use the same dynamic RTP payload type twice.
+// This is important when using Bundle.
+static void DeDuplicatePayloadTypes(AudioCodecs* audio_codecs,
+                                    VideoCodecs* video_codecs,
+                                    DataCodecs* data_codecs) {
+  UsedPayloadTypes pltypes;
+  pltypes.FindAndSetPayloadTypesUsed<AudioCodecs>(audio_codecs);
+  pltypes.FindAndSetPayloadTypesUsed<VideoCodecs>(video_codecs);
+  pltypes.FindAndSetPayloadTypesUsed<DataCodecs>(data_codecs);
+}
+
 // Adds a StreamParams for each Stream in Streams with media type
 // media_type to content_description.
 // |current_params| - All currently known StreamParams of any media type.
@@ -657,6 +736,12 @@ MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
 SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const MediaSessionOptions& options,
     const SessionDescription* current_description) const {
+  AudioCodecs audio_codecs = audio_codecs_;
+  VideoCodecs video_codecs = video_codecs_;
+  DataCodecs data_codecs = data_codecs_;
+  if (options.bundle_enabled) {
+    DeDuplicatePayloadTypes(&audio_codecs, &video_codecs, &data_codecs);
+  }
   scoped_ptr<SessionDescription> offer(new SessionDescription());
 
   StreamParamsVec current_streams;
@@ -669,7 +754,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     GetSupportedAudioCryptoSuites(&crypto_suites);
     if (!CreateMediaContentOffer(
             options,
-            audio_codecs_,
+            audio_codecs,
             secure(),
             GetCryptos(GetFirstAudioContentDescription(current_description)),
             crypto_suites,
@@ -693,7 +778,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     GetSupportedVideoCryptoSuites(&crypto_suites);
     if (!CreateMediaContentOffer(
             options,
-            video_codecs_,
+            video_codecs,
             secure(),
             GetCryptos(GetFirstVideoContentDescription(current_description)),
             crypto_suites,
@@ -717,7 +802,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     GetSupportedDataCryptoSuites(&crypto_suites);
     if (!CreateMediaContentOffer(
             options,
-            data_codecs_,
+            data_codecs,
             secure(),
             GetCryptos(GetFirstDataContentDescription(current_description)),
             crypto_suites,
