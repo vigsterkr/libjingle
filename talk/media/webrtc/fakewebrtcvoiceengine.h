@@ -574,6 +574,12 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(AudioDeviceControl, (unsigned int, unsigned int, unsigned int));
   WEBRTC_STUB(SetLoudspeakerStatus, (bool enable));
   WEBRTC_STUB(GetLoudspeakerStatus, (bool& enabled));
+#ifdef USE_WEBRTC_DEV_BRANCH
+  WEBRTC_STUB(SetRecordingSampleRate, (unsigned int samples_per_sec));
+  WEBRTC_STUB_CONST(RecordingSampleRate, (unsigned int* samples_per_sec));
+  WEBRTC_STUB(SetPlayoutSampleRate, (unsigned int samples_per_sec));
+  WEBRTC_STUB_CONST(PlayoutSampleRate, (unsigned int* samples_per_sec));
+#endif
   WEBRTC_STUB(EnableBuiltInAEC, (bool enable));
   virtual bool BuiltInAECIsEnabled() const { return true; }
 

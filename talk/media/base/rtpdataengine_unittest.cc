@@ -193,9 +193,6 @@ TEST_F(RtpDataMediaChannelTest, SetUnknownCodecs) {
 TEST_F(RtpDataMediaChannelTest, AddRemoveSendStream) {
   talk_base::scoped_ptr<cricket::RtpDataMediaChannel> dmc(CreateChannel());
 
-  cricket::SendDataParams params;
-  params.ssrc = 42;
-
   cricket::StreamParams stream1;
   stream1.add_ssrc(41);
   EXPECT_TRUE(dmc->AddSendStream(stream1));
@@ -210,9 +207,6 @@ TEST_F(RtpDataMediaChannelTest, AddRemoveSendStream) {
 
 TEST_F(RtpDataMediaChannelTest, AddRemoveRecvStream) {
   talk_base::scoped_ptr<cricket::RtpDataMediaChannel> dmc(CreateChannel());
-
-  cricket::SendDataParams params;
-  params.ssrc = 42;
 
   cricket::StreamParams stream1;
   stream1.add_ssrc(41);

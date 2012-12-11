@@ -207,13 +207,6 @@ class WebRtcVoiceEngine
   typedef sigslot::
       signal3<uint32, MediaProcessorDirection, AudioFrame*> FrameSignal;
 
-  struct CodecPref {
-    const char* name;
-    int clockrate;
-    int channels;
-    int payload_type;
-  };
-
   void Construct();
   void ConstructCodecs();
   bool InitInternal();
@@ -251,7 +244,6 @@ class WebRtcVoiceEngine
   FrameSignal SignalTxMediaFrame;
 
   static const int kDefaultLogSeverity = talk_base::LS_WARNING;
-  static const CodecPref kCodecPrefs[];
 
   // The primary instance of WebRtc VoiceEngine.
   talk_base::scoped_ptr<VoEWrapper> voe_wrapper_;
@@ -391,7 +383,7 @@ class WebRtcVoiceMediaChannel
   virtual void OnPacketReceived(talk_base::Buffer* packet);
   virtual void OnRtcpReceived(talk_base::Buffer* packet);
   virtual bool MuteStream(uint32 ssrc, bool on);
-  virtual bool SetSendBandwidth(bool autobw, int bps) { return false; }
+  virtual bool SetSendBandwidth(bool autobw, int bps);
   virtual bool GetStats(VoiceMediaInfo* info);
   // Gets last reported error from WebRtc voice engine.  This should be only
   // called in response a failure.

@@ -134,7 +134,7 @@ class CoordinatedVideoAdapter
  private:
   // Adapt to the minimum of the formats the server requests, the CPU wants, and
   // the encoder wants.  Returns true if resolution changed.
-  bool AdaptToMinimumFormat();
+  bool AdaptToMinimumFormat(int* new_width, int* new_height);
   bool IsMinimumFormat(int pixels);
   void StepPixelCount(CoordinatedVideoAdapter::AdaptRequest request,
                       int* num_pixels);

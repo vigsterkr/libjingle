@@ -346,11 +346,13 @@ void CoordinatedVideoAdapter::OnOutputFormatRequest(const VideoFormat& format) {
   SetOutputNumPixels(old_num_pixels);
   view_desired_num_pixels_ = format.width * format.height;
   view_desired_interval_ = format.interval;
-  bool changed = AdaptToMinimumFormat();
+  int new_width, new_height;
+  bool changed = AdaptToMinimumFormat(&new_width, &new_height);
   LOG(LS_INFO) << "VAdapt View Request: "
                << format.width << "x" << format.height
                << " Pixels: " << view_desired_num_pixels_
-               << " Changed: " << (changed ? "true" : "false");
+               << " Changed: " << (changed ? "true" : "false")
+               << " To: " << new_width << "x" << new_height;
 }
 
 // A Bandwidth GD request for new resolution
@@ -371,13 +373,15 @@ void CoordinatedVideoAdapter::OnEncoderResolutionRequest(
       StepPixelCount(request, &encoder_desired_num_pixels_);
     }
   }
-  bool changed = AdaptToMinimumFormat();
+  int new_width, new_height;
+  bool changed = AdaptToMinimumFormat(&new_width, &new_height);
   LOG(LS_INFO) << "VAdapt GD Request: "
                << (DOWNGRADE == request ? "down" :
                    (UPGRADE == request ? "up" : "keep"))
                << " From: " << width << "x" << height
                << " Pixels: " << encoder_desired_num_pixels_
-               << " Changed: " << (changed ? "true" : "false");
+               << " Changed: " << (changed ? "true" : "false")
+               << " To: " << new_width << "x" << new_height;
 }
 
 // A CPU request for new resolution
@@ -435,14 +439,16 @@ void CoordinatedVideoAdapter::OnCpuLoadUpdated(
     cpu_desired_num_pixels_ = static_cast<int>(
         input_format().width * input_format().height >> cpu_downgrade_count_);
   }
-  bool changed = AdaptToMinimumFormat();
+  int new_width, new_height;
+  bool changed = AdaptToMinimumFormat(&new_width, &new_height);
   LOG(LS_INFO) << "VAdapt CPU Request: "
                << (DOWNGRADE == request ? "down" :
                    (UPGRADE == request ? "up" : "keep"))
                << " Process: " << process_load
                << " System: " << system_load
                << " Steps: " << cpu_downgrade_count_
-               << " Changed: " << (changed ? "true" : "false");
+               << " Changed: " << (changed ? "true" : "false")
+               << " To: " << new_width << "x" << new_height;
 }
 
 // Called by cpu adapter on up requests.
@@ -470,7 +476,8 @@ bool CoordinatedVideoAdapter::IsMinimumFormat(int pixels) {
 }
 
 // Called by all coordinators when there is a change.
-bool CoordinatedVideoAdapter::AdaptToMinimumFormat() {
+bool CoordinatedVideoAdapter::AdaptToMinimumFormat(int* new_width,
+                                                   int* new_height) {
   VideoFormat new_output = output_format();
   VideoFormat input = input_format();
   if (input_format().IsSize0x0()) {
@@ -511,8 +518,8 @@ bool CoordinatedVideoAdapter::AdaptToMinimumFormat() {
   if (!input.IsSize0x0()) {
     scale = FindClosestScale(input.width, input.height, min_num_pixels);
   }
-  new_output.width = static_cast<int>(input.width * scale);
-  new_output.height = static_cast<int>(input.height * scale);
+  *new_width = new_output.width = static_cast<int>(input.width * scale);
+  *new_height = new_output.height = static_cast<int>(input.height * scale);
   new_output.interval = view_desired_interval_;
   SetOutputFormat(new_output);
   int new_num_pixels = GetOutputNumPixels();

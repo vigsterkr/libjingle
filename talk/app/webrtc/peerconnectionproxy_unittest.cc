@@ -68,6 +68,10 @@ class MockPeerConnection : public PeerConnectionInterface {
       bool(const AudioTrackInterface* send_track,
            const std::string& tones, int duration,
            const AudioTrackInterface* play_track));
+  MOCK_METHOD2(CreateDataChannel,
+        talk_base::scoped_refptr<DataChannelInterface>(
+            const std::string& label,
+            const DataChannelInit* config));
   MOCK_METHOD1(CreateOffer,
       SessionDescriptionInterface*(const MediaHints& hints));
   MOCK_METHOD2(CreateAnswer,

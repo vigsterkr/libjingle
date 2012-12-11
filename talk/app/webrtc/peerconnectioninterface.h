@@ -71,6 +71,7 @@
 #include <string>
 #include <vector>
 
+#include "talk/app/webrtc/datachannelinterface.h"
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/statstypes.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
@@ -118,6 +119,10 @@ class PeerConnectionObserver : public IceCandidateObserver {
 
   // Triggered when a remote peer close a stream.
   virtual void OnRemoveStream(MediaStreamInterface* stream) = 0;
+
+  // Triggered when a remote peer open a data channel.
+  // TODO(perkj): Make pure virtual.
+  virtual void OnDataChannel(DataChannelInterface* data_channel) {}
 
   // Triggered when renegotation is needed, for example the ICE has restarted.
   virtual void OnRenegotiationNeeded() {}
@@ -197,6 +202,10 @@ class PeerConnectionInterface : public JsepInterface,
   virtual bool SendDtmf(const AudioTrackInterface* send_track,
                         const std::string& tones, int duration,
                         const AudioTrackInterface* play_track) = 0;
+
+  virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
+      const std::string& label,
+      const DataChannelInit* config) = 0;
 
   // Returns the current ReadyState.
   virtual ReadyState ready_state() = 0;

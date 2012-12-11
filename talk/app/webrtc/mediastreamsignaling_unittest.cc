@@ -43,6 +43,7 @@ static const char kStreams[][8] = {"stream1", "stream2"};
 static const char kAudioTracks[][8] = {"audio_1", "audio_2"};
 static const char kVideoTracks[][8] = {"video_1", "video_2"};
 
+using webrtc::DataChannelInterface;
 using webrtc::IceCandidateInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::SessionDescriptionInterface;
@@ -95,6 +96,30 @@ static const char kSdpString2[] =
     "a=ssrc:4 cname:stream2\r\n"
     "a=ssrc:4 mslabel:stream2\r\n"
     "a=ssrc:4 label:video_2\r\n";
+
+// Reference SDP without MediaStreams.
+static const char kSdpStringWithoutStreams[] =
+    "v=0\r\n"
+    "o=- 0 0 IN IP4 127.0.0.1\r\n"
+    "s=-\r\n"
+    "t=0 0\r\n"
+    "m=audio 1 RTP/AVPF 103\r\n"
+    "a=mid:audio\r\n"
+    "a=rtpmap:103 ISAC/16000\r\n"
+    "m=video 1 RTP/AVPF 120\r\n"
+    "a=mid:video\r\n"
+    "a=rtpmap:120 VP8/90000\r\n";
+
+// Reference SDP without MediaStreams and audio only.
+static const char kSdpStringWithoutStreamsAudioOnly[] =
+    "v=0\r\n"
+    "o=- 0 0 IN IP4 127.0.0.1\r\n"
+    "s=-\r\n"
+    "t=0 0\r\n"
+    "m=audio 1 RTP/AVPF 103\r\n"
+    "a=mid:audio\r\n"
+    "a=rtpmap:103 ISAC/16000\r\n";
+
 
 // Create a collection of streams.
 // CreateStreamCollection(1) creates a collection that
@@ -195,14 +220,15 @@ class MockRemoteStreamObserver : public webrtc::RemoteMediaStreamObserver {
 
   // New remote stream have been discovered.
   virtual void OnAddStream(MediaStreamInterface* remote_stream) {
-    EXPECT_EQ(MediaStreamInterface::kLive, remote_stream->ready_state());
     remote_media_streams_->AddStream(remote_stream);
   }
 
   // Remote stream is no longer available.
   virtual void OnRemoveStream(MediaStreamInterface* remote_stream) {
-    EXPECT_EQ(MediaStreamInterface::kEnded, remote_stream->ready_state());
     remote_media_streams_->RemoveStream(remote_stream);
+  }
+
+  virtual void OnAddDataChannel(DataChannelInterface* data_channel) {
   }
 
   MediaStreamInterface* RemoteStream(const std::string& label) {
@@ -269,10 +295,10 @@ TEST_F(MediaStreamSignalingTest, VideoHints) {
 }
 
 TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
-  SessionDescriptionInterface* desc = webrtc::CreateSessionDescription(
-      kSdpString1);
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(kSdpString1));
   EXPECT_TRUE(desc != NULL);
-  signaling_->UpdateRemoteStreams(desc);
+  signaling_->UpdateRemoteStreams(desc.get());
 
   talk_base::scoped_refptr<StreamCollection> reference(
       CreateStreamCollection(1));
@@ -282,10 +308,10 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
                                        reference.get()));
 
   // Update the remote streams.
-  SessionDescriptionInterface* update_desc =
-      webrtc::CreateSessionDescription(kSdpString2);
+  talk_base::scoped_ptr<SessionDescriptionInterface> update_desc(
+      webrtc::CreateSessionDescription(kSdpString2));
   EXPECT_TRUE(update_desc != NULL);
-  signaling_->UpdateRemoteStreams(update_desc);
+  signaling_->UpdateRemoteStreams(update_desc.get());
 
   talk_base::scoped_refptr<StreamCollection> reference2(
       CreateStreamCollection(2));
@@ -293,4 +319,72 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
                                        reference2.get()));
   EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
                                        reference2.get()));
+}
+
+// This tests that a default MediaStream is created if a remote session
+// description doesn't contain any streams but media is received. This occurs if
+// remote clients doesn't support MSID. It also tests that the default stream is
+// updated if a video m-line is added in a subsequent session description.
+TEST_F(MediaStreamSignalingTest, SdpWithoutMsidCreatesDefaultStream) {
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_audio_only(
+      webrtc::CreateSessionDescription(kSdpStringWithoutStreamsAudioOnly));
+  ASSERT_TRUE(desc_audio_only != NULL);
+  signaling_->UpdateRemoteStreams(desc_audio_only.get());
+
+  EXPECT_EQ(0u, observer_->remote_streams()->count());
+  signaling_->SetMediaReceived();
+  EXPECT_EQ(1u, signaling_->remote_streams()->count());
+  ASSERT_EQ(1u, observer_->remote_streams()->count());
+  MediaStreamInterface* remote_stream = observer_->remote_streams()->at(0);
+
+  EXPECT_EQ(1u, remote_stream->audio_tracks()->count());
+  EXPECT_EQ(0u, remote_stream->video_tracks()->count());
+  EXPECT_EQ("default", remote_stream->label());
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(kSdpStringWithoutStreams));
+  ASSERT_TRUE(desc != NULL);
+  signaling_->UpdateRemoteStreams(desc.get());
+  EXPECT_EQ(1u, signaling_->remote_streams()->count());
+  ASSERT_EQ(1u, remote_stream->audio_tracks()->count());
+  EXPECT_EQ("defaulta0", remote_stream->audio_tracks()->at(0)->label());
+  ASSERT_EQ(1u, remote_stream->video_tracks()->count());
+  EXPECT_EQ("defaultv0", remote_stream->video_tracks()->at(0)->label());
+}
+
+// This tests that a default MediaStream is created if media is received before
+// the remote session description is set and the remote session description
+// doesn't contain any streams. This occurs if the remote client doesn't support
+// MSID.
+TEST_F(MediaStreamSignalingTest,
+       SdpWithoutMsidAndEarlyMediaCreatesDefaultStream) {
+  signaling_->SetMediaReceived();
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(kSdpStringWithoutStreams));
+  ASSERT_TRUE(desc != NULL);
+  signaling_->UpdateRemoteStreams(desc.get());
+
+  ASSERT_EQ(1u, observer_->remote_streams()->count());
+  MediaStreamInterface* remote_stream = observer_->remote_streams()->at(0);
+  EXPECT_EQ(1u, remote_stream->audio_tracks()->count());
+  EXPECT_EQ(1u, remote_stream->video_tracks()->count());
+}
+
+// This test that a default MediaStream is not created if a remote session
+// description is updated to not have any MediaStreams.
+TEST_F(MediaStreamSignalingTest, VerifyDefaultStreamIsNotCreated) {
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc(
+      webrtc::CreateSessionDescription(kSdpString1));
+  ASSERT_TRUE(desc != NULL);
+  signaling_->UpdateRemoteStreams(desc.get());
+  talk_base::scoped_refptr<StreamCollection> reference(
+      CreateStreamCollection(1));
+  EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
+                                       reference.get()));
+  signaling_->SetMediaReceived();
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_without_streams(
+      webrtc::CreateSessionDescription(kSdpStringWithoutStreams));
+  signaling_->UpdateRemoteStreams(desc_without_streams.get());
+  EXPECT_EQ(0u, observer_->remote_streams()->count());
 }

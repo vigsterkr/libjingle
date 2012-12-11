@@ -32,6 +32,7 @@
 
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
+#include "talk/app/webrtc/datachannel.h"
 #include "talk/app/webrtc/statstypes.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
@@ -42,9 +43,11 @@
 namespace cricket {
 
 class ChannelManager;
+class DataChannel;
 class StatsReport;
 class Transport;
 class VideoCapturer;
+class BaseChannel;
 class VideoChannel;
 class VoiceChannel;
 
@@ -56,6 +59,7 @@ class MediaStreamSignaling;
 
 class WebRtcSession : public cricket::BaseSession,
                       public AudioProviderInterface,
+                      public DataChannelFactory,
                       public VideoProviderInterface,
                       public JsepInterface {
  public:
@@ -77,6 +81,9 @@ class WebRtcSession : public cricket::BaseSession,
   }
   cricket::VideoChannel* video_channel() {
     return video_channel_.get();
+  }
+  cricket::DataChannel* data_channel() {
+    return data_channel_.get();
   }
 
   void set_secure_policy(cricket::SecureMediaPolicy secure_policy);
@@ -149,6 +156,10 @@ class WebRtcSession : public cricket::BaseSession,
                         const std::string& tones, int duration,
                         const std::string& play_name);
 
+  talk_base::scoped_refptr<DataChannel> CreateDataChannel(
+      const std::string& label,
+      const DataChannelInit* config);
+
  private:
   // Invokes ConnectChannels() on transport proxies, which initiates ice
   // candidates allocation.
@@ -157,6 +168,11 @@ class WebRtcSession : public cricket::BaseSession,
                           const cricket::SessionDescription* desc);
 
   virtual void OnMessage(talk_base::Message* msg);
+
+  // This callback is connected to BaseChannel::SignalFirstPacketReceived.
+  // It is used for detecting if we receive packets without being aware of the
+  // remote SSRC and must create a default media stream.
+  void OnFirstPacketReceived(cricket::BaseChannel* channel);
 
   // Transport related callbacks, override from cricket::BaseSession.
   virtual void OnTransportRequestSignaling(cricket::Transport* transport);
@@ -201,6 +217,7 @@ class WebRtcSession : public cricket::BaseSession,
   // Helper methods to create media channels.
   bool CreateVoiceChannel(const cricket::SessionDescription* desc);
   bool CreateVideoChannel(const cricket::SessionDescription* desc);
+  bool CreateDataChannel(const cricket::SessionDescription* desc);
   // Copy the candidates from |saved_candidates_| to |dest_desc|.
   // The |saved_candidates_| will be cleared after this function call.
   void CopySavedCandidates(SessionDescriptionInterface* dest_desc);
@@ -213,6 +230,7 @@ class WebRtcSession : public cricket::BaseSession,
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
+  talk_base::scoped_ptr<cricket::DataChannel> data_channel_;
   cricket::ChannelManager* channel_manager_;
   cricket::TransportDescriptionFactory transport_desc_factory_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
@@ -226,6 +244,9 @@ class WebRtcSession : public cricket::BaseSession,
   uint64 session_version_;
   // If the remote peer is using a older version of implementation.
   bool older_version_remote_peer_;
+  // True if this session can create an RTP data engine. This is controlled
+  // by the constraint kEnableRtpDataChannels.
+  bool allow_rtp_data_engine_;
 };
 
 }  // namespace webrtc

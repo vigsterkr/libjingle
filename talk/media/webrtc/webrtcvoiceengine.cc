@@ -55,6 +55,32 @@
 
 namespace cricket {
 
+struct CodecPref {
+  const char* name;
+  int clockrate;
+  int channels;
+  int payload_type;
+  bool is_multi_rate;
+};
+
+static const CodecPref kCodecPrefs[] = {
+  { "ISAC",   16000,  1, 103, true },
+  { "ISAC",   32000,  1, 104, true },
+  { "opus",   48000,  2, 111, true },
+  { "CELT",   32000,  1, 109, true },
+  { "CELT",   32000,  2, 110, true },
+  { "G722",   16000,  1, 9,   false },
+  { "ILBC",   8000,   1, 102, false },
+  { "PCMU",   8000,   1, 0,   false },
+  { "PCMA",   8000,   1, 8,   false },
+  { "CN",     48000,  1, 107, false },
+  { "CN",     32000,  1, 106, false },
+  { "CN",     16000,  1, 105, false },
+  { "CN",     8000,   1, 13,  false },
+  { "red",    8000,   1, 127, false },
+  { "telephone-event", 8000, 1, 126, false },
+};
+
 // For Linux/Mac, using the default device is done by specifying index 0 for
 // VoE 4.0 and not -1 (which was the case for VoE 3.5).
 //
@@ -106,24 +132,15 @@ static void LogMultiline(talk_base::LoggingSeverity sev, char* text) {
   }
 }
 
-// WebRtcVoiceEngine
-const WebRtcVoiceEngine::CodecPref WebRtcVoiceEngine::kCodecPrefs[] = {
-  { "ISAC",   16000,  1, 103 },
-  { "ISAC",   32000,  1, 104 },
-  { "opus",   48000,  1, 111 },
-  { "CELT",   32000,  1, 109 },
-  { "CELT",   32000,  2, 110 },
-  { "G722",   16000,  1, 9 },
-  { "ILBC",   8000,   1, 102 },
-  { "PCMU",   8000,   1, 0 },
-  { "PCMA",   8000,   1, 8 },
-  { "CN",     48000,  1, 107 },
-  { "CN",     32000,  1, 106 },
-  { "CN",     16000,  1, 105 },
-  { "CN",     8000,   1, 13 },
-  { "red",    8000,   1, 127 },
-  { "telephone-event", 8000, 1, 126 },
-};
+static bool IsCodecMultiRate(const webrtc::CodecInst& codec) {
+  for (size_t i = 0; i < ARRAY_SIZE(kCodecPrefs); ++i) {
+    if (_stricmp(kCodecPrefs[i].name, codec.plname) == 0 &&
+        kCodecPrefs[i].clockrate == codec.plfreq) {
+      return kCodecPrefs[i].is_multi_rate;
+    }
+  }
+  return false;
+}
 
 class WebRtcSoundclipMedia : public SoundclipMedia {
  public:
@@ -879,18 +896,22 @@ bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
     if (voe_wrapper_->codec()->GetCodec(i, voe_codec) != -1) {
       AudioCodec codec(voe_codec.pltype, voe_codec.plname, voe_codec.plfreq,
                        voe_codec.rate, voe_codec.channels, 0);
+      bool multi_rate = IsCodecMultiRate(voe_codec);
       // Allow arbitrary rates for ISAC to be specified.
-      if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+      if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0 || multi_rate) {
+        // Set codec.bitrate to 0 so the check for codec.Matches() passes.
         codec.bitrate = 0;
       }
       if (codec.Matches(in)) {
         if (out) {
           // Fixup the payload type.
           voe_codec.pltype = in.id;
-          // If ISAC is being used, and an explicit bitrate is not specified,
+          // If ISAC is is being used, and an explicit bitrate is not specified,
           // enable auto bandwidth adjustment.
           if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
             voe_codec.rate = (in.bitrate > 0) ? in.bitrate : -1;
+          } else if (multi_rate) {
+            voe_codec.rate = in.bitrate;
           }
           *out = voe_codec;
         }
@@ -2231,6 +2252,44 @@ bool WebRtcVoiceMediaChannel::MuteStream(uint32 ssrc, bool muted) {
     return false;
   }
   return true;
+}
+
+bool WebRtcVoiceMediaChannel::SetSendBandwidth(bool autobw, int bps) {
+  LOG(LS_INFO) << "WebRtcVoiceMediaChanne::SetSendBandwidth.";
+
+  if (!send_codec_) {
+    LOG(LS_INFO) << "The send codec has not been set up yet.";
+    return false;
+  }
+
+  // Bandwidth is auto by default.
+  if (autobw || bps <= 0)
+    return true;
+
+  webrtc::CodecInst codec = *send_codec_;
+  bool is_multi_rate = IsCodecMultiRate(codec);
+
+  if (is_multi_rate) {
+    // If codec is multi-rate then just set the bitrate.
+    codec.rate = bps;
+    if (!SetSendCodec(codec)) {
+      LOG(LS_INFO) << "Failed to set codec " << codec.plname
+                   << " to bitrate " << bps << " bps.";
+      return false;
+    }
+    return true;
+  } else {
+    // If codec is not multi-rate and |bps| is less than the fixed bitrate
+    // then fail. If codec is not multi-rate and |bps| exceeds or equal the
+    // fixed bitrate then ignore.
+    if (bps < codec.rate) {
+      LOG(LS_INFO) << "Failed to set codec " << codec.plname
+                   << " to bitrate " << bps << " bps"
+                   << ", requires at least " << codec.rate << " bps.";
+      return false;
+    }
+    return true;
+  }
 }
 
 bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {

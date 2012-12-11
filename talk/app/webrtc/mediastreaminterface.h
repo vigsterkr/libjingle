@@ -242,12 +242,13 @@ class MediaConstraintsInterface {
   static const char kOfferToReceiveAudio[];  // OfferToReceiveAudio
 
   // Constraints values.
-  static const char kTrue[];  // true
-  static const char kFalse[];  // false
+  static const char kValueTrue[];  // true
+  static const char kValueFalse[];  // false
 
   // Temporary pseudo-constraints used to enable DTLS-SRTP
   static const char kEnableDtlsSrtp[];  // Enable DTLS-SRTP
-  static const char kValueTrue[];  // "true"
+  // Temporary pseudo-constraints used to enable DataChannels
+  static const char kEnableRtpDataChannels[];  // Enable DataChannels
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface

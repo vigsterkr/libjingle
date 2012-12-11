@@ -398,6 +398,8 @@ class VoiceChannel : public BaseChannel {
   sigslot::signal2<VoiceChannel*, const AudioInfo&> SignalAudioMonitor;
 
   void StartTypingMonitor(const TypingMonitorOptions& settings);
+  void StopTypingMonitor();
+  bool IsTypingMonitorRunning() const;
 
   // Overrides BaseChannel::MuteStream_w.
   virtual bool MuteStream_w(uint32 ssrc, bool mute);
@@ -594,6 +596,11 @@ class DataChannel : public BaseChannel {
                    const ReceiveDataParams&,
                    const std::string&>
       SignalDataReceived;
+  // Signal for notifying when the channel becomes ready to send data.
+  // That occurs when the channel is enabled, the transport is writable and
+  // both local and remote descriptions are set.
+  // TODO(perkj): Signal this per SSRC stream.
+  sigslot::signal1<bool> SignalReadyToSendData;
 
  private:
   struct SendDataMessageData : public talk_base::MessageData {

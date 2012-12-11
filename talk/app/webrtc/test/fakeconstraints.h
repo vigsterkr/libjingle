@@ -80,21 +80,26 @@ class FakeConstraints : public webrtc::MediaConstraintsInterface {
   void SetMandatoryReceiveAudio(bool enable) {
     if (enable) {
       AddMandatory(MediaConstraintsInterface::kOfferToReceiveAudio,
-                   MediaConstraintsInterface::kTrue);
+                   MediaConstraintsInterface::kValueTrue);
     } else {
       AddMandatory(MediaConstraintsInterface::kOfferToReceiveAudio,
-                   MediaConstraintsInterface::kFalse);
+                   MediaConstraintsInterface::kValueFalse);
     }
   }
 
   void SetMandatoryReceiveVideo(bool enable) {
     if (enable) {
       AddMandatory(MediaConstraintsInterface::kOfferToReceiveVideo,
-                   MediaConstraintsInterface::kTrue);
+                   MediaConstraintsInterface::kValueTrue);
     } else {
       AddMandatory(MediaConstraintsInterface::kOfferToReceiveVideo,
-                   MediaConstraintsInterface::kFalse);
+                   MediaConstraintsInterface::kValueFalse);
     }
+  }
+
+  void SetAllowRtpDataChannels() {
+    AddMandatory(MediaConstraintsInterface::kEnableRtpDataChannels,
+                 MediaConstraintsInterface::kValueTrue);
   }
 
   bool FindConstraint(const std::string& key, std::string* value,

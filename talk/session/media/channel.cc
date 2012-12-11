@@ -69,6 +69,7 @@ enum {
   MSG_SETCHANNELOPTIONS,
   MSG_SCALEVOLUME,
   MSG_HANDLEVIEWREQUEST,
+  MSG_READYTOSENDDATA,
   MSG_SENDDATA,
   MSG_DATARECEIVED,
   MSG_SETCAPTURER,
@@ -1257,6 +1258,9 @@ bool BaseChannel::SetBaseRemoteContent_w(const MediaContentDescription* content,
     ret &= media_channel()->SetSendRtpHeaderExtensions(
         content->rtp_header_extensions());
   }
+  if (content->bandwidth() != kAutoBandwidth) {
+    ret &= media_channel()->SetSendBandwidth(false, content->bandwidth());
+  }
   set_remote_content_direction(content->direction());
   return ret;
 }
@@ -1482,11 +1486,16 @@ bool VoiceChannel::IsAudioMonitorRunning() const {
 }
 
 void VoiceChannel::StartTypingMonitor(const TypingMonitorOptions& settings) {
-  // Don't allow resetting parameters on the fly.
-  if (!typing_monitor_) {
-    typing_monitor_.reset(new TypingMonitor(this, worker_thread(), settings));
-    SignalAutoMuted.repeat(typing_monitor_->SignalMuted);
-  }
+  typing_monitor_.reset(new TypingMonitor(this, worker_thread(), settings));
+  SignalAutoMuted.repeat(typing_monitor_->SignalMuted);
+}
+
+void VoiceChannel::StopTypingMonitor() {
+  typing_monitor_.reset();
+}
+
+bool VoiceChannel::IsTypingMonitorRunning() const {
+  return typing_monitor_;
 }
 
 bool VoiceChannel::MuteStream_w(uint32 ssrc, bool mute) {
@@ -1990,10 +1999,6 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
       // Log an error on failure, but don't abort the call.
       LOG(LS_ERROR) << "Failed to set video channel options";
     }
-    // Set bandwidth parameters (what the other side wants to get, default=auto)
-    int bandwidth_bps = video->bandwidth();
-    bool auto_bandwidth = (bandwidth_bps == kAutoBandwidth);
-    ret &= media_channel()->SetSendBandwidth(auto_bandwidth, bandwidth_bps);
   }
 
   // If everything worked, see if we can start sending.
@@ -2423,11 +2428,21 @@ void DataChannel::ChangeState() {
     LOG(LS_ERROR) << "Failed to SetSend on data channel";
   }
 
+  // Post to trigger SignalReadyToSendData.
+  signaling_thread()->Post(this, MSG_READYTOSENDDATA,
+                           new BoolMessageData(send));
+
   LOG(LS_INFO) << "Changing data state, recv=" << recv << " send=" << send;
 }
 
 void DataChannel::OnMessage(talk_base::Message *pmsg) {
   switch (pmsg->message_id) {
+    case MSG_READYTOSENDDATA: {
+      BoolMessageData* data = static_cast<BoolMessageData*>(pmsg->pdata);
+      SignalReadyToSendData(data->data());
+      delete data;
+      break;
+    }
     case MSG_SENDDATA: {
       SendDataMessageData* data =
           static_cast<SendDataMessageData*>(pmsg->pdata);

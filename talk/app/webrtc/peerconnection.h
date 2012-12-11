@@ -71,8 +71,12 @@ class PeerConnection : public PeerConnectionInterface,
                         const std::string& tones, int duration,
                         const AudioTrackInterface* play_track);
 
+  virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
+      const std::string& label,
+      const DataChannelInit* config);
   virtual bool GetStats(StatsObserver* observer,
                         webrtc::MediaStreamTrackInterface* track);
+
 
   virtual ReadyState ready_state();
   virtual IceState ice_state();
@@ -115,6 +119,7 @@ class PeerConnection : public PeerConnectionInterface,
   // Implements RemoteMediaStreamObserver.
   virtual void OnAddStream(MediaStreamInterface* stream);
   virtual void OnRemoveStream(MediaStreamInterface* stream);
+  virtual void OnAddDataChannel(DataChannelInterface* data_channel);
 
   // Implements IceCandidateObserver
   virtual void OnIceChange();

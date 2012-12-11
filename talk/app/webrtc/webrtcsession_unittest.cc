@@ -235,6 +235,9 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
   }
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* stream) {
   }
+  virtual void OnAddDataChannel(webrtc::DataChannelInterface* data_channel) {
+  }
+
 
  private:
   cricket::MediaSessionOptions options_;

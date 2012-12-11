@@ -22,14 +22,15 @@
 static const cricket::AudioCodec kPcmuCodec(0, "PCMU", 8000, 64000, 1, 0);
 static const cricket::AudioCodec kIsacCodec(103, "ISAC", 16000, 32000, 1, 0);
 static const cricket::AudioCodec kCeltCodec(110, "CELT", 32000, 64000, 2, 0);
+static const cricket::AudioCodec kOpusCodec(111, "opus", 48000, 64000, 2, 0);
 static const cricket::AudioCodec kRedCodec(117, "red", 8000, 0, 1, 0);
 static const cricket::AudioCodec kCn8000Codec(13, "CN", 8000, 0, 1, 0);
 static const cricket::AudioCodec kCn16000Codec(105, "CN", 16000, 0, 1, 0);
 static const cricket::AudioCodec
     kTelephoneEventCodec(106, "telephone-event", 8000, 0, 1, 0);
 static const cricket::AudioCodec* const kAudioCodecs[] = {
-    &kPcmuCodec, &kIsacCodec, &kCeltCodec, &kRedCodec, &kCn8000Codec,
-    &kCn16000Codec, &kTelephoneEventCodec,
+    &kPcmuCodec, &kIsacCodec, &kCeltCodec, &kOpusCodec, &kRedCodec,
+    &kCn8000Codec, &kCn16000Codec, &kTelephoneEventCodec,
 };
 const char kRingbackTone[] = "RIFF____WAVE____ABCD1234";
 static uint32 kSsrc1 = 0x99;
@@ -161,6 +162,47 @@ class WebRtcVoiceEngineTestFake : public testing::Test {
     EXPECT_TRUE(voe_.WasSendTelephoneEventCalled(channel_id, 4, 145));
     EXPECT_TRUE(voe_.WasPlayDtmfToneCalled(4, 145));
   }
+
+  // Test that send bandwidth is set correctly.
+  // |codec| is the codec under test.
+  // |default_bitrate| is the default bitrate for the codec.
+  // |auto_bitrate| is a parameter to set to SetSendBandwidth().
+  // |desired_bitrate| is a parameter to set to SetSendBandwidth().
+  // |expected_result| is expected results from SetSendBandwidth().
+  void TestSendBandwidth(const cricket::AudioCodec& codec,
+                         int default_bitrate,
+                         bool auto_bitrate,
+                         int desired_bitrate,
+                         bool expected_result) {
+    int channel_num = voe_.GetLastChannel();
+    std::vector<cricket::AudioCodec> codecs;
+
+    codecs.push_back(codec);
+    EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+
+    webrtc::CodecInst temp_codec;
+    EXPECT_FALSE(voe_.GetSendCodec(channel_num, temp_codec));
+    EXPECT_EQ(default_bitrate, temp_codec.rate);
+
+    bool result = channel_->SetSendBandwidth(auto_bitrate, desired_bitrate);
+    EXPECT_EQ(expected_result, result);
+
+    EXPECT_FALSE(voe_.GetSendCodec(channel_num, temp_codec));
+
+    if (result) {
+      // If SetSendBandwidth() returns true then bitrate is set correctly.
+      if (auto_bitrate) {
+        EXPECT_EQ(default_bitrate, temp_codec.rate);
+      } else {
+        EXPECT_EQ(desired_bitrate, temp_codec.rate);
+      }
+    } else {
+      // If SetSendBandwidth() returns false then bitrate is set to the
+      // default value.
+      EXPECT_EQ(default_bitrate, temp_codec.rate);
+    }
+  }
+
 
  protected:
   cricket::FakeWebRtcVoiceEngine voe_;
@@ -357,6 +399,67 @@ TEST_F(WebRtcVoiceEngineTestFake, SetRecvCodecsWhilePlaying) {
   EXPECT_FALSE(channel_->SetRecvCodecs(codecs));
 }
 
+TEST_F(WebRtcVoiceEngineTestFake, SetSendBandwidthAuto) {
+  EXPECT_TRUE(SetupEngine());
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+
+  // Test that when autobw is true, bitrate is kept as the default
+  // value. autobw is true for the following tests.
+
+  // ISAC, default bitrate == 32000.
+  TestSendBandwidth(kIsacCodec, 32000, true, 96000, true);
+
+  // PCMU, default bitrate == 64000.
+  TestSendBandwidth(kPcmuCodec, 64000, true, 96000, true);
+
+  // CELT, default bitrate == 64000.
+  TestSendBandwidth(kCeltCodec, 64000, true, 96000, true);
+
+  // opus, default bitrate == 64000.
+  TestSendBandwidth(kOpusCodec, 64000, true, 96000, true);
+}
+
+TEST_F(WebRtcVoiceEngineTestFake, SetSendBandwidthFixedMultiRate) {
+  EXPECT_TRUE(SetupEngine());
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+
+  // Test that we can set bitrate if a multi-rate codec is used.
+  // autobw is false for the following tests.
+
+  // ISAC, default bitrate == 32000.
+  TestSendBandwidth(kIsacCodec, 32000, false, 128000, true);
+
+  // CELT, default bitrate == 64000.
+  TestSendBandwidth(kCeltCodec, 64000, false, 96000, true);
+
+  // opus, default bitrate == 64000.
+  TestSendBandwidth(kOpusCodec, 64000, false, 96000, true);
+}
+
+// Test that bitrate cannot be set for CBR codecs.
+// Bitrate is ignored if it is higher than the fixed bitrate.
+// Bitrate less then the fixed bitrate is an error.
+TEST_F(WebRtcVoiceEngineTestFake, SetSendBandwidthFixedCbr) {
+  EXPECT_TRUE(SetupEngine());
+  EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
+
+  webrtc::CodecInst codec;
+  int channel_num = voe_.GetLastChannel();
+  std::vector<cricket::AudioCodec> codecs;
+
+  // PCMU, default bitrate == 64000.
+  codecs.push_back(kPcmuCodec);
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, codec));
+  EXPECT_EQ(64000, codec.rate);
+  EXPECT_TRUE(channel_->SetSendBandwidth(false, 128000));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, codec));
+  EXPECT_EQ(64000, codec.rate);
+  EXPECT_FALSE(channel_->SetSendBandwidth(false, 128));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, codec));
+  EXPECT_EQ(64000, codec.rate);
+}
+
 // Test that we apply codecs properly.
 TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   EXPECT_TRUE(SetupEngine());
@@ -366,16 +469,34 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecs) {
   codecs.push_back(kPcmuCodec);
   codecs.push_back(kRedCodec);
   codecs[0].id = 96;
+  codecs[0].bitrate = 48000;
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   webrtc::CodecInst gcodec;
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(96, gcodec.pltype);
+  EXPECT_EQ(48000, gcodec.rate);
   EXPECT_STREQ("ISAC", gcodec.plname);
   EXPECT_FALSE(voe_.GetVAD(channel_num));
   EXPECT_FALSE(voe_.GetFEC(channel_num));
   EXPECT_EQ(13, voe_.GetSendCNPayloadType(channel_num, false));
   EXPECT_EQ(105, voe_.GetSendCNPayloadType(channel_num, true));
   EXPECT_EQ(106, voe_.GetSendTelephoneEventPayloadType(channel_num));
+}
+
+// Test that we can set opus as send codec with a specific bitrate.
+TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecOpus) {
+  EXPECT_TRUE(SetupEngine());
+  int channel_num = voe_.GetLastChannel();
+  std::vector<cricket::AudioCodec> codecs;
+  codecs.push_back(kOpusCodec);
+  codecs[0].id = 111;
+  codecs[0].bitrate = 96000;
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  webrtc::CodecInst gcodec;
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(111, gcodec.pltype);
+  EXPECT_EQ(96000, gcodec.rate);
+  EXPECT_STREQ("opus", gcodec.plname);
 }
 
 // Test that we can apply CELT with stereo mode but fail with mono mode.
@@ -387,10 +508,13 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCelt) {
   codecs.push_back(kPcmuCodec);
   codecs[0].id = 96;
   codecs[0].channels = 2;
+  codecs[0].bitrate = 96000;
+  codecs[1].bitrate = 96000;
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   webrtc::CodecInst gcodec;
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(96, gcodec.pltype);
+  EXPECT_EQ(96000, gcodec.rate);
   EXPECT_EQ(2, gcodec.channels);
   EXPECT_STREQ("CELT", gcodec.plname);
   // Doesn't support mono, expect it to fall back to the next codec in the list.
@@ -399,6 +523,7 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsCelt) {
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.pltype);
   EXPECT_EQ(1, gcodec.channels);
+  EXPECT_EQ(64000, gcodec.rate);
   EXPECT_STREQ("PCMU", gcodec.plname);
 }
 
@@ -1955,7 +2080,7 @@ TEST(WebRtcVoiceEngineTest, HasCorrectCodecs) {
   cricket::WebRtcVoiceEngine engine;
   // Check codecs by name.
   EXPECT_TRUE(engine.FindCodec(
-      cricket::AudioCodec(96, "opus", 48000, 0, 1, 0)));
+      cricket::AudioCodec(96, "opus", 48000, 0, 2, 0)));
   EXPECT_TRUE(engine.FindCodec(
       cricket::AudioCodec(96, "CELT", 32000, 0, 2, 0)));
   EXPECT_TRUE(engine.FindCodec(

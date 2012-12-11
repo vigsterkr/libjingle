@@ -54,6 +54,9 @@ class PeerConnectionProxy : public PeerConnectionInterface,
   virtual bool SendDtmf(const AudioTrackInterface* send_track,
                         const std::string& tones, int duration,
                         const AudioTrackInterface* play_track);
+  virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
+      const std::string& label,
+      const DataChannelInit* config);
 
   virtual ReadyState ready_state();
   virtual IceState ice_state();

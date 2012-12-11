@@ -372,6 +372,16 @@ bool PeerConnection::SendDtmf(const AudioTrackInterface* send_track,
   return session_->SendDtmf(send_track->label(), tones, duration, play_name);
 }
 
+talk_base::scoped_refptr<DataChannelInterface>
+PeerConnection::CreateDataChannel(
+    const std::string& label,
+    const DataChannelInit* config) {
+  talk_base::scoped_refptr<DataChannelInterface> channel(
+      session_->CreateDataChannel(label, config));
+  observer_->OnRenegotiationNeeded();
+  return channel;
+}
+
 bool PeerConnection::StartIce(IceOptions options) {
   // Ice will be started by default and will be removed in Jsep01.
   // TODO: Remove this method once fully migrated to JSEP01.
@@ -620,6 +630,10 @@ void PeerConnection::OnAddStream(MediaStreamInterface* stream) {
 void PeerConnection::OnRemoveStream(MediaStreamInterface* stream) {
   stream_handler_->RemoveRemoteStream(stream);
   observer_->OnRemoveStream(stream);
+}
+
+void PeerConnection::OnAddDataChannel(DataChannelInterface* data_channel) {
+  observer_->OnDataChannel(data_channel);
 }
 
 void PeerConnection::OnIceChange() {

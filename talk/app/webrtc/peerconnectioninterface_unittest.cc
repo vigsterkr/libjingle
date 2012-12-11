@@ -33,6 +33,7 @@
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/test/fakeconstraints.h"
+#include "talk/app/webrtc/test/mockpeerconnectionobservers.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stringutils.h"
@@ -57,13 +58,20 @@ static const uint32 kTimeout = 5000U;
 using talk_base::scoped_ptr;
 using talk_base::scoped_refptr;
 using webrtc::AudioSourceInterface;
+using webrtc::AudioTrackInterface;
+using webrtc::DataChannelInterface;
+using webrtc::FakeConstraints;
 using webrtc::FakePortAllocatorFactory;
 using webrtc::IceCandidateInterface;
-using webrtc::AudioTrackInterface;
+
+using webrtc::DataBuffer;
 using webrtc::JsepInterface;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::MediaStreamTrackInterface;
+using webrtc::MockCreateSessionDescriptionObserver;
+using webrtc::MockDataChannelObserver;
+using webrtc::MockSetSessionDescriptionObserver;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
@@ -71,8 +79,10 @@ using webrtc::SessionDescriptionInterface;
 using webrtc::VideoSourceInterface;
 using webrtc::VideoTrackInterface;
 
+namespace {
+
 // Gets the first ssrc of given content type from the ContentInfo.
-static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
+bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
   if (!content_info || !ssrc) {
     return false;
   }
@@ -86,7 +96,17 @@ static bool GetFirstSsrc(const cricket::ContentInfo* content_info, int* ssrc) {
   return true;
 }
 
-namespace {
+void SetSsrcToZero(std::string* sdp) {
+  const char kSdpSsrcAtribute[] = "a=ssrc:";
+  const char kSdpSsrcAtributeZero[] = "a=ssrc:0";
+  size_t ssrc_pos = 0;
+  while ((ssrc_pos = sdp->find(kSdpSsrcAtribute, ssrc_pos)) !=
+      std::string::npos) {
+    size_t end_ssrc = sdp->find(" ", ssrc_pos);
+    sdp->replace(ssrc_pos, end_ssrc - ssrc_pos, kSdpSsrcAtributeZero);
+    ssrc_pos = end_ssrc;
+  }
+}
 
 class MockPeerConnectionObserver : public PeerConnectionObserver {
  public:
@@ -125,6 +145,10 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   virtual void OnRenegotiationNeeded() {
     renegotiation_needed_ = true;
   }
+  virtual void OnDataChannel(DataChannelInterface* data_channel) {
+    last_datachannel_ = data_channel;
+  }
+
   virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
     std::string sdp;
@@ -154,63 +178,13 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   scoped_refptr<PeerConnectionInterface> pc_;
   PeerConnectionInterface::ReadyState state_;
   scoped_ptr<IceCandidateInterface> last_candidate_;
+  scoped_refptr<DataChannelInterface> last_datachannel_;
   bool renegotiation_needed_;
   bool ice_complete_;
 
  private:
   scoped_refptr<MediaStreamInterface> last_added_stream_;
   scoped_refptr<MediaStreamInterface> last_removed_stream_;
-};
-
-class MockCreateSessionDescriptionObserver
-    : public webrtc::CreateSessionDescriptionObserver {
- public:
-  MockCreateSessionDescriptionObserver()
-      : called_(false),
-        result_(false) {}
-  virtual ~MockCreateSessionDescriptionObserver() {}
-  virtual void OnSuccess(SessionDescriptionInterface* desc) {
-    called_ = true;
-    result_ = true;
-    desc_.reset(desc);
-  }
-  virtual void OnFailure(const std::string& error) {
-    called_ = true;
-    result_ = false;
-  }
-  bool called() const { return called_; }
-  bool result() const { return result_; }
-  SessionDescriptionInterface* release_desc() {
-    return desc_.release();
-  }
-
- private:
-  bool called_;
-  bool result_;
-  talk_base::scoped_ptr<SessionDescriptionInterface> desc_;
-};
-
-class MockSetSessionDescriptionObserver
-    : public webrtc::SetSessionDescriptionObserver {
- public:
-  MockSetSessionDescriptionObserver()
-      : called_(false),
-        result_(false) {}
-  virtual ~MockSetSessionDescriptionObserver() {}
-  virtual void OnSuccess() {
-    called_ = true;
-    result_ = true;
-  }
-  virtual void OnFailure(const std::string& error) {
-    called_ = true;
-    result_ = false;
-  }
-  bool called() const { return called_; }
-  bool result() const { return result_; }
-
- private:
-  bool called_;
-  bool result_;
 };
 
 // TODO(perkj): Move to a common file with test mocks.
@@ -234,7 +208,6 @@ class MockStatsObserver : public webrtc::StatsObserver {
 };
 
 }  // namespace
-
 class PeerConnectionInterfaceTest : public testing::Test {
  protected:
   virtual void SetUp() {
@@ -244,11 +217,16 @@ class PeerConnectionInterfaceTest : public testing::Test {
   }
 
   void CreatePeerConnection() {
-    CreatePeerConnection("", "");
+    CreatePeerConnection("", "", NULL);
+  }
+
+  void CreatePeerConnection(webrtc::MediaConstraintsInterface* constraints) {
+    CreatePeerConnection("", "", constraints);
   }
 
   void CreatePeerConnection(const std::string& uri,
-                            const std::string& password) {
+                            const std::string& password,
+                            webrtc::MediaConstraintsInterface* constraints) {
     JsepInterface::IceServer server;
     JsepInterface::IceServers servers;
     server.uri = uri;
@@ -256,7 +234,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     servers.push_back(server);
 
     port_allocator_factory_ = FakePortAllocatorFactory::Create();
-    pc_ = pc_factory_->CreatePeerConnection(servers, NULL,
+    pc_ = pc_factory_->CreatePeerConnection(servers, constraints,
                                             port_allocator_factory_.get(),
                                             &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
@@ -265,7 +243,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
   }
 
   void CreatePeerConnectionWithDifferentConfigurations() {
-    CreatePeerConnection(kStunAddressOnly, "");
+    CreatePeerConnection(kStunAddressOnly, "", NULL);
     EXPECT_EQ(1u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
     EXPECT_EQ("address",
@@ -273,19 +251,19 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_EQ(kDefaultStunPort,
         port_allocator_factory_->stun_configs()[0].server.port());
 
-    CreatePeerConnection(kStunInvalidPort, "");
+    CreatePeerConnection(kStunInvalidPort, "", NULL);
     EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
 
-    CreatePeerConnection(kStunAddressPortAndMore1, "");
+    CreatePeerConnection(kStunAddressPortAndMore1, "", NULL);
     EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
 
-    CreatePeerConnection(kStunAddressPortAndMore2, "");
+    CreatePeerConnection(kStunAddressPortAndMore2, "", NULL);
     EXPECT_EQ(0u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(0u, port_allocator_factory_->turn_configs().size());
 
-    CreatePeerConnection(kTurnIceServerUri, kTurnPassword);
+    CreatePeerConnection(kTurnIceServerUri, kTurnPassword, NULL);
     EXPECT_EQ(1u, port_allocator_factory_->stun_configs().size());
     EXPECT_EQ(1u, port_allocator_factory_->turn_configs().size());
     EXPECT_EQ(kTurnUsername,
@@ -422,17 +400,36 @@ class PeerConnectionInterfaceTest : public testing::Test {
   }
 
   void CreateOfferReceiveAnswer() {
+    CreateOfferAsLocalDescription();
+    std::string sdp;
+    EXPECT_TRUE(pc_->local_description()->ToString(&sdp));
+    CreateAnswerAsRemoteDescription(sdp);
+  }
+
+  void CreateOfferAsLocalDescription() {
     SessionDescriptionInterface* offer = NULL;
     ASSERT_TRUE(DoCreateOffer(&offer));
     EXPECT_TRUE(DoSetLocalDescription(offer));
-    std::string sdp;
-    EXPECT_TRUE(offer->ToString(&sdp));
     EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
+  }
+
+  void CreateAnswerAsRemoteDescription(const std::string& offer) {
     webrtc::JsepSessionDescription* answer = new webrtc::JsepSessionDescription(
         SessionDescriptionInterface::kAnswer);
-    EXPECT_TRUE(answer->Initialize(sdp));
+    EXPECT_TRUE(answer->Initialize(offer));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
     EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+  }
+
+  // Creates an offer and applies it as a local session description.
+  // Creates an answer with the same SDP an the offer but removes all lines
+  // that start with a:ssrc"
+  void CreateOfferReceiveAnswerWithoutSsrc() {
+    CreateOfferAsLocalDescription();
+    std::string sdp;
+    EXPECT_TRUE(pc_->local_description()->ToString(&sdp));
+    SetSsrcToZero(&sdp);
+    CreateAnswerAsRemoteDescription(sdp);
   }
 
   scoped_refptr<FakePortAllocatorFactory> port_allocator_factory_;
@@ -608,3 +605,141 @@ TEST_F(PeerConnectionInterfaceTest, GetStatsForInvalidTrack) {
       pc_factory_->CreateAudioTrack("unknown track", NULL));
   EXPECT_FALSE(DoGetStats(unknown_audio_track));
 }
+
+// This test setup two RTP data channels in loop back.
+#ifdef WIN32
+// TODO(perkj): Investigate why the transport channel sometimes don't become
+// writable on Windows when we try to connect in loop back.
+TEST_F(PeerConnectionInterfaceTest, DISABLED_TestDataChannel) {
+#else
+TEST_F(PeerConnectionInterfaceTest, TestDataChannel) {
+#endif
+  FakeConstraints constraints;
+  constraints.SetAllowRtpDataChannels();
+  CreatePeerConnection(&constraints);
+  scoped_refptr<DataChannelInterface> data1  =
+      pc_->CreateDataChannel("test1", NULL);
+  scoped_refptr<DataChannelInterface> data2  =
+      pc_->CreateDataChannel("test2", NULL);
+  ASSERT_TRUE(data1 != NULL);
+  talk_base::scoped_ptr<MockDataChannelObserver> observer1(
+      new MockDataChannelObserver(data1));
+  talk_base::scoped_ptr<MockDataChannelObserver> observer2(
+      new MockDataChannelObserver(data2));
+
+  EXPECT_EQ(DataChannelInterface::kConnecting, data1->state());
+  EXPECT_EQ(DataChannelInterface::kConnecting, data2->state());
+  std::string data_to_send1 = "testing testing";
+  std::string data_to_send2 = "testing something else";
+  EXPECT_FALSE(data1->Send(DataBuffer(data_to_send1)));
+
+  CreateOfferReceiveAnswer();
+  EXPECT_TRUE_WAIT(observer1->IsOpen(), kTimeout);
+  EXPECT_TRUE_WAIT(observer2->IsOpen(), kTimeout);
+
+  EXPECT_EQ(DataChannelInterface::kOpen, data1->state());
+  EXPECT_EQ(DataChannelInterface::kOpen, data2->state());
+  EXPECT_TRUE(data1->Send(DataBuffer(data_to_send1)));
+  EXPECT_TRUE(data2->Send(DataBuffer(data_to_send2)));
+
+  EXPECT_EQ_WAIT(data_to_send1, observer1->last_message(), kTimeout);
+  EXPECT_EQ_WAIT(data_to_send2, observer2->last_message(), kTimeout);
+
+  data1->Close();
+  EXPECT_EQ(DataChannelInterface::kClosing, data1->state());
+  CreateOfferReceiveAnswer();
+  EXPECT_FALSE(observer1->IsOpen());
+  EXPECT_EQ(DataChannelInterface::kClosed, data1->state());
+  EXPECT_TRUE(observer2->IsOpen());
+
+  data_to_send2 = "testing something else again";
+  EXPECT_TRUE(data2->Send(DataBuffer(data_to_send2)));
+
+  EXPECT_EQ_WAIT(data_to_send2, observer2->last_message(), kTimeout);
+}
+
+// This test setup a RTP data channels in loop back and test that a channel is
+// opened even if the remote end answer with a zero SSRC.
+#ifdef WIN32
+// TODO(perkj): Investigate why the transport channel sometimes don't become
+// writable on Windows when we try to connect in loop back.
+TEST_F(PeerConnectionInterfaceTest, DISABLED_TestSendOnlyDataChannel) {
+#else
+TEST_F(PeerConnectionInterfaceTest, TestSendOnlyDataChannel) {
+#endif
+  FakeConstraints constraints;
+  constraints.SetAllowRtpDataChannels();
+  CreatePeerConnection(&constraints);
+  scoped_refptr<DataChannelInterface> data1  =
+      pc_->CreateDataChannel("test1", NULL);
+  talk_base::scoped_ptr<MockDataChannelObserver> observer1(
+      new MockDataChannelObserver(data1));
+
+  CreateOfferReceiveAnswerWithoutSsrc();
+
+  EXPECT_TRUE_WAIT(observer1->IsOpen(), kTimeout);
+
+  data1->Close();
+  EXPECT_EQ(DataChannelInterface::kClosing, data1->state());
+  CreateOfferReceiveAnswerWithoutSsrc();
+  EXPECT_EQ(DataChannelInterface::kClosed, data1->state());
+  EXPECT_FALSE(observer1->IsOpen());
+}
+
+// This test that if a data channel is added in an answer a receive only channel
+// channel is created.
+TEST_F(PeerConnectionInterfaceTest, TestReceiveOnlyDataChannel) {
+  FakeConstraints constraints;
+  constraints.SetAllowRtpDataChannels();
+  CreatePeerConnection(&constraints);
+
+  std::string offer_label = "offer_channel";
+  scoped_refptr<DataChannelInterface> offer_channel  =
+      pc_->CreateDataChannel(offer_label, NULL);
+
+  CreateOfferAsLocalDescription();
+
+  // Replace the data channel label in the offer and apply it as an answer.
+  std::string receive_label = "answer_channel";
+  std::string sdp;
+  EXPECT_TRUE(pc_->local_description()->ToString(&sdp));
+  talk_base::replace_substrs(offer_label.c_str(), offer_label.length(),
+                             receive_label.c_str(), receive_label.length(),
+                             &sdp);
+  CreateAnswerAsRemoteDescription(sdp);
+
+  // Verify that a new incoming data channel has been created and that
+  // it is open but can't we written to.
+  ASSERT_TRUE(observer_.last_datachannel_ != NULL);
+  DataChannelInterface* received_channel = observer_.last_datachannel_;
+  EXPECT_EQ(DataChannelInterface::kConnecting, received_channel->state());
+  EXPECT_EQ(receive_label, received_channel->label());
+  EXPECT_FALSE(received_channel->Send(DataBuffer("something")));
+
+  // Verify that the channel we initially offered has been rejected.
+  EXPECT_EQ(DataChannelInterface::kClosed, offer_channel->state());
+
+  // Do another offer / answer exchange and verify that the data channel is
+  // opened.
+  CreateOfferReceiveAnswer();
+  EXPECT_EQ_WAIT(DataChannelInterface::kOpen, received_channel->state(),
+                 kTimeout);
+}
+
+// This test that no data channel is returned if a reliable channel is
+// requested.
+// TODO(perkj): Remove this test once reliable channels are implemented.
+TEST_F(PeerConnectionInterfaceTest, CreateReliableDataChannel) {
+  FakeConstraints constraints;
+  constraints.SetAllowRtpDataChannels();
+  CreatePeerConnection(&constraints);
+
+  std::string label = "test";
+  webrtc::DataChannelInit config;
+  config.reliable = true;
+  scoped_refptr<DataChannelInterface> channel  =
+      pc_->CreateDataChannel(label, &config);
+  EXPECT_TRUE(channel == NULL);
+}
+
+

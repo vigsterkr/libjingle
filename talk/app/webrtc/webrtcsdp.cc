@@ -118,10 +118,10 @@ static const char kAttributeRtcp[] = "rtcp";
 static const char kAttributeIceUfrag[] = "ice-ufrag";
 static const char kAttributeIcePwd[] = "ice-pwd";
 static const char kAttributeIceOption[] = "ice-options";
-static const char kAttributeSendOnly[] ="sendonly";
-static const char kAttributeRecvOnly[] ="recvonly";
-static const char kAttributeSendRecv[] ="sendrecv";
-static const char kAttributeInactive[] ="inactive";
+static const char kAttributeSendOnly[] = "sendonly";
+static const char kAttributeRecvOnly[] = "recvonly";
+static const char kAttributeSendRecv[] = "sendrecv";
+static const char kAttributeInactive[] = "inactive";
 
 // Candidate
 static const char kCandidateHost[] = "host";

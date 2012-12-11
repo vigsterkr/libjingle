@@ -38,6 +38,7 @@ enum {
   MSG_ICESTATE,
   MSG_CANSENDDTMF,
   MSG_SEND_DTMF,
+  MSG_CREATEDATACHANNEL,
   MSG_TERMINATE,
   MSG_CREATEOFFER,
   MSG_CREATEOFFERJSEP00,
@@ -171,6 +172,18 @@ class SendDtmfMessageData : public talk_base::MessageData {
   bool result;
 };
 
+struct CreateDataChannelMessageData : public talk_base::MessageData {
+  CreateDataChannelMessageData(std::string label,
+                               const webrtc::DataChannelInit* init)
+      : label(label),
+        init(init) {
+  }
+
+  std::string label;
+  const webrtc::DataChannelInit* init;
+  talk_base::scoped_refptr<webrtc::DataChannelInterface> data_channel;
+};
+
 }  // namespace
 
 namespace webrtc {
@@ -280,6 +293,17 @@ bool PeerConnectionProxy::SendDtmf(const AudioTrackInterface* send_track,
     return msg.result;
   }
   return peerconnection_->SendDtmf(send_track, tones, duration, play_track);
+}
+
+talk_base::scoped_refptr<DataChannelInterface>
+PeerConnectionProxy::CreateDataChannel(const std::string& label,
+                                       const DataChannelInit* config) {
+  if (!signaling_thread_->IsCurrent()) {
+    CreateDataChannelMessageData msg(label, config);
+    signaling_thread_->Send(this, MSG_CREATEDATACHANNEL, &msg);
+    return msg.data_channel;
+  }
+  return peerconnection_->CreateDataChannel(label, config);
 }
 
 bool PeerConnectionProxy::StartIce(IceOptions options) {
@@ -493,6 +517,13 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       SendDtmfMessageData* param(static_cast<SendDtmfMessageData*> (data));
       param->result = peerconnection_->SendDtmf(param->send_track,
           param->tones, param->duration, param->play_track);
+      break;
+    }
+    case MSG_CREATEDATACHANNEL: {
+      CreateDataChannelMessageData* param(
+          static_cast<CreateDataChannelMessageData*>(data));
+      param->data_channel = peerconnection_->CreateDataChannel(param->label,
+                                                               param->init);
       break;
     }
     case MSG_CREATEOFFERJSEP00: {
