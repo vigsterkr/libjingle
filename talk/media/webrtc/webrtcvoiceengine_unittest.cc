@@ -566,29 +566,41 @@ TEST_F(WebRtcVoiceEngineTestFake, SetSendCodecsBitrate) {
   EXPECT_EQ(103, gcodec.pltype);
   EXPECT_STREQ("ISAC", gcodec.plname);
   EXPECT_EQ(32000, gcodec.rate);
+
   codecs[0].bitrate = 0;         // bitrate == default
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(103, gcodec.pltype);
   EXPECT_STREQ("ISAC", gcodec.plname);
   EXPECT_EQ(-1, gcodec.rate);
+
   codecs[0].bitrate = 28000;     // bitrate == 28000
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(103, gcodec.pltype);
   EXPECT_STREQ("ISAC", gcodec.plname);
   EXPECT_EQ(28000, gcodec.rate);
+
   codecs[0] = kPcmuCodec;        // bitrate == 64000
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.pltype);
   EXPECT_STREQ("PCMU", gcodec.plname);
   EXPECT_EQ(64000, gcodec.rate);
+
   codecs[0].bitrate = 0;         // bitrate == default
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
   EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
   EXPECT_EQ(0, gcodec.pltype);
   EXPECT_STREQ("PCMU", gcodec.plname);
+  EXPECT_EQ(64000, gcodec.rate);
+
+  codecs[0] = kOpusCodec;
+  codecs[0].bitrate = 0;         // bitrate == default
+  EXPECT_TRUE(channel_->SetSendCodecs(codecs));
+  EXPECT_EQ(0, voe_.GetSendCodec(channel_num, gcodec));
+  EXPECT_EQ(111, gcodec.pltype);
+  EXPECT_STREQ("opus", gcodec.plname);
   EXPECT_EQ(64000, gcodec.rate);
 }
 

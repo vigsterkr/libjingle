@@ -911,7 +911,9 @@ bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
           if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
             voe_codec.rate = (in.bitrate > 0) ? in.bitrate : -1;
           } else if (multi_rate) {
-            voe_codec.rate = in.bitrate;
+            if (in.bitrate != 0) {
+              voe_codec.rate = in.bitrate;
+            }
           }
           *out = voe_codec;
         }
