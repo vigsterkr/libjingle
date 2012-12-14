@@ -78,42 +78,46 @@
         'examples/login/login_main.cc',
       ],
     },  # target login
-    {
-      'target_name': 'call',
-      'type': 'executable',
-      'dependencies': [
-        'libjingle.gyp:libjingle_p2p',
-        'libjingle_xmpphelp',
-      ],
-      'sources': [
-       'examples/call/call_main.cc',
-       'examples/call/callclient.cc',
-       'examples/call/console.cc',
-       'examples/call/friendinvitesendtask.cc',
-       'examples/call/mediaenginefactory.cc',
-       'examples/call/mucinviterecvtask.cc',
-       'examples/call/mucinvitesendtask.cc',
-       'examples/call/presenceouttask.cc',
-       'examples/call/presencepushtask.cc',
-      ],
-      'conditions': [
-        ['OS=="linux"', {
-          'link_settings': {
-            'libraries': [
-              '<!@(pkg-config --libs-only-l gtk+-2.0 gthread-2.0)',
-            ],
-          },
-        }],
-        ['OS=="win"', {
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'AdditionalDependencies': [
-                'strmiids.lib',
+  ],
+  'conditions': [
+    ['OS!="android"', {
+      'targets': [{
+        'target_name': 'call',
+        'type': 'executable',
+        'dependencies': [
+          'libjingle.gyp:libjingle_p2p',
+          'libjingle_xmpphelp',
+        ],
+        'sources': [
+          'examples/call/call_main.cc',
+          'examples/call/callclient.cc',
+          'examples/call/console.cc',
+          'examples/call/friendinvitesendtask.cc',
+          'examples/call/mediaenginefactory.cc',
+          'examples/call/mucinviterecvtask.cc',
+          'examples/call/mucinvitesendtask.cc',
+          'examples/call/presenceouttask.cc',
+          'examples/call/presencepushtask.cc',
+        ],
+        'conditions': [
+          ['OS=="linux"', {
+            'link_settings': {
+              'libraries': [
+                '<!@(pkg-config --libs-only-l gtk+-2.0 gthread-2.0)',
               ],
             },
-          },
-        }],
-      ],
-    },  # target call
+          }],
+          ['OS=="win"', {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'strmiids.lib',
+                ],
+              },
+            },
+          }],
+        ],
+      }],  # target call
+    }],
   ],
 }

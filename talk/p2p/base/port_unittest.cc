@@ -153,6 +153,12 @@ class TestPort : public Port {
   void AddCandidateAddress(const talk_base::SocketAddress& addr) {
     AddAddress(addr, addr, "udp", Type(), type_preference(), false);
   }
+  void AddCandidateAddress(const talk_base::SocketAddress& addr,
+                           const talk_base::SocketAddress& base_address,
+                           const std::string& type,
+                           bool final) {
+    AddAddress(addr, base_address, "udp", type, type_preference(), final);
+  }
 
   virtual Connection* CreateConnection(const Candidate& remote_candidate,
                                        CandidateOrigin origin) {
@@ -199,7 +205,7 @@ class TestChannel : public sigslot::has_slots<> {
   TestChannel(Port* p1, Port* p2)
       : src_(p1), dst_(p2), address_count_(0), conn_(NULL),
         remote_request_(NULL) {
-    src_->SignalAddressReady.connect(this, &TestChannel::OnAddressReady);
+    src_->SignalAddressReady.connect(this, &TestChannel::OnPortReady);
     src_->SignalUnknownAddress.connect(this, &TestChannel::OnUnknownAddress);
   }
 
@@ -233,7 +239,7 @@ class TestChannel : public sigslot::has_slots<> {
     conn_->Destroy();
   }
 
-  void OnAddressReady(Port* port) {
+  void OnPortReady(Port* port) {
     address_count_++;
   }
 
@@ -1888,7 +1894,22 @@ TEST_F(PortTest, TestPortProxyProperties) {
   EXPECT_EQ(port->Tiebreaker(), proxy->Tiebreaker());
 }
 
-TEST_F(PortTest, TestRelatedAddressAndFoundation) {
+// In the case of shared socket, one port may be shared by local and stun.
+// Test that candidates with different types will have different foundation.
+TEST_F(PortTest, TestFoundation) {
+  talk_base::scoped_ptr<TestPort> testport(
+      CreateTestPort(kLocalAddr1, "name", "pass"));
+  testport->AddCandidateAddress(kLocalAddr1, kLocalAddr1,
+                                LOCAL_PORT_TYPE, false);
+  testport->AddCandidateAddress(kLocalAddr2, kLocalAddr1,
+                                STUN_PORT_TYPE, true);
+  EXPECT_NE(testport->Candidates()[0].foundation(),
+            testport->Candidates()[1].foundation());
+}
+
+// TODO(mallinath) - Enable below test and add related address
+// tests for STUN and TURN ports.
+TEST_F(PortTest, DISABLED_TestRelatedAddressAndFoundation) {
   talk_base::scoped_ptr<UDPPort> udpport(CreateUdpPort(kLocalAddr1));
   udpport->PrepareAddress();
   // For UDPPort, related address will be empty.
@@ -1918,8 +1939,8 @@ TEST_F(PortTest, TestRelatedAddressAndFoundation) {
   relayport->AddExternalAddress(ProtocolAddress(kRelayTcpIntAddr, PROTO_TCP));
   relayport->AddExternalAddress(
       ProtocolAddress(kRelaySslTcpIntAddr, PROTO_SSLTCP));
+  relayport->AddExternalAddress(ProtocolAddress(kLocalAddr1, PROTO_UDP));
   relayport->set_related_address(kLocalAddr1);
-  relayport->AddExternalAddress(ProtocolAddress(kLocalAddr1, PROTO_UDP), true);
   EXPECT_EQ_WAIT(kLocalAddr1.ipaddr(),
                  relayport->Candidates()[0].related_address().ipaddr(),
                  kTimeout);

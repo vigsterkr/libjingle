@@ -2423,6 +2423,8 @@ bool WebRtcVoiceMediaChannel::GetStats(VoiceMediaInfo* info) {
               *it, ns) != -1) {
         rinfo.jitter_buffer_ms = ns.currentBufferSize;
         rinfo.jitter_buffer_preferred_ms = ns.preferredBufferSize;
+        rinfo.expand_rate =
+            static_cast<float> (ns.currentExpandRate) / (1 << 14);
       }
       if (engine()->voe()->sync()) {
         engine()->voe()->sync()->GetDelayEstimate(*it,

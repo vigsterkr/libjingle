@@ -8,8 +8,10 @@ vars = {
 
   "googlecode_url": "http://%s.googlecode.com/svn",
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
-  "chromium_revision": "164065",
-  "webrtc_revision": "3138",
+  "chromium_git": "https://chromium.googlesource.com",
+
+  "chromium_revision": "172329",
+  "webrtc_revision": "3255",
 }
 
 # NOTE: Prefer revision numbers to tags for svn deps. Use http rather than
@@ -118,6 +120,14 @@ deps_os = {
     "third_party/gold":
       From("chromium_deps", "src/third_party/gold"),
   },
+
+  "android": {
+    "third_party/android_tools":
+      From("chromium_deps", "src/third_party/android_tools"),
+
+    "third_party/openssl":
+      From("chromium_deps", "src/third_party/openssl"),
+  }
 }
 
 hooks = [

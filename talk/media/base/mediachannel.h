@@ -362,7 +362,8 @@ struct VoiceReceiverInfo {
         jitter_buffer_ms(0),
         jitter_buffer_preferred_ms(0),
         delay_estimate_ms(0),
-        audio_level(0) {
+        audio_level(0),
+        expand_rate(0) {
   }
 
   uint32 ssrc;
@@ -376,6 +377,8 @@ struct VoiceReceiverInfo {
   int jitter_buffer_preferred_ms;
   int delay_estimate_ms;
   int audio_level;
+  // fraction of synthesized speech inserted through pre-emptive expansion
+  float expand_rate;
 };
 
 struct VideoSenderInfo {

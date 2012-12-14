@@ -216,22 +216,28 @@ void RelayPort::AddServerAddress(const ProtocolAddress& addr) {
   }
 }
 
-void RelayPort::AddExternalAddress(const ProtocolAddress& addr, bool final) {
+void RelayPort::AddExternalAddress(const ProtocolAddress& addr) {
   std::string proto_name = ProtoToString(addr.proto);
-  for (std::vector<Candidate>::const_iterator it = Candidates().begin();
-       it != Candidates().end(); ++it) {
-    if ((it->address() == addr.address) && (it->protocol() == proto_name)) {
+  for (std::vector<ProtocolAddress>::iterator it = external_addr_.begin();
+       it != external_addr_.end(); ++it) {
+    if ((it->address == addr.address) && (it->proto == addr.proto)) {
       LOG(INFO) << "Redundant relay address: " << proto_name
                 << " @ " << addr.address.ToString();
       return;
     }
   }
-  AddAddress(addr.address, addr.address, proto_name,
-             RELAY_PORT_TYPE, ICE_TYPE_PREFERENCE_RELAY, final);
+  external_addr_.push_back(addr);
 }
 
 void RelayPort::SetReady() {
   if (!ready_) {
+    std::vector<ProtocolAddress>::iterator iter;
+    for (iter = external_addr_.begin();
+         iter != external_addr_.end(); ++iter) {
+      std::string proto_name = ProtoToString(iter->proto);
+      AddAddress(iter->address, iter->address, proto_name,
+                 RELAY_PORT_TYPE, ICE_TYPE_PREFERENCE_RELAY, false);
+    }
     ready_ = true;
     SignalAddressReady(this);
   }
@@ -515,9 +521,7 @@ void RelayEntry::OnConnect(const talk_base::SocketAddress& mapped_addr,
   connected_ = true;
 
   port_->set_related_address(mapped_addr);
-  // TODO: Pass |final| as true so that the Port can set up the
-  // related address to mapped address.
-  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto), false);
+  port_->AddExternalAddress(ProtocolAddress(mapped_addr, proto));
   port_->SetReady();
 }
 

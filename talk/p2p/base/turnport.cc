@@ -330,6 +330,8 @@ void TurnPort::OnSendStunPacket(const void* data, size_t size,
 }
 
 void TurnPort::OnStunAddress(const talk_base::SocketAddress& address) {
+  // For relay, mapped address is rel-addr.
+  set_related_address(address);
 }
 
 void TurnPort::OnAllocateSuccess(const talk_base::SocketAddress& address) {

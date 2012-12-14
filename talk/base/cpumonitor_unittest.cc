@@ -199,14 +199,14 @@ void TestCpuSampler(bool test_proc, bool test_sys, bool force_fallback) {
   }
   if (test_proc) {
     LOG(LS_INFO) << "ProcessLoad Idle:      "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << proc_idle;
     EXPECT_GE(proc_idle, 0.f);
     EXPECT_LE(proc_idle, static_cast<float>(cpus));
   }
   if (test_sys) {
     LOG(LS_INFO) << "SystemLoad Idle:       "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << sys_idle;
     EXPECT_GE(sys_idle, 0.f);
     EXPECT_LE(sys_idle, static_cast<float>(cpus));
@@ -228,14 +228,14 @@ void TestCpuSampler(bool test_proc, bool test_sys, bool force_fallback) {
   }
   if (test_proc) {
     LOG(LS_INFO) << "ProcessLoad Halfbusy:  "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << proc_halfbusy;
     EXPECT_GE(proc_halfbusy, 0.f);
     EXPECT_LE(proc_halfbusy, static_cast<float>(cpus));
   }
   if (test_sys) {
     LOG(LS_INFO) << "SystemLoad Halfbusy:   "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << sys_halfbusy;
     EXPECT_GE(sys_halfbusy, 0.f);
     EXPECT_LE(sys_halfbusy, static_cast<float>(cpus));
@@ -257,14 +257,14 @@ void TestCpuSampler(bool test_proc, bool test_sys, bool force_fallback) {
   }
   if (test_proc) {
     LOG(LS_INFO) << "ProcessLoad Busy:      "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << proc_busy;
     EXPECT_GE(proc_busy, 0.f);
     EXPECT_LE(proc_busy, static_cast<float>(cpus));
   }
   if (test_sys) {
     LOG(LS_INFO) << "SystemLoad Busy:       "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << sys_busy;
     EXPECT_GE(sys_busy, 0.f);
     EXPECT_LE(sys_busy, static_cast<float>(cpus));
@@ -287,14 +287,14 @@ void TestCpuSampler(bool test_proc, bool test_sys, bool force_fallback) {
     }
     if (test_proc) {
       LOG(LS_INFO) << "ProcessLoad 2 CPU Busy:"
-                   << setiosflags(std::ios_base::fixed)
+                   << std::setiosflags(std::ios_base::fixed)
                    << std::setprecision(2) << std::setw(6) << proc_twobusy;
       EXPECT_GE(proc_twobusy, 0.f);
       EXPECT_LE(proc_twobusy, static_cast<float>(cpus));
     }
     if (test_sys) {
       LOG(LS_INFO) << "SystemLoad 2 CPU Busy: "
-                   << setiosflags(std::ios_base::fixed)
+                   << std::setiosflags(std::ios_base::fixed)
                    << std::setprecision(2) << std::setw(6) << sys_twobusy;
       EXPECT_GE(sys_twobusy, 0.f);
       EXPECT_LE(sys_twobusy, static_cast<float>(cpus));
@@ -316,14 +316,14 @@ void TestCpuSampler(bool test_proc, bool test_sys, bool force_fallback) {
   }
   if (test_proc) {
     LOG(LS_INFO) << "ProcessLoad Idle:      "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << proc_idle;
     EXPECT_GE(proc_idle, 0.f);
     EXPECT_LE(proc_idle, proc_busy);
   }
   if (test_sys) {
     LOG(LS_INFO) << "SystemLoad Idle:       "
-                 << setiosflags(std::ios_base::fixed)
+                 << std::setiosflags(std::ios_base::fixed)
                  << std::setprecision(2) << std::setw(6) << sys_idle;
     EXPECT_GE(sys_idle, 0.f);
     EXPECT_LE(sys_idle, static_cast<float>(cpus));

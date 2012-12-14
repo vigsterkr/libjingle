@@ -231,10 +231,11 @@ Connection* Port::GetConnection(const talk_base::SocketAddress& remote_addr) {
 //   the same foundation pairs are likely to have similar network
 //   characteristics.  Foundations are used in the frozen algorithm.
 std::string Port::ComputeFoundation(
+    const std::string& type,
     const std::string& protocol,
     const talk_base::SocketAddress& base_address) const {
   std::ostringstream ost;
-  ost << type_ << base_address.ipaddr().ToString() << protocol;
+  ost << type << base_address.ipaddr().ToString() << protocol;
   return talk_base::ToString<uint32>(talk_base::ComputeCrc32(ost.str()));
 }
 
@@ -256,15 +257,11 @@ void Port::AddAddress(const talk_base::SocketAddress& address,
   c.set_network_name(network_->name());
   c.set_generation(generation_);
   c.set_related_address(related_address_);
-  c.set_foundation(ComputeFoundation(protocol, base_address));
+  c.set_foundation(ComputeFoundation(type, protocol, base_address));
   candidates_.push_back(c);
+  SignalCandidateReady(this, c);
 
   if (final) {
-    // Set related address if it's already not set. This can happen in relay
-    // scenario where related address will be set later.
-    for (size_t i = 0; i < candidates_.size(); ++i) {
-      candidates_[i].set_related_address(related_address_);
-    }
     SignalAddressReady(this);
   }
 }

@@ -533,9 +533,9 @@ TEST_F(PortAllocatorTest, TestDisableSharedUfrag) {
 }
 
 // Test that when PORTALLOCATOR_ENABLE_SHARED_SOCKET is enabled only one port
-// is allocated for udp and stun and there can be one candidate (local)
-// if stun candidate is same as local candidate which will be the case in a
-// public network like the below test.
+// is allocated for udp and stun. Also verify there is only one candidate
+// (local) if stun candidate is same as local candidate, which will be the case
+// in a public network like the below test.
 TEST_F(PortAllocatorTest, TestEnableSharedSocket) {
   allocator().set_flags(allocator().flags() |
                         cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
@@ -546,8 +546,28 @@ TEST_F(PortAllocatorTest, TestEnableSharedSocket) {
   ASSERT_EQ_WAIT(1U, candidates_.size(), 1000);
   EXPECT_PRED5(CheckCandidate, candidates_[0],
       cricket::ICE_CANDIDATE_COMPONENT_RTP, "local", "udp", kClientAddr);
-  EXPECT_EQ(1U, ports_.size());
+  EXPECT_EQ_WAIT(1U, ports_.size(), 1000);
   EXPECT_TRUE(candidate_allocation_done_);
+}
+
+// This test verifies when PORTALLOCATOR_ENABLE_SHARED_SOCKET flag is enabled
+// and fail to generate STUN candidate, local UDP candidate is generated
+// properly.
+TEST_F(PortAllocatorTest, TestEnableSharedSocketNoUdpAllowed) {
+  allocator().set_flags(allocator().flags() |
+                        cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
+                        cricket::PORTALLOCATOR_ENABLE_SHARED_SOCKET);
+  fss_->AddRule(false, talk_base::FP_UDP, talk_base::FD_ANY, kClientAddr);
+  AddInterface(kClientAddr);
+  EXPECT_TRUE(CreateSession(cricket::ICE_CANDIDATE_COMPONENT_RTP));
+  session_->GetInitialPorts();
+  ASSERT_EQ_WAIT(1U, candidates_.size(), 1000);
+  EXPECT_PRED5(CheckCandidate, candidates_[0],
+      cricket::ICE_CANDIDATE_COMPONENT_RTP, "local", "udp", kClientAddr);
+  // STUN timeout is 9sec.
+  EXPECT_EQ_WAIT(1U, ports_.size(), 10000);
+  EXPECT_TRUE(candidate_allocation_done_);
+  EXPECT_EQ(1U, candidates_.size());
 }
 
 // Test that the httpportallocator correctly maintains its lists of stun and

@@ -69,13 +69,7 @@ class StunBindingRequest : public StunRequest {
       LOG(LS_ERROR) << "Binding address has bad family";
     } else {
       talk_base::SocketAddress addr(addr_attr->ipaddr(), addr_attr->port());
-      if (port_->SharedSocket() && addr == port_->socket_->GetLocalAddress()) {
-        // Discarding STUN candidate if it is same as the local candidate.
-        port_->SignalAddressReady(port_);
-      } else {
-        port_->AddAddress(addr, port_->socket_->GetLocalAddress(), "udp",
-                          STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_SRFLX, true);
-      }
+      port_->OnStunBindingRequestSucceeded(addr);
     }
 
     // We will do a keep-alive regardless of whether this request suceeds.
@@ -98,7 +92,7 @@ class StunBindingRequest : public StunRequest {
                  << " reason='" << attr->reason() << "'";
     }
 
-    port_->SignalAddressError(port_);
+    port_->OnStunBindingOrResolveRequestFailed();
 
     if (keep_alive_
         && (talk_base::TimeSince(start_time_) <= RETRY_TIMEOUT)) {
@@ -113,7 +107,7 @@ class StunBindingRequest : public StunRequest {
       << port_->GetLocalAddress().ToString()
       << " (" << port_->Network()->name() << ")";
 
-    port_->SignalAddressError(port_);
+    port_->OnStunBindingOrResolveRequestFailed();
 
     if (keep_alive_
         && (talk_base::TimeSince(start_time_) <= RETRY_TIMEOUT)) {
@@ -183,9 +177,7 @@ UDPPort::~UDPPort() {
 void UDPPort::PrepareAddress() {
   ASSERT(requests_.empty());
   if (socket_->GetState() == talk_base::AsyncPacketSocket::STATE_BOUND) {
-    AddAddress(socket_->GetLocalAddress(), socket_->GetLocalAddress(), "udp",
-               LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST, false);
-    MaybePrepareStunCandidate();
+    OnLocalAddressReady(socket_, socket_->GetLocalAddress());
   }
 }
 
@@ -296,16 +288,34 @@ void UDPPort::OnResolveResult(talk_base::SignalThread* t) {
   if (resolver_->error() != 0) {
     LOG_J(LS_WARNING, this) << "StunPort: stun host lookup received error "
                             << resolver_->error();
-    if (!SharedSocket()) {
-      SignalAddressError(this);
-    } else {
-      // If socket is shared, we should process local udp candidate.
-      SignalAddressReady(this);
-    }
+    OnStunBindingOrResolveRequestFailed();
   }
 
   server_addr_ = resolver_->address();
   SendStunBindingRequest();
+}
+
+void UDPPort::OnStunBindingRequestSucceeded(
+    const talk_base::SocketAddress& stun_addr) {
+  if (SharedSocket() && stun_addr == socket_->GetLocalAddress()) {
+    // Discarding STUN candidate if it is same as the local candidate.
+    SignalAddressReady(this);
+  } else {
+    // Setting related address before STUN candidate is added. For STUN
+    // related address is local socket address.
+    set_related_address(socket_->GetLocalAddress());
+    AddAddress(stun_addr, socket_->GetLocalAddress(), "udp",
+               STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_PRFLX, true);
+  }
+}
+
+void UDPPort::OnStunBindingOrResolveRequestFailed() {
+  if (SharedSocket()) {
+    // If socket is shared, we should process local udp candidate.
+    SignalAddressReady(this);
+  } else {
+    SignalAddressError(this);
+  }
 }
 
 // TODO: merge this with SendTo above.

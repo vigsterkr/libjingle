@@ -39,6 +39,7 @@ class TypingMonitorTest : public testing::Test {
   TypingMonitorTest() : session_(true) {
     vc_.reset(new VoiceChannel(talk_base::Thread::Current(), &engine_,
                                engine_.CreateChannel(), &session_, "", false));
+    engine_.GetVoiceChannel(0)->set_time_since_last_typing(1000);
 
     TypingMonitorOptions settings = {10, 20, 30, 40, 50};
     monitor_.reset(new TypingMonitor(vc_.get(),
@@ -57,7 +58,6 @@ class TypingMonitorTest : public testing::Test {
 };
 
 TEST_F(TypingMonitorTest, TestTriggerMute) {
-  engine_.GetVoiceChannel(0)->set_time_since_last_typing(1000);
   EXPECT_FALSE(vc_->IsStreamMuted(0));
   EXPECT_FALSE(engine_.GetVoiceChannel(0)->IsStreamMuted(0));
 
@@ -74,5 +74,19 @@ TEST_F(TypingMonitorTest, TestTriggerMute) {
                    !engine_.GetVoiceChannel(0)->IsStreamMuted(0), 100);
 }
 
+TEST_F(TypingMonitorTest, TestResetMonitor) {
+  engine_.GetVoiceChannel(0)->set_time_since_last_typing(1000);
+  EXPECT_FALSE(vc_->IsStreamMuted(0));
+  EXPECT_FALSE(engine_.GetVoiceChannel(0)->IsStreamMuted(0));
+
+  engine_.GetVoiceChannel(0)->TriggerError(
+      0, VoiceMediaChannel::ERROR_REC_TYPING_NOISE_DETECTED);
+  EXPECT_TRUE(vc_->IsStreamMuted(0));
+  EXPECT_TRUE(engine_.GetVoiceChannel(0)->IsStreamMuted(0));
+
+  monitor_.reset();
+  EXPECT_FALSE(vc_->IsStreamMuted(0));
+  EXPECT_FALSE(engine_.GetVoiceChannel(0)->IsStreamMuted(0));
 }
 
+}  // namespace cricket

@@ -44,6 +44,13 @@
           '<(DEPTH)/third_party/gtest/include',
         ],
       },
+      'conditions': [
+        ['OS=="android"', {
+          'include_dirs': [
+            '<(android_ndk_include)',
+          ]
+        }],
+      ],
     },  # target gunit
     {
       'target_name': 'libjingle_unittest_main',

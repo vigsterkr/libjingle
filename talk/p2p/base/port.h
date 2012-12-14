@@ -202,6 +202,12 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   sigslot::signal1<Port*> SignalAddressReady;
   sigslot::signal1<Port*> SignalAddressError;
 
+  // Fired when candidates are discovered by the port. When all candidates
+  // are discovered that belong to port SignalAddressReady is fired.
+  // TODO(mallinath) - Change SignalAddressError to SignalPortError.
+  // TODO(mallinath) - Change SignalAddressReady to SignalPortReady.
+  sigslot::signal2<Port*, const Candidate&> SignalCandidateReady;
+
   // Provides all of the above information in one handy object.
   virtual const std::vector<Candidate>& Candidates() const {
     return candidates_;
@@ -314,7 +320,8 @@ class Port : public PortInterface, public talk_base::MessageHandler,
   // Checks if this port is useless, and hence, should be destroyed.
   void CheckTimeout();
 
-  std::string ComputeFoundation(const std::string& protocol,
+  std::string ComputeFoundation(const std::string& type,
+      const std::string& protocol,
       const talk_base::SocketAddress& base_address) const;
 
   talk_base::Thread* thread_;

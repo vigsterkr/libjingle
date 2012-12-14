@@ -174,11 +174,23 @@
             '<(DEPTH)/third_party/nss/nss.gyp:nss',
           ],
         }],
+        ['OS=="android"', {
+          'link_settings': {
+            'libraries': [
+              '-llog',
+              '-lGLESv2',
+            ],
+          },
+        }],
+        ['OS=="linux" or OS=="android"', {
+          'sources': [
+            'base/linux.cc',
+          ],
+        }],
         ['OS=="linux"', {
           'sources': [
             'base/dbus.cc',
             'base/libdbusglibsymboltable.cc',
-            'base/linux.cc',
             'base/linuxfdwalk.c',
             'base/linuxwindowpicker.cc',
           ],
@@ -265,6 +277,13 @@
             'base/opensslstreamadapter.cc',
             'base/posix.cc',
             'base/unixfilesystem.cc',
+          ],
+          'conditions': [
+            ['OS=="android"', {
+              'dependencies': [
+                '<(DEPTH)/third_party/openssl/openssl.gyp:openssl',
+              ],
+            }],
           ],
         }],
       ],  # conditions

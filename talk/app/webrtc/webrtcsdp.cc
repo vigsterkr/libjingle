@@ -96,6 +96,10 @@ static const char kAttributeMid[] = "mid";
 static const char kAttributeRtcpMux[] = "rtcp-mux";
 static const char kAttributeSsrc[] = "ssrc";
 static const char kSsrcAttributeCname[] = "cname";
+// draft-alvestrand-mmusic-msid-01
+// a=msid-semantic: WMS
+static const char kAttributeMsidSemantics[] = "msid-semantic";
+static const char kMediaStreamSematic[] = "WMS";
 static const char kSsrcAttributeMsid[] = "msid";
 static const char kDefaultMsid[] = "default";
 static const char kMsidAppdataAudio[] = "a";
@@ -204,12 +208,15 @@ static void BuildIceOptions(const TransportOptions& transport_options,
 static bool ParseSessionDescription(const std::string& message, size_t* pos,
                                     std::string* session_id,
                                     std::string* session_version,
+                                    bool* supports_msid,
                                     TransportDescription* session_td,
                                     cricket::SessionDescription* desc);
 static bool ParseGroupAttribute(const std::string& line,
                                 cricket::SessionDescription* desc);
-static bool ParseMediaDescription(const std::string& message,
+static bool ParseMediaDescription(
+    const std::string& message,
     const TransportDescription& session_td,
+    bool supports_msid,
     size_t* pos, cricket::SessionDescription* desc,
     std::vector<JsepIceCandidate*>* candidates);
 static bool ParseContent(const std::string& message,
@@ -448,6 +455,18 @@ void CreateTracksFromSsrcInfos(const SsrcInfoVec& ssrc_infos,
   }
 }
 
+void GetMediaStreamLabels(const ContentInfo* content,
+                          std::set<std::string>* labels) {
+  const MediaContentDescription* media_desc =
+      static_cast<const MediaContentDescription*> (
+          content->description);
+  const cricket::StreamParamsVec& streams =  media_desc->streams();
+  for (cricket::StreamParamsVec::const_iterator it = streams.begin();
+       it != streams.end(); ++it) {
+    labels->insert(it->sync_label);
+  }
+}
+
 // RFC 5245
 // It is RECOMMENDED that default candidates be chosen based on the
 // likelihood of those candidates to work with the peer that is being
@@ -645,15 +664,30 @@ std::string SdpSerializeSessionDescription(
     AddLine(group_line, &message);
   }
 
-  // Media Description
+
+  // MediaStream semantics
+  InitAttrLine(kAttributeMsidSemantics, &os);
+  os << kSdpDelimiterColon << " " << kMediaStreamSematic;
+  std::set<std::string> media_stream_labels;
   const ContentInfo* audio_content = GetFirstAudioContent(desc);
+  if (audio_content)
+    GetMediaStreamLabels(audio_content, &media_stream_labels);
+  const ContentInfo* video_content = GetFirstVideoContent(desc);
+  if (video_content)
+    GetMediaStreamLabels(video_content, &media_stream_labels);
+  for (std::set<std::string>::const_iterator it =
+      media_stream_labels.begin(); it != media_stream_labels.end(); ++it) {
+    os << " " << *it;
+  }
+  AddLine(os.str(), &message);
+
   if (audio_content) {
     BuildMediaDescription(audio_content,
                           desc->GetTransportInfoByName(audio_content->name),
                           cricket::MEDIA_TYPE_AUDIO, &message);
   }
 
-  const ContentInfo* video_content = GetFirstVideoContent(desc);
+
   if (video_content) {
     BuildMediaDescription(video_content,
                           desc->GetTransportInfoByName(video_content->name),
@@ -690,16 +724,18 @@ bool SdpDeserialize(const std::string& message,
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
   size_t current_pos = 0;
+  bool supports_msid = false;
 
   // Session Description
   if (!ParseSessionDescription(message, &current_pos, &session_id,
-                               &session_version, &session_td, desc)) {
+                               &session_version, &supports_msid, &session_td,
+                               desc)) {
     delete desc;
     return false;
   }
 
   // Media Description
-  if (!ParseMediaDescription(message, session_td,
+  if (!ParseMediaDescription(message, session_td, supports_msid,
                              &current_pos, desc, &candidates)) {
     delete desc;
     for (std::vector<JsepIceCandidate*>::const_iterator
@@ -964,7 +1000,13 @@ void BuildMediaDescription(const ContentInfo* content_info,
 
   // RFC 3264
   // a=sendrecv || a=sendonly || a=sendrecv || a=inactive
-  switch (media_desc->direction()) {
+
+  cricket::MediaContentDirection direction = media_desc->direction();
+  if (media_desc->streams().empty() && direction == cricket::MD_SENDRECV) {
+    direction = cricket::MD_RECVONLY;
+  }
+
+  switch (direction) {
     case cricket::MD_INACTIVE:
       InitAttrLine(kAttributeInactive, &os);
       break;
@@ -1022,6 +1064,7 @@ void BuildMediaDescription(const ContentInfo* content_info,
   // a=rtpmap:<payload type> <encoding name>/<clock rate>
   // [/<encodingparameters>]
   BuildRtpMap(media_desc, media_type, message);
+
   for (StreamParamsVec::const_iterator track = media_desc->streams().begin();
        track != media_desc->streams().end(); ++track) {
     // Require that the track belongs to a media stream,
@@ -1047,7 +1090,6 @@ void BuildMediaDescription(const ContentInfo* content_info,
       }
       AddLine(os.str(), message);
     }
-
     // Build the ssrc lines for each ssrc.
     for (size_t i = 0; i < track->ssrcs.size(); ++i) {
       uint32 ssrc = track->ssrcs[i];
@@ -1209,6 +1251,7 @@ void BuildIceOptions(const TransportOptions& transport_options,
 bool ParseSessionDescription(const std::string& message, size_t* pos,
                              std::string* session_id,
                              std::string* session_version,
+                             bool* supports_msid,
                              TransportDescription* session_td,
                              cricket::SessionDescription* desc) {
   std::string line;
@@ -1336,6 +1379,13 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
         return false;
       }
       session_td->identity_fingerprint.reset(fingerprint);
+    } else if (HasAttribute(line, kAttributeMsidSemantics)) {
+      std::string semantics;
+      if (!GetValue(line, kAttributeMsidSemantics, &semantics)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      *supports_msid = (semantics == kMediaStreamSematic);
     }
   }
 
@@ -1411,6 +1461,7 @@ static bool ParseFingerprintAttribute(const std::string& line,
 
 bool ParseMediaDescription(const std::string& message,
                            const TransportDescription& session_td,
+                           bool supports_msid,
                            size_t* pos,
                            cricket::SessionDescription* desc,
                            std::vector<JsepIceCandidate*>* candidates) {
@@ -1496,6 +1547,14 @@ bool ParseMediaDescription(const std::string& message,
     } else {
       LOG(LS_WARNING) << "Unsupported media type: " << line;
       continue;
+    }
+
+    // Make sure to set the media direction correctly. If the direction is not
+    // MD_RECVONLY or Inactive and no streams are parsed,
+    // a default MediaStream will be created to prepare for receiving media.
+    if (supports_msid && content->streams().empty() &&
+        content->direction() == cricket::MD_SENDRECV) {
+      content->set_direction(cricket::MD_RECVONLY);
     }
 
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected,

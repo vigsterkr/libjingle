@@ -535,8 +535,10 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
   PortData data(port, seq);
   ports_.push_back(data);
 
+  port->SignalCandidateReady.connect(
+      this, &BasicPortAllocatorSession::OnCandidateReady);
   port->SignalAddressReady.connect(this,
-      &BasicPortAllocatorSession::OnAddressReady);
+      &BasicPortAllocatorSession::OnPortReady);
   port->SignalConnectionCreated.connect(this,
       &BasicPortAllocatorSession::OnConnectionCreated);
   port->SignalDestroyed.connect(this,
@@ -551,32 +553,36 @@ void BasicPortAllocatorSession::AddAllocatedPort(Port* port,
     port->Start();
 }
 
-void BasicPortAllocatorSession::OnAddressReady(Port *port) {
+void BasicPortAllocatorSession::OnCandidateReady(
+    Port* port, const Candidate& c) {
   ASSERT(talk_base::Thread::Current() == network_thread_);
-  std::vector<PortData>::iterator it
-    = std::find(ports_.begin(), ports_.end(), port);
+  std::vector<PortData>::iterator it =
+      std::find(ports_.begin(), ports_.end(), port);
+  ASSERT(it != ports_.end());
+
+  // Send candidates whose protocol is enabled.
+  std::vector<Candidate> candidates;
+  ProtocolType pvalue;
+  if (StringToProto(c.protocol().c_str(), &pvalue) &&
+      it->sequence->ProtocolEnabled(pvalue)) {
+    candidates.push_back(c);
+  }
+
+  if (!candidates.empty()) {
+    SignalCandidatesReady(this, candidates);
+  }
+}
+
+void BasicPortAllocatorSession::OnPortReady(Port *port) {
+  ASSERT(talk_base::Thread::Current() == network_thread_);
+  std::vector<PortData>::iterator it =
+      std::find(ports_.begin(), ports_.end(), port);
   ASSERT(it != ports_.end());
   if (it->allocation_complete())
     return;
   it->state = STATE_READY;
   SignalPortReady(this, port);
-
-  // Only accumulate the candidates whose protocol has been enabled
-  std::vector<Candidate> candidates;
-  const std::vector<Candidate>& potentials = port->Candidates();
-  for (size_t i = 0; i < potentials.size(); ++i) {
-    ProtocolType pvalue;
-    if (!StringToProto(potentials[i].protocol().c_str(), &pvalue))
-      continue;
-    if (it->sequence->ProtocolEnabled(pvalue)) {
-      candidates.push_back(potentials[i]);
-    }
-  }
-
-  if (!candidates.empty()) {
-    SignalCandidatesReady(this, candidates);
-    MaybeSignalCandidatesAllocationDone();
-  }
+  MaybeSignalCandidatesAllocationDone();
 }
 
 void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
@@ -584,7 +590,7 @@ void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
   std::vector<Candidate> candidates;
   for (std::vector<PortData>::iterator it = ports_.begin();
        it != ports_.end(); ++it) {
-    if (!it->ready() || (it->sequence != seq))
+    if (it->sequence != seq)
       continue;
 
     const std::vector<Candidate>& potentials = it->port->Candidates();
@@ -600,6 +606,7 @@ void BasicPortAllocatorSession::OnProtocolEnabled(AllocationSequence * seq,
 
   if (!candidates.empty()) {
     SignalCandidatesReady(this, candidates);
+    MaybeSignalCandidatesAllocationDone();
   }
 }
 

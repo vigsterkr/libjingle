@@ -63,7 +63,7 @@ class RelayPort : public Port {
   virtual ~RelayPort();
 
   void AddServerAddress(const ProtocolAddress& addr);
-  void AddExternalAddress(const ProtocolAddress& addr, bool final = false);
+  void AddExternalAddress(const ProtocolAddress& addr);
 
   const std::vector<OptionValue>& options() const { return options_; }
   bool HasMagicCookie(const char* data, size_t size);
@@ -102,6 +102,7 @@ class RelayPort : public Port {
   friend class RelayEntry;
 
   std::deque<ProtocolAddress> server_addr_;
+  std::vector<ProtocolAddress> external_addr_;
   bool ready_;
   std::vector<RelayEntry*> entries_;
   std::vector<OptionValue> options_;

@@ -418,6 +418,10 @@ class FakeWebRtcVideoEngine
       unsigned int&, unsigned int&));
   WEBRTC_STUB_CONST(GetReceiveCodecStastistics, (const int,
       unsigned int&, unsigned int&));
+#ifdef USE_WEBRTC_DEV_BRANCH
+  WEBRTC_STUB_CONST(GetReceiveSideDelay, (const int video_channel,
+                                          int* delay_ms));
+#endif
   WEBRTC_FUNC_CONST(GetCodecTargetBitrate, (const int channel,
       unsigned int* codec_target_bitrate)) {
     WEBRTC_CHECK_CHANNEL(channel);

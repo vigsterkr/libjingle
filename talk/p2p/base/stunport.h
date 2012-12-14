@@ -135,6 +135,11 @@ class UDPPort : public Port {
   // DNS resolution of the STUN server.
   void ResolveStunAddress();
   void OnResolveResult(talk_base::SignalThread* thread);
+
+  // Below methods handles binding request responses.
+  void OnStunBindingRequestSucceeded(const talk_base::SocketAddress& stun_addr);
+  void OnStunBindingOrResolveRequestFailed();
+
   // Sends STUN requests to the server.
   void OnSendPacket(const void* data, size_t size, StunRequest* req);
 
