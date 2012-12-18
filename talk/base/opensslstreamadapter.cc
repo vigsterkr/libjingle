@@ -312,7 +312,7 @@ bool OpenSSLStreamAdapter::GetDtlsSrtpCipher(std::string* cipher) {
       SSL_get_selected_srtp_profile(ssl_);
 
   if (!srtp_profile)
-    return NULL;
+    return false;
 
   for (SrtpCipherMapEntry *entry = SrtpCipherMap;
        entry->internal_name; ++entry) {
