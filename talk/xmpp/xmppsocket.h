@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _XMPPSOCKET_H_
-#define _XMPPSOCKET_H_
+#ifndef TALK_XMPP_XMPPSOCKET_H_
+#define TALK_XMPP_XMPPSOCKET_H_
 
 #include "talk/base/asyncsocket.h"
 #include "talk/base/bytebuffer.h"
@@ -81,4 +81,5 @@ private:
   buzz::TlsOptions tls_;
 };
 
-#endif // _XMPPSOCKET_H_
+#endif // TALK_XMPP_XMPPSOCKET_H_
+

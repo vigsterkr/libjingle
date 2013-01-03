@@ -398,7 +398,7 @@ void WebRtcSession::set_secure_policy(
 SessionDescriptionInterface* WebRtcSession::CreateOffer(
     const MediaHints& hints) {
   cricket::MediaSessionOptions options =
-      mediastream_signaling_->GetMediaSessionOptions(hints);
+      mediastream_signaling_->GetOptionsForOffer(hints);
   if (!ValidStreams(options.streams)) {
     LOG(LS_ERROR) << "CreateOffer called with invalid media streams.";
     return NULL;
@@ -451,7 +451,7 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     const MediaHints& hints,
     const SessionDescriptionInterface* offer) {
   cricket::MediaSessionOptions options =
-      mediastream_signaling_->GetMediaSessionOptions(hints);
+      mediastream_signaling_->GetOptionsForAnswer(hints);
   if (!offer) {
     LOG(LS_ERROR) << "Offer can't be NULL in CreateAnswer.";
     return NULL;

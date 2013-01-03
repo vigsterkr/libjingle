@@ -66,7 +66,7 @@ struct CodecPref {
 static const CodecPref kCodecPrefs[] = {
   { "ISAC",   16000,  1, 103, true },
   { "ISAC",   32000,  1, 104, true },
-  { "opus",   48000,  2, 111, true },
+  { "OPUS",   48000,  2, 111, true },
   { "CELT",   32000,  1, 109, true },
   { "CELT",   32000,  2, 110, true },
   { "G722",   16000,  1, 9,   false },
@@ -110,6 +110,18 @@ static const char kRtpAudioLevelHeaderExtension[] =
 
 static const char kIsacCodecName[] = "ISAC";
 static const char kL16CodecName[] = "L16";
+static const char kOpusCodecName[] = "OPUS";
+static const int kOpusMonoBitrate = 32000;
+static const int kOpusStereoBitrate = 64000;
+// Codec parameters for Opus.
+static const char kOpusStereo[] = "stereo";
+static const char kOpusTrue[] = "1";
+// Minimum amount of data in one packet.
+static const char kOpusMinPacketTime[] = "minptime";
+static const char kOpusRecommendedMinPacketTime[] = "10";
+// Maximum amount of data in one packet.
+static const char kOpusMaxPacketTime[] = "maxptime";
+static const char kOpusRecommendedMaxPacketTime[] = "60";
 
 // Dumps an AudioCodec in RFC 2327-ish format.
 static std::string ToString(const AudioCodec& codec) {
@@ -276,6 +288,23 @@ void WebRtcVoiceEngine::Construct() {
   ConstructCodecs();
 }
 
+bool IsOpus(const AudioCodec& codec) {
+  return (_stricmp(codec.name.c_str(), kOpusCodecName) == 0);
+}
+
+bool IsIsac(const AudioCodec& codec) {
+  return (_stricmp(codec.name.c_str(), kIsacCodecName) == 0);
+}
+
+// True if params["stereo"] == "1"
+bool IsOpusStereoEnabled(const AudioCodec& codec) {
+  CodecParameterMap::const_iterator param = codec.params.find(kOpusStereo);
+  if (param == codec.params.end()) {
+    return false;
+  }
+  return param->second == kOpusTrue;
+}
+
 void WebRtcVoiceEngine::ConstructCodecs() {
   LOG(LS_INFO) << "WebRtc VoiceEngine codecs:";
   int ncodecs = voe_wrapper_->codec()->NumOfCodecs();
@@ -304,9 +333,13 @@ void WebRtcVoiceEngine::ConstructCodecs() {
                          voe_codec.rate, voe_codec.channels,
                          ARRAY_SIZE(kCodecPrefs) - (pref - kCodecPrefs));
         LOG(LS_INFO) << ToString(codec);
-        // For ISAC, use 0 to indicate auto bandwidth in our signaling.
-        if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+        if (IsIsac(codec)) {
+          // Indicate auto-bandwidth in signaling.
           codec.bitrate = 0;
+        }
+        if (IsOpus(codec)) {
+          codec.params[kOpusMinPacketTime] = kOpusRecommendedMinPacketTime;
+          codec.params[kOpusMaxPacketTime] = kOpusRecommendedMaxPacketTime;
         }
         codecs_.push_back(codec);
       } else {
@@ -898,7 +931,7 @@ bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
                        voe_codec.rate, voe_codec.channels, 0);
       bool multi_rate = IsCodecMultiRate(voe_codec);
       // Allow arbitrary rates for ISAC to be specified.
-      if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0 || multi_rate) {
+      if (multi_rate) {
         // Set codec.bitrate to 0 so the check for codec.Matches() passes.
         codec.bitrate = 0;
       }
@@ -906,13 +939,33 @@ bool WebRtcVoiceEngine::FindWebRtcCodec(const AudioCodec& in,
         if (out) {
           // Fixup the payload type.
           voe_codec.pltype = in.id;
-          // If ISAC is is being used, and an explicit bitrate is not specified,
-          // enable auto bandwidth adjustment.
-          if (_stricmp(codec.name.c_str(), kIsacCodecName) == 0) {
+
+          // Set bitrate if specified.
+          if (multi_rate && in.bitrate != 0) {
+            voe_codec.rate = in.bitrate;
+          }
+
+          // Apply codec-specific settings.
+          if (IsIsac(codec)) {
+            // If ISAC and an explicit bitrate is not specified,
+            // enable auto bandwidth adjustment.
             voe_codec.rate = (in.bitrate > 0) ? in.bitrate : -1;
-          } else if (multi_rate) {
-            if (in.bitrate != 0) {
-              voe_codec.rate = in.bitrate;
+          } else if (IsOpus(codec)) {
+            // If OPUS, change what we send according to the "stereo" codec
+            // parameter, and not the "channels" parameter.  We set
+            // voe_codec.channels to 2 if "stereo=1" and 1 otherwise.  If
+            // the bitrate is not specified, i.e. is zero, we set it to the
+            // appropriate default value for mono or stereo Opus.
+            if (IsOpusStereoEnabled(in)) {
+              voe_codec.channels = 2;
+              if (in.bitrate == 0) {
+                voe_codec.rate = kOpusStereoBitrate;
+              }
+            } else {
+              voe_codec.channels = 1;
+              if (in.bitrate == 0) {
+                voe_codec.rate = kOpusMonoBitrate;
+              }
             }
           }
           *out = voe_codec;

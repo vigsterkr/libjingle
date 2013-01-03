@@ -28,6 +28,8 @@
 #ifndef TALK_MEDIA_BASE_MEDIACOMMON_H_
 #define TALK_MEDIA_BASE_MEDIACOMMON_H_
 
+#include "talk/base/stringencode.h"
+
 namespace cricket {
 
 enum MediaCapabilities {

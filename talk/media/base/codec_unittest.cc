@@ -79,21 +79,21 @@ TEST_F(CodecTest, TestAudioCodecOperators) {
 
 TEST_F(CodecTest, TestAudioCodecMatches) {
   // Test a codec with a static payload type.
-  AudioCodec c0(95, "A", 44100, 20000, 2, 3);
+  AudioCodec c0(95, "A", 44100, 20000, 1, 3);
   EXPECT_TRUE(c0.Matches(95, ""));
   EXPECT_FALSE(c0.Matches(96, ""));
-  EXPECT_TRUE(c0.Matches(AudioCodec(95, "", 44100, 20000, 2, 0)));
+  EXPECT_TRUE(c0.Matches(AudioCodec(95, "", 44100, 20000, 1, 0)));
   EXPECT_TRUE(c0.Matches(AudioCodec(95, "", 44100, 20000, 0, 0)));
   EXPECT_TRUE(c0.Matches(AudioCodec(95, "", 44100, 0, 0, 0)));
   EXPECT_TRUE(c0.Matches(AudioCodec(95, "", 0, 0, 0, 0)));
-  EXPECT_FALSE(c0.Matches(AudioCodec(96, "", 44100, 20000, 2, 0)));
-  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 55100, 20000, 2, 0)));
-  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 44100, 30000, 2, 0)));
-  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 44100, 20000, 1, 0)));
-  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 55100, 30000, 1, 0)));
+  EXPECT_FALSE(c0.Matches(AudioCodec(96, "", 44100, 20000, 1, 0)));
+  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 55100, 20000, 1, 0)));
+  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 44100, 30000, 1, 0)));
+  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 44100, 20000, 2, 0)));
+  EXPECT_FALSE(c0.Matches(AudioCodec(95, "", 55100, 30000, 2, 0)));
 
   // Test a codec with a dynamic payload type.
-  AudioCodec c1(96, "A", 44100, 20000, 2, 3);
+  AudioCodec c1(96, "A", 44100, 20000, 1, 3);
   EXPECT_TRUE(c1.Matches(96, "A"));
   EXPECT_TRUE(c1.Matches(97, "A"));
   EXPECT_TRUE(c1.Matches(96, "a"));
@@ -113,6 +113,12 @@ TEST_F(CodecTest, TestAudioCodecMatches) {
   EXPECT_TRUE(c2.Matches(AudioCodec(97, "A", 16000, 32000, 1, 0)));
   // Backward compatibility with clients that might send "-1" (for default).
   EXPECT_TRUE(c2.Matches(AudioCodec(97, "A", 16000, -1, 1, 0)));
+
+  // Stereo doesn't match channels = 0.
+  AudioCodec c3(96, "A", 44100, 20000, 2, 3);
+  EXPECT_TRUE(c3.Matches(AudioCodec(96, "A", 44100, 20000, 2, 3)));
+  EXPECT_FALSE(c3.Matches(AudioCodec(96, "A", 44100, 20000, 1, 3)));
+  EXPECT_FALSE(c3.Matches(AudioCodec(96, "A", 44100, 20000, 0, 3)));
 }
 
 TEST_F(CodecTest, TestVideoCodecOperators) {

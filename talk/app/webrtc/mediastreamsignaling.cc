@@ -73,20 +73,37 @@ bool MediaStreamSignaling::AddDataChannel(DataChannel* data_channel) {
   return true;
 }
 
-
 const cricket::MediaSessionOptions&
-MediaStreamSignaling::GetMediaSessionOptions(const MediaHints& hints) {
+MediaStreamSignaling::GetOptionsForOffer(const MediaHints& hints) {
   UpdateSessionOptions();
   // has_video and has_audio can only change from false to true,
-  // but never change from true to false. This is to make sure CreateOffer and
-  // CreateAnswer dont't remove a media content description that has been
+  // but never change from true to false if this is an offer. This is to make
+  // sure CreateOffer doesn't remove a media content description that has been
   // created.
-  options_.has_video |= hints.has_video();
   options_.has_audio |= hints.has_audio();
+  options_.has_video |= hints.has_video();
   // Enable BUNDLE feature by default if at least one media content is present.
   options_.bundle_enabled =
       options_.has_audio || options_.has_video || options_.has_data;
   return options_;
+}
+
+cricket::MediaSessionOptions
+MediaStreamSignaling::GetOptionsForAnswer(const MediaHints& hints) {
+  UpdateSessionOptions();
+  // Copy the |options_| to not let |receive_audio| and |receive_video| affect
+  // subsequent offers.
+  cricket::MediaSessionOptions options = options_;
+  // has_video and has_audio can only change from false to true,
+  // but never change from true to false. This is to make
+  // sure CreateAnswer doesn't remove a media content description that has been
+  // created.
+  options.has_audio |= hints.has_audio();
+  options.has_video |= hints.has_video();
+  // Enable BUNDLE feature by default if at least one media content is present.
+  options.bundle_enabled =
+      options.has_audio || options.has_video || options.has_data;
+  return options;
 }
 
 bool MediaStreamSignaling::GetRemoteTrackSsrc(
@@ -136,8 +153,6 @@ void MediaStreamSignaling::UpdateRemoteStreams(
     MediaStreamInterface* old_stream = remote_streams_->find(
         new_stream->label());
     if (old_stream != NULL) continue;
-
-    new_stream->set_ready_state(MediaStreamInterface::kLive);
     stream_observer_->OnAddStream(new_stream);
   }
 

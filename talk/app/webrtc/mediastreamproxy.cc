@@ -38,7 +38,6 @@ enum {
   MSG_LABEL,
   MSG_ADD_AUDIO_TRACK,
   MSG_ADD_VIDEO_TRACK,
-  MSG_READY_STATE,
   MSG_COUNT,
   MSG_AT
 };
@@ -47,8 +46,6 @@ typedef talk_base::TypedMessageData<std::string*> LabelMessageData;
 typedef talk_base::TypedMessageData<size_t> SizeTMessageData;
 typedef talk_base::TypedMessageData<webrtc::ObserverInterface*>
     ObserverMessageData;
-typedef talk_base::TypedMessageData<webrtc::MediaStreamInterface::ReadyState>
-    ReadyStateMessageData;
 
 template<typename T>
 class MediaStreamTrackMessageData : public talk_base::MessageData {
@@ -142,25 +139,6 @@ std::string MediaStreamProxy::label() const {
   return media_stream_impl_->label();
 }
 
-MediaStreamInterface::ReadyState MediaStreamProxy::ready_state() const {
-  if (!signaling_thread_->IsCurrent()) {
-    ReadyStateMessageData msg(MediaStreamInterface::kInitializing);
-    Send(MSG_READY_STATE, &msg);
-    return msg.data();
-  }
-  return media_stream_impl_->ready_state();
-}
-
-void MediaStreamProxy::set_ready_state(
-    MediaStreamInterface::ReadyState new_state) {
-  if (!signaling_thread_->IsCurrent()) {
-    // State should only be allowed to be changed from the signaling thread.
-    ASSERT(!"Not Allowed!");
-    return;
-  }
-  media_stream_impl_->set_ready_state(new_state);
-}
-
 bool MediaStreamProxy::AddTrack(AudioTrackInterface* track) {
   if (!signaling_thread_->IsCurrent()) {
     AudioTrackMsgData msg(track);
@@ -238,11 +216,6 @@ void MediaStreamProxy::OnMessage(talk_base::Message* msg) {
       VideoTrackMsgData * track =
           static_cast<VideoTrackMsgData *>(data);
       track->result_ = media_stream_impl_->AddTrack(track->track_.get());
-      break;
-    }
-    case MSG_READY_STATE: {
-      ReadyStateMessageData* state = static_cast<ReadyStateMessageData*>(data);
-      state->data() = media_stream_impl_->ready_state();
       break;
     }
     default:

@@ -87,6 +87,10 @@ void VideoCapturer::Construct() {
   SignalFrameCaptured.connect(this, &VideoCapturer::OnFrameCaptured);
 }
 
+const std::vector<VideoFormat>* VideoCapturer::GetSupportedFormats() const {
+  return &filtered_supported_formats_;
+}
+
 bool VideoCapturer::StartCapturing(const VideoFormat& capture_format) {
   CaptureState result = Start(capture_format);
   const bool success = (result == CS_RUNNING) || (result == CS_STARTING);
@@ -111,22 +115,21 @@ void VideoCapturer::ClearAspectRatio() {
 
 void VideoCapturer::SetSupportedFormats(
     const std::vector<VideoFormat>& formats) {
-  if (!supported_formats_) {
-    supported_formats_.reset(new std::vector<VideoFormat>);
-  }
-  *supported_formats_ = formats;
+  supported_formats_ = formats;
+  UpdateFilteredSupportedFormats();
 }
 
 bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
                                          VideoFormat* best_format) {
-  if (!supported_formats_) {
+  const std::vector<VideoFormat>* supported_formats = GetSupportedFormats();
+  if (supported_formats->empty()) {
     return false;
   }
   LOG(LS_INFO) << " Capture Requested " << format.ToString();
   int64 best_distance = kMaxDistance;
-  std::vector<VideoFormat>::const_iterator best = supported_formats_->end();
+  std::vector<VideoFormat>::const_iterator best = supported_formats->end();
   std::vector<VideoFormat>::const_iterator i;
-  for (i = supported_formats_->begin(); i != supported_formats_->end(); ++i) {
+  for (i = supported_formats->begin(); i != supported_formats->end(); ++i) {
     int64 distance = GetFormatDistance(format, *i);
     // TODO(fbarchard): Reduce to LS_VERBOSE if/when camera capture is
     // relatively bug free.
@@ -137,7 +140,7 @@ bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
       best = i;
     }
   }
-  if (supported_formats_->end() == best) {
+  if (supported_formats->end() == best) {
     LOG(LS_ERROR) << " No acceptable camera format found";
     return false;
   }
@@ -148,6 +151,7 @@ bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
     best_format->fourcc = best->fourcc;
     best_format->interval = talk_base::_max(format.interval, best->interval);
     LOG(LS_INFO) << " Best " << best_format->ToString()
+                 << " Interval " << best_format->interval
                  << " distance " << best_distance;
   }
   return true;
@@ -170,18 +174,26 @@ bool VideoCapturer::RemoveVideoProcessor(VideoProcessor* video_processor) {
   return true;
 }
 
-void VideoCapturer::GetDesiredResolution(const CapturedFrame* frame,
-                                         int* cropped_width,
-                                         int* cropped_height) {
-  *cropped_width = frame->width;
-  *cropped_height = frame->height;
-  if ((ratio_w_ == 0) || (ratio_h_ == 0)) {
-    return;
+void VideoCapturer::ConstrainSupportedFormats(const VideoFormat& max_format) {
+  max_format_.reset(new VideoFormat(max_format));
+  UpdateFilteredSupportedFormats();
+}
+
+std::string VideoCapturer::ToString(const CapturedFrame* captured_frame) const {
+  std::string fourcc_name = GetFourccName(captured_frame->fourcc) + " ";
+  for (std::string::const_iterator i = fourcc_name.begin();
+      i < fourcc_name.end(); ++i) {
+    // Test character is printable; Avoid isprint() which asserts on negatives.
+    if (*i < 32 || *i >= 127) {
+      fourcc_name = "";
+      break;
+    }
   }
-  ComputeCrop(ratio_w_, ratio_h_,
-              frame->width, abs(frame->height),
-              frame->pixel_width, frame->pixel_height,
-              frame->rotation, cropped_width, cropped_height);
+
+  std::ostringstream ss;
+  ss << fourcc_name << captured_frame->width << "x" << captured_frame->height
+     << "x" << VideoFormat::IntervalToFps(captured_frame->elapsed_time);
+  return ss.str();
 }
 
 void VideoCapturer::OnFrameCaptured(VideoCapturer*,
@@ -193,13 +205,25 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
 #define VIDEO_FRAME_NAME WebRtcVideoFrame
 #endif
 #if defined(VIDEO_FRAME_NAME)
+  // Size to crop captured frame to.  This adjusts the captured frames
+  // aspect ratio to match the final view aspect ratio, considering pixel
+  // aspect ratio and rotation.  The final size may be scaled down by video
+  // adapter to better match ratio_w_ x ratio_h_.
+  // Note that abs() of frame height is passed in, because source may be
+  // inverted, but output will be positive.
   int desired_width = 0;
   int desired_height = 0;
-  GetDesiredResolution(captured_frame, &desired_width, &desired_height);
+  ComputeCrop(ratio_w_, ratio_h_,
+              captured_frame->width, abs(captured_frame->height),
+              captured_frame->pixel_width, captured_frame->pixel_height,
+              captured_frame->rotation, &desired_width, &desired_height);
+
   VIDEO_FRAME_NAME i420_frame;
   if (!i420_frame.Init(captured_frame, desired_width, desired_height)) {
+    // TODO(fbarchard): LOG more information about captured frame attributes.
     LOG(LS_ERROR) << "Couldn't convert to I420! "
-                  << desired_width << " x " << desired_height;
+                  << "From " << ToString(captured_frame)
+                  << " To " << desired_width << " x " << desired_height;
     return;
   }
   if (!ApplyProcessors(&i420_frame)) {
@@ -327,6 +351,28 @@ bool VideoCapturer::ApplyProcessors(VideoFrame* video_frame) {
     }
   }
   return true;
+}
+
+void VideoCapturer::UpdateFilteredSupportedFormats() {
+  filtered_supported_formats_.clear();
+  filtered_supported_formats_ = supported_formats_;
+  if (!max_format_) {
+    return;
+  }
+  std::vector<VideoFormat>::iterator iter =
+      filtered_supported_formats_.begin();
+  while (iter != filtered_supported_formats_.end()) {
+    if (ShouldFilterFormat(*iter)) {
+      iter = filtered_supported_formats_.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+}
+
+bool VideoCapturer::ShouldFilterFormat(const VideoFormat& format) const {
+  return format.width > max_format_->width ||
+         format.height > max_format_->height;
 }
 
 }  // namespace cricket

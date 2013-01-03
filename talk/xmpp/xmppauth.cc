@@ -25,7 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/examples/login/xmppauth.h"
+#include "talk/xmpp/xmppauth.h"
 
 #include <algorithm>
 

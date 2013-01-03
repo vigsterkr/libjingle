@@ -39,7 +39,6 @@ talk_base::scoped_refptr<MediaStream> MediaStream::Create(
 
 MediaStream::MediaStream(const std::string& label)
     : label_(label),
-      ready_state_(MediaStreamInterface::kInitializing),
       audio_track_list_(
           new talk_base::RefCountedObject<
           MediaStreamTrackList<AudioTrackInterface> >()),
@@ -48,24 +47,12 @@ MediaStream::MediaStream(const std::string& label)
           MediaStreamTrackList<VideoTrackInterface> >()) {
 }
 
-void MediaStream::set_ready_state(
-    MediaStreamInterface::ReadyState new_state) {
-  if (ready_state_ != new_state) {
-    ready_state_ = new_state;
-    Notifier<LocalMediaStreamInterface>::FireOnChanged();
-  }
-}
-
 bool MediaStream::AddTrack(AudioTrackInterface* track) {
-  if (ready_state() != kInitializing)
-    return false;
   audio_track_list_->AddTrack(track);
   return true;
 }
 
 bool MediaStream::AddTrack(VideoTrackInterface* track) {
-  if (ready_state() != kInitializing)
-    return false;
   video_track_list_->AddTrack(track);
   return true;
 }

@@ -47,6 +47,8 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
         is_screencast_(false) {
     // Default supported formats. Use ResetSupportedFormats to over write.
     std::vector<cricket::VideoFormat> formats;
+    formats.push_back(cricket::VideoFormat(1280, 720,
+        cricket::VideoFormat::FpsToInterval(30), cricket::FOURCC_I420));
     formats.push_back(cricket::VideoFormat(640, 480,
         cricket::VideoFormat::FpsToInterval(30), cricket::FOURCC_I420));
     formats.push_back(cricket::VideoFormat(320, 240,
@@ -130,7 +132,7 @@ class FakeVideoCapturer : public cricket::VideoCapturer {
   void SetScreencast(bool is_screencast) {
     is_screencast_ = is_screencast;
   }
-  virtual bool IsScreencast() { return is_screencast_; }
+  virtual bool IsScreencast() const { return is_screencast_; }
   bool GetPreferredFourccs(std::vector<uint32>* fourccs) {
     fourccs->push_back(cricket::FOURCC_I420);
     fourccs->push_back(cricket::FOURCC_MJPG);

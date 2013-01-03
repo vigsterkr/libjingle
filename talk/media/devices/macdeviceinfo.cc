@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2004--2005, Google Inc.
+ * Copyright 2012 Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,58 +25,32 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/examples/login/xmppthread.h"
+#include "talk/media/devices/deviceinfo.h"
 
-#include "talk/xmpp/xmppclientsettings.h"
-#include "talk/examples/login/xmppauth.h"
+namespace cricket {
 
-namespace {
-
-const uint32 MSG_LOGIN = 1;
-const uint32 MSG_DISCONNECT = 2;
-
-struct LoginData: public talk_base::MessageData {
-  LoginData(const buzz::XmppClientSettings& s) : xcs(s) {}
-  virtual ~LoginData() {}
-
-  buzz::XmppClientSettings xcs;
-};
-
-} // namespace
-
-XmppThread::XmppThread() {
-  pump_ = new XmppPump(this);
-}
-
-XmppThread::~XmppThread() {
-  delete pump_;
-}
-
-void XmppThread::ProcessMessages(int cms) {
-  talk_base::Thread::ProcessMessages(cms);
-}
-
-void XmppThread::Login(const buzz::XmppClientSettings& xcs) {
-  Post(this, MSG_LOGIN, new LoginData(xcs));
-}
-
-void XmppThread::Disconnect() {
-  Post(this, MSG_DISCONNECT);
-}
-
-void XmppThread::OnStateChange(buzz::XmppEngine::State state) {
-}
-
-void XmppThread::OnMessage(talk_base::Message* pmsg) {
-  if (pmsg->message_id == MSG_LOGIN) {
-    ASSERT(pmsg->pdata != NULL);
-    LoginData* data = reinterpret_cast<LoginData*>(pmsg->pdata);
-    pump_->DoLogin(data->xcs, new XmppSocket(buzz::TLS_DISABLED),
-        new XmppAuth());
-    delete data;
-  } else if (pmsg->message_id == MSG_DISCONNECT) {
-    pump_->DoDisconnect();
-  } else {
-    ASSERT(false);
+bool GetUsbUvcId(const Device& device, std::string* uvc_id) {
+  // Both PID and VID are 4 characters.
+  const int id_size = 4;
+  if (device.id.size() < 2 * id_size) {
+    return false;
   }
+
+  // The last characters of device id is a concatenation of VID and then PID.
+  const size_t vid_location = device.id.size() - 2 * id_size;
+  std::string id_vendor = device.id.substr(vid_location, id_size);
+  const size_t pid_location = device.id.size() - id_size;
+  std::string id_product = device.id.substr(pid_location, id_size);
+
+  uvc_id->clear();
+  uvc_id->append(id_vendor);
+  uvc_id->append(":");
+  uvc_id->append(id_product);
+  return true;
 }
+
+bool GetUsbVersion(const Device& device, std::string* usb_version) {
+  return false;
+}
+
+}  // namespace cricket

@@ -27,6 +27,7 @@
 
 #include <limits.h>
 
+#include "talk/media/base/constants.h"
 #include "talk/base/logging.h"
 #include "talk/base/timeutils.h"
 #include "talk/media/base/videoframe.h"
@@ -36,11 +37,6 @@ namespace cricket {
 // TODO(fbarchard): Make downgrades settable
 static const int kMaxCpuDowngrades = 4;  // Downgrade at most 4 times for CPU.
 static const int kDefaultDowngradeWaitTimeMs = 2000;
-
-// Default CPU thresholds.
-static const float kHighSystemThreshold = 0.85f;
-static const float kLowSystemThreshold = 0.65f;
-static const float kMediumProcessThreshold = 0.10f;
 
 // TODO(fbarchard): Consider making scale factor table settable, to allow
 // application to select quality vs performance tradeoff.
@@ -290,9 +286,9 @@ CoordinatedVideoAdapter::CoordinatedVideoAdapter()
       view_adaptation_(true),
       cpu_downgrade_count_(0),
       cpu_downgrade_wait_time_(0),
-      high_system_threshold_(kHighSystemThreshold),
-      low_system_threshold_(kLowSystemThreshold),
-      medium_process_threshold_(kMediumProcessThreshold),
+      high_system_threshold_(kHighSystemCpuThreshold),
+      low_system_threshold_(kLowSystemCpuThreshold),
+      process_threshold_(kProcessCpuThreshold),
       view_desired_num_pixels_(INT_MAX),
       view_desired_interval_(0),
       encoder_desired_num_pixels_(INT_MAX),
@@ -325,7 +321,7 @@ CoordinatedVideoAdapter::AdaptRequest CoordinatedVideoAdapter::FindCpuRequest(
     float process_load, float system_load) {
   // Downgrade if system is high and plugin is at least more than midrange.
   if (system_load >= high_system_threshold_ * max_cpus &&
-      process_load >= medium_process_threshold_ * current_cpus) {
+      process_load >= process_threshold_ * current_cpus) {
     return CoordinatedVideoAdapter::DOWNGRADE;
   // Upgrade if system is low.
   } else if (system_load < low_system_threshold_ * max_cpus) {

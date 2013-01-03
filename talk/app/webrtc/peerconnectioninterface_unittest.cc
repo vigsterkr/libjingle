@@ -283,7 +283,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     scoped_refptr<VideoSourceInterface> video_source(
         pc_factory_->CreateVideoSource(new cricket::FakeVideoCapturer(), NULL));
     scoped_refptr<VideoTrackInterface> video_track(
-        pc_factory_->CreateVideoTrack(label, video_source));
+        pc_factory_->CreateVideoTrack(label + "v0", video_source));
     stream->AddTrack(video_track.get());
     EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
@@ -295,7 +295,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     scoped_refptr<LocalMediaStreamInterface> stream(
         pc_factory_->CreateLocalMediaStream(label));
     scoped_refptr<AudioTrackInterface> audio_track(
-        pc_factory_->CreateAudioTrack(label, NULL));
+        pc_factory_->CreateAudioTrack(label + "a0", NULL));
     stream->AddTrack(audio_track.get());
     EXPECT_TRUE(pc_->AddStream(stream, NULL));
     EXPECT_TRUE_WAIT(observer_.renegotiation_needed_, kTimeout);
@@ -382,21 +382,31 @@ class PeerConnectionInterfaceTest : public testing::Test {
     CreateOfferReceiveAnswer();
   }
 
-  void ReceiveOfferCreateAnswer() {
-    bool first_negotiate = pc_->local_description() == NULL;
+  void CreateOfferAsRemoteDescription() {
     SessionDescriptionInterface* offer = NULL;
     EXPECT_TRUE(DoCreateOffer(&offer));
     EXPECT_TRUE(DoSetRemoteDescription(offer));
+    EXPECT_EQ(PeerConnectionInterface::kHaveRemoteOffer, observer_.state_);
+  }
 
-    if (first_negotiate)
-      EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
-    else
-      EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
-
+  void CreateAnswerAsLocalDescription() {
     SessionDescriptionInterface* answer = NULL;
     EXPECT_TRUE(DoCreateAnswer(&answer));
     EXPECT_TRUE(DoSetLocalDescription(answer));
     EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+  }
+
+  void CreatePrAnswerAsLocalDescription() {
+    scoped_ptr<SessionDescriptionInterface> answer;
+    EXPECT_TRUE(DoCreateAnswer(answer.use()));
+
+    std::string sdp;
+    EXPECT_TRUE(answer->ToString(&sdp));
+    SessionDescriptionInterface* pr_answer =
+        webrtc::CreateSessionDescription(SessionDescriptionInterface::kPrAnswer,
+                                         sdp);
+    EXPECT_TRUE(DoSetLocalDescription(pr_answer));
+    EXPECT_EQ(PeerConnectionInterface::kHaveLocalPrAnswer, observer_.state_);
   }
 
   void CreateOfferReceiveAnswer() {
@@ -410,7 +420,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     SessionDescriptionInterface* offer = NULL;
     ASSERT_TRUE(DoCreateOffer(&offer));
     EXPECT_TRUE(DoSetLocalDescription(offer));
-    EXPECT_EQ(PeerConnectionInterface::kOpening, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kHaveLocalOffer, observer_.state_);
   }
 
   void CreateAnswerAsRemoteDescription(const std::string& offer) {
@@ -419,6 +429,30 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_TRUE(answer->Initialize(offer));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
     EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+  }
+
+  void CreatePrAnswerAndAnswerAsRemoteDescription(const std::string& offer) {
+    webrtc::JsepSessionDescription* pr_answer =
+        new webrtc::JsepSessionDescription(
+            SessionDescriptionInterface::kPrAnswer);
+    EXPECT_TRUE(pr_answer->Initialize(offer));
+    EXPECT_TRUE(DoSetRemoteDescription(pr_answer));
+    EXPECT_EQ(PeerConnectionInterface::kHaveRemotePrAnswer, observer_.state_);
+    webrtc::JsepSessionDescription* answer =
+        new webrtc::JsepSessionDescription(
+            SessionDescriptionInterface::kAnswer);
+    EXPECT_TRUE(answer->Initialize(offer));
+    EXPECT_TRUE(DoSetRemoteDescription(answer));
+    EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+  }
+
+  // Help function used for waiting until a the last signaled remote stream has
+  // the same label as |stream_label|. In a few of the tests in this file we
+  // answer with the same session description as we offer and thus we can
+  // check if OnAddStream have been called with the same stream as we offer to
+  // send.
+  void WaitAndVerifyOnAddStream(const std::string& stream_label) {
+    EXPECT_EQ_WAIT(stream_label, observer_.GetLastAddedStreamLabel(), kTimeout);
   }
 
   // Creates an offer and applies it as a local session description.
@@ -475,20 +509,38 @@ TEST_F(PeerConnectionInterfaceTest, RemoveStream) {
 
 TEST_F(PeerConnectionInterfaceTest, CreateOfferReceiveAnswer) {
   InitiateCall();
-  // Since we answer with the same session description as we offer we can
-  // check if OnAddStream have been called.
-  EXPECT_EQ_WAIT(kStreamLabel1, observer_.GetLastAddedStreamLabel(), kTimeout);
+  WaitAndVerifyOnAddStream(kStreamLabel1);
+}
+
+TEST_F(PeerConnectionInterfaceTest, CreateOfferReceivePrAnswerAndAnswer) {
+  CreatePeerConnection();
+  AddStream(kStreamLabel1);
+  CreateOfferAsLocalDescription();
+  std::string offer;
+  EXPECT_TRUE(pc_->local_description()->ToString(&offer));
+  CreatePrAnswerAndAnswerAsRemoteDescription(offer);
+  WaitAndVerifyOnAddStream(kStreamLabel1);
 }
 
 TEST_F(PeerConnectionInterfaceTest, ReceiveOfferCreateAnswer) {
   CreatePeerConnection();
   AddStream(kStreamLabel1);
 
-  ReceiveOfferCreateAnswer();
+  CreateOfferAsRemoteDescription();
+  CreateAnswerAsLocalDescription();
 
-  // Since we answer with the same session description as we offer we can
-  // check if OnAddStream have been called.
-  EXPECT_EQ_WAIT(kStreamLabel1, observer_.GetLastAddedStreamLabel(), kTimeout);
+  WaitAndVerifyOnAddStream(kStreamLabel1);
+}
+
+TEST_F(PeerConnectionInterfaceTest, ReceiveOfferCreatePrAnswerAndAnswer) {
+  CreatePeerConnection();
+  AddStream(kStreamLabel1);
+
+  CreateOfferAsRemoteDescription();
+  CreatePrAnswerAsLocalDescription();
+  CreateAnswerAsLocalDescription();
+
+  WaitAndVerifyOnAddStream(kStreamLabel1);
 }
 
 TEST_F(PeerConnectionInterfaceTest, Renegotiate) {
@@ -499,6 +551,20 @@ TEST_F(PeerConnectionInterfaceTest, Renegotiate) {
   EXPECT_EQ(0u, pc_->remote_streams()->count());
   AddStream(kStreamLabel1);
   CreateOfferReceiveAnswer();
+}
+
+// Tests that after negotiating an audio only call, the respondent can perform a
+// renegotiation that removes the audio stream.
+TEST_F(PeerConnectionInterfaceTest, RenegotiateAudioOnly) {
+  CreatePeerConnection();
+  AddVoiceStream(kStreamLabel1);
+  CreateOfferAsRemoteDescription();
+  CreateAnswerAsLocalDescription();
+
+  ASSERT_EQ(1u, pc_->remote_streams()->count());
+  pc_->RemoveStream(pc_->local_streams()->at(0));
+  CreateOfferReceiveAnswer();
+  EXPECT_EQ(0u, pc_->remote_streams()->count());
 }
 
 // Test that candidates are generated and that we can parse our own candidates.

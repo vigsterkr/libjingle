@@ -79,6 +79,21 @@ class FakeDeviceManager : public DeviceManagerInterface {
     *devs = vidcap_devices_;
     return true;
   }
+  virtual void SetVideoCaptureDeviceMaxFormat(const std::string& uvc_id,
+                                              const VideoFormat& max_format) {
+    max_formats_[uvc_id] = max_format;
+  }
+  bool IsMaxFormatForDevice(const std::string& uvc_id,
+                            const VideoFormat& max_format) const {
+    std::map<std::string, VideoFormat>::const_iterator found =
+        max_formats_.find(uvc_id);
+    return (found != max_formats_.end()) ?
+        max_format == found->second :
+        false;
+  }
+  virtual void ClearVideoCaptureDeviceMaxFormat(const std::string& uvc_id) {
+    max_formats_.erase(uvc_id);
+  }
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const {
     return new FakeVideoCapturer();
   }
@@ -196,6 +211,7 @@ class FakeDeviceManager : public DeviceManagerInterface {
   std::vector<Device> input_devices_;
   std::vector<Device> output_devices_;
   std::vector<Device> vidcap_devices_;
+  std::map<std::string, VideoFormat> max_formats_;
 };
 
 }  // namespace cricket

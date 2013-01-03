@@ -228,12 +228,6 @@ bool WebRtcVideoCapturer::GetBestCaptureFormat(const VideoFormat& desired,
   }
 
   if (!VideoCapturer::GetBestCaptureFormat(desired, best_format)) {
-    // If the vcm has a list of the supported format, but didn't find the
-    // best match, then we should return fail.
-    if (GetSupportedFormats()) {
-      return false;
-    }
-
     // We maybe using a manually injected VCM which doesn't support enum.
     // Use the desired format as the best format.
     best_format->width = desired.width;

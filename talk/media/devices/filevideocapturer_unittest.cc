@@ -88,7 +88,7 @@ class FileVideoCapturerTest : public testing::Test {
 
 TEST_F(FileVideoCapturerTest, TestNotOpened) {
   EXPECT_EQ("", capturer_->GetId());
-  EXPECT_EQ(NULL, capturer_->GetSupportedFormats());
+  EXPECT_TRUE(capturer_->GetSupportedFormats()->empty());
   EXPECT_EQ(NULL, capturer_->GetCaptureFormat());
   EXPECT_FALSE(capturer_->IsRunning());
 }

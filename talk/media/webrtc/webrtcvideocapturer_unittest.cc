@@ -65,7 +65,7 @@ class WebRtcVideoCapturerTest : public testing::Test {
 
 TEST_F(WebRtcVideoCapturerTest, TestNotOpened) {
   EXPECT_EQ("", capturer_->GetId());
-  EXPECT_EQ(NULL, capturer_->GetSupportedFormats());
+  EXPECT_TRUE(capturer_->GetSupportedFormats()->empty());
   EXPECT_TRUE(capturer_->GetCaptureFormat() == NULL);
   EXPECT_FALSE(capturer_->IsRunning());
 }
@@ -114,7 +114,7 @@ TEST_F(WebRtcVideoCapturerTest, TestCapture) {
 TEST_F(WebRtcVideoCapturerTest, TestCaptureVcm) {
   EXPECT_TRUE(capturer_->Init(factory_->Create(0,
       reinterpret_cast<const char*>(kTestDeviceId.c_str()))));
-  EXPECT_FALSE(capturer_->GetSupportedFormats());
+  EXPECT_TRUE(capturer_->GetSupportedFormats()->empty());
   VideoFormat format;
   EXPECT_TRUE(capturer_->GetBestCaptureFormat(kDefaultVideoFormat, &format));
   EXPECT_EQ(kDefaultVideoFormat.width, format.width);

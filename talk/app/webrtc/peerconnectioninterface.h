@@ -145,10 +145,12 @@ class PeerConnectionInterface : public JsepInterface,
  public:
   enum ReadyState {
     kNew,
-    kOpening,
+    kHaveLocalOffer,
+    kHaveLocalPrAnswer,
+    kHaveRemoteOffer,
+    kHaveRemotePrAnswer,
     kActive,
-    kClosing,
-    kClosed,
+    kClosed
   };
 
   enum IceState {

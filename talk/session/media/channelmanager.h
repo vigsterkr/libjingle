@@ -190,6 +190,9 @@ class ChannelManager : public talk_base::MessageHandler,
   bool GetAudioInputDevices(std::vector<std::string>* names);
   bool GetAudioOutputDevices(std::vector<std::string>* names);
   bool GetVideoCaptureDevices(std::vector<std::string>* names);
+  void SetVideoCaptureDeviceMaxFormat(const std::string& uvc_id,
+                                      const VideoFormat& max_format);
+
   sigslot::repeater0<> SignalDevicesChange;
   sigslot::signal2<VideoCapturer*, CaptureState> SignalVideoCaptureStateChange;
 

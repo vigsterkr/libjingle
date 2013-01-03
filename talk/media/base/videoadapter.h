@@ -115,11 +115,11 @@ class CoordinatedVideoAdapter
     low_system_threshold_ = low_system_threshold;
   }
   float low_system_threshold() const { return low_system_threshold_; }
-  // CPU process load medium threshold for reducing resolution.  e.g. 0.40f
-  void set_medium_process_threshold(float medium_process_threshold) {
-    medium_process_threshold_ = medium_process_threshold;
+  // CPU process load threshold for reducing resolution.  e.g. 0.40f
+  void set_process_threshold(float process_threshold) {
+    process_threshold_ = process_threshold;
   }
-  float medium_process_threshold() const { return medium_process_threshold_; }
+  float process_threshold() const { return process_threshold_; }
 
   // Handle the format request from the server via Jingle update message.
   void OnOutputFormatRequest(const VideoFormat& format);
@@ -148,10 +148,10 @@ class CoordinatedVideoAdapter
   int cpu_downgrade_count_;
   int cpu_downgrade_wait_time_;
   // cpu system load thresholds relative to max cpus.
-  float high_system_threshold_;  // 0.90f;
-  float low_system_threshold_;  // 0.70f;
+  float high_system_threshold_;
+  float low_system_threshold_;
   // cpu process load thresholds relative to current cpus.
-  float medium_process_threshold_;  // 0.40f;
+  float process_threshold_;
   // Video formats that the server view requests, the CPU wants, and the encoder
   // wants respectively. The adapted output format is the minimum of these.
   int view_desired_num_pixels_;

@@ -28,6 +28,7 @@
 #ifndef TALK_MEDIA_DEVICES_DEVICEMANAGER_H_
 #define TALK_MEDIA_DEVICES_DEVICEMANAGER_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@
 #include "talk/base/sigslot.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/window.h"
+#include "talk/media/base/videocommon.h"
 
 namespace talk_base {
 
@@ -43,7 +45,6 @@ class WindowDescription;
 class WindowPicker;
 
 }
-
 namespace cricket {
 
 class VideoCapturer;
@@ -60,6 +61,14 @@ struct Device {
 
   std::string name;
   std::string id;
+};
+
+class VideoCapturerFactory {
+ public:
+  VideoCapturerFactory() {}
+  virtual ~VideoCapturerFactory() {}
+
+  virtual VideoCapturer* Create(const Device& device) = 0;
 };
 
 // DeviceManagerInterface - interface to manage the audio and
@@ -84,6 +93,16 @@ class DeviceManagerInterface {
 
   virtual bool GetVideoCaptureDevices(std::vector<Device>* devs) = 0;
   virtual bool GetVideoCaptureDevice(const std::string& name, Device* out) = 0;
+
+  // Caps the capture format according to max format for capturers created
+  // by CreateVideoCapturer(). See ConstrainSupportedFormats() in
+  // videocapturer.h for more detail.
+  // Note that once a VideoCapturer has been created, calling this API will
+  // not affect it.
+  virtual void SetVideoCaptureDeviceMaxFormat(
+      const std::string& uvc_id,
+      const VideoFormat& max_format) = 0;
+  virtual void ClearVideoCaptureDeviceMaxFormat(const std::string& uvc_id) = 0;
 
   // Device creation
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const = 0;
@@ -113,14 +132,20 @@ class DeviceWatcher {
 class DeviceManagerFactory {
  public:
   static DeviceManagerInterface* Create();
+
  private:
-  DeviceManagerFactory();
+  DeviceManagerFactory() {}
 };
 
 class DeviceManager : public DeviceManagerInterface {
  public:
   DeviceManager();
   virtual ~DeviceManager();
+
+  void set_device_video_capturer_factory(
+      VideoCapturerFactory* device_video_capturer_factory) {
+    device_video_capturer_factory_.reset(device_video_capturer_factory);
+  }
 
   // Initialization
   virtual bool Init();
@@ -138,6 +163,10 @@ class DeviceManager : public DeviceManagerInterface {
 
   virtual bool GetVideoCaptureDevices(std::vector<Device>* devs);
   virtual bool GetVideoCaptureDevice(const std::string& name, Device* out);
+
+  virtual void SetVideoCaptureDeviceMaxFormat(const std::string& uvc_id,
+                                              const VideoFormat& max_format);
+  virtual void ClearVideoCaptureDeviceMaxFormat(const std::string& uvc_id);
 
   virtual VideoCapturer* CreateVideoCapturer(const Device& device) const;
 
@@ -159,6 +188,8 @@ class DeviceManager : public DeviceManagerInterface {
   virtual bool GetAudioDevice(bool is_input, const std::string& name,
                               Device* out);
   virtual bool GetDefaultVideoCaptureDevice(Device* device);
+  virtual void GetMaxFormat(const Device& device,
+                            VideoFormat* video_format) const;
 
   void set_initialized(bool initialized) { initialized_ = initialized; }
 
@@ -171,6 +202,8 @@ class DeviceManager : public DeviceManagerInterface {
       const char* const exclusion_list[]);
 
   bool initialized_;
+  talk_base::scoped_ptr<VideoCapturerFactory> device_video_capturer_factory_;
+  std::map<std::string, VideoFormat> max_formats_;
   talk_base::scoped_ptr<DeviceWatcher> watcher_;
   talk_base::scoped_ptr<talk_base::WindowPicker> window_picker_;
 };

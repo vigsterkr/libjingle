@@ -130,9 +130,18 @@ class MediaStreamSignaling {
   // cricket::MediaSessionOptions returned by GetMediaSessionOptions().
   bool AddDataChannel(DataChannel* data_channel);
 
-  // Returns a MediaSessionOptions struct with options decided by |hints| and
-  // the local MediaStreams and DataChannels.
-  virtual const cricket::MediaSessionOptions& GetMediaSessionOptions(
+  // Returns a MediaSessionOptions struct with options decided by |hints|,
+  // the local MediaStreams and DataChannels. If a |hints| element
+  // is true, media content description of that type will be
+  // offered even if no tracks are sent.
+  virtual const cricket::MediaSessionOptions& GetOptionsForOffer(
+      const MediaHints& hints);
+
+  // Returns a MediaSessionOptions struct with options decided by
+  // |hints|, the local MediaStreams and DataChannels.
+  // If a |hints| elements is true, media content description of
+  // that type will be accepted even if no tracks are sent.
+  virtual cricket::MediaSessionOptions GetOptionsForAnswer(
       const MediaHints& hints);
 
   // Updates or creates remote MediaStream objects given a

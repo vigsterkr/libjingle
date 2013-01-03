@@ -38,6 +38,11 @@ extern const int kVideoCodecClockrate;
 extern const int kDataCodecClockrate;
 extern const int kDataMaxBandwidth;  // bps
 
+// Default CPU thresholds.
+extern const float kHighSystemCpuThreshold;
+extern const float kLowSystemCpuThreshold;
+extern const float kProcessCpuThreshold;
+
 extern const char* kRtxCodecName;
 
 // Codec parameter: associated payload type

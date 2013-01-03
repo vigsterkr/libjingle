@@ -1,6 +1,6 @@
 /*
  * libjingle
- * Copyright 2012 Google Inc.
+ * Copyright 2004--2005, Google Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,23 +25,58 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/media/base/constants.h"
+#include "talk/xmpp/xmppthread.h"
 
-#include <string>
+#include "talk/xmpp/xmppauth.h"
+#include "talk/xmpp/xmppclientsettings.h"
 
-namespace cricket {
+namespace {
 
-const int kVideoCodecClockrate = 90000;
-const int kDataCodecClockrate = 90000;
-const int kDataMaxBandwidth = 30720;  // bps
+const uint32 MSG_LOGIN = 1;
+const uint32 MSG_DISCONNECT = 2;
 
-const float kHighSystemCpuThreshold = 0.85f;
-const float kLowSystemCpuThreshold = 0.65f;
-const float kProcessCpuThreshold = 0.10f;
+struct LoginData: public talk_base::MessageData {
+  LoginData(const buzz::XmppClientSettings& s) : xcs(s) {}
+  virtual ~LoginData() {}
 
-const char* kRtxCodecName = "rtx";
+  buzz::XmppClientSettings xcs;
+};
 
-const char* kCodecParamAssociatedPayloadType = "apt";
+} // namespace
 
+XmppThread::XmppThread() {
+  pump_ = new XmppPump(this);
+}
 
-}  // namespace cricket
+XmppThread::~XmppThread() {
+  delete pump_;
+}
+
+void XmppThread::ProcessMessages(int cms) {
+  talk_base::Thread::ProcessMessages(cms);
+}
+
+void XmppThread::Login(const buzz::XmppClientSettings& xcs) {
+  Post(this, MSG_LOGIN, new LoginData(xcs));
+}
+
+void XmppThread::Disconnect() {
+  Post(this, MSG_DISCONNECT);
+}
+
+void XmppThread::OnStateChange(buzz::XmppEngine::State state) {
+}
+
+void XmppThread::OnMessage(talk_base::Message* pmsg) {
+  if (pmsg->message_id == MSG_LOGIN) {
+    ASSERT(pmsg->pdata != NULL);
+    LoginData* data = reinterpret_cast<LoginData*>(pmsg->pdata);
+    pump_->DoLogin(data->xcs, new XmppSocket(buzz::TLS_DISABLED),
+        new XmppAuth());
+    delete data;
+  } else if (pmsg->message_id == MSG_DISCONNECT) {
+    pump_->DoDisconnect();
+  } else {
+    ASSERT(false);
+  }
+}

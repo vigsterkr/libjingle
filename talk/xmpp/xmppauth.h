@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TALK_EXAMPLES_LOGIN_XMPPAUTH_H_
-#define TALK_EXAMPLES_LOGIN_XMPPAUTH_H_
+#ifndef TALK_XMPP_XMPPAUTH_H_
+#define TALK_XMPP_XMPPAUTH_H_
 
 #include <vector>
 
@@ -74,4 +74,5 @@ private:
   bool done_;
 };
 
-#endif  // TALK_EXAMPLES_LOGIN_XMPPAUTH_H_
+#endif  // TALK_XMPP_XMPPAUTH_H_
+

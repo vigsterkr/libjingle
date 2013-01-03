@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/media/base/constants.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/socket.h"
 #include "talk/base/window.h"
@@ -58,11 +59,11 @@ const int kMinRtpHeaderExtensionId = 1;
 const int kMaxRtpHeaderExtensionId = 255;
 const int kScreencastDefaultFps = 5;
 
-// Used in AudioOptions to signify "unset" values.
+// Used in AudioOptions & VideoMediaOptions to signify "unset" values.
 template <class T>
 class Settable {
  public:
- Settable() : set_(false), val_() {}
+  Settable() : set_(false), val_() {}
   explicit Settable(T val) : set_(true), val_(val) {}
 
   bool IsSet() const {
@@ -84,21 +85,43 @@ class Settable {
     val_ = T();
   }
 
-  void SetFrom(Settable<T> o) {
+  void SetFrom(const Settable<T>& o) {
     T val;
     if (o.Get(&val)) {
       Set(val);
     }
   }
 
+  std::string ToString() const {
+    return set_ ? talk_base::ToString(val_) : "";
+  }
+
   bool operator==(const Settable<T>& o) const {
     return (set_ == o.set_) && (val_ == o.val_);
+  }
+
+  bool operator!=(const Settable<T>& o) const {
+    return !operator==(o);
   }
 
  private:
   bool set_;
   T val_;
+  // TODO(hughv): Fix unit tests so we can disallow copy.
+  // DISALLOW_COPY_AND_ASSIGN(Settable<T>);
 };
+
+template <class T>
+static std::string ToStringIfSet(const char* key, const Settable<T>& val) {
+  std::string str;
+  if (val.IsSet()) {
+    str = key;
+    str += ": ";
+    str += val.ToString();
+    str += ", ";
+  }
+  return str;
+}
 
 // Options that can be applied to a VoiceMediaChannel or a VoiceMediaEngine.
 // Used to be flags, but that makes it hard to selectively apply options.
@@ -130,38 +153,14 @@ struct AudioOptions {
   virtual std::string ToString() const {
     std::ostringstream ost;
     ost << "AudioOptions {";
-    bool aec;
-    if (echo_cancellation.Get(&aec)) {
-      ost << "aec: " << aec << ", ";
-    }
-    bool agc;
-    if (auto_gain_control.Get(&agc)) {
-      ost << "agc: " << agc << ", ";
-    }
-    bool ns;
-    if (noise_suppression.Get(&ns)) {
-      ost << "ns: " << ns << ", ";
-    }
-    bool hf;
-    if (highpass_filter.Get(&hf)) {
-      ost << "hf: " << hf << ", ";
-    }
-    bool swap;
-    if (stereo_swapping.Get(&swap)) {
-      ost << "swap: " << swap << ", ";
-    }
-    bool typing;
-    if (typing_detection.Get(&typing)) {
-      ost << "typing: " << typing << ", ";
-    }
-    bool conference;
-    if (conference_mode.Get(&conference)) {
-      ost << "conference: " << conference << ", ";
-    }
-    int agc_delta;
-    if (adjust_agc_delta.Get(&agc_delta)) {
-      ost << "agc_delta: " << agc_delta << ", ";
-    }
+    ost << ToStringIfSet("aec", echo_cancellation);
+    ost << ToStringIfSet("agc", auto_gain_control);
+    ost << ToStringIfSet("ns", noise_suppression);
+    ost << ToStringIfSet("hf", highpass_filter);
+    ost << ToStringIfSet("swap", stereo_swapping);
+    ost << ToStringIfSet("typing", typing_detection);
+    ost << ToStringIfSet("conference", conference_mode);
+    ost << ToStringIfSet("agc_delta", adjust_agc_delta);
     ost << "}";
     return ost.str();
   }
@@ -181,6 +180,76 @@ struct AudioOptions {
   Settable<bool> typing_detection;
   Settable<bool> conference_mode;
   Settable<int> adjust_agc_delta;
+};
+
+// Options that can be applied to a VideoMediaChannel or a VideoMediaEngine.
+// Used to be flags, but that makes it hard to selectively apply options.
+// We are moving all of the setting of options to structs like this,
+// but some things currently still use flags.
+struct VideoMediaOptions {
+  VideoMediaOptions() {
+    process_adaptation_threshhold.Set(kProcessCpuThreshold);
+    system_low_adaptation_threshhold.Set(kLowSystemCpuThreshold);
+    system_high_adaptation_threshhold.Set(kHighSystemCpuThreshold);
+  }
+
+  void SetAll(const VideoMediaOptions& change) {
+    adapt_input_to_encoder.SetFrom(change.adapt_input_to_encoder);
+    adapt_input_to_cpu_usage.SetFrom(change.adapt_input_to_cpu_usage);
+    video_noise_reduction.SetFrom(change.video_noise_reduction);
+    video_leaky_bucket.SetFrom(change.video_leaky_bucket);
+    conference_mode.SetFrom(change.conference_mode);
+    process_adaptation_threshhold.SetFrom(change.process_adaptation_threshhold);
+    system_low_adaptation_threshhold.SetFrom(
+        change.system_low_adaptation_threshhold);
+    system_high_adaptation_threshhold.SetFrom(
+        change.system_high_adaptation_threshhold);
+  }
+
+  bool operator==(const VideoMediaOptions& o) const {
+    return adapt_input_to_encoder == o.adapt_input_to_encoder &&
+        adapt_input_to_cpu_usage == o.adapt_input_to_cpu_usage &&
+        video_noise_reduction == o.video_noise_reduction &&
+        video_leaky_bucket == o.video_leaky_bucket &&
+        conference_mode == o.conference_mode &&
+        process_adaptation_threshhold == o.process_adaptation_threshhold &&
+        system_low_adaptation_threshhold ==
+            o.system_low_adaptation_threshhold &&
+        system_high_adaptation_threshhold ==
+            o.system_high_adaptation_threshhold;
+  }
+
+  virtual std::string ToString() const {
+    std::ostringstream ost;
+    ost << "VideoOptions {";
+    ost << ToStringIfSet("encoder adaption", adapt_input_to_encoder);
+    ost << ToStringIfSet("cpu adaption", adapt_input_to_cpu_usage);
+    ost << ToStringIfSet("noise reduction", video_noise_reduction);
+    ost << ToStringIfSet("leaky bucket", video_leaky_bucket);
+    ost << ToStringIfSet("conference mode", conference_mode);
+    ost << ToStringIfSet("process", process_adaptation_threshhold);
+    ost << ToStringIfSet("low", system_low_adaptation_threshhold);
+    ost << ToStringIfSet("high", system_high_adaptation_threshhold);
+    ost << "}";
+    return ost.str();
+  }
+
+  // Encoder adaption, which is the gd callback in LMI, and TBA in WebRTC.
+  Settable<bool> adapt_input_to_encoder;
+  // Enable CPU adaptation?
+  Settable<bool> adapt_input_to_cpu_usage;
+  // Enable denoising?
+  Settable<bool> video_noise_reduction;
+  // Enable WebRTC leaky bucket when sending media packets.
+  Settable<bool> video_leaky_bucket;
+  // Use conference mode?
+  Settable<bool> conference_mode;
+  // Threshhold for process cpu adaptation.  (Process limit)
+  Settable<float> process_adaptation_threshhold;
+  // Low threshhold for cpu adaptation.  (Adapt up)
+  Settable<float> system_low_adaptation_threshhold;
+  // High threshhold for cpu adaptation.  (Adapt down)
+  Settable<float> system_high_adaptation_threshhold;
 };
 
 // A class for playing out soundclips.

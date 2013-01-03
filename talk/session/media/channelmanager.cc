@@ -1223,6 +1223,12 @@ bool ChannelManager::GetVideoCaptureDevices(std::vector<std::string>* names) {
   return ret;
 }
 
+void ChannelManager::SetVideoCaptureDeviceMaxFormat(
+    const std::string& uvc_id,
+    const VideoFormat& max_format) {
+  device_manager_->SetVideoCaptureDeviceMaxFormat(uvc_id, max_format);
+}
+
 VideoFormat ChannelManager::GetStartCaptureFormat() {
   StartCaptureParams params;
   Send(MSG_GETSTARTCAPTUREFORMAT, &params);

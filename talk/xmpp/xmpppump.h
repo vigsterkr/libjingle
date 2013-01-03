@@ -25,8 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _XMPPPUMP_H_
-#define _XMPPPUMP_H_
+#ifndef TALK_XMPP_XMPPPUMP_H_
+#define TALK_XMPP_XMPPPUMP_H_
 
 #include "talk/base/messagequeue.h"
 #include "talk/base/taskrunner.h"
@@ -71,4 +71,5 @@ private:
   XmppPumpNotify *notify_;
 };
 
-#endif // _XMPPPUMP_H_
+#endif // TALK_XMPP_XMPPPUMP_H_
+

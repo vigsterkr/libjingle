@@ -93,15 +93,19 @@ struct CapturedFrame {
 };
 
 // VideoCapturer is an abstract class that defines the interfaces for video
-// capturing. The subclasses implement the video capturer for various platforms.
+// capturing. The subclasses implement the video capturer for various types of
+// capturers and various platforms.
 //
-// The captured frames may need to be adapted (for example, cropping). Such an
-// adaptor is out of the scope of VideoCapturer. If the adaptor is needed, it
-// acts as the downstream of VideoCapturer, adapts the captured frames, and
-// delivers the adapted frames to other components such as the encoder.
+// The captured frames may need to be adapted (for example, cropping). Adaptors
+// can be registered to the capturer or applied externally to the capturer.
+// If the adaptor is needed, it acts as the downstream of VideoCapturer, adapts
+// the captured frames, and delivers the adapted frames to other components
+// such as the encoder. Effects can also be registered to the capturer or
+// applied externally.
 //
 // Programming model:
-//   Create and initialize an object of a subclass of VideoCapturer
+//   Create an object of a subclass of VideoCapturer
+//   Initialize
 //   SignalStateChange.connect()
 //   SignalFrameCaptured.connect()
 //   Find the capture format for Start() by either calling GetSupportedFormats()
@@ -111,8 +115,9 @@ struct CapturedFrame {
 //   Stop()
 //
 // Assumption:
-//   The Start() and Stop() methods are called by a single thread (that is, the
-//   media engine thread). Hence, there is no need to make them thread safe.
+//   The Start() and Stop() methods are called by a single thread (E.g., the
+//   media engine thread). Hence, the VideoCapture subclasses dont need to be
+//   thread safe.
 //
 class VideoCapturer
     : public sigslot::has_slots<>,
@@ -130,11 +135,8 @@ class VideoCapturer
   const std::string& GetId() const { return id_; }
 
   // Get the capture formats supported by the video capturer. The supported
-  // formats are available after the device is opened successfully.
-  // Return NULL if the supported formats are not available.
-  const std::vector<VideoFormat>* GetSupportedFormats() const {
-    return supported_formats_.get();
-  }
+  // formats are non empty after the device has been opened successfully.
+  const std::vector<VideoFormat>* GetSupportedFormats() const;
 
   // Get the best capture format for the desired format. The best format is the
   // same as one of the supported formats except that the frame interval may be
@@ -200,7 +202,14 @@ class VideoCapturer
 
   // Returns true if the capturer is screencasting. This can be used to
   // implement screencast specific behavior.
-  virtual bool IsScreencast() = 0;
+  virtual bool IsScreencast() const = 0;
+
+  // Caps the VideoCapturer's format according to max_format. It can e.g. be
+  // used to prevent cameras from capturing at a resolution or framerate that
+  // the capturer is capable of but not performing satisfactorily at.
+  // The capping is an upper bound for each component of the capturing format.
+  // The fourcc component is ignored.
+  void ConstrainSupportedFormats(const VideoFormat& max_format);
 
   // Signal all capture state changes that are not a direct result of calling
   // Start().
@@ -253,19 +262,27 @@ class VideoCapturer
   int64 GetFormatDistance(const VideoFormat& desired,
                           const VideoFormat& supported);
 
+  // Convert captured frame to readable string for LOG messages.
+  std::string ToString(const CapturedFrame* frame) const;
+
   // Applies all registered processors. If any of the processors signal that
   // the frame should be dropped the return value will be false. Note that
   // this frame should be dropped as it has not applied all processors.
   bool ApplyProcessors(VideoFrame* video_frame);
 
-  void GetDesiredResolution(const CapturedFrame* frame,
-                            int* captured_width, int* captured_height);
+  // Updates filtered_supported_formats_ so that it contains the formats in
+  // supported_formats_ that fulfill all applied restrictions.
+  void UpdateFilteredSupportedFormats();
+  // Returns true if format doesn't fulfill all applied restrictions.
+  bool ShouldFilterFormat(const VideoFormat& format) const;
 
   talk_base::Thread* thread_;
   std::string id_;
   CaptureState capture_state_;
   talk_base::scoped_ptr<VideoFormat> capture_format_;
-  talk_base::scoped_ptr<std::vector<VideoFormat> > supported_formats_;
+  std::vector<VideoFormat> supported_formats_;
+  talk_base::scoped_ptr<VideoFormat> max_format_;
+  std::vector<VideoFormat> filtered_supported_formats_;
 
   int ratio_w_;
   int ratio_h_;

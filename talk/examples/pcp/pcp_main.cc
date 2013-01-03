@@ -28,8 +28,6 @@
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/examples/login/autoportallocator.h"
-#include "talk/examples/login/xmpppump.h"
-#include "talk/examples/login/xmppsocket.h"
 #include "talk/p2p/base/sessionmanager.h"
 #include "talk/p2p/client/sessionmanagertask.h"
 #include "talk/xmpp/xmppengine.h"
@@ -39,6 +37,8 @@
 #include "talk/session/tunnel/tunnelsessionclient.h"
 #include "talk/xmpp/xmppclient.h"
 #include "talk/xmpp/xmppclientsettings.h"
+#include "talk/xmpp/xmpppump.h"
+#include "talk/xmpp/xmppsocket.h"
 
 #ifndef MAX_PATH
 #define MAX_PATH 256

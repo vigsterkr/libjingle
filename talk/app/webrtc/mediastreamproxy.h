@@ -64,8 +64,6 @@ class MediaStreamProxy : public LocalMediaStreamInterface,
   virtual VideoTracks* video_tracks() {
     return video_tracks_;
   }
-  virtual ReadyState ready_state() const;
-  virtual void set_ready_state(ReadyState new_state);
 
   // Implement Notifier
   virtual void RegisterObserver(ObserverInterface* observer);

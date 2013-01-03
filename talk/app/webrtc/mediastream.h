@@ -68,14 +68,11 @@ class MediaStream : public Notifier<LocalMediaStreamInterface> {
   virtual MediaStreamTrackListInterface<VideoTrackInterface>* video_tracks() {
     return video_track_list_;
   }
-  virtual ReadyState ready_state() const { return ready_state_; }
-  virtual void set_ready_state(ReadyState new_state);
 
  protected:
   explicit MediaStream(const std::string& label);
 
   std::string label_;
-  MediaStreamInterface::ReadyState ready_state_;
   talk_base::scoped_refptr<MediaStreamTrackList<AudioTrackInterface> >
       audio_track_list_;
   talk_base::scoped_refptr<MediaStreamTrackList<VideoTrackInterface> >

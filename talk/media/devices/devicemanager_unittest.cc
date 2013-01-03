@@ -40,6 +40,7 @@
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/stream.h"
 #include "talk/base/windowpickerfactory.h"
+#include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/base/testutils.h"
 #include "talk/media/devices/filevideocapturer.h"
 #include "talk/media/devices/v4llookup.h"
@@ -56,6 +57,42 @@ using cricket::Device;
 using cricket::DeviceManager;
 using cricket::DeviceManagerFactory;
 using cricket::DeviceManagerInterface;
+
+const cricket::VideoFormat kVgaFormat(640, 480,
+                                      cricket::VideoFormat::FpsToInterval(30),
+                                      cricket::FOURCC_I420);
+const cricket::VideoFormat kHdFormat(1280, 720,
+                                     cricket::VideoFormat::FpsToInterval(30),
+                                     cricket::FOURCC_I420);
+
+class FakeVideoCapturerFactory : public cricket::VideoCapturerFactory {
+ public:
+  FakeVideoCapturerFactory() {}
+  virtual ~FakeVideoCapturerFactory() {}
+
+  virtual cricket::VideoCapturer* Create(const cricket::Device& device) {
+    return new cricket::FakeVideoCapturer;
+  }
+};
+
+class DeviceManagerTestFake : public testing::Test {
+ public:
+  virtual void SetUp() {
+    dm_.reset(DeviceManagerFactory::Create());
+    EXPECT_TRUE(dm_->Init());
+    DeviceManager* device_manager = static_cast<DeviceManager*>(dm_.get());
+    device_manager->set_device_video_capturer_factory(
+        new FakeVideoCapturerFactory());
+  }
+
+  virtual void TearDown() {
+    dm_->Terminate();
+  }
+
+ protected:
+  scoped_ptr<DeviceManagerInterface> dm_;
+};
+
 
 // Test that we startup/shutdown properly.
 TEST(DeviceManagerTest, StartupShutdown) {
@@ -365,4 +402,34 @@ TEST(DeviceManagerTest, GetDesktops) {
   scoped_ptr<cricket::VideoCapturer> capturer(dm->CreateDesktopCapturer(
       descriptions.front().id()));
   EXPECT_FALSE(capturer.get() == NULL);
+}
+
+TEST_F(DeviceManagerTestFake, CaptureConstraintsWhitelisted) {
+  const Device device("white", "white_id");
+  dm_->SetVideoCaptureDeviceMaxFormat(device.name, kHdFormat);
+  scoped_ptr<cricket::VideoCapturer> capturer(
+      dm_->CreateVideoCapturer(device));
+  cricket::VideoFormat best_format;
+  EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
+  EXPECT_EQ(kHdFormat, best_format);
+}
+
+TEST_F(DeviceManagerTestFake, CaptureConstraintsNotWhitelisted) {
+  const Device device("regular", "regular_id");
+  scoped_ptr<cricket::VideoCapturer> capturer(
+      dm_->CreateVideoCapturer(device));
+  cricket::VideoFormat best_format;
+  EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
+  EXPECT_EQ(kVgaFormat, best_format);
+}
+
+TEST_F(DeviceManagerTestFake, CaptureConstraintsUnWhitelisted) {
+  const Device device("un_white", "un_white_id");
+  dm_->SetVideoCaptureDeviceMaxFormat(device.name, kHdFormat);
+  dm_->ClearVideoCaptureDeviceMaxFormat(device.name);
+  scoped_ptr<cricket::VideoCapturer> capturer(
+      dm_->CreateVideoCapturer(device));
+  cricket::VideoFormat best_format;
+  EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
+  EXPECT_EQ(kVgaFormat, best_format);
 }

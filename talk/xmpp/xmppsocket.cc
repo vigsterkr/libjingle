@@ -25,6 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "xmppsocket.h"
+
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -36,7 +38,6 @@
 #ifdef FEATURE_ENABLE_SSL
 #include "talk/base/ssladapter.h"
 #endif
-#include "xmppsocket.h"
 
 #ifdef USE_SSLSTREAM
 #include "talk/base/socketstream.h"

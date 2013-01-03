@@ -40,9 +40,6 @@
       ],
       'sources': [
         'examples/login/jingleinfotask.cc',
-        'examples/login/xmppauth.cc',
-        'examples/login/xmpppump.cc',
-        'examples/login/xmppsocket.cc',
       ],
     },  # target libjingle_xmpphelp
     {
@@ -74,7 +71,6 @@
         'libjingle_xmpphelp',
       ],
       'sources': [
-        'examples/login/xmppthread.cc',
         'examples/login/login_main.cc',
       ],
     },  # target login

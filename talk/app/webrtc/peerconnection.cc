@@ -553,8 +553,16 @@ void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
     case cricket::BaseSession::STATE_INIT:
       ChangeReadyState(PeerConnectionInterface::kNew);
     case cricket::BaseSession::STATE_SENTINITIATE:
+      ChangeReadyState(PeerConnectionInterface::kHaveLocalOffer);
+      break;
+    case cricket::BaseSession::STATE_SENTPRACCEPT:
+      ChangeReadyState(PeerConnectionInterface::kHaveLocalPrAnswer);
+      break;
     case cricket::BaseSession::STATE_RECEIVEDINITIATE:
-      ChangeReadyState(PeerConnectionInterface::kOpening);
+      ChangeReadyState(PeerConnectionInterface::kHaveRemoteOffer);
+      break;
+    case cricket::BaseSession::STATE_RECEIVEDPRACCEPT:
+      ChangeReadyState(PeerConnectionInterface::kHaveRemotePrAnswer);
       break;
     case cricket::BaseSession::STATE_SENTACCEPT:
     case cricket::BaseSession::STATE_RECEIVEDACCEPT:

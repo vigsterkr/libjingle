@@ -46,19 +46,6 @@ using ::testing::Exactly;
 
 namespace {
 
-class ReadyStateMessageData : public talk_base::MessageData {
- public:
-  ReadyStateMessageData(
-      webrtc::MediaStreamInterface* stream,
-      webrtc::MediaStreamInterface::ReadyState new_state)
-      : stream_(stream),
-        ready_state_(new_state) {
-  }
-
-  scoped_refptr<webrtc::MediaStreamInterface> stream_;
-  webrtc::MediaStreamInterface::ReadyState ready_state_;
-};
-
 class TrackStateMessageData : public talk_base::MessageData {
  public:
   TrackStateMessageData(
@@ -117,14 +104,6 @@ class MockMediaStream: public LocalMediaStreamInterface {
   virtual VideoTracks* video_tracks() {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
     return stream_impl_->video_tracks();
-  }
-  virtual ReadyState ready_state() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->ready_state();
-  }
-  virtual void set_ready_state(ReadyState state) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->set_ready_state(state);
   }
   virtual bool AddTrack(AudioTrackInterface* audio_track) {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
@@ -244,7 +223,6 @@ class MediaStreamTest: public testing::Test,
                                        mock_stream);
     ASSERT_TRUE(stream_.get() != NULL);
     EXPECT_EQ(label, stream_->label());
-    EXPECT_EQ(MediaStreamInterface::kInitializing, stream_->ready_state());
 
     // Create a video track proxy object that uses our mocked
     // version of a VideoTrack
@@ -274,17 +252,8 @@ class MediaStreamTest: public testing::Test,
   }
 
   enum {
-    MSG_SET_READYSTATE,
     MSG_SET_TRACKSTATE,
   };
-
-  // Set the ready state on the signaling thread.
-  // State can only be changed on the signaling thread.
-  void SetReadyState(MediaStreamInterface* stream,
-                     MediaStreamInterface::ReadyState new_state) {
-    ReadyStateMessageData state(stream, new_state);
-    signaling_thread_->Send(this, MSG_SET_READYSTATE, &state);
-  }
 
   // Set the track state on the signaling thread.
   // State can only be changed on the signaling thread.
@@ -303,12 +272,6 @@ class MediaStreamTest: public testing::Test,
   // Implements talk_base::MessageHandler.
   virtual void OnMessage(talk_base::Message* msg) {
     switch (msg->message_id) {
-      case MSG_SET_READYSTATE: {
-        ReadyStateMessageData* state =
-            static_cast<ReadyStateMessageData*>(msg->pdata);
-        state->stream_->set_ready_state(state->ready_state_);
-        break;
-      }
       case MSG_SET_TRACKSTATE: {
         TrackStateMessageData* state =
             static_cast<TrackStateMessageData*>(msg->pdata);
@@ -338,21 +301,6 @@ TEST_F(MediaStreamTest, CreateLocalStream) {
   track = stream_->audio_tracks()->at(0);
   EXPECT_EQ(0, track->label().compare(kAudioTrackLabel));
   EXPECT_TRUE(track->enabled());
-}
-
-TEST_F(MediaStreamTest, ChangeStreamState) {
-  MockObserver observer(signaling_thread_.get());
-  stream_->RegisterObserver(&observer);
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  SetReadyState(stream_, MediaStreamInterface::kLive);
-
-  EXPECT_EQ(MediaStreamInterface::kLive, stream_->ready_state());
-  // It should not be possible to add
-  // streams when the state has changed to live.
-  EXPECT_FALSE(stream_->AddTrack(audio_track_));
-  EXPECT_EQ(0u, stream_->audio_tracks()->count());
 }
 
 TEST_F(MediaStreamTest, ChangeVideoTrack) {

@@ -48,6 +48,7 @@ using webrtc::IceCandidateInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::SessionDescriptionInterface;
 
+using webrtc::MediaHints;
 using webrtc::StreamCollection;
 using webrtc::StreamCollectionInterface;
 
@@ -150,7 +151,7 @@ CreateStreamCollection(int number_of_streams) {
 // Verifies that |options| contain all tracks in |collection| if |hints| allow
 // them.
 static void VerifyMediaOptions(StreamCollectionInterface* collection,
-                               const webrtc::MediaHints hints,
+                               const MediaHints hints,
                                const cricket::MediaSessionOptions& options) {
   EXPECT_EQ(hints.has_audio(), options.has_audio);
   EXPECT_EQ(hints.has_video(), options.has_video);
@@ -247,7 +248,8 @@ class MediaStreamSignalingForTest : public webrtc::MediaStreamSignaling {
       : webrtc::MediaStreamSignaling(talk_base::Thread::Current(), observer) {
   };
   using webrtc::MediaStreamSignaling::SetLocalStreams;
-  using webrtc::MediaStreamSignaling::GetMediaSessionOptions;
+  using webrtc::MediaStreamSignaling::GetOptionsForOffer;
+  using webrtc::MediaStreamSignaling::GetOptionsForAnswer;
   using webrtc::MediaStreamSignaling::UpdateRemoteStreams;
   using webrtc::MediaStreamSignaling::remote_streams;
 };
@@ -262,34 +264,71 @@ class MediaStreamSignalingTest: public testing::Test {
   talk_base::scoped_ptr<MockRemoteStreamObserver> observer_;
   talk_base::scoped_ptr<MediaStreamSignalingForTest> signaling_;
 
-  void TestGetMediaSessionOptions(const webrtc::MediaHints& hints,
+  void TestGetMediaSessionOptions(const MediaHints& hints,
                                   StreamCollectionInterface* streams) {
     signaling_->SetLocalStreams(streams);
     cricket::MediaSessionOptions options =
-        signaling_->GetMediaSessionOptions(hints);
+        signaling_->GetOptionsForOffer(hints);
     VerifyMediaOptions(streams, hints, options);
   }
 };
 
 TEST_F(MediaStreamSignalingTest, AudioVideoHints) {
-  webrtc::MediaHints hints;
+  MediaHints hints;
   talk_base::scoped_refptr<StreamCollection> local_streams(
       CreateStreamCollection(1));
   TestGetMediaSessionOptions(hints, local_streams.get());
 }
 
 TEST_F(MediaStreamSignalingTest, AudioHints) {
-  webrtc::MediaHints hints(true, false);
+  MediaHints hints(true, false);
   // Don't use all MediaStreams so we only create offer based on hints without
   // sending streams.
   TestGetMediaSessionOptions(hints, NULL);
 }
 
 TEST_F(MediaStreamSignalingTest, VideoHints) {
-  webrtc::MediaHints hints(false, true);
+  MediaHints hints(false, true);
   // Don't use all MediaStreams so we only create offer based on hints without
   // sending streams.
   TestGetMediaSessionOptions(hints, NULL);
+}
+
+// Test that the hints in an answer don't affect the hints in an offer but that
+// if hints are true in an offer, the media type they will be included in
+// subsequent answers.
+TEST_F(MediaStreamSignalingTest, HintsInAnswer) {
+  MediaHints answer_hints(true, true);
+  cricket::MediaSessionOptions answer_options =
+      signaling_->GetOptionsForAnswer(answer_hints);
+  EXPECT_TRUE(answer_options.has_audio);
+  EXPECT_TRUE(answer_options.has_video);
+
+  MediaHints offer_hints(false, false);
+  cricket::MediaSessionOptions offer_options =
+      signaling_->GetOptionsForAnswer(offer_hints);
+  EXPECT_FALSE(offer_options.has_audio);
+  EXPECT_FALSE(offer_options.has_video);
+
+  cricket::MediaSessionOptions updated_offer_options =
+      signaling_->GetOptionsForOffer(MediaHints(true, true));
+  EXPECT_TRUE(updated_offer_options.has_audio);
+  EXPECT_TRUE(updated_offer_options.has_video);
+
+  // Since an offer has been created with both audio and video, subsequent
+  // offers and answers should contain both audio and video.
+  // Answers will only contain the media types that exist in the offer
+  // regardless of the value of |updated_answer_options.has_audio| and
+  // |updated_answer_options.has_video|.
+  cricket::MediaSessionOptions updated_answer_options =
+      signaling_->GetOptionsForAnswer(MediaHints(false, false));
+  EXPECT_TRUE(updated_answer_options.has_audio);
+  EXPECT_TRUE(updated_answer_options.has_video);
+
+  updated_offer_options = signaling_->GetOptionsForOffer(MediaHints(false,
+                                                                    false));
+  EXPECT_TRUE(updated_offer_options.has_audio);
+  EXPECT_TRUE(updated_offer_options.has_video);
 }
 
 TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {

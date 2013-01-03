@@ -165,6 +165,10 @@
         'xmpp/xmpplogintask.cc',
         'xmpp/xmppstanzaparser.cc',
         'xmpp/xmpptask.cc',
+        'xmpp/xmppauth.cc',
+        'xmpp/xmpppump.cc',
+        'xmpp/xmppsocket.cc',
+        'xmpp/xmppthread.cc',
       ],
       'conditions': [
         ['OS=="mac" or OS=="win"', {

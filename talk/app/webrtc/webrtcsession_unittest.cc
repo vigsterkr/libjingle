@@ -166,14 +166,23 @@ class FakeMediaStreamSignaling : public webrtc::MediaStreamSignaling,
   // This function returns MediaSessionOptions based on what UseOptions...
   // function  that have been called previous to this call.
   // The MediaSessionOptions.has_audio and MediaSessionOptions.had_video is true
-  // if |hints| request it to be true or if a track of the type have been added.
+  // if |offer_audio| or |offer_video| request it to be true or if a track of
+  // the type have been added.
   // This is the same behavior as the real  MediaStreamSignaling
   // implementation.
-  virtual const cricket::MediaSessionOptions& GetMediaSessionOptions(
-        const MediaHints& hints) {
+  virtual const cricket::MediaSessionOptions& GetOptionsForOffer(
+      const MediaHints& hints) {
     options_.has_audio |= hints.has_audio();
     options_.has_video |= hints.has_video();
     return options_;
+  }
+
+  virtual cricket::MediaSessionOptions GetOptionsForAnswer(
+      const MediaHints& hints) {
+    cricket::MediaSessionOptions options = options_;
+    options.has_audio |= hints.has_audio();
+    options.has_video |= hints.has_video();
+    return options;
   }
 
   void UseOptionsWithStream1(bool bundle = false) {

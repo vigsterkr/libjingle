@@ -25,8 +25,9 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/examples/login/xmpppump.h"
-#include "talk/examples/login/xmppauth.h"
+#include "talk/xmpp/xmpppump.h"
+
+#include "talk/xmpp/xmppauth.h"
 
 XmppPump::XmppPump(XmppPumpNotify * notify) {
   state_ = buzz::XmppEngine::STATE_NONE;

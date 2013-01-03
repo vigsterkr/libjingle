@@ -55,14 +55,17 @@ bool AudioCodec::Matches(const AudioCodec& codec) const {
   // If a nonzero clockrate is specified, it must match the actual clockrate.
   // If a nonzero bitrate is specified, it must match the actual bitrate,
   // unless the codec is VBR (0), where we just force the supplied value.
-  // The number of channels must match exactly.
+  // The number of channels must match exactly, with the exception
+  // that channels=0 is treated synonymously as channels=1, per RFC
+  // 4566 section 6: " [The channels] parameter is OPTIONAL and may be
+  // omitted if the number of channels is one."
   // Preference is ignored.
   // TODO(juberti): Treat a zero clockrate as 8000Hz, the RTP default clockrate.
   return Matches(codec.id, codec.name) &&
       ((codec.clockrate == 0 /*&& clockrate == 8000*/) ||
           clockrate == codec.clockrate) &&
       (codec.bitrate == 0 || bitrate <= 0 || bitrate == codec.bitrate) &&
-      (codec.channels == 0 || channels == codec.channels);
+      ((codec.channels < 2 && channels < 2) || channels == codec.channels);
 }
 
 std::string AudioCodec::ToString() const {

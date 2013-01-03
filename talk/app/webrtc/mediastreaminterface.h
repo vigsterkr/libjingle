@@ -186,17 +186,6 @@ class MediaStreamInterface : public talk_base::RefCountInterface,
   virtual AudioTracks* audio_tracks() = 0;
   virtual VideoTracks* video_tracks() = 0;
 
-  enum ReadyState {
-    kInitializing,
-    kLive = 1,  // Stream alive
-    kEnded = 2,  // Stream have ended
-  };
-
-  virtual ReadyState ready_state() const = 0;
-
-  // These methods should be called by implementation only.
-  virtual void set_ready_state(ReadyState state) = 0;
-
  protected:
   virtual ~MediaStreamInterface() {}
 };

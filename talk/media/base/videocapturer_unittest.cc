@@ -24,6 +24,8 @@
 using cricket::FakeVideoCapturer;
 
 const int kMsCallbackWait = 500;
+// For HD only the height matters.
+const int kMinHdHeight = 720;
 
 // Sets the elapsed time in the video frame to 0.
 class VideoProcessor0 : public cricket::VideoProcessor {
@@ -118,14 +120,14 @@ TEST_F(VideoCapturerTest, TestFourccMatch) {
 }
 
 TEST_F(VideoCapturerTest, TestResolutionMatch) {
-  cricket::VideoFormat desired(960, 720,
+  cricket::VideoFormat desired(1920, 1080,
                                cricket::VideoFormat::FpsToInterval(30),
                                cricket::FOURCC_ANY);
   cricket::VideoFormat best;
-  // Ask for 960x720. Get VGA which is the highest.
+  // Ask for FHD 1920x1080. Get HD 1280x720 which is the highest.
   EXPECT_TRUE(capturer_.GetBestCaptureFormat(desired, &best));
-  EXPECT_EQ(640, best.width);
-  EXPECT_EQ(480, best.height);
+  EXPECT_EQ(1280, best.width);
+  EXPECT_EQ(720, best.height);
   EXPECT_EQ(cricket::VideoFormat::FpsToInterval(30), best.interval);
 
   desired.width = 360;
@@ -527,3 +529,32 @@ TEST_F(VideoCapturerTest, ProcessorDropFrame) {
   EXPECT_EQ(0, video_frames_received());
 }
 #endif  // HAS_I420_FRAME
+
+bool HdFormatInList(const std::vector<cricket::VideoFormat>& formats) {
+  for (std::vector<cricket::VideoFormat>::const_iterator found =
+           formats.begin(); found != formats.end(); ++found) {
+    if (found->height >= kMinHdHeight) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TEST_F(VideoCapturerTest, Whitelist) {
+  // The definition of HD only applies to the height. Set the HD width to the
+  // smallest legal number to document this fact in this test.
+  const int kMinHdWidth = 1;
+  cricket::VideoFormat hd_format(kMinHdWidth,
+                                 kMinHdHeight,
+                                 cricket::VideoFormat::FpsToInterval(30),
+                                 cricket::FOURCC_I420);
+  cricket::VideoFormat vga_format(640, 480,
+                                  cricket::VideoFormat::FpsToInterval(30),
+                                  cricket::FOURCC_I420);
+  std::vector<cricket::VideoFormat> formats = *capturer_.GetSupportedFormats();
+  formats.push_back(hd_format);
+  capturer_.ResetSupportedFormats(formats);
+  EXPECT_TRUE(HdFormatInList(*capturer_.GetSupportedFormats()));
+  capturer_.ConstrainSupportedFormats(vga_format);
+  EXPECT_FALSE(HdFormatInList(*capturer_.GetSupportedFormats()));
+}
