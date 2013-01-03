@@ -559,6 +559,10 @@ void BasicPortAllocatorSession::OnCandidateReady(
   std::vector<PortData>::iterator it =
       std::find(ports_.begin(), ports_.end(), port);
   ASSERT(it != ports_.end());
+  // Dicarding any candidate signal if port allocation status is
+  // already in completed state.
+  if (it->allocation_complete())
+    return;
 
   // Send candidates whose protocol is enabled.
   std::vector<Candidate> candidates;

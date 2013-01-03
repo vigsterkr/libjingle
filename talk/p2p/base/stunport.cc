@@ -45,7 +45,7 @@ const int RETRY_TIMEOUT = 50 * 1000;    // ICE says 50 secs
 class StunBindingRequest : public StunRequest {
  public:
   StunBindingRequest(UDPPort* port, bool keep_alive,
-                         const talk_base::SocketAddress& addr)
+                     const talk_base::SocketAddress& addr)
     : port_(port), keep_alive_(keep_alive), server_addr_(addr) {
     start_time_ = talk_base::Time();
   }
@@ -77,7 +77,7 @@ class StunBindingRequest : public StunRequest {
     if (keep_alive_) {
       port_->requests_.SendDelayed(
           new StunBindingRequest(port_, true, server_addr_),
-          KEEPALIVE_DELAY);
+          port_->stun_keepalive_delay());
     }
   }
 
@@ -98,7 +98,7 @@ class StunBindingRequest : public StunRequest {
         && (talk_base::TimeSince(start_time_) <= RETRY_TIMEOUT)) {
       port_->requests_.SendDelayed(
           new StunBindingRequest(port_, true, server_addr_),
-          KEEPALIVE_DELAY);
+          port_->stun_keepalive_delay());
     }
   }
 
@@ -133,7 +133,9 @@ UDPPort::UDPPort(talk_base::Thread* thread,
       requests_(thread),
       socket_(socket),
       error_(0),
-      resolver_(NULL) {
+      resolver_(NULL),
+      ready_(false),
+      stun_keepalive_delay_(KEEPALIVE_DELAY) {
 }
 
 UDPPort::UDPPort(talk_base::Thread* thread,
@@ -147,7 +149,9 @@ UDPPort::UDPPort(talk_base::Thread* thread,
       requests_(thread),
       socket_(NULL),
       error_(0),
-      resolver_(NULL) {
+      resolver_(NULL),
+      ready_(false),
+      stun_keepalive_delay_(KEEPALIVE_DELAY) {
 }
 
 bool UDPPort::Init() {
@@ -187,7 +191,8 @@ void UDPPort::MaybePrepareStunCandidate() {
   if (!server_addr_.IsNil()) {
     SendStunBindingRequest();
   } else {
-    SignalAddressReady(this);
+    // Processing host candidate address.
+    SetResult(true);
   }
 }
 
@@ -246,7 +251,7 @@ void UDPPort::OnReadPacket(talk_base::AsyncPacketSocket* socket,
   // will eat it because it might be a response to a retransmitted packet, and
   // we already cleared the request when we got the first response.
   ASSERT(!server_addr_.IsUnresolved());
-  if (remote_addr == server_addr_ || remote_addr == server_addr2_) {
+  if (remote_addr == server_addr_) {
     requests_.CheckResponse(data, size);
     return;
   }
@@ -297,21 +302,33 @@ void UDPPort::OnResolveResult(talk_base::SignalThread* t) {
 
 void UDPPort::OnStunBindingRequestSucceeded(
     const talk_base::SocketAddress& stun_addr) {
-  if (SharedSocket() && stun_addr == socket_->GetLocalAddress()) {
-    // Discarding STUN candidate if it is same as the local candidate.
-    SignalAddressReady(this);
-  } else {
+  if (ready_)  // Discarding the binding response if port is already enabled.
+    return;
+
+  if (!SharedSocket() || stun_addr != socket_->GetLocalAddress()) {
+    // If socket is shared and |stun_addr| is equal to local socket
+    // address then discarding the stun address.
     // Setting related address before STUN candidate is added. For STUN
     // related address is local socket address.
     set_related_address(socket_->GetLocalAddress());
     AddAddress(stun_addr, socket_->GetLocalAddress(), "udp",
-               STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_PRFLX, true);
+               STUN_PORT_TYPE, ICE_TYPE_PREFERENCE_PRFLX, false);
   }
+  SetResult(true);
 }
 
 void UDPPort::OnStunBindingOrResolveRequestFailed() {
-  if (SharedSocket()) {
-    // If socket is shared, we should process local udp candidate.
+  if (ready_)  // Discarding failure response if port is already enabled.
+    return;
+
+  // If socket is shared, we should process local udp candidate.
+  SetResult(SharedSocket());
+}
+
+void UDPPort::SetResult(bool success) {
+  // Setting ready status.
+  ready_ = true;
+  if (success) {
     SignalAddressReady(this);
   } else {
     SignalAddressError(this);

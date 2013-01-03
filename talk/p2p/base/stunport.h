@@ -85,11 +85,6 @@ class UDPPort : public Port {
     server_addr_ = addr;
   }
 
-  const talk_base::SocketAddress& server_addr2() const { return server_addr2_; }
-  void set_server_addr2(const talk_base::SocketAddress& addr) {
-    server_addr2_ = addr;
-  }
-
   virtual void PrepareAddress();
 
   virtual Connection* CreateConnection(const Candidate& address,
@@ -103,6 +98,13 @@ class UDPPort : public Port {
     // All packets given to UDP port will be consumed.
     OnReadPacket(socket, data, size, remote_addr);
     return true;
+  }
+
+  void set_stun_keepalive_delay(int delay) {
+    stun_keepalive_delay_ = delay;
+  }
+  int stun_keepalive_delay() const {
+    return stun_keepalive_delay_;
   }
 
  protected:
@@ -131,6 +133,7 @@ class UDPPort : public Port {
 
   void SendStunBindingRequest();
 
+
  private:
   // DNS resolution of the STUN server.
   void ResolveStunAddress();
@@ -143,12 +146,17 @@ class UDPPort : public Port {
   // Sends STUN requests to the server.
   void OnSendPacket(const void* data, size_t size, StunRequest* req);
 
+  // TODO(mallinaht) - Move this up to cricket::Port when SignalAddressReady is
+  // changed to SignalPortReady.
+  void SetResult(bool success);
+
   talk_base::SocketAddress server_addr_;
-  talk_base::SocketAddress server_addr2_;
   StunRequestManager requests_;
   talk_base::AsyncPacketSocket* socket_;
   int error_;
   talk_base::AsyncResolver* resolver_;
+  bool ready_;
+  int stun_keepalive_delay_;
 
   friend class StunBindingRequest;
 };

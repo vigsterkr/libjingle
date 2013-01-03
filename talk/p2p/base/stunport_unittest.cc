@@ -52,7 +52,7 @@ class StunPortTest : public testing::Test,
         socket_factory_(talk_base::Thread::Current()),
         stun_server_(new cricket::TestStunServer(
           talk_base::Thread::Current(), kStunAddr)),
-        done_(false), error_(false) {
+        done_(false), error_(false), stun_keepalive_delay_(0) {
   }
 
   const cricket::Port* port() const { return stun_port_.get(); }
@@ -64,6 +64,7 @@ class StunPortTest : public testing::Test,
         talk_base::Thread::Current(), &socket_factory_, &network_,
         kLocalAddr.ipaddr(), 0, 0, talk_base::CreateRandomString(16),
         talk_base::CreateRandomString(22), server_addr));
+    stun_port_->set_stun_keepalive_delay(stun_keepalive_delay_);
     stun_port_->SignalAddressReady.connect(this,
         &StunPortTest::OnAddressReady);
     stun_port_->SignalAddressError.connect(this,
@@ -88,6 +89,9 @@ class StunPortTest : public testing::Test,
     done_ = true;
     error_ = true;
   }
+  void SetKeepaliveDelay(int delay) {
+    stun_keepalive_delay_ = delay;
+  }
 
  private:
   talk_base::Network network_;
@@ -96,6 +100,7 @@ class StunPortTest : public testing::Test,
   talk_base::scoped_ptr<cricket::TestStunServer> stun_server_;
   bool done_;
   bool error_;
+  int stun_keepalive_delay_;
 };
 
 // Test that we can create a STUN port
@@ -143,3 +148,19 @@ TEST_F(StunPortTest, TestPrepareAddressHostnameFail) {
   EXPECT_TRUE(error());
   EXPECT_EQ(0U, port()->Candidates().size());
 }
+
+// This test verifies keepalive response messages don't result in
+// additional candidate generation.
+TEST_F(StunPortTest, TestKeepAliveResponse) {
+  SetKeepaliveDelay(500);  // 500ms of keepalive delay.
+  CreateStunPort(kStunHostnameAddr);
+  PrepareAddress();
+  EXPECT_TRUE_WAIT(done(), kTimeoutMs);
+  ASSERT_EQ(1U, port()->Candidates().size());
+  EXPECT_TRUE(kLocalAddr.EqualIPs(port()->Candidates()[0].address()));
+  // Waiting for 1 seond, which will allow us to process
+  // response for keepalive binding request. 500 ms is the keepalive delay.
+  talk_base::Thread::Current()->ProcessMessages(1000);
+  ASSERT_EQ(1U, port()->Candidates().size());
+}
+
