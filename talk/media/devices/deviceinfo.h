@@ -31,7 +31,7 @@
 
 namespace cricket {
 
-bool GetUsbUvcId(Device device, std::string* uvc_id);
-bool GetUsbVersion(Device device, std::string* usb_version);
+bool GetUsbUvcId(const Device& device, std::string* uvc_id);
+bool GetUsbVersion(const Device& device, std::string* usb_version);
 
 }  // namespace cricket
