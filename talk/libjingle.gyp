@@ -388,6 +388,7 @@
         ['OS=="win"', {
           'sources': [
             'media/devices/gdivideorenderer.cc',
+            'media/devices/win32deviceinfo.cc',
             'media/devices/win32devicemanager.cc',
           ],
           'msvs_settings': {
@@ -404,6 +405,7 @@
         ['OS=="mac"', {
           'sources': [
             'media/devices/carbonvideorenderer.cc',
+            'media/devices/macdeviceinfo.cc',
             'media/devices/macdevicemanager.cc',
             'media/devices/macdevicemanagermm.mm',
           ],

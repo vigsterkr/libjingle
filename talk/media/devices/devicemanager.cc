@@ -211,7 +211,7 @@ VideoCapturer* DeviceManager::CreateVideoCapturer(const Device& device) const {
   }
   VideoCapturer* capturer = device_video_capturer_factory_->Create(device);
   if (!capturer) {
-    return false;
+    return NULL;
   }
   VideoFormat video_format;
   GetMaxFormat(device, &video_format);
