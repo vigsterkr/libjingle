@@ -151,9 +151,10 @@ void GetSupportedDefaultCryptoSuites(
 }
 
 // For video support only 80-bit SHA1 HMAC. For audio 32-bit HMAC is
-// tolerated because it is low overhead. Pick the crypto in the list
-// that is supported.
+// tolerated unless bundle is enabled because it is low overhead. Pick the
+// crypto in the list that is supported.
 static bool SelectCrypto(const MediaContentDescription* offer,
+                         bool bundle,
                          CryptoParams *crypto) {
   bool audio = offer->type() == MEDIA_TYPE_AUDIO;
   const CryptoParamsVec& cryptos = offer->cryptos();
@@ -161,7 +162,7 @@ static bool SelectCrypto(const MediaContentDescription* offer,
   for (CryptoParamsVec::const_iterator i = cryptos.begin();
        i != cryptos.end(); ++i) {
     if (CS_AES_CM_128_HMAC_SHA1_80 == i->cipher_suite ||
-        (CS_AES_CM_128_HMAC_SHA1_32 == i->cipher_suite && audio)) {
+        (CS_AES_CM_128_HMAC_SHA1_32 == i->cipher_suite && audio && !bundle)) {
       return CreateCryptoParams(i->tag, i->cipher_suite, crypto);
     }
   }
@@ -658,6 +659,7 @@ static bool CreateMediaContentAnswer(
     const CryptoParamsVec* current_cryptos,
     StreamParamsVec* current_streams,
     bool add_legacy_stream,
+    bool bundle_enabled,
     MediaContentDescriptionImpl<C>* answer) {
   std::vector<C> negotiated_codecs;
   NegotiateCodecs(local_codecs, offer->codecs(), &negotiated_codecs);
@@ -668,7 +670,7 @@ static bool CreateMediaContentAnswer(
 
   if (secure_policy != SEC_DISABLED) {
     CryptoParams crypto;
-    if (SelectCrypto(offer, &crypto)) {
+    if (SelectCrypto(offer, bundle_enabled, &crypto)) {
       if (current_cryptos) {
         FindMatchingCrypto(*current_cryptos, crypto, &crypto);
       }
@@ -852,6 +854,9 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
 
+  bool bundle_enabled =
+      offer->HasGroup(GROUP_TYPE_BUNDLE) && options.bundle_enabled;
+
   // Handle m=audio.
   const ContentInfo* audio_content = GetFirstAudioContent(offer);
   if (audio_content) {
@@ -866,6 +871,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstAudioContentDescription(current_description)),
             &current_streams,
             add_legacy_,
+            bundle_enabled,
             audio_answer.get())) {
       return NULL;  // Fails the session setup.
     }
@@ -901,6 +907,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstVideoContentDescription(current_description)),
             &current_streams,
             add_legacy_,
+            bundle_enabled,
             video_answer.get())) {
       return NULL;
     }
@@ -936,6 +943,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             GetCryptos(GetFirstDataContentDescription(current_description)),
             &current_streams,
             add_legacy_,
+            bundle_enabled,
             data_answer.get())) {
       return NULL;  // Fails the session setup.
     }

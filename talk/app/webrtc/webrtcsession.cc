@@ -502,17 +502,17 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   return CreateAnswer(MediaHints(receive_audio, receive_video), offer);
 }
 
-bool WebRtcSession::SetLocalDescription(Action action,
-                                        SessionDescriptionInterface* desc) {
-  if (!ExpectSetLocalDescription(action)) {
-    LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
-                  << "action: " << action << " state: " << state();
-    delete desc;
-    return false;
-  }
+bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
   if (!desc || !desc->description()) {
     LOG(LS_ERROR) << "SetLocalDescription called with an invalid session"
                   <<" description";
+    delete desc;
+    return false;
+  }
+  Action action = GetAction(desc->type());
+  if (!ExpectSetLocalDescription(action)) {
+    LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
+                  << "action: " << action << " state: " << state();
     delete desc;
     return false;
   }
@@ -563,17 +563,17 @@ bool WebRtcSession::SetLocalDescription(Action action,
   return error() == cricket::BaseSession::ERROR_NONE;
 }
 
-bool WebRtcSession::SetRemoteDescription(Action action,
-                                         SessionDescriptionInterface* desc) {
-  if (!ExpectSetRemoteDescription(action)) {
-    LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
-                  << "action: " << action << " state: " << state();
-    delete desc;
-    return false;
-  }
+bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
   if (!desc || !desc->description()) {
     LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
                   <<" description";
+    delete desc;
+    return false;
+  }
+  Action action = GetAction(desc->type());
+  if (!ExpectSetRemoteDescription(action)) {
+    LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
+                  << "action: " << action << " state: " << state();
     delete desc;
     return false;
   }
@@ -657,6 +657,18 @@ bool WebRtcSession::UpdateSessionState(
     }
   }
   return ret;
+}
+
+WebRtcSession::Action WebRtcSession::GetAction(const std::string& type) {
+  if (type == SessionDescriptionInterface::kOffer) {
+    return WebRtcSession::kOffer;
+  } else if (type == SessionDescriptionInterface::kPrAnswer) {
+    return WebRtcSession::kPrAnswer;
+  } else if (type == SessionDescriptionInterface::kAnswer) {
+    return WebRtcSession::kAnswer;
+  }
+  ASSERT(!"unknown action type");
+  return WebRtcSession::kOffer;
 }
 
 bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
@@ -882,10 +894,6 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
       cricket::BaseSession::OnMessage(msg);
       break;
   }
-}
-
-void WebRtcSession::OnFirstPacketReceived(cricket::BaseChannel* channel) {
-  mediastream_signaling_->SetMediaReceived();
 }
 
 void WebRtcSession::OnTransportRequestSignaling(
@@ -1123,9 +1131,6 @@ bool WebRtcSession::CreateVoiceChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* voice = cricket::GetFirstAudioContent(desc);
   voice_channel_.reset(channel_manager_->CreateVoiceChannel(
       this, voice->name, true));
-  if (voice_channel_)
-    voice_channel_->SignalFirstPacketReceived.connect(
-        this, &WebRtcSession::OnFirstPacketReceived);
   return voice_channel_ ? true : false;
 }
 
@@ -1133,9 +1138,6 @@ bool WebRtcSession::CreateVideoChannel(const SessionDescription* desc) {
   const cricket::ContentInfo* video = cricket::GetFirstVideoContent(desc);
   video_channel_.reset(channel_manager_->CreateVideoChannel(
       this, video->name, true, voice_channel_.get()));
-  if (video_channel_)
-    video_channel_->SignalFirstPacketReceived.connect(
-        this, &WebRtcSession::OnFirstPacketReceived);
   return video_channel_ ? true : false;
 }
 

@@ -128,22 +128,24 @@ void MediaStreamSignaling::UpdateRemoteStreams(
 
   const cricket::ContentInfo* audio_content = GetFirstAudioContent(remote_desc);
   if (audio_content) {
-    remote_info_.supports_audio = true;
     const cricket::AudioContentDescription* desc =
           static_cast<const cricket::AudioContentDescription*>(
               audio_content->description);
     UpdateRemoteStreamsList<AudioTrack, AudioTrackProxy>(desc->streams(),
                                                          current_streams);
+    remote_info_.default_audio_track_needed =
+        desc->direction() == cricket::MD_SENDRECV && desc->streams().empty();
   }
 
   const cricket::ContentInfo* video_content = GetFirstVideoContent(remote_desc);
   if (video_content) {
-    remote_info_.supports_video = true;
-    const cricket::VideoContentDescription* video_desc =
+    const cricket::VideoContentDescription* desc =
         static_cast<const cricket::VideoContentDescription*>(
             video_content->description);
-    UpdateRemoteStreamsList<VideoTrack, VideoTrackProxy>(video_desc->streams(),
+    UpdateRemoteStreamsList<VideoTrack, VideoTrackProxy>(desc->streams(),
                                                          current_streams);
+    remote_info_.default_video_track_needed =
+        desc->direction() == cricket::MD_SENDRECV && desc->streams().empty();
   }
 
   // Iterate current_streams to find all new streams.
@@ -173,11 +175,9 @@ void MediaStreamSignaling::UpdateRemoteStreams(
       UpdateEndedRemoteStream(old_stream);
       stream_observer_->OnRemoveStream(old_stream);
     }
-
     // Prepare for next description.
     remote_streams_ = current_streams;
-    remote_info_.description_set_once = true;
-    remote_info_.supports_msid |= remote_streams_->count() > 0;
+    remote_info_.msid_supported |= remote_streams_->count() > 0;
   }
   MaybeCreateDefaultStream();
 
@@ -190,11 +190,6 @@ void MediaStreamSignaling::UpdateRemoteStreams(
             data_content->description);
     UpdateRemoteDataChannels(data_desc->streams());
   }
-}
-
-void MediaStreamSignaling::SetMediaReceived() {
-  remote_info_.media_received = true;
-  MaybeCreateDefaultStream();
 }
 
 void MediaStreamSignaling::UpdateLocalStreams(
@@ -329,12 +324,12 @@ void MediaStreamSignaling::MaybeCreateDefaultStream() {
     default_remote_stream = MediaStreamProxy::Create(kDefaultStreamLabel,
                                                       signaling_thread_);
   }
-  if (remote_info_.supports_audio &&
+  if (remote_info_.default_audio_track_needed &&
       default_remote_stream->audio_tracks()->count() == 0) {
     AddRemoteTrack<AudioTrack, AudioTrackProxy>(kDefaultAudioTrackLabel, 0,
                                                 default_remote_stream);
   }
-  if (remote_info_.supports_video &&
+  if (remote_info_.default_video_track_needed &&
       default_remote_stream->video_tracks()->count() == 0) {
     AddRemoteTrack<VideoTrack, VideoTrackProxy>(kDefaultVideoTrackLabel, 0,
                                                 default_remote_stream);

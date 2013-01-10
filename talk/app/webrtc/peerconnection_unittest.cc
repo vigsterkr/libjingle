@@ -56,6 +56,7 @@ using webrtc::MediaStreamTrackInterface;
 using webrtc::MockCreateSessionDescriptionObserver;
 using webrtc::MockDataChannelObserver;
 using webrtc::MockSetSessionDescriptionObserver;
+using webrtc::MockStatsObserver;
 using webrtc::StreamCollectionInterface;
 using webrtc::SessionDescriptionInterface;
 using webrtc::StreamCollectionInterface;
@@ -71,7 +72,8 @@ static const char kVideoTrackLabelBase[] = "video_track";
 static const char kAudioTrackLabelBase[] = "audio_track";
 static const char kDataChannelLabel[] = "data_channel";
 
-static void RemoveLineFromSdp(const std::string& line_start, std::string* sdp) {
+static void RemoveLinesFromSdp(const std::string& line_start,
+                               std::string* sdp) {
   const char kSdpLineEnd[] = "\r\n";
   size_t ssrc_pos = 0;
   while ((ssrc_pos = sdp->find(line_start, ssrc_pos)) !=
@@ -90,7 +92,7 @@ class SignalingMessageReceiver {
 
 class JsepMessageReceiver : public SignalingMessageReceiver {
  public:
-  virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
+  virtual void ReceiveSdpMessage(const std::string& type,
                                  std::string& msg) = 0;
   virtual void ReceiveIceMessage(const std::string& sdp_mid,
                                  int sdp_mline_index,
@@ -99,39 +101,6 @@ class JsepMessageReceiver : public SignalingMessageReceiver {
  protected:
   JsepMessageReceiver() {}
   virtual ~JsepMessageReceiver() {}
-};
-
-// TODO(perkj): Move to a common file with test mocks.
-class MockStatsObserver : public webrtc::StatsObserver {
- public:
-  MockStatsObserver()
-      : called_(false) {}
-  virtual ~MockStatsObserver() {}
-  virtual void OnComplete(const std::vector<webrtc::StatsReport>& reports) {
-    called_ = true;
-    reports_ = reports;
-  }
-
-  bool called() const { return called_; }
-  size_t number_of_reports() const { return reports_.size(); }
-
-  int audio_output_level() {
-    if (reports_.empty()) {
-      return 0;
-    }
-    webrtc::StatsElement::Values::const_iterator it =
-        reports_[0].local.values.begin();
-    for (; it != reports_[0].local.values.end(); ++it) {
-      if (it->name == webrtc::StatsElement::kStatsValueNameAudioOutputLevel) {
-        return  talk_base::FromString<int>(it->value);
-      }
-    }
-    return 0;
-  }
-
- private:
-  bool called_;
-  std::vector<webrtc::StatsReport> reports_;
 };
 
 template <typename MessageReceiver>
@@ -176,8 +145,8 @@ class PeerConnectionTestClientBase
   }
 
   bool SessionActive() {
-    return peer_connection_->ready_state() ==
-        webrtc::PeerConnectionInterface::kActive;
+    return peer_connection_->signaling_state() ==
+        webrtc::PeerConnectionInterface::kStable;
   }
 
   void set_signaling_message_receiver(
@@ -414,13 +383,13 @@ class JsepTestClient
     EXPECT_TRUE(offer->ToString(&sdp));
     EXPECT_TRUE(DoSetLocalDescription(offer.release()));
     signaling_message_receiver()->ReceiveSdpMessage(
-        webrtc::PeerConnectionInterface::kOffer, sdp);
+        webrtc::SessionDescriptionInterface::kOffer, sdp);
   }
   // JsepMessageReceiver callback.
-  virtual void ReceiveSdpMessage(webrtc::JsepInterface::Action action,
+  virtual void ReceiveSdpMessage(const std::string& type,
                                  std::string& msg) {
     FilterIncomingSdpMessage(&msg);
-    if (action == webrtc::PeerConnectionInterface::kOffer) {
+    if (type == webrtc::SessionDescriptionInterface::kOffer) {
       HandleIncomingOffer(msg);
     } else {
       HandleIncomingAnswer(msg);
@@ -538,7 +507,7 @@ class JsepTestClient
     EXPECT_TRUE(DoSetLocalDescription(answer.release()));
     if (signaling_message_receiver()) {
       signaling_message_receiver()->ReceiveSdpMessage(
-          webrtc::PeerConnectionInterface::kAnswer, sdp);
+          webrtc::SessionDescriptionInterface::kAnswer, sdp);
     }
   }
 
@@ -609,14 +578,14 @@ class JsepTestClient
   void  FilterIncomingSdpMessage(std::string* sdp) {
     if (remove_msid_) {
       const char kSdpSsrcAtribute[] = "a=ssrc:";
-      RemoveLineFromSdp(kSdpSsrcAtribute, sdp);
+      RemoveLinesFromSdp(kSdpSsrcAtribute, sdp);
+      const char kSdpMsidSupportedAtribute[] = "a=msid-semantic:";
+      RemoveLinesFromSdp(kSdpMsidSupportedAtribute, sdp);
     }
     if (remove_bundle_) {
       const char kSdpBundleAtribute[] = "a=group:BUNDLE";
-      RemoveLineFromSdp(kSdpBundleAtribute, sdp);
+      RemoveLinesFromSdp(kSdpBundleAtribute, sdp);
     }
-    LOG(INFO) << id() << "Modified SDP";
-    LOG(INFO) << *sdp;
   }
 
  private:

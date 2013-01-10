@@ -105,13 +105,13 @@ class StreamCollectionInterface : public talk_base::RefCountInterface {
 class PeerConnectionObserver : public IceCandidateObserver {
  public:
   enum StateType {
-    kReadyState,
+    kSignalingState,
     kIceState,
   };
 
   virtual void OnError() = 0;
 
-  // Triggered when ReadyState, SdpState or IceState have changed.
+  // Triggered when SignalingState or IceState have changed.
   virtual void OnStateChange(StateType state_changed) = 0;
 
   // Triggered when media is received on a new stream from remote peer.
@@ -143,14 +143,18 @@ class StatsObserver : public talk_base::RefCountInterface {
 class PeerConnectionInterface : public JsepInterface,
                                 public talk_base::RefCountInterface {
  public:
-  enum ReadyState {
-    kNew,
+  enum SignalingState {
+    kStable,
     kHaveLocalOffer,
     kHaveLocalPrAnswer,
     kHaveRemoteOffer,
     kHaveRemotePrAnswer,
-    kActive,
-    kClosed
+    kClosed,
+
+    // Deprecated states.
+    // TODO(perkj): Remove once Chrome is not using them.
+    kNew = kStable,
+    kActive = kStable
   };
 
   enum IceState {
@@ -209,8 +213,13 @@ class PeerConnectionInterface : public JsepInterface,
       const std::string& label,
       const DataChannelInit* config) = 0;
 
-  // Returns the current ReadyState.
+  // Deprecated, please use SignalingState instead.
+  // TODO(perkj): Remove ready_state when callers are changed.
+  typedef SignalingState ReadyState;
   virtual ReadyState ready_state() = 0;
+
+  // Returns the current SignalingState.
+  virtual SignalingState signaling_state() = 0;
 
   // Returns the current IceState.
   virtual IceState ice_state() = 0;

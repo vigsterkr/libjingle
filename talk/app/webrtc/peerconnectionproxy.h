@@ -58,20 +58,10 @@ class PeerConnectionProxy : public PeerConnectionInterface,
       const std::string& label,
       const DataChannelInit* config);
 
-  virtual ReadyState ready_state();
+  // TODO(perkj): Remove ready_state when callers removed. It is deprecated.
+  virtual ReadyState ready_state() { return signaling_state(); }
+  virtual SignalingState signaling_state();
   virtual IceState ice_state();
-
-  // TODO: Remove deprecated Jsep functions.
-  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
-  virtual SessionDescriptionInterface* CreateAnswer(
-      const MediaHints& hints,
-      const SessionDescriptionInterface* offer);
-  virtual bool StartIce(IceOptions options);
-  virtual bool SetLocalDescription(Action action,
-                                   SessionDescriptionInterface* desc);
-  virtual bool SetRemoteDescription(Action action,
-                                    SessionDescriptionInterface* desc);
-  virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
 
   virtual const SessionDescriptionInterface* local_description() const;
   virtual const SessionDescriptionInterface* remote_description() const;

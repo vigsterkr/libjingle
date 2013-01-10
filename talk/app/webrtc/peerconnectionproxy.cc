@@ -34,23 +34,18 @@ enum {
   MSG_REMOVESTREAM,
   MSG_RETURNLOCALMEDIASTREAMS,
   MSG_RETURNREMOTEMEDIASTREAMS,
-  MSG_READYSTATE,
+  MSG_SIGNALINGSTATE,
   MSG_ICESTATE,
   MSG_CANSENDDTMF,
   MSG_SEND_DTMF,
   MSG_CREATEDATACHANNEL,
   MSG_TERMINATE,
   MSG_CREATEOFFER,
-  MSG_CREATEOFFERJSEP00,
   MSG_CREATEANSWER,
-  MSG_CREATEANSWERJSEP00,
   MSG_SETLOCALDESCRIPTION,
-  MSG_SETLOCALDESCRIPTIONJSEP00,
   MSG_SETREMOTEDESCRIPTION,
-  MSG_SETREMOTEDESCRIPTIONJSEP00,
   MSG_UPDATEICE,
   MSG_ADDICECANDIDATE,
-  MSG_PROCESSICEMESSAGEJSEP00,
   MSG_GETLOCALDESCRIPTION,
   MSG_GETREMOTEDESCRIPTION,
   MSG_GETSTATS,
@@ -105,8 +100,6 @@ struct JsepSessionDescriptionParams : public talk_base::MessageData {
       : result(false), desc(NULL), const_desc(NULL) {
   }
   bool result;
-  webrtc::MediaHints hints;
-  webrtc::JsepInterface::Action action;
   webrtc::SessionDescriptionInterface* desc;
   const webrtc::SessionDescriptionInterface* const_desc;
 };
@@ -138,9 +131,9 @@ struct StreamCollectionParams : public talk_base::MessageData {
   talk_base::scoped_refptr<webrtc::StreamCollectionInterface> streams;
 };
 
-struct ReadyStateMessage : public talk_base::MessageData {
-  ReadyStateMessage() : state(webrtc::PeerConnectionInterface::kNew) {}
-  webrtc::PeerConnectionInterface::ReadyState state;
+struct SignalingStateMessage : public talk_base::MessageData {
+  SignalingStateMessage() : state(webrtc::PeerConnectionInterface::kStable) {}
+  webrtc::PeerConnectionInterface::SignalingState state;
 };
 
 struct IceStateMessage : public talk_base::MessageData {
@@ -257,14 +250,15 @@ bool PeerConnectionProxy::GetStats(StatsObserver* observer,
   return peerconnection_->GetStats(observer, track);
 }
 
-PeerConnectionInterface::ReadyState PeerConnectionProxy::ready_state() {
+PeerConnectionInterface::SignalingState PeerConnectionProxy::signaling_state() {
   if (!signaling_thread_->IsCurrent()) {
-    ReadyStateMessage msg;
-    signaling_thread_->Send(this, MSG_READYSTATE, &msg);
+    SignalingStateMessage msg;
+    signaling_thread_->Send(this, MSG_SIGNALINGSTATE, &msg);
     return msg.state;
   }
-  return peerconnection_->ready_state();
+  return peerconnection_->signaling_state();
 }
+
 
 PeerConnectionInterface::IceState PeerConnectionProxy::ice_state() {
   if (!signaling_thread_->IsCurrent()) {
@@ -306,23 +300,6 @@ PeerConnectionProxy::CreateDataChannel(const std::string& label,
   return peerconnection_->CreateDataChannel(label, config);
 }
 
-bool PeerConnectionProxy::StartIce(IceOptions options) {
-  // Ice will be started by default and will be removed in Jsep01.
-  // TODO: Remove this method once fully migrated to JSEP01.
-  return true;
-}
-
-SessionDescriptionInterface* PeerConnectionProxy::CreateOffer(
-    const MediaHints& hints) {
-  if (!signaling_thread_->IsCurrent()) {
-    JsepSessionDescriptionParams msg;
-    msg.hints = hints;
-    signaling_thread_->Send(this, MSG_CREATEOFFERJSEP00, &msg);
-    return msg.desc;
-  }
-  return peerconnection_->CreateOffer(hints);
-}
-
 void PeerConnectionProxy::CreateOffer(
     CreateSessionDescriptionObserver* observer,
     const MediaConstraintsInterface* constraints) {
@@ -334,19 +311,6 @@ void PeerConnectionProxy::CreateOffer(
     return;
   }
   peerconnection_->CreateOffer(observer, constraints);
-}
-
-SessionDescriptionInterface* PeerConnectionProxy::CreateAnswer(
-    const MediaHints& hints,
-    const SessionDescriptionInterface* offer) {
-  if (!signaling_thread_->IsCurrent()) {
-    JsepSessionDescriptionParams msg;
-    msg.hints = hints;
-    msg.const_desc = offer;
-    signaling_thread_->Send(this, MSG_CREATEANSWERJSEP00, &msg);
-    return msg.desc;
-  }
-  return peerconnection_->CreateAnswer(hints, offer);
 }
 
 void PeerConnectionProxy::CreateAnswer(
@@ -362,19 +326,6 @@ void PeerConnectionProxy::CreateAnswer(
   peerconnection_->CreateAnswer(observer, constraints);
 }
 
-bool PeerConnectionProxy::SetLocalDescription(
-    Action action,
-    SessionDescriptionInterface* desc) {
-  if (!signaling_thread_->IsCurrent()) {
-    JsepSessionDescriptionParams msg;
-    msg.action = action;
-    msg.desc = desc;
-    signaling_thread_->Send(this, MSG_SETLOCALDESCRIPTIONJSEP00, &msg);
-    return msg.result;
-  }
-  return peerconnection_->SetLocalDescription(action, desc);
-}
-
 void PeerConnectionProxy::SetLocalDescription(
     SetSessionDescriptionObserver* observer,
     SessionDescriptionInterface* desc) {
@@ -386,19 +337,6 @@ void PeerConnectionProxy::SetLocalDescription(
     return;
   }
   peerconnection_->SetLocalDescription(observer, desc);
-}
-
-bool PeerConnectionProxy::SetRemoteDescription(
-    Action action,
-    SessionDescriptionInterface* desc) {
-  if (!signaling_thread_->IsCurrent()) {
-    JsepSessionDescriptionParams msg;
-    msg.action = action;
-    msg.desc = desc;
-    signaling_thread_->Send(this, MSG_SETREMOTEDESCRIPTIONJSEP00, &msg);
-    return msg.result;
-  }
-  return peerconnection_->SetRemoteDescription(action, desc);
 }
 
 void PeerConnectionProxy::SetRemoteDescription(
@@ -425,16 +363,6 @@ bool PeerConnectionProxy::UpdateIce(
     return msg.result;
   }
   return peerconnection_->UpdateIce(configuration, constraints);
-}
-
-bool PeerConnectionProxy::ProcessIceMessage(
-    const IceCandidateInterface* ice_candidate) {
-  if (!signaling_thread_->IsCurrent()) {
-    JsepIceCandidateParams msg(ice_candidate);
-    signaling_thread_->Send(this, MSG_PROCESSICEMESSAGEJSEP00, &msg);
-    return msg.result;
-  }
-  return peerconnection_->ProcessIceMessage(ice_candidate);
 }
 
 bool PeerConnectionProxy::AddIceCandidate(
@@ -498,9 +426,9 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       param->streams = peerconnection_->remote_streams();
       break;
     }
-    case MSG_READYSTATE: {
-      ReadyStateMessage* param(static_cast<ReadyStateMessage*> (data));
-      param->state = peerconnection_->ready_state();
+    case MSG_SIGNALINGSTATE: {
+      SignalingStateMessage* param(static_cast<SignalingStateMessage*> (data));
+      param->state = peerconnection_->signaling_state();
       break;
     }
     case MSG_ICESTATE: {
@@ -526,19 +454,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
                                                                param->init);
       break;
     }
-    case MSG_CREATEOFFERJSEP00: {
-      JsepSessionDescriptionParams* param(
-          static_cast<JsepSessionDescriptionParams*> (data));
-      param->desc = peerconnection_->CreateOffer(param->hints);
-      break;
-    }
-    case MSG_CREATEANSWERJSEP00: {
-      JsepSessionDescriptionParams* param(
-          static_cast<JsepSessionDescriptionParams*> (data));
-      param->desc = peerconnection_->CreateAnswer(param->hints,
-                                                  param->const_desc);
-      break;
-    }
     case MSG_CREATEOFFER: {
       CreateSessionDescriptionParams* param(
           static_cast<CreateSessionDescriptionParams*> (data));
@@ -558,25 +473,11 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
                                            param->desc);
       break;
     }
-    case MSG_SETLOCALDESCRIPTIONJSEP00: {
-      JsepSessionDescriptionParams* param(
-          static_cast<JsepSessionDescriptionParams*> (data));
-      param->result  = peerconnection_->SetLocalDescription(param->action,
-                                                            param->desc);
-      break;
-    }
     case MSG_SETREMOTEDESCRIPTION: {
       SetSessionDescriptionParams* param(
           static_cast<SetSessionDescriptionParams*> (data));
       peerconnection_->SetRemoteDescription(param->observer,
                                             param->desc);
-      break;
-    }
-    case MSG_SETREMOTEDESCRIPTIONJSEP00: {
-      JsepSessionDescriptionParams* param(
-          static_cast<JsepSessionDescriptionParams*> (data));
-      param->result  = peerconnection_->SetRemoteDescription(param->action,
-                                                             param->desc);
       break;
     }
     case MSG_UPDATEICE: {
@@ -590,12 +491,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       JsepIceCandidateParams* param(
           static_cast<JsepIceCandidateParams*> (data));
       param->result  = peerconnection_->AddIceCandidate(param->candidate);
-      break;
-    }
-    case MSG_PROCESSICEMESSAGEJSEP00: {
-      JsepIceCandidateParams* param(
-          static_cast<JsepIceCandidateParams*> (data));
-      param->result  = peerconnection_->ProcessIceMessage(param->candidate);
       break;
     }
     case MSG_GETLOCALDESCRIPTION: {

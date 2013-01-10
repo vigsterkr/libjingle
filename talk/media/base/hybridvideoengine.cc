@@ -160,8 +160,8 @@ bool HybridVideoMediaChannel::SetSendCodecs(
   if (!return_value) {
     return false;
   }
-  active_channel_->UpdateAspectRatio(send_codec.width, send_codec.height);
   engine_->OnNewSendResolution(send_codec.width, send_codec.height);
+  active_channel_->UpdateAspectRatio(send_codec.width, send_codec.height);
   return true;
 }
 

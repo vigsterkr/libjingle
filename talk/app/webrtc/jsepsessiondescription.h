@@ -70,14 +70,13 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   virtual std::string type() const {
     return type_;
   }
+  // Allow changing the type. Used for testing.
+  void set_type(const std::string& type) { type_ = type; }
   virtual bool AddCandidate(const IceCandidateInterface* candidate);
   virtual size_t number_of_mediasections() const;
   virtual const IceCandidateCollection* candidates(
       size_t mediasection_index) const;
   virtual bool ToString(std::string* out) const;
-
-  // TODO(perkj): Remove this once webrtcsession is updated to jsep01.
-  static JsepInterface::Action GetAction(const std::string& type);
 
   // Default video encoder settings. The resolution is the max resolution.
   // TODO(perkj): Implement proper negotiation of video resolution.

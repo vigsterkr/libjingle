@@ -63,12 +63,6 @@ const int JsepSessionDescription::kMaxVideoCodecWidth = 1280;
 const int JsepSessionDescription::kMaxVideoCodecHeight = 720;
 const int JsepSessionDescription::kDefaultVideoCodecPreference = 1;
 
-// TODO(perkj): Remove CreateSessionDescription(const std::string& sdp) once
-// JSEP00 is removed.
-SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp) {
-  return CreateSessionDescription(JsepSessionDescription::kOffer, sdp);
-}
-
 SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
                                                       const std::string& sdp) {
   if (!IsTypeSupported(type)) {
@@ -185,29 +179,6 @@ bool JsepSessionDescription::GetMediasectionIndex(
     }
   }
   return true;
-}
-
-// TODO(perkj): Remove this once webrtcsession is updated to jsep01.
-JsepInterface::Action
-JsepSessionDescription::GetAction(const std::string& type) {
-  bool known_type = false;
-  JsepInterface::Action  action = webrtc::JsepInterface::kOffer;
-
-  if (type == kOffer) {
-    action = webrtc::JsepInterface::kOffer;
-    known_type =true;
-  }
-  if (type == kPrAnswer) {
-    action = webrtc::JsepInterface::kPrAnswer;
-    known_type =true;
-  }
-  if (type == kAnswer) {
-    action = webrtc::JsepInterface::kAnswer;
-    known_type =true;
-  }
-
-  ASSERT(known_type);
-  return action;
 }
 
 }  // namespace webrtc

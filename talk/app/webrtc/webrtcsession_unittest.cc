@@ -316,7 +316,7 @@ class WebRtcSessionTest : public testing::Test {
   // to decide which streams to create.
   void InitiateCall() {
     SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+    EXPECT_TRUE(session_->SetLocalDescription(offer));
   }
 
   bool ChannelsExist() {
@@ -450,20 +450,18 @@ class WebRtcSessionTest : public testing::Test {
   void SetRemoteAndLocalSessionDescription() {
     SessionDescriptionInterface* offer = session_->CreateOffer(NULL);
     SessionDescriptionInterface* answer = session_->CreateAnswer(NULL, offer);
-    EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+    EXPECT_TRUE(session_->SetRemoteDescription(offer));
+    EXPECT_TRUE(session_->SetLocalDescription(answer));
   }
 
-  void SetLocalDescription(JsepInterface::Action action,
-                      SessionDescriptionInterface* desc,
-                      BaseSession::State expected_state) {
-    EXPECT_TRUE(session_->SetLocalDescription(action, desc));
+  void SetLocalDescription(SessionDescriptionInterface* desc,
+                           BaseSession::State expected_state) {
+    EXPECT_TRUE(session_->SetLocalDescription(desc));
     EXPECT_EQ(expected_state, session_->state());
   }
-  void SetRemoteDescription(JsepInterface::Action action,
-                            SessionDescriptionInterface* desc,
+  void SetRemoteDescription(SessionDescriptionInterface* desc,
                             BaseSession::State expected_state) {
-    EXPECT_TRUE(session_->SetRemoteDescription(action, desc));
+    EXPECT_TRUE(session_->SetRemoteDescription(desc));
     EXPECT_EQ(expected_state, session_->state());
   }
 
@@ -535,9 +533,9 @@ class WebRtcSessionTest : public testing::Test {
     }
     // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
     // and answer.
-    EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+    EXPECT_TRUE(session_->SetLocalDescription(offer));
     // SetRemoteDescription to enable rtcp mux.
-    EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+    EXPECT_TRUE(session_->SetRemoteDescription(answer));
     EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
     EXPECT_EQ(expected_candidate_num, observer_.mline_0_candidates_.size());
     EXPECT_EQ(expected_candidate_num, observer_.mline_1_candidates_.size());
@@ -694,8 +692,8 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
                                                                offer);
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
@@ -721,11 +719,11 @@ TEST_F(WebRtcSessionTest, TestCreateOfferReceiveAnswer) {
   EXPECT_LT(talk_base::FromString<uint64>(session_version_orig),
             talk_base::FromString<uint64>(offer->session_version()));
 
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
 
   mediastream_signaling_.UseOptionsWithStream2();
   answer = session_->CreateAnswer(MediaHints(), offer);
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 
   EXPECT_EQ(0u, video_channel_->send_streams().size());
   EXPECT_EQ(0u, voice_channel_->send_streams().size());
@@ -750,8 +748,8 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   const std::string session_id_orig = answer->session_id();
   const std::string session_version_orig = answer->session_version();
 
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
 
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
@@ -779,8 +777,8 @@ TEST_F(WebRtcSessionTest, TestReceiveOfferCreateAnswer) {
   EXPECT_LT(talk_base::FromString<uint64>(session_version_orig),
             talk_base::FromString<uint64>(answer->session_version()));
 
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
 
   ASSERT_EQ(2u, video_channel_->recv_streams().size());
   EXPECT_TRUE(kVideoTrack1 == video_channel_->recv_streams()[0].name);
@@ -806,12 +804,10 @@ TEST_F(WebRtcSessionTest, SetNonCryptoOffer) {
   VerifyNoCryptoParams(offer->description());
   // SetRemoteDescription and SetLocalDescription will take the ownership of
   // the offer.
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer,
-                                              offer));
+  EXPECT_FALSE(session_->SetRemoteDescription(offer));
   offer = CreateOfferSessionDescription(options);
   ASSERT_TRUE(offer != NULL);
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                             offer));
+  EXPECT_FALSE(session_->SetLocalDescription(offer));
 }
 
 // Test we will return fail when apply an answer that doesn't have
@@ -823,8 +819,8 @@ TEST_F(WebRtcSessionTest, SetLocalNonCryptoAnswer) {
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
   // SetRemoteDescription and SetLocalDescription will take the ownership of
   // the offer.
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
+  EXPECT_FALSE(session_->SetLocalDescription(answer));
 }
 
 // Test we will return fail when apply an answer that doesn't have
@@ -836,8 +832,8 @@ TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
   // SetRemoteDescription and SetLocalDescription will take the ownership of
   // the offer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_FALSE(session_->SetRemoteDescription(answer));
 }
 
 // Test that we can create and set an offer with a DTLS fingerprint.
@@ -847,8 +843,7 @@ TEST_F(WebRtcSessionTest, DISABLED_CreateSetDtlsOffer) {
   ASSERT_TRUE(offer != NULL);
   VerifyFingerprintStatus(offer->description(), true);
   // SetLocalDescription will take the ownership of the offer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                            offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
 }
 
 // Test that we can process an offer with a DTLS fingerprint
@@ -864,7 +859,7 @@ TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
 
   // SetRemoteDescription will take the ownership of
   // the offer.
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   // Verify that we get a crypto fingerprint in the answer.
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
@@ -878,8 +873,7 @@ TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
 #endif
 
   // Now set the local description.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
 }
 
 // Test that if the other side didn't offer a fingerprint, we don't
@@ -895,7 +889,7 @@ TEST_F(WebRtcSessionTest, ReceiveNoDtlsOfferCreateAnswer) {
 
   // SetRemoteDescription will take the ownership of
   // the offer.
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   // Verify that we don't get a crypto fingerprint in the answer.
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
@@ -904,8 +898,7 @@ TEST_F(WebRtcSessionTest, ReceiveNoDtlsOfferCreateAnswer) {
   VerifyFingerprintStatus(answer->description(), false);
 
   // Now set the local description.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {
@@ -913,11 +906,11 @@ TEST_F(WebRtcSessionTest, TestSetLocalOfferTwice) {
   mediastream_signaling_.UseOptionsReceiveOnly();
   // SetLocalDescription take ownership of offer.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
 
   // SetLocalDescription take ownership of offer.
   SessionDescriptionInterface* offer2 = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer2));
+  EXPECT_TRUE(session_->SetLocalDescription(offer2));
 }
 
 TEST_F(WebRtcSessionTest, TestSetRemoteOfferTwice) {
@@ -925,51 +918,54 @@ TEST_F(WebRtcSessionTest, TestSetRemoteOfferTwice) {
   mediastream_signaling_.UseOptionsReceiveOnly();
   // SetLocalDescription take ownership of offer.
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   SessionDescriptionInterface* offer2 = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer2));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer2));
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteOffer) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   offer = session_->CreateOffer(MediaHints());
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_FALSE(session_->SetRemoteDescription(offer));
 }
 
 TEST_F(WebRtcSessionTest, TestSetRemoteAndLocalOffer) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   offer = session_->CreateOffer(MediaHints());
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_FALSE(session_->SetLocalDescription(offer));
 }
 
 TEST_F(WebRtcSessionTest, TestSetLocalPrAnswer) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  SessionDescriptionInterface* pranswer = session_->CreateAnswer(MediaHints(),
-                                                                 offer);
-  SetRemoteDescription(JsepInterface::kOffer, offer,
+  JsepSessionDescription* pranswer = static_cast<JsepSessionDescription*>(
+      session_->CreateAnswer(MediaHints(), offer));
+  pranswer->set_type(SessionDescriptionInterface::kPrAnswer);
+  SetRemoteDescription(offer,
                        BaseSession::STATE_RECEIVEDINITIATE);
-  SetLocalDescription(JsepInterface::kPrAnswer, pranswer,
+  SetLocalDescription(pranswer,
                       BaseSession::STATE_SENTPRACCEPT);
 
   mediastream_signaling_.UseOptionsWithStream1();
-  SessionDescriptionInterface* pranswer2 = session_->CreateAnswer(MediaHints(),
-                                                                  offer);
-  SetLocalDescription(JsepInterface::kPrAnswer, pranswer2,
+  JsepSessionDescription* pranswer2 = static_cast<JsepSessionDescription*>(
+      session_->CreateAnswer(MediaHints(), offer));
+  pranswer2->set_type(SessionDescriptionInterface::kPrAnswer);
+
+  SetLocalDescription(pranswer2,
                       BaseSession::STATE_SENTPRACCEPT);
 
   mediastream_signaling_.UseOptionsWithStream2();
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  SetLocalDescription(JsepInterface::kAnswer, answer,
+  SetLocalDescription(answer,
                       BaseSession::STATE_SENTACCEPT);
 }
 
@@ -977,23 +973,28 @@ TEST_F(WebRtcSessionTest, TestSetRemotePrAnswer) {
   WebRtcSessionTest::Init();
   mediastream_signaling_.UseOptionsReceiveOnly();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  SessionDescriptionInterface* pranswer = session_->CreateAnswer(MediaHints(),
-                                                                 offer);
-  SetLocalDescription(JsepInterface::kOffer, offer,
+  JsepSessionDescription* pranswer = static_cast<JsepSessionDescription*>(
+      session_->CreateAnswer(MediaHints(), offer));
+  pranswer->set_type(SessionDescriptionInterface::kPrAnswer);
+
+  SetLocalDescription(offer,
                       BaseSession::STATE_SENTINITIATE);
-  SetRemoteDescription(JsepInterface::kPrAnswer, pranswer,
+  SetRemoteDescription(pranswer,
                        BaseSession::STATE_RECEIVEDPRACCEPT);
 
   mediastream_signaling_.UseOptionsWithStream1();
-  SessionDescriptionInterface* pranswer2 = session_->CreateAnswer(MediaHints(),
-                                                                  offer);
-  SetRemoteDescription(JsepInterface::kPrAnswer, pranswer2,
+
+  JsepSessionDescription* pranswer2 = static_cast<JsepSessionDescription*>(
+      session_->CreateAnswer(MediaHints(), offer));
+  pranswer2->set_type(SessionDescriptionInterface::kPrAnswer);
+
+  SetRemoteDescription(pranswer2,
                        BaseSession::STATE_RECEIVEDPRACCEPT);
 
   mediastream_signaling_.UseOptionsWithStream2();
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  SetRemoteDescription(JsepInterface::kAnswer, answer,
+  SetRemoteDescription(answer,
                        BaseSession::STATE_RECEIVEDACCEPT);
 }
 
@@ -1003,7 +1004,7 @@ TEST_F(WebRtcSessionTest, TestSetLocalAnswerWithoutOffer) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_FALSE(session_->SetLocalDescription(answer));
 }
 
 TEST_F(WebRtcSessionTest, TestSetRemoteAnswerWithoutOffer) {
@@ -1012,7 +1013,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteAnswerWithoutOffer) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_FALSE(session_->SetRemoteDescription(answer));
 }
 
 TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
@@ -1026,7 +1027,7 @@ TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
   EXPECT_FALSE(session_->ProcessIceMessage(&ice_candidate1));
 
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   // Candidate should be allowed to add before remote description.
   EXPECT_TRUE(session_->ProcessIceMessage(&ice_candidate1));
   candidate.set_component(2);
@@ -1035,7 +1036,7 @@ TEST_F(WebRtcSessionTest, TestAddRemoteCandidate) {
 
   SessionDescriptionInterface* answer =
       session_->CreateAnswer(MediaHints(), offer);
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 
   // Verifying the candidates are copied properly from internal vector.
   const SessionDescriptionInterface* remote_desc =
@@ -1088,7 +1089,7 @@ TEST_F(WebRtcSessionTest, TestRemoteCandidatesAddedToSessionDescription) {
   JsepIceCandidate ice_candidate2(kMediaContentName0, kMediaContentIndex0,
                                   candidate2);
   EXPECT_TRUE(offer->AddCandidate(&ice_candidate2));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   remote_desc = session_->remote_description();
   ASSERT_TRUE(remote_desc != NULL);
@@ -1187,7 +1188,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
 
   EXPECT_TRUE(offer->AddCandidate(&ice_candidate));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   const SessionDescriptionInterface* remote_desc =
       session_->remote_description();
@@ -1200,7 +1201,7 @@ TEST_F(WebRtcSessionTest, TestSetRemoteSessionDescriptionWithCandidates) {
 
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                               remote_desc);
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
   // TODO: How do I check that the transport have got the
   // remote candidates?
 }
@@ -1235,8 +1236,8 @@ TEST_F(WebRtcSessionTest, TestSetLocalAndRemoteDescriptionWithCandidates) {
   ASSERT_TRUE(answer->candidates(kMediaContentIndex1) != NULL);
   EXPECT_LT(0u, answer->candidates(kMediaContentIndex1)->count());
 
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 }
 
 // Verifies TransportProxy and media channels are created with content names
@@ -1274,13 +1275,13 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
   EXPECT_TRUE(modified_offer->Initialize(sdp));
 
   EXPECT_TRUE(session_->SetLocalDescription(
-      JsepInterface::kOffer, modified_offer));
+      modified_offer));
   EXPECT_TRUE(session_->GetTransportProxy("audio_content_name") != NULL);
   EXPECT_TRUE(session_->GetTransportProxy("video_content_name") != NULL);
   mediastream_signaling_.UseOptionsWithStream1();
   SessionDescriptionInterface* answer =
       session_->CreateAnswer(MediaHints(true, true), modified_offer);
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
   ASSERT_TRUE((video_channel_ = media_engine_->GetVideoChannel(0)) != NULL);
@@ -1485,8 +1486,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithAudioOnlyAnswer) {
       session_->CreateAnswer(MediaHints(true, false), offer);
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
@@ -1517,8 +1518,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithAudioOnlyAnswer) {
   answer = session_->CreateAnswer(MediaHints(true, false), offer);
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
 
@@ -1556,8 +1557,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithVideoOnlyAnswer) {
      session_->CreateAnswer(MediaHints(false, true), offer);
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
@@ -1589,8 +1590,8 @@ TEST_F(WebRtcSessionTest, TestAVOfferWithVideoOnlyAnswer) {
   answer = session_->CreateAnswer(MediaHints(false, true), offer);
   // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
   // and answer.
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
   video_channel_ = media_engine_->GetVideoChannel(0);
   voice_channel_ = media_engine_->GetVoiceChannel(0);
 
@@ -1655,7 +1656,7 @@ TEST_F(WebRtcSessionTest, VerifyBundleFlagInPA) {
       new JsepSessionDescription(JsepSessionDescription::kOffer);
   modified_offer->Initialize(offer_copy, "1", "1");
 
-  session_->SetLocalDescription(JsepInterface::kOffer, modified_offer);
+  session_->SetLocalDescription(modified_offer);
   EXPECT_FALSE(allocator_.flags() & cricket::PORTALLOCATOR_ENABLE_BUNDLE);
 }
 
@@ -1665,7 +1666,7 @@ TEST_F(WebRtcSessionTest, TestDisabledBundleInAnswer) {
   EXPECT_TRUE((cricket::PORTALLOCATOR_ENABLE_BUNDLE & allocator_.flags()) ==
       cricket::PORTALLOCATOR_ENABLE_BUNDLE);
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  session_->SetLocalDescription(JsepInterface::kOffer, offer);
+  session_->SetLocalDescription(offer);
   mediastream_signaling_.UseOptionsWithStream2();
   talk_base::scoped_ptr<SessionDescriptionInterface> answer(
       session_->CreateAnswer(MediaHints(), offer));
@@ -1674,7 +1675,7 @@ TEST_F(WebRtcSessionTest, TestDisabledBundleInAnswer) {
   JsepSessionDescription* modified_answer =
       new JsepSessionDescription(JsepSessionDescription::kAnswer);
   modified_answer->Initialize(answer_copy, "1", "1");
-  session_->SetRemoteDescription(JsepInterface::kAnswer, modified_answer);
+  session_->SetRemoteDescription(modified_answer);
   EXPECT_TRUE((cricket::PORTALLOCATOR_ENABLE_BUNDLE & allocator_.flags()) ==
       cricket::PORTALLOCATOR_ENABLE_BUNDLE);
 
@@ -1783,9 +1784,9 @@ TEST_F(WebRtcSessionTest, TestInitiatorFlagAsOriginator) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                    offer);
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   EXPECT_TRUE(session_->initiator());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
   EXPECT_TRUE(session_->initiator());
 }
 
@@ -1796,9 +1797,9 @@ TEST_F(WebRtcSessionTest, TestInitiatorFlagAsReceiver) {
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   EXPECT_FALSE(session_->initiator());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
   EXPECT_FALSE(session_->initiator());
 }
 
@@ -1809,7 +1810,7 @@ TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
   std::string sdp;
@@ -1821,8 +1822,7 @@ TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   JsepSessionDescription* answer_with_gice =
       new JsepSessionDescription(JsepSessionDescription::kAnswer);
   EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
-                                             answer_with_gice));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer_with_gice));
   VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
 }
@@ -1834,10 +1834,10 @@ TEST_F(WebRtcSessionTest, TestInitiatorIceInAnswer) {
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
+  EXPECT_TRUE(session_->SetRemoteDescription(
                                              answer));
   VerifyTransportType("audio", cricket::ICEPROTO_RFC5245);
   VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
@@ -1850,7 +1850,7 @@ TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   SessionDescriptionInterface* answer = session_->CreateAnswer(MediaHints(),
                                                                offer);
   std::string sdp;
@@ -1862,8 +1862,7 @@ TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   JsepSessionDescription* answer_with_gice =
       new JsepSessionDescription(JsepSessionDescription::kAnswer);
   EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer_with_gice));
+  EXPECT_TRUE(session_->SetLocalDescription(answer_with_gice));
   VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
 }
@@ -1875,12 +1874,10 @@ TEST_F(WebRtcSessionTest, TestReceiverIceInOffer) {
   cricket::MediaSessionOptions options;
   options.has_video = true;
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer,
-                                             offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   SessionDescriptionInterface* answer =
       session_->CreateAnswer(MediaHints(), offer);
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
   VerifyTransportType("audio", cricket::ICEPROTO_RFC5245);
   VerifyTransportType("video", cricket::ICEPROTO_RFC5245);
 }
@@ -1904,23 +1901,20 @@ TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
   JsepSessionDescription *ice_only_offer =
       new JsepSessionDescription(JsepSessionDescription::kOffer);
   EXPECT_TRUE((ice_only_offer)->Initialize(offer_str));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                            ice_only_offer));
+  EXPECT_TRUE(session_->SetLocalDescription(ice_only_offer));
   std::string original_offer_sdp;
   EXPECT_TRUE(offer->ToString(&original_offer_sdp));
   JsepSessionDescription* answer_with_gice =
       new JsepSessionDescription(JsepSessionDescription::kAnswer);
   EXPECT_TRUE((answer_with_gice)->Initialize(original_offer_sdp));
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
-                                              answer_with_gice));
+  EXPECT_FALSE(session_->SetRemoteDescription(answer_with_gice));
 }
 
 // Verifing local offer and remote answer have matching m-lines as per RFC 3264.
 TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
   WebRtcSessionTest::Init();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                            offer));
+  EXPECT_TRUE(session_->SetLocalDescription(offer));
   SessionDescriptionInterface* answer =
      session_->CreateAnswer(MediaHints(), offer);
 
@@ -1932,8 +1926,7 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
   EXPECT_TRUE(modified_answer->Initialize(answer_copy,
                                           answer->session_id(),
                                           answer->session_version()));
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
-                                             modified_answer));
+  EXPECT_FALSE(session_->SetRemoteDescription(modified_answer));
 
   // Modifying content names.
   std::string sdp;
@@ -1950,11 +1943,9 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
   JsepSessionDescription* modified_answer1(new JsepSessionDescription(
       JsepSessionDescription::kAnswer));
   EXPECT_TRUE(modified_answer1->Initialize(sdp));
-  EXPECT_FALSE(session_->SetRemoteDescription(JsepInterface::kAnswer,
-                                              modified_answer1));
+  EXPECT_FALSE(session_->SetRemoteDescription(modified_answer1));
 
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kAnswer,
-                                             answer));
+  EXPECT_TRUE(session_->SetRemoteDescription(answer));
 }
 
 // Verifying remote offer and local answer have matching m-lines as per
@@ -1962,8 +1953,7 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
 TEST_F(WebRtcSessionTest, TestIncorrectMLinesInLocalAnswer) {
   WebRtcSessionTest::Init();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer,
-                                             offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   SessionDescriptionInterface* answer =
      session_->CreateAnswer(MediaHints(), offer);
 
@@ -1975,10 +1965,8 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInLocalAnswer) {
   EXPECT_TRUE(modified_answer->Initialize(answer_copy,
                                           answer->session_id(),
                                           answer->session_version()));
-  EXPECT_FALSE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                             modified_answer));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer,
-                                            answer));
+  EXPECT_FALSE(session_->SetLocalDescription(modified_answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
 }
 
 // This test verifies that WebRtcSession does not start candidate allocation
@@ -1996,7 +1984,7 @@ TEST_F(WebRtcSessionTest, TestIceStartAfterSetLocalDescriptionOnly) {
   JsepIceCandidate ice_candidate1(kMediaContentName1, kMediaContentIndex1,
                                   candidate1);
   EXPECT_TRUE(offer->AddCandidate(&ice_candidate1));
-  EXPECT_TRUE(session_->SetRemoteDescription(JsepInterface::kOffer, offer));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer));
   ASSERT_TRUE(session_->GetTransportProxy("audio") != NULL);
   ASSERT_TRUE(session_->GetTransportProxy("video") != NULL);
 
@@ -2007,7 +1995,7 @@ TEST_F(WebRtcSessionTest, TestIceStartAfterSetLocalDescriptionOnly) {
 
   SessionDescriptionInterface* answer =
       session_->CreateAnswer(MediaHints(), offer);
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kAnswer, answer));
+  EXPECT_TRUE(session_->SetLocalDescription(answer));
   EXPECT_TRUE(session_->GetTransportProxy("audio")->negotiated());
   EXPECT_TRUE(session_->GetTransportProxy("video")->negotiated());
   EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
@@ -2028,8 +2016,7 @@ TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescription) {
   JsepSessionDescription *jsep_offer_str =
       new JsepSessionDescription(JsepSessionDescription::kOffer);
   EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                            jsep_offer_str));
+  EXPECT_TRUE(session_->SetLocalDescription(jsep_offer_str));
   EXPECT_TRUE(session_->voice_channel()->secure_required());
   EXPECT_TRUE(session_->video_channel()->secure_required());
 }
@@ -2049,8 +2036,7 @@ TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescriptionWithDisabled) {
   JsepSessionDescription *jsep_offer_str =
       new JsepSessionDescription(JsepSessionDescription::kOffer);
   EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
-  EXPECT_TRUE(session_->SetLocalDescription(JsepInterface::kOffer,
-                                            jsep_offer_str));
+  EXPECT_TRUE(session_->SetLocalDescription(jsep_offer_str));
   EXPECT_FALSE(session_->voice_channel()->secure_required());
   EXPECT_FALSE(session_->video_channel()->secure_required());
 }

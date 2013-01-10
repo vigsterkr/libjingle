@@ -284,6 +284,7 @@ CoordinatedVideoAdapter::CoordinatedVideoAdapter()
     : cpu_adaptation_(false),
       gd_adaptation_(true),
       view_adaptation_(true),
+      view_switch_(false),
       cpu_downgrade_count_(0),
       cpu_downgrade_wait_time_(0),
       high_system_threshold_(kHighSystemCpuThreshold),
@@ -358,6 +359,7 @@ void CoordinatedVideoAdapter::OnEncoderResolutionRequest(
   if (!gd_adaptation_) {
     return;
   }
+  int old_encoder_desired_num_pixels = encoder_desired_num_pixels_;
   if (KEEP != request) {
     int new_encoder_desired_num_pixels = width * height;
     int old_num_pixels = GetOutputNumPixels();
@@ -371,6 +373,12 @@ void CoordinatedVideoAdapter::OnEncoderResolutionRequest(
   }
   int new_width, new_height;
   bool changed = AdaptToMinimumFormat(&new_width, &new_height);
+
+  // Ignore up or keep if no change.
+  if (DOWNGRADE != request && view_switch_ && !changed) {
+    encoder_desired_num_pixels_ = old_encoder_desired_num_pixels;
+  }
+
   LOG(LS_INFO) << "VAdapt GD Request: "
                << (DOWNGRADE == request ? "down" :
                    (UPGRADE == request ? "up" : "keep"))

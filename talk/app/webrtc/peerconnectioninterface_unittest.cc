@@ -72,6 +72,7 @@ using webrtc::MediaStreamTrackInterface;
 using webrtc::MockCreateSessionDescriptionObserver;
 using webrtc::MockDataChannelObserver;
 using webrtc::MockSetSessionDescriptionObserver;
+using webrtc::MockStatsObserver;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
@@ -118,15 +119,15 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   }
   void SetPeerConnectionInterface(PeerConnectionInterface* pc) {
     pc_ = pc;
-    state_ = pc_->ready_state();
+    state_ = pc_->signaling_state();
   }
   virtual void OnError() {}
   virtual void OnStateChange(StateType state_changed) {
     if (pc_.get() == NULL)
       return;
     switch (state_changed) {
-      case kReadyState:
-        state_ = pc_->ready_state();
+      case kSignalingState:
+        state_ = pc_->signaling_state();
         break;
       case kIceState:
         ADD_FAILURE();
@@ -176,7 +177,7 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
   }
 
   scoped_refptr<PeerConnectionInterface> pc_;
-  PeerConnectionInterface::ReadyState state_;
+  PeerConnectionInterface::SignalingState state_;
   scoped_ptr<IceCandidateInterface> last_candidate_;
   scoped_refptr<DataChannelInterface> last_datachannel_;
   bool renegotiation_needed_;
@@ -185,26 +186,6 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
  private:
   scoped_refptr<MediaStreamInterface> last_added_stream_;
   scoped_refptr<MediaStreamInterface> last_removed_stream_;
-};
-
-// TODO(perkj): Move to a common file with test mocks.
-class MockStatsObserver : public webrtc::StatsObserver {
- public:
-  MockStatsObserver()
-      : called_(false),
-        number_of_reports_(0) {}
-  virtual ~MockStatsObserver() {}
-  virtual void OnComplete(const std::vector<webrtc::StatsReport>& reports) {
-    called_ = true;
-    number_of_reports_ = reports.size();
-  }
-
-  bool called() const { return called_; }
-  size_t number_of_reports() const { return number_of_reports_; }
-
- private:
-  bool called_;
-  size_t number_of_reports_;
 };
 
 }  // namespace
@@ -239,7 +220,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
                                             &observer_);
     ASSERT_TRUE(pc_.get() != NULL);
     observer_.SetPeerConnectionInterface(pc_.get());
-    EXPECT_EQ(PeerConnectionInterface::kNew, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
 
   void CreatePeerConnectionWithDifferentConfigurations() {
@@ -393,7 +374,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     SessionDescriptionInterface* answer = NULL;
     EXPECT_TRUE(DoCreateAnswer(&answer));
     EXPECT_TRUE(DoSetLocalDescription(answer));
-    EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
 
   void CreatePrAnswerAsLocalDescription() {
@@ -428,7 +409,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
         SessionDescriptionInterface::kAnswer);
     EXPECT_TRUE(answer->Initialize(offer));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
-    EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
 
   void CreatePrAnswerAndAnswerAsRemoteDescription(const std::string& offer) {
@@ -443,7 +424,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
             SessionDescriptionInterface::kAnswer);
     EXPECT_TRUE(answer->Initialize(offer));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
-    EXPECT_EQ(PeerConnectionInterface::kActive, observer_.state_);
+    EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
 
   // Help function used for waiting until a the last signaled remote stream has

@@ -77,21 +77,11 @@ class PeerConnection : public PeerConnectionInterface,
   virtual bool GetStats(StatsObserver* observer,
                         webrtc::MediaStreamTrackInterface* track);
 
+  // TODO(perkj): Remove ready_state when callers removed. It is deprecated.
+  virtual ReadyState ready_state() { return signaling_state(); }
+  virtual SignalingState signaling_state();
 
-  virtual ReadyState ready_state();
   virtual IceState ice_state();
-
-  // TODO(ronghuawu): Remove deprecated Jsep functions.
-  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
-  virtual SessionDescriptionInterface* CreateAnswer(
-      const MediaHints& hints,
-      const SessionDescriptionInterface* offer);
-  virtual bool StartIce(IceOptions options);
-  virtual bool SetLocalDescription(Action action,
-                                   SessionDescriptionInterface* desc);
-  virtual bool SetRemoteDescription(Action action,
-                                    SessionDescriptionInterface* desc);
-  virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
 
   virtual const SessionDescriptionInterface* local_description() const;
   virtual const SessionDescriptionInterface* remote_description() const;
@@ -129,7 +119,7 @@ class PeerConnection : public PeerConnectionInterface,
   // Signals from WebRtcSession.
   void OnSessionStateChange(cricket::BaseSession* session,
                             cricket::BaseSession::State state);
-  void ChangeReadyState(PeerConnectionInterface::ReadyState ready_state);
+  void ChangeSignalingState(SignalingState signaling_state);
 
   bool DoInitialize(const StunConfigurations& stun_config,
                     const TurnConfigurations& turn_config,
@@ -152,7 +142,7 @@ class PeerConnection : public PeerConnectionInterface,
   // will refer to the same reference count.
   talk_base::scoped_refptr<PeerConnectionFactory> factory_;
   PeerConnectionObserver* observer_;
-  ReadyState ready_state_;
+  SignalingState signaling_state_;
   // TODO(ronghuawu): Implement ice_state.
   IceState ice_state_;
   talk_base::scoped_refptr<StreamCollection> local_media_streams_;

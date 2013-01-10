@@ -151,8 +151,6 @@ class SessionDescriptionInterface {
   virtual bool ToString(std::string* out) const = 0;
 };
 
-// Deprecated (jsep00)
-SessionDescriptionInterface* CreateSessionDescription(const std::string& sdp);
 // Creates a SessionDescriptionInterface based on SDP string and the type.
 // Returns NULL if the sdp string can't be parsed or the type is unsupported.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
@@ -200,15 +198,6 @@ class SetSessionDescriptionObserver : public talk_base::RefCountInterface {
 // Interface for implementing Jsep. PeerConnection implements these functions.
 class JsepInterface {
  public:
-  // Indicates the type of SessionDescription in a call to SetLocalDescription
-  // and SetRemoteDescription.
-  // Deprecated (jsep00)
-  enum Action {
-    kOffer,
-    kPrAnswer,
-    kAnswer,
-  };
-
   // Indicates what types of local candidates should be used.
   // Deprecated (jsep00)
   enum IceOptions {
@@ -223,38 +212,6 @@ class JsepInterface {
   };
 
   typedef std::vector<IceServer> IceServers;
-
-  // Deprecated (jsep00)
-  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints) = 0;
-
-  // Deprecated (jsep00)
-  // Create an answer to an offer. Returns NULL if an answer can't be created.
-  virtual SessionDescriptionInterface* CreateAnswer(
-      const MediaHints& hints,
-      const SessionDescriptionInterface* offer) = 0;
-
-  // Deprecated (jsep00)
-  // Starts or updates the ICE Agent process of
-  // gathering local candidates and pinging remote candidates.
-  // SetLocalDescription must be called before calling this method.
-  virtual bool StartIce(IceOptions options) = 0;
-
-  // Deprecated (jsep00)
-  // Sets the local session description.
-  // JsepInterface take ownership of |desc|.
-  virtual bool SetLocalDescription(Action action,
-                                   SessionDescriptionInterface* desc) = 0;
-
-  // Deprecated (jsep00)
-  // Sets the remote session description.
-  // JsepInterface take ownership of |desc|.
-  virtual bool SetRemoteDescription(Action action,
-                                    SessionDescriptionInterface* desc) = 0;
-
-  // Deprecated (jsep00)
-  // Processes received ICE information.
-  virtual bool ProcessIceMessage(
-      const IceCandidateInterface* ice_candidate) = 0;
 
   virtual const SessionDescriptionInterface* local_description() const = 0;
   virtual const SessionDescriptionInterface* remote_description() const = 0;

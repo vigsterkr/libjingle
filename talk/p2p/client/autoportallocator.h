@@ -31,9 +31,9 @@
 #include <string>
 #include <vector>
 
-#include "talk/examples/login/jingleinfotask.h"
 #include "talk/base/sigslot.h"
 #include "talk/p2p/client/httpportallocator.h"
+#include "talk/xmpp/jingleinfotask.h"
 #include "talk/xmpp/xmppclient.h"
 
 // This class sets the relay and stun servers using XmppClient.

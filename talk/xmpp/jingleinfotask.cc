@@ -25,7 +25,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "talk/examples/login/jingleinfotask.h"
+#include "talk/xmpp/jingleinfotask.h"
+
 #include "talk/base/socketaddress.h"
 #include "talk/xmpp/constants.h"
 #include "talk/xmpp/xmppclient.h"

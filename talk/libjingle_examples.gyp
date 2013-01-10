@@ -39,7 +39,7 @@
         'libjingle.gyp:libjingle_p2p',
       ],
       'sources': [
-        'examples/login/jingleinfotask.cc',
+        'xmpp/jingleinfotask.cc',
       ],
     },  # target libjingle_xmpphelp
     {

@@ -27,8 +27,8 @@
 #include "talk/base/ssladapter.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
-#include "talk/examples/login/autoportallocator.h"
 #include "talk/p2p/base/sessionmanager.h"
+#include "talk/p2p/client/autoportallocator.h"
 #include "talk/p2p/client/sessionmanagertask.h"
 #include "talk/xmpp/xmppengine.h"
 #ifdef USE_SSL_TUNNEL

@@ -60,8 +60,7 @@ class MediaStreamSignaling;
 class WebRtcSession : public cricket::BaseSession,
                       public AudioProviderInterface,
                       public DataChannelFactory,
-                      public VideoProviderInterface,
-                      public JsepInterface {
+                      public VideoProviderInterface {
  public:
   WebRtcSession(cricket::ChannelManager* channel_manager,
                 talk_base::Thread* signaling_thread,
@@ -95,45 +94,24 @@ class WebRtcSession : public cricket::BaseSession,
   // TODO - It may be necessary to supply error code as well.
   sigslot::signal0<> SignalError;
 
-  // Implements JsepInterface.
-  virtual SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
-  virtual SessionDescriptionInterface* CreateOffer(
+  SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
+  SessionDescriptionInterface* CreateOffer(
       const MediaConstraintsInterface* constraints);
-  virtual SessionDescriptionInterface* CreateAnswer(
+  SessionDescriptionInterface* CreateAnswer(
       const MediaHints& hints,
       const SessionDescriptionInterface* offer);
-  virtual SessionDescriptionInterface* CreateAnswer(
+  SessionDescriptionInterface* CreateAnswer(
       const MediaConstraintsInterface* constraints,
       const SessionDescriptionInterface* offer);
-  virtual bool StartIce(IceOptions options) { return true;}
-  virtual bool SetLocalDescription(Action action,
-                                   SessionDescriptionInterface* desc);
 
-  virtual bool SetRemoteDescription(Action action,
-                                    SessionDescriptionInterface* desc);
-  virtual bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
-  virtual const SessionDescriptionInterface* local_description() const {
+  bool SetLocalDescription(SessionDescriptionInterface* desc);
+  bool SetRemoteDescription(SessionDescriptionInterface* desc);
+  bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
+  const SessionDescriptionInterface* local_description() const {
     return local_desc_.get();
   }
-  virtual const SessionDescriptionInterface* remote_description() const {
+  const SessionDescriptionInterface* remote_description() const {
     return remote_desc_.get();
-  }
-
-  // TODO(ronghuawu): Implement below functions to replace the deprecated ones.
-  virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
-                           const MediaConstraintsInterface* constraints) {}
-  virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
-                            const MediaConstraintsInterface* constraints) {}
-  virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
-                                   SessionDescriptionInterface* desc) {}
-  virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
-                                    SessionDescriptionInterface* desc) {}
-  virtual bool UpdateIce(const IceServers& configuration,
-                         const MediaConstraintsInterface* constraints) {
-    return false;
-  }
-  virtual bool AddIceCandidate(const IceCandidateInterface* candidate) {
-    return false;
   }
 
   bool GetLocalTrackName(uint32 ssrc, std::string* name);
@@ -161,18 +139,21 @@ class WebRtcSession : public cricket::BaseSession,
       const DataChannelInit* config);
 
  private:
+  // Indicates the type of SessionDescription in a call to SetLocalDescription
+  // and SetRemoteDescription.
+  enum Action {
+    kOffer,
+    kPrAnswer,
+    kAnswer,
+  };
   // Invokes ConnectChannels() on transport proxies, which initiates ice
   // candidates allocation.
   bool StartCandidatesAllocation();
   bool UpdateSessionState(Action action, cricket::ContentSource source,
                           const cricket::SessionDescription* desc);
+  static Action GetAction(const std::string& type);
 
   virtual void OnMessage(talk_base::Message* msg);
-
-  // This callback is connected to BaseChannel::SignalFirstPacketReceived.
-  // It is used for detecting if we receive packets without being aware of the
-  // remote SSRC and must create a default media stream.
-  void OnFirstPacketReceived(cricket::BaseChannel* channel);
 
   // Transport related callbacks, override from cricket::BaseSession.
   virtual void OnTransportRequestSignaling(cricket::Transport* transport);

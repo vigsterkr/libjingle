@@ -102,6 +102,9 @@ class CoordinatedVideoAdapter
   // Enable or disable video adaptation due to the change of the View
   void set_view_adaptation(bool enable) { view_adaptation_ = enable; }
   bool view_adaptation() const { return view_adaptation_; }
+  // Enable or disable video adaptation to fast switch View
+  void set_view_switch(bool enable) { view_switch_ = enable; }
+  bool view_switch() const { return view_switch_; }
   // When the video is decreased, set the waiting time for CPU adaptation to
   // decrease video again.
   void set_cpu_downgrade_wait_time(uint32 ms) { cpu_downgrade_wait_time_ = ms; }
@@ -145,6 +148,7 @@ class CoordinatedVideoAdapter
   bool cpu_adaptation_;  // True if cpu adaptation is enabled.
   bool gd_adaptation_;  // True if gd adaptation is enabled.
   bool view_adaptation_;  // True if view adaptation is enabled.
+  bool view_switch_;  // True if view switch is enabled.
   int cpu_downgrade_count_;
   int cpu_downgrade_wait_time_;
   // cpu system load thresholds relative to max cpus.

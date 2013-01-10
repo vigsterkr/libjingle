@@ -233,7 +233,7 @@ namespace webrtc {
 PeerConnection::PeerConnection(PeerConnectionFactory* factory)
     : factory_(factory),
       observer_(NULL),
-      ready_state_(kNew),
+      signaling_state_(kStable),
       ice_state_(kIceNew),
       local_media_streams_(StreamCollection::Create()) {
 }
@@ -343,8 +343,8 @@ bool PeerConnection::GetStats(StatsObserver* observer,
   return true;
 }
 
-PeerConnectionInterface::ReadyState PeerConnection::ready_state() {
-  return ready_state_;
+PeerConnectionInterface::SignalingState PeerConnection::signaling_state() {
+  return signaling_state_;
 }
 
 PeerConnectionInterface::IceState PeerConnection::ice_state() {
@@ -382,17 +382,6 @@ PeerConnection::CreateDataChannel(
   return channel;
 }
 
-bool PeerConnection::StartIce(IceOptions options) {
-  // Ice will be started by default and will be removed in Jsep01.
-  // TODO: Remove this method once fully migrated to JSEP01.
-  return true;
-}
-
-SessionDescriptionInterface* PeerConnection::CreateOffer(
-    const MediaHints& hints) {
-  return session_->CreateOffer(hints);
-}
-
 void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
                                  const MediaConstraintsInterface* constraints) {
   if (!VERIFY(observer != NULL)) {
@@ -411,12 +400,6 @@ void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
   }
 
   signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_SUCCESS, msg);
-}
-
-SessionDescriptionInterface* PeerConnection::CreateAnswer(
-    const MediaHints& hints,
-    const SessionDescriptionInterface* offer) {
-  return session_->CreateAnswer(hints, offer);
 }
 
 void PeerConnection::CreateAnswer(
@@ -454,13 +437,6 @@ void PeerConnection::CreateAnswer(
   signaling_thread()->Post(this, MSG_CREATE_SESSIONDESCRIPTION_SUCCESS, msg);
 }
 
-bool PeerConnection::SetLocalDescription(Action action,
-                                         SessionDescriptionInterface* desc) {
-  bool result =  session_->SetLocalDescription(action, desc);
-  stream_handler_->CommitLocalStreams(local_media_streams_);
-  return result;
-}
-
 void PeerConnection::SetLocalDescription(
     SetSessionDescriptionObserver* observer,
     SessionDescriptionInterface* desc) {
@@ -475,19 +451,13 @@ void PeerConnection::SetLocalDescription(
   // Update stats here so that we have the most recent stats for tracks and
   // streams that might be removed by updating the session description.
   stats_.UpdateStats();
-  if (!SetLocalDescription(JsepSessionDescription::GetAction(desc->type()),
-                           desc)) {
+  if (!session_->SetLocalDescription(desc)) {
     PostSetSessionDescriptionFailure(observer, "SetLocalDescription failed.");
     return;
   }
   stream_handler_->CommitLocalStreams(local_media_streams_);
   SetSessionDescriptionMsg* msg =  new SetSessionDescriptionMsg(observer);
   signaling_thread()->Post(this, MSG_SET_SESSIONDESCRIPTION_SUCCESS, msg);
-}
-
-bool PeerConnection::SetRemoteDescription(Action action,
-                                          SessionDescriptionInterface* desc) {
-  return session_->SetRemoteDescription(action, desc);
 }
 
 void PeerConnection::SetRemoteDescription(
@@ -505,8 +475,7 @@ void PeerConnection::SetRemoteDescription(
   // Update stats here so that we have the most recent stats for tracks and
   // streams that might be removed by updating the session description.
   stats_.UpdateStats();
-  if (!SetRemoteDescription(JsepSessionDescription::GetAction(desc->type()),
-                            desc)) {
+  if (!session_->SetRemoteDescription(desc)) {
     PostSetSessionDescriptionFailure(observer, "SetRemoteDescription failed.");
     return;
   }
@@ -529,14 +498,9 @@ bool PeerConnection::UpdateIce(const IceServers& configuration,
   return false;
 }
 
-bool PeerConnection::ProcessIceMessage(
-    const IceCandidateInterface* ice_candidate) {
-  return session_->ProcessIceMessage(ice_candidate);
-}
-
 bool PeerConnection::AddIceCandidate(
     const IceCandidateInterface* ice_candidate) {
-  return ProcessIceMessage(ice_candidate);
+  return session_->ProcessIceMessage(ice_candidate);
 }
 
 const SessionDescriptionInterface* PeerConnection::local_description() const {
@@ -551,22 +515,22 @@ void PeerConnection::OnSessionStateChange(cricket::BaseSession* /*session*/,
                                           cricket::BaseSession::State state) {
   switch (state) {
     case cricket::BaseSession::STATE_INIT:
-      ChangeReadyState(PeerConnectionInterface::kNew);
+      ChangeSignalingState(PeerConnectionInterface::kStable);
     case cricket::BaseSession::STATE_SENTINITIATE:
-      ChangeReadyState(PeerConnectionInterface::kHaveLocalOffer);
+      ChangeSignalingState(PeerConnectionInterface::kHaveLocalOffer);
       break;
     case cricket::BaseSession::STATE_SENTPRACCEPT:
-      ChangeReadyState(PeerConnectionInterface::kHaveLocalPrAnswer);
+      ChangeSignalingState(PeerConnectionInterface::kHaveLocalPrAnswer);
       break;
     case cricket::BaseSession::STATE_RECEIVEDINITIATE:
-      ChangeReadyState(PeerConnectionInterface::kHaveRemoteOffer);
+      ChangeSignalingState(PeerConnectionInterface::kHaveRemoteOffer);
       break;
     case cricket::BaseSession::STATE_RECEIVEDPRACCEPT:
-      ChangeReadyState(PeerConnectionInterface::kHaveRemotePrAnswer);
+      ChangeSignalingState(PeerConnectionInterface::kHaveRemotePrAnswer);
       break;
     case cricket::BaseSession::STATE_SENTACCEPT:
     case cricket::BaseSession::STATE_RECEIVEDACCEPT:
-      ChangeReadyState(PeerConnectionInterface::kActive);
+      ChangeSignalingState(PeerConnectionInterface::kStable);
       break;
     default:
       break;
@@ -666,10 +630,10 @@ void PeerConnection::OnIceComplete() {
   signaling_thread()->Post(this, MSG_ICECOMPLETE);
 }
 
-void PeerConnection::ChangeReadyState(
-    PeerConnectionInterface::ReadyState ready_state) {
-  ready_state_ = ready_state;
-  observer_->OnStateChange(PeerConnectionObserver::kReadyState);
+void PeerConnection::ChangeSignalingState(
+    PeerConnectionInterface::SignalingState signaling_state) {
+  signaling_state_ = signaling_state;
+  observer_->OnStateChange(PeerConnectionObserver::kSignalingState);
 }
 
 }  // namespace webrtc

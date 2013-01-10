@@ -391,6 +391,43 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestBundleOfferWithSameCodecPlType) {
   EXPECT_EQ(dcd->codecs()[0].name, offered_data_codec.name);
 }
 
+// Test creating an updated offer with with bundle, audio, video and data
+// after an audio only session has been negotiated.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       TestCreateUpdatedVideoOfferWithBundle) {
+  f1_.set_secure(SEC_ENABLED);
+  f2_.set_secure(SEC_ENABLED);
+  MediaSessionOptions opts;
+  opts.has_audio = true;
+  opts.has_video = false;
+  opts.has_data = false;
+  opts.bundle_enabled = true;
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  MediaSessionOptions updated_opts;
+  updated_opts.has_audio = true;
+  updated_opts.has_video = true;
+  updated_opts.has_data = true;
+  updated_opts.bundle_enabled = true;
+  talk_base::scoped_ptr<SessionDescription> updated_offer(f1_.CreateOffer(
+      updated_opts, answer.get()));
+
+  const AudioContentDescription* acd =
+      GetFirstAudioContentDescription(updated_offer.get());
+  const VideoContentDescription* vcd =
+      GetFirstVideoContentDescription(updated_offer.get());
+  const DataContentDescription* dcd =
+      GetFirstDataContentDescription(updated_offer.get());
+  EXPECT_TRUE(NULL != vcd);
+  EXPECT_TRUE(NULL != acd);
+  EXPECT_TRUE(NULL != dcd);
+
+  ASSERT_CRYPTO(acd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  ASSERT_CRYPTO(dcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+}
 // Create a typical data offer, and ensure it matches what we expect.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataOffer) {
   MediaSessionOptions opts;

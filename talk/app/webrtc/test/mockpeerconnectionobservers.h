@@ -112,6 +112,38 @@ class MockDataChannelObserver : public webrtc::DataChannelObserver {
   std::string last_message_;
 };
 
+class MockStatsObserver : public webrtc::StatsObserver {
+ public:
+  MockStatsObserver()
+      : called_(false) {}
+  virtual ~MockStatsObserver() {}
+  virtual void OnComplete(const std::vector<webrtc::StatsReport>& reports) {
+    called_ = true;
+    reports_ = reports;
+  }
+
+  bool called() const { return called_; }
+  size_t number_of_reports() const { return reports_.size(); }
+
+  int audio_output_level() {
+    if (reports_.empty()) {
+      return 0;
+    }
+    webrtc::StatsElement::Values::const_iterator it =
+        reports_[0].local.values.begin();
+    for (; it != reports_[0].local.values.end(); ++it) {
+      if (it->name == webrtc::StatsElement::kStatsValueNameAudioOutputLevel) {
+        return  talk_base::FromString<int>(it->value);
+      }
+    }
+    return 0;
+  }
+
+ private:
+  bool called_;
+  std::vector<webrtc::StatsReport> reports_;
+};
+
 }  // namespace webrtc
 
 #endif  // TALK_APP_WEBRTC_TEST_MOCKPEERCONNECTIONOBSERVERS_H_

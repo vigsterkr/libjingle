@@ -56,6 +56,7 @@ using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
 using cricket::MediaContentDescription;
 using cricket::MediaType;
 using cricket::NS_JINGLE_ICE_UDP;
+using cricket::RtpHeaderExtension;
 using cricket::SsrcGroup;
 using cricket::StreamParams;
 using cricket::StreamParamsVec;
@@ -64,6 +65,8 @@ using cricket::TransportOptions;
 using cricket::TransportInfo;
 using cricket::VideoContentDescription;
 using talk_base::SocketAddress;
+
+typedef std::vector<RtpHeaderExtension> RtpHeaderExtensions;
 
 namespace webrtc {
 
@@ -96,6 +99,7 @@ static const char kAttributeMid[] = "mid";
 static const char kAttributeRtcpMux[] = "rtcp-mux";
 static const char kAttributeSsrc[] = "ssrc";
 static const char kSsrcAttributeCname[] = "cname";
+static const char kAttributeExtmap[] = "extmap";
 // draft-alvestrand-mmusic-msid-01
 // a=msid-semantic: WMS
 static const char kAttributeMsidSemantics[] = "msid-semantic";
@@ -137,6 +141,7 @@ static const char kCandidateRelay[] = "relay";
 static const char kSdpDelimiterEqual = '=';
 static const char kSdpDelimiterSpace = ' ';
 static const char kSdpDelimiterColon = ':';
+static const char kSdpDelimiterSlash = '/';
 static const char kLineBreak[] = "\r\n";
 
 // TODO: Generate the Session and Time description
@@ -210,12 +215,14 @@ static bool ParseSessionDescription(const std::string& message, size_t* pos,
                                     std::string* session_version,
                                     bool* supports_msid,
                                     TransportDescription* session_td,
+                                    RtpHeaderExtensions* session_extmaps,
                                     cricket::SessionDescription* desc);
 static bool ParseGroupAttribute(const std::string& line,
                                 cricket::SessionDescription* desc);
 static bool ParseMediaDescription(
     const std::string& message,
     const TransportDescription& session_td,
+    const RtpHeaderExtensions& session_extmaps,
     bool supports_msid,
     size_t* pos, cricket::SessionDescription* desc,
     std::vector<JsepIceCandidate*>* candidates);
@@ -241,6 +248,8 @@ static bool ParseRtpmapAttribute(const std::string& line,
 static bool ParseCandidate(const std::string& message, Candidate* candidate);
 static bool ParseIceOptions(const std::string& line,
                             TransportOptions* transport_options);
+static bool ParseExtmap(const std::string& line,
+                        RtpHeaderExtension* extmap);
 static bool ParseFingerprintAttribute(const std::string& line,
                                       talk_base::SSLFingerprint** fingerprint);
 
@@ -664,7 +673,6 @@ std::string SdpSerializeSessionDescription(
     AddLine(group_line, &message);
   }
 
-
   // MediaStream semantics
   InitAttrLine(kAttributeMsidSemantics, &os);
   os << kSdpDelimiterColon << " " << kMediaStreamSematic;
@@ -721,6 +729,7 @@ bool SdpDeserialize(const std::string& message,
   std::string session_id;
   std::string session_version;
   TransportDescription session_td(NS_JINGLE_ICE_UDP, Candidates());
+  RtpHeaderExtensions session_extmaps;
   cricket::SessionDescription* desc = new cricket::SessionDescription();
   std::vector<JsepIceCandidate*> candidates;
   size_t current_pos = 0;
@@ -729,14 +738,14 @@ bool SdpDeserialize(const std::string& message,
   // Session Description
   if (!ParseSessionDescription(message, &current_pos, &session_id,
                                &session_version, &supports_msid, &session_td,
-                               desc)) {
+                               &session_extmaps, desc)) {
     delete desc;
     return false;
   }
 
   // Media Description
-  if (!ParseMediaDescription(message, session_td, supports_msid,
-                             &current_pos, desc, &candidates)) {
+  if (!ParseMediaDescription(message, session_td, session_extmaps,
+                             supports_msid, &current_pos, desc, &candidates)) {
     delete desc;
     for (std::vector<JsepIceCandidate*>::const_iterator
          it = candidates.begin(); it != candidates.end(); ++it) {
@@ -886,6 +895,31 @@ bool ParseIceOptions(const std::string& line,
   return true;
 }
 
+bool ParseExtmap(const std::string& line, RtpHeaderExtension* extmap) {
+  // RFC 5285
+  // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
+  std::vector<std::string> fields;
+  talk_base::split(line.substr(kLinePrefixLength),
+                   kSdpDelimiterSpace, &fields);
+  const size_t mandatory_fields_num = 2;
+  if (fields.size() < mandatory_fields_num) {
+    LOG_LINE_PARSING_ERROR(line);
+    return false;
+  }
+  std::string uri = fields[1];
+
+  std::string value_direction;
+  if (!GetValue(fields[0], kAttributeExtmap, &value_direction)) {
+    return false;
+  }
+  std::vector<std::string> sub_fields;
+  talk_base::split(value_direction, kSdpDelimiterSlash, &sub_fields);
+  int value = talk_base::FromString<int>(sub_fields[0]);
+
+  *extmap = RtpHeaderExtension(uri, value);
+  return true;
+}
+
 void BuildMediaDescription(const ContentInfo* content_info,
                            const TransportInfo* transport_info,
                            const MediaType media_type,
@@ -996,6 +1030,18 @@ void BuildMediaDescription(const ContentInfo* content_info,
 
       AddLine(os.str(), message);
     }
+  }
+
+  // RFC 5285
+  // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
+  // The definitions MUST be either all session level or all media level. This
+  // implementation uses all media level.
+  for (size_t i = 0; i < media_desc->rtp_header_extensions().size(); ++i) {
+    std::ostringstream os;
+    InitAttrLine(kAttributeExtmap, &os);
+    os << kSdpDelimiterColon << media_desc->rtp_header_extensions()[i].id
+       << kSdpDelimiterSpace << media_desc->rtp_header_extensions()[i].uri;
+    AddLine(os.str(), message);
   }
 
   // RFC 3264
@@ -1253,6 +1299,7 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
                              std::string* session_version,
                              bool* supports_msid,
                              TransportDescription* session_td,
+                             RtpHeaderExtensions* session_extmaps,
                              cricket::SessionDescription* desc) {
   std::string line;
 
@@ -1386,6 +1433,13 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
         return false;
       }
       *supports_msid = (semantics == kMediaStreamSematic);
+    } else if (HasAttribute(line, kAttributeExtmap)) {
+      RtpHeaderExtension extmap;
+      if (!ParseExtmap(line, &extmap)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      session_extmaps->push_back(extmap);
     }
   }
 
@@ -1461,6 +1515,7 @@ static bool ParseFingerprintAttribute(const std::string& line,
 
 bool ParseMediaDescription(const std::string& message,
                            const TransportDescription& session_td,
+                           const RtpHeaderExtensions& session_extmaps,
                            bool supports_msid,
                            size_t* pos,
                            cricket::SessionDescription* desc,
@@ -1555,6 +1610,16 @@ bool ParseMediaDescription(const std::string& message,
     if (supports_msid && content->streams().empty() &&
         content->direction() == cricket::MD_SENDRECV) {
       content->set_direction(cricket::MD_RECVONLY);
+    }
+
+    // Set the extmap.
+    if (!session_extmaps.empty() && !content->rtp_header_extensions().empty()) {
+      LOG(LS_ERROR) << "The a=extmap MUST be either all session level or all "
+                    << "media level.";
+      return false;
+    }
+    for (size_t i = 0; i < session_extmaps.size(); ++i) {
+      content->AddRtpHeaderExtension(session_extmaps[i]);
     }
 
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected,
@@ -1709,6 +1774,13 @@ bool ParseContent(const std::string& message,
         return false;
       }
       transport->identity_fingerprint.reset(fingerprint);
+    } else if (HasAttribute(line, kAttributeExtmap)) {
+      RtpHeaderExtension extmap;
+      if (!ParseExtmap(line, &extmap)) {
+        LOG_LINE_PARSING_ERROR(line);
+        return false;
+      }
+      media_desc->AddRtpHeaderExtension(extmap);
     } else {
       // Only parse lines that we are interested of.
       LOG(LS_INFO) << "Ignored line: " << line;

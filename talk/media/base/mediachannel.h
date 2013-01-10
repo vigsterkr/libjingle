@@ -196,6 +196,7 @@ struct VideoMediaOptions {
   void SetAll(const VideoMediaOptions& change) {
     adapt_input_to_encoder.SetFrom(change.adapt_input_to_encoder);
     adapt_input_to_cpu_usage.SetFrom(change.adapt_input_to_cpu_usage);
+    adapt_view_switch.SetFrom(change.adapt_view_switch);
     video_noise_reduction.SetFrom(change.video_noise_reduction);
     video_leaky_bucket.SetFrom(change.video_leaky_bucket);
     conference_mode.SetFrom(change.conference_mode);
@@ -209,6 +210,7 @@ struct VideoMediaOptions {
   bool operator==(const VideoMediaOptions& o) const {
     return adapt_input_to_encoder == o.adapt_input_to_encoder &&
         adapt_input_to_cpu_usage == o.adapt_input_to_cpu_usage &&
+        adapt_view_switch == o.adapt_view_switch &&
         video_noise_reduction == o.video_noise_reduction &&
         video_leaky_bucket == o.video_leaky_bucket &&
         conference_mode == o.conference_mode &&
@@ -224,6 +226,7 @@ struct VideoMediaOptions {
     ost << "VideoOptions {";
     ost << ToStringIfSet("encoder adaption", adapt_input_to_encoder);
     ost << ToStringIfSet("cpu adaption", adapt_input_to_cpu_usage);
+    ost << ToStringIfSet("adapt view switch", adapt_view_switch);
     ost << ToStringIfSet("noise reduction", video_noise_reduction);
     ost << ToStringIfSet("leaky bucket", video_leaky_bucket);
     ost << ToStringIfSet("conference mode", conference_mode);
@@ -238,6 +241,8 @@ struct VideoMediaOptions {
   Settable<bool> adapt_input_to_encoder;
   // Enable CPU adaptation?
   Settable<bool> adapt_input_to_cpu_usage;
+  // Enable Adapt View Switch?
+  Settable<bool> adapt_view_switch;
   // Enable denoising?
   Settable<bool> video_noise_reduction;
   // Enable WebRTC leaky bucket when sending media packets.
@@ -307,6 +312,8 @@ enum VideoMediaChannelOptions {
   // Enable video adaption based on encoder's estimation on bandwidth and
   // cpu load.
   OPT_ADAPT_INPUT_TO_ENCODER = 0x40000,
+  // Adapt view switch which quickly switches resolution up on view request.
+  OPT_ADAPT_VIEW_SWITCH = 0x1000000,
   // Enable video noise reduction.
   OPT_VIDEO_NOISE_REDUCTION = 0x80000,
   // Enable WebRTC leaky bucket when sending media packets.

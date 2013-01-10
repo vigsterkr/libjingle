@@ -160,11 +160,6 @@ class MediaStreamSignaling {
   // Updates local DataChannels with information about its local SSRC.
   void UpdateLocalStreams(const SessionDescriptionInterface* desc);
 
-  // Notify the MediaStreamSignaling object that media has been received.
-  // This is used by MediaStreamSignaling to decide if a default remote
-  // MediaStream must be created.
-  void SetMediaReceived();
-
   // Returns the SSRC for a given track.
   bool GetRemoteTrackSsrc(const std::string& name, uint32* ssrc) const;
 
@@ -200,29 +195,22 @@ class MediaStreamSignaling {
 
   struct RemotePeerInfo {
     RemotePeerInfo()
-        : media_received(false),
-          description_set_once(false),
-          supports_msid(false),
-          supports_audio(false),
-          supports_video(false) {
+        : msid_supported(false),
+          default_audio_track_needed(false),
+          default_video_track_needed(false) {
     }
-    bool media_received;  // Media has been received from the remote peer.
-    // UpdateRemoteStreams has been called at least once.
-    bool description_set_once;
-    bool supports_msid;
-    // The remote peer indicates in the session description that audio is
-    // supported.
-    bool supports_audio;
-    // The remote peer indicates in the session description that video is
-    // supported.
-    bool supports_video;
+    // True if it has been discovered that the remote peer support MSID.
+    bool msid_supported;
+    // The remote peer indicates in the session description that audio will be
+    // sent but no MSID is given.
+    bool default_audio_track_needed;
+    // The remote peer indicates in the session description that video will be
+    // sent but no MSID is given.
+    bool default_video_track_needed;
 
     bool IsDefaultMediaStreamNeeded() {
-      // Returns true iff media has been received and
-      // UpdateRemoteStreams has been called at least once but never with any
-      // StreamParams and it support audio and/or video.
-      return media_received && description_set_once && !supports_msid &&
-          (supports_audio || supports_video);
+      return !msid_supported && (default_audio_track_needed ||
+          default_video_track_needed);
     }
   };
   RemotePeerInfo remote_info_;
