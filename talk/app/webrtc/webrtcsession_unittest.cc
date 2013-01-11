@@ -36,6 +36,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/network.h"
 #include "talk/base/physicalsocketserver.h"
+#include "talk/base/sslstreamadapter.h"
 #include "talk/base/stringutils.h"
 #include "talk/base/thread.h"
 #include "talk/base/virtualsocketserver.h"
@@ -47,6 +48,12 @@
 #include "talk/p2p/client/basicportallocator.h"
 #include "talk/session/media/channelmanager.h"
 #include "talk/session/media/mediasession.h"
+
+#define MAYBE_SKIP_TEST(feature)                    \
+  if (!(feature())) {                               \
+    LOG(LS_INFO) << "Feature disabled... skipping"; \
+    return;                                         \
+  }
 
 using cricket::kDtmfDelay;
 using cricket::kDtmfReset;
@@ -389,7 +396,7 @@ class WebRtcSessionTest : public testing::Test {
 
   // Set the internal fake description factories to do DTLS-SRTP.
   void SetFactoryDtlsSrtp() {
-    desc_factory_->set_secure(cricket::SEC_REQUIRED);  
+    desc_factory_->set_secure(cricket::SEC_REQUIRED);
     std::string identity_name = "WebRTC" +
         talk_base::ToString(talk_base::CreateRandomId());
     tdesc_factory_->set_identity(talk_base::SSLIdentity::Generate(
@@ -837,7 +844,8 @@ TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
 }
 
 // Test that we can create and set an offer with a DTLS fingerprint.
-TEST_F(WebRtcSessionTest, DISABLED_CreateSetDtlsOffer) {
+TEST_F(WebRtcSessionTest, CreateSetDtlsOffer) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
   WebRtcSessionTest::InitWithDtls();
   SessionDescriptionInterface* offer = session_->CreateOffer(MediaHints());
   ASSERT_TRUE(offer != NULL);
@@ -848,7 +856,8 @@ TEST_F(WebRtcSessionTest, DISABLED_CreateSetDtlsOffer) {
 
 // Test that we can process an offer with a DTLS fingerprint
 // and that we return an answer with a fingerprint.
-TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
+TEST_F(WebRtcSessionTest, ReceiveDtlsOfferCreateAnswer) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
   WebRtcSessionTest::InitWithDtls();
   SetFactoryDtlsSrtp();
   cricket::MediaSessionOptions options;
@@ -857,8 +866,7 @@ TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
   ASSERT_TRUE(offer != NULL);
   VerifyFingerprintStatus(offer->description(), true);
 
-  // SetRemoteDescription will take the ownership of
-  // the offer.
+  // SetRemoteDescription will take the ownership of the offer.
   EXPECT_TRUE(session_->SetRemoteDescription(offer));
 
   // Verify that we get a crypto fingerprint in the answer.
@@ -867,18 +875,16 @@ TEST_F(WebRtcSessionTest, DISABLED_ReceiveDtlsOfferCreateAnswer) {
   ASSERT_TRUE(answer != NULL);
   VerifyFingerprintStatus(answer->description(), true);
   // Check that we don't have an a=crypto line in the answer.
-#if 0
-  // Broken for now.
   VerifyNoCryptoParams(answer->description());
-#endif
 
-  // Now set the local description.
+  // Now set the local description, which should work, even without a=crypto.
   EXPECT_TRUE(session_->SetLocalDescription(answer));
 }
 
-// Test that if the other side didn't offer a fingerprint, we don't
-// either.
+// Test that even if we support DTLS, if the other side didn't offer a
+// fingerprint, we don't either.
 TEST_F(WebRtcSessionTest, ReceiveNoDtlsOfferCreateAnswer) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
   WebRtcSessionTest::InitWithDtls();
   desc_factory_->set_secure(cricket::SEC_REQUIRED);
   cricket::MediaSessionOptions options;

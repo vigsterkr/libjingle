@@ -989,9 +989,12 @@ void BuildMediaDescription(const ContentInfo* content_info,
   const std::string port = content_info->rejected ?
       kMediaPortRejected : kDefaultPort;
   const char* proto = kMediaProtocolAvpf;
+  talk_base::SSLFingerprint* fp = (transport_info) ?
+      transport_info->description.identity_fingerprint.get() : NULL;
+
   // RFC 4568
-  // SRTP security descriptions MUST only be used with the SRTP transport.
-  if (media_desc->cryptos().size() > 0) {
+  // If we're doing SRTP (either SDES or DTLS), use the SAVPF profile.
+  if (media_desc->cryptos().size() > 0 || fp) {
     proto = kMediaProtocolSavpf;
   }
   InitLine(kLineTypeMedia, type, &os);
@@ -1018,9 +1021,6 @@ void BuildMediaDescription(const ContentInfo* content_info,
     // RFC 4572
     // fingerprint-attribute  =
     //   "fingerprint" ":" hash-func SP fingerprint
-    talk_base::SSLFingerprint* fp = // Reduce typing.
-        transport_info->description.identity_fingerprint.get();
-
     if (fp) {
       // Insert the fingerprint attribute.
       InitAttrLine(kAttributeFingerprint, &os);

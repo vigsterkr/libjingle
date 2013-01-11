@@ -41,10 +41,18 @@
 #include "talk/app/webrtc/videosourceinterface.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
+#include "talk/base/ssladapter.h"
+#include "talk/base/sslstreamadapter.h"
 #include "talk/base/thread.h"
 #include "talk/p2p/base/constants.h"
 #include "talk/p2p/base/sessiondescription.h"
 #include "talk/session/media/mediasession.h"
+
+#define MAYBE_SKIP_TEST(feature)                    \
+  if (!(feature())) {                               \
+    LOG(LS_INFO) << "Feature disabled... skipping"; \
+    return;                                         \
+  }
 
 using cricket::ContentInfo;
 using cricket::MediaContentDescription;
@@ -575,16 +583,16 @@ class JsepTestClient
   }
 
   // This modifies all received SDP messages before they are processed.
-  void  FilterIncomingSdpMessage(std::string* sdp) {
+  void FilterIncomingSdpMessage(std::string* sdp) {
     if (remove_msid_) {
-      const char kSdpSsrcAtribute[] = "a=ssrc:";
-      RemoveLinesFromSdp(kSdpSsrcAtribute, sdp);
-      const char kSdpMsidSupportedAtribute[] = "a=msid-semantic:";
-      RemoveLinesFromSdp(kSdpMsidSupportedAtribute, sdp);
+      const char kSdpSsrcAttribute[] = "a=ssrc:";
+      RemoveLinesFromSdp(kSdpSsrcAttribute, sdp);
+      const char kSdpMsidSupportedAttribute[] = "a=msid-semantic:";
+      RemoveLinesFromSdp(kSdpMsidSupportedAttribute, sdp);
     }
     if (remove_bundle_) {
-      const char kSdpBundleAtribute[] = "a=group:BUNDLE";
-      RemoveLinesFromSdp(kSdpBundleAtribute, sdp);
+      const char kSdpBundleAttribute[] = "a=group:BUNDLE";
+      RemoveLinesFromSdp(kSdpBundleAttribute, sdp);
     }
   }
 
@@ -635,6 +643,9 @@ class P2PTestConductor : public testing::Test {
     EXPECT_EQ(height, initializing_client()->rendered_height());
   }
 
+  P2PTestConductor() {
+    talk_base::InitializeSSL(NULL);
+  }
   ~P2PTestConductor() {
     if (initiating_client_) {
       initiating_client_->set_signaling_message_receiver(NULL);
@@ -762,6 +773,44 @@ TEST_F(JsepPeerConnectionP2PTestClient, DISABLED_LocalP2PTest1280By720) {
   VerifyRenderedSize(1280, 720);
 }
 
+// This test sets up a call between two endpoints that are configured to use
+// DTLS key agreement. As a result, DTLS is negotiated and used for transport.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDtls) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
+  FakeConstraints setup_constraints;
+  setup_constraints.AddMandatory(MediaConstraintsInterface::kEnableDtlsSrtp,
+                                 MediaConstraintsInterface::kValueTrue);
+  ASSERT_TRUE(CreateTestClients(&setup_constraints, &setup_constraints));
+  LocalP2PTest();
+  VerifyRenderedSize(640, 480);
+}
+
+// This test sets up a call between an endpoint configured to use either SDES or
+// DTLS (the offerer) and just SDES (the answerer). As a result, SDES is used
+// instead of DTLS.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestOfferDtlsToSdes) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
+  FakeConstraints setup_constraints;
+  setup_constraints.AddMandatory(MediaConstraintsInterface::kEnableDtlsSrtp,
+                                 MediaConstraintsInterface::kValueTrue);
+  ASSERT_TRUE(CreateTestClients(&setup_constraints, NULL));
+  LocalP2PTest();
+  VerifyRenderedSize(640, 480);
+}
+
+// This test sets up a call between an endpoint configured to use SDES
+// (the offerer) and either SDES or DTLS (the answerer). As a result, SDES is
+// used instead of DTLS.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestOfferSdesToDtls) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
+  FakeConstraints setup_constraints;
+  setup_constraints.AddMandatory(MediaConstraintsInterface::kEnableDtlsSrtp,
+                                 MediaConstraintsInterface::kValueTrue);
+  ASSERT_TRUE(CreateTestClients(NULL, &setup_constraints));
+  LocalP2PTest();
+  VerifyRenderedSize(640, 480);
+}
+
 // This test sets up a Jsep call between two parties, and the callee only
 // accept to receive video.
 TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestAnswerVideo) {
@@ -866,7 +915,7 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDataChannel) {
 
 // This test sets up a call between two parties with audio, video and but only
 // the initiating client support data.
-TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestReceiverDontSupportData) {
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestReceiverDoesntSupportData) {
   FakeConstraints setup_constraints;
   setup_constraints.SetAllowRtpDataChannels();
   ASSERT_TRUE(CreateTestClients(&setup_constraints, NULL));

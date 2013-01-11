@@ -174,7 +174,7 @@ std::string P2pCandidateXml(const std::string& name, int port_index) {
   std::string username = GetUsername(port_index);
   // TODO: Use the component id instead of the channel name to
   // determinte if we need to covert the username here.
-  if (name == "rtcp" || name == "video_rtp" || name == "chanb") {
+  if (name == "rtcp" || name == "video_rtcp" || name == "chanb") {
     char next_ch = username[username.size() - 1];
     ASSERT(username.size() > 0);
     talk_base::Base64::GetNextBase64Char(next_ch, &next_ch);
@@ -1068,11 +1068,15 @@ class TestClient : public sigslot::has_slots<> {
 
   void CreateChannels() {
     ASSERT(session != NULL);
+    // We either have a single content with multiple components (RTP/RTCP), or
+    // multiple contents with single components, but not both.
+    int component_a = 1;
+    int component_b = (content_name_a == content_name_b) ? 2 : 1;
     chan_a = new ChannelHandler(
-        session->CreateChannel(content_name_a, channel_name_a, 1),
+        session->CreateChannel(content_name_a, channel_name_a, component_a),
         channel_name_a);
     chan_b = new ChannelHandler(
-        session->CreateChannel(content_name_b, channel_name_b, 2),
+        session->CreateChannel(content_name_b, channel_name_b, component_b),
         channel_name_b);
   }
 
@@ -1195,10 +1199,13 @@ class SessionTest : public testing::Test {
     EXPECT_EQ(cricket::BaseSession::STATE_INIT,
               initiator->session_state());
 
+    // See comment in CreateChannels about how we choose component IDs.
+    int component_a = 1;
+    int component_b = (content_name_a == content_name_b) ? 2 : 1;
     EXPECT_TRUE(initiator->HasTransport(content_name_a));
-    EXPECT_TRUE(initiator->HasChannel(content_name_a, 1));
+    EXPECT_TRUE(initiator->HasChannel(content_name_a, component_a));
     EXPECT_TRUE(initiator->HasTransport(content_name_b));
-    EXPECT_TRUE(initiator->HasChannel(content_name_b, 2));
+    EXPECT_TRUE(initiator->HasChannel(content_name_b, component_b));
 
     // Initiate and expect initiate message sent.
     cricket::SessionDescription* offer = NewTestSessionDescription(
@@ -1239,9 +1246,9 @@ class SessionTest : public testing::Test {
               responder->session_state());
 
     EXPECT_TRUE(responder->HasTransport(content_name_a));
-    EXPECT_TRUE(responder->HasChannel(content_name_a, 1));
+    EXPECT_TRUE(responder->HasChannel(content_name_a, component_a));
     EXPECT_TRUE(responder->HasTransport(content_name_b));
-    EXPECT_TRUE(responder->HasChannel(content_name_b, 2));
+    EXPECT_TRUE(responder->HasChannel(content_name_b, component_b));
 
     // Expect transport-info message from initiator.
     // But don't send candidates until initiate ack is received.

@@ -405,6 +405,7 @@ class FakeSession : public BaseSession {
     for (TransportMap::const_iterator it = transport_proxies().begin();
         it != transport_proxies().end(); ++it) {
       it->second->CompleteNegotiation();
+      it->second->ConnectChannels();
     }
   }
 

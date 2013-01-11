@@ -43,6 +43,7 @@
 #include "talk/session/media/channelmanager.h"
 #include "talk/session/media/mediasession.h"
 
+using cricket::ContentInfo;
 using cricket::ContentInfos;
 using cricket::MediaContentDescription;
 using cricket::SessionDescription;
@@ -115,19 +116,38 @@ static void CopyCandidatesFromSessionDescription(
   }
 }
 
-static bool HasCrypto(const SessionDescription* desc) {
+// Checks that each non-rejected content has SDES crypto keys or a DTLS
+// fingerprint. Mismatches, such as replying with a DTLS fingerprint to SDES
+// keys, will be caught in Transport negotiation, and backstopped by Channel's
+// |secure_required| check.
+static bool VerifyCrypto(const SessionDescription* desc) {
   if (!desc) {
     return false;
   }
   const ContentInfos& contents = desc->contents();
   for (size_t index = 0; index < contents.size(); ++index) {
+    const ContentInfo* cinfo = &contents[index];
+    if (cinfo->rejected) {
+      continue;
+    }
+
+    // If the content isn't rejected, crypto must be present.
     const MediaContentDescription* media =
-        static_cast<const MediaContentDescription*>(
-            contents[index].description);
-    if (media && media->cryptos().empty()) {
+        static_cast<const MediaContentDescription*>(cinfo->description);
+    const TransportInfo* tinfo = desc->GetTransportInfoByName(cinfo->name);
+    if (!media || !tinfo) {
+      // Something is not right.
+      LOG(LS_ERROR) << "Invalid session description.";
+      return false;
+    }
+    if (media->cryptos().empty() &&
+        !tinfo->description.identity_fingerprint) {
+      // Crypto must be supplied.
+      LOG(LS_WARNING) << "Session description must have SDES or DTLS-SRTP.";
       return false;
     }
   }
+
   return true;
 }
 
@@ -334,10 +354,7 @@ bool WebRtcSession::Initialize(const MediaConstraintsInterface* constraints) {
   // By default SRTP-SDES is enabled in WebRtc.
   set_secure_policy(cricket::SEC_REQUIRED);
 
-#if 0
   // Enable DTLS-SRTP if the constraint is set.
-  // DTLS-SRTP currently disabled in this code base pending landing
-  // of CLs this depends on.
   std::string value;
   if (FindConstraint(constraints, MediaConstraintsInterface::kEnableDtlsSrtp,
       &value, NULL) && value == MediaConstraintsInterface::kValueTrue) {
@@ -352,9 +369,8 @@ bool WebRtcSession::Initialize(const MediaConstraintsInterface* constraints) {
 
     transport_desc_factory_.set_secure(cricket::SEC_ENABLED);
   }
-#endif
+
   // Enable creation of RTP data channels if the kEnableRtpDataChannels is set.
-  std::string value;
   allow_rtp_data_engine_ = FindConstraint(
       constraints, MediaConstraintsInterface::kEnableRtpDataChannels,
       &value, NULL) && value == MediaConstraintsInterface::kValueTrue;
@@ -516,8 +532,9 @@ bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
     delete desc;
     return false;
   }
+
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
-      !HasCrypto(desc->description())) {
+      !VerifyCrypto(desc->description())) {
     LOG(LS_ERROR) << "SetLocalDescription called with a session"
                   <<" description without crypto enabled";
     delete desc;
@@ -586,7 +603,7 @@ bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
   }
 
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
-      !HasCrypto(desc->description())) {
+      !VerifyCrypto(desc->description())) {
     LOG(LS_ERROR) << "SetRemoteDescription called with a session"
                   <<" description without crypto enabled";
     delete desc;
@@ -646,10 +663,8 @@ bool WebRtcSession::UpdateSessionState(
     // Remove channel and transport proxies, if MediaContentDescription is
     // rejected in local session description.
     RemoveUnusedChannelsAndTransports(desc);
-    if (!transport_muxed()) {
-      MaybeEnableMuxingSupport();
-    }
     if (PushdownTransportDescription(source, cricket::CA_ANSWER)) {
+      MaybeEnableMuxingSupport();
       EnableChannels();
       SetState(source == cricket::CS_LOCAL ?
           STATE_SENTACCEPT : STATE_RECEIVEDACCEPT);

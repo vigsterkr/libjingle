@@ -90,12 +90,6 @@ typedef std::map<int, TransportChannelProxy*> ChannelMap;
 class TransportProxy : public sigslot::has_slots<>,
                        public CandidateTranslator {
  public:
-  enum TransportState {
-    STATE_INIT,
-    STATE_CONNECTING,
-    STATE_NEGOTIATED
-  };
-
   TransportProxy(
       const std::string& sid,
       const std::string& content_name,
@@ -103,7 +97,8 @@ class TransportProxy : public sigslot::has_slots<>,
       : sid_(sid),
         content_name_(content_name),
         transport_(transport),
-        state_(STATE_INIT),
+        connecting_(false),
+        negotiated_(false),
         sent_candidates_(false),
         candidates_allocated_(false) {
     transport_->get()->SignalCandidatesReady.connect(
@@ -112,54 +107,48 @@ class TransportProxy : public sigslot::has_slots<>,
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
-  // Ideally we should never set or update content names. This value should
-  // be set during transport proxy creation time. But in some case we may need
-  // to change from the initial value ( e.g. creating transport proxy before
-  // setLocalDescription in webrtc. Due to this reason method name is
-  // UpdateContentName not set_content_name.
-  void UpdateContentName(const std::string& content_name) {
-    content_name_ = content_name;
-  }
+  // TODO: It's not good form to expose the object you're wrapping,
+  // since callers can mutate it. Can we make this return a const Transport*?
   Transport* impl() const { return transport_->get(); }
 
   std::string type() const;
-  TransportState state() const { return state_; }
-  bool negotiated() const { return state_ == STATE_NEGOTIATED; }
+  bool negotiated() const { return negotiated_; }
   const Candidates& sent_candidates() const { return sent_candidates_; }
   const Candidates& unsent_candidates() const { return unsent_candidates_; }
+  bool candidates_allocated() const { return candidates_allocated_; }
+  void set_candidates_allocated(bool allocated) {
+    candidates_allocated_ = allocated;
+  }
 
   TransportChannel* GetChannel(int component);
   TransportChannel* CreateChannel(const std::string& channel_name,
                                   int component);
   bool HasChannel(int component);
   void DestroyChannel(int component);
+
   void AddSentCandidates(const Candidates& candidates);
   void AddUnsentCandidates(const Candidates& candidates);
   void ClearSentCandidates() { sent_candidates_.clear(); }
   void ClearUnsentCandidates() { unsent_candidates_.clear(); }
-  void SpeculativelyConnectChannels();
+
+  // Start the connection process for any channels, creating impls if needed.
+  void ConnectChannels();
+  // Hook up impls to the proxy channels. Doesn't change connect state.
   void CompleteNegotiation();
-  void SetupMux(TransportProxy* proxy);
-  const ChannelMap& channels() { return channels_; }
-  void set_candidates_allocated(bool allocated) {
-    candidates_allocated_ = allocated;
-  }
-  bool candidates_allocated() { return candidates_allocated_; }
+
+  // Mux this proxy onto the specified proxy's transport.
+  bool SetupMux(TransportProxy* proxy);
+
+  // Simple functions that thunk down to the same functions on Transport.
+  void SetRole(TransportRole role);
   bool SetLocalTransportDescription(const TransportDescription& description,
-                                    ContentAction action) {
-    return transport_->get()->SetLocalTransportDescription(description, action);
-  }
+                                    ContentAction action);
   bool SetRemoteTransportDescription(const TransportDescription& description,
-                                     ContentAction action) {
-    return transport_->get()->SetRemoteTransportDescription(description,
-                                                            action);
-  }
+                                     ContentAction action);
+  void OnSignalingReady();
+  bool OnRemoteCandidates(const Candidates& candidates, std::string* error);
 
-  void OnRemoteCandidates(const Candidates& candidates) {
-    transport_->get()->OnRemoteCandidates(candidates);
-  }
-
-  // As CandidateTranslator
+  // CandidateTranslator methods.
   virtual bool GetChannelNameFromComponent(
       int component, std::string* channel_name) const;
   virtual bool GetComponentFromChannelName(
@@ -173,7 +162,7 @@ class TransportProxy : public sigslot::has_slots<>,
 
   // Handles sending of ready candidates and receiving of remote candidates.
   sigslot::signal2<TransportProxy*,
-                   const std::vector<Candidate>&> SignalCandidatesReady;
+                         const std::vector<Candidate>&> SignalCandidatesReady;
 
  private:
   TransportChannelProxy* GetChannelProxy(int component) const;
@@ -187,7 +176,8 @@ class TransportProxy : public sigslot::has_slots<>,
   std::string sid_;
   std::string content_name_;
   talk_base::scoped_refptr<TransportWrapper> transport_;
-  TransportState state_;
+  bool connecting_;
+  bool negotiated_;
   ChannelMap channels_;
   Candidates sent_candidates_;
   Candidates unsent_candidates_;
@@ -373,11 +363,6 @@ class BaseSession : public sigslot::has_slots<>,
   // Creates the actual transport object. Overridable for testing.
   virtual Transport* CreateTransport(const std::string& content_name);
 
-  // Method to update TransportMap entry to a different content name for a
-  // transport proxy.
-  void UpdateContentName(const std::string& old_content_name,
-                         const std::string& new_content_name);
-
   void OnSignalingReady();
   void SpeculativelyConnectAllTransportChannels();
   // Helper method to provide remote candidates to the transport.
@@ -388,8 +373,6 @@ class BaseSession : public sigslot::has_slots<>,
   // This method will mux transport channels by content_name.
   // First content is used for muxing.
   bool MaybeEnableMuxingSupport();
-  void MaybeCandidatesAllocationDone();
-  bool transport_muxed() const { return transport_muxed_; }
 
   // Called when a transport requests signaling.
   virtual void OnTransportRequestSignaling(Transport* transport) {
@@ -453,13 +436,15 @@ class BaseSession : public sigslot::has_slots<>,
   // Helper methods to push local and remote transport descriptions.
   bool PushdownLocalTransportDescription(ContentAction action);
   bool PushdownRemoteTransportDescription(ContentAction action);
-  // This method will check GroupInfo in local and remote SessionDescriptions.
-  bool ContentsGrouped();
-  // This method will delete the Transport and TransportChannelImpl's and
+
+  bool IsCandidateAllocationDone() const;
+  void MaybeCandidateAllocationDone();
+
+  // This method will delete the Transport and TransportChannelImpls and
   // replace those with the selected Transport objects. Selection is done
   // based on the content_name and in this case first MediaContent information
   // is used for mux.
-  void SetSelectedProxy(const std::string& content_name,
+  bool SetSelectedProxy(const std::string& content_name,
                         const ContentGroup* muxed_group);
   // Log session state.
   void LogState(State old_state, State new_state);

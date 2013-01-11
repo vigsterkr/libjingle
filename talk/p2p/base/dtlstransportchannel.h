@@ -190,10 +190,8 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   virtual void SetIcePwd(const std::string& ice_pwd) {
     channel_->SetIcePwd(ice_pwd);
   }
-  virtual void Connect() {
-    channel_->Connect();
-  }
 
+  virtual void Connect();
   virtual void Reset();
 
   virtual void OnSignalingReady() {

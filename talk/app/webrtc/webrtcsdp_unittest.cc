@@ -88,6 +88,13 @@ static const char kCandidateFoundation1[] = "a0+B/1";
 static const char kCandidateFoundation2[] = "a0+B/2";
 static const char kCandidateFoundation3[] = "a0+B/3";
 static const char kCandidateFoundation4[] = "a0+B/4";
+static const char kAttributeCryptoVoice[] =
+    "a=crypto:1 AES_CM_128_HMAC_SHA1_32 "
+    "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32 "
+    "dummy_session_params\r\n";
+static const char kAttributeCryptoVideo[] =
+    "a=crypto:1 AES_CM_128_HMAC_SHA1_80 "
+    "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n";
 static const char kFingerprint[] = "a=fingerprint:sha-1 "
     "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB\r\n";
 static const int kExtmapId = 1;
@@ -854,6 +861,11 @@ class WebRtcSdpTest : public testing::Test {
     desc_.AddContent(kVideoContentName, NS_JINGLE_RTP, video_desc_);
   }
 
+  void RemoveCryptos() {
+    audio_desc_->set_cryptos(std::vector<CryptoParams>());
+    video_desc_->set_cryptos(std::vector<CryptoParams>());
+  }
+
   bool TestSerializeDirection(cricket::MediaContentDirection direction) {
     audio_desc_->set_direction(direction);
     video_desc_->set_direction(direction);
@@ -1016,9 +1028,11 @@ TEST_F(WebRtcSdpTest, SerializeSessionDescriptionEmpty) {
   EXPECT_EQ("", webrtc::SdpSerialize(jdesc_empty));
 }
 
+// This tests serialization of SDP with a=crypto and a=fingerprint, as would be
+// the case in a DTLS offer.
 TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithFingerprint) {
   AddFingerprint();
-  JsepSessionDescription jdesc_with_fingerprint("dummy");
+  JsepSessionDescription jdesc_with_fingerprint(kDummyString);
   ASSERT_TRUE(jdesc_with_fingerprint.Initialize(desc_.Copy(),
                                                 kSessionId, kSessionVersion));
   std::string message = webrtc::SdpSerialize(jdesc_with_fingerprint);
@@ -1032,8 +1046,29 @@ TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithFingerprint) {
   EXPECT_EQ(sdp_with_fingerprint, message);
 }
 
+// This tests serialization of SDP with a=fingerprint with no a=crypto, as would
+// be the case in a DTLS answer.
+TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithFingerprintNoCryptos) {
+  AddFingerprint();
+  RemoveCryptos();
+  JsepSessionDescription jdesc_with_fingerprint(kDummyString);
+  ASSERT_TRUE(jdesc_with_fingerprint.Initialize(desc_.Copy(),
+                                                kSessionId, kSessionVersion));
+  std::string message = webrtc::SdpSerialize(jdesc_with_fingerprint);
+
+  std::string sdp_with_fingerprint = kSdpString;
+  Replace(kAttributeCryptoVoice, "", &sdp_with_fingerprint);
+  Replace(kAttributeCryptoVideo, "", &sdp_with_fingerprint);
+  InjectAfter(kAttributeIcePwdVoice,
+              kFingerprint, &sdp_with_fingerprint);
+  InjectAfter(kAttributeIcePwdVideo,
+              kFingerprint, &sdp_with_fingerprint);
+
+  EXPECT_EQ(sdp_with_fingerprint, message);
+}
+
 TEST_F(WebRtcSdpTest, SerializeSessionDescriptionWithoutCandidates) {
-  // SessionDescription with desc but without candidates.
+  // JsepSessionDescription with desc but without candidates.
   JsepSessionDescription jdesc_no_candidates(kDummyString);
   ASSERT_TRUE(jdesc_no_candidates.Initialize(desc_.Copy(),
                                              kSessionId, kSessionVersion));
@@ -1176,20 +1211,19 @@ TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionWithoutCandidates) {
   EXPECT_TRUE(CompareSessionDescription(jdesc_no_candidates, new_jdesc));
 }
 
-TEST_F(WebRtcSdpTest, DeserializeSessionDescriptionWithFingerprint) {
-  // SessionDescription with DTLS fingerprint.
+// Ensure that we can deserialize SDP with a=fingerprint properly.
+TEST_F(WebRtcSdpTest, DeserializeJsepSessionDescriptionWithFingerprint) {
+  // Add a DTLS a=fingerprint attribute to our session description.
   AddFingerprint();
-  JsepSessionDescription new_jdesc("dummy");
+  JsepSessionDescription new_jdesc(kDummyString);
   ASSERT_TRUE(new_jdesc.Initialize(desc_.Copy(),
                                    jdesc_.session_id(),
                                    jdesc_.session_version()));
 
-  JsepSessionDescription jdesc_with_fingerprint("dummy");
+  JsepSessionDescription jdesc_with_fingerprint(kDummyString);
   std::string sdp_with_fingerprint = kSdpString;
   InjectAfter(kAttributeIcePwdVoice, kFingerprint, &sdp_with_fingerprint);
-  InjectAfter(kAttributeIcePwdVideo,
-              kFingerprint,
-              &sdp_with_fingerprint);
+  InjectAfter(kAttributeIcePwdVideo, kFingerprint, &sdp_with_fingerprint);
   EXPECT_TRUE(webrtc::SdpDeserialize(sdp_with_fingerprint,
                                      &jdesc_with_fingerprint));
   EXPECT_TRUE(CompareSessionDescription(jdesc_with_fingerprint, new_jdesc));
