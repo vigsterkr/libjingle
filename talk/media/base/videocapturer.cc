@@ -159,8 +159,8 @@ bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
 
 void VideoCapturer::AddVideoProcessor(VideoProcessor* video_processor) {
   talk_base::CritScope cs(&crit_);
-  ASSERT(find(video_processors_.begin(), video_processors_.end(),
-              video_processor) == video_processors_.end());
+  ASSERT(std::find(video_processors_.begin(), video_processors_.end(),
+                   video_processor) == video_processors_.end());
   video_processors_.push_back(video_processor);
 }
 

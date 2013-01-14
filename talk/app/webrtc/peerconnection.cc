@@ -355,7 +355,7 @@ bool PeerConnection::CanSendDtmf(const AudioTrackInterface* track) {
   if (!track) {
     return false;
   }
-  return session_->CanSendDtmf(track->label());
+  return session_->CanSendDtmf(track->id());
 }
 
 bool PeerConnection::SendDtmf(const AudioTrackInterface* send_track,
@@ -366,10 +366,10 @@ bool PeerConnection::SendDtmf(const AudioTrackInterface* send_track,
   }
   std::string play_name;
   if (play_track) {
-    play_name = play_track->label();
+    play_name = play_track->id();
   }
 
-  return session_->SendDtmf(send_track->label(), tones, duration, play_name);
+  return session_->SendDtmf(send_track->id(), tones, duration, play_name);
 }
 
 talk_base::scoped_refptr<DataChannelInterface>

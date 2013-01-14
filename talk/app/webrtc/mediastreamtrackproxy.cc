@@ -35,7 +35,7 @@ namespace {
 enum {
   MSG_REGISTER_OBSERVER = 1,
   MSG_UNREGISTER_OBSERVER,
-  MSG_LABEL,
+  MSG_ID,
   MSG_ENABLED,
   MSG_SET_ENABLED,
   MSG_STATE,
@@ -84,14 +84,14 @@ std::string MediaStreamTrackProxy<T>::kind() const {
 }
 
 template <class T>
-std::string MediaStreamTrackProxy<T>::label() const {
+std::string MediaStreamTrackProxy<T>::id() const {
   if (!signaling_thread_->IsCurrent()) {
     std::string label;
     LabelMessageData msg(&label);
-    Send(MSG_LABEL, &msg);
+    Send(MSG_ID, &msg);
     return label;
   }
-  return track_->label();
+  return track_->id();
 }
 
 template <class T>
@@ -178,9 +178,9 @@ bool MediaStreamTrackProxy<T>::HandleMessage(talk_base::Message* msg) {
       return true;
       break;
     }
-    case MSG_LABEL: {
+    case MSG_ID: {
       LabelMessageData* label = static_cast<LabelMessageData*>(data);
-      *(label->data()) = track_->label();
+      *(label->data()) = track_->id();
       return true;
     }
     case MSG_SET_ENABLED: {

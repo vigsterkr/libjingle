@@ -345,14 +345,12 @@ class FakeWebRtcVoiceEngine
     codec = channels_[channel]->send_codec;
     return 0;
   }
-#ifdef USE_WEBRTC_DEV_BRANCH
   WEBRTC_STUB(SetSecondarySendCodec, (int channel,
                                       const webrtc::CodecInst& codec,
                                       int red_payload_type));
   WEBRTC_STUB(RemoveSecondarySendCodec, (int channel));
   WEBRTC_STUB(GetSecondarySendCodec, (int channel,
                                       webrtc::CodecInst& codec));
-#endif
   WEBRTC_STUB(GetRecCodec, (int channel, webrtc::CodecInst& codec));
   WEBRTC_STUB(SetAMREncFormat, (int channel, webrtc::AmrMode mode));
   WEBRTC_STUB(SetAMRDecFormat, (int channel, webrtc::AmrMode mode));
@@ -582,12 +580,10 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(AudioDeviceControl, (unsigned int, unsigned int, unsigned int));
   WEBRTC_STUB(SetLoudspeakerStatus, (bool enable));
   WEBRTC_STUB(GetLoudspeakerStatus, (bool& enabled));
-#ifdef USE_WEBRTC_DEV_BRANCH
   WEBRTC_STUB(SetRecordingSampleRate, (unsigned int samples_per_sec));
   WEBRTC_STUB_CONST(RecordingSampleRate, (unsigned int* samples_per_sec));
   WEBRTC_STUB(SetPlayoutSampleRate, (unsigned int samples_per_sec));
   WEBRTC_STUB_CONST(PlayoutSampleRate, (unsigned int* samples_per_sec));
-#endif
   WEBRTC_STUB(EnableBuiltInAEC, (bool enable));
   virtual bool BuiltInAECIsEnabled() const { return true; }
 
@@ -751,10 +747,8 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(InsertExtraRTPPacket, (int channel, unsigned char payloadType,
                                      bool markerBit, const char* payloadData,
                                      unsigned short payloadSize));
-#ifdef USE_WEBRTC_DEV_BRANCH
   WEBRTC_STUB(GetLastRemoteTimeStamp, (int channel,
                                        uint32_t* lastRemoteTimeStamp));
-#endif
 
   // webrtc::VoEVideoSync
   WEBRTC_STUB(GetPlayoutBufferSize, (int& bufferMs));
@@ -952,11 +946,9 @@ class FakeWebRtcVoiceEngine
   WEBRTC_STUB(ExternalPlayoutGetData,
               (WebRtc_Word16 speechData10ms[], int samplingFreqHz,
                int current_delay_ms, int& lengthSamples));
-#ifdef USE_WEBRTC_DEV_BRANCH
   WEBRTC_STUB(GetAudioFrame, (int channel, int desired_sample_rate_hz,
                               webrtc::AudioFrame* frame));
   WEBRTC_STUB(SetExternalMixing, (int channel, bool enable));
-#endif
 
  private:
   int GetNumDevices(int& num) {

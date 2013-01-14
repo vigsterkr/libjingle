@@ -40,9 +40,9 @@ using webrtc::VideoTrackInterface;
 // Test adding renderers to a video track and render to them by providing
 // VideoFrames to the track frame input.
 TEST(VideoTrack, RenderVideo) {
-  static const char kVideoTrackLabel[] = "track_label";
+  static const char kVideoTrackId[] = "track_id";
   talk_base::scoped_refptr<VideoTrackInterface> video_track(
-      VideoTrack::Create(kVideoTrackLabel, NULL));
+      VideoTrack::Create(kVideoTrackId, NULL));
   // FakeVideoTrackRenderer register itself to |video_track|
   talk_base::scoped_ptr<FakeVideoTrackRenderer> renderer_1(
       new FakeVideoTrackRenderer(video_track.get()));

@@ -28,14 +28,14 @@
 #include <time.h>
 #include <sstream>
 #include "talk/base/stringencode.h"
-#include "talk/examples/call/presenceouttask.h"
 #include "talk/xmpp/constants.h"
+#include "talk/xmpp/presenceouttask.h"
 #include "talk/xmpp/xmppclient.h"
 
 namespace buzz {
 
 XmppReturnStatus
-PresenceOutTask::Send(const Status & s) {
+PresenceOutTask::Send(const PresenceStatus & s) {
   if (GetState() != STATE_INIT && GetState() != STATE_START)
     return XMPP_RETURN_BADSTATE;
 
@@ -46,7 +46,7 @@ PresenceOutTask::Send(const Status & s) {
 }
 
 XmppReturnStatus
-PresenceOutTask::SendDirected(const Jid & j, const Status & s) {
+PresenceOutTask::SendDirected(const Jid & j, const PresenceStatus & s) {
   if (GetState() != STATE_INIT && GetState() != STATE_START)
     return XMPP_RETURN_BADSTATE;
 
@@ -83,25 +83,26 @@ PresenceOutTask::ProcessStart() {
 }
 
 XmlElement *
-PresenceOutTask::TranslateStatus(const Status & s) {
+PresenceOutTask::TranslateStatus(const PresenceStatus & s) {
   XmlElement * result = new XmlElement(QN_PRESENCE);
   if (!s.available()) {
     result->AddAttr(QN_TYPE, STR_UNAVAILABLE);
   }
   else {
-    if (s.show() != Status::SHOW_ONLINE && s.show() != Status::SHOW_OFFLINE) {
+    if (s.show() != PresenceStatus::SHOW_ONLINE && 
+        s.show() != PresenceStatus::SHOW_OFFLINE) {
       result->AddElement(new XmlElement(QN_SHOW));
       switch (s.show()) {
         default:
           result->AddText(STR_SHOW_AWAY, 1);
           break;
-        case Status::SHOW_XA:
+        case PresenceStatus::SHOW_XA:
           result->AddText(STR_SHOW_XA, 1);
           break;
-        case Status::SHOW_DND:
+        case PresenceStatus::SHOW_DND:
           result->AddText(STR_SHOW_DND, 1);
           break;
-        case Status::SHOW_CHAT:
+        case PresenceStatus::SHOW_CHAT:
           result->AddText(STR_SHOW_CHAT, 1);
           break;
       }

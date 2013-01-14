@@ -165,7 +165,8 @@ class MediaStreamSignaling {
 
   // Returns all current remote MediaStreams.
   StreamCollectionInterface* remote_streams() const {
-    return remote_streams_.get(); }
+    return remote_streams_.get();
+  }
 
  private:
   // We can use LocalMediaStreamInterface as RemoteMediaStream since the are the

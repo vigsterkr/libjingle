@@ -40,8 +40,8 @@
 #include "talk/p2p/base/sessiondescription.h"
 
 static const char kStreams[][8] = {"stream1", "stream2"};
-static const char kAudioTracks[][10] = {"stream1a0", "stream2a0"};
-static const char kVideoTracks[][10] = {"stream1v0", "stream2v0"};
+static const char kAudioTracks[][32] = {"audiotrack0", "audiotrack1"};
+static const char kVideoTracks[][32] = {"videotrack0", "videotrack1"};
 
 using webrtc::DataChannelInterface;
 using webrtc::IceCandidateInterface;
@@ -64,13 +64,13 @@ static const char kSdpString1[] =
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=ssrc:1 cname:stream1\r\n"
     "a=ssrc:1 mslabel:stream1\r\n"
-    "a=ssrc:1 label:stream1a0\r\n"
+    "a=ssrc:1 label:audiotrack0\r\n"
     "m=video 1 RTP/AVPF 120\r\n"
     "a=mid:video\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream1\r\n"
     "a=ssrc:2 mslabel:stream1\r\n"
-    "a=ssrc:2 label:stream1v0\r\n";
+    "a=ssrc:2 label:videotrack0\r\n";
 
 // Reference SDP with two MediaStreams with label "stream1" and "stream2. Each
 // MediaStreams have one audio track and one video track.
@@ -85,16 +85,16 @@ static const char kSdpString2[] =
     "a=mid:audio\r\n"
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=ssrc:1 cname:stream1\r\n"
-    "a=ssrc:1 msid:stream1 a0\r\n"
+    "a=ssrc:1 msid:stream1 audiotrack0\r\n"
     "a=ssrc:3 cname:stream2\r\n"
-    "a=ssrc:3 msid:stream2 a0\r\n"
+    "a=ssrc:3 msid:stream2 audiotrack1\r\n"
     "m=video 1 RTP/AVPF 120\r\n"
     "a=mid:video\r\n"
     "a=rtpmap:120 VP8/0\r\n"
     "a=ssrc:2 cname:stream1\r\n"
-    "a=ssrc:2 msid:stream1 v0\r\n"
+    "a=ssrc:2 msid:stream1 videotrack0\r\n"
     "a=ssrc:4 cname:stream2\r\n"
-    "a=ssrc:4 msid:stream2 v0\r\n";
+    "a=ssrc:4 msid:stream2 videotrack1\r\n";
 
 // Reference SDP without MediaStreams. Msid is not supported.
 static const char kSdpStringWithoutStreams[] =
@@ -180,13 +180,13 @@ static void VerifyMediaOptions(StreamCollectionInterface* collection,
     for (size_t j = 0; j < stream->audio_tracks()->count(); ++j) {
       webrtc::AudioTrackInterface* audio = stream->audio_tracks()->at(j);
       EXPECT_EQ(options.streams[stream_index].sync_label, stream->label());
-      EXPECT_EQ(options.streams[stream_index++].name, audio->label());
+      EXPECT_EQ(options.streams[stream_index++].name, audio->id());
     }
     ASSERT_GE(options.streams.size(), stream->audio_tracks()->count());
     for (size_t j = 0; j < stream->video_tracks()->count(); ++j) {
       webrtc::VideoTrackInterface* video = stream->video_tracks()->at(j);
       EXPECT_EQ(options.streams[stream_index].sync_label, stream->label());
-      EXPECT_EQ(options.streams[stream_index++].name, video->label());
+      EXPECT_EQ(options.streams[stream_index++].name, video->id());
     }
   }
 }
@@ -207,13 +207,13 @@ static bool CompareStreamCollections(StreamCollectionInterface* s1,
     if (audio_tracks1->count() != audio_tracks2->count())
       return false;
     for (size_t j = 0; j != audio_tracks1->count(); ++j) {
-       if (audio_tracks1->at(j)->label() != audio_tracks2->at(j)->label())
+       if (audio_tracks1->at(j)->id() != audio_tracks2->at(j)->id())
          return false;
     }
     if (video_tracks1->count() != video_tracks2->count())
       return false;
     for (size_t j = 0; j != video_tracks1->count(); ++j) {
-       if (video_tracks1->at(j)->label() != video_tracks2->at(j)->label())
+       if (video_tracks1->at(j)->id() != video_tracks2->at(j)->id())
          return false;
     }
   }
@@ -400,9 +400,9 @@ TEST_F(MediaStreamSignalingTest, SdpWithoutMsidCreatesDefaultStream) {
   signaling_->UpdateRemoteStreams(desc.get());
   EXPECT_EQ(1u, signaling_->remote_streams()->count());
   ASSERT_EQ(1u, remote_stream->audio_tracks()->count());
-  EXPECT_EQ("defaulta0", remote_stream->audio_tracks()->at(0)->label());
+  EXPECT_EQ("defaulta0", remote_stream->audio_tracks()->at(0)->id());
   ASSERT_EQ(1u, remote_stream->video_tracks()->count());
-  EXPECT_EQ("defaultv0", remote_stream->video_tracks()->at(0)->label());
+  EXPECT_EQ("defaultv0", remote_stream->video_tracks()->at(0)->id());
 }
 
 // This tests that a default MediaStream is created if the remote session

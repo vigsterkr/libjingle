@@ -100,7 +100,7 @@ class MediaStreamTrackInterface : public talk_base::RefCountInterface,
   };
 
   virtual std::string kind() const = 0;
-  virtual std::string label() const = 0;
+  virtual std::string id() const = 0;
   virtual bool enabled() const = 0;
   virtual TrackState state() const = 0;
   virtual bool set_enabled(bool enable) = 0;

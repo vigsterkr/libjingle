@@ -35,18 +35,33 @@
 namespace webrtc {
 
 const char StatsElement::kStatsValueNameAudioOutputLevel[] = "audioOutputLevel";
+const char StatsElement::kStatsValueNameBytesSent[] = "bytesSent";
+const char StatsElement::kStatsValueNamePacketsSent[] = "packetsSent";
+const char StatsElement::kStatsValueNameBytesReceived[] = "bytesReceived";
+const char StatsElement::kStatsValueNamePacketsReceived[] = "packetsReceived";
+const char StatsElement::kStatsValueNamePacketsLost[] = "packetsLost";
 
 const char StatsReport::kStatsReportTypeSsrc[] = "ssrc";
 
-}  // namespace webrtc
+// Implementations of functions in statstypes.h
+void StatsElement::AddValue(std::string name, std::string value) {
+  Value temp;
+  temp.name = name;
+  temp.value = value;
+  values.push_back(temp);
+}
+
+void StatsElement::AddValue(std::string name, int value) {
+  AddValue(name, talk_base::ToString<int>(value));
+}
 
 namespace {
 
 typedef std::map<std::string, webrtc::StatsReport> ReportsMap;
 
-void AddEmptyReport(const std::string& name, ReportsMap* reports) {
+void AddEmptyReport(const std::string& label, ReportsMap* reports) {
   reports->insert(std::pair<std::string, webrtc::StatsReport>(
-      name, webrtc::StatsReport()));
+      label, webrtc::StatsReport()));
 }
 
 template <class TrackList>
@@ -54,15 +69,85 @@ void CreateTrackReports(TrackList* tracks, ReportsMap* reports) {
   for (size_t j = 0; j < tracks->count(); ++j) {
     webrtc::MediaStreamTrackInterface* track = tracks->at(j);
     // If there is no previous report for this track, add one.
-    if (reports->find(track->label()) == reports->end()) {
-      AddEmptyReport(track->label(), reports);
+    if (reports->find(track->id()) == reports->end()) {
+      AddEmptyReport(track->id(), reports);
     }
   }
 }
 
-}  // namespace
+void ExtractStats(const cricket::VoiceReceiverInfo& info, StatsReport* report) {
+  report->local.AddValue(StatsElement::kStatsValueNameAudioOutputLevel,
+                         info.audio_level);
+  report->local.AddValue(StatsElement::kStatsValueNameBytesReceived,
+                         info.bytes_rcvd);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsReceived,
+                         info.packets_rcvd);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsLost,
+                         info.packets_lost);
+}
 
-namespace webrtc {
+void ExtractStats(const cricket::VoiceSenderInfo& info, StatsReport* report) {
+  report->local.AddValue(StatsElement::kStatsValueNameBytesSent,
+                         info.bytes_sent);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsSent,
+                         info.packets_sent);
+}
+
+void ExtractStats(const cricket::VideoReceiverInfo& info, StatsReport* report) {
+  report->local.AddValue(StatsElement::kStatsValueNameBytesReceived,
+                         info.bytes_rcvd);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsReceived,
+                         info.packets_rcvd);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsLost,
+                         info.packets_lost);
+}
+
+void ExtractStats(const cricket::VideoSenderInfo& info, StatsReport* report) {
+  report->local.AddValue(StatsElement::kStatsValueNameBytesSent,
+                         info.bytes_sent);
+  report->local.AddValue(StatsElement::kStatsValueNamePacketsSent,
+                         info.packets_sent);
+}
+
+uint32 ExtractSsrc(const cricket::VoiceReceiverInfo& info) {
+  return info.ssrc;
+}
+
+uint32 ExtractSsrc(const cricket::VoiceSenderInfo& info) {
+  return info.ssrc;
+}
+
+uint32 ExtractSsrc(const cricket::VideoReceiverInfo& info) {
+  return info.ssrcs[0];
+}
+
+uint32 ExtractSsrc(const cricket::VideoSenderInfo& info) {
+  return info.ssrcs[0];
+}
+
+// Template to extract stats from a data vector.
+// ExtractSsrc and ExtractStats must be defined and overloaded for each type.
+template<typename T>
+void ExtractStatsFromList(const std::vector<T> data,
+                          StatsCollector* collector) {
+  typename std::vector<T>::const_iterator it = data.begin();
+  for (; it != data.end(); ++it) {
+    std::string label;
+    uint32 ssrc = ExtractSsrc(*it);
+    if (!collector->session()->GetTrackLabelBySsrc(ssrc, &label)) {
+      LOG(LS_ERROR) << "The SSRC " << ssrc
+                    << " is not associated with a track";
+      continue;
+    }
+    StatsReport* report = collector->PrepareReport(label, ssrc);
+    if (!report) {
+      continue;
+    }
+    ExtractStats(*it, report);
+  }
+};
+
+}  // namespace
 
 StatsCollector::StatsCollector()
     : session_(NULL), stats_gathering_started_(0) {
@@ -83,9 +168,9 @@ bool StatsCollector::GetStats(MediaStreamTrackInterface* track,
   reports->clear();
 
   if (track) {
-    ReportsMap::const_iterator it = track_reports_.find(track->label());
+    ReportsMap::const_iterator it = track_reports_.find(track->id());
     if (it == track_reports_.end()) {
-      LOG(LS_WARNING) << "No StatsReport is available for "<< track->label();
+      LOG(LS_WARNING) << "No StatsReport is available for "<< track->id();
       return false;
     }
     reports->push_back(it->second);
@@ -111,15 +196,16 @@ void StatsCollector::UpdateStats() {
   }
   stats_gathering_started_ = time_now;
 
-  if (session_ && session_->voice_channel())  {
-    GetRemoteAudioTrackStats();
+  if (session_) {
+    ExtractVoiceInfo();
+    ExtractVideoInfo();
   }
 }
 
-StatsReport* StatsCollector::PrepareReport(const std::string& name,
+StatsReport* StatsCollector::PrepareReport(const std::string& label,
                                            uint32 ssrc) {
   std::map<std::string, webrtc::StatsReport>::iterator it =
-      track_reports_.find(name);
+      track_reports_.find(label);
   if (!VERIFY(it != track_reports_.end())) {
     return NULL;
   }
@@ -137,34 +223,30 @@ StatsReport* StatsCollector::PrepareReport(const std::string& name,
   return report;
 }
 
-void StatsCollector::GetRemoteAudioTrackStats() {
+void StatsCollector::ExtractVoiceInfo() {
+  if (!session_->voice_channel()) {
+    return;
+  }
   cricket::VoiceMediaInfo voice_info;
   if (!session_->voice_channel()->GetStats(&voice_info)) {
     LOG(LS_ERROR) << "Failed to get voice channel stats.";
     return;
   }
+  ExtractStatsFromList(voice_info.receivers, this);
+  ExtractStatsFromList(voice_info.senders, this);
+}
 
-  std::vector<cricket::VoiceReceiverInfo>::const_iterator it =
-      voice_info.receivers.begin();
-  // For each receiver:
-  for (; it != voice_info.receivers.end(); ++it) {
-    std::string name;
-    // MSID label is used as object names for remote tracks.
-
-    if (!session_->GetRemoteTrackName(it->ssrc, &name)) {
-      LOG(LS_ERROR) << "The SSRC is not associated with an audio track.";
-      continue;
-    }
-    StatsReport* report = PrepareReport(name, it->ssrc);
-    if (!report) {
-      continue;
-    }
-
-    StatsElement::Value stat;
-    stat.name = StatsElement::kStatsValueNameAudioOutputLevel;
-    stat.value = talk_base::ToString<int>(it->audio_level);
-    report->local.values.push_back(stat);
+void StatsCollector::ExtractVideoInfo() {
+  if (!session_->video_channel()) {
+    return;
   }
+  cricket::VideoMediaInfo video_info;
+  if (!session_->video_channel()->GetStats(&video_info)) {
+    LOG(LS_ERROR) << "Failed to get video channel stats.";
+    return;
+  }
+  ExtractStatsFromList(video_info.receivers, this);
+  ExtractStatsFromList(video_info.senders, this);
 }
 
 double StatsCollector::GetTimeNow() {

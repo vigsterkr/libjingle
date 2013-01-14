@@ -45,7 +45,7 @@ class MediaStreamTrackProxy : public T,
  public:
   // Implement MediaStreamTrack.
   virtual std::string kind() const;
-  virtual std::string label() const;
+  virtual std::string id() const;
   virtual bool enabled() const;
   virtual MediaStreamTrackInterface::TrackState state() const;
   virtual bool set_enabled(bool enable);

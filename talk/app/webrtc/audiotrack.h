@@ -38,7 +38,7 @@ namespace webrtc {
 class AudioTrack : public MediaStreamTrack<AudioTrackInterface> {
  public:
   static talk_base::scoped_refptr<AudioTrack> Create(
-      const std::string& label, AudioSourceInterface* source);
+      const std::string& id, AudioSourceInterface* source);
 
   virtual AudioSourceInterface* GetSource() const {
     return audio_source_.get();

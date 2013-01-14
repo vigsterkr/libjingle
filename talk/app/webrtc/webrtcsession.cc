@@ -717,6 +717,19 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   return UseCandidatesInSessionDescription(remote_desc_.get());
 }
 
+bool WebRtcSession::GetTrackLabelBySsrc(uint32 ssrc, std::string* name) {
+  if (GetLocalTrackName(ssrc, name)) {
+    if (GetRemoteTrackName(ssrc, name)) {
+      LOG(LS_WARNING) << "SSRC " << ssrc
+                      << " exists in both local and remote descriptions";
+      return true;  // We return the remote track name.
+    }
+    return true;
+  } else {
+    return GetRemoteTrackName(ssrc, name);
+  }
+}
+
 bool WebRtcSession::GetLocalTrackName(uint32 ssrc, std::string* name) {
   if (!BaseSession::local_description())
     return false;

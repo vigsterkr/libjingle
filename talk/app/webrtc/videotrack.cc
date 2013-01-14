@@ -69,9 +69,9 @@ bool VideoTrack::set_enabled(bool enable) {
 }
 
 talk_base::scoped_refptr<VideoTrack> VideoTrack::Create(
-    const std::string& label, VideoSourceInterface* source) {
+    const std::string& id, VideoSourceInterface* source) {
   talk_base::RefCountedObject<VideoTrack>* track =
-      new talk_base::RefCountedObject<VideoTrack>(label, source);
+      new talk_base::RefCountedObject<VideoTrack>(id, source);
   return track;
 }
 

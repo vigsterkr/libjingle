@@ -234,7 +234,23 @@ class PeerConnectionTestClientBase
     observer(new talk_base::RefCountedObject<MockStatsObserver>());
     EXPECT_TRUE(peer_connection_->GetStats(observer, track));
     EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
-    return observer->audio_output_level();
+    return observer->AudioOutputLevel();
+  }
+
+  int GetBytesReceivedStats(webrtc::MediaStreamTrackInterface* track) {
+    talk_base::scoped_refptr<MockStatsObserver>
+    observer(new talk_base::RefCountedObject<MockStatsObserver>());
+    EXPECT_TRUE(peer_connection_->GetStats(observer, track));
+    EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
+    return observer->BytesReceived();
+  }
+
+  int GetBytesSentStats(webrtc::MediaStreamTrackInterface* track) {
+    talk_base::scoped_refptr<MockStatsObserver>
+    observer(new talk_base::RefCountedObject<MockStatsObserver>());
+    EXPECT_TRUE(peer_connection_->GetStats(observer, track));
+    EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
+    return observer->BytesSent();
   }
 
   int rendered_width() {
@@ -263,6 +279,14 @@ class PeerConnectionTestClientBase
     return peer_connection()->remote_streams();
   }
 
+  StreamCollectionInterface* local_streams() {
+    if (!peer_connection()) {
+      ADD_FAILURE();
+      return NULL;
+    }
+    return peer_connection()->local_streams();
+  }
+
   // PeerConnectionObserver callbacks.
   virtual void OnError() {}
   virtual void OnMessage(const std::string&) {}
@@ -270,10 +294,10 @@ class PeerConnectionTestClientBase
   virtual void OnStateChange(StateType /*state_changed*/) {}
   virtual void OnAddStream(webrtc::MediaStreamInterface* media_stream) {
     for (size_t i = 0; i < media_stream->video_tracks()->count(); ++i) {
-      const std::string label = media_stream->video_tracks()->at(i)->label();
-      ASSERT_TRUE(fake_video_renderers_.find(label) ==
+      const std::string id = media_stream->video_tracks()->at(i)->id();
+      ASSERT_TRUE(fake_video_renderers_.find(id) ==
           fake_video_renderers_.end());
-      fake_video_renderers_[label] = new webrtc::FakeVideoTrackRenderer(
+      fake_video_renderers_[id] = new webrtc::FakeVideoTrackRenderer(
           media_stream->video_tracks()->at(i));
     }
   }
@@ -881,6 +905,50 @@ TEST_F(JsepPeerConnectionP2PTestClient, GetAudioOutputLevelStats) {
   // until a RTCP packet has been received.
   EXPECT_TRUE_WAIT(
       initializing_client()->GetAudioOutputLevelStats(remote_audio_track) > 0,
+      kMaxWaitForStatsMs);
+}
+
+// Test that we can get incoming byte counts from both audio and video tracks.
+TEST_F(JsepPeerConnectionP2PTestClient, GetBytesReceivedStats) {
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
+
+  StreamCollectionInterface* remote_streams =
+      initializing_client()->remote_streams();
+  ASSERT_GT(remote_streams->count(), 0u);
+  ASSERT_GT(remote_streams->at(0)->audio_tracks()->count(), 0u);
+  MediaStreamTrackInterface* remote_audio_track =
+      remote_streams->at(0)->audio_tracks()->at(0);
+  EXPECT_TRUE_WAIT(
+      initializing_client()->GetBytesReceivedStats(remote_audio_track) > 0,
+      kMaxWaitForStatsMs);
+
+  MediaStreamTrackInterface* remote_video_track =
+      remote_streams->at(0)->video_tracks()->at(0);
+  EXPECT_TRUE_WAIT(
+      initializing_client()->GetBytesReceivedStats(remote_video_track) > 0,
+      kMaxWaitForStatsMs);
+}
+
+// Test that we can get outgoing byte counts from both audio and video tracks.
+TEST_F(JsepPeerConnectionP2PTestClient, GetBytesSentStats) {
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
+
+  StreamCollectionInterface* local_streams =
+      initializing_client()->local_streams();
+  ASSERT_GT(local_streams->count(), 0u);
+  ASSERT_GT(local_streams->at(0)->audio_tracks()->count(), 0u);
+  MediaStreamTrackInterface* local_audio_track =
+      local_streams->at(0)->audio_tracks()->at(0);
+  EXPECT_TRUE_WAIT(
+      initializing_client()->GetBytesSentStats(local_audio_track) > 0,
+      kMaxWaitForStatsMs);
+
+  MediaStreamTrackInterface* local_video_track =
+      local_streams->at(0)->video_tracks()->at(0);
+  EXPECT_TRUE_WAIT(
+      initializing_client()->GetBytesSentStats(local_video_track) > 0,
       kMaxWaitForStatsMs);
 }
 

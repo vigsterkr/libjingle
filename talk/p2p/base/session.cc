@@ -119,7 +119,7 @@ void TransportProxy::ConnectChannels() {
     }
     connecting_ = true;
   }
-  // TODO: Right now Transport::ConnectChannels doesn't work if we
+  // TODO(juberti): Right now Transport::ConnectChannels doesn't work if we
   // don't have any channels yet, so we need to allow this method to be called
   // multiple times. Once we fix Transport, we can move this call inside the
   // if (!connecting_) block.
@@ -265,7 +265,7 @@ void TransportProxy::OnSignalingReady() {
 bool TransportProxy::OnRemoteCandidates(const Candidates& candidates,
                                         std::string* error) {
   // Ensure the transport is negotiated before handling candidates.
-  // TODO: Remove this once everybody calls SetLocalTD.
+  // TODO(juberti): Remove this once everybody calls SetLocalTD.
   CompleteNegotiation();
 
   // Verify each candidate before passing down to transport layer.
@@ -546,7 +546,7 @@ void BaseSession::OnSignalingReady() {
   }
 }
 
-// TODO: Since PushdownLocalTD now triggers the connection process to
+// TODO(juberti): Since PushdownLocalTD now triggers the connection process to
 // start, remove this method once everyone calls PushdownLocalTD.
 void BaseSession::SpeculativelyConnectAllTransportChannels() {
   // Put all transports into the connecting state.
@@ -569,7 +569,7 @@ bool BaseSession::OnRemoteCandidates(const std::string& content_name,
   if (!transproxy->OnRemoteCandidates(candidates, error)) {
     return false;
   }
-  // TODO: Remove this call once we can be sure that we always have
+  // TODO(juberti): Remove this call once we can be sure that we always have
   // a local transport description (which will trigger the connection).
   transproxy->ConnectChannels();
   return true;
@@ -597,7 +597,7 @@ bool BaseSession::MaybeEnableMuxingSupport() {
   // If both sides agree to BUNDLE, mux all the specified contents onto the
   // transport belonging to the first content name in the BUNDLE group.
   // If the contents are already muxed, this will be a no-op.
-  // TODO: Should this check that local and remote have configured
+  // TODO(juberti): Should this check that local and remote have configured
   // BUNDLE the same way?
   bool candidates_allocated = IsCandidateAllocationDone();
   const ContentGroup* local_bundle_group =
@@ -651,7 +651,7 @@ bool BaseSession::SetSelectedProxy(const std::string& content_name,
 }
 
 void BaseSession::OnTransportCandidatesAllocationDone(Transport* transport) {
-  // TODO: This is a clunky way of processing the done signal. Instead,
+  // TODO(juberti): This is a clunky way of processing the done signal. Instead,
   // TransportProxy should receive the done signal directly, set its allocated
   // flag internally, and then reissue the done signal to Session.
   // Overall we should make TransportProxy receive *all* the signals from
@@ -815,7 +815,7 @@ bool Session::Accept(const SessionDescription* sdesc) {
     LOG(LS_ERROR) << "Could not send accept message: " << error.text;
     return false;
   }
-  // TODO: Add BUNDLE support to transport-info messages.
+  // TODO(juberti): Add BUNDLE support to transport-info messages.
   PushdownTransportDescription(CS_LOCAL, CA_ANSWER);
   MaybeEnableMuxingSupport();  // Enable transport channel mux if supported.
   SetState(Session::STATE_SENTACCEPT);
@@ -1189,7 +1189,7 @@ bool Session::OnInitiateMessage(const SessionMessage& msg,
     if (!OnRemoteCandidates(init.transports, error))
       return false;
 
-    // TODO: Auto-generate and push down the local transport answer.
+    // TODO(juberti): Auto-generate and push down the local transport answer.
     // This is necessary for trickling to work with RFC 5245 ICE.
   }
   return true;

@@ -645,6 +645,16 @@ TEST_F(PeerConnectionInterfaceTest, GetStatsForSpecificTrack) {
   EXPECT_TRUE(DoGetStats(remote_audio));
 }
 
+// Test that we can get stats on a video track.
+TEST_F(PeerConnectionInterfaceTest, GetStatsForVideoTrack) {
+  InitiateCall();
+  ASSERT_LT(0u, pc_->remote_streams()->count());
+  ASSERT_LT(0u, pc_->remote_streams()->at(0)->video_tracks()->count());
+  scoped_refptr<MediaStreamTrackInterface> remote_video =
+      pc_->remote_streams()->at(0)->video_tracks()->at(0);
+  EXPECT_TRUE(DoGetStats(remote_video));
+}
+
 // Test that we don't get statistics for an invalid track.
 TEST_F(PeerConnectionInterfaceTest, GetStatsForInvalidTrack) {
   InitiateCall();

@@ -114,8 +114,8 @@ class WebRtcSession : public cricket::BaseSession,
     return remote_desc_.get();
   }
 
-  bool GetLocalTrackName(uint32 ssrc, std::string* name);
-  bool GetRemoteTrackName(uint32 ssrc, std::string* name);
+  // Get the label used as a media stream track's "label" field from ssrc.
+  bool GetTrackLabelBySsrc(uint32 ssrc, std::string* name);
 
   // AudioMediaProviderInterface implementation.
   virtual void SetAudioPlayout(const std::string& name, bool enable);
@@ -208,6 +208,9 @@ class WebRtcSession : public cricket::BaseSession,
   // in crypto negotiation.
   // Called when processing the local session description.
   void UpdateSessionDescriptionSecurePolicy(cricket::SessionDescription* desc);
+
+  bool GetLocalTrackName(uint32 ssrc, std::string* name);
+  bool GetRemoteTrackName(uint32 ssrc, std::string* name);
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;

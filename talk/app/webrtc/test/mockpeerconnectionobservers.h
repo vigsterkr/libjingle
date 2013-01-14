@@ -125,21 +125,33 @@ class MockStatsObserver : public webrtc::StatsObserver {
   bool called() const { return called_; }
   size_t number_of_reports() const { return reports_.size(); }
 
-  int audio_output_level() {
+  int AudioOutputLevel() {
+    return GetStatsValue(webrtc::StatsElement::kStatsValueNameAudioOutputLevel);
+  }
+
+  int BytesReceived() {
+    return GetStatsValue(webrtc::StatsElement::kStatsValueNameBytesReceived);
+  }
+
+  int BytesSent() {
+    return GetStatsValue(webrtc::StatsElement::kStatsValueNameBytesSent);
+  }
+
+ private:
+  int GetStatsValue(const std::string name) {
     if (reports_.empty()) {
       return 0;
     }
     webrtc::StatsElement::Values::const_iterator it =
         reports_[0].local.values.begin();
     for (; it != reports_[0].local.values.end(); ++it) {
-      if (it->name == webrtc::StatsElement::kStatsValueNameAudioOutputLevel) {
-        return  talk_base::FromString<int>(it->value);
+      if (it->name == name) {
+        return talk_base::FromString<int>(it->value);
       }
     }
     return 0;
   }
 
- private:
   bool called_;
   std::vector<webrtc::StatsReport> reports_;
 };

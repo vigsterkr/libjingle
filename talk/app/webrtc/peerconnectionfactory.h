@@ -60,19 +60,19 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
       const MediaConstraintsInterface* constraints);
 
   virtual talk_base::scoped_refptr<VideoTrackInterface>
-      CreateVideoTrack(const std::string& label,
+      CreateVideoTrack(const std::string& id,
                        VideoSourceInterface* video_source);
 
   virtual talk_base::scoped_refptr<AudioTrackInterface>
-      CreateAudioTrack(const std::string& label,
+      CreateAudioTrack(const std::string& id,
                        AudioSourceInterface* audio_source);
   // Deprecated:
   virtual talk_base::scoped_refptr<LocalVideoTrackInterface>
-      CreateLocalVideoTrack(const std::string& label,
+      CreateLocalVideoTrack(const std::string& id,
                             cricket::VideoCapturer* video_device);
   // Deprecated:
   virtual talk_base::scoped_refptr<LocalAudioTrackInterface>
-      CreateLocalAudioTrack(const std::string& label,
+      CreateLocalAudioTrack(const std::string& id,
                             AudioDeviceModule* audio_device);
 
   virtual cricket::ChannelManager* channel_manager();

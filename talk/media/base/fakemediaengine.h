@@ -501,7 +501,11 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     return set_sending(send);
   }
   virtual bool SetCapturer(uint32 ssrc, VideoCapturer* capturer) {
+    capturers_[ssrc] = capturer;
     return true;
+  }
+  bool HasCapturer(uint32 ssrc) const {
+    return capturers_.find(ssrc) != capturers_.end();
   }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
   virtual bool AddRecvStream(const StreamParams& sp) {
@@ -556,6 +560,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   std::vector<VideoCodec> send_codecs_;
   std::map<uint32, VideoRenderer*> renderers_;
   std::map<uint32, VideoFormat> send_formats_;
+  std::map<uint32, VideoCapturer*> capturers_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
   int options_;

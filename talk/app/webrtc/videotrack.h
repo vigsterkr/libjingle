@@ -52,7 +52,7 @@ class VideoTrack : public MediaStreamTrack<VideoTrackInterface> {
   virtual std::string kind() const;
 
  protected:
-  VideoTrack(const std::string& label, VideoSourceInterface* video_source);
+  VideoTrack(const std::string& id, VideoSourceInterface* video_source);
   ~VideoTrack();
 
  private:

@@ -143,13 +143,13 @@ static const char kSdpFullString[] =
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
-    "a=ssrc:1 msid:local_stream_1 a0\r\n"
+    "a=ssrc:1 msid:local_stream_1 audio_track_id_1\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
-    "a=ssrc:1 label:local_stream_1a0\r\n"
+    "a=ssrc:1 label:audio_track_id_1\r\n"
     "a=ssrc:4 cname:stream_2_cname\r\n"
-    "a=ssrc:4 msid:local_stream_2 a0\r\n"
+    "a=ssrc:4 msid:local_stream_2 audio_track_id_2\r\n"
     "a=ssrc:4 mslabel:local_stream_2\r\n"
-    "a=ssrc:4 label:local_stream_2a0\r\n"
+    "a=ssrc:4 label:audio_track_id_2\r\n"
     "m=video 3457 RTP/SAVPF 120\r\n"
     "c=IN IP4 74.125.224.39\r\n"
     "a=rtcp:3456 IN IP4 74.125.224.39\r\n"
@@ -172,22 +172,22 @@ static const char kSdpFullString[] =
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
-    "a=ssrc:2 msid:local_stream_1 v0\r\n"
+    "a=ssrc:2 msid:local_stream_1 video_track_id_1\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
-    "a=ssrc:2 label:local_stream_1v0\r\n"
+    "a=ssrc:2 label:video_track_id_1\r\n"
     "a=ssrc:3 cname:stream_1_cname\r\n"
-    "a=ssrc:3 msid:local_stream_1 v1\r\n"
+    "a=ssrc:3 msid:local_stream_1 video_track_id_2\r\n"
     "a=ssrc:3 mslabel:local_stream_1\r\n"
-    "a=ssrc:3 label:local_stream_1v1\r\n"
+    "a=ssrc:3 label:video_track_id_2\r\n"
     "a=ssrc-group:FEC 5 6\r\n"
     "a=ssrc:5 cname:stream_2_cname\r\n"
-    "a=ssrc:5 msid:local_stream_2 v0\r\n"
+    "a=ssrc:5 msid:local_stream_2 video_track_id_3\r\n"
     "a=ssrc:5 mslabel:local_stream_2\r\n"
-    "a=ssrc:5 label:local_stream_2v0\r\n"
+    "a=ssrc:5 label:video_track_id_3\r\n"
     "a=ssrc:6 cname:stream_2_cname\r\n"
-    "a=ssrc:6 msid:local_stream_2 v0\r\n"
+    "a=ssrc:6 msid:local_stream_2 video_track_id_3\r\n"
     "a=ssrc:6 mslabel:local_stream_2\r\n"
-    "a=ssrc:6 label:local_stream_2v0\r\n";
+    "a=ssrc:6 label:video_track_id_3\r\n";
 
 // SDP reference string without the candidates.
 static const char kSdpString[] =
@@ -209,13 +209,13 @@ static const char kSdpString[] =
     "a=rtpmap:103 ISAC/16000\r\n"
     "a=rtpmap:104 CELT/32000/2\r\n"
     "a=ssrc:1 cname:stream_1_cname\r\n"
-    "a=ssrc:1 msid:local_stream_1 a0\r\n"
+    "a=ssrc:1 msid:local_stream_1 audio_track_id_1\r\n"
     "a=ssrc:1 mslabel:local_stream_1\r\n"
-    "a=ssrc:1 label:local_stream_1a0\r\n"
+    "a=ssrc:1 label:audio_track_id_1\r\n"
     "a=ssrc:4 cname:stream_2_cname\r\n"
-    "a=ssrc:4 msid:local_stream_2 a0\r\n"
+    "a=ssrc:4 msid:local_stream_2 audio_track_id_2\r\n"
     "a=ssrc:4 mslabel:local_stream_2\r\n"
-    "a=ssrc:4 label:local_stream_2a0\r\n"
+    "a=ssrc:4 label:audio_track_id_2\r\n"
     "m=video 1 RTP/SAVPF 120\r\n"
     "c=IN IP4 0.0.0.0\r\n"
     "a=rtcp:1 IN IP4 0.0.0.0\r\n"
@@ -226,22 +226,22 @@ static const char kSdpString[] =
     "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32\r\n"
     "a=rtpmap:120 VP8/90000\r\n"
     "a=ssrc:2 cname:stream_1_cname\r\n"
-    "a=ssrc:2 msid:local_stream_1 v0\r\n"
+    "a=ssrc:2 msid:local_stream_1 video_track_id_1\r\n"
     "a=ssrc:2 mslabel:local_stream_1\r\n"
-    "a=ssrc:2 label:local_stream_1v0\r\n"
+    "a=ssrc:2 label:video_track_id_1\r\n"
     "a=ssrc:3 cname:stream_1_cname\r\n"
-    "a=ssrc:3 msid:local_stream_1 v1\r\n"
+    "a=ssrc:3 msid:local_stream_1 video_track_id_2\r\n"
     "a=ssrc:3 mslabel:local_stream_1\r\n"
-    "a=ssrc:3 label:local_stream_1v1\r\n"
+    "a=ssrc:3 label:video_track_id_2\r\n"
     "a=ssrc-group:FEC 5 6\r\n"
     "a=ssrc:5 cname:stream_2_cname\r\n"
-    "a=ssrc:5 msid:local_stream_2 v0\r\n"
+    "a=ssrc:5 msid:local_stream_2 video_track_id_3\r\n"
     "a=ssrc:5 mslabel:local_stream_2\r\n"
-    "a=ssrc:5 label:local_stream_2v0\r\n"
+    "a=ssrc:5 label:video_track_id_3\r\n"
     "a=ssrc:6 cname:stream_2_cname\r\n"
-    "a=ssrc:6 msid:local_stream_2 v0\r\n"
+    "a=ssrc:6 msid:local_stream_2 video_track_id_3\r\n"
     "a=ssrc:6 mslabel:local_stream_2\r\n"
-    "a=ssrc:6 label:local_stream_2v0\r\n";
+    "a=ssrc:6 label:video_track_id_3\r\n";
 
 static const char kSdpDataChannelString[] =
     "m=application 1 RTP/SAVPF 101\r\n"
@@ -255,7 +255,7 @@ static const char kSdpDataChannelString[] =
     "inline:FvLcvU2P3ZWmQxgPAgcDu7Zl9vftYElFOjEzhWs5\r\n"
     "a=rtpmap:101 google-data/90000\r\n"
     "a=ssrc:10 cname:data_channel_cname\r\n"
-    "a=ssrc:10 msid:data_channel d0\r\n"
+    "a=ssrc:10 msid:data_channel data_channeld0\r\n"
     "a=ssrc:10 mslabel:data_channel\r\n"
     "a=ssrc:10 label:data_channeld0\r\n";
 
@@ -286,19 +286,19 @@ static const char kDataContentName[] = "data_content_name";
 // MediaStream 1
 static const char kStreamLabel1[] = "local_stream_1";
 static const char kStream1Cname[] = "stream_1_cname";
-static const char kAudioTrackLabel1[] = "local_stream_1a0";
+static const char kAudioTrackId1[] = "audio_track_id_1";
 static const uint32 kAudioTrack1Ssrc = 1;
-static const char kVideoTrackLabel1[] = "local_stream_1v0";
+static const char kVideoTrackId1[] = "video_track_id_1";
 static const uint32 kVideoTrack1Ssrc = 2;
-static const char kVideoTrackLabel2[] = "local_stream_1v1";
+static const char kVideoTrackId2[] = "video_track_id_2";
 static const uint32 kVideoTrack2Ssrc = 3;
 
 // MediaStream 2
 static const char kStreamLabel2[] = "local_stream_2";
 static const char kStream2Cname[] = "stream_2_cname";
-static const char kAudioTrackLabel2[] = "local_stream_2a0";
+static const char kAudioTrackId2[] = "audio_track_id_2";
 static const uint32 kAudioTrack2Ssrc = 4;
-static const char kVideoTrackLabel3[] = "local_stream_2v0";
+static const char kVideoTrackId3[] = "video_track_id_3";
 static const uint32 kVideoTrack3Ssrc = 5;
 static const uint32 kVideoTrack4Ssrc = 6;
 
@@ -383,13 +383,13 @@ class WebRtcSdpTest : public testing::Test {
     audio_desc_ = audio.get();
     audio->set_rtcp_mux(true);
     StreamParams audio_stream1;
-    audio_stream1.name = kAudioTrackLabel1;
+    audio_stream1.name = kAudioTrackId1;
     audio_stream1.cname = kStream1Cname;
     audio_stream1.sync_label = kStreamLabel1;
     audio_stream1.ssrcs.push_back(kAudioTrack1Ssrc);
     audio->AddStream(audio_stream1);
     StreamParams audio_stream2;
-    audio_stream2.name = kAudioTrackLabel2;
+    audio_stream2.name = kAudioTrackId2;
     audio_stream2.cname = kStream2Cname;
     audio_stream2.sync_label = kStreamLabel2;
     audio_stream2.ssrcs.push_back(kAudioTrack2Ssrc);
@@ -407,19 +407,19 @@ class WebRtcSdpTest : public testing::Test {
         new VideoContentDescription());
     video_desc_ = video.get();
     StreamParams video_stream1;
-    video_stream1.name = kVideoTrackLabel1;
+    video_stream1.name = kVideoTrackId1;
     video_stream1.cname = kStream1Cname;
     video_stream1.sync_label = kStreamLabel1;
     video_stream1.ssrcs.push_back(kVideoTrack1Ssrc);
     video->AddStream(video_stream1);
     StreamParams video_stream2;
-    video_stream2.name = kVideoTrackLabel2;
+    video_stream2.name = kVideoTrackId2;
     video_stream2.cname = kStream1Cname;
     video_stream2.sync_label = kStreamLabel1;
     video_stream2.ssrcs.push_back(kVideoTrack2Ssrc);
     video->AddStream(video_stream2);
     StreamParams video_stream3;
-    video_stream3.name = kVideoTrackLabel3;
+    video_stream3.name = kVideoTrackId3;
     video_stream3.cname = kStream2Cname;
     video_stream3.sync_label = kStreamLabel2;
     video_stream3.ssrcs.push_back(kVideoTrack3Ssrc);

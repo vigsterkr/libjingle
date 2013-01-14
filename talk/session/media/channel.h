@@ -485,6 +485,8 @@ class VideoChannel : public BaseChannel {
   // has been started or not.
   bool IsScreencasting();
   int ScreencastFps(uint32 ssrc);
+  // Get statistics about the current media session.
+  bool GetStats(VideoMediaInfo* stats);
 
   sigslot::signal2<VideoChannel*, const std::vector<ConnectionInfo>&>
       SignalConnectionMonitor;
@@ -540,6 +542,7 @@ class VideoChannel : public BaseChannel {
   int ScreencastFps_w(uint32 ssrc) const;
   void SetScreenCaptureFactory_w(
       ScreenCapturerFactory* screencapture_factory);
+  bool GetStats_w(VideoMediaInfo* stats);
 
   virtual void OnMessage(talk_base::Message* pmsg);
   virtual void GetSrtpCiphers(std::vector<std::string>* ciphers) const;

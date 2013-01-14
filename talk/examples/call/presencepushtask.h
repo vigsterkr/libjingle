@@ -32,8 +32,8 @@
 
 #include "talk/xmpp/xmppengine.h"
 #include "talk/xmpp/xmpptask.h"
+#include "talk/xmpp/presencestatus.h"
 #include "talk/base/sigslot.h"
-#include "talk/examples/call/status.h"
 #include "talk/examples/call/callclient.h"
 
 namespace buzz {
@@ -45,10 +45,10 @@ class PresencePushTask : public XmppTask {
       client_(client) {}
   virtual int ProcessStart();
 
-  sigslot::signal1<const Status&> SignalStatusUpdate;
+  sigslot::signal1<const PresenceStatus&> SignalStatusUpdate;
   sigslot::signal1<const Jid&> SignalMucJoined;
   sigslot::signal2<const Jid&, int> SignalMucLeft;
-  sigslot::signal2<const Jid&, const MucStatus&> SignalMucStatusUpdate;
+  sigslot::signal2<const Jid&, const MucPresenceStatus&> SignalMucStatusUpdate;
 
  protected:
   virtual bool HandleStanza(const XmlElement * stanza);
@@ -56,9 +56,9 @@ class PresencePushTask : public XmppTask {
   void HandleMucPresence(buzz::Muc* muc,
                          const Jid& from, const XmlElement * stanza);
   static void FillStatus(const Jid& from, const XmlElement * stanza,
-                         Status* status);
+                         PresenceStatus* status);
   static void FillMucStatus(const Jid& from, const XmlElement * stanza,
-                            MucStatus* status);
+                            MucPresenceStatus* status);
 
  private:
   CallClient* client_;

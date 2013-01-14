@@ -88,7 +88,7 @@ void PresencePushTask::HandlePresence(const Jid& from,
   if (stanza->Attr(QN_TYPE) == STR_ERROR)
     return;
 
-  Status s;
+  PresenceStatus s;
   FillStatus(from, stanza, &s);
   SignalStatusUpdate(s);
 }
@@ -120,14 +120,14 @@ void PresencePushTask::HandleMucPresence(buzz::Muc* muc,
       SignalMucLeft(muc->jid(), error);
     }
   } else {
-    MucStatus s;
+    MucPresenceStatus s;
     FillMucStatus(from, stanza, &s);
     SignalMucStatusUpdate(muc->jid(), s);
   }
 }
 
 void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
-                                  Status* s) {
+                                  PresenceStatus* s) {
   s->set_jid(from);
   if (stanza->Attr(QN_TYPE) == STR_UNAVAILABLE) {
     s->set_available(false);
@@ -160,23 +160,23 @@ void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
 
     const XmlElement * show = stanza->FirstNamed(QN_SHOW);
     if (show == NULL || show->FirstChild() == NULL) {
-      s->set_show(Status::SHOW_ONLINE);
+      s->set_show(PresenceStatus::SHOW_ONLINE);
     }
     else {
       if (show->BodyText() == "away") {
-        s->set_show(Status::SHOW_AWAY);
+        s->set_show(PresenceStatus::SHOW_AWAY);
       }
       else if (show->BodyText() == "xa") {
-        s->set_show(Status::SHOW_XA);
+        s->set_show(PresenceStatus::SHOW_XA);
       }
       else if (show->BodyText() == "dnd") {
-        s->set_show(Status::SHOW_DND);
+        s->set_show(PresenceStatus::SHOW_DND);
       }
       else if (show->BodyText() == "chat") {
-        s->set_show(Status::SHOW_CHAT);
+        s->set_show(PresenceStatus::SHOW_CHAT);
       }
       else {
-        s->set_show(Status::SHOW_ONLINE);
+        s->set_show(PresenceStatus::SHOW_ONLINE);
       }
     }
 
@@ -215,7 +215,7 @@ void PresencePushTask::FillStatus(const Jid& from, const XmlElement* stanza,
 }
 
 void PresencePushTask::FillMucStatus(const Jid& from, const XmlElement* stanza,
-                                     MucStatus* s) {
+                                     MucPresenceStatus* s) {
   FillStatus(from, stanza, s);
 }
 

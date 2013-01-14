@@ -399,23 +399,6 @@ static bool GetValue(const std::string& message, const std::string& attribute,
   return true;
 }
 
-// Get the track's position within the MediaStream it belongs to.
-// For the first track, the function will return 0.
-static int GetTrackPosition(const StreamParams& track,
-                            const StreamParamsVec& tracks) {
-  int position = -1;
-  for (size_t i = 0; i < tracks.size(); ++i) {
-    if (tracks[i].sync_label == track.sync_label) {
-      ++position;
-    }
-    if (tracks[i].name == track.name) {
-      // Found
-      break;
-    }
-  }
-  return position;
-}
-
 void CreateTracksFromSsrcInfos(const SsrcInfoVec& ssrc_infos,
                                StreamParamsVec* tracks) {
   ASSERT(tracks != NULL);
@@ -436,10 +419,9 @@ void CreateTracksFromSsrcInfos(const SsrcInfoVec& ssrc_infos,
       name = ssrc_info->label;
     } else {
       sync_label = ssrc_info->msid_identifier;
-      // Combine msid_identifier and msid_appdata to make the label name unique
-      // across the media streams.
-      name = ssrc_info->msid_identifier;
-      name.append(ssrc_info->msid_appdata);
+      // The appdata consists of the "id" attribute of a MediaStreamTrack, which
+      // is corresponding to the "name" attribute of StreamParams.
+      name = ssrc_info->msid_appdata;
     }
     if (sync_label.empty() || name.empty()) {
       ASSERT(false);
@@ -1146,23 +1128,9 @@ void BuildMediaDescription(const ContentInfo* content_info,
 
       // draft-alvestrand-mmusic-msid-00
       // a=ssrc:<ssrc-id> msid:identifier [appdata]
-      int position = GetTrackPosition(*track, media_desc->streams());
-      ASSERT(position >= 0);
-      std::string appdata;
-      switch (media_type) {
-        case cricket::MEDIA_TYPE_AUDIO:
-          appdata = kMsidAppdataAudio;
-          break;
-        case cricket::MEDIA_TYPE_VIDEO:
-          appdata = kMsidAppdataVideo;
-          break;
-        case cricket::MEDIA_TYPE_DATA:
-          appdata = kMsidAppdataData;
-          break;
-        default:
-          ASSERT(!"unknown media type");
-      }
-      appdata.append(talk_base::ToString<int>(position));
+      // The appdata consists of the "id" attribute of a MediaStreamTrack, which
+      // is corresponding to the "name" attribute of StreamParams.
+      std::string appdata = track->name;
       std::ostringstream os;
       InitAttrLine(kAttributeSsrc, &os);
       os << kSdpDelimiterColon << ssrc << kSdpDelimiterSpace

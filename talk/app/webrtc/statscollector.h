@@ -65,11 +65,15 @@ class StatsCollector {
   // |reports|.
   bool GetStats(MediaStreamTrackInterface* track, StatsReports* reports);
 
+  WebRtcSession* session() { return session_; }
+  // Prepare a report for the given label and ssrc. Used internally.
+  StatsReport* PrepareReport(const std::string& label, uint32 ssrc);
+
  private:
   bool CopySelectedReports(const std::string& selector, StatsReports* reports);
 
-  StatsReport* PrepareReport(const std::string& name, uint32 ssrc);
-  void GetRemoteAudioTrackStats();
+  void ExtractVoiceInfo();
+  void ExtractVideoInfo();
   double GetTimeNow();
 
   // |track_reports_| contain the last gathered stats for all tracks.

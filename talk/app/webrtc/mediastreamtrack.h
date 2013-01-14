@@ -42,7 +42,7 @@ class MediaStreamTrack : public Notifier<T> {
  public:
   typedef typename T::TrackState TypedTrackState;
 
-  virtual std::string label() const { return label_; }
+  virtual std::string id() const { return id_; }
   virtual MediaStreamTrackInterface::TrackState state() const {
     return state_;
   }
@@ -64,15 +64,15 @@ class MediaStreamTrack : public Notifier<T> {
   }
 
  protected:
-  explicit MediaStreamTrack(const std::string& label)
+  explicit MediaStreamTrack(const std::string& id)
       : enabled_(true),
-        label_(label),
+        id_(id),
         state_(MediaStreamTrackInterface::kInitializing) {
   }
 
  private:
   bool enabled_;
-  std::string label_;
+  std::string id_;
   MediaStreamTrackInterface::TrackState state_;
 };
 

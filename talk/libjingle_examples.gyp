@@ -92,7 +92,6 @@
           'examples/call/mediaenginefactory.cc',
           'examples/call/mucinviterecvtask.cc',
           'examples/call/mucinvitesendtask.cc',
-          'examples/call/presenceouttask.cc',
           'examples/call/presencepushtask.cc',
         ],
         'conditions': [

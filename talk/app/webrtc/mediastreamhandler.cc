@@ -70,7 +70,7 @@ void LocalAudioTrackHandler::OnStateChanged() {
 }
 
 void LocalAudioTrackHandler::OnEnabledChanged() {
-  provider_->SetAudioSend(audio_track_->label(), audio_track_->enabled());
+  provider_->SetAudioSend(audio_track_->id(), audio_track_->enabled());
 }
 
 RemoteAudioTrackHandler::RemoteAudioTrackHandler(
@@ -90,7 +90,7 @@ void RemoteAudioTrackHandler::OnStateChanged() {
 }
 
 void RemoteAudioTrackHandler::OnEnabledChanged() {
-  provider_->SetAudioPlayout(audio_track_->label(), audio_track_->enabled());
+  provider_->SetAudioPlayout(audio_track_->id(), audio_track_->enabled());
 }
 
 LocalVideoTrackHandler::LocalVideoTrackHandler(
@@ -101,7 +101,7 @@ LocalVideoTrackHandler::LocalVideoTrackHandler(
       provider_(provider) {
   VideoSourceInterface* source = local_video_track_->GetSource();
   if (source)
-    provider_->SetCaptureDevice(local_video_track_->label(),
+    provider_->SetCaptureDevice(local_video_track_->id(),
                                 source->GetVideoCapturer());
   OnEnabledChanged();
 }
@@ -114,7 +114,7 @@ void LocalVideoTrackHandler::OnStateChanged() {
 }
 
 void LocalVideoTrackHandler::OnEnabledChanged() {
-  provider_->SetVideoSend(local_video_track_->label(),
+  provider_->SetVideoSend(local_video_track_->id(),
                           local_video_track_->enabled());
 }
 
@@ -130,7 +130,7 @@ RemoteVideoTrackHandler::RemoteVideoTrackHandler(
 RemoteVideoTrackHandler::~RemoteVideoTrackHandler() {
   // Since cricket::VideoRenderer is not reference counted
   // we need to remove the renderer before we are deleted.
-  provider_->SetVideoPlayout(remote_video_track_->label(), false, NULL);
+  provider_->SetVideoPlayout(remote_video_track_->id(), false, NULL);
 }
 
 void RemoteVideoTrackHandler::OnStateChanged() {
@@ -138,7 +138,7 @@ void RemoteVideoTrackHandler::OnStateChanged() {
 }
 
 void RemoteVideoTrackHandler::OnEnabledChanged() {
-  provider_->SetVideoPlayout(remote_video_track_->label(),
+  provider_->SetVideoPlayout(remote_video_track_->id(),
                              remote_video_track_->enabled(),
                              remote_video_track_->FrameInput());
 }

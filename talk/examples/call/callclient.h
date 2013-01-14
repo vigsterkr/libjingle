@@ -35,12 +35,12 @@
 #include "talk/base/scoped_ptr.h"
 #include "talk/base/sslidentity.h"
 #include "talk/examples/call/console.h"
-#include "talk/examples/call/status.h"
 #include "talk/media/base/mediachannel.h"
 #include "talk/p2p/base/session.h"
 #include "talk/session/media/mediamessages.h"
 #include "talk/session/media/mediasessionclient.h"
 #include "talk/xmpp/hangoutpubsubclient.h"
+#include "talk/xmpp/presencestatus.h"
 #include "talk/xmpp/xmppclient.h"
 
 namespace buzz {
@@ -51,11 +51,11 @@ class MucInviteSendTask;
 class FriendInviteSendTask;
 class DiscoInfoQueryTask;
 class Muc;
-class Status;
+class PresenceStatus;
 class IqTask;
 class MucRoomConfigTask;
 class MucRoomLookupTask;
-class MucStatus;
+class MucPresenceStatus;
 class XmlElement;
 class HangoutPubSubClient;
 struct AvailableMediaEntry;
@@ -80,7 +80,7 @@ struct StreamParams;
 
 struct RosterItem {
   buzz::Jid jid;
-  buzz::Status::Show show;
+  buzz::PresenceStatus::Show show;
   std::string status;
 };
 
@@ -134,7 +134,7 @@ class CallClient: public sigslot::has_slots<> {
   void SendStatus() {
     SendStatus(my_status_);
   }
-  void SendStatus(const buzz::Status& status);
+  void SendStatus(const buzz::PresenceStatus& status);
 
   void ParseLine(const std::string &str);
 
@@ -192,11 +192,12 @@ class CallClient: public sigslot::has_slots<> {
   void OnSessionState(cricket::Call* call,
                       cricket::Session* session,
                       cricket::Session::State state);
-  void OnStatusUpdate(const buzz::Status& status);
+  void OnStatusUpdate(const buzz::PresenceStatus& status);
   void OnMucInviteReceived(const buzz::Jid& inviter, const buzz::Jid& room,
       const std::vector<buzz::AvailableMediaEntry>& avail);
   void OnMucJoined(const buzz::Jid& endpoint);
-  void OnMucStatusUpdate(const buzz::Jid& jid, const buzz::MucStatus& status);
+  void OnMucStatusUpdate(const buzz::Jid& jid,
+                         const buzz::MucPresenceStatus& status);
   void OnMucLeft(const buzz::Jid& endpoint, int error);
   void OnPresenterStateChange(const std::string& nick,
                               bool was_presenting, bool is_presenting);
@@ -324,7 +325,7 @@ class CallClient: public sigslot::has_slots<> {
   uint32 static_views_accumulated_count_;
   uint32 screencast_ssrc_;
 
-  buzz::Status my_status_;
+  buzz::PresenceStatus my_status_;
   buzz::PresencePushTask* presence_push_;
   buzz::PresenceOutTask* presence_out_;
   buzz::MucInviteRecvTask* muc_invite_recv_;

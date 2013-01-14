@@ -248,7 +248,7 @@ bool DtlsTransportChannelWrapper::SetupDtls() {
 bool DtlsTransportChannelWrapper::SetSrtpCiphers(const std::vector<std::string>&
                                                  ciphers) {
   // SRTP ciphers must be set before the DTLS handshake starts.
-  // TODO: In multiplex situations, we may end up calling this function
+  // TODO(juberti): In multiplex situations, we may end up calling this function
   // once for each muxed channel. Depending on the order of calls, this may
   // result in slightly undesired results, e.g. 32 vs 80-bit MAC. The right way to
   // fix this would be for the TransportProxyChannels to intersect the ciphers

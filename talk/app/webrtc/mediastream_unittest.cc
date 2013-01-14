@@ -38,8 +38,8 @@
 #include "testing/base/public/gmock.h"
 
 static const char kStreamLabel1[] = "local_stream_1";
-static const char kVideoTrackLabel[] = "dummy_video_cam_1";
-static const char kAudioTrackLabel[] = "dummy_microphone_1";
+static const char kVideoTrackId[] = "dummy_video_cam_1";
+static const char kAudioTrackId[] = "dummy_microphone_1";
 
 using talk_base::scoped_refptr;
 using ::testing::Exactly;
@@ -139,9 +139,9 @@ class MockMediaStreamTrack: public T {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
     return track_impl_->kind();
   }
-  virtual std::string label() const {
+  virtual std::string id() const {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->label();
+    return track_impl_->id();
   }
   virtual bool enabled() const {
     EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
@@ -227,7 +227,7 @@ class MediaStreamTest: public testing::Test,
     // Create a video track proxy object that uses our mocked
     // version of a VideoTrack
     scoped_refptr<VideoTrack> video_track_impl(
-        VideoTrack::Create(kVideoTrackLabel, NULL));
+        VideoTrack::Create(kVideoTrackId, NULL));
     scoped_refptr<MockVideoTrack> mock_videotrack(
         new talk_base::RefCountedObject<MockVideoTrack>(
             video_track_impl, signaling_thread_.get()));
@@ -240,7 +240,7 @@ class MediaStreamTest: public testing::Test,
     // Create an audio track proxy object that uses our mocked
     // version of a AudioTrack
     scoped_refptr<AudioTrackInterface> audio_track_impl(
-        AudioTrack::Create(kAudioTrackLabel, NULL));
+        AudioTrack::Create(kAudioTrackId, NULL));
     scoped_refptr<MockAudioTrack> mock_audiotrack(
         new talk_base::RefCountedObject<MockAudioTrack>(
             audio_track_impl, signaling_thread_.get()));
@@ -294,12 +294,12 @@ TEST_F(MediaStreamTest, CreateLocalStream) {
   // Verify the video track.
   scoped_refptr<webrtc::MediaStreamTrackInterface> track(
       stream_->video_tracks()->at(0));
-  EXPECT_EQ(0, track->label().compare(kVideoTrackLabel));
+  EXPECT_EQ(0, track->id().compare(kVideoTrackId));
   EXPECT_TRUE(track->enabled());
 
   // Verify the audio track.
   track = stream_->audio_tracks()->at(0);
-  EXPECT_EQ(0, track->label().compare(kAudioTrackLabel));
+  EXPECT_EQ(0, track->id().compare(kAudioTrackId));
   EXPECT_TRUE(track->enabled());
 }
 

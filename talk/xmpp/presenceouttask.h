@@ -25,40 +25,28 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MUC_H_
-#define _MUC_H_
+#ifndef _PRESENCEOUTTASK_H_
+#define _PRESENCEOUTTASK_H_
 
-#include <map>
-#include "talk/xmpp/jid.h"
+#include "talk/xmpp/xmppengine.h"
+#include "talk/xmpp/xmpptask.h"
 #include "talk/xmpp/presencestatus.h"
 
 namespace buzz {
 
-class Muc {
- public:
-   Muc(const Jid& jid, const std::string& nick) : state_(MUC_JOINING),
-       jid_(jid), local_jid_(Jid(jid.Str() + "/" + nick)) {}
-  ~Muc() {};
+class PresenceOutTask : public XmppTask {
+public:
+  explicit PresenceOutTask(XmppTaskParentInterface* parent)
+      : XmppTask(parent) {}
+  virtual ~PresenceOutTask() {}
 
-  enum State { MUC_JOINING, MUC_JOINED, MUC_LEAVING };
-  State state() const { return state_; }
-  void set_state(State state) { state_ = state; }
-  const Jid & jid() const { return jid_; }
-  const Jid & local_jid() const { return local_jid_; }
+  XmppReturnStatus Send(const PresenceStatus & s);
+  XmppReturnStatus SendDirected(const Jid & j, const PresenceStatus & s);
+  XmppReturnStatus SendProbe(const Jid& jid);
 
-  typedef std::map<std::string, MucPresenceStatus> MemberMap;
-
-  // All the intelligence about how to manage the members is in
-  // CallClient, so we completely expose the map.
-  MemberMap& members() {
-    return members_;
-  }
-
+  virtual int ProcessStart();
 private:
-  State state_;
-  Jid jid_;
-  Jid local_jid_;
-  MemberMap members_;
+  XmlElement * TranslateStatus(const PresenceStatus & s);
 };
 
 }

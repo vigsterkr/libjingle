@@ -25,30 +25,18 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _STATUS_H_
-#define _STATUS_H_
+#ifndef THIRD_PARTY_LIBJINGLE_FILES_TALK_XMPP_PRESENCESTATUS_H_
+#define THIRD_PARTY_LIBJINGLE_FILES_TALK_XMPP_PRESENCESTATUS_H_
 
 #include "talk/xmpp/jid.h"
 #include "talk/xmpp/constants.h"
 
 namespace buzz {
 
-class Status {
+class PresenceStatus {
 public:
-  Status()
-      : pri_(0),
-        show_(SHOW_NONE),
-        available_(false),
-        e_code_(0),
-        feedback_probation_(false),
-        know_capabilities_(false),
-        voice_capability_(false),
-        pmuc_capability_(false),
-        video_capability_(false),
-        camera_capability_(false) {
-  }
-
-  ~Status() {}
+  PresenceStatus();
+  ~PresenceStatus() {}
 
   // These are arranged in "priority order", i.e., if we see
   // two statuses at the same priority but with different Shows,
@@ -100,24 +88,7 @@ public:
   void set_feedback_probation(bool f) { feedback_probation_ = f; }
   void set_sent_time(const std::string& time) { sent_time_ = time; }
 
-  void UpdateWith(const Status& new_value) {
-    if (!new_value.know_capabilities()) {
-       bool k = know_capabilities();
-       bool p = voice_capability();
-       std::string node = caps_node();
-       std::string v = version();
-
-       *this = new_value;
-
-       set_know_capabilities(k);
-       set_caps_node(node);
-       set_voice_capability(p);
-       set_version(v);
-    }
-    else {
-      *this = new_value;
-    }
-  }
+  void UpdateWith(const PresenceStatus& new_value);
 
   bool HasQuietStatus() const {
     if (status_.empty())
@@ -224,10 +195,11 @@ private:
   std::string sent_time_; // from the jabber:x:delay element
 };
 
-class MucStatus : public Status {
+class MucPresenceStatus : public PresenceStatus {
 };
 
-}
+} // namespace buzz
 
 
-#endif
+#endif // THIRD_PARTY_LIBJINGLE_FILES_TALK_XMPP_PRESENCESTATUS_H_
+

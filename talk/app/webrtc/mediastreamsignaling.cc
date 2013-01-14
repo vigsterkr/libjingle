@@ -218,7 +218,7 @@ void MediaStreamSignaling::UpdateSessionOptions() {
       // For each audio track in the stream, add it to the MediaSessionOptions.
       for (size_t j = 0; j < audio_tracks->count(); ++j) {
         scoped_refptr<MediaStreamTrackInterface> track(audio_tracks->at(j));
-        options_.AddStream(cricket::MEDIA_TYPE_AUDIO, track->label(),
+        options_.AddStream(cricket::MEDIA_TYPE_AUDIO, track->id(),
                            stream->label());
       }
 
@@ -229,7 +229,7 @@ void MediaStreamSignaling::UpdateSessionOptions() {
       // For each video track in the stream, add it to the MediaSessionOptions.
       for (size_t j = 0; j < video_tracks->count(); ++j) {
         scoped_refptr<MediaStreamTrackInterface> track(video_tracks->at(j));
-        options_.AddStream(cricket::MEDIA_TYPE_VIDEO, track->label(),
+        options_.AddStream(cricket::MEDIA_TYPE_VIDEO, track->id(),
                            stream->label());
       }
     }
@@ -269,9 +269,9 @@ void MediaStreamSignaling::UpdateRemoteStreamsList(
                                               signaling_thread_);
         current_streams->AddStream(new_stream);
       }
-      const std::string track_label = it->name;
+      const std::string track_id = it->name;
       uint32 track_ssrc = it->first_ssrc();
-      AddRemoteTrack<Track, TrackProxy>(track_label, track_ssrc, new_stream);
+      AddRemoteTrack<Track, TrackProxy>(track_id, track_ssrc, new_stream);
     } else {
       current_streams->AddStream(old_stream);
     }
@@ -279,19 +279,19 @@ void MediaStreamSignaling::UpdateRemoteStreamsList(
 }
 
 template <typename Track, typename TrackProxy>
-void MediaStreamSignaling::AddRemoteTrack(const std::string& track_label,
+void MediaStreamSignaling::AddRemoteTrack(const std::string& track_id,
                                           uint32 ssrc,
                                           RemoteMediaStream* stream) {
-  if (remote_track_ssrc_.find(track_label) != remote_track_ssrc_.end()) {
-    LOG(LS_WARNING) << "Remote track with label " << track_label
+  if (remote_track_ssrc_.find(track_id) != remote_track_ssrc_.end()) {
+    LOG(LS_WARNING) << "Remote track with label " << track_id
                     << " already exists.";
     return;
   }
   scoped_refptr<TrackProxy> track(
-      TrackProxy::Create(Track::Create(track_label, NULL), signaling_thread_));
+      TrackProxy::Create(Track::Create(track_id, NULL), signaling_thread_));
   track->set_state(MediaStreamTrackInterface::kLive);
   stream->AddTrack(track);
-  remote_track_ssrc_[track_label] = ssrc;
+  remote_track_ssrc_[track_id] = ssrc;
 }
 
 void MediaStreamSignaling::UpdateEndedRemoteStream(
@@ -300,13 +300,13 @@ void MediaStreamSignaling::UpdateEndedRemoteStream(
   for (size_t j = 0; j < audio_tracklist->count(); ++j) {
     MediaStreamTrackInterface* track = audio_tracklist->at(j);
     track->set_state(MediaStreamTrackInterface::kEnded);
-    remote_track_ssrc_.erase(track->label());
+    remote_track_ssrc_.erase(track->id());
   }
   scoped_refptr<VideoTracks> video_tracklist(stream->video_tracks());
   for (size_t j = 0; j < video_tracklist->count(); ++j) {
     MediaStreamTrackInterface* track = video_tracklist->at(j);
     track->set_state(MediaStreamTrackInterface::kEnded);
-    remote_track_ssrc_.erase(track->label());
+    remote_track_ssrc_.erase(track->id());
   }
 }
 

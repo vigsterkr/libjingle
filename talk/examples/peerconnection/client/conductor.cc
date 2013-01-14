@@ -447,7 +447,6 @@ void Conductor::UIThreadCallback(int msg_id, void* data) {
       // Only render the first track.
       if (tracks->count() > 0) {
         webrtc::VideoTrackInterface* track = tracks->at(0);
-        LOG(INFO) << "Setting video renderer for track: " << track->label();
         main_wnd_->StartRemoteRenderer(track);
       }
       stream->Release();

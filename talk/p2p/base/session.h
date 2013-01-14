@@ -107,7 +107,7 @@ class TransportProxy : public sigslot::has_slots<>,
   ~TransportProxy();
 
   std::string content_name() const { return content_name_; }
-  // TODO: It's not good form to expose the object you're wrapping,
+  // TODO(juberti): It's not good form to expose the object you're wrapping,
   // since callers can mutate it. Can we make this return a const Transport*?
   Transport* impl() const { return transport_->get(); }
 

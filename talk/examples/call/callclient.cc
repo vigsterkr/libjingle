@@ -42,7 +42,6 @@
 #include "talk/examples/call/muc.h"
 #include "talk/examples/call/mucinviterecvtask.h"
 #include "talk/examples/call/mucinvitesendtask.h"
-#include "talk/examples/call/presenceouttask.h"
 #include "talk/examples/call/presencepushtask.h"
 #include "talk/media/base/mediacommon.h"
 #include "talk/media/base/mediaengine.h"
@@ -59,6 +58,7 @@
 #include "talk/xmpp/hangoutpubsubclient.h"
 #include "talk/xmpp/mucroomconfigtask.h"
 #include "talk/xmpp/mucroomlookuptask.h"
+#include "talk/xmpp/presenceouttask.h"
 #include "talk/xmpp/pingtask.h"
 
 namespace {
@@ -67,14 +67,15 @@ namespace {
 const uint32 kPingPeriodMillis = 10000;
 const uint32 kPingTimeoutMillis = 10000;
 
-const char* DescribeStatus(buzz::Status::Show show, const std::string& desc) {
+const char* DescribeStatus(buzz::PresenceStatus::Show show,
+                           const std::string& desc) {
   switch (show) {
-  case buzz::Status::SHOW_XA:      return desc.c_str();
-  case buzz::Status::SHOW_ONLINE:  return "online";
-  case buzz::Status::SHOW_AWAY:    return "away";
-  case buzz::Status::SHOW_DND:     return "do not disturb";
-  case buzz::Status::SHOW_CHAT:    return "ready to chat";
-  default:                         return "offline";
+  case buzz::PresenceStatus::SHOW_XA:      return desc.c_str();
+  case buzz::PresenceStatus::SHOW_ONLINE:  return "online";
+  case buzz::PresenceStatus::SHOW_AWAY:    return "away";
+  case buzz::PresenceStatus::SHOW_DND:     return "do not disturb";
+  case buzz::PresenceStatus::SHOW_CHAT:    return "ready to chat";
+  default:                                 return "offline";
   }
 }
 
@@ -617,22 +618,22 @@ void CallClient::OnSpeakerChanged(cricket::Call* call,
   }
 }
 
-void SetMediaCaps(int media_caps, buzz::Status* status) {
+void SetMediaCaps(int media_caps, buzz::PresenceStatus* status) {
   status->set_voice_capability((media_caps & cricket::AUDIO_RECV) != 0);
   status->set_video_capability((media_caps & cricket::VIDEO_RECV) != 0);
   status->set_camera_capability((media_caps & cricket::VIDEO_SEND) != 0);
 }
 
-void SetCaps(int media_caps, buzz::Status* status) {
+void SetCaps(int media_caps, buzz::PresenceStatus* status) {
   status->set_know_capabilities(true);
   status->set_pmuc_capability(true);
   SetMediaCaps(media_caps, status);
 }
 
-void SetAvailable(const buzz::Jid& jid, buzz::Status* status) {
+void SetAvailable(const buzz::Jid& jid, buzz::PresenceStatus* status) {
   status->set_jid(jid);
   status->set_available(true);
-  status->set_show(buzz::Status::SHOW_ONLINE);
+  status->set_show(buzz::PresenceStatus::SHOW_ONLINE);
 }
 
 void CallClient::InitPresence() {
@@ -681,11 +682,11 @@ void CallClient::OnPingTimeout() {
   // Quit();
 }
 
-void CallClient::SendStatus(const buzz::Status& status) {
+void CallClient::SendStatus(const buzz::PresenceStatus& status) {
   presence_out_->Send(status);
 }
 
-void CallClient::OnStatusUpdate(const buzz::Status& status) {
+void CallClient::OnStatusUpdate(const buzz::PresenceStatus& status) {
   RosterItem item;
   item.jid = status.jid();
   item.show = status.show();
@@ -1240,7 +1241,7 @@ void CallClient::OnMucJoined(const buzz::Jid& endpoint) {
 }
 
 void CallClient::OnMucStatusUpdate(const buzz::Jid& jid,
-    const buzz::MucStatus& status) {
+    const buzz::MucPresenceStatus& status) {
 
   // Look up this muc.
   MucMap::iterator elem = mucs_.find(jid);
@@ -1296,7 +1297,7 @@ void CallClient::LeaveMuc(const std::string& room) {
   buzz::Muc* muc = elem->second;
   muc->set_state(buzz::Muc::MUC_LEAVING);
 
-  buzz::Status status;
+  buzz::PresenceStatus status;
   status.set_jid(my_status_.jid());
   status.set_available(false);
   status.set_priority(0);

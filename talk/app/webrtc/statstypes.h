@@ -35,22 +35,34 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
+#include "talk/base/stringencode.h"
 
 namespace webrtc {
 
 // StatsElement contains a time stamped list of name/value pairs.
-struct StatsElement {
-  StatsElement() : timestamp(0) { }
-  double timestamp;  // Time since 1970-01-01T00:00:00Z in milliseconds.
+class StatsElement {
+ public:
   struct Value {
     std::string name;
     std::string value;
   };
+
+  StatsElement() : timestamp(0) { }
+
+  void AddValue(std::string name, std::string value);
+  void AddValue(std::string name, int value);
+
+  double timestamp;  // Time since 1970-01-01T00:00:00Z in milliseconds.
   typedef std::vector<Value> Values;
   Values values;
 
   // StatsValue names
   static const char kStatsValueNameAudioOutputLevel[];
+  static const char kStatsValueNameBytesSent[];
+  static const char kStatsValueNamePacketsSent[];
+  static const char kStatsValueNameBytesReceived[];
+  static const char kStatsValueNamePacketsReceived[];
+  static const char kStatsValueNamePacketsLost[];
 };
 
 // StatsReport contains local and remote StatsElements that pertain to the same
