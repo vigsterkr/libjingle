@@ -10,7 +10,7 @@ vars = {
   "chromium_trunk" : "http://src.chromium.org/svn/trunk",
   "chromium_git": "https://chromium.googlesource.com",
 
-  "chromium_revision": "172329",
+  "chromium_revision": "176094",
   "webrtc_revision": "3255",
 }
 
