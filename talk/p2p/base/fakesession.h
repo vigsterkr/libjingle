@@ -296,6 +296,9 @@ class FakeTransport : public Transport {
     identity_ = identity;
   }
 
+  using Transport::local_description;
+  using Transport::remote_description;
+
  protected:
   virtual TransportChannelImpl* CreateTransportChannel(int component) {
     if (channels_.find(component) != channels_.end()) {

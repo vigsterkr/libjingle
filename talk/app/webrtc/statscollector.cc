@@ -35,6 +35,7 @@
 namespace webrtc {
 
 const char StatsElement::kStatsValueNameAudioOutputLevel[] = "audioOutputLevel";
+const char StatsElement::kStatsValueNameAudioInputLevel[] = "audioInputLevel";
 const char StatsElement::kStatsValueNameBytesSent[] = "bytesSent";
 const char StatsElement::kStatsValueNamePacketsSent[] = "packetsSent";
 const char StatsElement::kStatsValueNameBytesReceived[] = "bytesReceived";
@@ -87,6 +88,8 @@ void ExtractStats(const cricket::VoiceReceiverInfo& info, StatsReport* report) {
 }
 
 void ExtractStats(const cricket::VoiceSenderInfo& info, StatsReport* report) {
+  report->local.AddValue(StatsElement::kStatsValueNameAudioInputLevel,
+                         info.audio_level);
   report->local.AddValue(StatsElement::kStatsValueNameBytesSent,
                          info.bytes_sent);
   report->local.AddValue(StatsElement::kStatsValueNamePacketsSent,

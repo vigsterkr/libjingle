@@ -1,0 +1,20 @@
+This directory holds a Java implementation of the webrtc::PeerConnection API, as
+well as the JNI glue C++ code that lets the Java implementation reuse the C++
+implementation of the same API.
+
+To build the Java API and related tests, include libjingle_java=1 in $GYP_DEFINES.
+
+To use the Java API, start by looking at the public interface of
+org.webrtc.PeerConnection{,Factory} and the org.webrtc.PeerConnectionTest.
+
+To understand the implementation of the API, see the native code in jni/.
+
+An example command-line to build & run the unittest:
+export R=path/to/trunk
+cd $R
+GYP_GENERATORS=ninja GYP_DEFINES=libjingle_java=1 gclient runhooks
+ninja -C out/Debug libjingle_peerconnection_test_jar
+LD_LIBRARY_PATH=$R/out/Debug java -classpath ${R}/third_party/junit/junit-4.11.jar:${R}/out/Debug/libjingle_peerconnection_test.jar:${R}/out/Debug/libjingle_peerconnection.jar junit.textui.TestRunner org.webrtc.PeerConnectionTest
+
+During development it can be helpful to run the JVM with the -Xcheck:jni flag.
+

@@ -28,6 +28,7 @@
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
 #include "talk/media/base/fakemediaprocessor.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/media/base/testutils.h"
 #include "talk/media/base/videoengine_unittest.h"
 #include "talk/media/webrtc/fakewebrtcvideocapturemodule.h"
@@ -399,7 +400,9 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
 TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->AddSendStream(
       cricket::StreamParams::CreateLegacy(1)));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
@@ -421,7 +424,9 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
 TEST_F(WebRtcVideoEngineTestFake, RtpTimestampOffsetHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
 
   // Verify extensions are off by default.
   EXPECT_EQ(0, vie_.GetSendRtpTimestampOffsetExtensionId(channel_num));
@@ -467,7 +472,9 @@ TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
   EXPECT_FALSE(vie_.GetTransmissionSmoothingStatus(first_send_channel));
 
   // Enable the experiment and verify.
-  int options = cricket::OPT_CONFERENCE | cricket::OPT_VIDEO_LEAKY_BUCKET;
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  options.video_leaky_bucket.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(vie_.GetTransmissionSmoothingStatus(first_send_channel));
 
@@ -597,7 +604,9 @@ TEST_F(WebRtcVideoEngineTestFake, HybridNackFecConference) {
   EXPECT_TRUE(SetupEngine());
   // Setup the send channel.
   int send_channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->SetRecvCodecs(engine_.codecs()));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   EXPECT_FALSE(vie_.GetHybridNackFecStatus(send_channel_num));
@@ -615,7 +624,9 @@ TEST_F(WebRtcVideoEngineTestFake, AddRemoveRecvStreamConference) {
   EXPECT_TRUE(SetupEngine());
   // Setup the send channel.
   int send_channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
   // Add a receive stream.
   EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(1)));
   int receive_channel_num = vie_.GetLastChannel();
@@ -695,7 +706,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthFixed) {
 TEST_F(WebRtcVideoEngineTestFake, SetBandwidthInConference) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
   VerifyVP8SendCodec(channel_num, kVP8Codec.width, kVP8Codec.height);
 
@@ -767,7 +780,9 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
 
   // Set options with OPT_VIDEO_NOISE_REDUCTION flag.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_VIDEO_NOISE_REDUCTION));
+  cricket::VideoMediaOptions options;
+  options.video_noise_reduction.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
 
   // Verify capture has denoising turned on.
   webrtc::VideoCodec send_codec;
@@ -777,7 +792,8 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
   EXPECT_FALSE(vie_.GetCaptureDenoising(capture_id));
 
   // Set options back to zero.
-  EXPECT_TRUE(channel_->SetOptions(0));
+  options.video_noise_reduction.Set(false);
+  EXPECT_TRUE(channel_->SetOptions(options));
 
   // Verify capture has denoising turned off.
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, send_codec));
@@ -815,7 +831,9 @@ TEST_F(WebRtcVideoEngineTestFake, MultipleSendStreamsDifferentFormats) {
 
 TEST_F(WebRtcVideoEngineTestFake, SendReceiveBitratesStats) {
   EXPECT_TRUE(SetupEngine());
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->AddSendStream(
       cricket::StreamParams::CreateLegacy(1)));
   int send_channel = vie_.GetLastChannel();
@@ -1130,10 +1148,14 @@ TEST_F(WebRtcVideoMediaChannelTest, HighAspectHighHeightCapturer) {
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options;
+  options.conference_mode.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
 
   // Verify SetOptions returns true on a different options.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_ADAPT_INPUT_TO_CPU_USAGE));
+  cricket::VideoMediaOptions options2;
+  options2.adapt_input_to_cpu_usage.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options2));
 
   // Set send codecs on the channel and start sending.
   std::vector<cricket::VideoCodec> codecs;
@@ -1142,10 +1164,12 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
   EXPECT_TRUE(channel_->SetSend(true));
 
   // Verify SetOptions returns false if channel is already sending.
-  EXPECT_FALSE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+  cricket::VideoMediaOptions options3;
+  options3.conference_mode.Set(true);
+  EXPECT_FALSE(channel_->SetOptions(options3));
 
   // Verify SetOptions returns true with the old options.
-  EXPECT_TRUE(channel_->SetOptions(cricket::OPT_ADAPT_INPUT_TO_CPU_USAGE));
+  EXPECT_TRUE(channel_->SetOptions(options2));
 }
 
 // Tests empty StreamParams is rejected.

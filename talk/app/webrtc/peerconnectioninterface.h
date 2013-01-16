@@ -143,6 +143,7 @@ class StatsObserver : public talk_base::RefCountInterface {
 class PeerConnectionInterface : public JsepInterface,
                                 public talk_base::RefCountInterface {
  public:
+  // Keep in sync with org.webrtc.PeerConnection.SignalingState.
   enum SignalingState {
     kStable,
     kHaveLocalOffer,
@@ -157,6 +158,7 @@ class PeerConnectionInterface : public JsepInterface,
     kActive = kStable
   };
 
+  // Keep in sync with org.webrtc.PeerConnection.IceState.
   enum IceState {
     kIceNew,
     kIceGathering,

@@ -1185,7 +1185,7 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
     : engine_(engine),
       voice_channel_(channel),
       vie_channel_(-1),
-      options_(0),
+      options_(),
       render_started_(false),
       first_receive_ssrc_(0),
       send_red_type_(-1),
@@ -2314,7 +2314,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   return true;
 }
 
-bool WebRtcVideoMediaChannel::SetOptions(int options) {
+bool WebRtcVideoMediaChannel::SetOptions(const VideoMediaOptions &options) {
   // Always accept options that are unchanged.
   if (options_ == options) {
     return true;
@@ -2322,16 +2322,18 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
 
   // Reject new options if we're already sending.
   if (sending()) {
+    LOG(LS_INFO) << "Not setting options - already sending | "
+                 << options.ToString();
     return false;
   }
 
   // Trigger SetSendCodec to set correct noise reduction state if the option has
   // changed.
-  bool denoiser_changed = (options_ & OPT_VIDEO_NOISE_REDUCTION) !=
-      (options & OPT_VIDEO_NOISE_REDUCTION);
+  bool denoiser_changed =
+      (options_.video_noise_reduction != options.video_noise_reduction);
 
-  bool leaky_bucket_changed = (options_ & OPT_VIDEO_LEAKY_BUCKET) !=
-      (options & OPT_VIDEO_LEAKY_BUCKET);
+  bool leaky_bucket_changed =
+      (options_.video_leaky_bucket != options.video_leaky_bucket);
 
   // Save the options, to be interpreted where appropriate.
   options_ = options;
@@ -2354,9 +2356,10 @@ bool WebRtcVideoMediaChannel::SetOptions(int options) {
     LogSendCodecChange("SetOptions()");
   }
   if (leaky_bucket_changed) {
-    bool enable_leaky_bucket = IsOptionSet(OPT_VIDEO_LEAKY_BUCKET);
+    bool enable_leaky_bucket =
+        options_.video_leaky_bucket.GetWithDefaultIfUnset(false);
     for (SendChannelMap::iterator it = send_channels_.begin();
-         it != send_channels_.end(); ++it) {
+        it != send_channels_.end(); ++it) {
       if (engine()->vie()->rtp()->SetTransmissionSmoothingStatus(
           it->second->channel_id(), enable_leaky_bucket) != 0) {
         LOG_RTCERR2(SetTransmissionSmoothingStatus, it->second->channel_id(),
@@ -2718,7 +2721,9 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
     }
   }
 
-  if (IsOptionSet(OPT_VIDEO_LEAKY_BUCKET)) {
+  bool enable_leaky_bucket;
+  if (options_.video_leaky_bucket.Get(&enable_leaky_bucket) &&
+      enable_leaky_bucket) {
     if (engine()->vie()->rtp()->SetTransmissionSmoothingStatus(channel_id,
                                                                true) != 0) {
       LOG_RTCERR2(SetTransmissionSmoothingStatus, channel_id, true);
@@ -2817,7 +2822,8 @@ bool WebRtcVideoMediaChannel::SetSendCodec(
     // Turn off the VP8 error resilience
     target_codec.codecSpecific.VP8.resilience = webrtc::kResilienceOff;
 
-    bool enable_denoising = (0 != (options_ & OPT_VIDEO_NOISE_REDUCTION));
+    bool enable_denoising =
+        options_.video_noise_reduction.GetWithDefaultIfUnset(false);
     target_codec.codecSpecific.VP8.denoisingOn = enable_denoising;
   }
 
@@ -2957,8 +2963,9 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
   // not work well at low fps.
   bool vp8_frame_dropping = !is_screencast;
   // Disable denoising for screencasting.
-  bool denoising = !is_screencast &&
-      (0 != (options_ & OPT_VIDEO_NOISE_REDUCTION));
+  bool enable_denoising =
+      options_.video_noise_reduction.GetWithDefaultIfUnset(false);
+  bool denoising = !is_screencast && enable_denoising;
   bool reset_send_codec =
       target_width != cur_width || target_height != cur_height ||
       automatic_resize != vie_codec.codecSpecific.VP8.automaticResizeOn;

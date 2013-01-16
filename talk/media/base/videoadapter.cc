@@ -377,6 +377,7 @@ void CoordinatedVideoAdapter::OnEncoderResolutionRequest(
   // Ignore up or keep if no change.
   if (DOWNGRADE != request && view_switch_ && !changed) {
     encoder_desired_num_pixels_ = old_encoder_desired_num_pixels;
+    LOG(LS_VERBOSE) << "VAdapt ignoring GD request.";
   }
 
   LOG(LS_INFO) << "VAdapt GD Request: "

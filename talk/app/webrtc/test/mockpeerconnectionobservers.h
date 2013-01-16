@@ -129,6 +129,10 @@ class MockStatsObserver : public webrtc::StatsObserver {
     return GetStatsValue(webrtc::StatsElement::kStatsValueNameAudioOutputLevel);
   }
 
+  int AudioInputLevel() {
+    return GetStatsValue(webrtc::StatsElement::kStatsValueNameAudioInputLevel);
+  }
+
   int BytesReceived() {
     return GetStatsValue(webrtc::StatsElement::kStatsValueNameBytesReceived);
   }

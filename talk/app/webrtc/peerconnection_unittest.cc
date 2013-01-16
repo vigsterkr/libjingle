@@ -231,10 +231,18 @@ class PeerConnectionTestClientBase
 
   int GetAudioOutputLevelStats(webrtc::MediaStreamTrackInterface* track) {
     talk_base::scoped_refptr<MockStatsObserver>
-    observer(new talk_base::RefCountedObject<MockStatsObserver>());
+        observer(new talk_base::RefCountedObject<MockStatsObserver>());
     EXPECT_TRUE(peer_connection_->GetStats(observer, track));
     EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
     return observer->AudioOutputLevel();
+  }
+
+  int GetAudioInputLevelStats() {
+    talk_base::scoped_refptr<MockStatsObserver>
+        observer(new talk_base::RefCountedObject<MockStatsObserver>());
+    EXPECT_TRUE(peer_connection_->GetStats(observer, NULL));
+    EXPECT_TRUE_WAIT(observer->called(), kMaxWaitMs);
+    return observer->AudioInputLevel();
   }
 
   int GetBytesReceivedStats(webrtc::MediaStreamTrackInterface* track) {
@@ -905,6 +913,17 @@ TEST_F(JsepPeerConnectionP2PTestClient, GetAudioOutputLevelStats) {
   // until a RTCP packet has been received.
   EXPECT_TRUE_WAIT(
       initializing_client()->GetAudioOutputLevelStats(remote_audio_track) > 0,
+      kMaxWaitForStatsMs);
+}
+
+// Test that an audio input level is reported.
+TEST_F(JsepPeerConnectionP2PTestClient, GetAudioInputLevelStats) {
+  ASSERT_TRUE(CreateTestClients());
+  LocalP2PTest();
+
+  // Get the audio input level stats.  The level should be available very
+  // soon after the test starts.
+  EXPECT_TRUE_WAIT(initializing_client()->GetAudioInputLevelStats() > 0,
       kMaxWaitForStatsMs);
 }
 

@@ -45,9 +45,10 @@ namespace cricket {
 static const int TURN_ALLOCATE_REQUEST = STUN_ALLOCATE_REQUEST;
 static const int TURN_ALLOCATE_ERROR_RESPONSE = STUN_ALLOCATE_ERROR_RESPONSE;
 
+// TODO(juberti): Extract to turnmessage.h
 static const int TURN_DEFAULT_PORT = 3478;
 static const int TURN_CHANNEL_NUMBER_START = 0x4000;
-static const int TURN_CHANNEL_BINDING_TIMEOUT = 10 * 60 * 1000;  // 10 minutes
+static const int TURN_PERMISSION_TIMEOUT = 5 * 60 * 1000;  // 5 minutes
 
 static const size_t TURN_CHANNEL_HEADER_SIZE = 4U;
 
@@ -688,10 +689,13 @@ void TurnChannelBindRequest::Prepare(StunMessage* request) {
 
 void TurnChannelBindRequest::OnResponse(StunMessage* response) {
   entry_->OnChannelBindSuccess();
-  // Refresh the binding a minute before it expires.
+  // Refresh the channel binding just under the permission timeout
+  // threshold. The channel binding has a longer lifetime, but
+  // this is the easiest way to keep both the channel and the
+  // permission from expiring.
   port_->SendRequest(new TurnChannelBindRequest(
       port_, entry_, channel_id_, ext_addr_),
-      TURN_CHANNEL_BINDING_TIMEOUT - 60 * 1000);
+      TURN_PERMISSION_TIMEOUT - 60 * 1000);
 }
 
 void TurnChannelBindRequest::OnErrorResponse(StunMessage* response) {

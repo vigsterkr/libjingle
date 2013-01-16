@@ -35,6 +35,7 @@
 #include "talk/media/base/fakemediaengine.h"
 #include "talk/media/base/fakertp.h"
 #include "talk/media/base/fakevideocapturer.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/media/base/rtpdump.h"
 #include "talk/media/base/screencastid.h"
 #include "talk/media/base/testutils.h"
@@ -1914,15 +1915,23 @@ class VideoChannelTest
   void TestSetChannelOptions() {
     CreateChannels(0, 0);
 
-    channel1_->SetChannelOptions(1);
-    channel2_->SetChannelOptions(1);
-    EXPECT_EQ(1, media_channel1_->GetOptions());
-    EXPECT_EQ(1, media_channel2_->GetOptions());
+    cricket::VideoMediaOptions o1, o2;
+    o1.video_noise_reduction.Set(true);
 
-    channel1_->SetChannelOptions(2);
-    channel2_->SetChannelOptions(2);
-    EXPECT_EQ(2, media_channel1_->GetOptions());
-    EXPECT_EQ(2, media_channel2_->GetOptions());
+    channel1_->SetChannelOptions(o1);
+    channel2_->SetChannelOptions(o1);
+    EXPECT_TRUE(media_channel1_->GetOptions(&o2));
+    EXPECT_EQ(o1, o2);
+    EXPECT_TRUE(media_channel2_->GetOptions(&o2));
+    EXPECT_EQ(o1, o2);
+
+    o1.video_leaky_bucket.Set(true);
+    channel1_->SetChannelOptions(o1);
+    channel2_->SetChannelOptions(o1);
+    EXPECT_TRUE(media_channel1_->GetOptions(&o2));
+    EXPECT_EQ(o1, o2);
+    EXPECT_TRUE(media_channel2_->GetOptions(&o2));
+    EXPECT_EQ(o1, o2);
   }
 };
 

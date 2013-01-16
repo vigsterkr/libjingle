@@ -42,6 +42,81 @@
         }],
       ],
     }],
+
+    ['libjingle_java == 1', {
+      'targets': [
+        {
+          'target_name': 'libjingle_peerconnection_so',
+          'type': 'loadable_module',
+          'dependencies': [
+            'libjingle_peerconnection',
+            '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
+          ],
+          'sources': [
+            'app/webrtc/java/jni/peerconnection_jni.cc'
+          ],
+          'conditions': [
+            ['OS=="linux"', {
+              'include_dirs': [
+                '/usr/local/buildtools/java/jdk7-64/include',
+                '/usr/local/buildtools/java/jdk7-64/include/linux',
+              ],
+              'link_settings': {
+                'libraries': [
+                  '<!@(pkg-config --libs-only-l gtk+-2.0 gthread-2.0)',
+                ],
+              },
+            }],
+          ],
+        },
+        {
+          'target_name': 'libjingle_peerconnection_jar',
+          'type': 'none',
+          'actions': [
+            {
+              'variables': {
+                'java_src_dir': 'app/webrtc/java/src',
+                'java_files': [
+                  'app/webrtc/java/src/org/webrtc/AudioSource.java',
+                  'app/webrtc/java/src/org/webrtc/AudioTrack.java',
+                  'app/webrtc/java/src/org/webrtc/IceCandidate.java',
+                  'app/webrtc/java/src/org/webrtc/LocalMediaStream.java',
+                  'app/webrtc/java/src/org/webrtc/MediaConstraints.java',
+                  'app/webrtc/java/src/org/webrtc/MediaSource.java',
+                  'app/webrtc/java/src/org/webrtc/MediaStream.java',
+                  'app/webrtc/java/src/org/webrtc/MediaStreamTrack.java',
+                  'app/webrtc/java/src/org/webrtc/PeerConnectionFactory.java',
+                  'app/webrtc/java/src/org/webrtc/PeerConnection.java',
+                  'app/webrtc/java/src/org/webrtc/SdpObserver.java',
+                  'app/webrtc/java/src/org/webrtc/SessionDescription.java',
+                  'app/webrtc/java/src/org/webrtc/VideoCapturer.java',
+                  'app/webrtc/java/src/org/webrtc/VideoRenderer.java',
+                  'app/webrtc/java/src/org/webrtc/VideoSource.java',
+                  'app/webrtc/java/src/org/webrtc/VideoTrack.java',
+                ],
+              },
+              'action_name': 'create_jar',
+              'inputs': [
+                'build/build_jar.sh',
+                '<@(java_files)',
+              ],
+              'outputs': [
+                '<(PRODUCT_DIR)/libjingle_peerconnection.jar',
+              ],
+              'action': [
+                'build/build_jar.sh', '<@(_outputs)', '<(INTERMEDIATE_DIR)',
+                '<(java_src_dir)',
+                '<(PRODUCT_DIR)/libjingle_peerconnection_so.so',
+                '', '<@(java_files)'
+              ],
+            },
+          ],
+          'dependencies': [
+            'libjingle_peerconnection_so',
+          ],
+        },
+      ],
+    }],
   ],
 
   'targets': [
@@ -153,8 +228,8 @@
         'xmpp/mucroomlookuptask.cc',
         'xmpp/mucroomuniquehangoutidtask.cc',
         'xmpp/pingtask.cc',
-        'xmpp/presenceouttask.cc',
-        'xmpp/presencereceivetask.cc',
+        'xmpp/presenceouttask.cc', 
+        'xmpp/presencereceivetask.cc', 
         'xmpp/presencestatus.cc',
         'xmpp/pubsubclient.cc',
         'xmpp/pubsub_task.cc',

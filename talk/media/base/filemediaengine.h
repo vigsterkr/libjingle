@@ -270,17 +270,20 @@ class FileVideoChannel : public VideoMediaChannel {
   virtual bool RemoveRecvStream(uint32 ssrc) { return true; }
   virtual bool MuteStream(uint32 ssrc, bool on) { return false; }
   virtual bool SetSendBandwidth(bool autobw, int bps) { return true; }
-  virtual bool SetOptions(int options) {
+  virtual bool SetOptions(const VideoMediaOptions& options) {
     options_ = options;
     return true;
   }
-  virtual int GetOptions() const { return options_; }
+  virtual bool GetOptions(VideoMediaOptions* options) const {
+    *options = options_;
+    return true;
+  }
   virtual void UpdateAspectRatio(int ratio_w, int ratio_h) {}
 
  private:
   uint32 send_ssrc_;
   talk_base::scoped_ptr<RtpSenderReceiver> rtp_sender_receiver_;
-  int options_;
+  VideoMediaOptions options_;
 
   DISALLOW_COPY_AND_ASSIGN(FileVideoChannel);
 };

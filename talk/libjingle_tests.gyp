@@ -331,6 +331,42 @@
         'app/webrtc/webrtcsdp_unittest.cc',
         'app/webrtc/webrtcsession_unittest.cc',
       ],
-    },  # target libjingle_peerconnection_unittest
+      },  # target libjingle_peerconnection_unittest
+  ],
+  'conditions': [
+    ['libjingle_java == 1', {
+      'targets': [
+        {
+          'target_name': 'libjingle_peerconnection_test_jar',
+          'type': 'none',
+          'actions': [
+            {
+              'variables': {
+                'java_src_dir': 'app/webrtc/javatests/src',
+                'java_files': [
+                  'app/webrtc/javatests/src/org/webrtc/PeerConnectionTest.java',
+                ],
+              },
+              'action_name': 'create_jar',
+              'inputs': [
+                'build/build_jar.sh',
+                '<@(java_files)',
+                '<(PRODUCT_DIR)/libjingle_peerconnection.jar',
+                '<(DEPTH)/third_party/junit/junit-4.11.jar',
+              ],
+              'outputs': [
+                '<(PRODUCT_DIR)/libjingle_peerconnection_test.jar',
+              ],
+              'action': [
+                'build/build_jar.sh', '<@(_outputs)', '<(INTERMEDIATE_DIR)',
+                '<(java_src_dir)', '',
+                '<(PRODUCT_DIR)/libjingle_peerconnection.jar:<(DEPTH)/third_party/junit/junit-4.11.jar',
+                '<@(java_files)'
+              ],
+            },
+          ],
+        },
+      ],
+    }],
   ],
 }

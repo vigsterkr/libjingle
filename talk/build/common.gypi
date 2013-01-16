@@ -34,6 +34,8 @@
     # TODO(ronghuawu): For now, disable the Chrome plugins, which causes a
     # flood of chromium-style warnings.
     'clang_use_chrome_plugins%': 0,
+    # Whether or not to build the Java PeerConnection API & tests.
+    'libjingle_java%': 0,
   },
   'target_defaults': {
     'include_dirs': [

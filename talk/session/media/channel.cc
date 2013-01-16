@@ -299,8 +299,9 @@ struct AudioOptionsMessageData : public talk_base::MessageData {
 };
 
 struct VideoOptionsMessageData : public talk_base::MessageData {
-  explicit VideoOptionsMessageData(int options) : options(options) {}
-  int options;
+  explicit VideoOptionsMessageData(VideoMediaOptions options)
+      : options(options) {}
+  VideoMediaOptions options;
 };
 
 struct SetCapturerMessageData : public talk_base::MessageData {
@@ -2004,11 +2005,12 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   if (action != CA_UPDATE) {
     // Tweak our video processing settings, if needed.
-    int video_options = media_channel()->GetOptions();
+    VideoMediaOptions video_options;
+    media_channel()->GetOptions(&video_options);
     if (video->conference_mode()) {
-      video_options |= OPT_CONFERENCE;
+      video_options.conference_mode.Set(true);
     } else {
-      video_options &= (~OPT_CONFERENCE);
+      video_options.conference_mode.Set(false);
     }
     if (!media_channel()->SetOptions(video_options)) {
       // Log an error on failure, but don't abort the call.
@@ -2130,12 +2132,12 @@ void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
   SignalScreencastWindowEvent(ssrc, we);
 }
 
-void VideoChannel::SetChannelOptions(int options) {
+void VideoChannel::SetChannelOptions(const VideoMediaOptions &options) {
   VideoOptionsMessageData data(options);
   Send(MSG_SETCHANNELOPTIONS, &data);
 }
 
-void VideoChannel::SetChannelOptions_w(int options) {
+void VideoChannel::SetChannelOptions_w(const VideoMediaOptions &options) {
   media_channel()->SetOptions(options);
 }
 

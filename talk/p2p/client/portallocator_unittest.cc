@@ -138,8 +138,13 @@ class PortAllocatorTest : public testing::Test, public sigslot::has_slots<> {
     return (addr.port() >= min_port && addr.port() <= max_port);
   }
 
-  void OnCandidatesAllocationDone(cricket::PortAllocatorSession* allocator) {
-    candidate_allocation_done_ = true;
+  void OnCandidatesAllocationDone(cricket::PortAllocatorSession* session) {
+    // We should only get this callback once, except in the mux test where
+    // we have multiple port allocation sessions.
+    if (session == session_.get()) {
+      ASSERT_FALSE(candidate_allocation_done_);
+      candidate_allocation_done_ = true;
+    }
   }
 
  protected:
@@ -245,6 +250,8 @@ TEST_F(PortAllocatorTest, TestGetAllPorts) {
                "relay", "ssltcp", kRelaySslTcpIntAddr);
   EXPECT_EQ(4U, ports_.size());
   EXPECT_TRUE(candidate_allocation_done_);
+  // If we Stop gathering now, we shouldn't get a second "done" callback.
+  session_->StopGetAllPorts();
 }
 
 // Tests that we can get callback after StopGetAllPorts.

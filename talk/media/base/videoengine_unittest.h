@@ -35,6 +35,7 @@
 #include "talk/media/base/fakenetworkinterface.h"
 #include "talk/media/base/fakevideocapturer.h"
 #include "talk/media/base/fakevideorenderer.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/media/base/streamparams.h"
 
 #ifdef WIN32
@@ -892,7 +893,9 @@ class VideoMediaChannelTest : public testing::Test,
   void GetStatsMultipleRecvStreams() {
     Renderer renderer1, renderer2;
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
-    EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    cricket::VideoMediaOptions vmo;
+    vmo.conference_mode.Set(true);
+    EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(SetSend(true));
     EXPECT_TRUE(channel_->AddRecvStream(
         cricket::StreamParams::CreateLegacy(1)));
@@ -950,7 +953,9 @@ class VideoMediaChannelTest : public testing::Test,
     // Normal setup; note that we set the SSRC explicitly to ensure that
     // it will come first in the senders map.
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
-    EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    cricket::VideoMediaOptions vmo;
+    vmo.conference_mode.Set(true);
+    EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(channel_->AddRecvStream(
         cricket::StreamParams::CreateLegacy(1234)));
     EXPECT_TRUE(SetSend(true));
@@ -1101,7 +1106,9 @@ class VideoMediaChannelTest : public testing::Test,
 
   // Tests adding streams already exists returns false.
   void AddRecvStreamsAlreadyExist() {
-    EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    cricket::VideoMediaOptions vmo;
+    vmo.conference_mode.Set(true);
+    EXPECT_TRUE(channel_->SetOptions(vmo));
 
     EXPECT_FALSE(channel_->AddRecvStream(
         cricket::StreamParams::CreateLegacy(0)));
@@ -1121,7 +1128,9 @@ class VideoMediaChannelTest : public testing::Test,
   // Tests setting up and configuring multiple incoming streams.
   void AddRemoveRecvStreams() {
     Renderer renderer1, renderer2;
-    EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    cricket::VideoMediaOptions vmo;
+    vmo.conference_mode.Set(true);
+    EXPECT_TRUE(channel_->SetOptions(vmo));
     // Ensure we can't set the renderer on a non-existent stream.
     EXPECT_FALSE(channel_->SetRenderer(1, &renderer1));
     EXPECT_FALSE(channel_->SetRenderer(2, &renderer2));
@@ -1246,7 +1255,9 @@ class VideoMediaChannelTest : public testing::Test,
   void SimulateConference() {
     Renderer renderer1, renderer2;
     EXPECT_TRUE(SetDefaultCodec());
-    EXPECT_TRUE(channel_->SetOptions(cricket::OPT_CONFERENCE));
+    cricket::VideoMediaOptions vmo;
+    vmo.conference_mode.Set(true);
+    EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(SetSend(true));
     EXPECT_TRUE(channel_->SetRender(true));
     EXPECT_TRUE(channel_->AddRecvStream(

@@ -416,7 +416,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
       : engine_(engine),
         sent_intra_frame_(false),
         requested_intra_frame_(false),
-        options_(0)  {
+        options_() {
   }
   ~FakeVideoMediaChannel();
 
@@ -424,7 +424,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   const std::vector<VideoCodec>& send_codecs() const { return send_codecs_; }
   const std::vector<VideoCodec>& codecs() const { return send_codecs(); }
   bool rendering() const { return playout(); }
-  int options() const { return options_; }
+  const VideoMediaOptions& options() const { return options_; }
   const std::map<uint32, VideoRenderer*>& renderers() const {
     return renderers_;
   }
@@ -530,12 +530,13 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     requested_intra_frame_ = true;
     return true;
   }
-  virtual bool SetOptions(int options) {
+  virtual bool SetOptions(const VideoMediaOptions &options) {
     options_ = options;
     return true;
   }
-  virtual int GetOptions() const {
-    return options_;
+  virtual bool GetOptions(VideoMediaOptions *options) const {
+    *options = options_;
+    return true;
   }
   virtual void UpdateAspectRatio(int ratio_w, int ratio_h) {}
   void set_sent_intra_frame(bool v) { sent_intra_frame_ = v; }
@@ -563,7 +564,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   std::map<uint32, VideoCapturer*> capturers_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
-  int options_;
+  VideoMediaOptions options_;
 };
 
 class FakeSoundclipMedia : public SoundclipMedia {

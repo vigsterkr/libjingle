@@ -434,8 +434,10 @@ class BaseSession : public sigslot::has_slots<>,
 
  private:
   // Helper methods to push local and remote transport descriptions.
-  bool PushdownLocalTransportDescription(ContentAction action);
-  bool PushdownRemoteTransportDescription(ContentAction action);
+  bool PushdownLocalTransportDescription(
+      const SessionDescription* sdesc, ContentAction action);
+  bool PushdownRemoteTransportDescription(
+      const SessionDescription* sdesc, ContentAction action);
 
   bool IsCandidateAllocationDone() const;
   void MaybeCandidateAllocationDone();
@@ -454,20 +456,6 @@ class BaseSession : public sigslot::has_slots<>,
   bool GetTransportDescription(const SessionDescription* description,
                                const std::string& content_name,
                                TransportDescription* info);
-
-  // Returns true and the TransportInfo of the given |content_name|
-  // from |local_description_|.
-  bool GetLocalTransportDescription(const std::string& content_name,
-                                    TransportDescription* tdesc) {
-    return GetTransportDescription(local_description_, content_name, tdesc);
-  }
-
-  // Returns true and the TransportInfo of the given |content_name|
-  // from |remote_description|.
-  bool GetRemoteTransportDescription(const std::string& content_name,
-                                     TransportDescription* tdesc) {
-    return GetTransportDescription(remote_description_, content_name, tdesc);
-  }
 
   talk_base::Thread* signaling_thread_;
   talk_base::Thread* worker_thread_;

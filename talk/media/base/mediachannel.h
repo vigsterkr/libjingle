@@ -32,11 +32,12 @@
 #include <vector>
 
 #include "talk/base/basictypes.h"
-#include "talk/media/base/constants.h"
+#include "talk/base/logging.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/socket.h"
 #include "talk/base/window.h"
 #include "talk/media/base/codec.h"
+#include "talk/media/base/constants.h"
 #include "talk/media/base/streamparams.h"
 // TODO(juberti): re-evaluate this include
 #include "talk/session/media/audiomonitor.h"
@@ -75,14 +76,18 @@ class Settable {
     return set_;
   }
 
-  void Set(T val) {
+  T GetWithDefaultIfUnset(const T& defaultValue) {
+    return set_ ? val_ : defaultValue;
+  }
+
+  virtual void Set(T val) {
     set_ = true;
     val_ = val;
   }
 
   void Clear() {
+    Set(T());
     set_ = false;
-    val_ = T();
   }
 
   void SetFrom(const Settable<T>& o) {
@@ -104,11 +109,31 @@ class Settable {
     return !operator==(o);
   }
 
+ protected:
+  void InitializeValue(const T &val) {
+    val_ = val;
+  }
+
  private:
   bool set_;
   T val_;
   // TODO(hughv): Fix unit tests so we can disallow copy.
   // DISALLOW_COPY_AND_ASSIGN(Settable<T>);
+};
+
+class SettablePercent : public Settable<float> {
+ public:
+  virtual void Set(float val) {
+    if (val < 0) {
+      LOG(LS_ERROR) << "Value too small, setting to 0 ";
+      val = 0;
+    }
+    if (val >  1.0) {
+      LOG(LS_ERROR) << "Value too large, setting to 1.0 ";
+      val = 1.0;
+    }
+    Settable<float>::Set(val);
+  }
 };
 
 template <class T>
@@ -250,11 +275,11 @@ struct VideoMediaOptions {
   // Use conference mode?
   Settable<bool> conference_mode;
   // Threshhold for process cpu adaptation.  (Process limit)
-  Settable<float> process_adaptation_threshhold;
+  SettablePercent process_adaptation_threshhold;
   // Low threshhold for cpu adaptation.  (Adapt up)
-  Settable<float> system_low_adaptation_threshhold;
+  SettablePercent system_low_adaptation_threshhold;
   // High threshhold for cpu adaptation.  (Adapt down)
-  Settable<float> system_high_adaptation_threshhold;
+  SettablePercent system_high_adaptation_threshhold;
 };
 
 // A class for playing out soundclips.
@@ -724,8 +749,8 @@ class VideoMediaChannel : public MediaChannel {
   // Reuqest each of the remote senders to send an intra frame.
   virtual bool RequestIntraFrame() = 0;
   // Sets the media options to use.
-  virtual bool SetOptions(int options) { return false; }
-  virtual int GetOptions() const { return 0; }
+  virtual bool SetOptions(const VideoMediaOptions &options) = 0;
+  virtual bool GetOptions(VideoMediaOptions *options) const = 0;
   virtual void UpdateAspectRatio(int ratio_w, int ratio_h) = 0;
 
   // Signals events from the currently active window.

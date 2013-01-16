@@ -160,6 +160,35 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   virtual void OnMessage(talk_base::Message *message);
 
  private:
+  class PortData {
+   public:
+    PortData() : port_(NULL), sequence_(NULL), state_(STATE_INIT) {}
+    PortData(Port* port, AllocationSequence* seq)
+    : port_(port), sequence_(seq), state_(STATE_INIT) {
+    }
+
+    Port* port() { return port_; }
+    AllocationSequence* sequence() { return sequence_; }
+    bool ready() const { return state_ == STATE_READY; }
+    bool complete() const {
+      // Returns true if candidate allocation has completed one way or another.
+      return ((state_ == STATE_READY) || (state_ == STATE_ERROR));
+    }
+
+    void set_ready() { ASSERT(state_ == STATE_INIT); state_ = STATE_READY; }
+    void set_error() { ASSERT(state_ == STATE_INIT); state_ = STATE_ERROR; }
+    
+   private:
+    enum State {
+      STATE_INIT,   // No candidates allocated yet.
+      STATE_READY,  // All candidates allocated and ready for process.
+      STATE_ERROR   // Error in gathering candidates.
+    };
+    Port* port_;
+    AllocationSequence* sequence_;
+    State state_;
+  };
+
   void OnConfigReady(PortConfiguration* config);
   void OnConfigStop();
   void AllocatePorts();
@@ -181,6 +210,7 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   void OnShake();
   void MaybeSignalCandidatesAllocationDone();
   void OnPortAllocationComplete(AllocationSequence* seq);
+  PortData* FindPort(Port* port);
 
   BasicPortAllocator* allocator_;
   talk_base::Thread* network_thread_;
@@ -193,30 +223,6 @@ class BasicPortAllocatorSession : public PortAllocatorSession,
   bool allocation_sequences_created_;
   std::vector<PortConfiguration*> configs_;
   std::vector<AllocationSequence*> sequences_;
-
-  enum PortState {
-    STATE_INIT,   // No candidates allocated yet.
-    STATE_READY,  // All candidates allocated and ready for process.
-    STATE_ERROR   // Error in gathering candidates.
-  };
-
-  struct PortData {
-    PortData() : port(NULL), sequence(NULL), state(STATE_INIT) {}
-    PortData(Port* port, AllocationSequence* seq)
-        : port(port), sequence(seq), state(STATE_INIT) {
-    }
-
-    Port* port;
-    AllocationSequence* sequence;
-    PortState state;
-
-    bool operator==(Port* rhs) const { return (port == rhs); }
-    bool ready() const { return state == STATE_READY; }
-    bool allocation_complete() const {
-      // Returns true if candidates allocation is success or failure.
-      return ((state == STATE_READY) || (state == STATE_ERROR));
-    }
-  };
   std::vector<PortData> ports_;
 
   friend class AllocationSequence;

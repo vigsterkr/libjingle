@@ -39,6 +39,9 @@ deps = {
   "third_party/icu/":
     From("chromium_deps", "src/third_party/icu"),
 
+  "third_party/junit/":
+    (Var("googlecode_url") % "webrtc") + "/deps/third_party/junit@3367",
+
   "third_party/libjpeg":
     Var("chromium_trunk") + "/src/third_party/libjpeg@" + Var("chromium_revision"),
 

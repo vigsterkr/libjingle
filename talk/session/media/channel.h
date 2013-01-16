@@ -505,7 +505,7 @@ class VideoChannel : public BaseChannel {
       ScreenCapturerFactory* screencapture_factory);
 
   // Configuration and setting.
-  void SetChannelOptions(int options);
+  void SetChannelOptions(const VideoMediaOptions &options);
 
  protected:
   // downcasts a MediaChannel
@@ -558,7 +558,7 @@ class VideoChannel : public BaseChannel {
   void OnVideoChannelError(uint32 ssrc, VideoMediaChannel::Error error);
   void OnSrtpError(uint32 ssrc, SrtpFilter::Mode mode, SrtpFilter::Error error);
   // Configuration and setting.
-  void SetChannelOptions_w(int options);
+  void SetChannelOptions_w(const VideoMediaOptions &options);
 
   VoiceChannel* voice_channel_;
   VideoRenderer* renderer_;

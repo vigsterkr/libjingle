@@ -361,16 +361,15 @@ BaseSession::~BaseSession() {
 
 bool BaseSession::PushdownTransportDescription(ContentSource source,
                                                ContentAction action) {
-  bool ret = false;
   if (source == CS_LOCAL) {
-    ret = PushdownLocalTransportDescription(action);
-  } else {
-    ret = PushdownRemoteTransportDescription(action);
+    return PushdownLocalTransportDescription(local_description_, action);
   }
-  return ret;
+  return PushdownRemoteTransportDescription(remote_description_, action);
 }
 
-bool BaseSession::PushdownLocalTransportDescription(ContentAction action) {
+bool BaseSession::PushdownLocalTransportDescription(
+    const SessionDescription* sdesc,
+    ContentAction action) {
   // Update the Transports with the right information, and trigger them to
   // start connecting.
   for (TransportMap::iterator iter = transports_.begin();
@@ -378,8 +377,8 @@ bool BaseSession::PushdownLocalTransportDescription(ContentAction action) {
     // If no transport info was in this session description, ret == false
     // and we just skip this one.
     TransportDescription tdesc;
-    bool ret = GetLocalTransportDescription(
-        iter->second->content_name(), &tdesc);
+    bool ret = GetTransportDescription(
+        sdesc, iter->second->content_name(), &tdesc);
     if (ret) {
       if (!iter->second->SetLocalTransportDescription(tdesc, action)) {
         return false;
@@ -392,7 +391,9 @@ bool BaseSession::PushdownLocalTransportDescription(ContentAction action) {
   return true;
 }
 
-bool BaseSession::PushdownRemoteTransportDescription(ContentAction action) {
+bool BaseSession::PushdownRemoteTransportDescription(
+    const SessionDescription* sdesc,
+    ContentAction action) {
   // Update the Transports with the right information.
   for (TransportMap::iterator iter = transports_.begin();
        iter != transports_.end(); ++iter) {
@@ -400,8 +401,8 @@ bool BaseSession::PushdownRemoteTransportDescription(ContentAction action) {
 
     // If no transport info was in this session description, ret == false
     // and we just skip this one.
-    bool ret = GetRemoteTransportDescription(
-        iter->second->content_name(), &tdesc);
+    bool ret = GetTransportDescription(
+        sdesc, iter->second->content_name(), &tdesc);
     if (ret) {
       if (!iter->second->SetRemoteTransportDescription(tdesc, action)) {
         return false;

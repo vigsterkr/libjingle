@@ -58,6 +58,7 @@ class StatsElement {
 
   // StatsValue names
   static const char kStatsValueNameAudioOutputLevel[];
+  static const char kStatsValueNameAudioInputLevel[];
   static const char kStatsValueNameBytesSent[];
   static const char kStatsValueNamePacketsSent[];
   static const char kStatsValueNameBytesReceived[];
