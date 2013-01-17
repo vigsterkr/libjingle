@@ -151,11 +151,6 @@ class PeerConnectionInterface : public JsepInterface,
     kHaveRemoteOffer,
     kHaveRemotePrAnswer,
     kClosed,
-
-    // Deprecated states.
-    // TODO(perkj): Remove once Chrome is not using them.
-    kNew = kStable,
-    kActive = kStable
   };
 
   // Keep in sync with org.webrtc.PeerConnection.IceState.
