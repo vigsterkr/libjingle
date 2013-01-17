@@ -169,8 +169,12 @@ void DtlsTransportChannelWrapper::SetRole(TransportRole role) {
   // TODO(ekr@rtfm.com): Forbid this if Connect() has been called.
   ASSERT(dtls_state_ < STATE_ACCEPTED);
 
-  dtls_role_ = role == ROLE_CONTROLLING ? talk_base::SSL_CLIENT :
-      talk_base::SSL_SERVER;
+  // Set the role that is most conformant with RFC 5763, Section 5, bullet 1:
+  //     The endpoint that is the offerer MUST [...] be prepared to receive
+  //     a client_hello before it receives the answer.
+  // (IOW, the offerer is the server, and the answerer is the client).
+  dtls_role_ = (role == ROLE_CONTROLLING) ?
+      talk_base::SSL_SERVER : talk_base::SSL_CLIENT;
 
   channel_->SetRole(role);
 }

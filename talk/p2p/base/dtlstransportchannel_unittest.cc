@@ -67,7 +67,9 @@ class DtlsTestClient : public sigslot::has_slots<> {
       protocol_(cricket::ICEPROTO_GOOGLE),
       packet_size_(0),
       use_dtls_srtp_(false),
-      negotiated_dtls_(false) {
+      negotiated_dtls_(false),
+      received_dtls_client_hello_(false),
+      received_dtls_server_hello_(false) {
   }
   void SetIceProtocol(cricket::TransportProtocol proto) {
     protocol_ = proto;
@@ -167,6 +169,16 @@ class DtlsTestClient : public sigslot::has_slots<> {
 
   bool writable() const { return transport_->writable(); }
 
+  void CheckRole(talk_base::SSLRole role) {
+    if (role == talk_base::SSL_CLIENT) {
+      ASSERT_FALSE(received_dtls_client_hello_);
+      ASSERT_TRUE(received_dtls_server_hello_);
+    } else {
+      ASSERT_TRUE(received_dtls_client_hello_);
+      ASSERT_FALSE(received_dtls_server_hello_);
+    } 
+  }
+  
   void CheckSrtp(const std::string& expected_cipher) {
     for (std::vector<cricket::DtlsTransportChannelWrapper*>::iterator it =
            channels_.begin(); it != channels_.end(); ++it) {
@@ -274,15 +286,24 @@ class DtlsTestClient : public sigslot::has_slots<> {
     // Flags shouldn't be set on the underlying TransportChannel packets.
     ASSERT_EQ(0, flags);
 
+    // Look at the handshake packets to see what role we played.
     // Check that non-handshake packets are DTLS data or SRTP bypass.
-    if (negotiated_dtls_ && !(data[0] >= 20 && data[0] <= 22)) {
-      ASSERT_TRUE(data[0] == 23 || IsRtpLeadByte(data[0]));
-      if (data[0] == 23) {
-        ASSERT_TRUE(VerifyEncryptedPacket(data, size));
-      } else if (IsRtpLeadByte(data[0])) {
-        ASSERT_TRUE(VerifyPacket(data, size, NULL));
+    if (negotiated_dtls_) {
+      if (data[0] == 22 && size > 17) {
+        if (data[13] == 1) {
+          received_dtls_client_hello_ = true;
+        } else if (data[13] == 2) {
+          received_dtls_server_hello_ = true;
+        }
+      } else if (!(data[0] >= 20 && data[0] <= 22)) {
+        ASSERT_TRUE(data[0] == 23 || IsRtpLeadByte(data[0]));
+        if (data[0] == 23) {
+          ASSERT_TRUE(VerifyEncryptedPacket(data, size));
+        } else if (IsRtpLeadByte(data[0])) {
+          ASSERT_TRUE(VerifyPacket(data, size, NULL));
+        }
       }
-    }
+    } 
   }
 
  private:
@@ -297,6 +318,8 @@ class DtlsTestClient : public sigslot::has_slots<> {
   std::set<int> received_;
   bool use_dtls_srtp_;
   bool negotiated_dtls_;
+  bool received_dtls_client_hello_;
+  bool received_dtls_server_hello_;
 };
 
 
@@ -349,12 +372,18 @@ class DtlsTransportChannelTest : public testing::Test {
     EXPECT_TRUE(rv);
     if (!rv)
       return false;
+
     EXPECT_TRUE_WAIT(client1_.writable() && client2_.writable(), 10000);
-    if (!client1_.writable())
-      return false;
-    if (!client2_.writable())
+    if (!client1_.writable() || !client2_.writable())
       return false;
 
+    // Check that we used the right roles.
+    if (use_dtls_) {
+      client1_.CheckRole(talk_base::SSL_SERVER);
+      client2_.CheckRole(talk_base::SSL_CLIENT);
+    }
+
+    // Check that we negotiated the right ciphers.
     if (use_dtls_srtp_) {
       client1_.CheckSrtp(AES_CM_128_HMAC_SHA1_80);
       client2_.CheckSrtp(AES_CM_128_HMAC_SHA1_80);
