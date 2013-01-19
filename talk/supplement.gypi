@@ -12,16 +12,4 @@
     'include_internal_video_render': 1,
     'include_pulse_audio': 1,
   },
-  'target_defaults': {
-    'conditions': [
-      ['OS=="mac" and clang==1', {
-        'xcode_settings': {
-          'WARNING_CFLAGS': [
-            # TODO(ronghuawu): Remove once crbug/156530 is fixed.
-            '-Wno-unknown-warning-option',
-          ],
-        },
-      }],
-    ],
-  }, # target_defaults
 }
