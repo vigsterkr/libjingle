@@ -125,10 +125,11 @@
       'type': 'static_library',
       'dependencies': [
         '<(DEPTH)/third_party/expat/expat.gyp:expat',
-        # '<(DEPTH)/net/third_party/nss/ssl.gyp:libssl',
+        '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
       ],
       'export_dependent_settings': [
         '<(DEPTH)/third_party/expat/expat.gyp:expat',
+        '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
       ],
       'sources': [
         'base/asyncfile.cc',
@@ -159,6 +160,7 @@
         'base/httprequest.cc',
         'base/httpserver.cc',
         'base/ipaddress.cc',
+        'base/json.cc',
         'base/logging.cc',
         'base/md5.cc',
         'base/messagedigest.cc',
@@ -599,8 +601,8 @@
         'app/webrtc/mediastreamproxy.cc',
         'app/webrtc/mediastreamsignaling.cc',
         'app/webrtc/mediastreamtrackproxy.cc',
-        'app/webrtc/peerconnectionfactory.cc',
         'app/webrtc/peerconnection.cc',
+        'app/webrtc/peerconnectionfactory.cc',
         'app/webrtc/peerconnectionproxy.cc',
         'app/webrtc/portallocatorfactory.cc',
         'app/webrtc/statscollector.cc',
