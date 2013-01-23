@@ -39,7 +39,8 @@ enum {
   MSG_ADD_AUDIO_TRACK,
   MSG_ADD_VIDEO_TRACK,
   MSG_COUNT,
-  MSG_AT
+  MSG_AT,
+  MSG_FIND,
 };
 
 typedef talk_base::TypedMessageData<std::string*> LabelMessageData;
@@ -72,6 +73,17 @@ class MediaStreamTrackAtMessageData : public talk_base::MessageData {
   }
 
   size_t index_;
+  talk_base::scoped_refptr<TrackType> track_;
+};
+
+template <class TrackType>
+class MediaStreamTrackFindMessageData : public talk_base::MessageData {
+ public:
+  explicit MediaStreamTrackFindMessageData(const std::string& id)
+      : id_(id) {
+  }
+
+  std::string id_;
   talk_base::scoped_refptr<TrackType> track_;
 };
 
@@ -258,6 +270,17 @@ T* MediaStreamProxy::MediaStreamTrackListProxy<T>::at(
 }
 
 template <class T>
+T* MediaStreamProxy::MediaStreamTrackListProxy<T>::Find(
+    const std::string& id) {
+  if (!signaling_thread_->IsCurrent()) {
+    MediaStreamTrackFindMessageData<T> msg(id);
+    Send(MSG_FIND, &msg);
+    return msg.track_;
+  }
+  return track_list_->Find(id);
+}
+
+template <class T>
 void MediaStreamProxy::MediaStreamTrackListProxy<T>::Send(
     uint32 id, talk_base::MessageData* data) const {
   signaling_thread_->Send(
@@ -280,6 +303,12 @@ void MediaStreamProxy::MediaStreamTrackListProxy<T>::OnMessage(
       MediaStreamTrackAtMessageData<T>* track =
           static_cast<MediaStreamTrackAtMessageData<T>*>(data);
       track->track_ = track_list_->at(track->index_);
+      break;
+    }
+    case MSG_FIND: {
+      MediaStreamTrackFindMessageData<T>* track =
+          static_cast<MediaStreamTrackFindMessageData<T>*>(data);
+      track->track_ = track_list_->Find(track->id_);
       break;
     }
     default:

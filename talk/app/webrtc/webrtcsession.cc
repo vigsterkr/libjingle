@@ -246,33 +246,6 @@ static bool GetNameBySsrc(const SessionDescription* session_description,
   return false;
 }
 
-// RFC4733
-//  +-------+--------+------+---------+
-//  | Event | Code   | Type | Volume? |
-//  +-------+--------+------+---------+
-//  | 0--9  | 0--9   | tone | yes     |
-//  | *     | 10     | tone | yes     |
-//  | #     | 11     | tone | yes     |
-//  | A--D  | 12--15 | tone | yes     |
-//  +-------+--------+------+---------+
-// "," is defined by the WebRTC spec. It means to delay for 2 seconds before
-// processing the next tone.
-static const char DtmfTonesTable[] = ",0123456789*#ABCD";
-
-static bool GetDtmfCode(char tone, int* code, int* duration) {
-  // Convert a-d to A-D.
-  char event = toupper(tone);
-  const char* p = strchr(DtmfTonesTable, event);
-  if (!p)
-    return false;
-  // The "," is defined as cricket::kDtmfDelay(-1).
-  *code = p - DtmfTonesTable - 1;
-  if (*code == cricket::kDtmfDelay) {
-    *duration = cricket::kDtmfDelayInMs;
-  }
-  return true;
-}
-
 static bool FindConstraint(const MediaConstraintsInterface::Constraints&
   constraints, const std::string& key, std::string* value) {
   for (MediaConstraintsInterface::Constraints::const_iterator iter =
@@ -829,69 +802,40 @@ void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
   video_channel_->MuteStream(ssrc, !enable);
 }
 
-bool WebRtcSession::CanSendDtmf(const std::string& name) {
+bool WebRtcSession::CanInsertDtmf(const std::string& track_id) {
   ASSERT(signaling_thread()->IsCurrent());
   if (!voice_channel_) {
-    LOG(LS_ERROR) << "SendDtmf: No audio channel exists.";
+    LOG(LS_ERROR) << "CanInsertDtmf: No audio channel exists.";
     return false;
   }
   uint32 send_ssrc = 0;
   // The Dtmf is negotiated per channel not ssrc, so we only check if the ssrc
   // exists.
-  if (!GetAudioSsrcByName(BaseSession::local_description(), name, &send_ssrc)) {
-    LOG(LS_ERROR) << "CanSendDtmf: Track does not exist: " << name;
+  if (!GetAudioSsrcByName(BaseSession::local_description(), track_id,
+                          &send_ssrc)) {
+    LOG(LS_ERROR) << "CanInsertDtmf: Track does not exist: " << track_id;
     return false;
   }
   return voice_channel_->CanInsertDtmf();
 }
 
-bool WebRtcSession::SendDtmf(const std::string& send_name,
-                             const std::string& tones, int duration,
-                             const std::string& play_name) {
+bool WebRtcSession::InsertDtmf(const std::string& track_id,
+                               int code, int duration) {
   ASSERT(signaling_thread()->IsCurrent());
-  // The duration can not be more than 6000 or less than 70.
-  if (duration > 6000 || duration < 70) {
-    LOG(LS_WARNING) << "SendDtmf: Invalid duration: " << duration << "."
-                    << "The duration can not be more than 6000 or less "
-                    << "than 70.";
-    return false;
-  }
   if (!voice_channel_) {
-    LOG(LS_ERROR) << "SendDtmf: No audio channel exists.";
+    LOG(LS_ERROR) << "InsertDtmf: No audio channel exists.";
     return false;
   }
-  int flags = cricket::DF_SEND;
   uint32 send_ssrc = 0;
   if (!VERIFY(GetAudioSsrcByName(BaseSession::local_description(),
-                                 send_name, &send_ssrc))) {
-    LOG(LS_ERROR) << "SendDtmf: Track does not exist: " << send_name;
+                                 track_id, &send_ssrc))) {
+    LOG(LS_ERROR) << "InsertDtmf: Track does not exist: " << track_id;
     return false;
   }
-
-  uint32 play_ssrc = 0;
-  if (GetAudioSsrcByName(BaseSession::remote_description(),
-                         play_name, &play_ssrc)) {
-    flags |= cricket::DF_PLAY;
-    // TODO(ronghuawu): Should we send down the play_ssrc to the media channel?
-  }
-
-  // Reset the existing DTMF queue.
-  if (!voice_channel_->InsertDtmf(send_ssrc, cricket::kDtmfReset,
-                                  duration, flags)) {
+  if (!voice_channel_->InsertDtmf(send_ssrc, code, duration,
+                                  cricket::DF_SEND)) {
+    LOG(LS_ERROR) << "Failed to insert DTMF to channel.";
     return false;
-  }
-
-  for (size_t i = 0; i < tones.length(); ++i) {
-    int dtmf_code = -1;
-    int new_duration = duration;
-    if (!GetDtmfCode(tones[i], &dtmf_code, &new_duration)) {
-      // Ignore unrecognized characters.
-      continue;
-    }
-    if (!voice_channel_->InsertDtmf(send_ssrc, dtmf_code,
-                                    new_duration, flags)) {
-      return false;
-    }
   }
   return true;
 }

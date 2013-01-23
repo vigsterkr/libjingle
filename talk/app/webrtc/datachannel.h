@@ -29,7 +29,7 @@
 #define TALK_APP_WEBRTC_DATACHANNEL_H_
 
 #include <string>
-#include <vector>
+#include <queue>
 
 #include "talk/app/webrtc/datachannelinterface.h"
 #include "talk/base/scoped_ref_ptr.h"
@@ -105,6 +105,8 @@ class DataChannel : public DataChannelInterface,
   void ConnectToDataSession();
   void DisconnectFromDataSession();
   bool IsConnectedToDataSession() { return data_session_ != NULL; }
+  void DeliverQueuedData();
+  void ClearQueuedData();
 
   std::string label_;
   DataChannelObserver* observer_;
@@ -117,7 +119,7 @@ class DataChannel : public DataChannelInterface,
   bool receive_ssrc_set_;
   uint32 receive_ssrc_;
   std::string send_buffer_;
-  DataBuffer receive_buffer_;
+  std::queue<DataBuffer*> queued_data_;
 };
 
 class DataChannelFactory {

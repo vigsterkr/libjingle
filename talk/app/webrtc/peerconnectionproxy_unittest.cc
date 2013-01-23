@@ -56,6 +56,9 @@ class MockPeerConnection : public PeerConnectionInterface {
           const MediaConstraintsInterface* constraints));
   MOCK_METHOD1(RemoveStream,
       void(MediaStreamInterface* stream));
+  MOCK_METHOD2(CreateDtmfSender,
+      DtmfSender*(AudioTrackInterface* track,
+                  DtmfSenderObserverInterface* observer));
   MOCK_METHOD2(GetStats,
       bool(StatsObserver* observer, MediaStreamTrackInterface* track));
   MOCK_METHOD0(ready_state,
@@ -64,12 +67,6 @@ class MockPeerConnection : public PeerConnectionInterface {
       SignalingState());
   MOCK_METHOD0(ice_state,
       IceState());
-  MOCK_METHOD1(CanSendDtmf,
-      bool(const AudioTrackInterface* track));
-  MOCK_METHOD4(SendDtmf,
-      bool(const AudioTrackInterface* send_track,
-           const std::string& tones, int duration,
-           const AudioTrackInterface* play_track));
   MOCK_METHOD2(CreateDataChannel,
         talk_base::scoped_refptr<DataChannelInterface>(
             const std::string& label,
@@ -111,8 +108,10 @@ class PeerConnectionProxyTest: public testing::Test {
   PeerConnectionProxyTest()
       : dummy1_(new talk_base::RefCountedObject<DummyRefCountedObject>()),
         dummy2_(new talk_base::RefCountedObject<DummyRefCountedObject>()),
+        dummy3_(new talk_base::RefCountedObject<DummyRefCountedObject>()),
         fake_pointer1_(dummy1_.get()),
-        fake_pointer2_(dummy2_.get()) {
+        fake_pointer2_(dummy2_.get()),
+        fake_pointer3_(dummy3_.get()) {
   }
 
   // Checks that the functions is called on the |signaling_thread|.
@@ -130,6 +129,10 @@ class PeerConnectionProxyTest: public testing::Test {
   template <typename T>
   T* GetFakePointer2() {
     return static_cast<T*>(fake_pointer2_);
+  }
+  template <typename T>
+  T* GetFakePointer3() {
+    return static_cast<T*>(fake_pointer3_);
   }
 
  protected:
@@ -149,8 +152,10 @@ class PeerConnectionProxyTest: public testing::Test {
   talk_base::scoped_refptr<MockPeerConnection> pc_;
   talk_base::scoped_refptr<DummyRefCountedObject> dummy1_;
   talk_base::scoped_refptr<DummyRefCountedObject> dummy2_;
+  talk_base::scoped_refptr<DummyRefCountedObject> dummy3_;
   void* fake_pointer1_;
   void* fake_pointer2_;
+  void* fake_pointer3_;
 };
 
 TEST_F(PeerConnectionProxyTest, local_streams) {
@@ -195,6 +200,22 @@ TEST_F(PeerConnectionProxyTest, RemoveStream) {
   pc_proxy_->RemoveStream(fake_stream);
 }
 
+TEST_F(PeerConnectionProxyTest, CreateDtmfSender) {
+  AudioTrackInterface* fake_track =
+      GetFakePointer1<AudioTrackInterface>();
+  DtmfSenderObserverInterface* fake_observer =
+      GetFakePointer2<DtmfSenderObserverInterface>();
+  DtmfSender* fake_dtmf_sender =
+      GetFakePointer3<DtmfSender>();
+  EXPECT_CALL(*pc_, CreateDtmfSender(fake_track, fake_observer))
+      .Times(Exactly(1))
+      .WillOnce(
+          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
+                Return(fake_dtmf_sender)));
+  EXPECT_EQ(fake_dtmf_sender,
+            pc_proxy_->CreateDtmfSender(fake_track, fake_observer));
+}
+
 TEST_F(PeerConnectionProxyTest, GetStats) {
   StatsObserver* fake_stats_observer =
       GetFakePointer1<StatsObserver>();
@@ -224,33 +245,6 @@ TEST_F(PeerConnectionProxyTest, ice_state) {
           DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
                 Return(PeerConnectionInterface::kIceCompleted)));
   EXPECT_EQ(PeerConnectionInterface::kIceCompleted, pc_proxy_->ice_state());
-}
-
-TEST_F(PeerConnectionProxyTest, CanSendDtmf) {
-  AudioTrackInterface* fake_track =
-        GetFakePointer1<AudioTrackInterface>();
-  EXPECT_CALL(*pc_, CanSendDtmf(fake_track))
-      .Times(Exactly(1))
-      .WillOnce(
-          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
-                Return(true)));
-  EXPECT_EQ(true, pc_proxy_->CanSendDtmf(fake_track));
-}
-
-TEST_F(PeerConnectionProxyTest, SendDtmf) {
-  AudioTrackInterface* fake_send_track =
-        GetFakePointer1<AudioTrackInterface>();
-  AudioTrackInterface* fake_play_track =
-        GetFakePointer2<AudioTrackInterface>();
-  const std::string tones = "123,abc";
-  int duration = 120;
-  EXPECT_CALL(*pc_, SendDtmf(fake_send_track, tones, duration, fake_play_track))
-      .Times(Exactly(1))
-      .WillOnce(
-          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
-                Return(true)));
-  EXPECT_EQ(true, pc_proxy_->SendDtmf(fake_send_track, tones, duration,
-                                      fake_play_track));
 }
 
 TEST_F(PeerConnectionProxyTest, local_description) {

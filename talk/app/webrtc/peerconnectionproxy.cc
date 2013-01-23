@@ -32,12 +32,11 @@ namespace {
 enum {
   MSG_ADDSTREAM = 1,
   MSG_REMOVESTREAM,
+  MSG_CREATEDTMFSENDER,
   MSG_RETURNLOCALMEDIASTREAMS,
   MSG_RETURNREMOTEMEDIASTREAMS,
   MSG_SIGNALINGSTATE,
   MSG_ICESTATE,
-  MSG_CANSENDDTMF,
-  MSG_SEND_DTMF,
   MSG_CREATEDATACHANNEL,
   MSG_TERMINATE,
   MSG_CREATEOFFER,
@@ -61,6 +60,18 @@ struct MediaStreamParams : public talk_base::MessageData {
   webrtc::MediaStreamInterface* stream;
   const webrtc::MediaConstraintsInterface* constraints;
   bool result;
+};
+
+struct DtmfSenderParams : public talk_base::MessageData {
+  DtmfSenderParams(webrtc::AudioTrackInterface* track,
+                   webrtc::DtmfSenderObserverInterface* observer)
+      : track(track),
+        observer(observer),
+        dtmf_sender(NULL) {
+  }
+  webrtc::AudioTrackInterface* track;
+  webrtc::DtmfSenderObserverInterface* observer;
+  webrtc:: DtmfSender* dtmf_sender;
 };
 
 struct IceConfigurationParams : public talk_base::MessageData {
@@ -141,30 +152,6 @@ struct IceStateMessage : public talk_base::MessageData {
   webrtc::PeerConnectionInterface::IceState state;
 };
 
-class SendDtmfMessageData : public talk_base::MessageData {
- public:
-  explicit SendDtmfMessageData(const webrtc::AudioTrackInterface* send_track)
-      : send_track(send_track),
-        duration(0),
-        play_track(NULL),
-        result(false) {}
-
-  SendDtmfMessageData(const webrtc::AudioTrackInterface* send_track,
-                      std::string tones, int duration,
-                      const webrtc::AudioTrackInterface* play_track)
-      : send_track(send_track),
-        tones(tones),
-        duration(duration),
-        play_track(play_track),
-        result(false) {}
-
-  const webrtc::AudioTrackInterface* send_track;
-  std::string tones;
-  int duration;
-  const webrtc::AudioTrackInterface* play_track;
-  bool result;
-};
-
 struct CreateDataChannelMessageData : public talk_base::MessageData {
   CreateDataChannelMessageData(std::string label,
                                const webrtc::DataChannelInit* init)
@@ -240,6 +227,16 @@ void PeerConnectionProxy::RemoveStream(MediaStreamInterface* remove_stream) {
   peerconnection_->RemoveStream(remove_stream);
 }
 
+DtmfSender* PeerConnectionProxy::CreateDtmfSender(
+    AudioTrackInterface* track, DtmfSenderObserverInterface* observer) {
+  if (!signaling_thread_->IsCurrent()) {
+    DtmfSenderParams msg(track, observer);
+    signaling_thread_->Send(this, MSG_CREATEDTMFSENDER, &msg);
+    return msg.dtmf_sender;
+  }
+  return peerconnection_->CreateDtmfSender(track, observer);
+}
+
 bool PeerConnectionProxy::GetStats(StatsObserver* observer,
                                    MediaStreamTrackInterface* track) {
   if (!signaling_thread_->IsCurrent()) {
@@ -267,26 +264,6 @@ PeerConnectionInterface::IceState PeerConnectionProxy::ice_state() {
     return msg.state;
   }
   return peerconnection_->ice_state();
-}
-
-bool PeerConnectionProxy::CanSendDtmf(const AudioTrackInterface* track) {
-  if (!signaling_thread_->IsCurrent()) {
-    SendDtmfMessageData msg(track);
-    signaling_thread_->Send(this, MSG_CANSENDDTMF, &msg);
-    return msg.result;
-  }
-  return peerconnection_->CanSendDtmf(track);
-}
-
-bool PeerConnectionProxy::SendDtmf(const AudioTrackInterface* send_track,
-                                   const std::string& tones, int duration,
-                                   const AudioTrackInterface* play_track) {
-  if (!signaling_thread_->IsCurrent()) {
-    SendDtmfMessageData msg(send_track, tones, duration, play_track);
-    signaling_thread_->Send(this, MSG_SEND_DTMF, &msg);
-    return msg.result;
-  }
-  return peerconnection_->SendDtmf(send_track, tones, duration, play_track);
 }
 
 talk_base::scoped_refptr<DataChannelInterface>
@@ -411,6 +388,12 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
       peerconnection_->RemoveStream(param->stream);
       break;
     }
+    case MSG_CREATEDTMFSENDER: {
+      DtmfSenderParams* param(static_cast<DtmfSenderParams*> (data));
+      param->dtmf_sender =
+          peerconnection_->CreateDtmfSender(param->track, param->observer);
+      break;
+    }
     case MSG_GETSTATS: {
       StatsParams* param(static_cast<StatsParams*> (data));
       param->result = peerconnection_->GetStats(param->observer, param->track);
@@ -434,17 +417,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
     case MSG_ICESTATE: {
       IceStateMessage* param(static_cast<IceStateMessage*> (data));
       param->state = peerconnection_->ice_state();
-      break;
-    }
-    case MSG_CANSENDDTMF: {
-      SendDtmfMessageData* param(static_cast<SendDtmfMessageData*> (data));
-      param->result = peerconnection_->CanSendDtmf(param->send_track);
-      break;
-    }
-    case MSG_SEND_DTMF: {
-      SendDtmfMessageData* param(static_cast<SendDtmfMessageData*> (data));
-      param->result = peerconnection_->SendDtmf(param->send_track,
-          param->tones, param->duration, param->play_track);
       break;
     }
     case MSG_CREATEDATACHANNEL: {

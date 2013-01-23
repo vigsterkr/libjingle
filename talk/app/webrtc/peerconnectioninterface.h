@@ -87,13 +87,20 @@ class PortAllocator;
 
 namespace webrtc {
 class AudioDeviceModule;
+class DtmfSender;
+class DtmfSenderObserverInterface;
 
 // MediaStream container interface.
 class StreamCollectionInterface : public talk_base::RefCountInterface {
  public:
+  // TODO(ronghuawu): Update the function names to c++ style, e.g. find -> Find.
   virtual size_t count() = 0;
   virtual MediaStreamInterface* at(size_t index) = 0;
   virtual MediaStreamInterface* find(const std::string& label) = 0;
+  virtual MediaStreamTrackInterface* FindAudioTrack(
+      const std::string& id) = 0;
+  virtual MediaStreamTrackInterface* FindVideoTrack(
+      const std::string& id) = 0;
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
@@ -184,27 +191,13 @@ class PeerConnectionInterface : public JsepInterface,
   // remote peer is notified.
   virtual void RemoveStream(MediaStreamInterface* stream) = 0;
 
+  // Returns pointer to the created DtmfSender on success.
+  // Otherwise returns NULL.
+  virtual DtmfSender* CreateDtmfSender(AudioTrackInterface* track,
+      DtmfSenderObserverInterface* observer) = 0;
+
   virtual bool GetStats(StatsObserver* observer,
                         MediaStreamTrackInterface* track) = 0;
-
-  // Returns true if the |track| is capable of sending DTMF. Otherwise returns
-  // false.
-  virtual bool CanSendDtmf(const AudioTrackInterface* track) = 0;
-
-  // Queues a task that sends the DTMF |tones| using |send_track|.
-  // If the |play_track| is specified, play out an appropriate audio feedback
-  // signal using this track.
-  // The |tones| parameter is treated as a series of characters.
-  // The characters 0 to 9, A to D, #, and * generated the associated DTMF
-  // tones. The characters a to d are equivalent to A to D.
-  // The character, indicates a an delay of 2 seconds before processing the next
-  // character in the tones parameter. Unrecognized characters are ignored.
-  // If SendDtmf is called on the same object while an existing task for this
-  // object to generate DTMF is still running, the previous task is canceled.
-  // The duration can not be more than 6000 or less than 70.
-  virtual bool SendDtmf(const AudioTrackInterface* send_track,
-                        const std::string& tones, int duration,
-                        const AudioTrackInterface* play_track) = 0;
 
   virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
       const std::string& label,

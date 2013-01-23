@@ -557,7 +557,7 @@ class WebRtcSessionTest : public testing::Test {
     }
   }
   // Tests that we can only send DTMF when the dtmf codec is supported.
-  void TestCanSendDtmf(bool can) {
+  void TestCanInsertDtmf(bool can) {
     if (can) {
       WebRtcSessionTest::InitWithDtmfCodec();
     } else {
@@ -565,40 +565,9 @@ class WebRtcSessionTest : public testing::Test {
     }
     mediastream_signaling_.UseOptionsWithStream1();
     SetRemoteAndLocalSessionDescription();
-    EXPECT_FALSE(session_->CanSendDtmf(""));
-    EXPECT_EQ(can, session_->CanSendDtmf(kAudioTrack1));
+    EXPECT_FALSE(session_->CanInsertDtmf(""));
+    EXPECT_EQ(can, session_->CanInsertDtmf(kAudioTrack1));
   }
-  void TestSendDtmf(bool play) {
-    WebRtcSessionTest::Init();
-    mediastream_signaling_.UseOptionsWithStream1();
-    SetRemoteAndLocalSessionDescription();
-    FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
-    EXPECT_EQ(0U, channel->dtmf_info_queue().size());
-
-    std::string play_name;
-    int expected_flags = DF_SEND;
-    if (play) {
-      play_name = kAudioTrack1;
-      expected_flags |= DF_PLAY;
-    }
-    session_->SendDtmf(kAudioTrack1, "1,a", 90, play_name);
-    ASSERT_EQ(4U, channel->dtmf_info_queue().size());
-    uint32 send_ssrc  = channel->send_streams()[0].first_ssrc();
-    // It should start with a kDtmfReset.
-    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[0],
-                                send_ssrc, kDtmfReset, 90, expected_flags));
-    // The code for event '1' is 1.
-    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[1],
-                                send_ssrc, 1, 90, expected_flags));
-    // The code for event ',' is kDtmfDelay.
-    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[2],
-                                send_ssrc, kDtmfDelay, cricket::kDtmfDelayInMs,
-                                expected_flags));
-    // The code for event 'a' is 12.
-    EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[3],
-                                send_ssrc, 12, 90, expected_flags));
-  }
-
 
   void VerifyTransportType(const std::string& content_name,
                            cricket::TransportProtocol protocol) {
@@ -1767,20 +1736,38 @@ TEST_F(WebRtcSessionTest, SetVideoSend) {
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
 }
 
-TEST_F(WebRtcSessionTest, CanNotSendDtmf) {
-  TestCanSendDtmf(false);
+TEST_F(WebRtcSessionTest, CanNotInsertDtmf) {
+  TestCanInsertDtmf(false);
 }
 
-TEST_F(WebRtcSessionTest, CanSendDtmf) {
-  TestCanSendDtmf(true);
+TEST_F(WebRtcSessionTest, CanInsertDtmf) {
+  TestCanInsertDtmf(true);
 }
 
-TEST_F(WebRtcSessionTest, SendDtmf) {
-  TestSendDtmf(false);
-}
+TEST_F(WebRtcSessionTest, InsertDtmf) {
+  // Setup
+  WebRtcSessionTest::Init();
+  mediastream_signaling_.UseOptionsWithStream1();
+  SetRemoteAndLocalSessionDescription();
+  FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
+  EXPECT_EQ(0U, channel->dtmf_info_queue().size());
 
-TEST_F(WebRtcSessionTest, SendAndPlayDtmf) {
-  TestSendDtmf(true);
+  // Insert DTMF
+  const int expected_flags = DF_SEND;
+  const int expected_duration = 90;
+  session_->InsertDtmf(kAudioTrack1, 0, expected_duration);
+  session_->InsertDtmf(kAudioTrack1, 1, expected_duration);
+  session_->InsertDtmf(kAudioTrack1, 2, expected_duration);
+
+  // Verify
+  ASSERT_EQ(3U, channel->dtmf_info_queue().size());
+  const uint32 send_ssrc  = channel->send_streams()[0].first_ssrc();
+  EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[0], send_ssrc, 0,
+                              expected_duration, expected_flags));
+  EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[1], send_ssrc, 1,
+                              expected_duration, expected_flags));
+  EXPECT_TRUE(CompareDtmfInfo(channel->dtmf_info_queue()[2], send_ssrc, 2,
+                              expected_duration, expected_flags));
 }
 
 // This test verifies the |initiator| flag when session initiates the call.

@@ -102,12 +102,11 @@ namespace webrtc {
 
 scoped_refptr<PeerConnectionFactoryInterface>
 CreatePeerConnectionFactory() {
-  talk_base::RefCountedObject<PeerConnectionFactory>* pc_factory =
-      new talk_base::RefCountedObject<PeerConnectionFactory>();
+  scoped_refptr<PeerConnectionFactory> pc_factory(
+      new talk_base::RefCountedObject<PeerConnectionFactory>());
 
   if (!pc_factory->Initialize()) {
-    delete pc_factory;
-    pc_factory = NULL;
+    return NULL;
   }
   return pc_factory;
 }
@@ -116,12 +115,11 @@ scoped_refptr<PeerConnectionFactoryInterface>
 CreatePeerConnectionFactory(talk_base::Thread* worker_thread,
                             talk_base::Thread* signaling_thread,
                             AudioDeviceModule* default_adm) {
-  talk_base::RefCountedObject<PeerConnectionFactory>* pc_factory =
+  scoped_refptr<PeerConnectionFactory> pc_factory(
       new talk_base::RefCountedObject<PeerConnectionFactory>(
-          worker_thread, signaling_thread, default_adm);
+          worker_thread, signaling_thread, default_adm));
   if (!pc_factory->Initialize()) {
-    delete pc_factory;
-    pc_factory = NULL;
+    return NULL;
   }
   return pc_factory;
 }
@@ -265,14 +263,13 @@ PeerConnectionFactory::CreatePeerConnection_s(
     PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
   ASSERT(allocator_factory || allocator_factory_);
-  talk_base::RefCountedObject<PeerConnection>* pc(
+  talk_base::scoped_refptr<PeerConnection> pc(
       new talk_base::RefCountedObject<PeerConnection>(this));
   if (!pc->Initialize(
       configuration,
       constraints,
       allocator_factory ? allocator_factory : allocator_factory_.get(),
       observer)) {
-    delete pc;
     return NULL;
   }
   return PeerConnectionProxy::Create(signaling_thread(), pc);

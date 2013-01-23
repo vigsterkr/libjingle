@@ -27,9 +27,12 @@
 
 #include <stdio.h>
 
+#include <algorithm>
 #include <list>
 #include <map>
+#include <vector>
 
+#include "talk/app/webrtc/dtmfsender.h"
 #include "talk/app/webrtc/fakeportallocatorfactory.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
 #include "talk/app/webrtc/peerconnectioninterface.h"
@@ -64,6 +67,8 @@ using webrtc::MediaStreamTrackInterface;
 using webrtc::MockCreateSessionDescriptionObserver;
 using webrtc::MockDataChannelObserver;
 using webrtc::MockSetSessionDescriptionObserver;
+using webrtc::DtmfSender;
+using webrtc::DtmfSenderObserverInterface;
 using webrtc::MockStatsObserver;
 using webrtc::StreamCollectionInterface;
 using webrtc::SessionDescriptionInterface;
@@ -179,29 +184,40 @@ class PeerConnectionTestClientBase
     }
     return true;
   }
+  // Verify the CreateDtmfSender interface
+  void VerifyDtmf() {
+    talk_base::scoped_refptr<DummyDtmfObserver> observer =
+        new talk_base::RefCountedObject<DummyDtmfObserver>();
+    talk_base::scoped_ptr<DtmfSender> dtmf_sender;
 
-  // Verify the CanSendDtmf and SendDtmf interfaces.
-  void VerifySendDtmf() {
-    // An invalid audio track can't send dtmf.
-    EXPECT_FALSE(peer_connection_->CanSendDtmf(NULL));
+    // We can't create a DTMF sender with an invalid audio track or a non local
+    // track.
+    EXPECT_TRUE(peer_connection_->CreateDtmfSender(NULL, observer) == NULL);
+    talk_base::scoped_refptr<webrtc::AudioTrackInterface> non_localtrack(
+        peer_connection_factory_->CreateAudioTrack("dummy_track",
+                                                   NULL));
+    EXPECT_TRUE(peer_connection_->CreateDtmfSender(non_localtrack,
+                                                   observer) == NULL);
 
-    // The local audio track should be able to send dtmf.
-    const webrtc::AudioTrackInterface* send_track =
+    // We should be able to create a DTMF sender from a local track.
+    webrtc::AudioTrackInterface* localtrack =
         peer_connection_->local_streams()->at(0)->audio_tracks()->at(0);
-    EXPECT_TRUE(peer_connection_->CanSendDtmf(send_track));
+    dtmf_sender.reset(peer_connection_->CreateDtmfSender(localtrack, observer));
+    EXPECT_TRUE(dtmf_sender.get() != NULL);
 
-    // The duration can not be more than 6000 or less than 70.
-    EXPECT_FALSE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                            30, NULL));
-    EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                           100, NULL));
-    // Play the dtmf at the same time.
-    const webrtc::AudioTrackInterface* play_track =
-        peer_connection_->remote_streams()->at(0)->audio_tracks()->at(0);
-    EXPECT_TRUE(peer_connection_->SendDtmf(send_track, "123,aBc",
-                                           100, play_track));
-    // TODO(perkj): Talk to ronghuawu about how to verify if a DTMF tone is
-    // received or not.
+    // Test the DtmfSender object just created.
+    EXPECT_TRUE(dtmf_sender->CanInsertDtmf());
+    EXPECT_TRUE(dtmf_sender->InsertDtmf("1a", 100, 50));
+
+    // We don't need to verify that the DTMF tones are actually sent out because
+    // that is already covered by the tests of the lower level components.
+
+    EXPECT_TRUE_WAIT(observer->completed(), kMaxWaitMs);
+    std::vector<std::string> tones;
+    tones.push_back("1");
+    tones.push_back("a");
+    tones.push_back("");
+    observer->Verify(tones);
   }
 
   // Verifies that the SessionDescription have rejected the appropriate media
@@ -361,6 +377,30 @@ class PeerConnectionTestClientBase
   const std::string& id() const { return id_; }
 
  private:
+  class DummyDtmfObserver : public DtmfSenderObserverInterface {
+   public:
+    DummyDtmfObserver() : completed_(false) {}
+
+    // Implements DtmfSenderObserverInterface.
+    void OnToneChange(const std::string& tone) {
+      tones_.push_back(tone);
+      if (tone.empty()) {
+        completed_ = true;
+      }
+    }
+
+    void Verify(const std::vector<std::string>& tones) const {
+      ASSERT_TRUE(tones_.size() == tones.size());
+      EXPECT_TRUE(std::equal(tones.begin(), tones.end(), tones_.begin()));
+    }
+
+    bool completed() const { return completed_; }
+
+   private:
+    bool completed_;
+    std::vector<std::string> tones_;
+  };
+
   void GenerateRecordingFileName(int track, std::string* file_name) {
     if (file_name == NULL) {
       return;
@@ -663,9 +703,9 @@ class P2PTestConductor : public testing::Test {
     return initiating_client_->VideoFramesReceivedCheck(frames_received) &&
         receiving_client_->VideoFramesReceivedCheck(frames_received);
   }
-  void VerifySendDtmf() {
-    initiating_client_->VerifySendDtmf();
-    receiving_client_->VerifySendDtmf();
+  void VerifyDtmf() {
+    initiating_client_->VerifyDtmf();
+    receiving_client_->VerifyDtmf();
   }
 
   void VerifyRenderedSize(int width, int height) {
@@ -764,8 +804,7 @@ typedef P2PTestConductor<JsepTestClient> JsepPeerConnectionP2PTestClient;
 TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDtmf) {
   ASSERT_TRUE(CreateTestClients());
   LocalP2PTest();
-  VerifySendDtmf();
-  VerifyRenderedSize(640, 480);
+  VerifyDtmf();
 }
 
 // This test sets up a Jsep call between two parties and test that we can get a
@@ -998,6 +1037,39 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestDataChannel) {
   receiving_client()->Negotiate();
   EXPECT_FALSE(initializing_client()->data_observer()->IsOpen());
   EXPECT_FALSE(receiving_client()->data_observer()->IsOpen());
+}
+
+// This test sets up a call between two parties and creates a data channel.
+// The test tests that received data is buffered unless an observer has been
+// registered.
+// Rtp data channels can receive data before the underlying
+// transport has detected that a channel is writable and thus data can be
+// received before the data channel state changes to open. That is hard to test
+// but the same buffering is used in that case.
+TEST_F(JsepPeerConnectionP2PTestClient, RegisterDataChannelObserver) {
+  FakeConstraints setup_constraints;
+  setup_constraints.SetAllowRtpDataChannels();
+  ASSERT_TRUE(CreateTestClients(&setup_constraints, &setup_constraints));
+  initializing_client()->CreateDataChannel();
+  initializing_client()->Negotiate();
+
+  ASSERT_TRUE(initializing_client()->data_channel() != NULL);
+  ASSERT_TRUE(receiving_client()->data_channel() != NULL);
+  EXPECT_TRUE_WAIT(initializing_client()->data_observer()->IsOpen(),
+                   kMaxWaitMs);
+  EXPECT_EQ_WAIT(DataChannelInterface::kOpen,
+                 receiving_client()->data_channel()->state(), kMaxWaitMs);
+
+  // Unregister the existing observer.
+  receiving_client()->data_channel()->UnregisterObserver();
+  std::string data = "hello world";
+  initializing_client()->data_channel()->Send(DataBuffer(data));
+  // Wait a while to allow the sent data to arrive before an observer is
+  // registered..
+  talk_base::Thread::Current()->ProcessMessages(100);
+
+  MockDataChannelObserver new_observer(receiving_client()->data_channel());
+  EXPECT_EQ_WAIT(data, new_observer.last_message(), kMaxWaitMs);
 }
 
 // This test sets up a call between two parties with audio, video and but only

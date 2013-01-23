@@ -29,6 +29,7 @@
 
 #include <vector>
 
+#include "talk/app/webrtc/dtmfsender.h"
 #include "talk/app/webrtc/jsepicecandidate.h"
 #include "talk/app/webrtc/jsepsessiondescription.h"
 #include "talk/app/webrtc/mediastreamhandler.h"
@@ -327,6 +328,20 @@ void PeerConnection::RemoveStream(MediaStreamInterface* remove_stream) {
   observer_->OnRenegotiationNeeded();
 }
 
+DtmfSender* PeerConnection::CreateDtmfSender(AudioTrackInterface* track,
+    DtmfSenderObserverInterface* observer) {
+  if (!track) {
+    LOG(LS_ERROR) << "CreateDtmfSender - track is NULL.";
+    return NULL;
+  }
+  if (!local_media_streams_->FindAudioTrack(track->id())) {
+    LOG(LS_ERROR) << "CreateDtmfSender is called with a non local audio track.";
+    return NULL;
+  }
+
+  return new DtmfSender(track, observer, signaling_thread(), session_.get());
+}
+
 bool PeerConnection::GetStats(StatsObserver* observer,
                               MediaStreamTrackInterface* track) {
   if (!VERIFY(observer != NULL)) {
@@ -349,27 +364,6 @@ PeerConnectionInterface::SignalingState PeerConnection::signaling_state() {
 
 PeerConnectionInterface::IceState PeerConnection::ice_state() {
   return ice_state_;
-}
-
-bool PeerConnection::CanSendDtmf(const AudioTrackInterface* track) {
-  if (!track) {
-    return false;
-  }
-  return session_->CanSendDtmf(track->id());
-}
-
-bool PeerConnection::SendDtmf(const AudioTrackInterface* send_track,
-                              const std::string& tones, int duration,
-                              const AudioTrackInterface* play_track) {
-  if (!send_track) {
-    return false;
-  }
-  std::string play_name;
-  if (play_track) {
-    play_name = play_track->id();
-  }
-
-  return session_->SendDtmf(send_track->id(), tones, duration, play_name);
 }
 
 talk_base::scoped_refptr<DataChannelInterface>

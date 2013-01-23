@@ -230,8 +230,8 @@
         'xmpp/mucroomlookuptask.cc',
         'xmpp/mucroomuniquehangoutidtask.cc',
         'xmpp/pingtask.cc',
-        'xmpp/presenceouttask.cc', 
-        'xmpp/presencereceivetask.cc', 
+        'xmpp/presenceouttask.cc',
+        'xmpp/presencereceivetask.cc',
         'xmpp/presencestatus.cc',
         'xmpp/pubsubclient.cc',
         'xmpp/pubsub_task.cc',
@@ -593,6 +593,7 @@
       'sources': [
         'app/webrtc/audiotrack.cc',
         'app/webrtc/datachannel.cc',
+        'app/webrtc/dtmfsender.cc',
         'app/webrtc/jsepicecandidate.cc',
         'app/webrtc/jsepsessiondescription.cc',
         'app/webrtc/localvideosource.cc',

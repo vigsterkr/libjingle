@@ -50,6 +50,14 @@ class MediaStream : public Notifier<LocalMediaStreamInterface> {
     virtual T* at(size_t index) {
       return tracks_.at(index);
     }
+    virtual T* Find(const std::string& id) {
+      for (size_t i = 0; i < tracks_.size(); ++i) {
+        if (tracks_.at(i)->id() == id) {
+          return tracks_.at(i);
+        }
+      }
+      return NULL;
+    }
 
    private:
     std::vector<talk_base::scoped_refptr<T> > tracks_;

@@ -30,6 +30,7 @@
 
 #include <string>
 
+#include "talk/app/webrtc/dtmfsender.h"
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
 #include "talk/app/webrtc/datachannel.h"
@@ -60,7 +61,8 @@ class MediaStreamSignaling;
 class WebRtcSession : public cricket::BaseSession,
                       public AudioProviderInterface,
                       public DataChannelFactory,
-                      public VideoProviderInterface {
+                      public VideoProviderInterface,
+                      public DtmfProviderInterface {
  public:
   WebRtcSession(cricket::ChannelManager* channel_manager,
                 talk_base::Thread* signaling_thread,
@@ -129,10 +131,10 @@ class WebRtcSession : public cricket::BaseSession,
                                cricket::VideoRenderer* renderer);
   virtual void SetVideoSend(const std::string& name, bool enable);
 
-  virtual bool CanSendDtmf(const std::string& name);
-  virtual bool SendDtmf(const std::string& send_name,
-                        const std::string& tones, int duration,
-                        const std::string& play_name);
+  // Implements DtmfProviderInterface.
+  virtual bool CanInsertDtmf(const std::string& track_id);
+  virtual bool InsertDtmf(const std::string& track_id,
+                          int code, int duration);
 
   talk_base::scoped_refptr<DataChannel> CreateDataChannel(
       const std::string& label,

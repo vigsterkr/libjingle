@@ -48,12 +48,10 @@ class PeerConnectionProxy : public PeerConnectionInterface,
   virtual bool AddStream(MediaStreamInterface* local_stream,
                          const MediaConstraintsInterface* constraints);
   virtual void RemoveStream(MediaStreamInterface* local_stream);
+  virtual DtmfSender* CreateDtmfSender(AudioTrackInterface* track,
+                                       DtmfSenderObserverInterface* observer);
   virtual bool GetStats(StatsObserver* observer,
                         webrtc::MediaStreamTrackInterface* track);
-  virtual bool CanSendDtmf(const AudioTrackInterface* track);
-  virtual bool SendDtmf(const AudioTrackInterface* send_track,
-                        const std::string& tones, int duration,
-                        const AudioTrackInterface* play_track);
   virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
       const std::string& label,
       const DataChannelInit* config);

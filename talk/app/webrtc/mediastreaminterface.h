@@ -171,6 +171,7 @@ class MediaStreamTrackListInterface : public talk_base::RefCountInterface {
  public:
   virtual size_t count() const = 0;
   virtual TrackType* at(size_t index) = 0;
+  virtual TrackType* Find(const std::string& id) = 0;
 
  protected:
   virtual ~MediaStreamTrackListInterface() {}

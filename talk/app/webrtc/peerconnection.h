@@ -66,10 +66,9 @@ class PeerConnection : public PeerConnectionInterface,
   virtual bool AddStream(MediaStreamInterface* local_stream,
                          const MediaConstraintsInterface* constraints);
   virtual void RemoveStream(MediaStreamInterface* local_stream);
-  virtual bool CanSendDtmf(const AudioTrackInterface* track);
-  virtual bool SendDtmf(const AudioTrackInterface* send_track,
-                        const std::string& tones, int duration,
-                        const AudioTrackInterface* play_track);
+
+  virtual DtmfSender* CreateDtmfSender(AudioTrackInterface* track,
+                                       DtmfSenderObserverInterface* observer);
 
   virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
       const std::string& label,

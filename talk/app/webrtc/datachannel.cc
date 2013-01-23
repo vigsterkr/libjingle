@@ -34,14 +34,15 @@
 
 namespace webrtc {
 
+static size_t kMaxQueuedDataPackets = 100;
+
 talk_base::scoped_refptr<DataChannel> DataChannel::Create(
     WebRtcSession* session,
     const std::string& label,
     const DataChannelInit* config) {
-  talk_base::RefCountedObject<DataChannel>* channel =
-      new talk_base::RefCountedObject<DataChannel>(session, label);
+  talk_base::scoped_refptr<DataChannel> channel(
+      new talk_base::RefCountedObject<DataChannel>(session, label));
   if (!channel->Init(config)) {
-    delete channel;
     return NULL;
   }
   return channel;
@@ -68,10 +69,13 @@ bool DataChannel::Init(const DataChannelInit* config) {
   return true;
 }
 
-DataChannel::~DataChannel() {}
+DataChannel::~DataChannel() {
+  ClearQueuedData();
+}
 
 void DataChannel::RegisterObserver(DataChannelObserver* observer) {
   observer_ = observer;
+  DeliverQueuedData();
 }
 
 void DataChannel::UnregisterObserver() {
@@ -141,6 +145,9 @@ void DataChannel::UpdateState() {
         }
         if (was_ever_writable_) {
           SetState(kOpen);
+          // If we have received buffers before the channel got writable.
+          // Deliver them now.
+          DeliverQueuedData();
         }
       }
       break;
@@ -183,12 +190,39 @@ void DataChannel::DisconnectFromDataSession() {
   data_session_ = NULL;
 }
 
+void DataChannel::DeliverQueuedData() {
+  if (was_ever_writable_ && observer_) {
+    while (!queued_data_.empty()) {
+      DataBuffer* buffer = queued_data_.front();
+      observer_->OnMessage(*buffer);
+      queued_data_.pop();
+      delete buffer;
+    }
+  }
+}
+
+void DataChannel::ClearQueuedData() {
+  while (!queued_data_.empty()) {
+    DataBuffer* buffer = queued_data_.front();
+    queued_data_.pop();
+    delete buffer;
+  }
+}
+
 void DataChannel::OnDataReceived(cricket::DataChannel* channel,
                                  const cricket::ReceiveDataParams& params,
                                  const::std::string& data) {
-  if (params.ssrc == receive_ssrc_ && observer_) {
-    receive_buffer_.data.SetData(data.c_str(), data.length());
-    observer_->OnMessage(receive_buffer_);
+  if (params.ssrc == receive_ssrc_) {
+    talk_base::scoped_ptr<DataBuffer> buffer(new DataBuffer);
+    buffer->data.SetData(data.c_str(), data.length());
+    if (was_ever_writable_ && observer_) {
+      observer_->OnMessage(*buffer.get());
+    } else {
+      if (queued_data_.size() > kMaxQueuedDataPackets) {
+        ClearQueuedData();
+      }
+      queued_data_.push(buffer.release());
+    }
   }
 }
 

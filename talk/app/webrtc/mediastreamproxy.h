@@ -83,6 +83,7 @@ class MediaStreamProxy : public LocalMediaStreamInterface,
     void SetImplementation(MediaStreamTrackListInterface<T>* track_list);
     virtual size_t count() const;
     virtual T* at(size_t index);
+    virtual T* Find(const std::string& id);
 
    private:
     void Send(uint32 id, talk_base::MessageData* data) const;

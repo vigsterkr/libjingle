@@ -80,10 +80,9 @@ talk_base::scoped_refptr<FakeAudioCaptureModule> FakeAudioCaptureModule::Create(
     talk_base::Thread* process_thread) {
   if (process_thread == NULL) return NULL;
 
-  talk_base::RefCountedObject<FakeAudioCaptureModule>* capture_module =
-      new talk_base::RefCountedObject<FakeAudioCaptureModule>(process_thread);
+  talk_base::scoped_refptr<FakeAudioCaptureModule> capture_module(
+      new talk_base::RefCountedObject<FakeAudioCaptureModule>(process_thread));
   if (!capture_module->Initialize()) {
-    delete capture_module;
     return NULL;
   }
   return capture_module;
