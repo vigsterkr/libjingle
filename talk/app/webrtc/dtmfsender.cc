@@ -27,6 +27,8 @@
 
 #include "talk/app/webrtc/dtmfsender.h"
 
+#include <ctype.h>
+
 #include <string>
 
 #include "talk/base/logging.h"
