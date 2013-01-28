@@ -43,7 +43,6 @@ class PseudoTcp;
 
 class IPseudoTcpNotify {
  public:
-  virtual ~IPseudoTcpNotify() {}
   // Notification of tcp events
   virtual void OnTcpOpen(PseudoTcp* tcp) = 0;
   virtual void OnTcpReadable(PseudoTcp* tcp) = 0;
@@ -54,6 +53,9 @@ class IPseudoTcpNotify {
   enum WriteResult { WR_SUCCESS, WR_TOO_LARGE, WR_FAIL };
   virtual WriteResult TcpWritePacket(PseudoTcp* tcp,
                                      const char* buffer, size_t len) = 0;
+
+ protected:
+  virtual ~IPseudoTcpNotify() {}
 };
 
 //////////////////////////////////////////////////////////////////////
