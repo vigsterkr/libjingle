@@ -30,7 +30,10 @@
 
 #include <string>
 
+#include "talk/app/webrtc/dtmfsenderinterface.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
+#include "talk/app/webrtc/proxy.h"
+#include "talk/base/common.h"
 #include "talk/base/messagehandler.h"
 #include "talk/base/refcount.h"
 
@@ -61,65 +64,31 @@ class DtmfProviderInterface {
   virtual ~DtmfProviderInterface() {}
 };
 
-// DtmfSender callback interface. Application should implement this interface
-// to get notifications from the DtmfSender.
-class DtmfSenderObserverInterface : public talk_base::RefCountInterface {
+class DtmfSender
+    : public DtmfSenderInterface,
+      public talk_base::MessageHandler {
  public:
-  // Triggered when DTMF |tone| is sent.
-  // If |tone| is empty that means the DtmfSender has sent out all the given
-  // tones.
-  virtual void OnToneChange(const std::string& tone) = 0;
+  static talk_base::scoped_refptr<DtmfSender> Create(
+      AudioTrackInterface* track,
+      talk_base::Thread* signaling_thread,
+      DtmfProviderInterface* provider);
+
+  // Implements DtmfSenderInterface.
+  virtual void RegisterObserver(DtmfSenderObserverInterface* observer) OVERRIDE;
+  virtual void UnregisterObserver() OVERRIDE;
+  virtual bool CanInsertDtmf() OVERRIDE;
+  virtual bool InsertDtmf(const std::string& tones, int duration,
+                          int inter_tone_gap) OVERRIDE;
+  virtual const AudioTrackInterface* track() const OVERRIDE;
+  virtual std::string tones() const OVERRIDE;
+  virtual int duration() const OVERRIDE;
+  virtual int inter_tone_gap() const OVERRIDE;
 
  protected:
-  virtual ~DtmfSenderObserverInterface() {}
-};
-
-// Native implementation of the RTCDTMFSender defined by the WebRTC W3C Editor's
-// Draft.
-class DtmfSender : public talk_base::MessageHandler {
- public:
   DtmfSender(AudioTrackInterface* track,
-             DtmfSenderObserverInterface* observer,
              talk_base::Thread* signaling_thread,
              DtmfProviderInterface* provider);
   virtual ~DtmfSender();
-
-  // Returns true if this DtmfSender is capable of sending DTMF.
-  // Otherwise returns false.
-  bool CanInsertDtmf();
-
-  // Queues a task that sends the DTMF |tones|. The |tones| parameter is treated
-  // as a series of characters. The characters 0 through 9, A through D, #, and
-  // * generate the associated DTMF tones. The characters a to d are equivalent
-  // to A to D. The character ',' indicates a delay of 2 seconds before
-  // processing the next character in the tones parameter.
-  // Unrecognized characters are ignored.
-  // The |duration| parameter indicates the duration in ms to use for each
-  // character passed in the |tones| parameter.
-  // The duration cannot be more than 6000 or less than 70.
-  // The |inter_tone_gap| parameter indicates the gap between tones in ms.
-  // The |inter_tone_gap| must be at least 50 ms but should be as short as
-  // possible.
-  // If InsertDtmf is called on the same object while an existing task for this
-  // object to generate DTMF is still running, the previous task is canceled.
-  // Returns true on success and false on failure.
-  bool InsertDtmf(const std::string& tones, int duration, int inter_tone_gap);
-
-  // Returns the track given as argument to the constructor.
-  const AudioTrackInterface* track() const;
-
-  // Returns the tones remaining to be played out.
-  const std::string tones() const;
-
-  // Returns the current tone duration value in ms.
-  // This value will be the value last set via the InsertDtmf() method, or the
-  // default value of 100 ms if InsertDtmf() was never called.
-  int duration() const;
-
-  // Returns the current value of the between-tone gap in ms.
-  // This value will be the value last set via the InsertDtmf() method, or the
-  // default value of 50 ms if InsertDtmf() was never called.
-  int inter_tone_gap() const;
 
  private:
   DtmfSender();
@@ -131,7 +100,7 @@ class DtmfSender : public talk_base::MessageHandler {
   void DoInsertDtmf();
 
   talk_base::scoped_refptr<AudioTrackInterface> track_;
-  talk_base::scoped_refptr<DtmfSenderObserverInterface> observer_;
+  DtmfSenderObserverInterface* observer_;
   talk_base::Thread* signaling_thread_;
   DtmfProviderInterface* provider_;
   std::string tones_;
@@ -140,6 +109,18 @@ class DtmfSender : public talk_base::MessageHandler {
 
   DISALLOW_COPY_AND_ASSIGN(DtmfSender);
 };
+
+// Define proxy for DtmfSenderInterface.
+BEGIN_PROXY_MAP(DtmfSender)
+  PROXY_METHOD1(void, RegisterObserver, DtmfSenderObserverInterface*)
+  PROXY_METHOD0(void, UnregisterObserver)
+  PROXY_METHOD0(bool, CanInsertDtmf)
+  PROXY_METHOD3(bool, InsertDtmf, const std::string&, int, int)
+  PROXY_CONSTMETHOD0(const AudioTrackInterface*, track)
+  PROXY_CONSTMETHOD0(std::string, tones)
+  PROXY_CONSTMETHOD0(int, duration)
+  PROXY_CONSTMETHOD0(int, inter_tone_gap)
+END_PROXY()
 
 // Get DTMF code from the DTMF event character.
 bool GetDtmfCode(char tone, int* code);

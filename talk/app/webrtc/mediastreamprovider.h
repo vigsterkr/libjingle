@@ -30,6 +30,7 @@
 
 namespace cricket {
 
+struct AudioOptions;
 class VideoCapturer;
 class VideoRenderer;
 
@@ -44,7 +45,9 @@ class AudioProviderInterface {
   // Enable/disable the audio playout of a remote audio track with name |name|.
   virtual void SetAudioPlayout(const std::string& name, bool enable) = 0;
   // Enable/disable sending audio on the local audio track with name |name|.
-  virtual void SetAudioSend(const std::string& name, bool enable) = 0;
+  // When |enable| is true |options| should be applied to the audio track.
+  virtual void SetAudioSend(const std::string& name, bool enable,
+                            const cricket::AudioOptions& options) = 0;
 
  protected:
   virtual ~AudioProviderInterface() {}

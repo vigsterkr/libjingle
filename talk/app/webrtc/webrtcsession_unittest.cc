@@ -42,6 +42,7 @@
 #include "talk/base/virtualsocketserver.h"
 #include "talk/media/base/fakemediaengine.h"
 #include "talk/media/base/fakevideorenderer.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/media/devices/fakedevicemanager.h"
 #include "talk/p2p/base/stunserver.h"
 #include "talk/p2p/base/teststunserver.h"
@@ -1700,10 +1701,19 @@ TEST_F(WebRtcSessionTest, SetAudioSend) {
   ASSERT_EQ(1u, channel->send_streams().size());
   uint32 send_ssrc  = channel->send_streams()[0].first_ssrc();
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
-  session_->SetAudioSend(kAudioTrack1, false);
+
+  cricket::AudioOptions options;
+  options.echo_cancellation.Set(true);
+
+  session_->SetAudioSend(kAudioTrack1, false, options);
   EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
-  session_->SetAudioSend(kAudioTrack1, true);
+  EXPECT_FALSE(channel->options().echo_cancellation.IsSet());
+
+  session_->SetAudioSend(kAudioTrack1, true, options);
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
+  bool value;
+  EXPECT_TRUE(channel->options().echo_cancellation.Get(&value));
+  EXPECT_TRUE(value);
 }
 
 TEST_F(WebRtcSessionTest, SetVideoPlayout) {

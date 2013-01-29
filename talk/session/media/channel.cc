@@ -299,9 +299,12 @@ struct AudioOptionsMessageData : public talk_base::MessageData {
 };
 
 struct VideoOptionsMessageData : public talk_base::MessageData {
-  explicit VideoOptionsMessageData(VideoMediaOptions options)
-      : options(options) {}
-  VideoMediaOptions options;
+  explicit VideoOptionsMessageData(const VideoOptions& options)
+      : options(options),
+        result(false) {
+  }
+  VideoOptions options;
+  bool result;
 };
 
 struct SetCapturerMessageData : public talk_base::MessageData {
@@ -2005,13 +2008,9 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
 
   if (action != CA_UPDATE) {
     // Tweak our video processing settings, if needed.
-    VideoMediaOptions video_options;
+    VideoOptions video_options;
     media_channel()->GetOptions(&video_options);
-    if (video->conference_mode()) {
-      video_options.conference_mode.Set(true);
-    } else {
-      video_options.conference_mode.Set(false);
-    }
+    video_options.conference_mode.Set(video->conference_mode());
     if (!media_channel()->SetOptions(video_options)) {
       // Log an error on failure, but don't abort the call.
       LOG(LS_ERROR) << "Failed to set video channel options";
@@ -2132,13 +2131,14 @@ void VideoChannel::OnScreencastWindowEvent_s(uint32 ssrc,
   SignalScreencastWindowEvent(ssrc, we);
 }
 
-void VideoChannel::SetChannelOptions(const VideoMediaOptions &options) {
+bool VideoChannel::SetChannelOptions(const VideoOptions &options) {
   VideoOptionsMessageData data(options);
   Send(MSG_SETCHANNELOPTIONS, &data);
+  return data.result;
 }
 
-void VideoChannel::SetChannelOptions_w(const VideoMediaOptions &options) {
-  media_channel()->SetOptions(options);
+bool VideoChannel::SetChannelOptions_w(const VideoOptions &options) {
+  return media_channel()->SetOptions(options);
 }
 
 void VideoChannel::OnMessage(talk_base::Message *pmsg) {
@@ -2195,9 +2195,9 @@ void VideoChannel::OnMessage(talk_base::Message *pmsg) {
       break;
     }
     case MSG_SETCHANNELOPTIONS: {
-      const VideoOptionsMessageData* data =
+      VideoOptionsMessageData* data =
          static_cast<VideoOptionsMessageData*>(pmsg->pdata);
-      SetChannelOptions_w(data->options);
+      data->result = SetChannelOptions_w(data->options);
       break;
     }
     case MSG_CHANNEL_ERROR: {

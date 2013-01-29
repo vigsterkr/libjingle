@@ -893,7 +893,7 @@ class VideoMediaChannelTest : public testing::Test,
   void GetStatsMultipleRecvStreams() {
     Renderer renderer1, renderer2;
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
-    cricket::VideoMediaOptions vmo;
+    cricket::VideoOptions vmo;
     vmo.conference_mode.Set(true);
     EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(SetSend(true));
@@ -953,7 +953,7 @@ class VideoMediaChannelTest : public testing::Test,
     // Normal setup; note that we set the SSRC explicitly to ensure that
     // it will come first in the senders map.
     EXPECT_TRUE(SetOneCodec(DefaultCodec()));
-    cricket::VideoMediaOptions vmo;
+    cricket::VideoOptions vmo;
     vmo.conference_mode.Set(true);
     EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(channel_->AddRecvStream(
@@ -1106,7 +1106,7 @@ class VideoMediaChannelTest : public testing::Test,
 
   // Tests adding streams already exists returns false.
   void AddRecvStreamsAlreadyExist() {
-    cricket::VideoMediaOptions vmo;
+    cricket::VideoOptions vmo;
     vmo.conference_mode.Set(true);
     EXPECT_TRUE(channel_->SetOptions(vmo));
 
@@ -1128,7 +1128,7 @@ class VideoMediaChannelTest : public testing::Test,
   // Tests setting up and configuring multiple incoming streams.
   void AddRemoveRecvStreams() {
     Renderer renderer1, renderer2;
-    cricket::VideoMediaOptions vmo;
+    cricket::VideoOptions vmo;
     vmo.conference_mode.Set(true);
     EXPECT_TRUE(channel_->SetOptions(vmo));
     // Ensure we can't set the renderer on a non-existent stream.
@@ -1255,7 +1255,7 @@ class VideoMediaChannelTest : public testing::Test,
   void SimulateConference() {
     Renderer renderer1, renderer2;
     EXPECT_TRUE(SetDefaultCodec());
-    cricket::VideoMediaOptions vmo;
+    cricket::VideoOptions vmo;
     vmo.conference_mode.Set(true);
     EXPECT_TRUE(channel_->SetOptions(vmo));
     EXPECT_TRUE(SetSend(true));

@@ -38,9 +38,9 @@
 #include "talk/base/messagehandler.h"
 #include "talk/base/sigslot.h"
 
-#if defined(POSIX) && !defined(ANDROID)
+#if defined(POSIX)
 struct ifaddrs;
-#endif  // defined(POSIX) && !defined(ANDROID)
+#endif  // defined(POSIX)
 
 namespace talk_base {
 
@@ -128,12 +128,12 @@ class BasicNetworkManager : public NetworkManagerBase,
   bool started() { return start_count_ > 0; }
 
  protected:
-#if defined(POSIX) && !defined(ANDROID)
+#if defined(POSIX)
   // Separated from CreateNetworks for tests.
-  void ConvertIfAddrs(struct ifaddrs* interfaces,
+  void ConvertIfAddrs(ifaddrs* interfaces,
                       bool include_ignored,
                       NetworkList* networks) const;
-#endif  // defined(POSIX) && !defined(ANDROID)
+#endif  // defined(POSIX)
 
   // Creates a network object for each network available on the machine.
   bool CreateNetworks(bool include_ignored, NetworkList* networks) const;

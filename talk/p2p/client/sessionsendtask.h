@@ -138,7 +138,6 @@ class SessionSendTask : public buzz::XmppTask {
  private:
   SessionManager *session_manager_;
   talk_base::scoped_ptr<buzz::XmlElement> stanza_;
-  bool timed_out_;
 };
 
 }

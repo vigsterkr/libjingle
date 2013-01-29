@@ -56,7 +56,7 @@ class BaseTrackHandler : public ObserverInterface {
   virtual void OnEnabledChanged() = 0;
 
  private:
-  MediaStreamTrackInterface* track_;
+  talk_base::scoped_refptr<MediaStreamTrackInterface> track_;
   MediaStreamTrackInterface::TrackState state_;
   bool enabled_;
 };
@@ -75,7 +75,7 @@ class LocalAudioTrackHandler : public BaseTrackHandler {
   virtual void OnEnabledChanged();
 
  private:
-  talk_base::scoped_refptr<AudioTrackInterface> audio_track_;
+  AudioTrackInterface* audio_track_;
   AudioProviderInterface* provider_;
 };
 
@@ -93,7 +93,7 @@ class RemoteAudioTrackHandler : public BaseTrackHandler {
   virtual void OnEnabledChanged();
 
  private:
-  talk_base::scoped_refptr<AudioTrackInterface> audio_track_;
+  AudioTrackInterface* audio_track_;
   AudioProviderInterface* provider_;
 };
 
@@ -111,7 +111,7 @@ class LocalVideoTrackHandler : public BaseTrackHandler {
   virtual void OnEnabledChanged();
 
  private:
-  talk_base::scoped_refptr<VideoTrackInterface> local_video_track_;
+  VideoTrackInterface* local_video_track_;
   VideoProviderInterface* provider_;
 };
 
@@ -129,7 +129,7 @@ class RemoteVideoTrackHandler : public BaseTrackHandler {
   virtual void OnEnabledChanged();
 
  private:
-  talk_base::scoped_refptr<VideoTrackInterface> remote_video_track_;
+  VideoTrackInterface* remote_video_track_;
   VideoProviderInterface* provider_;
 };
 

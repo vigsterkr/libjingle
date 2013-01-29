@@ -28,12 +28,10 @@
 #include <string>
 
 #include "talk/app/webrtc/audiotrack.h"
-#include "talk/app/webrtc/mediastreamproxy.h"
-#include "talk/app/webrtc/mediastreamtrackproxy.h"
+#include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/refcount.h"
 #include "talk/base/scoped_ptr.h"
-#include "talk/base/thread.h"
 #include "talk/base/gunit.h"
 #include "testing/base/public/gmock.h"
 
@@ -44,293 +42,117 @@ static const char kAudioTrackId[] = "dummy_microphone_1";
 using talk_base::scoped_refptr;
 using ::testing::Exactly;
 
-namespace {
-
-class TrackStateMessageData : public talk_base::MessageData {
- public:
-  TrackStateMessageData(
-      webrtc::MediaStreamTrackInterface* track,
-      webrtc::MediaStreamTrackInterface::TrackState state)
-      : track_(track),
-        state_(state) {
-  }
-
-  scoped_refptr<webrtc::MediaStreamTrackInterface> track_;
-  webrtc::MediaStreamTrackInterface::TrackState state_;
-};
-
-}  // anonymous namespace
-
 namespace webrtc {
 
 // Helper class to test Observer.
 class MockObserver : public ObserverInterface {
  public:
-  explicit MockObserver(talk_base::Thread* signaling_thread)
-      : signaling_thread_(signaling_thread) {
-  }
+  MockObserver() {}
 
-  MOCK_METHOD0(DoOnChanged, void());
-  virtual void OnChanged() {
-    ASSERT_TRUE(talk_base::Thread::Current() == signaling_thread_);
-    DoOnChanged();
-  }
- private:
-  talk_base::Thread* signaling_thread_;
+  MOCK_METHOD0(OnChanged, void());
 };
 
-class MockMediaStream: public LocalMediaStreamInterface {
- public:
-  MockMediaStream(const std::string& label, talk_base::Thread* signaling_thread)
-      : stream_impl_(MediaStream::Create(label)),
-        signaling_thread_(signaling_thread) {
-  }
-  virtual void RegisterObserver(webrtc::ObserverInterface* observer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    stream_impl_->RegisterObserver(observer);
-  }
-  virtual void UnregisterObserver(webrtc::ObserverInterface* observer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    stream_impl_->UnregisterObserver(observer);
-  }
-  virtual std::string label() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->label();
-  }
-  virtual AudioTracks* audio_tracks() {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->audio_tracks();
-  }
-  virtual VideoTracks* video_tracks() {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->video_tracks();
-  }
-  virtual bool AddTrack(AudioTrackInterface* audio_track) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->AddTrack(audio_track);
-  }
-  virtual bool AddTrack(VideoTrackInterface* video_track) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return stream_impl_->AddTrack(video_track);
-  }
-
- private:
-  scoped_refptr<MediaStream> stream_impl_;
-  talk_base::Thread* signaling_thread_;
-};
-
-template <class T>
-class MockMediaStreamTrack: public T {
- public:
-  MockMediaStreamTrack(T* implementation,
-                       talk_base::Thread* signaling_thread)
-      : track_impl_(implementation),
-        signaling_thread_(signaling_thread) {
-  }
-  virtual void RegisterObserver(webrtc::ObserverInterface* observer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    track_impl_->RegisterObserver(observer);
-  }
-  virtual void UnregisterObserver(webrtc::ObserverInterface* observer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    track_impl_->UnregisterObserver(observer);
-  }
-  virtual std::string kind() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->kind();
-  }
-  virtual std::string id() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->id();
-  }
-  virtual bool enabled() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->enabled();
-  }
-  virtual MediaStreamTrackInterface::TrackState state() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->state();
-  }
-  virtual bool set_enabled(bool enabled) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->set_enabled(enabled);
-  }
-  virtual bool set_state(webrtc::MediaStreamTrackInterface::TrackState state) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->set_state(state);
-  }
-
- protected:
-  scoped_refptr<T> track_impl_;
-  talk_base::Thread* signaling_thread_;
-};
-
-class MockVideoTrack
-    : public MockMediaStreamTrack<VideoTrackInterface> {
- public:
-  MockVideoTrack(VideoTrackInterface* implementation,
-                 talk_base::Thread* signaling_thread)
-      : MockMediaStreamTrack<VideoTrackInterface>(implementation,
-                                                  signaling_thread) {
-  }
-  virtual VideoSourceInterface* GetSource() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->GetSource();
-  }
-  virtual void AddRenderer(VideoRendererInterface* renderer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->AddRenderer(renderer);
-  }
-  virtual void RemoveRenderer(VideoRendererInterface* renderer) {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->RemoveRenderer(renderer);
-  }
-  virtual cricket::VideoRenderer* FrameInput() {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->FrameInput();
-  }
-};
-
-class MockAudioTrack
-    : public MockMediaStreamTrack<AudioTrackInterface> {
- public:
-  MockAudioTrack(AudioTrackInterface* implementation,
-                      talk_base::Thread* signaling_thread)
-    : MockMediaStreamTrack<AudioTrackInterface>(implementation,
-                                                signaling_thread) {
-  }
-
-  virtual AudioSourceInterface* GetSource() const {
-    EXPECT_EQ(talk_base::Thread::Current(), signaling_thread_);
-    return track_impl_->GetSource();
-  }
-};
-
-class MediaStreamTest: public testing::Test,
-                       public talk_base::MessageHandler {
+class MediaStreamTest: public testing::Test {
  protected:
   virtual void SetUp() {
-    signaling_thread_ .reset(new talk_base::Thread());
-    ASSERT_TRUE(signaling_thread_->Start());
-
-    std::string label(kStreamLabel1);
-    // Create a stream proxy object that uses our mocked
-    // version of a LocalMediaStream.
-    scoped_refptr<MockMediaStream> mock_stream(
-        new talk_base::RefCountedObject<MockMediaStream>(
-            label, signaling_thread_.get()));
-    stream_ = MediaStreamProxy::Create(label, signaling_thread_.get(),
-                                       mock_stream);
+    stream_ = MediaStream::Create(kStreamLabel1);
     ASSERT_TRUE(stream_.get() != NULL);
-    EXPECT_EQ(label, stream_->label());
 
-    // Create a video track proxy object that uses our mocked
-    // version of a VideoTrack
-    scoped_refptr<VideoTrack> video_track_impl(
-        VideoTrack::Create(kVideoTrackId, NULL));
-    scoped_refptr<MockVideoTrack> mock_videotrack(
-        new talk_base::RefCountedObject<MockVideoTrack>(
-            video_track_impl, signaling_thread_.get()));
-    video_track_ = VideoTrackProxy::Create(mock_videotrack,
-                                           signaling_thread_.get());
-
+    video_track_ = VideoTrack::Create(kVideoTrackId, NULL);
     ASSERT_TRUE(video_track_.get() != NULL);
     EXPECT_EQ(MediaStreamTrackInterface::kInitializing, video_track_->state());
 
-    // Create an audio track proxy object that uses our mocked
-    // version of a AudioTrack
-    scoped_refptr<AudioTrackInterface> audio_track_impl(
-        AudioTrack::Create(kAudioTrackId, NULL));
-    scoped_refptr<MockAudioTrack> mock_audiotrack(
-        new talk_base::RefCountedObject<MockAudioTrack>(
-            audio_track_impl, signaling_thread_.get()));
-    audio_track_ = AudioTrackProxy::Create(mock_audiotrack,
-                                           signaling_thread_.get());
+    audio_track_ = AudioTrack::Create(kAudioTrackId, NULL);
 
     ASSERT_TRUE(audio_track_.get() != NULL);
     EXPECT_EQ(MediaStreamTrackInterface::kInitializing, audio_track_->state());
+
+    EXPECT_TRUE(stream_->AddTrack(video_track_));
+    EXPECT_FALSE(stream_->AddTrack(video_track_));
+    EXPECT_TRUE(stream_->AddTrack(audio_track_));
+    EXPECT_FALSE(stream_->AddTrack(audio_track_));
   }
 
-  enum {
-    MSG_SET_TRACKSTATE,
-  };
+  void ChangeTrack(MediaStreamTrackInterface* track) {
+    MockObserver observer;
+    track->RegisterObserver(&observer);
 
-  // Set the track state on the signaling thread.
-  // State can only be changed on the signaling thread.
-  void SetTrackState(MediaStreamTrackInterface* track,
-                     MediaStreamTrackInterface::TrackState new_state) {
-    TrackStateMessageData state(track, new_state);
-    signaling_thread_->Send(this, MSG_SET_TRACKSTATE, &state);
+    EXPECT_CALL(observer, OnChanged())
+        .Times(Exactly(1));
+    track->set_enabled(false);
+    EXPECT_FALSE(track->enabled());
+
+    EXPECT_CALL(observer, OnChanged())
+        .Times(Exactly(1));
+    track->set_state(MediaStreamTrackInterface::kLive);
+    EXPECT_EQ(MediaStreamTrackInterface::kLive, track->state());
   }
 
-  talk_base::scoped_ptr<talk_base::Thread> signaling_thread_;
   scoped_refptr<LocalMediaStreamInterface> stream_;
-  scoped_refptr<VideoTrackInterface> video_track_;
   scoped_refptr<AudioTrackInterface> audio_track_;
-
- private:
-  // Implements talk_base::MessageHandler.
-  virtual void OnMessage(talk_base::Message* msg) {
-    switch (msg->message_id) {
-      case MSG_SET_TRACKSTATE: {
-        TrackStateMessageData* state =
-            static_cast<TrackStateMessageData*>(msg->pdata);
-        state->track_->set_state(state->state_);
-        break;
-      }
-      default:
-        break;
-    }
-  }
+  scoped_refptr<VideoTrackInterface> video_track_;
 };
 
-TEST_F(MediaStreamTest, CreateLocalStream) {
-  EXPECT_TRUE(stream_->AddTrack(video_track_));
-  EXPECT_TRUE(stream_->AddTrack(audio_track_));
-
+TEST_F(MediaStreamTest, GetTrackInfo) {
   ASSERT_EQ(1u, stream_->video_tracks()->count());
   ASSERT_EQ(1u, stream_->audio_tracks()->count());
 
   // Verify the video track.
-  scoped_refptr<webrtc::MediaStreamTrackInterface> track(
+  scoped_refptr<webrtc::MediaStreamTrackInterface> video_track(
       stream_->video_tracks()->at(0));
-  EXPECT_EQ(0, track->id().compare(kVideoTrackId));
-  EXPECT_TRUE(track->enabled());
+  EXPECT_EQ(0, video_track->id().compare(kVideoTrackId));
+  EXPECT_TRUE(video_track->enabled());
+
+  ASSERT_EQ(1u, stream_->GetVideoTracks().size());
+  EXPECT_TRUE(stream_->GetVideoTracks()[0].get() == video_track.get());
+  EXPECT_TRUE(stream_->FindVideoTrack(video_track->id()).get()
+              == video_track.get());
+  video_track = stream_->GetVideoTracks()[0];
+  EXPECT_EQ(0, video_track->id().compare(kVideoTrackId));
+  EXPECT_TRUE(video_track->enabled());
 
   // Verify the audio track.
-  track = stream_->audio_tracks()->at(0);
-  EXPECT_EQ(0, track->id().compare(kAudioTrackId));
-  EXPECT_TRUE(track->enabled());
+  scoped_refptr<webrtc::MediaStreamTrackInterface> audio_track(
+      stream_->audio_tracks()->at(0));
+  EXPECT_EQ(0, audio_track->id().compare(kAudioTrackId));
+  EXPECT_TRUE(audio_track->enabled());
+  ASSERT_EQ(1u, stream_->GetAudioTracks().size());
+  EXPECT_TRUE(stream_->GetAudioTracks()[0].get() == audio_track.get());
+  EXPECT_TRUE(stream_->FindAudioTrack(audio_track->id()).get()
+              == audio_track.get());
+  audio_track = stream_->GetAudioTracks()[0];
+  EXPECT_EQ(0, audio_track->id().compare(kAudioTrackId));
+  EXPECT_TRUE(audio_track->enabled());
+}
+
+TEST_F(MediaStreamTest, RemoveTrack) {
+  MockObserver observer;
+  stream_->RegisterObserver(&observer);
+
+  EXPECT_CALL(observer, OnChanged())
+      .Times(Exactly(2));
+
+  EXPECT_TRUE(stream_->RemoveTrack(audio_track_));
+  EXPECT_FALSE(stream_->RemoveTrack(audio_track_));
+  EXPECT_EQ(0u, stream_->GetAudioTracks().size());
+  EXPECT_EQ(0u, stream_->audio_tracks()->count());
+
+  EXPECT_TRUE(stream_->RemoveTrack(video_track_));
+  EXPECT_FALSE(stream_->RemoveTrack(video_track_));
+  EXPECT_EQ(0u, stream_->GetVideoTracks().size());
+  EXPECT_EQ(0u, stream_->video_tracks()->count());
 }
 
 TEST_F(MediaStreamTest, ChangeVideoTrack) {
-  MockObserver observer(signaling_thread_.get());
-  video_track_->RegisterObserver(&observer);
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  video_track_->set_enabled(false);
-  EXPECT_FALSE(video_track_->state());
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  SetTrackState(video_track_, MediaStreamTrackInterface::kLive);
-  EXPECT_EQ(MediaStreamTrackInterface::kLive, video_track_->state());
+  scoped_refptr<webrtc::VideoTrackInterface> video_track(
+      stream_->GetVideoTracks()[0]);
+  ChangeTrack(video_track.get());
 }
 
 TEST_F(MediaStreamTest, ChangeAudioTrack) {
-  MockObserver observer(signaling_thread_.get());
-  audio_track_->RegisterObserver(&observer);
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  audio_track_->set_enabled(false);
-  EXPECT_FALSE(audio_track_->enabled());
-
-  EXPECT_CALL(observer, DoOnChanged())
-      .Times(Exactly(1));
-  SetTrackState(audio_track_, MediaStreamTrackInterface::kLive);
-  EXPECT_EQ(MediaStreamTrackInterface::kLive, audio_track_->state());
+  scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+      stream_->GetAudioTracks()[0]);
+  ChangeTrack(audio_track.get());
 }
 
 }  // namespace webrtc

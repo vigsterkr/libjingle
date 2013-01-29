@@ -29,6 +29,9 @@
 
 #include <algorithm>
 
+#if defined(HAVE_YUV)
+#include "libyuv/scale_argb.h"
+#endif
 #include "talk/base/logging.h"
 #include "talk/media/base/videoprocessor.h"
 
@@ -207,18 +210,47 @@ void VideoCapturer::OnFrameCaptured(VideoCapturer*,
 #define VIDEO_FRAME_NAME WebRtcVideoFrame
 #endif
 #if defined(VIDEO_FRAME_NAME)
+#if defined(HAVE_YUV)
+  if (IsScreencast()) {
+    int scaled_width, scaled_height;
+    ComputeScale(captured_frame->width, captured_frame->height,
+                 &scaled_width, &scaled_height);
+    if (FOURCC_ARGB == captured_frame->fourcc &&
+        (scaled_width != captured_frame->height ||
+         scaled_height != captured_frame->height)) {
+      CapturedFrame* scaled_frame = const_cast<CapturedFrame*>(captured_frame);
+      // Compute new width such that width * height is less than maximum but
+      // maintains original captured frame aspect ratio.
+      // Round down width to multiple of 4 so odd width won't round up beyond
+      // maximum, and so chroma channel is even width to simplify spatial
+      // resampling.
+      libyuv::ARGBScale(reinterpret_cast<const uint8*>(captured_frame->data),
+                        captured_frame->width * 4, captured_frame->width,
+                        captured_frame->height,
+                        reinterpret_cast<uint8*>(scaled_frame->data),
+                        scaled_width * 4,
+                        scaled_width, scaled_height,
+                        libyuv::kFilterBilinear);
+      scaled_frame->width = scaled_width;
+      scaled_frame->height = scaled_height;
+      scaled_frame->data_size = scaled_width * 4 * scaled_height;
+    }
+  }
+#endif  // HAVE_YUV
   // Size to crop captured frame to.  This adjusts the captured frames
   // aspect ratio to match the final view aspect ratio, considering pixel
   // aspect ratio and rotation.  The final size may be scaled down by video
   // adapter to better match ratio_w_ x ratio_h_.
   // Note that abs() of frame height is passed in, because source may be
   // inverted, but output will be positive.
-  int desired_width = 0;
-  int desired_height = 0;
-  ComputeCrop(ratio_w_, ratio_h_,
-              captured_frame->width, abs(captured_frame->height),
-              captured_frame->pixel_width, captured_frame->pixel_height,
-              captured_frame->rotation, &desired_width, &desired_height);
+  int desired_width = captured_frame->width;
+  int desired_height = captured_frame->height;
+  if (!IsScreencast()) {
+    ComputeCrop(ratio_w_, ratio_h_,
+                captured_frame->width, abs(captured_frame->height),
+                captured_frame->pixel_width, captured_frame->pixel_height,
+                captured_frame->rotation, &desired_width, &desired_height);
+  }
 
   VIDEO_FRAME_NAME i420_frame;
   if (!i420_frame.Init(captured_frame, desired_width, desired_height)) {

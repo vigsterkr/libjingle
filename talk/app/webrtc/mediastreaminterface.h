@@ -166,6 +166,7 @@ class AudioTrackInterface : public MediaStreamTrackInterface {
 typedef AudioTrackInterface LocalAudioTrackInterface;
 
 // List of of tracks.
+// Deprecated: Please use TrackVectors.
 template <class TrackType>
 class MediaStreamTrackListInterface : public talk_base::RefCountInterface {
  public:
@@ -177,24 +178,49 @@ class MediaStreamTrackListInterface : public talk_base::RefCountInterface {
   virtual ~MediaStreamTrackListInterface() {}
 };
 
+typedef std::vector<talk_base::scoped_refptr<AudioTrackInterface> >
+    AudioTrackVector;
+typedef std::vector<talk_base::scoped_refptr<VideoTrackInterface> >
+    VideoTrackVector;
+
+// Deprecated: Please use AudioTrackVector.
 typedef MediaStreamTrackListInterface<AudioTrackInterface> AudioTracks;
+// Deprecated: Please use VideoTrackVector.
 typedef MediaStreamTrackListInterface<VideoTrackInterface> VideoTracks;
 
 class MediaStreamInterface : public talk_base::RefCountInterface,
                              public NotifierInterface {
  public:
   virtual std::string label() const = 0;
+
+  virtual AudioTrackVector GetAudioTracks() = 0;
+  virtual VideoTrackVector GetVideoTracks() = 0;
+  virtual talk_base::scoped_refptr<AudioTrackInterface>
+      FindAudioTrack(const std::string& track_id) = 0;
+  virtual talk_base::scoped_refptr<VideoTrackInterface>
+      FindVideoTrack(const std::string& track_id) = 0;
+
+  virtual bool AddTrack(AudioTrackInterface* track) = 0;
+  virtual bool AddTrack(VideoTrackInterface* track) = 0;
+  virtual bool RemoveTrack(AudioTrackInterface* track) = 0;
+  virtual bool RemoveTrack(VideoTrackInterface* track) = 0;
+
+  // Deprecated: Please use GetAudioTracks.
   virtual AudioTracks* audio_tracks() = 0;
+  // Deprecated: Please use GetVideoTracks.
   virtual VideoTracks* video_tracks() = 0;
 
  protected:
   virtual ~MediaStreamInterface() {}
 };
 
+// Currently there is no difference between LocalMediaStreams and MediaStreams
+// but the class is kept since Chrome use this type to distinguish between
+// local and remote streams.
+// TODO(perkj): Decide if LocalMediaStreamInterface is needed or not once Chrome
+// don't care about the type.
 class LocalMediaStreamInterface : public MediaStreamInterface {
  public:
-  virtual bool AddTrack(AudioTrackInterface* track) = 0;
-  virtual bool AddTrack(VideoTrackInterface* track) = 0;
 };
 
 // MediaConstraintsInterface
@@ -225,6 +251,13 @@ class MediaConstraintsInterface {
   static const char kMinHeight[];  // minHeight
   static const char kMaxFrameRate[];  // maxFrameRate
   static const char kMinFrameRate[];  // minFrameRate
+
+  // Constraint keys used by a local audio source.
+  // These keys are google specific.
+  static const char kEchoCancellation[];  // googEchoCancellation
+  static const char kAutoGainControl[];  // googAutoGainControl
+  static const char kNoiseSuppression[];  // googNoiseSuppression
+  static const char kHighpassFilter[];  // googHighpassFilter
 
   // Constraint keys for CreateOffer / CreateAnswer
   // Specified by the W3C PeerConnection spec

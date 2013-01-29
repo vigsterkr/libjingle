@@ -37,6 +37,7 @@
 #include "talk/app/webrtc/statstypes.h"
 #include "talk/base/sigslot.h"
 #include "talk/base/thread.h"
+#include "talk/media/base/mediachannel.h"
 #include "talk/p2p/base/session.h"
 #include "talk/p2p/base/transportdescriptionfactory.h"
 #include "talk/session/media/mediasession.h"
@@ -121,7 +122,8 @@ class WebRtcSession : public cricket::BaseSession,
 
   // AudioMediaProviderInterface implementation.
   virtual void SetAudioPlayout(const std::string& name, bool enable);
-  virtual void SetAudioSend(const std::string& name, bool enable);
+  virtual void SetAudioSend(const std::string& name, bool enable,
+                            const cricket::AudioOptions& options);
 
   // Implements VideoMediaProviderInterface.
   virtual bool SetCaptureDevice(const std::string& name,

@@ -75,23 +75,42 @@ bool GetDtmfCode(char tone, int* code) {
   return true;
 }
 
+talk_base::scoped_refptr<DtmfSender> DtmfSender::Create(
+    AudioTrackInterface* track,
+    talk_base::Thread* signaling_thread,
+    DtmfProviderInterface* provider) {
+  if (!track || !signaling_thread || !provider) {
+    return NULL;
+  }
+  talk_base::scoped_refptr<DtmfSender> dtmf_sender(
+      new talk_base::RefCountedObject<DtmfSender>(track, signaling_thread,
+                                                  provider));
+  return dtmf_sender;
+}
+
 DtmfSender::DtmfSender(AudioTrackInterface* track,
-                       DtmfSenderObserverInterface* observer,
                        talk_base::Thread* signaling_thread,
                        DtmfProviderInterface* provider)
     : track_(track),
-      observer_(observer),
+      observer_(NULL),
       signaling_thread_(signaling_thread),
       provider_(provider),
       duration_(kDtmfDefaultDurationMs),
       inter_tone_gap_(kDtmfDefaultGapMs) {
   ASSERT(track_ != NULL);
-  ASSERT(observer_ != NULL);
   ASSERT(signaling_thread_ != NULL);
   ASSERT(provider_ != NULL);
 }
 
 DtmfSender::~DtmfSender() {
+}
+
+void DtmfSender::RegisterObserver(DtmfSenderObserverInterface* observer) {
+  observer_ = observer;
+}
+
+void DtmfSender::UnregisterObserver() {
+  observer_ = NULL;
 }
 
 bool DtmfSender::CanInsertDtmf() {
@@ -134,7 +153,7 @@ const AudioTrackInterface* DtmfSender::track() const {
   return track_;
 }
 
-const std::string DtmfSender::tones() const {
+std::string DtmfSender::tones() const {
   return tones_;
 }
 
@@ -169,7 +188,9 @@ void DtmfSender::DoInsertDtmf() {
   if (first_tone_pos == std::string::npos) {
     tones_.clear();
     // Fire a “OnToneChange” event with an empty string and stop.
-    observer_->OnToneChange(std::string());
+    if (observer_) {
+      observer_->OnToneChange(std::string());
+    }
     return;
   } else {
     char tone = tones_[first_tone_pos];
@@ -194,7 +215,9 @@ void DtmfSender::DoInsertDtmf() {
   }
 
   // Fire a “OnToneChange” event with the tone that's just processed.
-  observer_->OnToneChange(tones_.substr(first_tone_pos, 1));
+  if (observer_) {
+    observer_->OnToneChange(tones_.substr(first_tone_pos, 1));
+  }
 
   // Erase the unrecognized characters plus the tone that's just processed.
   tones_.erase(0, first_tone_pos + 1);

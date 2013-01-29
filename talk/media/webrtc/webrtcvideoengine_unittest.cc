@@ -400,7 +400,7 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabled) {
 TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->AddSendStream(
@@ -424,7 +424,7 @@ TEST_F(WebRtcVideoEngineTestFake, RembEnabledOnReceiveChannels) {
 TEST_F(WebRtcVideoEngineTestFake, RtpTimestampOffsetHeaderExtensions) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
 
@@ -472,7 +472,7 @@ TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
   EXPECT_FALSE(vie_.GetTransmissionSmoothingStatus(first_send_channel));
 
   // Enable the experiment and verify.
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   options.video_leaky_bucket.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
@@ -604,7 +604,7 @@ TEST_F(WebRtcVideoEngineTestFake, HybridNackFecConference) {
   EXPECT_TRUE(SetupEngine());
   // Setup the send channel.
   int send_channel_num = vie_.GetLastChannel();
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->SetRecvCodecs(engine_.codecs()));
@@ -624,7 +624,7 @@ TEST_F(WebRtcVideoEngineTestFake, AddRemoveRecvStreamConference) {
   EXPECT_TRUE(SetupEngine());
   // Setup the send channel.
   int send_channel_num = vie_.GetLastChannel();
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   // Add a receive stream.
@@ -706,7 +706,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetBandwidthFixed) {
 TEST_F(WebRtcVideoEngineTestFake, SetBandwidthInConference) {
   EXPECT_TRUE(SetupEngine());
   int channel_num = vie_.GetLastChannel();
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->SetSendCodecs(engine_.codecs()));
@@ -780,7 +780,7 @@ TEST_F(WebRtcVideoEngineTestFake, SetOptionsWithDenoising) {
   EXPECT_TRUE(channel_->SetSendCodecs(codecs));
 
   // Set options with OPT_VIDEO_NOISE_REDUCTION flag.
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.video_noise_reduction.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
 
@@ -831,7 +831,7 @@ TEST_F(WebRtcVideoEngineTestFake, MultipleSendStreamsDifferentFormats) {
 
 TEST_F(WebRtcVideoEngineTestFake, SendReceiveBitratesStats) {
   EXPECT_TRUE(SetupEngine());
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
   EXPECT_TRUE(channel_->AddSendStream(
@@ -1148,12 +1148,12 @@ TEST_F(WebRtcVideoMediaChannelTest, HighAspectHighHeightCapturer) {
 }
 
 TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
-  cricket::VideoMediaOptions options;
+  cricket::VideoOptions options;
   options.conference_mode.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options));
 
   // Verify SetOptions returns true on a different options.
-  cricket::VideoMediaOptions options2;
+  cricket::VideoOptions options2;
   options2.adapt_input_to_cpu_usage.Set(true);
   EXPECT_TRUE(channel_->SetOptions(options2));
 
@@ -1164,7 +1164,7 @@ TEST_F(WebRtcVideoMediaChannelTest, SetOptionsFailsWhenSending) {
   EXPECT_TRUE(channel_->SetSend(true));
 
   // Verify SetOptions returns false if channel is already sending.
-  cricket::VideoMediaOptions options3;
+  cricket::VideoOptions options3;
   options3.conference_mode.Set(true);
   EXPECT_FALSE(channel_->SetOptions(options3));
 

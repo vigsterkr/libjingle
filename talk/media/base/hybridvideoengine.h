@@ -59,8 +59,8 @@ class HybridVideoMediaChannel : public VideoMediaChannel {
 
   // VideoMediaChannel methods
   virtual void SetInterface(NetworkInterface* iface);
-  virtual bool SetOptions(const VideoMediaOptions& options);
-  virtual bool GetOptions(VideoMediaOptions* options) const;
+  virtual bool SetOptions(const VideoOptions& options);
+  virtual bool GetOptions(VideoOptions* options) const;
   virtual bool AddSendStream(const StreamParams& sp);
   virtual bool RemoveSendStream(uint32 ssrc);
   virtual bool SetRenderer(uint32 ssrc, VideoRenderer* renderer);

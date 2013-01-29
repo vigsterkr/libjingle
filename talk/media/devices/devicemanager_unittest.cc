@@ -433,3 +433,13 @@ TEST_F(DeviceManagerTestFake, CaptureConstraintsUnWhitelisted) {
   EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
   EXPECT_EQ(kVgaFormat, best_format);
 }
+
+TEST_F(DeviceManagerTestFake, CaptureConstraintsWildcard) {
+  const Device device("any_device", "any_device");
+  dm_->SetVideoCaptureDeviceMaxFormat("*", kHdFormat);
+  scoped_ptr<cricket::VideoCapturer> capturer(
+      dm_->CreateVideoCapturer(device));
+  cricket::VideoFormat best_format;
+  EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
+  EXPECT_EQ(kHdFormat, best_format);
+}

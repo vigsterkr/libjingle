@@ -45,6 +45,8 @@ class Thread;
 
 namespace webrtc {
 
+class RemoteTracksInterface;
+
 // RemoteMediaStreamObserver is triggered when
 // MediaStreamSignaling::UpdateRemoteStreams is called with a new
 // SessionDescription with a new set of MediaStreams and DataChannels.
@@ -144,7 +146,7 @@ class MediaStreamSignaling {
   virtual cricket::MediaSessionOptions GetOptionsForAnswer(
       const MediaHints& hints);
 
-  // Updates or creates remote MediaStream objects given a
+  // Updates or creates remote MediaStream objects and Tracks given a
   // remote SessionDescription.
   // If the remote SessionDescription contain information about a new remote
   // MediaStreams a new remote MediaStream is created and
@@ -161,7 +163,8 @@ class MediaStreamSignaling {
   void UpdateLocalStreams(const SessionDescriptionInterface* desc);
 
   // Returns the SSRC for a given track.
-  bool GetRemoteTrackSsrc(const std::string& name, uint32* ssrc) const;
+  bool GetRemoteAudioTrackSsrc(const std::string& track_id, uint32* ssrc) const;
+  bool GetRemoteVideoTrackSsrc(const std::string& track_id, uint32* ssrc) const;
 
   // Returns all current remote MediaStreams.
   StreamCollectionInterface* remote_streams() const {
@@ -169,31 +172,6 @@ class MediaStreamSignaling {
   }
 
  private:
-  // We can use LocalMediaStreamInterface as RemoteMediaStream since the are the
-  // same except that tracks can be added and removed on the
-  // LocalMediaStreamInterface
-  typedef LocalMediaStreamInterface RemoteMediaStream;
-
-  // Create new MediaStreams and Tracks if they exist in |streams|
-  // Both new and existing MediaStreams are added to |current_streams|.
-  template <typename Track, typename TrackProxy>
-  void UpdateRemoteStreamsList(
-      const std::vector<cricket::StreamParams>& streams,
-      StreamCollection* current_streams);
-  template <typename Track, typename TrackProxy>
-    void AddRemoteTrack(const std::string& track_label,
-                        uint32 ssrc,
-                        RemoteMediaStream* stream);
-
-  void UpdateSessionOptions();
-  void MaybeCreateDefaultStream();
-  void UpdateEndedRemoteStream(MediaStreamInterface* stream);
-  void UpdateLocalDataChannels(const cricket::StreamParamsVec& streams);
-  void UpdateRemoteDataChannels(const cricket::StreamParamsVec& streams);
-  void UpdateClosingDataChannels(
-      const std::vector<std::string>& active_channels, bool is_local_update);
-  void CreateRemoteDataChannel(const std::string& label, uint32 remote_ssrc);
-
   struct RemotePeerInfo {
     RemotePeerInfo()
         : msid_supported(false),
@@ -214,6 +192,29 @@ class MediaStreamSignaling {
           default_video_track_needed);
     }
   };
+
+  void UpdateSessionOptions();
+  // Makes sure a MediaStream Track is created for each StreamParam in
+  // |streams|. |media_type| is the type of the |streams| and can be either
+  // audio or video.
+  // If a new MediaStream is created it is added to |new_streams|.
+  void UpdateRemoteStreamsList(
+      const std::vector<cricket::StreamParams>& streams,
+      cricket::MediaType media_type,
+      StreamCollection* new_streams);
+  // Finds remote MediaStreams without any tracks and removes them from
+  // |remote_streams_| and notifies the observer that the MediaStream no longer
+  // exist.
+  void UpdateEndedRemoteMediaStreams();
+  void MaybeCreateDefaultStream();
+  RemoteTracksInterface* GetRemoteTracks(cricket::MediaType type);
+
+  void UpdateLocalDataChannels(const cricket::StreamParamsVec& streams);
+  void UpdateRemoteDataChannels(const cricket::StreamParamsVec& streams);
+  void UpdateClosingDataChannels(
+      const std::vector<std::string>& active_channels, bool is_local_update);
+  void CreateRemoteDataChannel(const std::string& label, uint32 remote_ssrc);
+
   RemotePeerInfo remote_info_;
   talk_base::Thread* signaling_thread_;
   DataChannelFactory* data_channel_factory_;
@@ -221,13 +222,12 @@ class MediaStreamSignaling {
   RemoteMediaStreamObserver* stream_observer_;
   talk_base::scoped_refptr<StreamCollectionInterface> local_streams_;
   talk_base::scoped_refptr<StreamCollection> remote_streams_;
+  talk_base::scoped_ptr<RemoteTracksInterface> remote_audio_tracks_;
+  talk_base::scoped_ptr<RemoteTracksInterface> remote_video_tracks_;
 
   typedef std::map<std::string, talk_base::scoped_refptr<DataChannel> >
       DataChannels;
   DataChannels data_channels_;
-
-  typedef std::map<std::string, uint32> TrackSsrcMap;
-  TrackSsrcMap remote_track_ssrc_;
 };
 
 }  // namespace webrtc

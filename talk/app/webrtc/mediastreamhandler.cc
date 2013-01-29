@@ -27,6 +27,7 @@
 
 #include "talk/app/webrtc/mediastreamhandler.h"
 
+#include "talk/app/webrtc/localaudiosource.h"
 #include "talk/app/webrtc/videosourceinterface.h"
 
 namespace webrtc {
@@ -70,7 +71,13 @@ void LocalAudioTrackHandler::OnStateChanged() {
 }
 
 void LocalAudioTrackHandler::OnEnabledChanged() {
-  provider_->SetAudioSend(audio_track_->id(), audio_track_->enabled());
+  cricket::AudioOptions options;
+  if (audio_track_->enabled() && audio_track_->GetSource()) {
+    options = static_cast<LocalAudioSource*>(
+        audio_track_->GetSource())->options();
+  }
+  provider_->SetAudioSend(audio_track_->id(), audio_track_->enabled(),
+                          options);
 }
 
 RemoteAudioTrackHandler::RemoteAudioTrackHandler(

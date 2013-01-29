@@ -35,6 +35,7 @@
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/media/base/fakevideocapturer.h"
+#include "talk/media/base/mediachannel.h"
 #include "testing/base/public/gmock.h"
 
 using ::testing::_;
@@ -51,7 +52,8 @@ class MockAudioProvider : public AudioProviderInterface {
  public:
   virtual ~MockAudioProvider() {}
   MOCK_METHOD2(SetAudioPlayout, void(const std::string& name, bool enable));
-  MOCK_METHOD2(SetAudioSend, void(const std::string& name, bool enable));
+  MOCK_METHOD3(SetAudioSend, void(const std::string& name, bool enable,
+                                  const cricket::AudioOptions& options));
 };
 
 // Helper class to test MediaStreamHandler.
@@ -110,7 +112,7 @@ class MediaStreamHandlerTest : public testing::Test {
     EXPECT_CALL(video_provider_, SetCaptureDevice(
         kVideoTrackId, video_track_->GetSource()->GetVideoCapturer()));
     EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, true));
-    EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, true));
+    EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, true, _));
     handlers_.CommitLocalStreams(collection_);
   }
 
@@ -155,10 +157,10 @@ TEST_F(MediaStreamHandlerTest, AddRemoveRemoteMediaStream) {
 TEST_F(MediaStreamHandlerTest, LocalAudioTrackDisable) {
   AddLocalStream();
 
-  EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, false));
+  EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, false, _));
   audio_track_->set_enabled(false);
 
-  EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, true));
+  EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, true, _));
   audio_track_->set_enabled(true);
 
   RemoveLocalStream();

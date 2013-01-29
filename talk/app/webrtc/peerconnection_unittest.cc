@@ -68,6 +68,7 @@ using webrtc::MockCreateSessionDescriptionObserver;
 using webrtc::MockDataChannelObserver;
 using webrtc::MockSetSessionDescriptionObserver;
 using webrtc::DtmfSender;
+using webrtc::DtmfSenderInterface;
 using webrtc::DtmfSenderObserverInterface;
 using webrtc::MockStatsObserver;
 using webrtc::StreamCollectionInterface;
@@ -186,24 +187,23 @@ class PeerConnectionTestClientBase
   }
   // Verify the CreateDtmfSender interface
   void VerifyDtmf() {
-    talk_base::scoped_refptr<DummyDtmfObserver> observer =
-        new talk_base::RefCountedObject<DummyDtmfObserver>();
-    talk_base::scoped_ptr<DtmfSender> dtmf_sender;
+    talk_base::scoped_ptr<DummyDtmfObserver> observer(new DummyDtmfObserver());
+    talk_base::scoped_refptr<DtmfSenderInterface> dtmf_sender;
 
     // We can't create a DTMF sender with an invalid audio track or a non local
     // track.
-    EXPECT_TRUE(peer_connection_->CreateDtmfSender(NULL, observer) == NULL);
+    EXPECT_TRUE(peer_connection_->CreateDtmfSender(NULL) == NULL);
     talk_base::scoped_refptr<webrtc::AudioTrackInterface> non_localtrack(
         peer_connection_factory_->CreateAudioTrack("dummy_track",
                                                    NULL));
-    EXPECT_TRUE(peer_connection_->CreateDtmfSender(non_localtrack,
-                                                   observer) == NULL);
+    EXPECT_TRUE(peer_connection_->CreateDtmfSender(non_localtrack) == NULL);
 
     // We should be able to create a DTMF sender from a local track.
     webrtc::AudioTrackInterface* localtrack =
         peer_connection_->local_streams()->at(0)->audio_tracks()->at(0);
-    dtmf_sender.reset(peer_connection_->CreateDtmfSender(localtrack, observer));
+    dtmf_sender = peer_connection_->CreateDtmfSender(localtrack);
     EXPECT_TRUE(dtmf_sender.get() != NULL);
+    dtmf_sender->RegisterObserver(observer.get());
 
     // Test the DtmfSender object just created.
     EXPECT_TRUE(dtmf_sender->CanInsertDtmf());
@@ -218,6 +218,8 @@ class PeerConnectionTestClientBase
     tones.push_back("a");
     tones.push_back("");
     observer->Verify(tones);
+
+    dtmf_sender->UnregisterObserver();
   }
 
   // Verifies that the SessionDescription have rejected the appropriate media

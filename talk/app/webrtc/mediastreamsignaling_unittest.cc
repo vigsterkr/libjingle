@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include <string>
 
 #include "talk/app/webrtc/audiotrack.h"
@@ -43,6 +42,16 @@ static const char kStreams[][8] = {"stream1", "stream2"};
 static const char kAudioTracks[][32] = {"audiotrack0", "audiotrack1"};
 static const char kVideoTracks[][32] = {"videotrack0", "videotrack1"};
 
+static const char kStream1[] = "stream1";
+static const char kAudioTrack1[]= "audiotrack0";
+static const char kAudioTrack2[]= "audiotrack1";
+static const char kVideoTrack1[]= "videotrack0";
+static const char kVideoTrack2[]= "videotrack1";
+
+using webrtc::AudioTrack;
+using webrtc::AudioTrackVector;
+using webrtc::VideoTrack;
+using webrtc::VideoTrackVector;
 using webrtc::DataChannelInterface;
 using webrtc::IceCandidateInterface;
 using webrtc::MediaStreamInterface;
@@ -53,8 +62,8 @@ using webrtc::StreamCollection;
 using webrtc::StreamCollectionInterface;
 
 // Reference SDP with a MediaStream with label "stream1" and audio track with
-// label "audio_1" and a video track with label "video_1;
-static const char kSdpString1[] =
+// id "audio_1" and a video track with id "video_1;
+static const char kSdpStringWithStream1[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
     "s=-\r\n"
@@ -75,7 +84,7 @@ static const char kSdpString1[] =
 // Reference SDP with two MediaStreams with label "stream1" and "stream2. Each
 // MediaStreams have one audio track and one video track.
 // This uses MSID.
-static const char kSdpString2[] =
+static const char kSdpStringWith2Stream[] =
     "v=0\r\n"
     "o=- 0 0 IN IP4 127.0.0.1\r\n"
     "s=-\r\n"
@@ -133,34 +142,38 @@ static const char kSdpStringWithoutStreamsAudioOnly[] =
     "a=mid:audio\r\n"
     "a=rtpmap:103 ISAC/16000\r\n";
 
+static const char kSdpStringInit[] =
+    "v=0\r\n"
+    "o=- 0 0 IN IP4 127.0.0.1\r\n"
+    "s=-\r\n"
+    "t=0 0\r\n"
+    "a=msid-semantic: WMS\r\n";
 
-// Create a collection of streams.
-// CreateStreamCollection(1) creates a collection that
-// correspond to kSdpString1.
-// CreateStreamCollection(2) correspond to kSdpString2.
-static talk_base::scoped_refptr<StreamCollection>
-CreateStreamCollection(int number_of_streams) {
-  talk_base::scoped_refptr<StreamCollection> local_collection(
-      StreamCollection::Create());
+static const char kSdpStringAudio[] =
+    "m=audio 1 RTP/AVPF 103\r\n"
+    "a=mid:audio\r\n"
+    "a=rtpmap:103 ISAC/16000\r\n";
 
-  for (int i = 0; i < number_of_streams; ++i) {
-    talk_base::scoped_refptr<webrtc::LocalMediaStreamInterface> stream(
-        webrtc::MediaStream::Create(kStreams[i]));
+static const char kSdpStringVideo[] =
+    "m=video 1 RTP/AVPF 120\r\n"
+    "a=mid:video\r\n"
+    "a=rtpmap:120 VP8/90000\r\n";
 
-    // Add a local audio track.
-    talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
-        webrtc::AudioTrack::Create(kAudioTracks[i], NULL));
-    stream->AddTrack(audio_track);
+static const char kSdpStringMs1Audio0[] =
+    "a=ssrc:1 cname:stream1\r\n"
+    "a=ssrc:1 msid:stream1 audiotrack0\r\n";
 
-    // Add a local video track.
-    talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track(
-        webrtc::VideoTrack::Create(kVideoTracks[i], NULL));
-    stream->AddTrack(video_track);
+static const char kSdpStringMs1Video0[] =
+    "a=ssrc:2 cname:stream1\r\n"
+    "a=ssrc:2 msid:stream1 videotrack0\r\n";
 
-    local_collection->AddStream(stream);
-  }
-  return local_collection;
-}
+static const char kSdpStringMs1Audio1[] =
+    "a=ssrc:3 cname:stream1\r\n"
+    "a=ssrc:3 msid:stream1 audiotrack1\r\n";
+
+static const char kSdpStringMs1Video1[] =
+    "a=ssrc:4 cname:stream1\r\n"
+    "a=ssrc:4 msid:stream1 videotrack1\r\n";
 
 // Verifies that |options| contain all tracks in |collection| if |hints| allow
 // them.
@@ -199,22 +212,22 @@ static bool CompareStreamCollections(StreamCollectionInterface* s1,
   for (size_t i = 0; i != s1->count(); ++i) {
     if (s1->at(i)->label() != s2->at(i)->label())
       return false;
-    webrtc::AudioTracks* audio_tracks1 = s1->at(i)->audio_tracks();
-    webrtc::AudioTracks* audio_tracks2 = s2->at(i)->audio_tracks();
-    webrtc::VideoTracks* video_tracks1 = s1->at(i)->video_tracks();
-    webrtc::VideoTracks* video_tracks2 = s2->at(i)->video_tracks();
+    webrtc::AudioTrackVector audio_tracks1 = s1->at(i)->GetAudioTracks();
+    webrtc::AudioTrackVector audio_tracks2 = s2->at(i)->GetAudioTracks();
+    webrtc::VideoTrackVector video_tracks1 = s1->at(i)->GetVideoTracks();
+    webrtc::VideoTrackVector video_tracks2 = s2->at(i)->GetVideoTracks();
 
-    if (audio_tracks1->count() != audio_tracks2->count())
+    if (audio_tracks1.size() != audio_tracks2.size())
       return false;
-    for (size_t j = 0; j != audio_tracks1->count(); ++j) {
-       if (audio_tracks1->at(j)->id() != audio_tracks2->at(j)->id())
+    for (size_t j = 0; j != audio_tracks1.size(); ++j) {
+       if (audio_tracks1[j]->id() != audio_tracks2[j]->id())
          return false;
     }
-    if (video_tracks1->count() != video_tracks2->count())
+    if (video_tracks1.size() != video_tracks2.size())
       return false;
-    for (size_t j = 0; j != video_tracks1->count(); ++j) {
-       if (video_tracks1->at(j)->id() != video_tracks2->at(j)->id())
-         return false;
+    for (size_t j = 0; j != video_tracks1.size(); ++j) {
+      if (video_tracks1[j]->id() != video_tracks2[j]->id())
+        return false;
     }
   }
   return true;
@@ -275,9 +288,6 @@ class MediaStreamSignalingTest: public testing::Test {
     signaling_.reset(new MediaStreamSignalingForTest(observer_.get()));
   }
 
-  talk_base::scoped_ptr<MockRemoteStreamObserver> observer_;
-  talk_base::scoped_ptr<MediaStreamSignalingForTest> signaling_;
-
   void TestGetMediaSessionOptions(const MediaHints& hints,
                                   StreamCollectionInterface* streams) {
     signaling_->SetLocalStreams(streams);
@@ -285,6 +295,98 @@ class MediaStreamSignalingTest: public testing::Test {
         signaling_->GetOptionsForOffer(hints);
     VerifyMediaOptions(streams, hints, options);
   }
+
+  // Create a collection of streams.
+  // CreateStreamCollection(1) creates a collection that
+  // correspond to kSdpString1.
+  // CreateStreamCollection(2) correspond to kSdpString2.
+  talk_base::scoped_refptr<StreamCollection>
+  CreateStreamCollection(int number_of_streams) {
+    talk_base::scoped_refptr<StreamCollection> local_collection(
+        StreamCollection::Create());
+
+    for (int i = 0; i < number_of_streams; ++i) {
+      talk_base::scoped_refptr<webrtc::MediaStreamInterface> stream(
+          webrtc::MediaStream::Create(kStreams[i]));
+
+      // Add a local audio track.
+      talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+          webrtc::AudioTrack::Create(kAudioTracks[i], NULL));
+      stream->AddTrack(audio_track);
+
+      // Add a local video track.
+      talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track(
+          webrtc::VideoTrack::Create(kVideoTracks[i], NULL));
+      stream->AddTrack(video_track);
+
+      local_collection->AddStream(stream);
+    }
+    return local_collection;
+  }
+
+  // This functions Creates a MediaStream with label kStreams[0] and
+  // |number_of_audio_tracks| and |number_of_video_tracks| tracks and the
+  // corresponding SessionDescriptionInterface. The SessionDescriptionInterface
+  // is returned in |desc| and the MediaStream is stored in
+  // |reference_collection_|
+  void CreateSessionDescriptionAndReference(
+      size_t number_of_audio_tracks,
+      size_t number_of_video_tracks,
+      SessionDescriptionInterface** desc) {
+    ASSERT_TRUE(desc != NULL);
+    ASSERT_LE(number_of_audio_tracks, 2u);
+    ASSERT_LE(number_of_video_tracks, 2u);
+
+    reference_collection_ = StreamCollection::Create();
+    std::string sdp_ms1 = std::string(kSdpStringInit);
+
+    std::string mediastream_label = kStreams[0];
+
+    talk_base::scoped_refptr<webrtc::MediaStreamInterface> stream(
+            webrtc::MediaStream::Create(mediastream_label));
+    reference_collection_->AddStream(stream);
+
+    if (number_of_audio_tracks > 0) {
+      sdp_ms1 += std::string(kSdpStringAudio);
+      sdp_ms1 += std::string(kSdpStringMs1Audio0);
+      AddAudioTrack(kAudioTracks[0], stream);
+    }
+    if (number_of_audio_tracks > 1) {
+      sdp_ms1 += kSdpStringMs1Audio1;
+      AddAudioTrack(kAudioTracks[1], stream);
+    }
+
+    if (number_of_video_tracks > 0) {
+      sdp_ms1 += std::string(kSdpStringVideo);
+      sdp_ms1 += std::string(kSdpStringMs1Video0);
+      AddVideoTrack(kVideoTracks[0], stream);
+    }
+    if (number_of_video_tracks > 1) {
+      sdp_ms1 += kSdpStringMs1Video1;
+      AddVideoTrack(kVideoTracks[1], stream);
+    }
+
+    *desc = webrtc::CreateSessionDescription(
+        SessionDescriptionInterface::kOffer, sdp_ms1);
+  }
+
+  void AddAudioTrack(const std::string& track_id,
+                     MediaStreamInterface* stream) {
+    talk_base::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
+        webrtc::AudioTrack::Create(track_id, NULL));
+    ASSERT_TRUE(stream->AddTrack(audio_track));
+  }
+
+  void AddVideoTrack(const std::string& track_id,
+                     MediaStreamInterface* stream) {
+    talk_base::scoped_refptr<webrtc::VideoTrackInterface> video_track(
+        webrtc::VideoTrack::Create(track_id, NULL));
+    ASSERT_TRUE(stream->AddTrack(video_track));
+  }
+
+  talk_base::scoped_refptr<StreamCollection> reference_collection_;
+  talk_base::scoped_ptr<MockRemoteStreamObserver> observer_;
+  talk_base::scoped_ptr<MediaStreamSignalingForTest> signaling_;
 };
 
 TEST_F(MediaStreamSignalingTest, AudioVideoHints) {
@@ -306,6 +408,15 @@ TEST_F(MediaStreamSignalingTest, VideoHints) {
   // Don't use all MediaStreams so we only create offer based on hints without
   // sending streams.
   TestGetMediaSessionOptions(hints, NULL);
+}
+
+TEST_F(MediaStreamSignalingTest, AddTrackToLocalMediaStream) {
+  MediaHints hints;
+  talk_base::scoped_refptr<StreamCollection> local_streams(
+      CreateStreamCollection(1));
+  TestGetMediaSessionOptions(hints, local_streams);
+  local_streams->at(0)->AddTrack(AudioTrack::Create(kAudioTracks[1], NULL));
+  TestGetMediaSessionOptions(hints, local_streams);
 }
 
 // Test that the hints in an answer don't affect the hints in an offer but that
@@ -345,10 +456,13 @@ TEST_F(MediaStreamSignalingTest, HintsInAnswer) {
   EXPECT_TRUE(updated_offer_options.has_video);
 }
 
+// This test verifies that the remote MediaStreams corresponding to a received
+// SDP string is created. In this test the two separate MediaStreams are
+// signaled.
 TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpString1));
+                                       kSdpStringWithStream1));
   EXPECT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
 
@@ -359,10 +473,11 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
   EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
                                        reference.get()));
 
-  // Update the remote streams.
+  // Create a session description based on another SDP with another
+  // MediaStream.
   talk_base::scoped_ptr<SessionDescriptionInterface> update_desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpString2));
+                                       kSdpStringWith2Stream));
   EXPECT_TRUE(update_desc != NULL);
   signaling_->UpdateRemoteStreams(update_desc.get());
 
@@ -372,6 +487,34 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
                                        reference2.get()));
   EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
                                        reference2.get()));
+}
+
+// This test verifies that the remote MediaStreams corresponding to a received
+// SDP string is created. In this test the same remote MediaStream is signaled
+// but MediaStream tracks are added and removed.
+TEST_F(MediaStreamSignalingTest, AddRemoveTrackFromExistingRemoteMediaStream) {
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_ms1;
+  CreateSessionDescriptionAndReference(1, 1, desc_ms1.use());
+  signaling_->UpdateRemoteStreams(desc_ms1.get());
+  EXPECT_TRUE(CompareStreamCollections(signaling_->remote_streams(),
+                                       reference_collection_));
+
+  // Add extra audio and video tracks to the same MediaStream.
+  talk_base::scoped_ptr<SessionDescriptionInterface> desc_ms1_two_tracks;
+  CreateSessionDescriptionAndReference(2, 2, desc_ms1_two_tracks.use());
+  signaling_->UpdateRemoteStreams(desc_ms1_two_tracks.get());
+  EXPECT_TRUE(CompareStreamCollections(signaling_->remote_streams(),
+                                       reference_collection_));
+  EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
+                                       reference_collection_));
+
+  // Remove the extra audio and video tracks again.
+  CreateSessionDescriptionAndReference(1, 1, desc_ms1.use());
+  signaling_->UpdateRemoteStreams(desc_ms1.get());
+  EXPECT_TRUE(CompareStreamCollections(signaling_->remote_streams(),
+                                       reference_collection_));
+  EXPECT_TRUE(CompareStreamCollections(observer_->remote_streams(),
+                                       reference_collection_));
 }
 
 // This tests that a default MediaStream is created if a remote session
@@ -437,7 +580,7 @@ TEST_F(MediaStreamSignalingTest, SdpWitMsidDontCreatesDefaultStream) {
 TEST_F(MediaStreamSignalingTest, VerifyDefaultStreamIsNotCreated) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpString1));
+                                       kSdpStringWithStream1));
   ASSERT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
   talk_base::scoped_refptr<StreamCollection> reference(

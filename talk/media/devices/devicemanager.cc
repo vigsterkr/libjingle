@@ -52,6 +52,16 @@
 
 #endif
 
+namespace {
+
+bool StringMatchWithWildcard(
+    const std::pair<const std::basic_string<char>, cricket::VideoFormat> key,
+    const std::string& val) {
+  return talk_base::string_match(val.c_str(), key.first.c_str());
+}
+
+}  // namespace
+
 namespace cricket {
 
 // Initialize to empty string.
@@ -317,27 +327,36 @@ bool DeviceManager::GetDefaultVideoCaptureDevice(Device* device) {
   return ret;
 }
 
+bool DeviceManager::IsInWhitelist(const std::string& key,
+                                  VideoFormat* video_format) const {
+  std::map<std::string, VideoFormat>::const_iterator found =
+      std::search_n(max_formats_.begin(), max_formats_.end(), 1, key,
+                    StringMatchWithWildcard);
+  if (found == max_formats_.end()) {
+    return false;
+  }
+  *video_format = found->second;
+  return true;
+}
+
+bool DeviceManager::IsDeviceWhitelisted(const Device& device,
+                                        VideoFormat* video_format) const {
+  // Match UVC ID if available. Failing that, match device name.
+  std::string uvc_id;
+  if (GetUsbUvcId(device, &uvc_id) && IsInWhitelist(uvc_id, video_format)) {
+      return true;
+  }
+  return IsInWhitelist(device.name, video_format);
+}
+
 void DeviceManager::GetMaxFormat(const Device& device,
                                  VideoFormat* video_format) const {
-  std::string uvc_id;
-  if (!GetUsbUvcId(device, &uvc_id)) {
-    LOG(LS_INFO) << "Unable to retrieve UVC ID for device: " << device.name
-                 << "." << " Matching device name instead.";
-  }
-  std::map<std::string, VideoFormat>::const_iterator found =
-      max_formats_.find(uvc_id);
-  if (found == max_formats_.end()) {
-    // Match nice name if there was no UVC ID match.
-    found = max_formats_.find(device.name);
-  }
-  if (found == max_formats_.end()) {
-    // Default capabilities to VGA (in case it has not been whitelisted).
+  if (!IsDeviceWhitelisted(device, video_format)) {
+    // Default capabilities to VGA.
     *video_format = VideoFormat(640,
                                 480,
                                 cricket::VideoFormat::FpsToInterval(30),
                                 FOURCC_I420);
-  } else {
-    *video_format = found->second;
   }
 }
 

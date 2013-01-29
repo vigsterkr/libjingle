@@ -32,6 +32,7 @@
 #include <queue>
 
 #include "talk/app/webrtc/datachannelinterface.h"
+#include "talk/app/webrtc/proxy.h"
 #include "talk/base/scoped_ref_ptr.h"
 #include "talk/base/sigslot.h"
 #include "talk/session/media/channel.h"
@@ -66,7 +67,7 @@ class DataChannel : public DataChannelInterface,
   virtual void RegisterObserver(DataChannelObserver* observer);
   virtual void UnregisterObserver();
 
-  virtual const std::string& label() const  { return label_; }
+  virtual std::string label() const  { return label_; }
   virtual bool reliable() const;
   virtual uint64 buffered_amount() const;
   virtual void Close();
@@ -131,6 +132,18 @@ class DataChannelFactory {
  protected:
   virtual ~DataChannelFactory() {}
 };
+
+// Define proxy for DataChannelInterface.
+BEGIN_PROXY_MAP(DataChannel)
+  PROXY_METHOD1(void, RegisterObserver, DataChannelObserver*)
+  PROXY_METHOD0(void, UnregisterObserver)
+  PROXY_CONSTMETHOD0(std::string, label)
+  PROXY_CONSTMETHOD0(bool, reliable)
+  PROXY_CONSTMETHOD0(DataState, state)
+  PROXY_CONSTMETHOD0(uint64, buffered_amount)
+  PROXY_METHOD0(void, Close)
+  PROXY_METHOD1(bool, Send, const DataBuffer&)
+END_PROXY()
 
 }  // namespace webrtc
 

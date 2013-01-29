@@ -54,7 +54,7 @@ void HybridVideoMediaChannel::SetInterface(NetworkInterface* iface) {
   }
 }
 
-bool HybridVideoMediaChannel::SetOptions(const VideoMediaOptions &options) {
+bool HybridVideoMediaChannel::SetOptions(const VideoOptions &options) {
   bool ret = true;
   if (channel1_) {
     ret = channel1_->SetOptions(options);
@@ -65,7 +65,7 @@ bool HybridVideoMediaChannel::SetOptions(const VideoMediaOptions &options) {
   return ret;
 }
 
-bool HybridVideoMediaChannel::GetOptions(VideoMediaOptions *options) const {
+bool HybridVideoMediaChannel::GetOptions(VideoOptions *options) const {
   if (active_channel_) {
     return active_channel_->GetOptions(options);
   }

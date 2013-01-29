@@ -132,8 +132,13 @@ class DtmfSenderTest : public testing::Test {
       : track_(AudioTrack::Create(kTestAudioLabel, NULL)),
         observer_(new talk_base::RefCountedObject<FakeDtmfObserver>()) {
     provider_.AddCanInsertDtmfTrack(kTestAudioLabel);
-    dtmf_.reset(new DtmfSender(track_, observer_,
-                               talk_base::Thread::Current(), &provider_));
+    dtmf_ =
+        DtmfSender::Create(track_, talk_base::Thread::Current(), &provider_);
+    dtmf_->RegisterObserver(observer_.get());
+  }
+
+  ~DtmfSenderTest() {
+    dtmf_->UnregisterObserver();
   }
 
   // Constructs a list of DtmfInfo from |tones|, |duration| and
@@ -213,9 +218,9 @@ class DtmfSenderTest : public testing::Test {
   }
 
   talk_base::scoped_refptr<AudioTrackInterface> track_;
-  talk_base::scoped_refptr<FakeDtmfObserver> observer_;
+  talk_base::scoped_ptr<FakeDtmfObserver> observer_;
   FakeDtmfProvider provider_;
-  talk_base::scoped_ptr<DtmfSender> dtmf_;
+  talk_base::scoped_refptr<DtmfSender> dtmf_;
 };
 
 TEST_F(DtmfSenderTest, CanInsertDtmf) {

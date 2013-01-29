@@ -63,15 +63,12 @@ struct MediaStreamParams : public talk_base::MessageData {
 };
 
 struct DtmfSenderParams : public talk_base::MessageData {
-  DtmfSenderParams(webrtc::AudioTrackInterface* track,
-                   webrtc::DtmfSenderObserverInterface* observer)
+  explicit DtmfSenderParams(webrtc::AudioTrackInterface* track)
       : track(track),
-        observer(observer),
         dtmf_sender(NULL) {
   }
   webrtc::AudioTrackInterface* track;
-  webrtc::DtmfSenderObserverInterface* observer;
-  webrtc:: DtmfSender* dtmf_sender;
+  talk_base::scoped_refptr<webrtc::DtmfSenderInterface> dtmf_sender;
 };
 
 struct IceConfigurationParams : public talk_base::MessageData {
@@ -227,14 +224,14 @@ void PeerConnectionProxy::RemoveStream(MediaStreamInterface* remove_stream) {
   peerconnection_->RemoveStream(remove_stream);
 }
 
-DtmfSender* PeerConnectionProxy::CreateDtmfSender(
-    AudioTrackInterface* track, DtmfSenderObserverInterface* observer) {
+talk_base::scoped_refptr<DtmfSenderInterface>
+    PeerConnectionProxy::CreateDtmfSender(AudioTrackInterface* track) {
   if (!signaling_thread_->IsCurrent()) {
-    DtmfSenderParams msg(track, observer);
+    DtmfSenderParams msg(track);
     signaling_thread_->Send(this, MSG_CREATEDTMFSENDER, &msg);
     return msg.dtmf_sender;
   }
-  return peerconnection_->CreateDtmfSender(track, observer);
+  return peerconnection_->CreateDtmfSender(track);
 }
 
 bool PeerConnectionProxy::GetStats(StatsObserver* observer,
@@ -391,7 +388,7 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
     case MSG_CREATEDTMFSENDER: {
       DtmfSenderParams* param(static_cast<DtmfSenderParams*> (data));
       param->dtmf_sender =
-          peerconnection_->CreateDtmfSender(param->track, param->observer);
+          peerconnection_->CreateDtmfSender(param->track);
       break;
     }
     case MSG_GETSTATS: {

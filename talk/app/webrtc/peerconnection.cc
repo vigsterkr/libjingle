@@ -328,8 +328,8 @@ void PeerConnection::RemoveStream(MediaStreamInterface* remove_stream) {
   observer_->OnRenegotiationNeeded();
 }
 
-DtmfSender* PeerConnection::CreateDtmfSender(AudioTrackInterface* track,
-    DtmfSenderObserverInterface* observer) {
+talk_base::scoped_refptr<DtmfSenderInterface> PeerConnection::CreateDtmfSender(
+    AudioTrackInterface* track) {
   if (!track) {
     LOG(LS_ERROR) << "CreateDtmfSender - track is NULL.";
     return NULL;
@@ -339,7 +339,13 @@ DtmfSender* PeerConnection::CreateDtmfSender(AudioTrackInterface* track,
     return NULL;
   }
 
-  return new DtmfSender(track, observer, signaling_thread(), session_.get());
+  talk_base::scoped_refptr<DtmfSenderInterface> sender(
+      DtmfSender::Create(track, signaling_thread(), session_.get()));
+  if (!sender.get()) {
+    LOG(LS_ERROR) << "CreateDtmfSender failed on DtmfSender::Create.";
+    return NULL;
+  }
+  return DtmfSenderProxy::Create(signaling_thread(), sender.get());
 }
 
 bool PeerConnection::GetStats(StatsObserver* observer,
@@ -372,8 +378,11 @@ PeerConnection::CreateDataChannel(
     const DataChannelInit* config) {
   talk_base::scoped_refptr<DataChannelInterface> channel(
       session_->CreateDataChannel(label, config));
+  if (!channel.get())
+    return NULL;
+
   observer_->OnRenegotiationNeeded();
-  return channel;
+  return DataChannelProxy::Create(signaling_thread(), channel.get());
 }
 
 void PeerConnection::CreateOffer(CreateSessionDescriptionObserver* observer,
@@ -599,7 +608,8 @@ void PeerConnection::OnRemoveStream(MediaStreamInterface* stream) {
 }
 
 void PeerConnection::OnAddDataChannel(DataChannelInterface* data_channel) {
-  observer_->OnDataChannel(data_channel);
+  observer_->OnDataChannel(DataChannelProxy::Create(signaling_thread(),
+                                                    data_channel));
 }
 
 void PeerConnection::OnIceChange() {

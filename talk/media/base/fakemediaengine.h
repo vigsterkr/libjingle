@@ -246,8 +246,7 @@ class FakeVoiceMediaChannel : public RtpHelper<VoiceMediaChannel> {
         ringback_tone_ssrc_(0),
         ringback_tone_play_(false),
         ringback_tone_loop_(false),
-        time_since_last_typing_(-1),
-        options_() {
+        time_since_last_typing_(-1) {
     output_scalings_[0] = OutputScaling();  // For default channel.
   }
   ~FakeVoiceMediaChannel();
@@ -415,8 +414,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   explicit FakeVideoMediaChannel(FakeVideoEngine* engine)
       : engine_(engine),
         sent_intra_frame_(false),
-        requested_intra_frame_(false),
-        options_() {
+        requested_intra_frame_(false) {
   }
   ~FakeVideoMediaChannel();
 
@@ -424,7 +422,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   const std::vector<VideoCodec>& send_codecs() const { return send_codecs_; }
   const std::vector<VideoCodec>& codecs() const { return send_codecs(); }
   bool rendering() const { return playout(); }
-  const VideoMediaOptions& options() const { return options_; }
+  const VideoOptions& options() const { return options_; }
   const std::map<uint32, VideoRenderer*>& renderers() const {
     return renderers_;
   }
@@ -530,11 +528,11 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
     requested_intra_frame_ = true;
     return true;
   }
-  virtual bool SetOptions(const VideoMediaOptions &options) {
+  virtual bool SetOptions(const VideoOptions &options) {
     options_ = options;
     return true;
   }
-  virtual bool GetOptions(VideoMediaOptions *options) const {
+  virtual bool GetOptions(VideoOptions *options) const {
     *options = options_;
     return true;
   }
@@ -564,7 +562,7 @@ class FakeVideoMediaChannel : public RtpHelper<VideoMediaChannel> {
   std::map<uint32, VideoCapturer*> capturers_;
   bool sent_intra_frame_;
   bool requested_intra_frame_;
-  VideoMediaOptions options_;
+  VideoOptions options_;
 };
 
 class FakeSoundclipMedia : public SoundclipMedia {

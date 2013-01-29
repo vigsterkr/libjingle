@@ -1915,7 +1915,7 @@ class VideoChannelTest
   void TestSetChannelOptions() {
     CreateChannels(0, 0);
 
-    cricket::VideoMediaOptions o1, o2;
+    cricket::VideoOptions o1, o2;
     o1.video_noise_reduction.Set(true);
 
     channel1_->SetChannelOptions(o1);

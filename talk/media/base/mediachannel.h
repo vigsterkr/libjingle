@@ -60,7 +60,7 @@ const int kMinRtpHeaderExtensionId = 1;
 const int kMaxRtpHeaderExtensionId = 255;
 const int kScreencastDefaultFps = 5;
 
-// Used in AudioOptions & VideoMediaOptions to signify "unset" values.
+// Used in AudioOptions and VideoOptions to signify "unset" values.
 template <class T>
 class Settable {
  public:
@@ -76,8 +76,8 @@ class Settable {
     return set_;
   }
 
-  T GetWithDefaultIfUnset(const T& defaultValue) {
-    return set_ ? val_ : defaultValue;
+  T GetWithDefaultIfUnset(const T& default_value) const {
+    return set_ ? val_ : default_value;
   }
 
   virtual void Set(T val) {
@@ -211,14 +211,14 @@ struct AudioOptions {
 // Used to be flags, but that makes it hard to selectively apply options.
 // We are moving all of the setting of options to structs like this,
 // but some things currently still use flags.
-struct VideoMediaOptions {
-  VideoMediaOptions() {
+struct VideoOptions {
+  VideoOptions() {
     process_adaptation_threshhold.Set(kProcessCpuThreshold);
     system_low_adaptation_threshhold.Set(kLowSystemCpuThreshold);
     system_high_adaptation_threshhold.Set(kHighSystemCpuThreshold);
   }
 
-  void SetAll(const VideoMediaOptions& change) {
+  void SetAll(const VideoOptions& change) {
     adapt_input_to_encoder.SetFrom(change.adapt_input_to_encoder);
     adapt_input_to_cpu_usage.SetFrom(change.adapt_input_to_cpu_usage);
     adapt_view_switch.SetFrom(change.adapt_view_switch);
@@ -232,7 +232,7 @@ struct VideoMediaOptions {
         change.system_high_adaptation_threshhold);
   }
 
-  bool operator==(const VideoMediaOptions& o) const {
+  bool operator==(const VideoOptions& o) const {
     return adapt_input_to_encoder == o.adapt_input_to_encoder &&
         adapt_input_to_cpu_usage == o.adapt_input_to_cpu_usage &&
         adapt_view_switch == o.adapt_view_switch &&
@@ -749,8 +749,8 @@ class VideoMediaChannel : public MediaChannel {
   // Reuqest each of the remote senders to send an intra frame.
   virtual bool RequestIntraFrame() = 0;
   // Sets the media options to use.
-  virtual bool SetOptions(const VideoMediaOptions &options) = 0;
-  virtual bool GetOptions(VideoMediaOptions *options) const = 0;
+  virtual bool SetOptions(const VideoOptions& options) = 0;
+  virtual bool GetOptions(VideoOptions* options) const = 0;
   virtual void UpdateAspectRatio(int ratio_w, int ratio_h) = 0;
 
   // Signals events from the currently active window.

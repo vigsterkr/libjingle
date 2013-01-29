@@ -28,6 +28,7 @@
 #include "talk/app/webrtc/peerconnectionfactory.h"
 
 #include "talk/app/webrtc/audiotrack.h"
+#include "talk/app/webrtc/localaudiosource.h"
 #include "talk/app/webrtc/localvideosource.h"
 #include "talk/app/webrtc/mediastreamproxy.h"
 #include "talk/app/webrtc/mediastreamtrackproxy.h"
@@ -78,6 +79,15 @@ struct CreatePeerConnectionParamsDeprecated : public talk_base::MessageData {
   webrtc::PeerConnectionObserver* observer;
 };
 
+struct CreateAudioSourceParams : public talk_base::MessageData {
+  explicit CreateAudioSourceParams(
+      const webrtc::MediaConstraintsInterface* constraints)
+      : constraints(constraints) {
+  }
+  const webrtc::MediaConstraintsInterface* constraints;
+  scoped_refptr<webrtc::AudioSourceInterface> source;
+};
+
 struct CreateVideoSourceParams : public talk_base::MessageData {
   CreateVideoSourceParams(cricket::VideoCapturer* capturer,
                           const webrtc::MediaConstraintsInterface* constraints)
@@ -93,6 +103,7 @@ enum {
   MSG_INIT_FACTORY = 1,
   MSG_TERMINATE_FACTORY,
   MSG_CREATE_PEERCONNECTION,
+  MSG_CREATE_AUDIOSOURCE,
   MSG_CREATE_VIDEOSOURCE,
 };
 
@@ -184,6 +195,12 @@ void PeerConnectionFactory::OnMessage(talk_base::Message* msg) {
                                                      pdata->observer);
       break;
     }
+    case MSG_CREATE_AUDIOSOURCE: {
+      CreateAudioSourceParams* pdata =
+          static_cast<CreateAudioSourceParams*>(msg->pdata);
+      pdata->source = CreateAudioSource_s(pdata->constraints);
+      break;
+    }
     case MSG_CREATE_VIDEOSOURCE: {
       CreateVideoSourceParams* pdata =
           static_cast<CreateVideoSourceParams*> (msg->pdata);
@@ -224,6 +241,14 @@ void PeerConnectionFactory::Terminate_s() {
   if (owns_ptrs_) {
     allocator_factory_ = NULL;
   }
+}
+
+talk_base::scoped_refptr<AudioSourceInterface>
+PeerConnectionFactory::CreateAudioSource_s(
+    const MediaConstraintsInterface* constraints) {
+  talk_base::scoped_refptr<LocalAudioSource> source(
+      LocalAudioSource::Create(constraints));
+  return source;
 }
 
 talk_base::scoped_refptr<VideoSourceInterface>
@@ -279,6 +304,14 @@ scoped_refptr<LocalMediaStreamInterface>
 PeerConnectionFactory::CreateLocalMediaStream(
       const std::string& label) {
   return MediaStreamProxy::Create(label, signaling_thread_);
+}
+
+talk_base::scoped_refptr<AudioSourceInterface>
+PeerConnectionFactory::CreateAudioSource(
+    const MediaConstraintsInterface* constraints) {
+  CreateAudioSourceParams params(constraints);
+  signaling_thread_->Send(this, MSG_CREATE_AUDIOSOURCE, &params);
+  return params.source;
 }
 
 talk_base::scoped_refptr<VideoSourceInterface>

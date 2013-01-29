@@ -34,7 +34,6 @@
 
 #include <math.h>
 
-#include "libyuv/scale_argb.h"
 #include "talk/base/basictypes.h"
 #include "talk/base/buffer.h"
 #include "talk/base/byteorder.h"
@@ -1185,7 +1184,6 @@ WebRtcVideoMediaChannel::WebRtcVideoMediaChannel(
     : engine_(engine),
       voice_channel_(channel),
       vie_channel_(-1),
-      options_(),
       render_started_(false),
       first_receive_ssrc_(0),
       send_red_type_(-1),
@@ -1808,7 +1806,6 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
   WebRtcVideoChannelSendInfo* send_channel = send_channels_[ssrc_key];
   VideoCapturer* capturer = send_channel->video_capturer();
   if (capturer != NULL) {
-    capturer->SignalFrameCaptured.disconnect(this);
     capturer->SignalVideoFrame.disconnect(this);
     send_channel->set_video_capturer(NULL);
   }
@@ -1841,44 +1838,6 @@ bool WebRtcVideoMediaChannel::DeleteSendChannel(uint32 ssrc_key) {
   return true;
 }
 
-// TODO(fbarchard): Remove kMaxCapturePixels when encoder has no limit.
-// Limit as of 7/16/12 is 21000 macroblocks (16 x 16 each). b/6726828
-void WebRtcVideoMediaChannel::OnFrameCaptured(VideoCapturer* capturer,
-                                              const CapturedFrame* frame) {
-  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(capturer);
-  if (!send_channel) {
-    return;
-  }
-
-  WebRtcVideoFrame i420_frame;
-  int scaled_width, scaled_height;
-  ComputeScale(frame->width, frame->height, &scaled_width, &scaled_height);
-  if (FOURCC_ARGB == frame->fourcc &&
-      (scaled_width != frame->height || scaled_height != frame->height)) {
-    CapturedFrame* scaled_frame = const_cast<CapturedFrame*>(frame);
-    // Compute new width such that width * height is less than maximum but
-    // maintains original captured frame aspect ratio.
-    // Round down width to multiple of 4 so odd width won't round up beyond
-    // maximum, and so chroma channel is even width to simplify spatial
-    // resampling.
-    libyuv::ARGBScale(reinterpret_cast<const uint8*>(frame->data),
-                      frame->width * 4, frame->width, frame->height,
-                      reinterpret_cast<uint8*>(scaled_frame->data),
-                      scaled_width * 4,
-                      scaled_width, scaled_height,
-                      libyuv::kFilterBilinear);
-    scaled_frame->width = scaled_width;
-    scaled_frame->height = scaled_height;
-    scaled_frame->data_size = scaled_width * 4 * scaled_height;
-  }
-  if (!i420_frame.Init(frame, frame->width, frame->height)) {
-    LOG(LS_ERROR) << "Couldn't convert to I420!";
-    return;
-  }
-
-  SendFrame(send_channel, &i420_frame, capturer->IsScreencast());
-}
-
 bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
   WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(ssrc);
   if (!send_channel) {
@@ -1888,7 +1847,6 @@ bool WebRtcVideoMediaChannel::RemoveCapturer(uint32 ssrc) {
   if (capturer == NULL) {
     return false;
   }
-  capturer->SignalFrameCaptured.disconnect(this);
   capturer->SignalVideoFrame.disconnect(this);
   send_channel->set_video_capturer(NULL);
   if (send_channel->sending()) {
@@ -2124,19 +2082,14 @@ bool WebRtcVideoMediaChannel::SetCapturer(uint32 ssrc,
     engine_->DecrementFrameListeners();
   }
   if (old_capturer) {
-    old_capturer->SignalFrameCaptured.disconnect(this);
     old_capturer->SignalVideoFrame.disconnect(this);
   }
 
   send_channel->set_video_capturer(capturer);
-  if (capturer->IsScreencast()) {
-    capturer->SignalFrameCaptured.connect(
-        this,
-        &WebRtcVideoMediaChannel::OnFrameCaptured);
-  } else {
-    capturer->SignalVideoFrame.connect(
-        this,
-        &WebRtcVideoMediaChannel::SendFrame);
+  capturer->SignalVideoFrame.connect(
+      this,
+      &WebRtcVideoMediaChannel::SendFrame);
+  if (!capturer->IsScreencast()) {
     capturer->UpdateAspectRatio(ratio_w_, ratio_h_);
   }
   const int64 timestamp = send_channel->last_frame_time_stamp();
@@ -2314,7 +2267,7 @@ bool WebRtcVideoMediaChannel::SetSendBandwidth(bool autobw, int bps) {
   return true;
 }
 
-bool WebRtcVideoMediaChannel::SetOptions(const VideoMediaOptions &options) {
+bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
   // Always accept options that are unchanged.
   if (options_ == options) {
     return true;
@@ -2420,10 +2373,22 @@ bool WebRtcVideoMediaChannel::GetRenderer(uint32 ssrc,
 // TODO(zhurunz): Add unittests to test this function.
 void WebRtcVideoMediaChannel::SendFrame(VideoCapturer* capturer,
                                         const VideoFrame* frame) {
+  // If there's send channel registers to the |capturer|, then only send the
+  // frame to that channel and return. Otherwise send the frame to the default
+  // channel, which currently taking frames from the engine.
+  WebRtcVideoChannelSendInfo* send_channel = GetSendChannel(capturer);
+  if (send_channel) {
+    SendFrame(send_channel, frame, capturer->IsScreencast());
+    return;
+  }
+  // TODO(hellner): Remove below for loop once the captured frame no longer
+  // come from the engine, i.e. the engine no longer owns a capturer.
   for (SendChannelMap::iterator iter = send_channels_.begin();
        iter != send_channels_.end(); ++iter) {
     WebRtcVideoChannelSendInfo* send_channel = iter->second;
-    SendFrame(send_channel, frame, capturer->IsScreencast());
+    if (send_channel->video_capturer() == NULL) {
+      SendFrame(send_channel, frame, capturer->IsScreencast());
+    }
   }
 }
 
@@ -2721,9 +2686,7 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
     }
   }
 
-  bool enable_leaky_bucket;
-  if (options_.video_leaky_bucket.Get(&enable_leaky_bucket) &&
-      enable_leaky_bucket) {
+  if (options_.video_leaky_bucket.GetWithDefaultIfUnset(false)) {
     if (engine()->vie()->rtp()->SetTransmissionSmoothingStatus(channel_id,
                                                                true) != 0) {
       LOG_RTCERR2(SetTransmissionSmoothingStatus, channel_id, true);

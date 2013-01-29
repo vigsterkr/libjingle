@@ -55,6 +55,9 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label);
 
+  virtual talk_base::scoped_refptr<AudioSourceInterface> CreateAudioSource(
+      const MediaConstraintsInterface* constraints);
+
   virtual talk_base::scoped_refptr<VideoSourceInterface> CreateVideoSource(
       cricket::VideoCapturer* capturer,
       const MediaConstraintsInterface* constraints);
@@ -91,6 +94,8 @@ class PeerConnectionFactory : public PeerConnectionFactoryInterface,
  private:
   bool Initialize_s();
   void Terminate_s();
+  talk_base::scoped_refptr<AudioSourceInterface> CreateAudioSource_s(
+      const MediaConstraintsInterface* constraints);
   talk_base::scoped_refptr<VideoSourceInterface> CreateVideoSource_s(
       cricket::VideoCapturer* capturer,
       const MediaConstraintsInterface* constraints);

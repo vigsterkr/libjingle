@@ -67,7 +67,7 @@ uint32 CanonicalFourCC(uint32 fourcc) {
 //     adjusting pixel width and pixel height.
 // Limit as of 7/16/12 is 21000 macroblocks (16 x 16 each). b/6726828
 // Compute a size to scale frames to that is below maximum compression
-// and rendering size.
+// and rendering size with the same aspect ratio.
 void ComputeScale(int frame_width, int frame_height,
                   int* scaled_width, int* scaled_height) {
   ASSERT(scaled_width != NULL);

@@ -229,8 +229,8 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   virtual bool SetSendRtpHeaderExtensions(
       const std::vector<RtpHeaderExtension>& extensions);
   virtual bool SetSendBandwidth(bool autobw, int bps);
-  virtual bool SetOptions(const VideoMediaOptions &options);
-  virtual bool GetOptions(VideoMediaOptions *options) const {
+  virtual bool SetOptions(const VideoOptions &options);
+  virtual bool GetOptions(VideoOptions *options) const {
     *options = options_;
     return true;
   }
@@ -330,10 +330,8 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   bool DeleteSendChannel(uint32 ssrc_key);
 
   bool InConferenceMode() const {
-    bool conference_mode;
-    return (options_.conference_mode.Get(&conference_mode) && conference_mode);
+    return options_.conference_mode.GetWithDefaultIfUnset(false);
   }
-  void OnFrameCaptured(VideoCapturer* capturer, const CapturedFrame* frame);
   bool RemoveCapturer(uint32 ssrc);
 
 
@@ -344,7 +342,7 @@ class WebRtcVideoMediaChannel : public talk_base::MessageHandler,
   WebRtcVideoEngine* engine_;
   VoiceMediaChannel* voice_channel_;
   int vie_channel_;
-  VideoMediaOptions options_;
+  VideoOptions options_;
 
   // Global recv side state.
   // Note the default channel (vie_channel_), i.e. the send channel

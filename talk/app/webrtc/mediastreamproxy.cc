@@ -38,6 +38,12 @@ enum {
   MSG_LABEL,
   MSG_ADD_AUDIO_TRACK,
   MSG_ADD_VIDEO_TRACK,
+  MSG_REMOVE_AUDIO_TRACK,
+  MSG_REMOVE_VIDEO_TRACK,
+  MSG_GET_AUDIO_TRACKS,
+  MSG_FIND_AUDIO_TRACK,
+  MSG_GET_VIDEO_TRACKS,
+  MSG_FIND_VIDEO_TRACK,
   MSG_COUNT,
   MSG_AT,
   MSG_FIND,
@@ -56,6 +62,7 @@ class MediaStreamTrackMessageData : public talk_base::MessageData {
         result_(false) {
   }
 
+  std::string id;
   talk_base::scoped_refptr<T> track_;
   bool result_;
 };
@@ -93,6 +100,15 @@ class MediaStreamTrackListsMessageData : public talk_base::MessageData {
   talk_base::scoped_refptr<webrtc::VideoTracks> video_tracks_;
 };
 
+template <class TrackVector>
+class MediaStreamTracksMessageData : public talk_base::MessageData {
+ public:
+  explicit MediaStreamTracksMessageData() {
+  }
+
+  TrackVector tracks;
+};
+
 }  // namespace anonymous
 
 namespace webrtc {
@@ -116,7 +132,7 @@ talk_base::scoped_refptr<MediaStreamProxy> MediaStreamProxy::Create(
   ASSERT(media_stream_impl != NULL);
   talk_base::RefCountedObject<MediaStreamProxy>* stream =
       new talk_base::RefCountedObject<MediaStreamProxy>(label, signaling_thread,
-                                                media_stream_impl);
+                                                        media_stream_impl);
   return stream;
 }
 
@@ -160,6 +176,15 @@ bool MediaStreamProxy::AddTrack(AudioTrackInterface* track) {
   return media_stream_impl_->AddTrack(track);
 }
 
+bool MediaStreamProxy::RemoveTrack(AudioTrackInterface* track) {
+  if (!signaling_thread_->IsCurrent()) {
+    AudioTrackMsgData msg(track);
+    Send(MSG_REMOVE_AUDIO_TRACK, &msg);
+    return msg.result_;
+  }
+  return media_stream_impl_->RemoveTrack(track);
+}
+
 bool MediaStreamProxy::AddTrack(VideoTrackInterface* track) {
   if (!signaling_thread_->IsCurrent()) {
     VideoTrackMsgData msg(track);
@@ -167,6 +192,55 @@ bool MediaStreamProxy::AddTrack(VideoTrackInterface* track) {
     return msg.result_;
   }
   return media_stream_impl_->AddTrack(track);
+}
+
+bool MediaStreamProxy::RemoveTrack(VideoTrackInterface* track) {
+  if (!signaling_thread_->IsCurrent()) {
+    VideoTrackMsgData msg(track);
+    Send(MSG_REMOVE_VIDEO_TRACK, &msg);
+    return msg.result_;
+  }
+  return media_stream_impl_->RemoveTrack(track);
+}
+
+AudioTrackVector MediaStreamProxy::GetAudioTracks() {
+  if (!signaling_thread_->IsCurrent()) {
+    MediaStreamTracksMessageData<AudioTrackVector> msg;
+    Send(MSG_GET_AUDIO_TRACKS, &msg);
+    return msg.tracks;
+  }
+  return media_stream_impl_->GetAudioTracks();
+}
+
+VideoTrackVector MediaStreamProxy::GetVideoTracks() {
+  if (!signaling_thread_->IsCurrent()) {
+    MediaStreamTracksMessageData<VideoTrackVector> msg;
+    Send(MSG_GET_VIDEO_TRACKS, &msg);
+    return msg.tracks;
+  }
+  return media_stream_impl_->GetVideoTracks();
+}
+
+talk_base::scoped_refptr<AudioTrackInterface>
+MediaStreamProxy::FindAudioTrack(const std::string& track_id) {
+  if (!signaling_thread_->IsCurrent()) {
+    MediaStreamTrackMessageData<AudioTrackInterface> msg(NULL);
+    msg.id = track_id;
+    Send(MSG_FIND_AUDIO_TRACK, &msg);
+    return msg.track_;
+  }
+  return media_stream_impl_->FindAudioTrack(track_id);
+}
+
+talk_base::scoped_refptr<VideoTrackInterface>
+MediaStreamProxy::FindVideoTrack(const std::string& track_id) {
+  if (!signaling_thread_->IsCurrent()) {
+    MediaStreamTrackMessageData<VideoTrackInterface> msg(NULL);
+    msg.id = track_id;
+    Send(MSG_FIND_VIDEO_TRACK, &msg);
+    return msg.track_;
+  }
+  return media_stream_impl_->FindVideoTrack(track_id);
 }
 
 void MediaStreamProxy::RegisterObserver(ObserverInterface* observer) {
@@ -218,6 +292,30 @@ void MediaStreamProxy::OnMessage(talk_base::Message* msg) {
       *(label->data()) = media_stream_impl_->label();
       break;
     }
+    case MSG_GET_AUDIO_TRACKS: {
+      MediaStreamTracksMessageData<AudioTrackVector>* tracks =
+          static_cast<MediaStreamTracksMessageData<AudioTrackVector> *>(data);
+      tracks->tracks = media_stream_impl_->GetAudioTracks();
+      break;
+    }
+    case MSG_GET_VIDEO_TRACKS: {
+      MediaStreamTracksMessageData<VideoTrackVector>* tracks =
+          static_cast<MediaStreamTracksMessageData<VideoTrackVector> *>(data);
+      tracks->tracks = media_stream_impl_->GetVideoTracks();
+      break;
+    }
+    case MSG_FIND_AUDIO_TRACK: {
+      AudioTrackMsgData * track =
+          static_cast<AudioTrackMsgData *>(data);
+      track->track_ = media_stream_impl_->FindAudioTrack(track->id);
+      break;
+    }
+    case MSG_FIND_VIDEO_TRACK: {
+      VideoTrackMsgData * track =
+          static_cast<VideoTrackMsgData *>(data);
+      track->track_ = media_stream_impl_->FindVideoTrack(track->id);
+      break;
+    }
     case MSG_ADD_AUDIO_TRACK: {
       AudioTrackMsgData * track =
           static_cast<AudioTrackMsgData *>(data);
@@ -228,6 +326,18 @@ void MediaStreamProxy::OnMessage(talk_base::Message* msg) {
       VideoTrackMsgData * track =
           static_cast<VideoTrackMsgData *>(data);
       track->result_ = media_stream_impl_->AddTrack(track->track_.get());
+      break;
+    }
+    case MSG_REMOVE_AUDIO_TRACK: {
+      AudioTrackMsgData * track =
+          static_cast<AudioTrackMsgData *>(data);
+      track->result_ = media_stream_impl_->RemoveTrack(track->track_.get());
+      break;
+    }
+    case MSG_REMOVE_VIDEO_TRACK: {
+      VideoTrackMsgData * track =
+          static_cast<VideoTrackMsgData *>(data);
+      track->result_ = media_stream_impl_->RemoveTrack(track->track_.get());
       break;
     }
     default:

@@ -81,7 +81,7 @@ class DataChannelInterface : public talk_base::RefCountInterface {
   virtual void UnregisterObserver() = 0;
   // The label attribute represents a label that can be used to distinguish this
   // DataChannel object from other DataChannel objects.
-  virtual const std::string& label() const = 0;
+  virtual std::string label() const = 0;
   virtual bool reliable() const = 0;
   virtual DataState state() const = 0;
   // The buffered_amount returns the number of bytes of application data

@@ -722,14 +722,15 @@ void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {
     return;
   }
   uint32 ssrc = 0;
-  if (!VERIFY(mediastream_signaling_->GetRemoteTrackSsrc(name, &ssrc))) {
+  if (!VERIFY(mediastream_signaling_->GetRemoteAudioTrackSsrc(name, &ssrc))) {
     LOG(LS_ERROR) << "Trying to enable/disable an unexisting audio SSRC.";
     return;
   }
   voice_channel_->SetOutputScaling(ssrc, enable ? 1 : 0, enable ? 1 : 0);
 }
 
-void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
+void WebRtcSession::SetAudioSend(const std::string& name, bool enable,
+                                 const cricket::AudioOptions& options) {
   ASSERT(signaling_thread()->IsCurrent());
   if (!voice_channel_) {
     LOG(LS_ERROR) << "SetAudioSend: No audio channel exists.";
@@ -742,6 +743,8 @@ void WebRtcSession::SetAudioSend(const std::string& name, bool enable) {
     return;
   }
   voice_channel_->MuteStream(ssrc, !enable);
+  if (enable)
+    voice_channel_->SetChannelOptions(options);
 }
 
 bool WebRtcSession::SetCaptureDevice(const std::string& name,
@@ -778,7 +781,7 @@ void WebRtcSession::SetVideoPlayout(const std::string& name,
   }
 
   uint32 ssrc = 0;
-  if (mediastream_signaling_->GetRemoteTrackSsrc(name, &ssrc)) {
+  if (mediastream_signaling_->GetRemoteVideoTrackSsrc(name, &ssrc)) {
     video_channel_->SetRenderer(ssrc, enable ? renderer : NULL);
   } else {
     // Allow that |name| does not exist if renderer is null but assert

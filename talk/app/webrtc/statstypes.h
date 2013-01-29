@@ -49,8 +49,8 @@ class StatsElement {
 
   StatsElement() : timestamp(0) { }
 
-  void AddValue(std::string name, std::string value);
-  void AddValue(std::string name, int value);
+  void AddValue(const std::string& name, const std::string& value);
+  void AddValue(const std::string& name, int value);
 
   double timestamp;  // Time since 1970-01-01T00:00:00Z in milliseconds.
   typedef std::vector<Value> Values;
@@ -64,6 +64,20 @@ class StatsElement {
   static const char kStatsValueNameBytesReceived[];
   static const char kStatsValueNamePacketsReceived[];
   static const char kStatsValueNamePacketsLost[];
+
+  // Internal StatsValue names
+  static const char kStatsValueNameFirsReceived[];
+  static const char kStatsValueNameFirsSent[];
+  static const char kStatsValueNameFrameHeightReceived[];
+  static const char kStatsValueNameFrameHeightSent[];
+  static const char kStatsValueNameFrameRateReceived[];
+  static const char kStatsValueNameFrameRateSent[];
+  static const char kStatsValueNameFrameWidthReceived[];
+  static const char kStatsValueNameFrameWidthSent[];
+  static const char kStatsValueNameJitterReceived[];
+  static const char kStatsValueNameNacksReceived[];
+  static const char kStatsValueNameNacksSent[];
+  static const char kStatsValueNameRtt[];
 };
 
 // StatsReport contains local and remote StatsElements that pertain to the same

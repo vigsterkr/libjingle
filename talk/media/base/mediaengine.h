@@ -79,8 +79,6 @@ class MediaEngineInterface {
     DEFAULT_AUDIO_OPTIONS     = ECHO_CANCELLATION | AUTO_GAIN_CONTROL |
                                 NOISE_SUPPRESSION | HIGHPASS_FILTER,
   };
-  enum VideoOptions {
-  };
 
   // Default value to be used for SetAudioDelayOffset().
   static const int kDefaultAudioDelayOffset;

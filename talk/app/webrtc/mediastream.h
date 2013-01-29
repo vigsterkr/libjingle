@@ -38,53 +38,48 @@
 
 namespace webrtc {
 
+class AudioMediaStreamTrackList;
+class VideoMediaStreamTrackList;
+
 class MediaStream : public Notifier<LocalMediaStreamInterface> {
  public:
-  template<class T>
-  class MediaStreamTrackList : public MediaStreamTrackListInterface<T> {
-   public:
-    void AddTrack(T* track) {
-      tracks_.push_back(track);
-    }
-    virtual size_t count() const { return tracks_.size(); }
-    virtual T* at(size_t index) {
-      return tracks_.at(index);
-    }
-    virtual T* Find(const std::string& id) {
-      for (size_t i = 0; i < tracks_.size(); ++i) {
-        if (tracks_.at(i)->id() == id) {
-          return tracks_.at(i);
-        }
-      }
-      return NULL;
-    }
-
-   private:
-    std::vector<talk_base::scoped_refptr<T> > tracks_;
-  };
-
   static talk_base::scoped_refptr<MediaStream> Create(const std::string& label);
 
-  // Implement LocalMediaStreamInterface.
-  virtual bool AddTrack(AudioTrackInterface* track);
-  virtual bool AddTrack(VideoTrackInterface* track);
-  // Implement MediaStreamInterface.
-  virtual std::string label() const { return label_; }
-  virtual MediaStreamTrackListInterface<AudioTrackInterface>* audio_tracks() {
-    return audio_track_list_;
-  }
-  virtual MediaStreamTrackListInterface<VideoTrackInterface>* video_tracks() {
-    return video_track_list_;
-  }
+  virtual std::string label() const OVERRIDE { return label_; }
+
+  virtual bool AddTrack(AudioTrackInterface* track) OVERRIDE;
+  virtual bool AddTrack(VideoTrackInterface* track) OVERRIDE;
+  virtual bool RemoveTrack(AudioTrackInterface* track) OVERRIDE;
+  virtual bool RemoveTrack(VideoTrackInterface* track) OVERRIDE;
+  virtual talk_base::scoped_refptr<AudioTrackInterface>
+      FindAudioTrack(const std::string& track_id);
+  virtual talk_base::scoped_refptr<VideoTrackInterface>
+      FindVideoTrack(const std::string& track_id);
+
+  // TODO(perkj): Remove when there are no callers.
+  virtual AudioTracks* audio_tracks() OVERRIDE;
+  virtual VideoTracks* video_tracks() OVERRIDE;
+
+  virtual AudioTrackVector GetAudioTracks() OVERRIDE { return audio_tracks_; }
+  virtual VideoTrackVector GetVideoTracks() OVERRIDE { return video_tracks_; }
 
  protected:
   explicit MediaStream(const std::string& label);
 
+ private:
+  template <typename TrackVector, typename Track>
+  bool AddTrack(TrackVector* Tracks, Track* track);
+  template <typename TrackVector>
+  bool RemoveTrack(TrackVector* Tracks, MediaStreamTrackInterface* track);
+
   std::string label_;
-  talk_base::scoped_refptr<MediaStreamTrackList<AudioTrackInterface> >
-      audio_track_list_;
-  talk_base::scoped_refptr<MediaStreamTrackList<VideoTrackInterface> >
-      video_track_list_;
+  AudioTrackVector audio_tracks_;
+  VideoTrackVector video_tracks_;
+
+  // TODO(perkj): Remove when there are no callers to audio_tracks and
+  // video_tracks.
+  talk_base::scoped_refptr <AudioMediaStreamTrackList> audio_track_list_;
+  talk_base::scoped_refptr <VideoMediaStreamTrackList> video_track_list_;
 };
 
 }  // namespace webrtc

@@ -72,6 +72,7 @@
 #include <vector>
 
 #include "talk/app/webrtc/datachannelinterface.h"
+#include "talk/app/webrtc/dtmfsenderinterface.h"
 #include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/statstypes.h"
 #include "talk/app/webrtc/mediastreaminterface.h"
@@ -87,8 +88,6 @@ class PortAllocator;
 
 namespace webrtc {
 class AudioDeviceModule;
-class DtmfSender;
-class DtmfSenderObserverInterface;
 
 // MediaStream container interface.
 class StreamCollectionInterface : public talk_base::RefCountInterface {
@@ -193,8 +192,8 @@ class PeerConnectionInterface : public JsepInterface,
 
   // Returns pointer to the created DtmfSender on success.
   // Otherwise returns NULL.
-  virtual DtmfSender* CreateDtmfSender(AudioTrackInterface* track,
-      DtmfSenderObserverInterface* observer) = 0;
+  virtual talk_base::scoped_refptr<DtmfSenderInterface> CreateDtmfSender(
+      AudioTrackInterface* track) = 0;
 
   virtual bool GetStats(StatsObserver* observer,
                         MediaStreamTrackInterface* track) = 0;
@@ -274,6 +273,11 @@ class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
                            PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label) = 0;
+
+  // Creates a AudioSourceInterface.
+  // |constraints| decides audio processing settings but can be NULL.
+  virtual talk_base::scoped_refptr<AudioSourceInterface> CreateAudioSource(
+      const MediaConstraintsInterface* constraints) = 0;
 
   // Creates a VideoSourceInterface. The new source take ownership of
   // |capturer|. |constraints| decides video resolution and frame rate but can
