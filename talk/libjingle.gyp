@@ -259,6 +259,9 @@
           ],
         }],
         ['OS=="android"', {
+          'sources': [
+            'base/ifaddrs-android.cc',
+          ],
           'link_settings': {
             'libraries': [
               '-llog',

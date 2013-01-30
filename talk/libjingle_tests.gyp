@@ -318,6 +318,7 @@
       'sources': [
         'app/webrtc/dtmfsender_unittest.cc',
         'app/webrtc/jsepsessiondescription_unittest.cc',
+        'app/webrtc/localaudiosource_unittest.cc',
         'app/webrtc/localvideosource_unittest.cc',
         # 'app/webrtc/mediastream_unittest.cc',
         # 'app/webrtc/mediastreamhandler_unittest.cc',
