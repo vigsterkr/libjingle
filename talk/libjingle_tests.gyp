@@ -327,13 +327,14 @@
         'app/webrtc/peerconnectionfactory_unittest.cc',
         'app/webrtc/peerconnectioninterface_unittest.cc',
         # 'app/webrtc/peerconnectionproxy_unittest.cc',
+        # 'app/webrtc/statscollector_unittest.cc',
         'app/webrtc/test/fakeaudiocapturemodule.cc',
         'app/webrtc/test/fakeaudiocapturemodule_unittest.cc',
         'app/webrtc/videotrack_unittest.cc',
         'app/webrtc/webrtcsdp_unittest.cc',
         'app/webrtc/webrtcsession_unittest.cc',
       ],
-      },  # target libjingle_peerconnection_unittest
+    },  # target libjingle_peerconnection_unittest
   ],
   'conditions': [
     ['libjingle_java == 1', {

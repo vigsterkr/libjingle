@@ -814,19 +814,22 @@ void SocketTest::SingleFlowControlCallbackInternal(const IPAddress& loopback) {
   EXPECT_EQ(client->GetRemoteAddress(), accepted->GetLocalAddress());
   EXPECT_EQ(accepted->GetRemoteAddress(), client->GetLocalAddress());
 
+  // Expect a writable callback from the connect.
+  EXPECT_TRUE_WAIT(sink.Check(accepted.get(), testing::SSE_WRITE), kTimeout);
+
   // Fill the socket buffer.
   char buf[1024 * 16] = {0};
-  while (accepted->Send(&buf, ARRAY_SIZE(buf)) != -1) {}
+  int sends = 0;
+  while (++sends && accepted->Send(&buf, ARRAY_SIZE(buf)) != -1) {}
   EXPECT_TRUE(accepted->IsBlocking());
-
-  // Expect no writable callbacks
-  EXPECT_FALSE(sink.Check(accepted.get(), testing::SSE_WRITE));
 
   // Wait until data is available.
   EXPECT_TRUE_WAIT(sink.Check(client.get(), testing::SSE_READ), kTimeout);
 
-  // Pull some data.
-  client->Recv(buf, ARRAY_SIZE(buf));
+  // Pull data.
+  for (int i = 0; i < sends; ++i) {
+    client->Recv(buf, ARRAY_SIZE(buf));
+  }
 
   // Expect at least one additional writable callback.
   EXPECT_TRUE_WAIT(sink.Check(accepted.get(), testing::SSE_WRITE), kTimeout);

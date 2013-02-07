@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
   std::getline(std::cin, username);
 
   // Start xmpp on a different thread
-  XmppThread thread;
+  buzz::XmppThread thread;
   thread.Start();
 
   buzz::XmppClientSettings xcs;

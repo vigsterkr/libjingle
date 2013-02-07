@@ -163,8 +163,6 @@ static const char kMediaTypeVideo[] = "video";
 static const char kMediaTypeAudio[] = "audio";
 static const char kMediaTypeData[] = "application";
 static const char kMediaPortRejected[] = "0";
-static const char kMediaProtocolAvpf[] = "RTP/AVPF";
-static const char kMediaProtocolSavpf[] = "RTP/SAVPF";
 static const char kDefaultAddress[] = "0.0.0.0";
 static const char kDefaultPort[] = "1";
 
@@ -970,17 +968,12 @@ void BuildMediaDescription(const ContentInfo* content_info,
   // the answer MUST be set to zero.
   const std::string port = content_info->rejected ?
       kMediaPortRejected : kDefaultPort;
-  const char* proto = kMediaProtocolAvpf;
+
   talk_base::SSLFingerprint* fp = (transport_info) ?
       transport_info->description.identity_fingerprint.get() : NULL;
 
-  // RFC 4568
-  // If we're doing SRTP (either SDES or DTLS), use the SAVPF profile.
-  if (media_desc->cryptos().size() > 0 || fp) {
-    proto = kMediaProtocolSavpf;
-  }
   InitLine(kLineTypeMedia, type, &os);
-  os << " " << port << " " << proto << fmt;
+  os << " " << port << " " << media_desc->protocol() << fmt;
   AddLine(os.str(), message);
 
   // Use the transport_info to build the media level ice-ufrag and ice-pwd.
@@ -1514,6 +1507,8 @@ bool ParseMediaDescription(const std::string& message,
       rejected = true;
     }
 
+    std::string protocol = fields[2];
+
     // <fmt>
     std::vector<int> codec_preference;
     for (size_t j = 3 ; j < fields.size(); ++j) {
@@ -1589,7 +1584,7 @@ bool ParseMediaDescription(const std::string& message,
     for (size_t i = 0; i < session_extmaps.size(); ++i) {
       content->AddRtpHeaderExtension(session_extmaps[i]);
     }
-
+    content->set_protocol(protocol);
     desc->AddContent(content_name, cricket::NS_JINGLE_RTP, rejected,
                      content.release());
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".

@@ -181,6 +181,8 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
     const std::string current_audio_pwd = "current_audio_pwd";
     const std::string current_video_ufrag = "current_video_ufrag";
     const std::string current_video_pwd = "current_video_pwd";
+    const std::string current_data_ufrag = "current_data_ufrag";
+    const std::string current_data_pwd = "current_data_pwd";
     talk_base::scoped_ptr<SessionDescription> current_desc;
     talk_base::scoped_ptr<SessionDescription> desc;
     if (has_current_desc) {
@@ -196,6 +198,12 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
                         TransportDescription("", TransportOptions(),
                                              current_video_ufrag,
                                              current_video_pwd,
+                                             NULL, Candidates()))));
+      EXPECT_TRUE(current_desc->AddTransportInfo(
+          TransportInfo("data",
+                        TransportDescription("", TransportOptions(),
+                                             current_data_ufrag,
+                                             current_data_pwd,
                                              NULL, Candidates()))));
     }
     if (offer) {
@@ -218,10 +226,10 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
         EXPECT_EQ(static_cast<size_t>(cricket::ICE_PWD_LENGTH),
                   ti_audio->description.ice_pwd.size());
       }
+
     } else {
       EXPECT_TRUE(ti_audio == NULL);
     }
-
     const TransportInfo* ti_video = desc->GetTransportInfoByName("video");
     if (options.has_video) {
       EXPECT_TRUE(ti_video != NULL);
@@ -239,6 +247,28 @@ class MediaSessionDescriptionFactoryTest : public testing::Test {
                     ti_video->description.ice_ufrag.size());
           EXPECT_EQ(static_cast<size_t>(cricket::ICE_PWD_LENGTH),
                     ti_video->description.ice_pwd.size());
+        }
+      }
+    } else {
+      EXPECT_TRUE(ti_video == NULL);
+    }
+    const TransportInfo* ti_data = desc->GetTransportInfoByName("data");
+    if (options.has_data) {
+      EXPECT_TRUE(ti_data != NULL);
+      if (options.bundle_enabled) {
+        EXPECT_EQ(ti_audio->description.ice_ufrag,
+                  ti_data->description.ice_ufrag);
+        EXPECT_EQ(ti_audio->description.ice_pwd,
+                  ti_data->description.ice_pwd);
+      } else {
+        if (has_current_desc) {
+          EXPECT_EQ(current_data_ufrag, ti_data->description.ice_ufrag);
+          EXPECT_EQ(current_data_pwd, ti_data->description.ice_pwd);
+        } else {
+          EXPECT_EQ(static_cast<size_t>(cricket::ICE_UFRAG_LENGTH),
+                    ti_data->description.ice_ufrag.size());
+          EXPECT_EQ(static_cast<size_t>(cricket::ICE_PWD_LENGTH),
+                    ti_data->description.ice_pwd.size());
         }
       }
     } else {
@@ -323,6 +353,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioOffer) {
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, 2U, CS_AES_CM_128_HMAC_SHA1_32);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), acd->protocol());
 }
 
 // Create a typical video offer, and ensure it matches what we expect.
@@ -349,12 +380,14 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoOffer) {
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, 2U, CS_AES_CM_128_HMAC_SHA1_32);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), acd->protocol());
   EXPECT_EQ(MEDIA_TYPE_VIDEO, vcd->type());
   EXPECT_EQ(f1_.video_codecs(), vcd->codecs());
   EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_EQ(kAutoBandwidth, vcd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(vcd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), vcd->protocol());
 }
 
 // Test creating an offer with bundle where the Codecs have the same dynamic
@@ -425,8 +458,11 @@ TEST_F(MediaSessionDescriptionFactoryTest,
   EXPECT_TRUE(NULL != dcd);
 
   ASSERT_CRYPTO(acd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), acd->protocol());
   ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), vcd->protocol());
   ASSERT_CRYPTO(dcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), dcd->protocol());
 }
 // Create a typical data offer, and ensure it matches what we expect.
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataOffer) {
@@ -452,6 +488,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataOffer) {
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // default bandwidth (auto)
   EXPECT_TRUE(acd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(acd, 2U, CS_AES_CM_128_HMAC_SHA1_32);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), acd->protocol());
   EXPECT_EQ(MEDIA_TYPE_DATA, dcd->type());
   EXPECT_EQ(f1_.data_codecs(), dcd->codecs());
   EXPECT_NE(0U, dcd->first_ssrc());             // a random nonzero ssrc
@@ -459,6 +496,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataOffer) {
             dcd->bandwidth());                  // default bandwidth (auto)
   EXPECT_TRUE(dcd->rtcp_mux());                 // rtcp-mux defaults on
   ASSERT_CRYPTO(dcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), dcd->protocol());
 }
 
 // Create an audio, video offer without legacy StreamParams.
@@ -505,6 +543,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateAudioAnswer) {
   EXPECT_EQ(kAutoBandwidth, acd->bandwidth());  // negotiated auto bw
   EXPECT_TRUE(acd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(acd, 1U, CS_AES_CM_128_HMAC_SHA1_32);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), acd->protocol());
 }
 
 // Create a typical video answer, and ensure it matches what we expect.
@@ -538,6 +577,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateVideoAnswer) {
   EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_TRUE(vcd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), vcd->protocol());
 }
 
 TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataAnswer) {
@@ -570,6 +610,63 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateDataAnswer) {
   EXPECT_NE(0U, vcd->first_ssrc());             // a random nonzero ssrc
   EXPECT_TRUE(vcd->rtcp_mux());                 // negotiated rtcp-mux
   ASSERT_CRYPTO(vcd, 1U, CS_AES_CM_128_HMAC_SHA1_80);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf), vcd->protocol());
+}
+
+// Test that a data content with an unknown protocol is rejected in an answer.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       CreateDataAnswerToOfferWithUnknownProtocol) {
+  MediaSessionOptions opts;
+  opts.has_data = true;
+  opts.has_audio = false;
+  f1_.set_secure(SEC_ENABLED);
+  f2_.set_secure(SEC_ENABLED);
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  ContentInfo* dc_offer= offer->GetContentByName("data");
+  ASSERT_TRUE(dc_offer != NULL);
+  DataContentDescription* dcd_offer =
+      static_cast<DataContentDescription*>(dc_offer->description);
+  ASSERT_TRUE(dcd_offer != NULL);
+  std::string protocol = "a weird unknown protocol";
+  dcd_offer->set_protocol(protocol);
+
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  const ContentInfo* dc_answer = answer->GetContentByName("data");
+  ASSERT_TRUE(dc_answer != NULL);
+  EXPECT_TRUE(dc_answer->rejected);
+  const DataContentDescription* dcd_answer =
+      static_cast<const DataContentDescription*>(dc_answer->description);
+  ASSERT_TRUE(dcd_answer != NULL);
+  EXPECT_EQ(protocol, dcd_answer->protocol());
+}
+
+// Test that the media protocol is RTP/AVPF if DTLS and SDES are disabled.
+TEST_F(MediaSessionDescriptionFactoryTest, AudioOfferAnswerWithCryptoDisabled) {
+  MediaSessionOptions opts;
+  f1_.set_secure(SEC_DISABLED);
+  f2_.set_secure(SEC_DISABLED);
+  tdf1_.set_secure(SEC_DISABLED);
+  tdf2_.set_secure(SEC_DISABLED);
+
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  const AudioContentDescription* offer_acd =
+      GetFirstAudioContentDescription(offer.get());
+  ASSERT_TRUE(offer_acd != NULL);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolAvpf), offer_acd->protocol());
+
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  const ContentInfo* ac_answer = answer->GetContentByName("audio");
+  ASSERT_TRUE(ac_answer != NULL);
+  EXPECT_FALSE(ac_answer->rejected);
+
+  const AudioContentDescription* answer_acd =
+      GetFirstAudioContentDescription(answer.get());
+  ASSERT_TRUE(answer_acd != NULL);
+  EXPECT_EQ(std::string(cricket::kMediaProtocolAvpf), answer_acd->protocol());
 }
 
 // Create an audio, video, data answer without legacy StreamParams.
@@ -1105,7 +1202,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestTransportInfoOfferBundle) {
 }
 
 TEST_F(MediaSessionDescriptionFactoryTest,
-    TestTransportInfoOfferBundleCurrent) {
+       TestTransportInfoOfferBundleCurrent) {
   MediaSessionOptions options;
   options.has_audio = true;
   options.has_video = true;
@@ -1244,6 +1341,10 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCryptoDtls) {
   ASSERT_TRUE(video_media_desc != NULL);
   EXPECT_TRUE(audio_media_desc->cryptos().empty());
   EXPECT_TRUE(video_media_desc->cryptos().empty());
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf),
+            audio_media_desc->protocol());
+  EXPECT_EQ(std::string(cricket::kMediaProtocolSavpf),
+            video_media_desc->protocol());
 
   audio_trans_desc = answer->GetTransportDescriptionByName("audio");
   ASSERT_TRUE(audio_trans_desc != NULL);

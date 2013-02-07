@@ -57,7 +57,7 @@ class PeerConnection : public PeerConnectionInterface,
  public:
   explicit PeerConnection(PeerConnectionFactory* factory);
 
-  bool Initialize(const JsepInterface::IceServers& configuration,
+  bool Initialize(const PeerConnectionInterface::IceServers& configuration,
                   const MediaConstraintsInterface* constraints,
                   webrtc::PortAllocatorFactoryInterface* allocator_factory,
                   PeerConnectionObserver* observer);

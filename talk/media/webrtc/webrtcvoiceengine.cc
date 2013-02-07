@@ -569,6 +569,12 @@ bool WebRtcVoiceEngine::ClearOptionOverrides() {
 
 bool WebRtcVoiceEngine::ApplyOptions(const AudioOptions& options_in) {
   WebRtcAudioOptions options = WebRtcAudioOptions(options_in);
+#if defined(IOS)
+  // On iOS, VPIO provides built-in EC and AGC.
+  options.echo_cancellation.Set(false);
+  options.auto_gain_control.Set(false);
+#endif
+
 #if defined(IOS) || defined(ANDROID)
   // Use speakerphone mode with comfort noise generation for mobile.
   options.ec_mode = webrtc::kEcAecm;

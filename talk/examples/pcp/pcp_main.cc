@@ -340,7 +340,7 @@ uint32 Loop(const std::vector<uint32>& ids) {
 #pragma warning(disable:4355)
 #endif
 
-class CustomXmppPump : public XmppPumpNotify, public XmppPump {
+class CustomXmppPump : public buzz::XmppPumpNotify, public buzz::XmppPump {
 public:
   CustomXmppPump() : XmppPump(this), server_(false) { }
 
@@ -632,7 +632,7 @@ int main(int argc, char **argv) {
   CustomXmppPump pump;
   pump.client()->SignalLogInput.connect(&debug_log_, &DebugLog::Input);
   pump.client()->SignalLogOutput.connect(&debug_log_, &DebugLog::Output);
-  pump.DoLogin(LoginSettings(), new XmppSocket(gXmppUseTls), 0);
+  pump.DoLogin(LoginSettings(), new buzz::XmppSocket(gXmppUseTls), 0);
     //new XmppAuth());
 
   // Wait until login succeeds.

@@ -565,8 +565,8 @@ class JsepTestClient
       CreatePeerConnection(webrtc::PortAllocatorFactoryInterface* factory,
                            const MediaConstraintsInterface* constraints) {
     // CreatePeerConnection with IceServers.
-    webrtc::JsepInterface::IceServers ice_servers;
-    webrtc::JsepInterface::IceServer ice_server;
+    webrtc::PeerConnectionInterface::IceServers ice_servers;
+    webrtc::PeerConnectionInterface::IceServer ice_server;
     ice_server.uri = "stun:stun.l.google.com:19302";
     ice_servers.push_back(ice_server);
     return peer_connection_factory()->CreatePeerConnection(

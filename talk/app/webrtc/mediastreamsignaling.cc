@@ -43,6 +43,116 @@ namespace webrtc {
 using talk_base::scoped_ptr;
 using talk_base::scoped_refptr;
 
+// Supported MediaConstraints.
+const char MediaConstraintsInterface::kOfferToReceiveAudio[] =
+    "OfferToReceiveAudio";
+const char MediaConstraintsInterface::kOfferToReceiveVideo[] =
+    "OfferToReceiveVideo";
+const char MediaConstraintsInterface::kIceRestart[] =
+    "IceRestart";
+const char MediaConstraintsInterface::kUseRtpMux[] =
+    "googUseRtpMUX";
+
+static bool FindConstraint(
+    const MediaConstraintsInterface::Constraints& constraints,
+    const std::string& key, std::string* value) {
+  for (MediaConstraintsInterface::Constraints::const_iterator iter =
+           constraints.begin(); iter != constraints.end(); ++iter) {
+    if (iter->key == key) {
+      if (value) {
+        *value = iter->value;
+      }
+
+      return true;
+    }
+  }
+  return false;
+}
+
+// Finds a a constraint key and its value. |constraints| can be null..
+// |mandatory_constraints| is increased by one if the constraint is mandatory.
+static bool FindConstraint(const MediaConstraintsInterface* constraints,
+                           const std::string& key, std::string* value,
+                           size_t* mandatory_constraints) {
+  if (!constraints) {
+    return false;
+  }
+  if (FindConstraint(constraints->GetMandatory(), key, value)) {
+    ++*mandatory_constraints;
+    return true;
+  }
+  if (FindConstraint(constraints->GetOptional(), key, value)) {
+    return true;
+  }
+  return false;
+}
+
+static bool ParseConstraints(
+    const MediaConstraintsInterface* constraints,
+    cricket::MediaSessionOptions* options) {
+  std::string value;
+  size_t mandatory_constraints_satisfied = 0;
+
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveAudio,
+                     &value, &mandatory_constraints_satisfied)) {
+    // |options-|has_audio| can only change from false to
+    // true, but never change from true to false. This is to make sure
+    // CreateOffer / CreateAnswer doesn't remove a media content
+    // description that has been created.
+    options->has_audio |=
+        (value == MediaConstraintsInterface::kValueTrue);
+  } else {
+    // kOfferToReceiveAudio is non mandatory true according to spec.
+    options->has_audio |= true;
+  }
+
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kOfferToReceiveVideo,
+                     &value, &mandatory_constraints_satisfied)) {
+    // |options->has_video| can only change from false to
+    // true, but never change from true to false. This is to make sure
+    // CreateOffer / CreateAnswer doesn't remove a media content
+    // description that has been created.
+    options->has_video |=
+        (value == MediaConstraintsInterface::kValueTrue);
+  } else {
+    // kOfferToReceiveVideo is non mandatory false according to spec.
+  }
+
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kUseRtpMux,
+                     &value, &mandatory_constraints_satisfied)) {
+    options->bundle_enabled = (value == MediaConstraintsInterface::kValueTrue);
+  } else {
+    // kUseRtpMux is non mandatory true according to spec.
+    options->bundle_enabled = true;
+  }
+  if (FindConstraint(constraints,
+                     MediaConstraintsInterface::kIceRestart,
+                     &value, &mandatory_constraints_satisfied)) {
+    options->transport_options.ice_restart =
+        (value == MediaConstraintsInterface::kValueTrue);;
+  } else {
+    // kIceRestart is non mandatory false according to spec.
+    options->transport_options.ice_restart = false;
+  }
+
+  if (!constraints) {
+    return true;
+  }
+  return mandatory_constraints_satisfied == constraints->GetMandatory().size();
+}
+
+// Returns true if if at least one media content is present and
+// |options.bundle_enabled| is true.
+// Bundle will be enabled  by default if at least one media content is present
+// and the constraint kUseRtpMux has not disabled bundle.
+static bool EvaluateNeedForBundle(const cricket::MediaSessionOptions& options) {
+  return options.bundle_enabled &&
+      (options.has_audio || options.has_video || options.has_data);
+}
+
 // Helper class used for tracking the mapping between a rtp stream and a
 // remote MediaStreamTrack and MediaStream.
 class RemoteTracksInterface {
@@ -192,37 +302,32 @@ bool MediaStreamSignaling::AddDataChannel(DataChannel* data_channel) {
   return true;
 }
 
-const cricket::MediaSessionOptions&
-MediaStreamSignaling::GetOptionsForOffer(const MediaHints& hints) {
+bool MediaStreamSignaling::GetOptionsForOffer(
+    const MediaConstraintsInterface* constraints,
+    cricket::MediaSessionOptions* options) {
   UpdateSessionOptions();
-  // has_video and has_audio can only change from false to true,
-  // but never change from true to false if this is an offer. This is to make
-  // sure CreateOffer doesn't remove a media content description that has been
-  // created.
-  options_.has_audio |= hints.has_audio();
-  options_.has_video |= hints.has_video();
-  // Enable BUNDLE feature by default if at least one media content is present.
-  options_.bundle_enabled =
-      options_.has_audio || options_.has_video || options_.has_data;
-  return options_;
+  if (!ParseConstraints(constraints, &options_)) {
+    return false;
+  }
+  options_.bundle_enabled = EvaluateNeedForBundle(options_);
+  *options = options_;
+  return true;
 }
 
-cricket::MediaSessionOptions
-MediaStreamSignaling::GetOptionsForAnswer(const MediaHints& hints) {
+bool MediaStreamSignaling::GetOptionsForAnswer(
+    const MediaConstraintsInterface* constraints,
+    cricket::MediaSessionOptions* options) {
   UpdateSessionOptions();
-  // Copy the |options_| to not let |receive_audio| and |receive_video| affect
-  // subsequent offers.
-  cricket::MediaSessionOptions options = options_;
-  // has_video and has_audio can only change from false to true,
-  // but never change from true to false. This is to make
-  // sure CreateAnswer doesn't remove a media content description that has been
-  // created.
-  options.has_audio |= hints.has_audio();
-  options.has_video |= hints.has_video();
-  // Enable BUNDLE feature by default if at least one media content is present.
-  options.bundle_enabled =
-      options.has_audio || options.has_video || options.has_data;
-  return options;
+
+  // Copy the |options_| to not let the flag MediaSessionOptions::has_audio and
+  // MediaSessionOptions::has_video affect subsequent offers.
+  cricket::MediaSessionOptions current_options = options_;
+  if (!ParseConstraints(constraints, &current_options)) {
+    return false;
+  }
+  current_options.bundle_enabled = EvaluateNeedForBundle(current_options);
+  *options = current_options;
+  return true;
 }
 
 // Updates or creates remote MediaStream objects given a

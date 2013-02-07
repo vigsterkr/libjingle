@@ -31,6 +31,7 @@
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/mediastreamsignaling.h"
 #include "talk/app/webrtc/streamcollection.h"
+#include "talk/app/webrtc/test/fakeconstraints.h"
 #include "talk/app/webrtc/videotrack.h"
 #include "talk/base/gunit.h"
 #include "talk/base/scoped_ptr.h"
@@ -42,22 +43,17 @@ static const char kStreams[][8] = {"stream1", "stream2"};
 static const char kAudioTracks[][32] = {"audiotrack0", "audiotrack1"};
 static const char kVideoTracks[][32] = {"videotrack0", "videotrack1"};
 
-static const char kStream1[] = "stream1";
-static const char kAudioTrack1[]= "audiotrack0";
-static const char kAudioTrack2[]= "audiotrack1";
-static const char kVideoTrack1[]= "videotrack0";
-static const char kVideoTrack2[]= "videotrack1";
-
 using webrtc::AudioTrack;
 using webrtc::AudioTrackVector;
 using webrtc::VideoTrack;
 using webrtc::VideoTrackVector;
 using webrtc::DataChannelInterface;
+using webrtc::FakeConstraints;
 using webrtc::IceCandidateInterface;
+using webrtc::MediaConstraintsInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::SessionDescriptionInterface;
 
-using webrtc::MediaHints;
 using webrtc::StreamCollection;
 using webrtc::StreamCollectionInterface;
 
@@ -175,16 +171,13 @@ static const char kSdpStringMs1Video1[] =
     "a=ssrc:4 cname:stream1\r\n"
     "a=ssrc:4 msid:stream1 videotrack1\r\n";
 
-// Verifies that |options| contain all tracks in |collection| if |hints| allow
-// them.
+// Verifies that |options| contain all tracks in |collection| and that
+// the |options| has set the the has_audio and has_video flags correct.
 static void VerifyMediaOptions(StreamCollectionInterface* collection,
-                               const MediaHints hints,
                                const cricket::MediaSessionOptions& options) {
-  EXPECT_EQ(hints.has_audio(), options.has_audio);
-  EXPECT_EQ(hints.has_video(), options.has_video);
-
-  if (!collection)
+  if (!collection) {
     return;
+  }
 
   size_t stream_index = 0;
   for (size_t i = 0; i < collection->count(); ++i) {
@@ -194,12 +187,14 @@ static void VerifyMediaOptions(StreamCollectionInterface* collection,
       webrtc::AudioTrackInterface* audio = stream->audio_tracks()->at(j);
       EXPECT_EQ(options.streams[stream_index].sync_label, stream->label());
       EXPECT_EQ(options.streams[stream_index++].name, audio->id());
+      EXPECT_TRUE(options.has_audio);
     }
     ASSERT_GE(options.streams.size(), stream->audio_tracks()->count());
     for (size_t j = 0; j < stream->video_tracks()->count(); ++j) {
       webrtc::VideoTrackInterface* video = stream->video_tracks()->at(j);
       EXPECT_EQ(options.streams[stream_index].sync_label, stream->label());
       EXPECT_EQ(options.streams[stream_index++].name, video->id());
+      EXPECT_TRUE(options.has_video);
     }
   }
 }
@@ -288,12 +283,13 @@ class MediaStreamSignalingTest: public testing::Test {
     signaling_.reset(new MediaStreamSignalingForTest(observer_.get()));
   }
 
-  void TestGetMediaSessionOptions(const MediaHints& hints,
-                                  StreamCollectionInterface* streams) {
+  void TestGetMediaSessionOptionsForOffer(
+      StreamCollectionInterface* streams,
+      const MediaConstraintsInterface* constraints) {
     signaling_->SetLocalStreams(streams);
-    cricket::MediaSessionOptions options =
-        signaling_->GetOptionsForOffer(hints);
-    VerifyMediaOptions(streams, hints, options);
+    cricket::MediaSessionOptions options;
+    EXPECT_TRUE(signaling_->GetOptionsForOffer(constraints, &options));
+    VerifyMediaOptions(streams, options);
   }
 
   // Create a collection of streams.
@@ -389,54 +385,142 @@ class MediaStreamSignalingTest: public testing::Test {
   talk_base::scoped_ptr<MediaStreamSignalingForTest> signaling_;
 };
 
-TEST_F(MediaStreamSignalingTest, AudioVideoHints) {
-  MediaHints hints;
-  talk_base::scoped_refptr<StreamCollection> local_streams(
-      CreateStreamCollection(1));
-  TestGetMediaSessionOptions(hints, local_streams.get());
+// Test that a MediaSessionOptions is created for an offer if
+// kOfferToReceiveAudio and kOfferToReceiveVideo constraints are set but no
+// MediaStreams are sent.
+TEST_F(MediaStreamSignalingTest, GetMediaSessionOptionsForOfferWithAudioVideo) {
+  FakeConstraints constraints;
+  constraints.SetMandatoryReceiveAudio(true);
+  constraints.SetMandatoryReceiveVideo(true);
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&constraints, &options));
+  EXPECT_TRUE(options.has_audio);
+  EXPECT_TRUE(options.has_video);
+  EXPECT_TRUE(options.bundle_enabled);
 }
 
-TEST_F(MediaStreamSignalingTest, AudioHints) {
-  MediaHints hints(true, false);
-  // Don't use all MediaStreams so we only create offer based on hints without
-  // sending streams.
-  TestGetMediaSessionOptions(hints, NULL);
+// Test that a correct MediaSessionOptions is created for an offer if
+// kOfferToReceiveAudio constraints is set but no MediaStreams are sent.
+TEST_F(MediaStreamSignalingTest, GetMediaSessionOptionsForOfferWithAudio) {
+  FakeConstraints constraints;
+  constraints.SetMandatoryReceiveAudio(true);
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&constraints, &options));
+  EXPECT_TRUE(options.has_audio);
+  EXPECT_FALSE(options.has_video);
+  EXPECT_TRUE(options.bundle_enabled);
 }
 
-TEST_F(MediaStreamSignalingTest, VideoHints) {
-  MediaHints hints(false, true);
-  // Don't use all MediaStreams so we only create offer based on hints without
-  // sending streams.
-  TestGetMediaSessionOptions(hints, NULL);
+// Test that a correct MediaSessionOptions is created for an offer if
+// no constraints or MediaStreams are sent.
+TEST_F(MediaStreamSignalingTest, GetDefaultMediaSessionOptionsForOffer) {
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(NULL, &options));
+  EXPECT_TRUE(options.has_audio);
+  EXPECT_FALSE(options.has_video);
+  EXPECT_TRUE(options.bundle_enabled);
 }
 
+// Test that a correct MediaSessionOptions is created for an offer if
+// kOfferToReceiveVideo constraints is set but no MediaStreams are sent.
+TEST_F(MediaStreamSignalingTest, GetMediaSessionOptionsForOfferWithVideo) {
+  FakeConstraints constraints;
+  constraints.SetMandatoryReceiveAudio(false);
+  constraints.SetMandatoryReceiveVideo(true);
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&constraints, &options));
+  EXPECT_FALSE(options.has_audio);
+  EXPECT_TRUE(options.has_video);
+  EXPECT_TRUE(options.bundle_enabled);
+}
+
+// Test that a correct MediaSessionOptions is created for an offer if
+// kUseRtpMux constraints is set to false.
+TEST_F(MediaStreamSignalingTest,
+       GetMediaSessionOptionsForOfferWithBundleDisabled) {
+  FakeConstraints constraints;
+  constraints.SetMandatoryReceiveAudio(true);
+  constraints.SetMandatoryReceiveVideo(true);
+  constraints.SetMandatoryUseRtpMux(false);
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&constraints, &options));
+  EXPECT_TRUE(options.has_audio);
+  EXPECT_TRUE(options.has_video);
+  EXPECT_FALSE(options.bundle_enabled);
+}
+
+// Test that a correct MediaSessionOptions is created to restart ice if
+// kIceRestart constraints is set. It also tests that subsequent
+// MediaSessionOptions don't have |transport_options.ice_restart| set.
+TEST_F(MediaStreamSignalingTest,
+       GetMediaSessionOptionsForOfferWithIceRestart) {
+  FakeConstraints constraints;
+  constraints.SetMandatoryIceRestart(true);
+  cricket::MediaSessionOptions options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&constraints, &options));
+  EXPECT_TRUE(options.transport_options.ice_restart);
+
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(NULL, &options));
+  EXPECT_FALSE(options.transport_options.ice_restart);
+}
+
+// Test that GetMediaSessionOptionsForOffer and GetOptionsForAnswer work as
+// expected if unknown constraints are used.
+TEST_F(MediaStreamSignalingTest, GetMediaSessionOptionsWithBadConstraints) {
+  FakeConstraints mandatory;
+  mandatory.AddMandatory("bad_key", "bad_value");
+  cricket::MediaSessionOptions options;
+  EXPECT_FALSE(signaling_->GetOptionsForOffer(&mandatory, &options));
+  EXPECT_FALSE(signaling_->GetOptionsForAnswer(&mandatory, &options));
+
+  FakeConstraints optional;
+  optional.AddOptional("bad_key", "bad_value");
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&optional, &options));
+  EXPECT_TRUE(signaling_->GetOptionsForAnswer(&optional, &options));
+}
+
+// Test that a correct MediaSessionOptions are created for an offer if
+// a MediaStream is sent and later updated with a new track.
+// MediaConstraints are not used.
 TEST_F(MediaStreamSignalingTest, AddTrackToLocalMediaStream) {
-  MediaHints hints;
   talk_base::scoped_refptr<StreamCollection> local_streams(
       CreateStreamCollection(1));
-  TestGetMediaSessionOptions(hints, local_streams);
+  TestGetMediaSessionOptionsForOffer(local_streams, NULL);
+
   local_streams->at(0)->AddTrack(AudioTrack::Create(kAudioTracks[1], NULL));
-  TestGetMediaSessionOptions(hints, local_streams);
+  TestGetMediaSessionOptionsForOffer(local_streams, NULL);
 }
 
-// Test that the hints in an answer don't affect the hints in an offer but that
-// if hints are true in an offer, the media type they will be included in
-// subsequent answers.
-TEST_F(MediaStreamSignalingTest, HintsInAnswer) {
-  MediaHints answer_hints(true, true);
-  cricket::MediaSessionOptions answer_options =
-      signaling_->GetOptionsForAnswer(answer_hints);
+// Test that the MediaConstraints in an answer don't affect if audio and video
+// is offered in an offer but that if kOfferToReceiveAudio or
+// kOfferToReceiveVideo constraints are true in an offer, the media type will be
+// included in subsequent answers.
+TEST_F(MediaStreamSignalingTest, MediaConstraintsInAnswer) {
+  FakeConstraints answer_c;
+  answer_c.SetMandatoryReceiveAudio(true);
+  answer_c.SetMandatoryReceiveVideo(true);
+
+  cricket::MediaSessionOptions answer_options;
+  EXPECT_TRUE(signaling_->GetOptionsForAnswer(&answer_c, &answer_options));
   EXPECT_TRUE(answer_options.has_audio);
   EXPECT_TRUE(answer_options.has_video);
 
-  MediaHints offer_hints(false, false);
-  cricket::MediaSessionOptions offer_options =
-      signaling_->GetOptionsForAnswer(offer_hints);
+  FakeConstraints offer_c;
+  offer_c.SetMandatoryReceiveAudio(false);
+  offer_c.SetMandatoryReceiveVideo(false);
+
+  cricket::MediaSessionOptions offer_options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&offer_c, &offer_options));
   EXPECT_FALSE(offer_options.has_audio);
   EXPECT_FALSE(offer_options.has_video);
 
-  cricket::MediaSessionOptions updated_offer_options =
-      signaling_->GetOptionsForOffer(MediaHints(true, true));
+  FakeConstraints updated_offer_c;
+  updated_offer_c.SetMandatoryReceiveAudio(true);
+  updated_offer_c.SetMandatoryReceiveVideo(true);
+
+  cricket::MediaSessionOptions updated_offer_options;
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(&updated_offer_c,
+                                             &updated_offer_options));
   EXPECT_TRUE(updated_offer_options.has_audio);
   EXPECT_TRUE(updated_offer_options.has_video);
 
@@ -445,13 +529,18 @@ TEST_F(MediaStreamSignalingTest, HintsInAnswer) {
   // Answers will only contain the media types that exist in the offer
   // regardless of the value of |updated_answer_options.has_audio| and
   // |updated_answer_options.has_video|.
-  cricket::MediaSessionOptions updated_answer_options =
-      signaling_->GetOptionsForAnswer(MediaHints(false, false));
+  FakeConstraints updated_answer_c;
+  answer_c.SetMandatoryReceiveAudio(false);
+  answer_c.SetMandatoryReceiveVideo(false);
+
+  cricket::MediaSessionOptions updated_answer_options;
+  EXPECT_TRUE(signaling_->GetOptionsForAnswer(&updated_answer_c,
+                                              &updated_answer_options));
   EXPECT_TRUE(updated_answer_options.has_audio);
   EXPECT_TRUE(updated_answer_options.has_video);
 
-  updated_offer_options = signaling_->GetOptionsForOffer(MediaHints(false,
-                                                                    false));
+  EXPECT_TRUE(signaling_->GetOptionsForOffer(NULL,
+                                             &updated_offer_options));
   EXPECT_TRUE(updated_offer_options.has_audio);
   EXPECT_TRUE(updated_offer_options.has_video);
 }

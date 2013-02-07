@@ -44,6 +44,8 @@ namespace talk_base {
 };
 extern talk_base::AsyncSocket* cricket_socket_;
 
+namespace buzz {
+
 class XmppSocket : public buzz::AsyncSocket, public sigslot::has_slots<> {
 public:
   XmppSocket(buzz::TlsOptions tls);
@@ -80,6 +82,8 @@ private:
   talk_base::ByteBuffer buffer_;
   buzz::TlsOptions tls_;
 };
+
+}  // namespace buzz
 
 #endif // TALK_XMPP_XMPPSOCKET_H_
 

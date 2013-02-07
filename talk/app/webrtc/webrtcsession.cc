@@ -64,10 +64,6 @@ static const uint64 kInitSessionVersion = 2;
 static const int kCallSetupTimeout = 30 * 1000;
 
 // Supported MediaConstraints.
-const char MediaConstraintsInterface::kOfferToReceiveAudio[] =
-    "OfferToReceiveAudio";
-const char MediaConstraintsInterface::kOfferToReceiveVideo[] =
-    "OfferToReceiveVideo";
 // DTLS-SRTP pseudo-constraints.
 const char MediaConstraintsInterface::kEnableDtlsSrtp[] =
     "DtlsSrtpKeyAgreement";
@@ -385,9 +381,14 @@ void WebRtcSession::set_secure_policy(
 }
 
 SessionDescriptionInterface* WebRtcSession::CreateOffer(
-    const MediaHints& hints) {
-  cricket::MediaSessionOptions options =
-      mediastream_signaling_->GetOptionsForOffer(hints);
+    const MediaConstraintsInterface* constraints) {
+  cricket::MediaSessionOptions options;
+
+  if (!mediastream_signaling_->GetOptionsForOffer(constraints, &options)) {
+    LOG(LS_ERROR) << "CreateOffer called with invalid constraints.";
+    return NULL;
+  }
+
   if (!ValidStreams(options.streams)) {
     LOG(LS_ERROR) << "CreateOffer called with invalid media streams.";
     return NULL;
@@ -417,30 +418,15 @@ SessionDescriptionInterface* WebRtcSession::CreateOffer(
   return offer;
 }
 
-SessionDescriptionInterface* WebRtcSession::CreateOffer(
-    const MediaConstraintsInterface* constraints) {
-  bool receive_audio = false;
-  std::string value;
-  if (FindConstraint(constraints,
-                     MediaConstraintsInterface::kOfferToReceiveAudio,
-                     &value, NULL)) {
-    receive_audio = (value == MediaConstraintsInterface::kValueTrue);
-  }
-  bool receive_video = false;
-  if (FindConstraint(constraints,
-                     MediaConstraintsInterface::kOfferToReceiveVideo,
-                     &value, NULL)) {
-    receive_video = (value == MediaConstraintsInterface::kValueTrue);
-  }
-
-  return CreateOffer(MediaHints(receive_audio, receive_video));
-}
-
 SessionDescriptionInterface* WebRtcSession::CreateAnswer(
-    const MediaHints& hints,
+    const MediaConstraintsInterface* constraints,
     const SessionDescriptionInterface* offer) {
-  cricket::MediaSessionOptions options =
-      mediastream_signaling_->GetOptionsForAnswer(hints);
+  cricket::MediaSessionOptions options;
+  if (!mediastream_signaling_->GetOptionsForAnswer(constraints, &options)) {
+    LOG(LS_ERROR) << "CreateAnswer called with invalid constraints.";
+    return NULL;
+  }
+
   if (!offer) {
     LOG(LS_ERROR) << "Offer can't be NULL in CreateAnswer.";
     return NULL;
@@ -470,25 +456,6 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   if (local_description())
     CopyCandidatesFromSessionDescription(local_description(), answer);
   return answer;
-}
-
-SessionDescriptionInterface* WebRtcSession::CreateAnswer(
-    const MediaConstraintsInterface* constraints,
-    const SessionDescriptionInterface* offer) {
-  bool receive_audio = true;
-  std::string value;
-  if (FindConstraint(constraints,
-                     MediaConstraintsInterface::kOfferToReceiveAudio,
-                     &value, NULL)) {
-    receive_audio = (value == MediaConstraintsInterface::kValueTrue);
-  }
-  bool receive_video = true;
-  if (FindConstraint(constraints,
-                     MediaConstraintsInterface::kOfferToReceiveVideo,
-                     &value, NULL)) {
-    receive_video = (value == MediaConstraintsInterface::kValueTrue);
-  }
-  return CreateAnswer(MediaHints(receive_audio, receive_video), offer);
 }
 
 bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
@@ -690,7 +657,7 @@ bool WebRtcSession::ProcessIceMessage(const IceCandidateInterface* candidate) {
   return UseCandidatesInSessionDescription(remote_desc_.get());
 }
 
-bool WebRtcSession::GetTrackLabelBySsrc(uint32 ssrc, std::string* name) {
+bool WebRtcSession::GetTrackIdBySsrc(uint32 ssrc, std::string* name) {
   if (GetLocalTrackName(ssrc, name)) {
     if (GetRemoteTrackName(ssrc, name)) {
       LOG(LS_WARNING) << "SSRC " << ssrc

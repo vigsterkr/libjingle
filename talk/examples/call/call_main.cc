@@ -53,7 +53,7 @@
 #include "talk/xmpp/xmppauth.h"
 #include "talk/xmpp/xmppclientsettings.h"
 #include "talk/xmpp/xmpppump.h"
-#include "talk/xmpp/xmppthread.h"
+#include "talk/xmpp/xmppsocket.h"
 
 class DebugLog : public sigslot::has_slots<> {
  public:
@@ -438,7 +438,7 @@ int main(int argc, char **argv) {
   talk_base::SocketServerScope ss_scope(&ss);
 #endif
 
-  XmppPump pump;
+  buzz::XmppPump pump;
   CallClient *client = new CallClient(pump.client(), caps_node, caps_ver);
 
   if (FLAG_voiceinput || FLAG_voiceoutput ||
@@ -472,7 +472,7 @@ int main(int argc, char **argv) {
   }
 
   Print(("Logging in to " + server + " as " + jid.Str() + "\n").c_str());
-  pump.DoLogin(xcs, new XmppSocket(buzz::TLS_REQUIRED), new XmppAuth());
+  pump.DoLogin(xcs, new buzz::XmppSocket(buzz::TLS_REQUIRED), new XmppAuth());
   main_thread->Run();
   pump.DoDisconnect();
 

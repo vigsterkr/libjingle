@@ -183,7 +183,7 @@ class VideoFrameTest : public testing::Test {
                                               uint32 width, uint32 height) {
     int y1_pos, y2_pos, u_pos, v_pos;
     if (!GetYuv422Packing(fourcc, &y1_pos, &y2_pos, &u_pos, &v_pos)) {
-      return false;
+      return NULL;
     }
 
     talk_base::scoped_ptr<talk_base::MemoryStream> ms(

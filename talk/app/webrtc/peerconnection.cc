@@ -40,6 +40,8 @@
 
 namespace {
 
+using webrtc::PeerConnectionInterface;
+
 // The min number of tokens in the ice uri.
 static const size_t kMinIceUriTokens = 2;
 // The min number of tokens must present in Turn host uri.
@@ -112,7 +114,7 @@ typedef webrtc::PortAllocatorFactoryInterface::StunConfiguration
 typedef webrtc::PortAllocatorFactoryInterface::TurnConfiguration
     TurnConfiguration;
 
-bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
+bool ParseIceServers(const PeerConnectionInterface::IceServers& configuration,
                      std::vector<StunConfiguration>* stun_config,
                      std::vector<TurnConfiguration>* turn_config) {
   // draft-nandakumar-rtcweb-stun-uri-01
@@ -132,7 +134,7 @@ bool ParseIceServers(const webrtc::JsepInterface::IceServers& configuration,
 
   // TODO(ronghuawu): Handle IPV6 address
   for (size_t i = 0; i < configuration.size(); ++i) {
-    webrtc::JsepInterface::IceServer server = configuration[i];
+    webrtc::PeerConnectionInterface::IceServer server = configuration[i];
     if (server.uri.empty()) {
       LOG(WARNING) << "Empty uri.";
       continue;
@@ -243,7 +245,7 @@ PeerConnection::~PeerConnection() {
 }
 
 bool PeerConnection::Initialize(
-    const JsepInterface::IceServers& configuration,
+    const PeerConnectionInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     webrtc::PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {

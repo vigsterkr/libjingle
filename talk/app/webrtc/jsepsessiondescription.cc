@@ -145,6 +145,8 @@ size_t JsepSessionDescription::number_of_mediasections() const {
 
 const IceCandidateCollection* JsepSessionDescription::candidates(
     size_t mediasection_index) const {
+  if (mediasection_index >= candidate_collection_.size())
+    return NULL;
   return &candidate_collection_[mediasection_index];
 }
 

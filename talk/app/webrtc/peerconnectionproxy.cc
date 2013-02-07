@@ -77,7 +77,7 @@ struct IceConfigurationParams : public talk_base::MessageData {
         constraints(NULL),
         result(false) {
   }
-  const webrtc::JsepInterface::IceServers* configuration;
+  const webrtc::PeerConnectionInterface::IceServers* configuration;
   const webrtc::MediaConstraintsInterface* constraints;
   bool result;
 };

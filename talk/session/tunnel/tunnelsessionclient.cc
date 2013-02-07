@@ -289,7 +289,8 @@ SessionDescription* TunnelSessionClient::CreateOffer(
   SessionDescription* offer = NewTunnelSessionDescription(
       CN_TUNNEL, new TunnelContentDescription(description));
   talk_base::scoped_ptr<TransportDescription> tdesc(
-      session_manager_->transport_desc_factory()->CreateOffer(NULL));
+      session_manager_->transport_desc_factory()->CreateOffer(
+          TransportDescriptionOptions(), NULL));
   if (tdesc.get()) {
     offer->AddTransportInfo(TransportInfo(CN_TUNNEL, *tdesc));
   } else {
@@ -314,7 +315,7 @@ SessionDescription* TunnelSessionClient::CreateAnswer(
     ASSERT(offer_tdesc != NULL);
     talk_base::scoped_ptr<TransportDescription> tdesc(
       session_manager_->transport_desc_factory()->CreateAnswer(
-          offer_tdesc, NULL));
+          offer_tdesc, TransportDescriptionOptions(),  NULL));
     if (tdesc.get()) {
       answer->AddTransportInfo(TransportInfo(content_name, *tdesc));
     } else {

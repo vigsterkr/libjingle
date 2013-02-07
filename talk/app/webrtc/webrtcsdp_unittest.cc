@@ -397,6 +397,7 @@ class WebRtcSdpTest : public testing::Test {
     audio->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_32",
         "inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32",
         "dummy_session_params"));
+    audio->set_protocol(cricket::kMediaProtocolSavpf);
     audio->AddCodec(AudioCodec(103, "ISAC", 16000, 0, 1, 2));
     audio->AddCodec(AudioCodec(104, "CELT", 32000, 0, 2, 1));
     desc_.AddContent(kAudioContentName, NS_JINGLE_RTP,
@@ -429,6 +430,7 @@ class WebRtcSdpTest : public testing::Test {
     video->AddStream(video_stream3);
     video->AddCrypto(CryptoParams(1, "AES_CM_128_HMAC_SHA1_80",
         "inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32", ""));
+    video->set_protocol(cricket::kMediaProtocolSavpf);
     video->AddCodec(VideoCodec(
         120,
         JsepSessionDescription::kDefaultVideoCodecName,
@@ -603,6 +605,8 @@ class WebRtcSdpTest : public testing::Test {
       const CryptoParams c2 = cd2->cryptos().at(i);
       EXPECT_TRUE(c1.Matches(c2));
     }
+    // protocol
+    EXPECT_EQ(cd1->protocol(), cd2->protocol());
 
     // codecs
     EXPECT_EQ(cd1->codecs(), cd2->codecs());
@@ -921,6 +925,7 @@ class WebRtcSdpTest : public testing::Test {
     data_desc_->AddCrypto(CryptoParams(
         1, "AES_CM_128_HMAC_SHA1_80",
         "inline:FvLcvU2P3ZWmQxgPAgcDu7Zl9vftYElFOjEzhWs5", ""));
+    data_desc_->set_protocol(cricket::kMediaProtocolSavpf);
     desc_.AddContent(kDataContentName, NS_JINGLE_RTP, data.release());
     EXPECT_TRUE(desc_.AddTransportInfo(
            TransportInfo(kDataContentName,

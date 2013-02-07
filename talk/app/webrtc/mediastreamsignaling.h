@@ -132,19 +132,17 @@ class MediaStreamSignaling {
   // cricket::MediaSessionOptions returned by GetMediaSessionOptions().
   bool AddDataChannel(DataChannel* data_channel);
 
-  // Returns a MediaSessionOptions struct with options decided by |hints|,
-  // the local MediaStreams and DataChannels. If a |hints| element
-  // is true, media content description of that type will be
-  // offered even if no tracks are sent.
-  virtual const cricket::MediaSessionOptions& GetOptionsForOffer(
-      const MediaHints& hints);
+  // Returns a MediaSessionOptions struct with options decided by |constraints|,
+  // the local MediaStreams and DataChannels.
+  virtual bool GetOptionsForOffer(
+      const MediaConstraintsInterface* constraints,
+      cricket::MediaSessionOptions* options);
 
   // Returns a MediaSessionOptions struct with options decided by
-  // |hints|, the local MediaStreams and DataChannels.
-  // If a |hints| elements is true, media content description of
-  // that type will be accepted even if no tracks are sent.
-  virtual cricket::MediaSessionOptions GetOptionsForAnswer(
-      const MediaHints& hints);
+  // |constraints|, the local MediaStreams and DataChannels.
+  virtual bool GetOptionsForAnswer(
+      const MediaConstraintsInterface* constraints,
+      cricket::MediaSessionOptions* options);
 
   // Updates or creates remote MediaStream objects and Tracks given a
   // remote SessionDescription.
@@ -192,7 +190,6 @@ class MediaStreamSignaling {
           default_video_track_needed);
     }
   };
-
   void UpdateSessionOptions();
   // Makes sure a MediaStream Track is created for each StreamParam in
   // |streams|. |media_type| is the type of the |streams| and can be either

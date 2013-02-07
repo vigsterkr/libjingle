@@ -48,7 +48,7 @@ typedef talk_base::TypedMessageData<bool> InitMessageData;
 
 struct CreatePeerConnectionParams : public talk_base::MessageData {
   CreatePeerConnectionParams(
-      const webrtc::JsepInterface::IceServers& configuration,
+      const webrtc::PeerConnectionInterface::IceServers& configuration,
       const webrtc::MediaConstraintsInterface* constraints,
       webrtc::PortAllocatorFactoryInterface* allocator_factory,
       webrtc::PeerConnectionObserver* observer)
@@ -58,7 +58,7 @@ struct CreatePeerConnectionParams : public talk_base::MessageData {
         observer(observer) {
   }
   scoped_refptr<webrtc::PeerConnectionInterface> peerconnection;
-  const webrtc::JsepInterface::IceServers& configuration;
+  const webrtc::PeerConnectionInterface::IceServers& configuration;
   const webrtc::MediaConstraintsInterface* constraints;
   scoped_refptr<webrtc::PortAllocatorFactoryInterface> allocator_factory;
   webrtc::PeerConnectionObserver* observer;
@@ -263,7 +263,7 @@ PeerConnectionFactory::CreateVideoSource_s(
 
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
-    const JsepInterface::IceServers& configuration,
+    const PeerConnectionInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {
@@ -275,7 +275,7 @@ PeerConnectionFactory::CreatePeerConnection(
 
 scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection(
-    const JsepInterface::IceServers& configuration,
+    const PeerConnectionInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     PeerConnectionObserver* observer) {
   return CreatePeerConnection(configuration, constraints, NULL, observer);
@@ -283,7 +283,7 @@ PeerConnectionFactory::CreatePeerConnection(
 
 talk_base::scoped_refptr<PeerConnectionInterface>
 PeerConnectionFactory::CreatePeerConnection_s(
-    const JsepInterface::IceServers& configuration,
+    const PeerConnectionInterface::IceServers& configuration,
     const MediaConstraintsInterface* constraints,
     PortAllocatorFactoryInterface* allocator_factory,
     PeerConnectionObserver* observer) {

@@ -108,7 +108,7 @@ class StreamCollectionInterface : public talk_base::RefCountInterface {
 
 // PeerConnection callback interface. Application should implement these
 // methods.
-class PeerConnectionObserver : public IceCandidateObserver {
+class PeerConnectionObserver {
  public:
   enum StateType {
     kSignalingState,
@@ -133,6 +133,16 @@ class PeerConnectionObserver : public IceCandidateObserver {
   // Triggered when renegotation is needed, for example the ICE has restarted.
   virtual void OnRenegotiationNeeded() {}
 
+  // TODO(ronghuawu): Implement OnIceChange.
+  // Called any time the iceState changes.
+  virtual void OnIceChange() {}
+
+  // New Ice candidate have been found.
+  virtual void OnIceCandidate(const IceCandidateInterface* candidate) = 0;
+
+  // All Ice candidates have been found.
+  virtual void OnIceComplete() {}
+
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~PeerConnectionObserver() {}
@@ -146,8 +156,7 @@ class StatsObserver : public talk_base::RefCountInterface {
   virtual ~StatsObserver() {}
 };
 
-class PeerConnectionInterface : public JsepInterface,
-                                public talk_base::RefCountInterface {
+class PeerConnectionInterface : public talk_base::RefCountInterface {
  public:
   // Keep in sync with org.webrtc.PeerConnection.SignalingState.
   enum SignalingState {
@@ -170,6 +179,12 @@ class PeerConnectionInterface : public JsepInterface,
     kIceFailed,
     kIceClosed,
   };
+
+  struct IceServer {
+    std::string uri;
+    std::string password;
+  };
+  typedef std::vector<IceServer> IceServers;
 
   // Accessor methods to active local streams.
   virtual talk_base::scoped_refptr<StreamCollectionInterface>
@@ -201,6 +216,39 @@ class PeerConnectionInterface : public JsepInterface,
   virtual talk_base::scoped_refptr<DataChannelInterface> CreateDataChannel(
       const std::string& label,
       const DataChannelInit* config) = 0;
+
+  virtual const SessionDescriptionInterface* local_description() const = 0;
+  virtual const SessionDescriptionInterface* remote_description() const = 0;
+
+  // Create a new offer.
+  // The CreateSessionDescriptionObserver callback will be called when done.
+  virtual void CreateOffer(CreateSessionDescriptionObserver* observer,
+                           const MediaConstraintsInterface* constraints) = 0;
+  // Create an answer to an offer.
+  // The CreateSessionDescriptionObserver callback will be called when done.
+  virtual void CreateAnswer(CreateSessionDescriptionObserver* observer,
+                            const MediaConstraintsInterface* constraints) = 0;
+  // Sets the local session description.
+  // JsepInterface takes the ownership of |desc| even if it fails.
+  // The |observer| callback will be called when done.
+  virtual void SetLocalDescription(SetSessionDescriptionObserver* observer,
+                                   SessionDescriptionInterface* desc) = 0;
+  // Sets the remote session description.
+  // JsepInterface takes the ownership of |desc| even if it fails.
+  // The |observer| callback will be called when done.
+  virtual void SetRemoteDescription(SetSessionDescriptionObserver* observer,
+                                    SessionDescriptionInterface* desc) = 0;
+  // Restarts or updates the ICE Agent process of gathering local candidates
+  // and pinging remote candidates.
+  virtual bool UpdateIce(const IceServers& configuration,
+                         const MediaConstraintsInterface* constraints) = 0;
+  // Provides a remote candidate to the ICE Agent.
+  // A copy of the |candidate| will be created and added to the remote
+  // description. So the caller of this method still has the ownership of the
+  // |candidate|.
+  // TODO(ronghuawu): Consider to change this so that the AddIceCandidate will
+  // take the ownership of the |candidate|.
+  virtual bool AddIceCandidate(const IceCandidateInterface* candidate) = 0;
 
   // Deprecated, please use SignalingState instead.
   // TODO(perkj): Remove ready_state when callers are changed.
@@ -263,14 +311,16 @@ class PortAllocatorFactoryInterface : public talk_base::RefCountInterface {
 class PeerConnectionFactoryInterface : public talk_base::RefCountInterface {
  public:
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const JsepInterface::IceServers& configuration,
-                           const MediaConstraintsInterface* constraints,
-                           PeerConnectionObserver* observer) = 0;
+     CreatePeerConnection(
+         const PeerConnectionInterface::IceServers& configuration,
+         const MediaConstraintsInterface* constraints,
+         PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<PeerConnectionInterface>
-      CreatePeerConnection(const JsepInterface::IceServers& configuration,
-                           const MediaConstraintsInterface* constraints,
-                           PortAllocatorFactoryInterface* allocator_factory,
-                           PeerConnectionObserver* observer) = 0;
+      CreatePeerConnection(
+          const PeerConnectionInterface::IceServers& configuration,
+          const MediaConstraintsInterface* constraints,
+          PortAllocatorFactoryInterface* allocator_factory,
+          PeerConnectionObserver* observer) = 0;
   virtual talk_base::scoped_refptr<LocalMediaStreamInterface>
       CreateLocalMediaStream(const std::string& label) = 0;
 
@@ -325,6 +375,15 @@ talk_base::scoped_refptr<PeerConnectionFactoryInterface>
 CreatePeerConnectionFactory(talk_base::Thread* worker_thread,
                             talk_base::Thread* signaling_thread,
                             AudioDeviceModule* default_adm);
+
+// TODO(perkj): The JsepInterface has been combined with
+// PeerConnectionInterface. Remove the below interface once no clients use
+// JsepInterface::IceServer.
+class JsepInterface {
+ public:
+  typedef PeerConnectionInterface::IceServer IceServer;
+  typedef std::vector<PeerConnectionInterface::IceServer> IceServers;
+};
 
 }  // namespace webrtc
 

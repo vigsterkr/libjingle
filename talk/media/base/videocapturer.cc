@@ -402,6 +402,12 @@ void VideoCapturer::UpdateFilteredSupportedFormats() {
       ++iter;
     }
   }
+  if (filtered_supported_formats_.empty()) {
+    // The device only captures at resolutions higher than |max_format_| this
+    // indicates that |max_format_| should be ignored as it is better to capture
+    // at too high a resolution than to not capture at all.
+    filtered_supported_formats_ = supported_formats_;
+  }
 }
 
 bool VideoCapturer::ShouldFilterFormat(const VideoFormat& format) const {

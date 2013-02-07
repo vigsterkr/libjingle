@@ -34,8 +34,10 @@
 #include "talk/xmpp/xmpppump.h"
 #include "talk/xmpp/xmppsocket.h"
 
+namespace buzz {
+
 class XmppThread:
-    public talk_base::Thread, XmppPumpNotify, talk_base::MessageHandler {
+    public talk_base::Thread, buzz::XmppPumpNotify, talk_base::MessageHandler {
 public:
   XmppThread();
   ~XmppThread();
@@ -48,11 +50,13 @@ public:
   void Disconnect();
 
 private:
-  XmppPump* pump_;
+  buzz::XmppPump* pump_;
 
   void OnStateChange(buzz::XmppEngine::State state);
   void OnMessage(talk_base::Message* pmsg);
 };
+
+}  // namespace buzz
 
 #endif  // TALK_XMPP_XMPPTHREAD_H_
 

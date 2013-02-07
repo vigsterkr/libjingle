@@ -71,11 +71,6 @@ class MockPeerConnection : public PeerConnectionInterface {
         talk_base::scoped_refptr<DataChannelInterface>(
             const std::string& label,
             const DataChannelInit* config));
-  MOCK_METHOD1(CreateOffer,
-      SessionDescriptionInterface*(const MediaHints& hints));
-  MOCK_METHOD2(CreateAnswer,
-      SessionDescriptionInterface*(const MediaHints& hints,
-          const SessionDescriptionInterface* offer));
   MOCK_CONST_METHOD0(local_description,
       const SessionDescriptionInterface*());
   MOCK_CONST_METHOD0(remote_description,
@@ -307,7 +302,8 @@ TEST_F(PeerConnectionProxyTest, UpdateIce) {
       .WillOnce(
           DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
                 Return(true)));
-  EXPECT_TRUE(pc_proxy_->UpdateIce(JsepInterface::IceServers(), constraints));
+  EXPECT_TRUE(pc_proxy_->UpdateIce(PeerConnectionInterface::IceServers(),
+                                   constraints));
 }
 
 TEST_F(PeerConnectionProxyTest, AddIceCandidate) {

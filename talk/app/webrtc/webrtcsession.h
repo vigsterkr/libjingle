@@ -30,8 +30,8 @@
 
 #include <string>
 
+#include "talk/app/webrtc/peerconnectioninterface.h"
 #include "talk/app/webrtc/dtmfsender.h"
-#include "talk/app/webrtc/jsep.h"
 #include "talk/app/webrtc/mediastreamprovider.h"
 #include "talk/app/webrtc/datachannel.h"
 #include "talk/app/webrtc/statstypes.h"
@@ -59,6 +59,21 @@ namespace webrtc {
 
 class MediaStreamSignaling;
 
+// Ice candidate callback interface.
+class IceCandidateObserver {
+ public:
+  // TODO(ronghuawu): Implement OnIceChange.
+  // Called any time the iceState changes.
+  virtual void OnIceChange() {}
+  // New Ice candidate have been found.
+  virtual void OnIceCandidate(const IceCandidateInterface* candidate) = 0;
+  // All Ice candidates have been found.
+  virtual void OnIceComplete() {}
+
+ protected:
+  ~IceCandidateObserver() {}
+};
+
 class WebRtcSession : public cricket::BaseSession,
                       public AudioProviderInterface,
                       public DataChannelFactory,
@@ -78,13 +93,13 @@ class WebRtcSession : public cricket::BaseSession,
     ice_observer_ = observer;
   }
 
-  cricket::VoiceChannel* voice_channel() {
+  virtual cricket::VoiceChannel* voice_channel() {
     return voice_channel_.get();
   }
-  cricket::VideoChannel* video_channel() {
+  virtual cricket::VideoChannel* video_channel() {
     return video_channel_.get();
   }
-  cricket::DataChannel* data_channel() {
+  virtual cricket::DataChannel* data_channel() {
     return data_channel_.get();
   }
 
@@ -97,12 +112,9 @@ class WebRtcSession : public cricket::BaseSession,
   // TODO - It may be necessary to supply error code as well.
   sigslot::signal0<> SignalError;
 
-  SessionDescriptionInterface* CreateOffer(const MediaHints& hints);
   SessionDescriptionInterface* CreateOffer(
       const MediaConstraintsInterface* constraints);
-  SessionDescriptionInterface* CreateAnswer(
-      const MediaHints& hints,
-      const SessionDescriptionInterface* offer);
+
   SessionDescriptionInterface* CreateAnswer(
       const MediaConstraintsInterface* constraints,
       const SessionDescriptionInterface* offer);
@@ -117,8 +129,8 @@ class WebRtcSession : public cricket::BaseSession,
     return remote_desc_.get();
   }
 
-  // Get the label used as a media stream track's "label" field from ssrc.
-  bool GetTrackLabelBySsrc(uint32 ssrc, std::string* name);
+  // Get the id used as a media stream track's "id" field from ssrc.
+  virtual bool GetTrackIdBySsrc(uint32 ssrc, std::string* name);
 
   // AudioMediaProviderInterface implementation.
   virtual void SetAudioPlayout(const std::string& name, bool enable);
@@ -223,7 +235,7 @@ class WebRtcSession : public cricket::BaseSession,
   cricket::TransportDescriptionFactory transport_desc_factory_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
   MediaStreamSignaling* mediastream_signaling_;
-  IceCandidateObserver * ice_observer_;
+  IceCandidateObserver* ice_observer_;
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
   talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
   // Candidates that arrived before the remote description was set.

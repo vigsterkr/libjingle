@@ -97,6 +97,26 @@ class FakeConstraints : public webrtc::MediaConstraintsInterface {
     }
   }
 
+  void SetMandatoryUseRtpMux(bool enable) {
+    if (enable) {
+      AddMandatory(MediaConstraintsInterface::kUseRtpMux,
+                   MediaConstraintsInterface::kValueTrue);
+    } else {
+      AddMandatory(MediaConstraintsInterface::kUseRtpMux,
+                   MediaConstraintsInterface::kValueFalse);
+    }
+  }
+
+  void SetMandatoryIceRestart(bool enable) {
+    if (enable) {
+      AddMandatory(MediaConstraintsInterface::kIceRestart,
+                   MediaConstraintsInterface::kValueTrue);
+    } else {
+      AddMandatory(MediaConstraintsInterface::kIceRestart,
+                   MediaConstraintsInterface::kValueFalse);
+    }
+  }
+
   void SetAllowRtpDataChannels() {
     AddMandatory(MediaConstraintsInterface::kEnableRtpDataChannels,
                  MediaConstraintsInterface::kValueTrue);

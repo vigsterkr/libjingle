@@ -68,6 +68,11 @@ enum MediaContentDirection {
   MD_SENDRECV
 };
 
+// RTC4585 RTP/AVPF
+extern const char kMediaProtocolAvpf[];
+// RFC5124 RTP/SAVPF
+extern const char kMediaProtocolSavpf[];
+
 // Options to control how session descriptions are generated.
 const int kAutoBandwidth = -1;
 struct MediaSessionOptions {
@@ -79,7 +84,6 @@ struct MediaSessionOptions {
       rtcp_mux_enabled(true),
       bundle_enabled(false),
       video_bandwidth(kAutoBandwidth),
-
       data_bandwidth(kDataMaxBandwidth) {
   }
 
@@ -100,6 +104,7 @@ struct MediaSessionOptions {
   // bps. -1 == auto.
   int video_bandwidth;
   int data_bandwidth;
+  TransportDescriptionOptions transport_options;
 
   struct Stream {
     Stream(MediaType type,
@@ -132,6 +137,12 @@ class MediaContentDescription : public ContentDescription {
 
   virtual MediaType type() const = 0;
   virtual bool has_codecs() const = 0;
+
+  // |protocol| is the expected media transport protocol, such as RTP/AVPF,
+  // RTP/SAVPF or SCTP/DTLS.
+  std::string protocol() const { return protocol_; }
+  void set_protocol(const std::string& protocol) { protocol_ = protocol; }
+
   MediaContentDirection direction() const { return direction_; }
   void set_direction(MediaContentDirection direction) {
     direction_ = direction;
@@ -228,6 +239,7 @@ class MediaContentDescription : public ContentDescription {
  protected:
   bool rtcp_mux_;
   int bandwidth_;
+  std::string protocol_;
   std::vector<CryptoParams> cryptos_;
   bool crypto_required_;
   std::vector<RtpHeaderExtension> rtp_header_extensions_;
@@ -348,11 +360,13 @@ class MediaSessionDescriptionFactory {
  private:
   bool AddTransportOffer(
       const std::string& content_name,
+      const TransportDescriptionOptions& transport_options,
       const SessionDescription* current_desc,
       SessionDescription* offer) const;
   bool AddTransportAnswer(
       const std::string& content_name,
       const SessionDescription* offer,
+      const TransportDescriptionOptions& transport_options,
       const SessionDescription* current_desc,
       SessionDescription* answer) const;
 

@@ -99,37 +99,38 @@ bool Base64::IsBase64Encoded(const std::string& str) {
 void Base64::EncodeFromArray(const void* data, size_t len, string* result) {
   ASSERT(NULL != result);
   result->clear();
-  result->reserve(((len + 2) / 3) * 4);
+  result->resize(((len + 2) / 3) * 4);
   const unsigned char* byte_data = static_cast<const unsigned char*>(data);
 
   unsigned char c;
   size_t i = 0;
+  size_t dest_ix = 0;
   while (i < len) {
     c = (byte_data[i] >> 2) & 0x3f;
-    result->push_back(Base64Table[c]);
+    (*result)[dest_ix++] = Base64Table[c];
 
     c = (byte_data[i] << 4) & 0x3f;
     if (++i < len) {
       c |= (byte_data[i] >> 4) & 0x0f;
     }
-    result->push_back(Base64Table[c]);
+    (*result)[dest_ix++] = Base64Table[c];
 
     if (i < len) {
       c = (byte_data[i] << 2) & 0x3f;
       if (++i < len) {
         c |= (byte_data[i] >> 6) & 0x03;
       }
-      result->push_back(Base64Table[c]);
+      (*result)[dest_ix++] = Base64Table[c];
     } else {
-      result->push_back(kPad);
+      (*result)[dest_ix++] = kPad;
     }
 
     if (i < len) {
       c = byte_data[i] & 0x3f;
-      result->push_back(Base64Table[c]);
+      (*result)[dest_ix++] = Base64Table[c];
       ++i;
     } else {
-      result->push_back(kPad);
+      (*result)[dest_ix++] = kPad;
     }
   }
 }

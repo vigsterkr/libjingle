@@ -437,7 +437,7 @@ struct VoiceSenderInfo {
 
   uint32 ssrc;
   std::string codec_name;
-  int bytes_sent;
+  int64 bytes_sent;
   int packets_sent;
   int packets_lost;
   float fraction_lost;
@@ -468,7 +468,7 @@ struct VoiceReceiverInfo {
   }
 
   uint32 ssrc;
-  int bytes_rcvd;
+  int64 bytes_rcvd;
   int packets_rcvd;
   int packets_lost;
   float fraction_lost;
@@ -503,7 +503,7 @@ struct VideoSenderInfo {
   std::vector<uint32> ssrcs;
   std::vector<SsrcGroup> ssrc_groups;
   std::string codec_name;
-  int bytes_sent;
+  int64 bytes_sent;
   int packets_sent;
   int packets_cached;
   int packets_lost;
@@ -537,7 +537,7 @@ struct VideoReceiverInfo {
 
   std::vector<uint32> ssrcs;
   std::vector<SsrcGroup> ssrc_groups;
-  int bytes_rcvd;
+  int64 bytes_rcvd;
   // vector<int> layer_bytes_rcvd;
   int packets_rcvd;
   int packets_lost;
@@ -561,7 +561,7 @@ struct DataSenderInfo {
 
   uint32 ssrc;
   std::string codec_name;
-  int bytes_sent;
+  int64 bytes_sent;
   int packets_sent;
 };
 
@@ -573,7 +573,7 @@ struct DataReceiverInfo {
   }
 
   uint32 ssrc;
-  int bytes_rcvd;
+  int64 bytes_rcvd;
   int packets_rcvd;
 };
 

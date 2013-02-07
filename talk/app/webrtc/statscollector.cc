@@ -69,8 +69,8 @@ void StatsElement::AddValue(const std::string& name, const std::string& value) {
   values.push_back(temp);
 }
 
-void StatsElement::AddValue(const std::string& name, int value) {
-  AddValue(name, talk_base::ToString<int>(value));
+void StatsElement::AddValue(const std::string& name, int64 value) {
+  AddValue(name, talk_base::ToString<int64>(value));
 }
 
 namespace {
@@ -188,7 +188,7 @@ void ExtractStatsFromList(const std::vector<T>& data,
   for (; it != data.end(); ++it) {
     std::string label;
     uint32 ssrc = ExtractSsrc(*it);
-    if (!collector->session()->GetTrackLabelBySsrc(ssrc, &label)) {
+    if (!collector->session()->GetTrackIdBySsrc(ssrc, &label)) {
       LOG(LS_ERROR) << "The SSRC " << ssrc
                     << " is not associated with a track";
       continue;

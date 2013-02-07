@@ -47,6 +47,13 @@ namespace cricket {
 
 using talk_base::scoped_ptr;
 
+// RTP Profile names
+// http://www.iana.org/assignments/rtp-parameters/rtp-parameters.xml
+// RTC4585
+const char kMediaProtocolAvpf[] = "RTP/AVPF";
+// RFC5124
+const char kMediaProtocolSavpf[] = "RTP/SAVPF";
+
 static bool IsMediaContentOfType(const ContentInfo* content,
                                  MediaType media_type) {
   if (!IsMediaContent(content)) {
@@ -574,7 +581,7 @@ static bool ContainsRtxCodec(const std::vector<C>& codecs) {
 
 // Create a media content to be offered in a session-initiate,
 // according to the given options.rtcp_mux, options.is_muc,
-// options.streams, codecs, crypto, and streams.  If we don't
+// options.streams, codecs, secure_transport, crypto, and streams.  If we don't
 // currently have crypto (in current_cryptos) and it is enabled (in
 // secure_policy), crypto is created (according to crypto_suites).  If
 // add_legacy_stream is true, and current_streams is empty, a legacy
@@ -618,7 +625,6 @@ static bool CreateMediaContentOffer(
   if (offer->crypto_required() && offer->cryptos().empty()) {
     return false;
   }
-
   return true;
 }
 
@@ -665,6 +671,7 @@ static bool CreateMediaContentAnswer(
   NegotiateCodecs(local_codecs, offer->codecs(), &negotiated_codecs);
   answer->AddCodecs(negotiated_codecs);
   answer->SortCodecs();
+  answer->set_protocol(offer->protocol());
 
   answer->set_rtcp_mux(options.rtcp_mux_enabled && offer->rtcp_mux());
 
@@ -690,6 +697,22 @@ static bool CreateMediaContentAnswer(
   }
 
   return true;
+}
+
+static bool IsMediaProtocolSupported(MediaType type,
+                                     const std::string& protocol) {
+  // Since not all applications serialize and deserialize the media protocol,
+  // we will have to accept |protocol| to be empty.
+  return protocol == kMediaProtocolAvpf || protocol == kMediaProtocolSavpf ||
+      protocol.empty();
+}
+
+static void SetMediaProtocol(bool secure_transport,
+                             MediaContentDescription* desc) {
+  if (!desc->cryptos().empty() || secure_transport)
+    desc->set_protocol(kMediaProtocolSavpf);
+  else
+    desc->set_protocol(kMediaProtocolAvpf);
 }
 
 void MediaSessionOptions::AddStream(MediaType type,
@@ -741,6 +764,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
   AudioCodecs audio_codecs = audio_codecs_;
   VideoCodecs video_codecs = video_codecs_;
   DataCodecs data_codecs = data_codecs_;
+  bool secure_transport = (transport_desc_factory_->secure() != SEC_DISABLED);
+
   if (options.bundle_enabled) {
     DeDuplicatePayloadTypes(&audio_codecs, &video_codecs, &data_codecs);
   }
@@ -767,8 +792,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
 
     audio->set_lang(lang_);
+    SetMediaProtocol(secure_transport, audio.get());
     offer->AddContent(CN_AUDIO, NS_JINGLE_RTP, audio.release());
-    if (!AddTransportOffer(CN_AUDIO, current_description, offer.get())) {
+    if (!AddTransportOffer(CN_AUDIO, options.transport_options,
+                           current_description, offer.get())) {
       return NULL;
     }
   }
@@ -791,8 +818,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
 
     video->set_bandwidth(options.video_bandwidth);
+    SetMediaProtocol(secure_transport, video.get());
     offer->AddContent(CN_VIDEO, NS_JINGLE_RTP, video.release());
-    if (!AddTransportOffer(CN_VIDEO, current_description, offer.get())) {
+    if (!AddTransportOffer(CN_VIDEO, options.transport_options,
+                           current_description, offer.get())) {
       return NULL;
     }
   }
@@ -815,8 +844,10 @@ SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     }
 
     data->set_bandwidth(options.data_bandwidth);
+    SetMediaProtocol(secure_transport, data.get());
     offer->AddContent(CN_DATA, NS_JINGLE_RTP, data.release());
-    if (!AddTransportOffer(CN_DATA, current_description, offer.get())) {
+    if (!AddTransportOffer(CN_DATA, options.transport_options,
+                           current_description, offer.get())) {
       return NULL;
     }
   }
@@ -876,9 +907,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
       return NULL;  // Fails the session setup.
     }
 
-    bool rejected = !options.has_audio;
+    bool rejected = !options.has_audio ||
+        !IsMediaProtocolSupported(MEDIA_TYPE_AUDIO, audio_answer->protocol());
     if (!rejected) {
       if (!AddTransportAnswer(audio_content->name, offer,
+                              options.transport_options,
                               current_description, answer.get())) {
         return NULL;
       }
@@ -911,9 +944,11 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             video_answer.get())) {
       return NULL;
     }
-    bool rejected = !options.has_video;
+    bool rejected = !options.has_video ||
+        !IsMediaProtocolSupported(MEDIA_TYPE_VIDEO, video_answer->protocol());
     if (!rejected) {
       if (!AddTransportAnswer(video_content->name, offer,
+                              options.transport_options,
                               current_description, answer.get())) {
         return NULL;
       }
@@ -947,11 +982,13 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
             data_answer.get())) {
       return NULL;  // Fails the session setup.
     }
-    bool rejected = !options.has_data;
+    bool rejected = !options.has_data ||
+        !IsMediaProtocolSupported(MEDIA_TYPE_DATA, data_answer->protocol());
     if (!rejected) {
       data_answer->set_bandwidth(options.data_bandwidth);
       if (!AddTransportAnswer(data_content->name, offer,
-                              current_description, answer.get())) {
+                              options.transport_options, current_description,
+                              answer.get())) {
         return NULL;
       }
     } else {
@@ -1017,6 +1054,7 @@ static const TransportDescription* GetTransportDescription(
 
 bool MediaSessionDescriptionFactory::AddTransportOffer(
   const std::string& content_name,
+  const TransportDescriptionOptions& transport_options,
   const SessionDescription* current_desc,
   SessionDescription* offer_desc) const {
   if (!transport_desc_factory_)
@@ -1024,7 +1062,7 @@ bool MediaSessionDescriptionFactory::AddTransportOffer(
   const TransportDescription* current_tdesc =
       GetTransportDescription(content_name, current_desc);
   talk_base::scoped_ptr<TransportDescription> new_tdesc(
-      transport_desc_factory_->CreateOffer(current_tdesc));
+      transport_desc_factory_->CreateOffer(transport_options, current_tdesc));
   bool ret = (new_tdesc.get() != NULL &&
       offer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
   if (!ret) {
@@ -1037,6 +1075,7 @@ bool MediaSessionDescriptionFactory::AddTransportOffer(
 bool MediaSessionDescriptionFactory::AddTransportAnswer(
     const std::string& content_name,
     const SessionDescription* offer_desc,
+    const TransportDescriptionOptions& transport_options,
     const SessionDescription* current_desc,
     SessionDescription* answer_desc) const {
   if (!transport_desc_factory_)
@@ -1046,7 +1085,8 @@ bool MediaSessionDescriptionFactory::AddTransportAnswer(
   const TransportDescription* current_tdesc =
       GetTransportDescription(content_name, current_desc);
   talk_base::scoped_ptr<TransportDescription> new_tdesc(
-      transport_desc_factory_->CreateAnswer(offer_tdesc, current_tdesc));
+      transport_desc_factory_->CreateAnswer(offer_tdesc, transport_options,
+                                            current_tdesc));
   bool ret = (new_tdesc.get() != NULL &&
       answer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
   if (!ret) {

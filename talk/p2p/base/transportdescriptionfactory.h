@@ -36,6 +36,11 @@ class SSLIdentity;
 
 namespace cricket {
 
+struct TransportDescriptionOptions {
+  TransportDescriptionOptions() : ice_restart(false) {}
+  bool ice_restart;
+};
+
 // Creates transport descriptions according to the supplied configuration.
 // When creating answers, performs the appropriate negotiation
 // of the various fields to determine the proper result.
@@ -43,7 +48,7 @@ class TransportDescriptionFactory {
  public:
   // Default ctor; use methods below to set configuration.
   TransportDescriptionFactory();
-
+  SecurePolicy secure() const { return secure_; }
   // The identity to use when setting up DTLS.
   talk_base::SSLIdentity* identity() const { return identity_; }
 
@@ -57,11 +62,12 @@ class TransportDescriptionFactory {
   void set_digest_algorithm(const std::string& alg) { digest_alg_ = alg; }
 
   // Creates a transport description suitable for use in an offer.
-  TransportDescription* CreateOffer(
+  TransportDescription* CreateOffer(const TransportDescriptionOptions& options,
       const TransportDescription* current_description) const;
   // Create a transport description that is a response to an offer.
   TransportDescription* CreateAnswer(
       const TransportDescription* offer,
+      const TransportDescriptionOptions& options,
       const TransportDescription* current_description) const;
 
  private:

@@ -36,6 +36,8 @@
 #include "talk/xmpp/xmppengine.h"
 #include "talk/xmpp/xmpptask.h"
 
+namespace buzz {
+
 // Simple xmpp pump
 
 class XmppPumpNotify {
@@ -46,7 +48,7 @@ public:
 
 class XmppPump : public talk_base::MessageHandler, public talk_base::TaskRunner {
 public:
-  XmppPump(XmppPumpNotify * notify = NULL);
+  XmppPump(buzz::XmppPumpNotify * notify = NULL);
 
   buzz::XmppClient *client() { return client_; }
 
@@ -68,8 +70,10 @@ public:
 private:
   buzz::XmppClient *client_;
   buzz::XmppEngine::State state_;
-  XmppPumpNotify *notify_;
+  buzz::XmppPumpNotify *notify_;
 };
+
+}  // namespace buzz
 
 #endif // TALK_XMPP_XMPPPUMP_H_
 

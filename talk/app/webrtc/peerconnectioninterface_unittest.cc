@@ -65,7 +65,6 @@ using webrtc::FakePortAllocatorFactory;
 using webrtc::IceCandidateInterface;
 
 using webrtc::DataBuffer;
-using webrtc::JsepInterface;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::MediaStreamTrackInterface;
@@ -208,8 +207,8 @@ class PeerConnectionInterfaceTest : public testing::Test {
   void CreatePeerConnection(const std::string& uri,
                             const std::string& password,
                             webrtc::MediaConstraintsInterface* constraints) {
-    JsepInterface::IceServer server;
-    JsepInterface::IceServers servers;
+    PeerConnectionInterface::IceServer server;
+    PeerConnectionInterface::IceServers servers;
     server.uri = uri;
     server.password = password;
     servers.push_back(server);
@@ -364,16 +363,34 @@ class PeerConnectionInterfaceTest : public testing::Test {
   }
 
   void CreateOfferAsRemoteDescription() {
-    SessionDescriptionInterface* offer = NULL;
-    EXPECT_TRUE(DoCreateOffer(&offer));
-    EXPECT_TRUE(DoSetRemoteDescription(offer));
+    talk_base::scoped_ptr<SessionDescriptionInterface> offer;
+    EXPECT_TRUE(DoCreateOffer(offer.use()));
+    std::string sdp;
+    EXPECT_TRUE(offer->ToString(&sdp));
+    SessionDescriptionInterface* remote_offer =
+        webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
+                                         sdp);
+    EXPECT_TRUE(DoSetRemoteDescription(remote_offer));
     EXPECT_EQ(PeerConnectionInterface::kHaveRemoteOffer, observer_.state_);
   }
 
   void CreateAnswerAsLocalDescription() {
-    SessionDescriptionInterface* answer = NULL;
-    EXPECT_TRUE(DoCreateAnswer(&answer));
-    EXPECT_TRUE(DoSetLocalDescription(answer));
+    scoped_ptr<SessionDescriptionInterface> answer;
+    EXPECT_TRUE(DoCreateAnswer(answer.use()));
+
+    // TODO(perkj): Currently SetLocalDescription fails if any parameters in an
+    // audio codec change, even if the parameter has nothing to do with
+    // receiving. Not all parameters are serialized to SDP.
+    // Since CreatePrAnswerAsLocalDescription serialize/deserialize
+    // the SessionDescription, it is necessary to do that here to in order to
+    // get ReceiveOfferCreatePrAnswerAndAnswer and RenegotiateAudioOnly to pass.
+    // https://code.google.com/p/webrtc/issues/detail?id=1356
+    std::string sdp;
+    EXPECT_TRUE(answer->ToString(&sdp));
+    SessionDescriptionInterface* new_answer =
+        webrtc::CreateSessionDescription(SessionDescriptionInterface::kAnswer,
+                                         sdp);
+    EXPECT_TRUE(DoSetLocalDescription(new_answer));
     EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
 
@@ -398,9 +415,23 @@ class PeerConnectionInterfaceTest : public testing::Test {
   }
 
   void CreateOfferAsLocalDescription() {
-    SessionDescriptionInterface* offer = NULL;
-    ASSERT_TRUE(DoCreateOffer(&offer));
-    EXPECT_TRUE(DoSetLocalDescription(offer));
+    talk_base::scoped_ptr<SessionDescriptionInterface> offer;
+    ASSERT_TRUE(DoCreateOffer(offer.use()));
+    // TODO(perkj): Currently SetLocalDescription fails if any parameters in an
+    // audio codec change, even if the parameter has nothing to do with
+    // receiving. Not all parameters are serialized to SDP.
+    // Since CreatePrAnswerAsLocalDescription serialize/deserialize
+    // the SessionDescription, it is necessary to do that here to in order to
+    // get ReceiveOfferCreatePrAnswerAndAnswer and RenegotiateAudioOnly to pass.
+    // https://code.google.com/p/webrtc/issues/detail?id=1356
+    std::string sdp;
+    EXPECT_TRUE(offer->ToString(&sdp));
+    SessionDescriptionInterface* new_offer =
+            webrtc::CreateSessionDescription(
+                SessionDescriptionInterface::kOffer,
+                sdp);
+
+    EXPECT_TRUE(DoSetLocalDescription(new_offer));
     EXPECT_EQ(PeerConnectionInterface::kHaveLocalOffer, observer_.state_);
   }
 

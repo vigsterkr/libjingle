@@ -72,7 +72,6 @@ using webrtc::AudioSourceInterface;
 using webrtc::AudioTrackInterface;
 using webrtc::CreateSessionDescriptionObserver;
 using webrtc::IceCandidateInterface;
-using webrtc::JsepInterface;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::MediaConstraintsInterface;
 using webrtc::MediaSourceInterface;
@@ -649,7 +648,7 @@ JOW(jlong, PeerConnectionFactory_nativeCreateAudioTrack)(
 
 static void JavaIceServersToJsepIceServers(
     JNIEnv* jni, jobject j_ice_servers,
-    JsepInterface::IceServers* ice_servers) {
+    PeerConnectionInterface::IceServers* ice_servers) {
   jclass list_class = GetObjectClass(jni, j_ice_servers);
   jmethodID iterator_id = GetMethodID(
       jni, list_class, "iterator", "()Ljava/util/Iterator;");
@@ -672,7 +671,7 @@ static void JavaIceServersToJsepIceServers(
         GetObjectField(jni, j_ice_server, j_ice_server_uri_id));
     jstring password = reinterpret_cast<jstring>(
         GetObjectField(jni, j_ice_server, j_ice_server_password_id));
-    JsepInterface::IceServer server;
+    PeerConnectionInterface::IceServer server;
     server.uri = JavaToStdString(jni, uri);
     server.password = JavaToStdString(jni, password);
     ice_servers->push_back(server);
@@ -685,7 +684,7 @@ JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnection)(
     jobject j_constraints, jlong observer_p) {
   talk_base::scoped_refptr<PeerConnectionFactoryInterface> f(
       reinterpret_cast<PeerConnectionFactoryInterface*>(factory));
-  JsepInterface::IceServers servers;
+  PeerConnectionInterface::IceServers servers;
   JavaIceServersToJsepIceServers(jni, j_ice_servers, &servers);
   PCOJava* observer = reinterpret_cast<PCOJava*>(observer_p);
   observer->SetConstraints(new ConstraintsWrapper(jni, j_constraints));
@@ -779,7 +778,7 @@ JOW(void, PeerConnection_setRemoteDescription)(
 
 JOW(jboolean, PeerConnection_updateIce)(
     JNIEnv* jni, jobject j_pc, jobject j_ice_servers, jobject j_constraints) {
-  JsepInterface::IceServers ice_servers;
+  PeerConnectionInterface::IceServers ice_servers;
   JavaIceServersToJsepIceServers(jni, j_ice_servers, &ice_servers);
   talk_base::scoped_ptr<ConstraintsWrapper> constraints(
       new ConstraintsWrapper(jni, j_constraints));

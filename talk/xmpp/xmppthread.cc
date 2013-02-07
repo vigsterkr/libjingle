@@ -30,6 +30,7 @@
 #include "talk/xmpp/xmppauth.h"
 #include "talk/xmpp/xmppclientsettings.h"
 
+namespace buzz {
 namespace {
 
 const uint32 MSG_LOGIN = 1;
@@ -45,7 +46,7 @@ struct LoginData: public talk_base::MessageData {
 } // namespace
 
 XmppThread::XmppThread() {
-  pump_ = new XmppPump(this);
+  pump_ = new buzz::XmppPump(this);
 }
 
 XmppThread::~XmppThread() {
@@ -80,3 +81,5 @@ void XmppThread::OnMessage(talk_base::Message* pmsg) {
     ASSERT(false);
   }
 }
+
+}  // namespace buzz

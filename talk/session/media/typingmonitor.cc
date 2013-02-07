@@ -92,6 +92,7 @@ void TypingMonitor::OnChannelMuted() {
     talk_base::MessageList removed;
     worker_thread_->Clear(this, 0, &removed);
     ASSERT(removed.size() == 1);
+    has_pending_unmute_ = false;
   }
 }
 

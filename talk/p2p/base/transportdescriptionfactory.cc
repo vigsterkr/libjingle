@@ -47,6 +47,7 @@ TransportDescriptionFactory::TransportDescriptionFactory()
 }
 
 TransportDescription* TransportDescriptionFactory::CreateOffer(
+    const TransportDescriptionOptions& options,
     const TransportDescription* current_description) const {
   talk_base::scoped_ptr<TransportDescription> desc(new TransportDescription());
 
@@ -61,7 +62,7 @@ TransportDescription* TransportDescriptionFactory::CreateOffer(
   }
 
   // Generate the ICE credentials if we don't already have them.
-  if (!current_description) {
+  if (!current_description || options.ice_restart) {
     desc->ice_ufrag = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
     desc->ice_pwd = talk_base::CreateRandomString(ICE_PWD_LENGTH);
   } else {
@@ -81,6 +82,7 @@ TransportDescription* TransportDescriptionFactory::CreateOffer(
 
 TransportDescription* TransportDescriptionFactory::CreateAnswer(
     const TransportDescription* offer,
+    const TransportDescriptionOptions& options,
     const TransportDescription* current_description) const {
   // A NULL offer is treated as a GICE transport description.
   // TODO(juberti): Figure out why we get NULL offers, and fix this upstream.
@@ -109,8 +111,9 @@ TransportDescription* TransportDescriptionFactory::CreateAnswer(
     return NULL;
   }
 
-  // Generate the ICE credentials if we don't already have them.
-  if (!current_description) {
+  // Generate the ICE credentials if we don't already have them or ice is
+  // being restarted.
+  if (!current_description || options.ice_restart) {
     desc->ice_ufrag = talk_base::CreateRandomString(ICE_UFRAG_LENGTH);
     desc->ice_pwd = talk_base::CreateRandomString(ICE_PWD_LENGTH);
   } else {

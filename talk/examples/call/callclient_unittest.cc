@@ -34,13 +34,13 @@
 #include "talk/xmpp/xmppthread.h"
 
 TEST(CallClientTest, CreateCallClientWithDefaultMediaEngine) {
-  XmppPump pump;
+  buzz::XmppPump pump;
   CallClient *client = new CallClient(pump.client(), "app", "version");
   delete client;
 }
 
 TEST(CallClientTest, CreateCallClientWithFileMediaEngine) {
-  XmppPump pump;
+  buzz::XmppPump pump;
   CallClient *client = new CallClient(pump.client(), "app", "version");
   client->SetMediaEngine(new cricket::FileMediaEngine);
   delete client;

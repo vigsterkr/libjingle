@@ -29,6 +29,8 @@
 
 #include "talk/xmpp/xmppauth.h"
 
+namespace buzz {
+
 XmppPump::XmppPump(XmppPumpNotify * notify) {
   state_ = buzz::XmppEngine::STATE_NONE;
   notify_ = notify;
@@ -77,3 +79,6 @@ buzz::XmppReturnStatus XmppPump::SendStanza(const buzz::XmlElement *stanza) {
     return client_->SendStanza(stanza);
   return buzz::XMPP_RETURN_BADSTATE;
 }
+
+}  // namespace buzz
+

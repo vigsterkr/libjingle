@@ -50,7 +50,7 @@ class StatsElement {
   StatsElement() : timestamp(0) { }
 
   void AddValue(const std::string& name, const std::string& value);
-  void AddValue(const std::string& name, int value);
+  void AddValue(const std::string& name, int64 value);
 
   double timestamp;  // Time since 1970-01-01T00:00:00Z in milliseconds.
   typedef std::vector<Value> Values;

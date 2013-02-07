@@ -46,6 +46,8 @@
 #endif  // FEATURE_ENABLE_SSL
 #endif  // USE_SSLSTREAM
 
+namespace buzz {
+
 XmppSocket::XmppSocket(buzz::TlsOptions tls) : cricket_socket_(NULL),
                                                tls_(tls) {
   state_ = buzz::AsyncSocket::STATE_CLOSED;
@@ -255,3 +257,6 @@ bool XmppSocket::StartTls(const std::string & domainname) {
   return false;
 #endif  // !defined(FEATURE_ENABLE_SSL)
 }
+
+}  // namespace buzz
+
