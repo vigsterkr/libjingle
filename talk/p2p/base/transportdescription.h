@@ -62,14 +62,13 @@ enum TransportProtocol {
 // TODO(juberti): remove this.
 typedef TransportProtocol IceProtocolType;
 
-typedef std::vector<std::string> TransportOptions;
 typedef std::vector<Candidate> Candidates;
 
 struct TransportDescription {
   TransportDescription() {}
 
   TransportDescription(const std::string& transport_type,
-                       const TransportOptions& transport_options,
+                       const std::vector<std::string>& transport_options,
                        const std::string& ice_ufrag,
                        const std::string& ice_pwd,
                        const talk_base::SSLFingerprint* identity_fingerprint,
@@ -115,6 +114,7 @@ struct TransportDescription {
   void AddOption(const std::string& option) {
     transport_options.push_back(option);
   }
+  bool secure() { return identity_fingerprint != NULL; }
 
   static talk_base::SSLFingerprint* CopyFingerprint(
       const talk_base::SSLFingerprint* from) {
@@ -125,7 +125,7 @@ struct TransportDescription {
   }
 
   std::string transport_type;  // xmlns of <transport>
-  TransportOptions transport_options;
+  std::vector<std::string> transport_options;
   std::string ice_ufrag;
   std::string ice_pwd;
 

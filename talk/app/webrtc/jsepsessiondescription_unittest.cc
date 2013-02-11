@@ -77,14 +77,14 @@ static cricket::SessionDescription* CreateCricketSessionDescription() {
                              cricket::CN_AUDIO,
                              cricket::TransportDescription(
                                  cricket::NS_GINGLE_P2P,
-                                 cricket::TransportOptions(),
+                                 std::vector<std::string>(),
                                  kCandidateUfragVoice, kCandidatePwdVoice,
                                  NULL, cricket::Candidates()))));
   EXPECT_TRUE(desc->AddTransportInfo(
       cricket::TransportInfo(cricket::CN_VIDEO,
                              cricket::TransportDescription(
                                  cricket::NS_GINGLE_P2P,
-                                 cricket::TransportOptions(),
+                                 std::vector<std::string>(),
                                  kCandidateUfragVideo, kCandidatePwdVideo,
                                  NULL, cricket::Candidates()))));
   return desc;
@@ -117,7 +117,7 @@ class JsepSessionDescriptionTest : public testing::Test {
 
   SessionDescriptionInterface* DeSerialize(const std::string& sdp) {
     JsepSessionDescription* desc(new JsepSessionDescription("dummy"));
-    EXPECT_TRUE(desc->Initialize(sdp));
+    EXPECT_TRUE(desc->Initialize(sdp, NULL));
     return desc;
   }
 

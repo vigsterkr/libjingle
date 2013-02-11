@@ -72,6 +72,7 @@ class RelayPort : public Port {
   virtual Connection* CreateConnection(const Candidate& address,
                                        CandidateOrigin origin);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
+  virtual int GetOption(talk_base::Socket::Option opt, int* value);
   virtual int GetError();
 
   const ProtocolAddress * ServerAddress(size_t index) const;

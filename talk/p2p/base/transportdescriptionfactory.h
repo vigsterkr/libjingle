@@ -36,8 +36,8 @@ class SSLIdentity;
 
 namespace cricket {
 
-struct TransportDescriptionOptions {
-  TransportDescriptionOptions() : ice_restart(false) {}
+struct TransportOptions {
+  TransportOptions() : ice_restart(false) {}
   bool ice_restart;
 };
 
@@ -62,12 +62,12 @@ class TransportDescriptionFactory {
   void set_digest_algorithm(const std::string& alg) { digest_alg_ = alg; }
 
   // Creates a transport description suitable for use in an offer.
-  TransportDescription* CreateOffer(const TransportDescriptionOptions& options,
+  TransportDescription* CreateOffer(const TransportOptions& options,
       const TransportDescription* current_description) const;
   // Create a transport description that is a response to an offer.
   TransportDescription* CreateAnswer(
       const TransportDescription* offer,
-      const TransportDescriptionOptions& options,
+      const TransportOptions& options,
       const TransportDescription* current_description) const;
 
  private:

@@ -31,6 +31,7 @@
 namespace cricket {
 
 struct AudioOptions;
+struct VideoOptions;
 class VideoCapturer;
 class VideoRenderer;
 
@@ -65,7 +66,8 @@ class VideoProviderInterface {
                                bool enable,
                                cricket::VideoRenderer* renderer) = 0;
   // Enable sending video on the local video track with name |name|.
-  virtual void SetVideoSend(const std::string& name, bool enable) = 0;
+  virtual void SetVideoSend(const std::string& name, bool enable,
+                            const cricket::VideoOptions* options) = 0;
 
  protected:
   virtual ~VideoProviderInterface() {}

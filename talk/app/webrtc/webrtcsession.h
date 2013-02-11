@@ -57,6 +57,7 @@ class VoiceChannel;
 
 namespace webrtc {
 
+class IceRestartAnswerLatch;
 class MediaStreamSignaling;
 
 // Ice candidate callback interface.
@@ -143,7 +144,8 @@ class WebRtcSession : public cricket::BaseSession,
   virtual void SetVideoPlayout(const std::string& name,
                                bool enable,
                                cricket::VideoRenderer* renderer);
-  virtual void SetVideoSend(const std::string& name, bool enable);
+  virtual void SetVideoSend(const std::string& name, bool enable,
+                            const cricket::VideoOptions* options);
 
   // Implements DtmfProviderInterface.
   virtual bool CanInsertDtmf(const std::string& track_id);
@@ -247,6 +249,7 @@ class WebRtcSession : public cricket::BaseSession,
   // True if this session can create an RTP data engine. This is controlled
   // by the constraint kEnableRtpDataChannels.
   bool allow_rtp_data_engine_;
+  talk_base::scoped_ptr<IceRestartAnswerLatch> ice_restart_latch_;
 };
 
 }  // namespace webrtc

@@ -211,6 +211,12 @@ class VideoCapturer
   // The fourcc component is ignored.
   void ConstrainSupportedFormats(const VideoFormat& max_format);
 
+  void set_enable_camera_list(bool enable_camera_list) {
+    enable_camera_list_ = enable_camera_list;
+  }
+  bool enable_camera_list() {
+    return enable_camera_list_;
+  }
   // Signal all capture state changes that are not a direct result of calling
   // Start().
   sigslot::signal2<VideoCapturer*, CaptureState> SignalStateChange;
@@ -286,6 +292,7 @@ class VideoCapturer
 
   int ratio_w_;
   int ratio_h_;
+  bool enable_camera_list_;
 
   talk_base::CriticalSection crit_;
   VideoProcessors video_processors_;

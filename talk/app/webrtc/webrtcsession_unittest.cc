@@ -70,6 +70,7 @@ using cricket::NS_GINGLE_P2P;
 using cricket::TransportInfo;
 using talk_base::scoped_ptr;
 using talk_base::SocketAddress;
+using webrtc::CreateSessionDescription;
 using webrtc::IceCandidateCollection;
 using webrtc::FakeConstraints;
 using webrtc::JsepSessionDescription;
@@ -382,13 +383,13 @@ class WebRtcSessionTest : public testing::Test {
 
   // Set the internal fake description factories to do DTLS-SRTP.
   void SetFactoryDtlsSrtp() {
-    desc_factory_->set_secure(cricket::SEC_REQUIRED);
+    desc_factory_->set_secure(cricket::SEC_ENABLED);
     std::string identity_name = "WebRTC" +
         talk_base::ToString(talk_base::CreateRandomId());
     tdesc_factory_->set_identity(talk_base::SSLIdentity::Generate(
         identity_name));
     tdesc_factory_->set_digest_algorithm(talk_base::DIGEST_SHA_256);
-    tdesc_factory_->set_secure(cricket::SEC_ENABLED);
+    tdesc_factory_->set_secure(cricket::SEC_REQUIRED);
   }
 
   void VerifyFingerprintStatus(const cricket::SessionDescription* sdp,
@@ -438,6 +439,35 @@ class WebRtcSessionTest : public testing::Test {
     ASSERT_TRUE(answer.get() != NULL);
     VerifyCryptoParams(answer->description());
   }
+
+  void CompareIceUfragAndPassword(const cricket::SessionDescription* desc1,
+                                  const cricket::SessionDescription* desc2,
+                                  bool expect_equal) {
+    if (desc1->contents().size() != desc2->contents().size()) {
+      EXPECT_FALSE(expect_equal);
+      return;
+    }
+
+    const cricket::ContentInfos& contents = desc1->contents();
+    cricket::ContentInfos::const_iterator it = contents.begin();
+
+    for (; it != contents.end(); ++it) {
+      const cricket::TransportDescription* transport_desc1 =
+          desc1->GetTransportDescriptionByName(it->name);
+      const cricket::TransportDescription* transport_desc2 =
+          desc2->GetTransportDescriptionByName(it->name);
+      if (!transport_desc1 || !transport_desc2) {
+        EXPECT_FALSE(expect_equal);
+        return;
+      }
+      if (transport_desc1->ice_pwd != transport_desc2->ice_pwd ||
+          transport_desc1->ice_ufrag != transport_desc2->ice_ufrag) {
+        EXPECT_FALSE(expect_equal);
+        return;
+      }
+    }
+    EXPECT_TRUE(expect_equal);
+  }
   // Creates and offer and an answer and applies it on the offer.
   // Call mediastream_signaling_.UseOptionsWithStreamX() before this function
   // to decide which streams to create.
@@ -460,7 +490,7 @@ class WebRtcSessionTest : public testing::Test {
   }
 
   void CreateCryptoOfferAndNonCryptoAnswer(SessionDescriptionInterface** offer,
-      JsepSessionDescription** nocrypto_answer) {
+      SessionDescriptionInterface** nocrypto_answer) {
     mediastream_signaling_.SendAudioVideoStream2();
     *offer = session_->CreateOffer(NULL);
 
@@ -475,18 +505,24 @@ class WebRtcSessionTest : public testing::Test {
     talk_base::replace_substrs(kCrypto.c_str(), kCrypto.length(),
                                kCryptoX.c_str(), kCryptoX.length(),
                                &nocrypto_answer_str);
-    *nocrypto_answer =
-        new JsepSessionDescription(JsepSessionDescription::kAnswer);
-    EXPECT_TRUE((*nocrypto_answer)->Initialize(nocrypto_answer_str));
+    *nocrypto_answer = CreateSessionDescription(
+        JsepSessionDescription::kAnswer, nocrypto_answer_str, NULL);
+    EXPECT_TRUE(*nocrypto_answer != NULL);
   }
   JsepSessionDescription* CreateOfferSessionDescriptionWithVersion(
         cricket::MediaSessionOptions options,
-        const std::string& session_version) {
-    const std::string session_id =
-        talk_base::ToString(talk_base::CreateRandomId());
+        const std::string& session_version,
+        const SessionDescriptionInterface* current_desc) {
+    std::string session_id = talk_base::ToString(talk_base::CreateRandomId());
+    const cricket::SessionDescription* cricket_desc = NULL;
+    if (current_desc) {
+      cricket_desc = current_desc->description();
+      session_id = current_desc->session_id();
+    }
+
     JsepSessionDescription* offer(
         new JsepSessionDescription(JsepSessionDescription::kOffer));
-    if (!offer->Initialize(desc_factory_->CreateOffer(options, NULL),
+    if (!offer->Initialize(desc_factory_->CreateOffer(options, cricket_desc),
                            session_id, session_version)) {
       delete offer;
       offer = NULL;
@@ -496,7 +532,13 @@ class WebRtcSessionTest : public testing::Test {
   JsepSessionDescription* CreateOfferSessionDescription(
       cricket::MediaSessionOptions options) {
     return CreateOfferSessionDescriptionWithVersion(options,
-        kSessionVersion);
+        kSessionVersion, NULL);
+  }
+  JsepSessionDescription* CreateUpdatedOfferSessionDescription(
+      cricket::MediaSessionOptions options,
+      const SessionDescriptionInterface* current_desc) {
+    return CreateOfferSessionDescriptionWithVersion(options,
+        kSessionVersion, current_desc);
   }
 
   JsepSessionDescription* CreateAnswerSessionDescription(
@@ -543,9 +585,8 @@ class WebRtcSessionTest : public testing::Test {
                                  &sdp);
     }
 
-    JsepSessionDescription* new_answer(
-        new JsepSessionDescription(JsepSessionDescription::kAnswer));
-    EXPECT_TRUE(new_answer->Initialize(sdp));
+    SessionDescriptionInterface* new_answer = CreateSessionDescription(
+        JsepSessionDescription::kAnswer, sdp, NULL);
     delete answer;
     answer = new_answer;
     // SetLocalDescription and SetRemoteDescriptions takes ownership of offer
@@ -613,7 +654,6 @@ class WebRtcSessionTest : public testing::Test {
   MockCandidateObserver observer_;
   cricket::FakeVideoMediaChannel* video_channel_;
   cricket::FakeVoiceMediaChannel* voice_channel_;
-
 };
 
 TEST_F(WebRtcSessionTest, TestInitialize) {
@@ -803,7 +843,7 @@ TEST_F(WebRtcSessionTest, SetNonCryptoOffer) {
 TEST_F(WebRtcSessionTest, SetLocalNonCryptoAnswer) {
   WebRtcSessionTest::Init();
   SessionDescriptionInterface* offer = NULL;
-  JsepSessionDescription* answer = NULL;
+  SessionDescriptionInterface* answer = NULL;
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
   // SetRemoteDescription and SetLocalDescription will take the ownership of
   // the offer.
@@ -816,7 +856,7 @@ TEST_F(WebRtcSessionTest, SetLocalNonCryptoAnswer) {
 TEST_F(WebRtcSessionTest, SetRemoteNonCryptoAnswer) {
   WebRtcSessionTest::Init();
   SessionDescriptionInterface* offer = NULL;
-  JsepSessionDescription* answer = NULL;
+  SessionDescriptionInterface* answer = NULL;
   CreateCryptoOfferAndNonCryptoAnswer(&offer, &answer);
   // SetRemoteDescription and SetLocalDescription will take the ownership of
   // the offer.
@@ -1234,9 +1274,8 @@ TEST_F(WebRtcSessionTest, TestChannelCreationsWithContentNames) {
                              kVideoMidReplaceStr.length(),
                              &sdp);
 
-  JsepSessionDescription* modified_offer(new JsepSessionDescription(
-      JsepSessionDescription::kOffer));
-  EXPECT_TRUE(modified_offer->Initialize(sdp));
+  SessionDescriptionInterface* modified_offer =
+      CreateSessionDescription(JsepSessionDescription::kOffer, sdp, NULL);
 
   EXPECT_TRUE(session_->SetLocalDescription(
       modified_offer));
@@ -1724,9 +1763,10 @@ TEST_F(WebRtcSessionTest, SetVideoSend) {
   ASSERT_EQ(1u, channel->send_streams().size());
   uint32 send_ssrc  = channel->send_streams()[0].first_ssrc();
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
-  session_->SetVideoSend(kVideoTrack1, false);
+  cricket::VideoOptions* options = NULL;
+  session_->SetVideoSend(kVideoTrack1, false, options);
   EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
-  session_->SetVideoSend(kVideoTrack1, true);
+  session_->SetVideoSend(kVideoTrack1, true, options);
   EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
 }
 
@@ -1805,9 +1845,8 @@ TEST_F(WebRtcSessionTest, TestInitiatorGIceInAnswer) {
   InjectAfter("t=0 0\r\n",
               "a=ice-options:google-ice\r\n",
               &sdp);
-  JsepSessionDescription* answer_with_gice =
-      new JsepSessionDescription(JsepSessionDescription::kAnswer);
-  EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
+  SessionDescriptionInterface* answer_with_gice =
+      CreateSessionDescription(JsepSessionDescription::kAnswer, sdp, NULL);
   EXPECT_TRUE(session_->SetRemoteDescription(answer_with_gice));
   VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
@@ -1843,9 +1882,8 @@ TEST_F(WebRtcSessionTest, TestReceiverGIceInOffer) {
   InjectAfter("t=0 0\r\n",
               "a=ice-options:google-ice\r\n",
               &sdp);
-  JsepSessionDescription* answer_with_gice =
-      new JsepSessionDescription(JsepSessionDescription::kAnswer);
-  EXPECT_TRUE((answer_with_gice)->Initialize(sdp));
+  SessionDescriptionInterface* answer_with_gice =
+      CreateSessionDescription(JsepSessionDescription::kAnswer, sdp, NULL);
   EXPECT_TRUE(session_->SetLocalDescription(answer_with_gice));
   VerifyTransportType("audio", cricket::ICEPROTO_GOOGLE);
   VerifyTransportType("video", cricket::ICEPROTO_GOOGLE);
@@ -1882,13 +1920,13 @@ TEST_F(WebRtcSessionTest, TestIceOfferGIceOnlyAnswer) {
                              &offer_str);
   JsepSessionDescription *ice_only_offer =
       new JsepSessionDescription(JsepSessionDescription::kOffer);
-  EXPECT_TRUE((ice_only_offer)->Initialize(offer_str));
+  EXPECT_TRUE((ice_only_offer)->Initialize(offer_str, NULL));
   EXPECT_TRUE(session_->SetLocalDescription(ice_only_offer));
   std::string original_offer_sdp;
   EXPECT_TRUE(offer->ToString(&original_offer_sdp));
-  JsepSessionDescription* answer_with_gice =
-      new JsepSessionDescription(JsepSessionDescription::kAnswer);
-  EXPECT_TRUE((answer_with_gice)->Initialize(original_offer_sdp));
+  SessionDescriptionInterface* answer_with_gice =
+      CreateSessionDescription(JsepSessionDescription::kAnswer,
+                               original_offer_sdp, NULL);
   EXPECT_FALSE(session_->SetRemoteDescription(answer_with_gice));
 }
 
@@ -1923,9 +1961,8 @@ TEST_F(WebRtcSessionTest, TestIncorrectMLinesInRemoteAnswer) {
                              kAudioMidReplaceStr.length(),
                              &sdp);
 
-  JsepSessionDescription* modified_answer1(new JsepSessionDescription(
-      JsepSessionDescription::kAnswer));
-  EXPECT_TRUE(modified_answer1->Initialize(sdp));
+  SessionDescriptionInterface* modified_answer1 =
+      CreateSessionDescription(JsepSessionDescription::kAnswer, sdp, NULL);
   EXPECT_FALSE(session_->SetRemoteDescription(modified_answer1));
 
   EXPECT_TRUE(session_->SetRemoteDescription(answer));
@@ -1999,9 +2036,8 @@ TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescription) {
   // will be set as per MediaSessionDescriptionFactory.
   std::string offer_str;
   offer->ToString(&offer_str);
-  JsepSessionDescription *jsep_offer_str =
-      new JsepSessionDescription(JsepSessionDescription::kOffer);
-  EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
+  SessionDescriptionInterface* jsep_offer_str =
+      CreateSessionDescription(JsepSessionDescription::kOffer, offer_str, NULL);
   EXPECT_TRUE(session_->SetLocalDescription(jsep_offer_str));
   EXPECT_TRUE(session_->voice_channel()->secure_required());
   EXPECT_TRUE(session_->video_channel()->secure_required());
@@ -2020,10 +2056,59 @@ TEST_F(WebRtcSessionTest, TestCryptoAfterSetLocalDescriptionWithDisabled) {
   // will be set as per MediaSessionDescriptionFactory.
   std::string offer_str;
   offer->ToString(&offer_str);
-  JsepSessionDescription *jsep_offer_str =
-      new JsepSessionDescription(JsepSessionDescription::kOffer);
-  EXPECT_TRUE((jsep_offer_str)->Initialize(offer_str));
+  SessionDescriptionInterface *jsep_offer_str =
+      CreateSessionDescription(JsepSessionDescription::kOffer, offer_str, NULL);
   EXPECT_TRUE(session_->SetLocalDescription(jsep_offer_str));
   EXPECT_FALSE(session_->voice_channel()->secure_required());
   EXPECT_FALSE(session_->video_channel()->secure_required());
+}
+
+// This test verifies that an answer contains new ufrag and password if an offer
+// with new ufrag and password is received.
+TEST_F(WebRtcSessionTest, TestCreateAnswerWithNewUfragAndPassword) {
+  WebRtcSessionTest::Init();
+  desc_factory_->set_secure(cricket::SEC_REQUIRED);
+  cricket::MediaSessionOptions options;
+  options.has_audio = true;
+  options.has_video = true;
+  talk_base::scoped_ptr<JsepSessionDescription> offer(
+      CreateOfferSessionDescription(options));
+  EXPECT_TRUE(session_->SetRemoteDescription(offer.release()));
+
+  mediastream_signaling_.SendAudioVideoStream1();
+  talk_base::scoped_ptr<SessionDescriptionInterface> answer(
+      session_->CreateAnswer(NULL, session_->remote_description()));
+  EXPECT_TRUE(session_->SetLocalDescription(answer.release()));
+
+  // Receive an offer with new ufrag and password.
+  options.transport_options.ice_restart = true;
+  talk_base::scoped_ptr<JsepSessionDescription> updated_offer1(
+      CreateUpdatedOfferSessionDescription(options,
+                                           session_->remote_description()));
+  EXPECT_TRUE(session_->SetRemoteDescription(updated_offer1.release()));
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> updated_answer1(
+      session_->CreateAnswer(NULL, session_->remote_description()));
+
+  CompareIceUfragAndPassword(updated_answer1->description(),
+                             session_->local_description()->description(),
+                             false);
+
+  EXPECT_TRUE(session_->SetLocalDescription(updated_answer1.release()));
+
+  // Receive yet an offer without changed ufrag or password.
+  options.transport_options.ice_restart = false;
+  talk_base::scoped_ptr<JsepSessionDescription> updated_offer2(
+      CreateUpdatedOfferSessionDescription(options,
+                                           session_->remote_description()));
+  EXPECT_TRUE(session_->SetRemoteDescription(updated_offer2.release()));
+
+  talk_base::scoped_ptr<SessionDescriptionInterface> updated_answer2(
+      session_->CreateAnswer(NULL, session_->remote_description()));
+
+  CompareIceUfragAndPassword(updated_answer2->description(),
+                             session_->local_description()->description(),
+                             true);
+
+  EXPECT_TRUE(session_->SetLocalDescription(updated_answer2.release()));
 }

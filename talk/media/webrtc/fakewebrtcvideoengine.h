@@ -116,6 +116,7 @@ class FakeWebRtcVideoEngine
     bool remb_receive_;  // This channel receives video packets.
     int rtp_offset_send_id_;
     int rtp_offset_receive_id_;
+    int target_delay;
     bool transmission_smoothing_;
     bool nack_;
     bool hybrid_nack_fec_;
@@ -669,6 +670,7 @@ class FakeWebRtcVideoEngine
     channels_[channel]->key_frame_request_method_ = method;
     return 0;
   }
+  WEBRTC_STUB(EnableSenderStreamingMode, (int channel, int target_delay));
   WEBRTC_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->remb_send_ = send;

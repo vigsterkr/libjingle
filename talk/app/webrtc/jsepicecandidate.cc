@@ -37,8 +37,15 @@ namespace webrtc {
 IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
                                           int sdp_mline_index,
                                           const std::string& sdp) {
+  return CreateIceCandidate(sdp_mid, sdp_mline_index, sdp, NULL);
+}
+
+IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
+                                          int sdp_mline_index,
+                                          const std::string& sdp,
+                                          SdpParseError* error) {
   JsepIceCandidate* jsep_ice = new JsepIceCandidate(sdp_mid, sdp_mline_index);
-  if (!jsep_ice->Initialize(sdp)) {
+  if (!jsep_ice->Initialize(sdp, error)) {
     delete jsep_ice;
     return NULL;
   }
@@ -62,8 +69,8 @@ JsepIceCandidate::JsepIceCandidate(const std::string& sdp_mid,
 JsepIceCandidate::~JsepIceCandidate() {
 }
 
-bool JsepIceCandidate::Initialize(const std::string& sdp) {
-  return SdpDeserializeCandidate(sdp, this);
+bool JsepIceCandidate::Initialize(const std::string& sdp, SdpParseError* err) {
+  return SdpDeserializeCandidate(sdp, this, err);
 }
 
 bool JsepIceCandidate::ToString(std::string* out) const {

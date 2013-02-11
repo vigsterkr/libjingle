@@ -44,7 +44,8 @@ class JsepIceCandidate : public IceCandidateInterface {
   JsepIceCandidate(const std::string& sdp_mid, int sdp_mline_index,
                    const cricket::Candidate& candidate);
   ~JsepIceCandidate();
-  bool Initialize(const std::string& sdp);
+  // |error| can be NULL if don't care about the failure reason.
+  bool Initialize(const std::string& sdp, SdpParseError* err);
   void SetCandidate(const cricket::Candidate& candidate) {
     candidate_ = candidate;
   }

@@ -61,7 +61,6 @@ using cricket::SsrcGroup;
 using cricket::StreamParams;
 using cricket::StreamParamsVec;
 using cricket::TransportDescription;
-using cricket::TransportOptions;
 using cricket::TransportInfo;
 using cricket::VideoContentDescription;
 using talk_base::SocketAddress;
@@ -205,7 +204,7 @@ static void BuildRtpMap(const MediaContentDescription* media_desc,
                         std::string* message);
 static void BuildCandidate(const std::vector<Candidate>& candidates,
                            std::string* message);
-static void BuildIceOptions(const TransportOptions& transport_options,
+static void BuildIceOptions(const std::vector<std::string>& transport_options,
                             std::string* message);
 
 static bool ParseSessionDescription(const std::string& message, size_t* pos,
@@ -214,16 +213,19 @@ static bool ParseSessionDescription(const std::string& message, size_t* pos,
                                     bool* supports_msid,
                                     TransportDescription* session_td,
                                     RtpHeaderExtensions* session_extmaps,
-                                    cricket::SessionDescription* desc);
+                                    cricket::SessionDescription* desc,
+                                    SdpParseError* error);
 static bool ParseGroupAttribute(const std::string& line,
-                                cricket::SessionDescription* desc);
+                                cricket::SessionDescription* desc,
+                                SdpParseError* error);
 static bool ParseMediaDescription(
     const std::string& message,
     const TransportDescription& session_td,
     const RtpHeaderExtensions& session_extmaps,
     bool supports_msid,
     size_t* pos, cricket::SessionDescription* desc,
-    std::vector<JsepIceCandidate*>* candidates);
+    std::vector<JsepIceCandidate*>* candidates,
+    SdpParseError* error);
 static bool ParseContent(const std::string& message,
                          const MediaType media_type,
                          int mline_index,
@@ -232,31 +234,98 @@ static bool ParseContent(const std::string& message,
                          std::string* content_name,
                          MediaContentDescription* media_desc,
                          TransportDescription* transport,
-                         std::vector<JsepIceCandidate*>* candidates);
+                         std::vector<JsepIceCandidate*>* candidates,
+                         SdpParseError* error);
 static bool ParseSsrcAttribute(const std::string& line,
-                               SsrcInfoVec* ssrc_infos);
+                               SsrcInfoVec* ssrc_infos,
+                               SdpParseError* error);
 static bool ParseSsrcGroupAttribute(const std::string& line,
-                                    SsrcGroupVec* ssrc_groups);
+                                    SsrcGroupVec* ssrc_groups,
+                                    SdpParseError* error);
 static bool ParseCryptoAttribute(const std::string& line,
-                                 MediaContentDescription* media_desc);
+                                 MediaContentDescription* media_desc,
+                                 SdpParseError* error);
 static bool ParseRtpmapAttribute(const std::string& line,
                                  const MediaType media_type,
                                  const std::vector<int>& codec_preference,
-                                 MediaContentDescription* media_desc);
-static bool ParseCandidate(const std::string& message, Candidate* candidate);
+                                 MediaContentDescription* media_desc,
+                                 SdpParseError* error);
+static bool ParseCandidate(const std::string& message, Candidate* candidate,
+                           SdpParseError* error, bool is_raw);
 static bool ParseIceOptions(const std::string& line,
-                            TransportOptions* transport_options);
+                            std::vector<std::string>* transport_options,
+                            SdpParseError* error);
 static bool ParseExtmap(const std::string& line,
-                        RtpHeaderExtension* extmap);
+                        RtpHeaderExtension* extmap,
+                        SdpParseError* error);
 static bool ParseFingerprintAttribute(const std::string& line,
-                                      talk_base::SSLFingerprint** fingerprint);
+                                      talk_base::SSLFingerprint** fingerprint,
+                                      SdpParseError* error);
 
 // Helper functions
-#define LOG_PREFIX_PARSING_ERROR(line_type) LOG(LS_ERROR) \
-    << "Failed to parse the \"" << line_type << "\" line";
 
-#define LOG_LINE_PARSING_ERROR(line) LOG(LS_ERROR) \
-    << "Failed to parse line:" << line;
+static bool ParseFailed(const std::string& message,
+                        size_t line_start,
+                        const std::string& description,
+                        SdpParseError* error) {
+  // Get the first line of |message| from |line_start|.
+  std::string first_line = message;
+  size_t line_end = message.find('\n', line_start);
+  if (line_end != std::string::npos) {
+    if (line_end > 0 && (message.at(line_end - 1) == '\r')) {
+      --line_end;
+    }
+    first_line = message.substr(line_start, (line_end - line_start));
+  }
+
+  if (error) {
+    error->line = first_line;
+    error->description = description;
+  }
+  LOG(LS_ERROR) << "Failed to parse: \"" << first_line
+                << "\". Reason: " << description;
+  return false;
+}
+
+static bool ParseFailed(const std::string& message,
+                        const std::string& description,
+                        SdpParseError* error) {
+  return ParseFailed(message, 0, description, error);
+}
+
+static bool ParseFailedExpectFieldNum(const std::string& message,
+                                      int expected_fields,
+                                      SdpParseError* error) {
+  std::ostringstream description;
+  description << "Expects exactly " << expected_fields << " fields.";
+  return ParseFailed(message, description.str(), error);
+}
+
+static bool ParseFailedExpectMinFieldNum(const std::string& message,
+                                         int expected_min_fields,
+                                         SdpParseError* error) {
+  std::ostringstream description;
+  description << "Expects at least " << expected_min_fields << " fields.";
+  return ParseFailed(message, description.str(), error);
+}
+
+static bool ParseFailedGetValue(const std::string& message,
+                                const std::string& attribute,
+                                SdpParseError* error) {
+  std::ostringstream description;
+  description << "Failed to get the value of attribute: " << attribute;
+  return ParseFailed(message, description.str(), error);
+}
+
+static bool ParseFailedExpectLine(const std::string& message,
+                                  size_t line_start,
+                                  const char line_type,
+                                  const std::string& line_value,
+                                  SdpParseError* error) {
+  std::ostringstream description;
+  description << "Expect line: " << line_type << "=" << line_value;
+  return ParseFailed(message, line_start, description.str(), error);
+}
 
 static bool AddLine(const std::string& line, std::string* message) {
   if (!message)
@@ -292,7 +361,7 @@ static bool GetLine(const std::string& message,
   if (cline[0] == kSdpDelimiterSpace ||
       cline[1] != kSdpDelimiterEqual ||
       cline[2] == kSdpDelimiterSpace) {
-    LOG_LINE_PARSING_ERROR(*line);
+    *pos = line_begin;
     return false;
   }
   return true;
@@ -341,6 +410,21 @@ static bool HasAttribute(const std::string& line,
   return (line.compare(kLinePrefixLength, attribute.size(), attribute) == 0);
 }
 
+// Verifies the candiate to be of the format candidate:<blah>
+static bool IsRawCandidate(const std::string& line) {
+  // Checking candiadte-attribute is starting with "candidate" str.
+  if (line.compare(0, strlen(kAttributeCandidate), kAttributeCandidate) != 0) {
+    return false;
+  }
+  const size_t first_candidate = line.find(kSdpDelimiterColon);
+  if (first_candidate == std::string::npos)
+    return false;
+  // In this format we only expecting one candiate. If any additional
+  // candidates present, whole string will be discared.
+  const size_t any_other = line.find(kSdpDelimiterColon, first_candidate + 1);
+  return (any_other == std::string::npos);
+}
+
 // Init the |os| to "|type|=|value|".
 static void InitLine(const char type,
                      const std::string& value,
@@ -383,16 +467,16 @@ static bool SplitByDelimiter(const std::string& message,
 
 // Get value only from <attribute>:<value>.
 static bool GetValue(const std::string& message, const std::string& attribute,
-                     std::string* value) {
+                     std::string* value, SdpParseError* error) {
   std::string leftpart;
   if (!SplitByDelimiter(message, kSdpDelimiterColon, &leftpart, value)) {
-    return false;
+    return ParseFailedGetValue(message, attribute, error);
   }
-  // The left part should be end with the expected attribute.
+  // The left part should end with the expected attribute.
   if (leftpart.length() < attribute.length() ||
       leftpart.compare(leftpart.length() - attribute.length(),
                        attribute.length(), attribute) != 0) {
-    return false;
+    return ParseFailedGetValue(message, attribute, error);
   }
   return true;
 }
@@ -705,7 +789,8 @@ std::string SdpSerializeCandidate(
 }
 
 bool SdpDeserialize(const std::string& message,
-                    JsepSessionDescription* jdesc) {
+                    JsepSessionDescription* jdesc,
+                    SdpParseError* error) {
   std::string session_id;
   std::string session_version;
   TransportDescription session_td(NS_JINGLE_ICE_UDP, Candidates());
@@ -718,14 +803,15 @@ bool SdpDeserialize(const std::string& message,
   // Session Description
   if (!ParseSessionDescription(message, &current_pos, &session_id,
                                &session_version, &supports_msid, &session_td,
-                               &session_extmaps, desc)) {
+                               &session_extmaps, desc, error)) {
     delete desc;
     return false;
   }
 
   // Media Description
   if (!ParseMediaDescription(message, session_td, session_extmaps,
-                             supports_msid, &current_pos, desc, &candidates)) {
+                             supports_msid, &current_pos, desc, &candidates,
+                             error)) {
     delete desc;
     for (std::vector<JsepIceCandidate*>::const_iterator
          it = candidates.begin(); it != candidates.end(); ++it) {
@@ -745,45 +831,61 @@ bool SdpDeserialize(const std::string& message,
 }
 
 bool SdpDeserializeCandidate(const std::string& message,
-    JsepIceCandidate* jcandidate) {
+                             JsepIceCandidate* jcandidate,
+                             SdpParseError* error) {
   ASSERT(jcandidate != NULL);
   Candidate candidate;
-  if (!ParseCandidate(message, &candidate)) {
+  if (!ParseCandidate(message, &candidate, error, true)) {
     return false;
   }
   jcandidate->SetCandidate(candidate);
   return true;
 }
 
-bool ParseCandidate(const std::string& message, Candidate* candidate) {
+bool ParseCandidate(const std::string& message, Candidate* candidate,
+                    SdpParseError* error, bool is_raw) {
   ASSERT(candidate != NULL);
 
   // Get the first line from |message|.
   std::string first_line;
   GetFirstLine(message, &first_line);
 
-  if (!IsLineType(first_line, kLineTypeAttributes) ||
-      !HasAttribute(first_line, kAttributeCandidate)) {
-    // Must start with a=candidate line
-    return false;
+  size_t start_pos = kLinePrefixLength;  // Starting position to parse.
+  if (IsRawCandidate(first_line)) {
+    // From WebRTC draft section 4.8.1.1 candidate-attribute will be
+    // just candidate:<candidate> not a=candidate:<blah>CRLF
+    start_pos = 0;
+  } else if (!IsLineType(first_line, kLineTypeAttributes) ||
+             !HasAttribute(first_line, kAttributeCandidate)) {
+    // Must start with a=candidate line.
+    // Expecting to be of the format a=candidate:<blah>CRLF.
+    if (is_raw) {
+      std::ostringstream description;
+      description << "Expect line: "
+                  << kAttributeCandidate
+                  << ":" << "<candidate-str>";
+      return ParseFailed(first_line, 0, description.str(), error);
+    } else {
+      return ParseFailedExpectLine(first_line, 0, kLineTypeAttributes,
+                                   kAttributeCandidate, error);
+    }
   }
+
   std::vector<std::string> fields;
-  talk_base::split(first_line.substr(kLinePrefixLength),
+  talk_base::split(first_line.substr(start_pos),
                    kSdpDelimiterSpace, &fields);
   // RFC 5245
   // a=candidate:<foundation> <component-id> <transport> <priority>
   // <connection-address> <port> typ <candidate-types>
   // [raddr <connection-address>] [rport <port>]
   // *(SP extension-att-name SP extension-att-value)
-  // 8 mandatory fields
-  const size_t mandatory_fields_num = 8;
-  if (fields.size() < mandatory_fields_num ||
+  const size_t expected_min_fields = 8;
+  if (fields.size() < expected_min_fields ||
       (fields[6] != kAttributeCandidateTyp)) {
-    LOG_LINE_PARSING_ERROR(first_line);
-    return false;
+    return ParseFailedExpectMinFieldNum(first_line, expected_min_fields, error);
   }
   std::string foundation;
-  if (!GetValue(fields[0], kAttributeCandidate, &foundation)) {
+  if (!GetValue(fields[0], kAttributeCandidate, &foundation, error)) {
     return false;
   }
   const int component_id = talk_base::FromString<int>(fields[1]);
@@ -795,8 +897,7 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
 
   cricket::ProtocolType protocol;
   if (!StringToProto(transport.c_str(), &protocol)) {
-    LOG(LS_ERROR) << "Unsupported transport type: " << first_line;
-    return false;
+    return ParseFailed(first_line, "Unsupported transport type.", error);
   }
 
   std::string candidate_type;
@@ -808,11 +909,10 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
   } else if (type == kCandidateRelay) {
     candidate_type = cricket::RELAY_PORT_TYPE;
   } else {
-    LOG(LS_ERROR) << "Unsupported candidate type from message: " << first_line;
-    return false;
+    return ParseFailed(first_line, "Unsupported candidate type.", error);
   }
 
-  size_t current_position = mandatory_fields_num;
+  size_t current_position = expected_min_fields;
   SocketAddress related_address;
   // The 2 optional fields for related address
   // [raddr <connection-address>] [rport <port>]
@@ -862,9 +962,10 @@ bool ParseCandidate(const std::string& message, Candidate* candidate) {
 }
 
 bool ParseIceOptions(const std::string& line,
-                     TransportOptions* transport_options) {
+                     std::vector<std::string>* transport_options,
+                     SdpParseError* error) {
   std::string ice_options;
-  if (!GetValue(line, kAttributeIceOption, &ice_options)) {
+  if (!GetValue(line, kAttributeIceOption, &ice_options, error)) {
     return false;
   }
   std::vector<std::string> fields;
@@ -875,21 +976,21 @@ bool ParseIceOptions(const std::string& line,
   return true;
 }
 
-bool ParseExtmap(const std::string& line, RtpHeaderExtension* extmap) {
+bool ParseExtmap(const std::string& line, RtpHeaderExtension* extmap,
+                 SdpParseError* error) {
   // RFC 5285
   // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
-  const size_t mandatory_fields_num = 2;
-  if (fields.size() < mandatory_fields_num) {
-    LOG_LINE_PARSING_ERROR(line);
-    return false;
+  const size_t expected_min_fields = 2;
+  if (fields.size() < expected_min_fields) {
+    return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
   std::string uri = fields[1];
 
   std::string value_direction;
-  if (!GetValue(fields[0], kAttributeExtmap, &value_direction)) {
+  if (!GetValue(fields[0], kAttributeExtmap, &value_direction, error)) {
     return false;
   }
   std::vector<std::string> sub_fields;
@@ -1242,7 +1343,7 @@ void BuildCandidate(const std::vector<Candidate>& candidates,
   }
 }
 
-void BuildIceOptions(const TransportOptions& transport_options,
+void BuildIceOptions(const std::vector<std::string>& transport_options,
                      std::string* message) {
   if (!transport_options.empty()) {
     std::ostringstream os;
@@ -1261,36 +1362,38 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
                              bool* supports_msid,
                              TransportDescription* session_td,
                              RtpHeaderExtensions* session_extmaps,
-                             cricket::SessionDescription* desc) {
+                             cricket::SessionDescription* desc,
+                             SdpParseError* error) {
   std::string line;
 
   // RFC 4566
   // v=  (protocol version)
   if (!GetLineWithType(message, pos, &line, kLineTypeVersion)) {
-    LOG_PREFIX_PARSING_ERROR(kLineTypeVersion);
-    return false;
+    return ParseFailedExpectLine(message, *pos, kLineTypeVersion,
+                                 std::string(), error);
   }
   // RFC 4566
   // o=<username> <sess-id> <sess-version> <nettype> <addrtype>
   // <unicast-address>
-  if (GetLineWithType(message, pos, &line, kLineTypeOrigin)) {
-    std::vector<std::string> fields;
-    talk_base::split(line.substr(kLinePrefixLength),
-                     kSdpDelimiterSpace, &fields);
-    if (fields.size() != 6) {
-      return false;
-    }
-    *session_id = fields[1];
-    *session_version = fields[2];
-  } else {
-    LOG_PREFIX_PARSING_ERROR(kLineTypeOrigin);
-    return false;
+  if (!GetLineWithType(message, pos, &line, kLineTypeOrigin)) {
+    return ParseFailedExpectLine(message, *pos, kLineTypeOrigin,
+                                 std::string(), error);
   }
+  std::vector<std::string> fields;
+  talk_base::split(line.substr(kLinePrefixLength),
+                   kSdpDelimiterSpace, &fields);
+  const size_t expected_fields = 6;
+  if (fields.size() != expected_fields) {
+    return ParseFailedExpectFieldNum(line, expected_fields, error);
+  }
+  *session_id = fields[1];
+  *session_version = fields[2];
+
   // RFC 4566
   // s=  (session name)
   if (!GetLineWithType(message, pos, &line, kLineTypeSessionName)) {
-    LOG_PREFIX_PARSING_ERROR(kLineTypeSessionName);
-    return false;
+    return ParseFailedExpectLine(message, *pos, kLineTypeSessionName,
+                                 std::string(), error);
   }
 
   // Optional lines
@@ -1328,8 +1431,8 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
   // r=* (zero or more repeat times)
   // Ensure there's at least one time description
   if (!GetLineWithType(message, pos, &line, kLineTypeTiming)) {
-    LOG_PREFIX_PARSING_ERROR(kLineTypeTiming);
-    return false;
+    return ParseFailedExpectLine(message, *pos, kLineTypeTiming, std::string(),
+                                 error);
   }
 
   while (GetLineWithType(message, pos, &line, kLineTypeRepeatTimes)) {
@@ -1355,49 +1458,43 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
   // a=* (zero or more session attribute lines)
   while (GetLineWithType(message, pos, &line, kLineTypeAttributes)) {
     if (HasAttribute(line, kAttributeGroup)) {
-      if (!ParseGroupAttribute(line, desc)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseGroupAttribute(line, desc, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceUfrag)) {
-      if (!GetValue(line, kAttributeIceUfrag, &(session_td->ice_ufrag))) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!GetValue(line, kAttributeIceUfrag,
+                    &(session_td->ice_ufrag), error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIcePwd)) {
-      if (!GetValue(line, kAttributeIcePwd, &(session_td->ice_pwd))) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!GetValue(line, kAttributeIcePwd, &(session_td->ice_pwd), error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceOption)) {
-      if (!ParseIceOptions(line, &(session_td->transport_options))) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseIceOptions(line, &(session_td->transport_options), error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeFingerprint)) {
       if (session_td->identity_fingerprint.get()) {
-        LOG(LS_ERROR) <<
-            "Can't have multiple fingerprint attributes at the same level";
-        LOG_LINE_PARSING_ERROR(line);
-        return false;
+        return ParseFailed(
+            line,
+            "Can't have multiple fingerprint attributes at the same level.",
+            error);
       }
       talk_base::SSLFingerprint* fingerprint = NULL;
-      if (!ParseFingerprintAttribute(line, &fingerprint)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseFingerprintAttribute(line, &fingerprint, error)) {
         return false;
       }
       session_td->identity_fingerprint.reset(fingerprint);
     } else if (HasAttribute(line, kAttributeMsidSemantics)) {
       std::string semantics;
-      if (!GetValue(line, kAttributeMsidSemantics, &semantics)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!GetValue(line, kAttributeMsidSemantics, &semantics, error)) {
         return false;
       }
       *supports_msid = (semantics == kMediaStreamSematic);
     } else if (HasAttribute(line, kAttributeExtmap)) {
       RtpHeaderExtension extmap;
-      if (!ParseExtmap(line, &extmap)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseExtmap(line, &extmap, error)) {
         return false;
       }
       session_extmaps->push_back(extmap);
@@ -1408,7 +1505,8 @@ bool ParseSessionDescription(const std::string& message, size_t* pos,
 }
 
 bool ParseGroupAttribute(const std::string& line,
-                         cricket::SessionDescription* desc) {
+                         cricket::SessionDescription* desc,
+                         SdpParseError* error) {
   ASSERT(desc != NULL);
 
   // RFC 5888 and draft-holmberg-mmusic-sdp-bundle-negotiation-00
@@ -1416,11 +1514,8 @@ bool ParseGroupAttribute(const std::string& line,
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
-  if (fields.size() < 2) {
-    return false;
-  }
   std::string semantics;
-  if (!GetValue(fields[0], kAttributeGroup, &semantics)) {
+  if (!GetValue(fields[0], kAttributeGroup, &semantics, error)) {
     return false;
   }
   cricket::ContentGroup group(semantics);
@@ -1432,29 +1527,25 @@ bool ParseGroupAttribute(const std::string& line,
 }
 
 static bool ParseFingerprintAttribute(const std::string& line,
-                                      talk_base::SSLFingerprint** fingerprint) {
+                                      talk_base::SSLFingerprint** fingerprint,
+                                      SdpParseError* error) {
   if (!IsLineType(line, kLineTypeAttributes) ||
       !HasAttribute(line, kAttributeFingerprint)) {
-    // Must start with a=fingerprint line.
-    return false;
+    return ParseFailedExpectLine(line, 0, kLineTypeAttributes,
+                                 kAttributeFingerprint, error);
   }
 
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
-
-  if (fields.size() != 2) {
-    LOG(LS_ERROR)
-        << "The a=fingerprint line has the wrong number of fields: "
-        << line;
-    return false;
+  const size_t expected_fields = 2;
+  if (fields.size() != expected_fields) {
+    return ParseFailedExpectFieldNum(line, expected_fields, error);
   }
 
   // The first field here is "fingerprint:<hash>.
   std::string algorithm;
-  if (!GetValue(fields[0], kAttributeFingerprint, &algorithm)) {
-    LOG(LS_ERROR)
-        << "Could not parse the a=fingerprint line: " << line;
+  if (!GetValue(fields[0], kAttributeFingerprint, &algorithm, error)) {
     return false;
   }
 
@@ -1467,8 +1558,9 @@ static bool ParseFingerprintAttribute(const std::string& line,
   *fingerprint = talk_base::SSLFingerprint::CreateFromRfc4572(
       algorithm, fields[1]);
   if (!*fingerprint) {
-    LOG_LINE_PARSING_ERROR(line);
-    return false;
+    return ParseFailed(line,
+                       "Failed to create fingerprint from the digest.",
+                       error);
   }
 
   return true;
@@ -1480,7 +1572,8 @@ bool ParseMediaDescription(const std::string& message,
                            bool supports_msid,
                            size_t* pos,
                            cricket::SessionDescription* desc,
-                           std::vector<JsepIceCandidate*>* candidates) {
+                           std::vector<JsepIceCandidate*>* candidates,
+                           SdpParseError* error) {
   ASSERT(desc != NULL);
   std::string line;
   int mline_index = -1;
@@ -1494,10 +1587,9 @@ bool ParseMediaDescription(const std::string& message,
     std::vector<std::string> fields;
     talk_base::split(line.substr(kLinePrefixLength),
                      kSdpDelimiterSpace, &fields);
-    if (fields.size() < 4) {
-      LOG(LS_ERROR) << "The m line has less fields than it should have: "
-                    << line;
-      return false;
+    const size_t expected_min_fields = 4;
+    if (fields.size() < expected_min_fields) {
+      return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
     }
     bool rejected = false;
     // RFC 3264
@@ -1533,7 +1625,7 @@ bool ParseMediaDescription(const std::string& message,
       content_name = cricket::CN_VIDEO;
       if (!ParseContent(message, cricket::MEDIA_TYPE_VIDEO, mline_index,
                         codec_preference, pos, &content_name,
-                        media_desc, &transport, candidates)) {
+                        media_desc, &transport, candidates, error)) {
         return false;
       }
       // Sort the codecs according to the m-line fmt list.
@@ -1545,7 +1637,7 @@ bool ParseMediaDescription(const std::string& message,
       content_name = cricket::CN_AUDIO;
       if (!ParseContent(message, cricket::MEDIA_TYPE_AUDIO, mline_index,
                         codec_preference, pos, &content_name, media_desc,
-                        &transport, candidates)) {
+                        &transport, candidates, error)) {
         return false;
       }
       // Sort the codecs according to the m-line fmt list.
@@ -1557,7 +1649,7 @@ bool ParseMediaDescription(const std::string& message,
       content_name = cricket::CN_DATA;
       if (!ParseContent(message, cricket::MEDIA_TYPE_DATA, mline_index,
                         codec_preference, pos, &content_name, media_desc,
-                        &transport, candidates)) {
+                        &transport, candidates, error)) {
         return false;
       }
       // Sort the codecs according to the m-line fmt list.
@@ -1577,9 +1669,10 @@ bool ParseMediaDescription(const std::string& message,
 
     // Set the extmap.
     if (!session_extmaps.empty() && !content->rtp_header_extensions().empty()) {
-      LOG(LS_ERROR) << "The a=extmap MUST be either all session level or all "
-                    << "media level.";
-      return false;
+      return ParseFailed("",
+                         "The a=extmap MUST be either all session level or "
+                         "all media level.",
+                         error);
     }
     for (size_t i = 0; i < session_extmaps.size(); ++i) {
       content->AddRtpHeaderExtension(session_extmaps[i]);
@@ -1591,9 +1684,10 @@ bool ParseMediaDescription(const std::string& message,
     TransportInfo transport_info(content_name, transport);
 
     if (!desc->AddTransportInfo(transport_info)) {
-      LOG(LS_ERROR) << "Failed to AddTransportInfo with content name: "
-                    << content_name;
-      return false;
+      std::ostringstream description;
+      description << "Failed to AddTransportInfo with content name: "
+                  << content_name;
+      return ParseFailed("", description.str(), error);
     }
   }
   return true;
@@ -1607,7 +1701,8 @@ bool ParseContent(const std::string& message,
                   std::string* content_name,
                   MediaContentDescription* media_desc,
                   TransportDescription* transport,
-                  std::vector<JsepIceCandidate*>* candidates) {
+                  std::vector<JsepIceCandidate*>* candidates,
+                  SdpParseError* error) {
   ASSERT(media_desc != NULL);
   ASSERT(content_name != NULL);
   ASSERT(transport != NULL);
@@ -1628,15 +1723,14 @@ bool ParseContent(const std::string& message,
       if (*pos >= message.size()) {
         break;  // Done parsing
       } else {
-        return false;
+        return ParseFailed(message, *pos, "Can't find valid SDP line.", error);
       }
     }
 
     if (IsLineType(line, kLineTypeSessionBandwidth)) {
       std::string bandwidth;
       if (HasAttribute(line, kApplicationSpecificMaximum)) {
-        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth)) {
-          LOG_LINE_PARSING_ERROR(line);
+        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth, error)) {
           return false;
         } else {
           media_desc->set_bandwidth(
@@ -1651,8 +1745,7 @@ bool ParseContent(const std::string& message,
     if (IsLineType(line, kLineTypeSessionBandwidth)) {
       std::string bandwidth;
       if (HasAttribute(line, kApplicationSpecificMaximum)) {
-        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth)) {
-          LOG_LINE_PARSING_ERROR(line);
+        if (!GetValue(line, kApplicationSpecificMaximum, &bandwidth, error)) {
           return false;
         } else {
           media_desc->set_bandwidth(
@@ -1673,52 +1766,46 @@ bool ParseContent(const std::string& message,
       // mid-attribute      = "a=mid:" identification-tag
       // identification-tag = token
       // Use the mid identification-tag as the content name.
-      GetValue(line, kAttributeMid, &mline_id);
+      if (!GetValue(line, kAttributeMid, &mline_id, error)) {
+        return false;
+      }
       *content_name = mline_id;
       continue;
     } else if (HasAttribute(line, kAttributeRtcpMux)) {
       media_desc->set_rtcp_mux(true);
     } else if (HasAttribute(line, kAttributeSsrcGroup)) {
-      if (!ParseSsrcGroupAttribute(line, &ssrc_groups)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseSsrcGroupAttribute(line, &ssrc_groups, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeSsrc)) {
-      if (!ParseSsrcAttribute(line, &ssrc_infos)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseSsrcAttribute(line, &ssrc_infos, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeCrypto)) {
-      if (!ParseCryptoAttribute(line, media_desc)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseCryptoAttribute(line, media_desc, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeCandidate)) {
       Candidate candidate;
-      if (!ParseCandidate(line, &candidate)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseCandidate(line, &candidate, error, false)) {
         return false;
       }
       candidates_orig.push_back(candidate);
     } else if (HasAttribute(line, kAttributeRtpmap)) {
       if (!ParseRtpmapAttribute(line, media_type, codec_preference,
-                                media_desc)) {
-        LOG_LINE_PARSING_ERROR(line);
+                                media_desc, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceUfrag)) {
-      if (!GetValue(line, kAttributeIceUfrag, &transport->ice_ufrag)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!GetValue(line, kAttributeIceUfrag, &transport->ice_ufrag, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIcePwd)) {
-      if (!GetValue(line, kAttributeIcePwd, &transport->ice_pwd)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!GetValue(line, kAttributeIcePwd, &transport->ice_pwd, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeIceOption)) {
-      if (!ParseIceOptions(line, &transport->transport_options)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseIceOptions(line, &transport->transport_options, error)) {
         return false;
       }
     } else if (HasAttribute(line, kAttributeSendOnly)) {
@@ -1732,15 +1819,13 @@ bool ParseContent(const std::string& message,
     } else if (HasAttribute(line, kAttributeFingerprint)) {
       talk_base::SSLFingerprint* fingerprint = NULL;
 
-      if (!ParseFingerprintAttribute(line, &fingerprint)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseFingerprintAttribute(line, &fingerprint, error)) {
         return false;
       }
       transport->identity_fingerprint.reset(fingerprint);
     } else if (HasAttribute(line, kAttributeExtmap)) {
       RtpHeaderExtension extmap;
-      if (!ParseExtmap(line, &extmap)) {
-        LOG_LINE_PARSING_ERROR(line);
+      if (!ParseExtmap(line, &extmap, error)) {
         return false;
       }
       media_desc->AddRtpHeaderExtension(extmap);
@@ -1789,7 +1874,8 @@ bool ParseContent(const std::string& message,
   return true;
 }
 
-bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
+bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos,
+                        SdpParseError* error) {
   ASSERT(ssrc_infos != NULL);
   // RFC 5576
   // a=ssrc:<ssrc-id> <attribute>
@@ -1799,12 +1885,13 @@ bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
                         kSdpDelimiterSpace,
                         &field1,
                         &field2)) {
-    return false;
+    const size_t expected_fields = 2;
+    return ParseFailedExpectFieldNum(line, expected_fields, error);
   }
 
   // ssrc:<ssrc-id>
   std::string ssrc_id_s;
-  if (!GetValue(field1, kAttributeSsrc, &ssrc_id_s)) {
+  if (!GetValue(field1, kAttributeSsrc, &ssrc_id_s, error)) {
     return false;
   }
   uint32 ssrc_id = talk_base::FromString<uint32>(ssrc_id_s);
@@ -1813,7 +1900,10 @@ bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
   std::string value;
   if (!SplitByDelimiter(field2, kSdpDelimiterColon,
                         &attribute, &value)) {
-    return false;
+    std::ostringstream description;
+    description << "Failed to get the ssrc attribute value from " << field2
+                << ". Expected format <attribute>:<value>.";
+    return ParseFailed(line, description.str(), error);
   }
 
   // Check if there's already an item for this |ssrc_id|. Create a new one if
@@ -1842,7 +1932,9 @@ bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
     std::vector<std::string> fields;
     talk_base::split(value, kSdpDelimiterSpace, &fields);
     if (fields.size() < 1 || fields.size() > 2) {
-      return false;
+      std::ostringstream description;
+      description << "Expected format \"msid:<identifier>[ <appdata>]\".";
+      return ParseFailed(line, description.str(), error);
     }
     ssrc_info->msid_identifier = fields[0];
     if (fields.size() == 2) {
@@ -1861,18 +1953,20 @@ bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos) {
 }
 
 bool ParseSsrcGroupAttribute(const std::string& line,
-                             SsrcGroupVec* ssrc_groups) {
+                             SsrcGroupVec* ssrc_groups,
+                             SdpParseError* error) {
   ASSERT(ssrc_groups != NULL);
   // RFC 5576
   // a=ssrc-group:<semantics> <ssrc-id> ...
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
-  if (fields.size() < 2) {
-    return false;
+  const size_t expected_min_fields = 2;
+  if (fields.size() < expected_min_fields) {
+    return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
   std::string semantics;
-  if (!GetValue(fields[0], kAttributeSsrcGroup, &semantics)) {
+  if (!GetValue(fields[0], kAttributeSsrcGroup, &semantics, error)) {
     return false;
   }
   std::vector<uint32> ssrcs;
@@ -1885,17 +1979,19 @@ bool ParseSsrcGroupAttribute(const std::string& line,
 }
 
 bool ParseCryptoAttribute(const std::string& line,
-                          MediaContentDescription* media_desc) {
+                          MediaContentDescription* media_desc,
+                          SdpParseError* error) {
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
   // RFC 4568
   // a=crypto:<tag> <crypto-suite> <key-params> [<session-params>]
-  if (fields.size() < 3) {  // 3 mandatory fields
-    return false;
+  const size_t expected_min_fields = 3;
+  if (fields.size() < expected_min_fields) {
+    return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
   std::string tag_value;
-  if (!GetValue(fields[0], kAttributeCrypto, &tag_value)) {
+  if (!GetValue(fields[0], kAttributeCrypto, &tag_value, error)) {
     return false;
   }
   int tag = talk_base::FromString<int>(tag_value);
@@ -1908,18 +2004,21 @@ bool ParseCryptoAttribute(const std::string& line,
 bool ParseRtpmapAttribute(const std::string& line,
                           const MediaType media_type,
                           const std::vector<int>& codec_preference,
-                          MediaContentDescription* media_desc) {
+                          MediaContentDescription* media_desc,
+                          SdpParseError* error) {
   std::vector<std::string> fields;
   talk_base::split(line.substr(kLinePrefixLength),
                    kSdpDelimiterSpace, &fields);
   // RFC 4566
   // a=rtpmap:<payload type> <encoding name>/<clock rate>[/<encodingparameters>]
-  // 2 mandatory fields
-  if (fields.size() < 2) {
-    return false;
+  const size_t expected_min_fields = 2;
+  if (fields.size() < expected_min_fields) {
+    return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
   std::string payload_type_value;
-  GetValue(fields[0], kAttributeRtpmap, &payload_type_value);
+  if (!GetValue(fields[0], kAttributeRtpmap, &payload_type_value, error)) {
+    return false;
+  }
   const int payload_type = talk_base::FromString<int>(payload_type_value);
 
   // Set the preference order depending on the order of the pl type in the
@@ -1933,7 +2032,10 @@ bool ParseRtpmapAttribute(const std::string& line,
   // <encoding name>/<clock rate>[/<encodingparameters>]
   // 2 mandatory fields
   if (codec_params.size() < 2 || codec_params.size() > 3) {
-    return false;
+    return ParseFailed(line,
+                       "Expected format \"<encoding name>/<clock rate>"
+                       "[/<encodingparameters>]\".",
+                       error);
   }
   const std::string encoding_name = codec_params[0];
   const int clock_rate = talk_base::FromString<int>(codec_params[1]);

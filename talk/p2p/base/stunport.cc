@@ -230,6 +230,10 @@ int UDPPort::SetOption(talk_base::Socket::Option opt, int value) {
   return socket_->SetOption(opt, value);
 }
 
+int UDPPort::GetOption(talk_base::Socket::Option opt, int* value) {
+  return socket_->GetOption(opt, value);
+}
+
 int UDPPort::GetError() {
   return error_;
 }

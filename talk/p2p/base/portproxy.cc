@@ -107,6 +107,13 @@ int PortProxy::SetOption(talk_base::Socket::Option opt,
   return impl_->SetOption(opt, value);
 }
 
+int PortProxy::GetOption(talk_base::Socket::Option opt,
+                         int* value) {
+  ASSERT(impl_ != NULL);
+  return impl_->GetOption(opt, value);
+}
+
+
 int PortProxy::GetError() {
   ASSERT(impl_ != NULL);
   return impl_->GetError();

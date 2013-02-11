@@ -45,12 +45,17 @@
 
 namespace {
 
-// We only allow usernames to be this many characters or fewer.
-const size_t kMaxUsernameSize = 16;
+// Limits for GICE and ICE username sizes.
+const size_t kMaxGiceUsernameSize = 16;
+const size_t kMaxIceUsernameSize = 512;
 
 }  // namespace
 
 namespace cricket {
+
+static buzz::XmlElement* NewTransportElement(const std::string& name) {
+  return new buzz::XmlElement(buzz::QName(name, LN_TRANSPORT), true);
+}
 
 P2PTransport::P2PTransport(talk_base::Thread* signaling_thread,
                            talk_base::Thread* worker_thread,
@@ -64,41 +69,120 @@ P2PTransport::~P2PTransport() {
   DestroyAllChannels();
 }
 
-void P2PTransport::OnTransportError(const buzz::XmlElement* error) {
+TransportChannelImpl* P2PTransport::CreateTransportChannel(int component) {
+  return new P2PTransportChannel(content_name(), component, this,
+                                 port_allocator());
 }
 
+void P2PTransport::DestroyTransportChannel(TransportChannelImpl* channel) {
+  delete channel;
+}
 
-bool P2PTransportParser::ParseCandidates(SignalingProtocol protocol,
-                                         const buzz::XmlElement* elem,
-                                         const CandidateTranslator* translator,
-                                         Candidates* candidates,
-                                         ParseError* error) {
-  // TODO: Once we implement standard ICE-UDP, parse the
-  // candidates according to XEP-176.
+bool P2PTransportParser::ParseTransportDescription(
+    const buzz::XmlElement* elem,
+    const CandidateTranslator* translator,
+    TransportDescription* desc,
+    ParseError* error) {
+  ASSERT(elem->Name().LocalPart() == LN_TRANSPORT);
+  desc->transport_type = elem->Name().Namespace();
+  if (desc->transport_type != NS_GINGLE_P2P)
+    return BadParse("Unsupported transport type", error);
+
   for (const buzz::XmlElement* candidate_elem = elem->FirstElement();
        candidate_elem != NULL;
        candidate_elem = candidate_elem->NextElement()) {
-    // Only look at local part because it might be <session><candidate>
-    //                                          or <tranport><candidate>.
+    // Only look at local part because the namespace might (eventually)
+    // be NS_GINGLE_P2P or NS_JINGLE_ICE_UDP.
     if (candidate_elem->Name().LocalPart() == LN_CANDIDATE) {
-      if (translator == NULL) {
-        return BadParse("No candidate name translator.", error);
-      }
-
       Candidate candidate;
-      if (!ParseCandidate(candidate_elem, translator, &candidate, error)) {
+      if (!ParseCandidate(ICEPROTO_GOOGLE, candidate_elem, translator,
+                          &candidate, error)) {
         return false;
       }
-      candidates->push_back(candidate);
+
+      desc->candidates.push_back(candidate);
     }
   }
   return true;
 }
 
-bool P2PTransportParser::ParseCandidate(const buzz::XmlElement* elem,
+bool P2PTransportParser::WriteTransportDescription(
+    const TransportDescription& desc,
+    const CandidateTranslator* translator,
+    buzz::XmlElement** out_elem,
+    WriteError* error) {
+  TransportProtocol proto = TransportProtocolFromDescription(&desc);
+  talk_base::scoped_ptr<buzz::XmlElement> trans_elem(
+      NewTransportElement(desc.transport_type));
+
+  // Fail if we get HYBRID or ICE right now.
+  // TODO(juberti): Add ICE and HYBRID serialization.
+  if (proto != ICEPROTO_GOOGLE) {
+    LOG(LS_ERROR) << "Failed to serialize non-GICE TransportDescription";
+    return false;
+  }
+
+  for (std::vector<Candidate>::const_iterator iter = desc.candidates.begin();
+       iter != desc.candidates.end(); ++iter) {
+    talk_base::scoped_ptr<buzz::XmlElement> cand_elem(
+        new buzz::XmlElement(QN_GINGLE_P2P_CANDIDATE));
+    if (!WriteCandidate(proto, *iter, translator, cand_elem.get(), error)) {
+      return false;
+    }
+    trans_elem->AddElement(cand_elem.release());
+  }
+
+  *out_elem = trans_elem.release();
+  return true;
+}
+
+bool P2PTransportParser::ParseGingleCandidate(
+    const buzz::XmlElement* elem,
+    const CandidateTranslator* translator,
+    Candidate* candidate,
+    ParseError* error) {
+  return ParseCandidate(ICEPROTO_GOOGLE, elem, translator, candidate, error);
+}
+
+bool P2PTransportParser::WriteGingleCandidate(
+    const Candidate& candidate,
+    const CandidateTranslator* translator,
+    buzz::XmlElement** out_elem,
+    WriteError* error) {
+  talk_base::scoped_ptr<buzz::XmlElement> elem(
+      new buzz::XmlElement(QN_GINGLE_CANDIDATE));                                     
+  bool ret = WriteCandidate(ICEPROTO_GOOGLE, candidate, translator, elem.get(),
+                            error);
+  if (ret) {
+    *out_elem = elem.release();
+  }
+  return ret;
+}
+
+bool P2PTransportParser::VerifyUsernameFormat(TransportProtocol proto,
+                                              const std::string& username,
+                                              ParseError* error) {
+  if (proto == ICEPROTO_GOOGLE || proto == ICEPROTO_HYBRID) {
+    if (username.size() > kMaxGiceUsernameSize)
+      return BadParse("candidate username is too long", error);
+    if (!talk_base::Base64::IsBase64Encoded(username))
+      return BadParse("candidate username has non-base64 encoded characters",
+                      error);
+  } else if (proto == ICEPROTO_RFC5245) {
+    if (username.size() > kMaxIceUsernameSize)
+      return BadParse("candidate username is too long", error);
+  }
+  return true;
+}
+
+bool P2PTransportParser::ParseCandidate(TransportProtocol proto,
+                                        const buzz::XmlElement* elem,
                                         const CandidateTranslator* translator,
                                         Candidate* candidate,
                                         ParseError* error) {
+  ASSERT(proto == ICEPROTO_GOOGLE);
+  ASSERT(translator != NULL);
+
   if (!elem->HasAttr(buzz::QN_NAME) ||
       !elem->HasAttr(QN_ADDRESS) ||
       !elem->HasAttr(QN_PORT) ||
@@ -114,10 +198,10 @@ bool P2PTransportParser::ParseCandidate(const buzz::XmlElement* elem,
 
   std::string channel_name = elem->Attr(buzz::QN_NAME);
   int component = 0;
-  if (!translator->GetComponentFromChannelName(
-          channel_name, &component)) {
-    return BadParse(
-        "candidate has unknown channel name " + channel_name, error);
+  if (!translator ||
+      !translator->GetComponentFromChannelName(channel_name, &component)) {
+    return BadParse("candidate has unknown channel name " + channel_name,
+                    error);
   }
 
   float preference = 0.0;
@@ -138,57 +222,23 @@ bool P2PTransportParser::ParseCandidate(const buzz::XmlElement* elem,
   if (elem->HasAttr(QN_NETWORK))
     candidate->set_network_name(elem->Attr(QN_NETWORK));
 
-  if (!VerifyUsernameFormat(candidate->username(), error))
+  if (!VerifyUsernameFormat(proto, candidate->username(), error))
     return false;
 
   return true;
 }
 
-bool P2PTransportParser::VerifyUsernameFormat(const std::string& username,
-                                              ParseError* error) {
-  if (username.size() > kMaxUsernameSize)
-    return BadParse("candidate username is too long", error);
-  if (!talk_base::Base64::IsBase64Encoded(username))
-    return BadParse(
-        "candidate username has non-base64 encoded characters", error);
-  return true;
-}
-
-static const buzz::StaticQName& GetCandidateQName(SignalingProtocol protocol) {
-  if (protocol == PROTOCOL_GINGLE) {
-    return QN_GINGLE_CANDIDATE;
-  } else {
-    // TODO: Once we implement standard ICE-UDP, use the
-    // XEP-176 namespace.
-    return QN_GINGLE_P2P_CANDIDATE;
-  }
-}
-
-bool P2PTransportParser::WriteCandidates(SignalingProtocol protocol,
-                                         const Candidates& candidates,
-                                         const CandidateTranslator* translator,
-                                         XmlElements* candidate_elems,
-                                         WriteError* error) {
-  // TODO: Once we implement standard ICE-UDP, parse the
-  // candidates according to XEP-176.
-  for (std::vector<Candidate>::const_iterator iter = candidates.begin();
-       iter != candidates.end(); ++iter) {
-    buzz::XmlElement* cand_elem =
-        new buzz::XmlElement(GetCandidateQName(protocol));
-    if (!WriteCandidate(*iter, translator, cand_elem, error)) {
-      return false;
-    }
-    candidate_elems->push_back(cand_elem);
-  }
-  return true;
-}
-
-bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
+bool P2PTransportParser::WriteCandidate(TransportProtocol proto,
+                                        const Candidate& candidate,
                                         const CandidateTranslator* translator,
                                         buzz::XmlElement* elem,
                                         WriteError* error) {
+  ASSERT(proto == ICEPROTO_GOOGLE);
+  ASSERT(translator != NULL);
+
   std::string channel_name;
-  if (!translator->GetChannelNameFromComponent(
+  if (!translator ||
+      !translator->GetChannelNameFromComponent(
           candidate.component(), &channel_name)) {
     return BadWrite("Cannot write candidate because of unknown component.",
                     error);
@@ -201,22 +251,13 @@ bool P2PTransportParser::WriteCandidate(const Candidate& candidate,
   elem->SetAttr(QN_USERNAME, candidate.username());
   elem->SetAttr(QN_PROTOCOL, candidate.protocol());
   elem->SetAttr(QN_GENERATION, candidate.generation_str());
-  if (candidate.password().size() > 0)
+  if (!candidate.password().empty())
     elem->SetAttr(QN_PASSWORD, candidate.password());
-  if (candidate.type().size() > 0)
-    elem->SetAttr(buzz::QN_TYPE, candidate.type());
-  if (candidate.network_name().size() > 0)
+  elem->SetAttr(buzz::QN_TYPE, candidate.type());
+  if (!candidate.network_name().empty())
     elem->SetAttr(QN_NETWORK, candidate.network_name());
+
   return true;
-}
-
-TransportChannelImpl* P2PTransport::CreateTransportChannel(int component) {
-  return new P2PTransportChannel(
-      content_name(), component, this, port_allocator());
-}
-
-void P2PTransport::DestroyTransportChannel(TransportChannelImpl* channel) {
-  delete channel;
 }
 
 }  // namespace cricket

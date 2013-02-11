@@ -268,23 +268,41 @@ CandidateTranslator* GetCandidateTranslator(
   }
 }
 
-bool ParseCandidates(SignalingProtocol protocol,
-                     const buzz::XmlElement* candidates_elem,
-                     const TransportParserMap& trans_parsers,
-                     const std::string& transport_type,
-                     const CandidateTranslatorMap& translators,
-                     const std::string& content_name,
-                     Candidates* candidates,
-                     ParseError* error) {
-  TransportParser* trans_parser =
-      GetTransportParser(trans_parsers, transport_type);
-  if (trans_parser == NULL)
+bool GetParserAndTranslator(const TransportParserMap& trans_parsers,
+                            const CandidateTranslatorMap& translators,
+                            const std::string& transport_type,
+                            const std::string& content_name,
+                            TransportParser** parser,
+                            CandidateTranslator** translator,
+                            ParseError* error) {
+  *parser = GetTransportParser(trans_parsers, transport_type);
+  if (*parser == NULL) {
     return BadParse("unknown transport type: " + transport_type, error);
-  CandidateTranslator* translator =
-      GetCandidateTranslator(translators, content_name);
+  }
+  // Not having a translator isn't fatal when parsing. If this is called for an
+  // initiate message, we won't have our proxies set up to do the translation.
+  // Fortunately, for the cases where translation is needed, candidates are
+  // never sent in initiates.
+  *translator = GetCandidateTranslator(translators, content_name);
+  return true;
+}
 
-  return trans_parser->ParseCandidates(protocol, candidates_elem, translator,
-                                       candidates, error);
+bool GetParserAndTranslator(const TransportParserMap& trans_parsers,
+                            const CandidateTranslatorMap& translators,
+                            const std::string& transport_type,
+                            const std::string& content_name,
+                            TransportParser** parser,
+                            CandidateTranslator** translator,
+                            WriteError* error) {
+  *parser = GetTransportParser(trans_parsers, transport_type);
+  if (*parser == NULL) {
+    return BadWrite("unknown transport type: " + transport_type, error);
+  }
+  *translator = GetCandidateTranslator(translators, content_name);
+  if (*translator == NULL) {
+    return BadWrite("unknown content name: " + content_name, error);
+  }
+  return true;
 }
 
 bool ParseGingleCandidate(const buzz::XmlElement* candidate_elem,
@@ -293,28 +311,39 @@ bool ParseGingleCandidate(const buzz::XmlElement* candidate_elem,
                           const std::string& content_name,
                           Candidates* candidates,
                           ParseError* error) {
-  // We cast to a P2PTransportParser because we need to be able to
-  // call ParseCandidate (not ParseCandidates).  Normally, we send the
-  // entire list of candidates to the parser via the parent element.
-  // But in the case of Gingle, we cannot because candidates for
-  // different content types (audio and video) are mixed together
-  // under the same parent.  Also, it is safe to cast to
-  // P2PTransportParser because Gingle only supports P2PTransports.
-  P2PTransportParser* trans_parser = static_cast<P2PTransportParser*>(
-      GetTransportParser(trans_parsers, NS_GINGLE_P2P));
-  if (trans_parser == NULL) {
+  TransportParser* trans_parser;
+  CandidateTranslator* translator;
+  if (!GetParserAndTranslator(trans_parsers, translators,
+                              NS_GINGLE_P2P, content_name,
+                              &trans_parser, &translator, error))
     return false;
-  }
-  CandidateTranslator* translator =
-      GetCandidateTranslator(translators, content_name);
 
   Candidate candidate;
-  if (!trans_parser->ParseCandidate(
+  if (!trans_parser->ParseGingleCandidate(
           candidate_elem, translator, &candidate, error)) {
     return false;
   }
 
   candidates->push_back(candidate);
+  return true;
+}
+
+bool ParseGingleCandidates(const buzz::XmlElement* parent,
+                           const TransportParserMap& trans_parsers,
+                           const CandidateTranslatorMap& translators,
+                           const std::string& content_name,
+                           Candidates* candidates,
+                           ParseError* error) {
+  for (const buzz::XmlElement* candidate_elem = parent->FirstElement();
+       candidate_elem != NULL;
+       candidate_elem = candidate_elem->NextElement()) {
+    if (candidate_elem->Name().LocalPart() == LN_CANDIDATE) {
+      if (!ParseGingleCandidate(candidate_elem, trans_parsers, translators,
+                                content_name, candidates, error)) {
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -330,11 +359,10 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
   // If we don't have media, no need to separate the candidates.
   if (!has_audio && !has_video) {
     TransportInfo tinfo(CN_OTHER,
-      TransportDescription(NS_GINGLE_P2P, Candidates()));
-    if (!ParseCandidates(PROTOCOL_GINGLE, action_elem,
-                         trans_parsers, NS_GINGLE_P2P,
-                         translators, CN_OTHER,
-                         &tinfo.description.candidates, error)) {
+        TransportDescription(NS_GINGLE_P2P, Candidates()));
+    if (!ParseGingleCandidates(action_elem, trans_parsers, translators,
+                               CN_OTHER, &tinfo.description.candidates,
+                               error)) {
       return false;
     }
 
@@ -386,21 +414,24 @@ bool ParseGingleTransportInfos(const buzz::XmlElement* action_elem,
 }
 
 bool ParseJingleTransportInfo(const buzz::XmlElement* trans_elem,
-                              const ContentInfo& content,
+                              const std::string& content_name,
                               const TransportParserMap& trans_parsers,
                               const CandidateTranslatorMap& translators,
-                              TransportInfos* tinfos,
+                              TransportInfo* tinfo,
                               ParseError* error) {
-  std::string transport_type = trans_elem->Name().Namespace();
-  TransportInfo tinfo(content.name,
-    TransportDescription(transport_type, Candidates()));
-  if (!ParseCandidates(PROTOCOL_JINGLE, trans_elem,
-                       trans_parsers, transport_type,
-                       translators, content.name,
-                       &tinfo.description.candidates, error))
+  TransportParser* trans_parser;
+  CandidateTranslator* translator;
+  if (!GetParserAndTranslator(trans_parsers, translators,
+                              trans_elem->Name().Namespace(), content_name,
+                              &trans_parser, &translator, error))
     return false;
 
-  tinfos->push_back(tinfo);
+  TransportDescription tdesc;
+  if (!trans_parser->ParseTransportDescription(trans_elem, translator,
+                                               &tdesc, error))
+    return false;
+
+  *tinfo = TransportInfo(content_name, tdesc);
   return true;
 }
 
@@ -427,10 +458,13 @@ bool ParseJingleTransportInfos(const buzz::XmlElement* jingle,
     if (!RequireXmlChild(pair_elem, LN_TRANSPORT, &trans_elem, error))
       return false;
 
-    if (!ParseJingleTransportInfo(trans_elem, *content,
+    TransportInfo tinfo;
+    if (!ParseJingleTransportInfo(trans_elem, content->name,
                                   trans_parsers, translators,
-                                  tinfos, error))
+                                  &tinfo, error))
       return false;
+
+    tinfos->push_back(tinfo);
   }
 
   return true;
@@ -440,27 +474,31 @@ buzz::XmlElement* NewTransportElement(const std::string& name) {
   return new buzz::XmlElement(buzz::QName(name, LN_TRANSPORT), true);
 }
 
-bool WriteCandidates(SignalingProtocol protocol,
-                     const Candidates& candidates,
-                     const TransportParserMap& trans_parsers,
-                     const std::string& transport_type,
-                     const CandidateTranslatorMap& translators,
-                     const std::string& content_name,
-                     XmlElements* elems,
-                     WriteError* error) {
-  TransportParser* trans_parser =
-      GetTransportParser(trans_parsers, transport_type);
-  if (trans_parser == NULL) {
-    return BadWrite("unknown transport type: " + transport_type, error);
-  }
-  CandidateTranslator* translator =
-      GetCandidateTranslator(translators, content_name);
-  if (translator == NULL) {
-    return BadWrite("unknown content name: " + content_name, error);
+bool WriteGingleCandidates(const Candidates& candidates,
+                           const TransportParserMap& trans_parsers,
+                           const std::string& transport_type,
+                           const CandidateTranslatorMap& translators,
+                           const std::string& content_name,
+                           XmlElements* elems,
+                           WriteError* error) {
+  TransportParser* trans_parser;
+  CandidateTranslator* translator;
+  if (!GetParserAndTranslator(trans_parsers, translators,
+                              transport_type, content_name,
+                              &trans_parser, &translator, error))
+    return false;
+
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    talk_base::scoped_ptr<buzz::XmlElement> element;
+    if (!trans_parser->WriteGingleCandidate(candidates[i], translator,
+                                            element.accept(), error)) {
+      return false;
+    }
+
+    elems->push_back(element.release());
   }
 
-  return trans_parser->WriteCandidates(
-      protocol, candidates, translator, elems, error);
+  return true;
 }
 
 bool WriteGingleTransportInfos(const TransportInfos& tinfos,
@@ -470,10 +508,10 @@ bool WriteGingleTransportInfos(const TransportInfos& tinfos,
                                WriteError* error) {
   for (TransportInfos::const_iterator tinfo = tinfos.begin();
        tinfo != tinfos.end(); ++tinfo) {
-    if (!WriteCandidates(PROTOCOL_GINGLE, tinfo->description.candidates,
-                         trans_parsers, tinfo->description.transport_type,
-                         translators, tinfo->content_name,
-                         elems, error))
+    if (!WriteGingleCandidates(tinfo->description.candidates,
+                               trans_parsers, tinfo->description.transport_type,
+                               translators, tinfo->content_name,
+                               elems, error))
       return false;
   }
 
@@ -485,16 +523,20 @@ bool WriteJingleTransportInfo(const TransportInfo& tinfo,
                               const CandidateTranslatorMap& translators,
                               XmlElements* elems,
                               WriteError* error) {
-  XmlElements candidate_elems;
-  if (!WriteCandidates(PROTOCOL_JINGLE, tinfo.description.candidates,
-                       trans_parsers, tinfo.description.transport_type,
-                       translators, tinfo.content_name,
-                       &candidate_elems, error))
+  std::string transport_type = tinfo.description.transport_type;
+  TransportParser* trans_parser;
+  CandidateTranslator* translator;
+  if (!GetParserAndTranslator(trans_parsers, translators,
+                              transport_type, tinfo.content_name,
+                              &trans_parser, &translator, error))
     return false;
 
-  buzz::XmlElement* trans_elem = NewTransportElement(tinfo.description.
-                                                     transport_type);
-  AddXmlChildren(trans_elem, candidate_elems);
+  buzz::XmlElement* trans_elem;
+  if (!trans_parser->WriteTransportDescription(tinfo.description, translator,
+                                               &trans_elem, error)) {
+    return false;
+  }
+
   elems->push_back(trans_elem);
   return true;
 }

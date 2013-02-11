@@ -52,8 +52,8 @@ using webrtc::FakeConstraints;
 using webrtc::IceCandidateInterface;
 using webrtc::MediaConstraintsInterface;
 using webrtc::MediaStreamInterface;
+using webrtc::SdpParseError;
 using webrtc::SessionDescriptionInterface;
-
 using webrtc::StreamCollection;
 using webrtc::StreamCollectionInterface;
 
@@ -363,7 +363,7 @@ class MediaStreamSignalingTest: public testing::Test {
     }
 
     *desc = webrtc::CreateSessionDescription(
-        SessionDescriptionInterface::kOffer, sdp_ms1);
+        SessionDescriptionInterface::kOffer, sdp_ms1, NULL);
   }
 
   void AddAudioTrack(const std::string& track_id,
@@ -551,7 +551,7 @@ TEST_F(MediaStreamSignalingTest, MediaConstraintsInAnswer) {
 TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithStream1));
+                                       kSdpStringWithStream1, NULL));
   EXPECT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
 
@@ -566,7 +566,7 @@ TEST_F(MediaStreamSignalingTest, UpdateRemoteStreams) {
   // MediaStream.
   talk_base::scoped_ptr<SessionDescriptionInterface> update_desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWith2Stream));
+                                       kSdpStringWith2Stream, NULL));
   EXPECT_TRUE(update_desc != NULL);
   signaling_->UpdateRemoteStreams(update_desc.get());
 
@@ -613,7 +613,8 @@ TEST_F(MediaStreamSignalingTest, AddRemoveTrackFromExistingRemoteMediaStream) {
 TEST_F(MediaStreamSignalingTest, SdpWithoutMsidCreatesDefaultStream) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc_audio_only(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithoutStreamsAudioOnly));
+                                       kSdpStringWithoutStreamsAudioOnly,
+                                       NULL));
   ASSERT_TRUE(desc_audio_only != NULL);
   signaling_->UpdateRemoteStreams(desc_audio_only.get());
 
@@ -627,7 +628,7 @@ TEST_F(MediaStreamSignalingTest, SdpWithoutMsidCreatesDefaultStream) {
 
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithoutStreams));
+                                       kSdpStringWithoutStreams, NULL));
   ASSERT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
   EXPECT_EQ(1u, signaling_->remote_streams()->count());
@@ -644,7 +645,8 @@ TEST_F(MediaStreamSignalingTest,
        SdpWithoutMsidAndStreamsCreatesDefaultStream) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithoutStreams));
+                                       kSdpStringWithoutStreams,
+                                       NULL));
   ASSERT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
 
@@ -659,7 +661,8 @@ TEST_F(MediaStreamSignalingTest,
 TEST_F(MediaStreamSignalingTest, SdpWitMsidDontCreatesDefaultStream) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc_msid_without_streams(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithMsidWithoutStreams));
+                                       kSdpStringWithMsidWithoutStreams,
+                                       NULL));
   signaling_->UpdateRemoteStreams(desc_msid_without_streams.get());
   EXPECT_EQ(0u, observer_->remote_streams()->count());
 }
@@ -669,7 +672,8 @@ TEST_F(MediaStreamSignalingTest, SdpWitMsidDontCreatesDefaultStream) {
 TEST_F(MediaStreamSignalingTest, VerifyDefaultStreamIsNotCreated) {
   talk_base::scoped_ptr<SessionDescriptionInterface> desc(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithStream1));
+                                       kSdpStringWithStream1,
+                                       NULL));
   ASSERT_TRUE(desc != NULL);
   signaling_->UpdateRemoteStreams(desc.get());
   talk_base::scoped_refptr<StreamCollection> reference(
@@ -679,7 +683,8 @@ TEST_F(MediaStreamSignalingTest, VerifyDefaultStreamIsNotCreated) {
 
   talk_base::scoped_ptr<SessionDescriptionInterface> desc_without_streams(
       webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                       kSdpStringWithoutStreams));
+                                       kSdpStringWithoutStreams,
+                                       NULL));
   signaling_->UpdateRemoteStreams(desc_without_streams.get());
   EXPECT_EQ(0u, observer_->remote_streams()->count());
 }

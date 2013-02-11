@@ -28,6 +28,7 @@
 #include "talk/app/webrtc/mediastreamhandler.h"
 
 #include "talk/app/webrtc/localaudiosource.h"
+#include "talk/app/webrtc/localvideosource.h"
 #include "talk/app/webrtc/videosourceinterface.h"
 
 namespace webrtc {
@@ -121,8 +122,14 @@ void LocalVideoTrackHandler::OnStateChanged() {
 }
 
 void LocalVideoTrackHandler::OnEnabledChanged() {
+  const cricket::VideoOptions* options = NULL;
+  VideoSourceInterface* source = local_video_track_->GetSource();
+  if (local_video_track_->enabled() && source) {
+    options = source->options();
+  }
   provider_->SetVideoSend(local_video_track_->id(),
-                          local_video_track_->enabled());
+                          local_video_track_->enabled(),
+                          options);
 }
 
 RemoteVideoTrackHandler::RemoteVideoTrackHandler(

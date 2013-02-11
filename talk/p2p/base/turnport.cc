@@ -229,6 +229,10 @@ int TurnPort::SetOption(talk_base::Socket::Option opt, int value) {
   return socket_->SetOption(opt, value);
 }
 
+int TurnPort::GetOption(talk_base::Socket::Option opt, int* value) {
+  return socket_->GetOption(opt, value);
+}
+
 int TurnPort::GetError() {
   return error_;
 }

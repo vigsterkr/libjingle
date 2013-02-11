@@ -187,6 +187,9 @@ class TestPort : public Port {
   virtual int SetOption(talk_base::Socket::Option opt, int value) {
     return 0;
   }
+  virtual int GetOption(talk_base::Socket::Option opt, int* value) {
+    return -1;
+  }
   virtual int GetError() {
     return 0;
   }

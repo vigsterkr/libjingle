@@ -553,8 +553,18 @@ TEST_F(VideoCapturerTest, Whitelist) {
                                   cricket::FOURCC_I420);
   std::vector<cricket::VideoFormat> formats = *capturer_.GetSupportedFormats();
   formats.push_back(hd_format);
+
+  // Enable whitelist.  Expect HD not in list.
+  capturer_.set_enable_camera_list(true);
   capturer_.ResetSupportedFormats(formats);
   EXPECT_TRUE(HdFormatInList(*capturer_.GetSupportedFormats()));
   capturer_.ConstrainSupportedFormats(vga_format);
   EXPECT_FALSE(HdFormatInList(*capturer_.GetSupportedFormats()));
+
+  // Disable whitelist.  Expect HD in list.
+  capturer_.set_enable_camera_list(false);
+  capturer_.ResetSupportedFormats(formats);
+  EXPECT_TRUE(HdFormatInList(*capturer_.GetSupportedFormats()));
+  capturer_.ConstrainSupportedFormats(vga_format);
+  EXPECT_TRUE(HdFormatInList(*capturer_.GetSupportedFormats()));
 }

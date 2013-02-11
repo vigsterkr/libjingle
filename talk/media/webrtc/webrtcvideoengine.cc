@@ -2330,9 +2330,13 @@ void WebRtcVideoMediaChannel::SetInterface(NetworkInterface* iface) {
     network_interface_->SetOption(NetworkInterface::ST_RTP,
                                   talk_base::Socket::OPT_RCVBUF,
                                   kVideoRtpBufferSize);
-    network_interface_->SetOption(NetworkInterface::ST_RTP,
-                                  talk_base::Socket::OPT_SNDBUF,
-                                  kVideoRtpBufferSize);
+
+    // TODO(sriniv): Remove or re-enable this.
+    // As part of b/8030474, send-buffer is size now controlled through
+    // portallocator flags.
+    // network_interface_->SetOption(NetworkInterface::ST_RTP,
+    //                              talk_base::Socket::OPT_SNDBUF,
+    //                              kVideoRtpBufferSize);
   }
 }
 

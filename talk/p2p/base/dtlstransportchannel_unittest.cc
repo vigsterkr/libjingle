@@ -148,12 +148,12 @@ class DtlsTestClient : public sigslot::has_slots<> {
     std::string transport_type = (protocol_ == cricket::ICEPROTO_GOOGLE) ?
         cricket::NS_GINGLE_P2P : cricket::NS_JINGLE_ICE_UDP;
     cricket::TransportDescription local_desc(
-        transport_type, cricket::TransportOptions(), kIceUfrag1, kIcePwd1,
+        transport_type, std::vector<std::string>(), kIceUfrag1, kIcePwd1,
         local_fingerprint.release(), cricket::Candidates());
     ASSERT_TRUE(transport_->SetLocalTransportDescription(local_desc,
                                                          cricket::CA_OFFER));
     cricket::TransportDescription remote_desc(
-        transport_type, cricket::TransportOptions(), kIceUfrag1, kIcePwd1,
+        transport_type, std::vector<std::string>(), kIceUfrag1, kIcePwd1,
         remote_fingerprint.release(), cricket::Candidates());
     ASSERT_TRUE(transport_->SetRemoteTransportDescription(remote_desc,
                                                           cricket::CA_ANSWER));

@@ -59,12 +59,11 @@ using talk_base::scoped_ptr;
 using talk_base::scoped_refptr;
 using webrtc::AudioSourceInterface;
 using webrtc::AudioTrackInterface;
+using webrtc::DataBuffer;
 using webrtc::DataChannelInterface;
 using webrtc::FakeConstraints;
 using webrtc::FakePortAllocatorFactory;
 using webrtc::IceCandidateInterface;
-
-using webrtc::DataBuffer;
 using webrtc::LocalMediaStreamInterface;
 using webrtc::MediaStreamInterface;
 using webrtc::MediaStreamTrackInterface;
@@ -75,6 +74,7 @@ using webrtc::MockStatsObserver;
 using webrtc::PeerConnectionInterface;
 using webrtc::PeerConnectionObserver;
 using webrtc::PortAllocatorFactoryInterface;
+using webrtc::SdpParseError;
 using webrtc::SessionDescriptionInterface;
 using webrtc::VideoSourceInterface;
 using webrtc::VideoTrackInterface;
@@ -155,7 +155,7 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
     EXPECT_TRUE(candidate->ToString(&sdp));
     EXPECT_LT(0u, sdp.size());
     last_candidate_.reset(webrtc::CreateIceCandidate(candidate->sdp_mid(),
-        candidate->sdp_mline_index(), sdp));
+        candidate->sdp_mline_index(), sdp, NULL));
     EXPECT_TRUE(last_candidate_.get() != NULL);
   }
   virtual void OnIceComplete() {
@@ -369,7 +369,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_TRUE(offer->ToString(&sdp));
     SessionDescriptionInterface* remote_offer =
         webrtc::CreateSessionDescription(SessionDescriptionInterface::kOffer,
-                                         sdp);
+                                         sdp, NULL);
     EXPECT_TRUE(DoSetRemoteDescription(remote_offer));
     EXPECT_EQ(PeerConnectionInterface::kHaveRemoteOffer, observer_.state_);
   }
@@ -389,7 +389,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_TRUE(answer->ToString(&sdp));
     SessionDescriptionInterface* new_answer =
         webrtc::CreateSessionDescription(SessionDescriptionInterface::kAnswer,
-                                         sdp);
+                                         sdp, NULL);
     EXPECT_TRUE(DoSetLocalDescription(new_answer));
     EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
@@ -402,7 +402,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     EXPECT_TRUE(answer->ToString(&sdp));
     SessionDescriptionInterface* pr_answer =
         webrtc::CreateSessionDescription(SessionDescriptionInterface::kPrAnswer,
-                                         sdp);
+                                         sdp, NULL);
     EXPECT_TRUE(DoSetLocalDescription(pr_answer));
     EXPECT_EQ(PeerConnectionInterface::kHaveLocalPrAnswer, observer_.state_);
   }
@@ -429,7 +429,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
     SessionDescriptionInterface* new_offer =
             webrtc::CreateSessionDescription(
                 SessionDescriptionInterface::kOffer,
-                sdp);
+                sdp, NULL);
 
     EXPECT_TRUE(DoSetLocalDescription(new_offer));
     EXPECT_EQ(PeerConnectionInterface::kHaveLocalOffer, observer_.state_);
@@ -438,7 +438,7 @@ class PeerConnectionInterfaceTest : public testing::Test {
   void CreateAnswerAsRemoteDescription(const std::string& offer) {
     webrtc::JsepSessionDescription* answer = new webrtc::JsepSessionDescription(
         SessionDescriptionInterface::kAnswer);
-    EXPECT_TRUE(answer->Initialize(offer));
+    EXPECT_TRUE(answer->Initialize(offer, NULL));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
     EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }
@@ -447,13 +447,13 @@ class PeerConnectionInterfaceTest : public testing::Test {
     webrtc::JsepSessionDescription* pr_answer =
         new webrtc::JsepSessionDescription(
             SessionDescriptionInterface::kPrAnswer);
-    EXPECT_TRUE(pr_answer->Initialize(offer));
+    EXPECT_TRUE(pr_answer->Initialize(offer, NULL));
     EXPECT_TRUE(DoSetRemoteDescription(pr_answer));
     EXPECT_EQ(PeerConnectionInterface::kHaveRemotePrAnswer, observer_.state_);
     webrtc::JsepSessionDescription* answer =
         new webrtc::JsepSessionDescription(
             SessionDescriptionInterface::kAnswer);
-    EXPECT_TRUE(answer->Initialize(offer));
+    EXPECT_TRUE(answer->Initialize(offer, NULL));
     EXPECT_TRUE(DoSetRemoteDescription(answer));
     EXPECT_EQ(PeerConnectionInterface::kStable, observer_.state_);
   }

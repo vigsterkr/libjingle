@@ -86,6 +86,7 @@ VideoCapturer::VideoCapturer(talk_base::Thread* thread)
 
 void VideoCapturer::Construct() {
   ClearAspectRatio();
+  enable_camera_list_ = false;
   capture_state_ = CS_STOPPED;
   SignalFrameCaptured.connect(this, &VideoCapturer::OnFrameCaptured);
 }
@@ -124,7 +125,10 @@ void VideoCapturer::SetSupportedFormats(
 
 bool VideoCapturer::GetBestCaptureFormat(const VideoFormat& format,
                                          VideoFormat* best_format) {
+  // TODO(fbarchard): Directly support max_format.
+  UpdateFilteredSupportedFormats();
   const std::vector<VideoFormat>* supported_formats = GetSupportedFormats();
+
   if (supported_formats->empty()) {
     return false;
   }
@@ -411,6 +415,9 @@ void VideoCapturer::UpdateFilteredSupportedFormats() {
 }
 
 bool VideoCapturer::ShouldFilterFormat(const VideoFormat& format) const {
+  if (!enable_camera_list_) {
+    return false;
+  }
   return format.width > max_format_->width ||
          format.height > max_format_->height;
 }

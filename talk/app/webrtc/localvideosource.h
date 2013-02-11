@@ -64,6 +64,7 @@ class LocalVideoSource : public Notifier<VideoSourceInterface>,
       const webrtc::MediaConstraintsInterface* constraints);
 
   virtual SourceState state() const { return state_; }
+  virtual const cricket::VideoOptions* options() const { return &options_; }
 
   virtual cricket::VideoCapturer* GetVideoCapturer() {
     return video_capturer_.get();
@@ -88,6 +89,7 @@ class LocalVideoSource : public Notifier<VideoSourceInterface>,
   talk_base::scoped_ptr<cricket::VideoCapturer> video_capturer_;
 
   cricket::VideoFormat format_;
+  cricket::VideoOptions options_;
   SourceState state_;
 };
 

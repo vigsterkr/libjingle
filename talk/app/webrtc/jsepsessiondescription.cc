@@ -65,12 +65,18 @@ const int JsepSessionDescription::kDefaultVideoCodecPreference = 1;
 
 SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
                                                       const std::string& sdp) {
+  return CreateSessionDescription(type, sdp, NULL);
+}
+
+SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
+                                                      const std::string& sdp,
+                                                      SdpParseError* error) {
   if (!IsTypeSupported(type)) {
     return NULL;
   }
 
   JsepSessionDescription* jsep_desc = new JsepSessionDescription(type);
-  if (!jsep_desc->Initialize(sdp)) {
+  if (!jsep_desc->Initialize(sdp, error)) {
     delete jsep_desc;
     return NULL;
   }
@@ -97,8 +103,9 @@ bool JsepSessionDescription::Initialize(
   return true;
 }
 
-bool JsepSessionDescription::Initialize(const std::string& sdp) {
-  return SdpDeserialize(sdp, this);
+bool JsepSessionDescription::Initialize(const std::string& sdp,
+                                        SdpParseError* error) {
+  return SdpDeserialize(sdp, this, error);
 }
 
 bool JsepSessionDescription::AddCandidate(

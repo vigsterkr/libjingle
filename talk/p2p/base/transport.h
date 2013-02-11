@@ -91,16 +91,30 @@ class TransportParser {
   // parse (indicating a failure to parse).  If the Translator is null
   // and there are no candidates to parse, then return true,
   // indicating a successful parse of 0 candidates.
-  virtual bool ParseCandidates(SignalingProtocol protocol,
-                               const buzz::XmlElement* elem,
-                               const CandidateTranslator* translator,
-                               Candidates* candidates,
-                               ParseError* error) = 0;
-  virtual bool WriteCandidates(SignalingProtocol protocol,
-                               const Candidates& candidates,
-                               const CandidateTranslator* translator,
-                               XmlElements* candidate_elems,
-                               WriteError* error) = 0;
+
+  // Parse or write a transport description, including ICE credentials and
+  // any DTLS fingerprint. Since only Jingle has transport descriptions, these
+  // functions are only used when serializing to Jingle.
+  virtual bool ParseTransportDescription(const buzz::XmlElement* elem,
+                                         const CandidateTranslator* translator,
+                                         TransportDescription* tdesc,
+                                         ParseError* error) = 0;
+  virtual bool WriteTransportDescription(const TransportDescription& tdesc,
+                                         const CandidateTranslator* translator,
+                                         buzz::XmlElement** tdesc_elem,
+                                         WriteError* error) = 0;
+
+
+  // Parse a single candidate. This must be used when parsing Gingle
+  // candidates, since there is no enclosing transport description.
+  virtual bool ParseGingleCandidate(const buzz::XmlElement* elem,
+                                    const CandidateTranslator* translator,
+                                    Candidate* candidates,
+                                    ParseError* error) = 0;
+  virtual bool WriteGingleCandidate(const Candidate& candidate,
+                                    const CandidateTranslator* translator,
+                                    buzz::XmlElement** candidate_elem,
+                                    WriteError* error) = 0;
 
   // Helper function to parse an element describing an address.  This
   // retrieves the IP and port from the given element and verifies
@@ -249,9 +263,8 @@ class Transport : public talk_base::MessageHandler,
   // stanza that caused the error is available in session_msg.  If false is
   // returned, the error is considered unrecoverable, and the session is
   // terminated.
-  // TODO: Make OnTransportError take an abstract data type
-  // rather than an XmlElement.  It isn't needed yet, but it might be
-  // later for Jingle compliance.
+  // TODO(juberti): Remove these obsolete functions once Session no longer
+  // references them.
   virtual void OnTransportError(const buzz::XmlElement* error) {}
   sigslot::signal6<Transport*, const buzz::XmlElement*, const buzz::QName&,
                    const std::string&, const std::string&,
@@ -410,6 +423,10 @@ class Transport : public talk_base::MessageHandler,
 
   DISALLOW_EVIL_CONSTRUCTORS(Transport);
 };
+
+// Extract a TransportProtocol from a TransportDescription.
+TransportProtocol TransportProtocolFromDescription(
+    const TransportDescription* desc);
 
 }  // namespace cricket
 

@@ -178,6 +178,11 @@ void DataChannel::SetState(DataState state) {
 
 void DataChannel::ConnectToDataSession() {
   ASSERT(session_->data_channel() != NULL);
+  if (!session_->data_channel()) {
+    LOG(LS_ERROR) << "The DataEngine does not exist.";
+    return;
+  }
+
   data_session_ = session_->data_channel();
   data_session_->SignalReadyToSendData.connect(this,
                                                &DataChannel::OnChannelReady);

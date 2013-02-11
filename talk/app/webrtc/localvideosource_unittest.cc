@@ -349,3 +349,131 @@ TEST_F(LocalVideoSourceTest, InvalidOptionalConstraint) {
   EXPECT_EQ_WAIT(MediaSourceInterface::kLive, state_observer_->state(),
                  kMaxWaitMs);
 }
+
+TEST_F(LocalVideoSourceTest, SetValidOptions) {
+  TestConstraints constraints;
+  constraints.AddMandatory(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+  constraints.AddOptional(
+      MediaConstraintsInterface::kLeakyBucket, "true");
+
+  CreateLocalVideoSource(&constraints);
+
+  bool value = true;
+  EXPECT_TRUE(local_source_->options()->video_noise_reduction.Get(&value));
+  EXPECT_FALSE(value);
+  EXPECT_TRUE(local_source_->options()->video_leaky_bucket.Get(&value));
+  EXPECT_TRUE(value);
+}
+
+TEST_F(LocalVideoSourceTest, OptionNotSet) {
+  TestConstraints constraints;
+  CreateLocalVideoSource(&constraints);
+  bool value;
+  EXPECT_FALSE(local_source_->options()->video_noise_reduction.Get(&value));
+}
+
+TEST_F(LocalVideoSourceTest, MandatoryOptionOverridesOptional) {
+  TestConstraints constraints;
+  constraints.AddMandatory(
+      MediaConstraintsInterface::kNoiseReduction, "true");
+  constraints.AddOptional(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+
+  CreateLocalVideoSource(&constraints);
+
+  bool value = false;
+  EXPECT_TRUE(local_source_->options()->video_noise_reduction.Get(&value));
+  EXPECT_TRUE(value);
+  EXPECT_FALSE(local_source_->options()->video_leaky_bucket.Get(&value));
+}
+
+TEST_F(LocalVideoSourceTest, InvalidOptionKeyOptional) {
+  TestConstraints constraints;
+  constraints.AddOptional(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+  constraints.AddOptional("invalidKey", "false");
+
+  CreateLocalVideoSource(&constraints);
+
+  EXPECT_EQ_WAIT(MediaSourceInterface::kLive, state_observer_->state(),
+      kMaxWaitMs);
+  bool value = true;
+  EXPECT_TRUE(local_source_->options()->video_noise_reduction.Get(&value));
+  EXPECT_FALSE(value);
+}
+
+TEST_F(LocalVideoSourceTest, InvalidOptionKeyMandatory) {
+  TestConstraints constraints;
+  constraints.AddMandatory(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+  constraints.AddMandatory("invalidKey", "false");
+
+  CreateLocalVideoSource(&constraints);
+
+  EXPECT_EQ_WAIT(MediaSourceInterface::kEnded, state_observer_->state(),
+      kMaxWaitMs);
+  bool value;
+  EXPECT_FALSE(local_source_->options()->video_noise_reduction.Get(&value));
+}
+
+TEST_F(LocalVideoSourceTest, InvalidOptionValueOptional) {
+  TestConstraints constraints;
+  constraints.AddOptional(
+      MediaConstraintsInterface::kNoiseReduction, "true");
+  constraints.AddOptional(
+      MediaConstraintsInterface::kLeakyBucket, "not boolean");
+
+  CreateLocalVideoSource(&constraints);
+
+  EXPECT_EQ_WAIT(MediaSourceInterface::kLive, state_observer_->state(),
+      kMaxWaitMs);
+  bool value = false;
+  EXPECT_TRUE(local_source_->options()->video_noise_reduction.Get(&value));
+  EXPECT_TRUE(value);
+  EXPECT_FALSE(local_source_->options()->video_leaky_bucket.Get(&value));
+}
+
+TEST_F(LocalVideoSourceTest, InvalidOptionValueMandatory) {
+  TestConstraints constraints;
+  // Optional constraints should be ignored if the mandatory constraints fail.
+  constraints.AddOptional(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+  // Values are case-sensitive and must be all lower-case.
+  constraints.AddMandatory(
+      MediaConstraintsInterface::kLeakyBucket, "True");
+
+  CreateLocalVideoSource(&constraints);
+
+  EXPECT_EQ_WAIT(MediaSourceInterface::kEnded, state_observer_->state(),
+      kMaxWaitMs);
+  bool value;
+  EXPECT_FALSE(local_source_->options()->video_noise_reduction.Get(&value));
+}
+
+TEST_F(LocalVideoSourceTest, MixedOptionsAndConstraints) {
+  TestConstraints constraints;
+  constraints.AddMandatory(MediaConstraintsInterface::kMaxWidth, "352");
+  constraints.AddMandatory(MediaConstraintsInterface::kMaxHeight, "288");
+  constraints.AddOptional(MediaConstraintsInterface::kMaxFrameRate, "5");
+
+  constraints.AddMandatory(
+      MediaConstraintsInterface::kNoiseReduction, "false");
+  constraints.AddOptional(
+      MediaConstraintsInterface::kNoiseReduction, "true");
+
+  CreateLocalVideoSource(&constraints);
+  EXPECT_EQ_WAIT(MediaSourceInterface::kLive, state_observer_->state(),
+                 kMaxWaitMs);
+  const cricket::VideoFormat* format  = capturer_->GetCaptureFormat();
+  ASSERT_TRUE(format != NULL);
+  EXPECT_EQ(352 , format->width);
+  EXPECT_EQ(288 , format->height);
+  EXPECT_EQ(5 , format->framerate());
+
+  bool value = true;
+  EXPECT_TRUE(local_source_->options()->video_noise_reduction.Get(&value));
+  EXPECT_FALSE(value);
+  EXPECT_FALSE(local_source_->options()->video_leaky_bucket.Get(&value));
+}
+

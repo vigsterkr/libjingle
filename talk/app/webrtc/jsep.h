@@ -43,6 +43,16 @@ class Candidate;
 
 namespace webrtc {
 
+class MediaConstraintsInterface;
+
+struct SdpParseError {
+ public:
+  // The sdp line that causes the error.
+  std::string line;
+  // Explains the error.
+  std::string description;
+};
+
 // Class representation of an ICE candidate.
 // An instance of this interface is supposed to be owned by one class at
 // a time and is therefore not expected to be thread safe.
@@ -63,9 +73,15 @@ class IceCandidateInterface {
 
 // Creates a IceCandidateInterface based on SDP string.
 // Returns NULL if the sdp string can't be parsed.
+// TODO(ronghuawu): Deprecated.
 IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
                                           int sdp_mline_index,
                                           const std::string& sdp);
+// |error| can be NULL if doesn't care about the failure reason.
+IceCandidateInterface* CreateIceCandidate(const std::string& sdp_mid,
+                                          int sdp_mline_index,
+                                          const std::string& sdp,
+                                          SdpParseError* error);
 
 // This class represents a collection of candidates for a specific m-line.
 // This class is used in SessionDescriptionInterface to represent all known
@@ -113,8 +129,13 @@ class SessionDescriptionInterface {
 
 // Creates a SessionDescriptionInterface based on SDP string and the type.
 // Returns NULL if the sdp string can't be parsed or the type is unsupported.
+// TODO(ronghuawu): Deprecated.
 SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
                                                       const std::string& sdp);
+// |error| can be NULL if doesn't care about the failure reason.
+SessionDescriptionInterface* CreateSessionDescription(const std::string& type,
+                                                      const std::string& sdp,
+                                                      SdpParseError* error);
 
 // Jsep CreateOffer and CreateAnswer callback interface.
 class CreateSessionDescriptionObserver : public talk_base::RefCountInterface {

@@ -87,17 +87,6 @@ struct TransportDescriptionParams : public talk_base::MessageData {
   bool result;
 };
 
-cricket::TransportProtocol GetProtocolFromDescription(
-    const cricket::TransportDescription* desc) {
-  ASSERT(desc != NULL);
-
-  if (desc->transport_type == cricket::NS_JINGLE_ICE_UDP) {
-    return (desc->HasOption(cricket::ICE_OPTION_GICE)) ?
-        cricket::ICEPROTO_HYBRID : cricket::ICEPROTO_RFC5245;
-  }
-  return cricket::ICEPROTO_GOOGLE;
-}
-
 Transport::Transport(talk_base::Thread* signaling_thread,
                      talk_base::Thread* worker_thread,
                      const std::string& content_name,
@@ -270,7 +259,7 @@ void Transport::ConnectChannels_w() {
     // initiate request initiated by the remote.
     LOG(LS_INFO) << "Transport::ConnectChannels_w: No local description has "
                  << "been set. Will generate one.";
-    TransportDescription desc(NS_GINGLE_P2P, TransportOptions(),
+    TransportDescription desc(NS_GINGLE_P2P, std::vector<std::string>(),
                               talk_base::CreateRandomString(ICE_UFRAG_LENGTH),
                               talk_base::CreateRandomString(ICE_PWD_LENGTH),
                               NULL, Candidates());
@@ -468,6 +457,7 @@ void Transport::OnChannelRequestSignaling(TransportChannelImpl* channel) {
 
 void Transport::OnChannelRequestSignaling_s(int component) {
   ASSERT(signaling_thread()->IsCurrent());
+  LOG(LS_INFO) << "Transport: " << content_name_ << ", allocating candidates";
   // Resetting ICE state for the channel.
   {
     talk_base::CritScope cs(&crit_);
@@ -528,6 +518,8 @@ void Transport::OnChannelCandidatesAllocationDone(
   talk_base::CritScope cs(&crit_);
   ChannelMap::iterator iter = channels_.find(channel->component());
   ASSERT(iter != channels_.end());
+  LOG(LS_INFO) << "Transport: " << content_name_ << ", component " 
+               << channel->component() << " allocation complete";
   iter->second.set_candidates_allocated(true);
 
   // If all channels belonging to this Transport got signal, then
@@ -542,6 +534,7 @@ void Transport::OnChannelCandidatesAllocationDone(
 
 void Transport::OnChannelCandidatesAllocationDone_s() {
   ASSERT(signaling_thread()->IsCurrent());
+  LOG(LS_INFO) << "Transport: " << content_name_ << " allocation complete";
   SignalCandidatesAllocationDone(this);
 }
 
@@ -616,8 +609,8 @@ bool Transport::NegotiateTransportDescription_w(ContentAction local_role_) {
     answer = local_description_.get();
   }
 
-  TransportProtocol offer_proto = GetProtocolFromDescription(offer);
-  TransportProtocol answer_proto = GetProtocolFromDescription(answer);
+  TransportProtocol offer_proto = TransportProtocolFromDescription(offer);
+  TransportProtocol answer_proto = TransportProtocolFromDescription(answer);
 
   // If offered protocol is gice/ice, then we expect to receive matching
   // protocol in answer, anything else is treated as an error.
@@ -744,6 +737,18 @@ bool TransportParser::ParseAddress(const buzz::XmlElement* elem,
   address->SetPort(port);
 
   return true;
+}
+
+// We're GICE if the namespace is NS_GOOGLE_P2P, or if NS_JINGLE_ICE_UDP is
+// used and the GICE ice-option is set.
+TransportProtocol TransportProtocolFromDescription(
+    const TransportDescription* desc) {
+  ASSERT(desc != NULL);
+  if (desc->transport_type == NS_JINGLE_ICE_UDP) {
+    return (desc->HasOption(ICE_OPTION_GICE)) ?
+        ICEPROTO_HYBRID : ICEPROTO_RFC5245;
+  }
+  return ICEPROTO_GOOGLE;
 }
 
 }  // namespace cricket

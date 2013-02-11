@@ -499,21 +499,6 @@ static void PruneCryptos(const CryptoParamsVec& filter,
                         target_cryptos->end());
 }
 
-// Checks each content to see if it has negotiated a secure transport.
-// If so, strips the now-redundant crypto params for that content.
-static void RemoveCryptoParamsIfSecureTransport(SessionDescription* sdesc) {
-  for (ContentInfos::iterator content = sdesc->contents().begin();
-       content != sdesc->contents().end(); ++content) {
-    const TransportDescription* tdesc =
-        sdesc->GetTransportDescriptionByName(content->name);
-    if (IsMediaContent(&*content) && tdesc && tdesc->identity_fingerprint) {
-      MediaContentDescription* mdesc =
-          static_cast<MediaContentDescription*>(content->description);
-      mdesc->set_cryptos(CryptoParamsVec());
-    }
-  }
-}
-
 // Updates the crypto parameters of the |sdesc| according to the given
 // |bundle_group|. The crypto parameters of all the contents within the
 // |bundle_group| should be updated to use the common subset of the
@@ -661,7 +646,7 @@ static bool CreateMediaContentAnswer(
     const MediaContentDescriptionImpl<C>* offer,
     const MediaSessionOptions& options,
     const std::vector<C>& local_codecs,
-    const SecureMediaPolicy& secure_policy,
+    const SecureMediaPolicy& sdes_policy,
     const CryptoParamsVec* current_cryptos,
     StreamParamsVec* current_streams,
     bool add_legacy_stream,
@@ -675,7 +660,7 @@ static bool CreateMediaContentAnswer(
 
   answer->set_rtcp_mux(options.rtcp_mux_enabled && offer->rtcp_mux());
 
-  if (secure_policy != SEC_DISABLED) {
+  if (sdes_policy != SEC_DISABLED) {
     CryptoParams crypto;
     if (SelectCrypto(offer, bundle_enabled, &crypto)) {
       if (current_cryptos) {
@@ -686,7 +671,7 @@ static bool CreateMediaContentAnswer(
   }
 
   if (answer->cryptos().empty() &&
-      (offer->crypto_required() || secure_policy == SEC_REQUIRED)) {
+      (offer->crypto_required() || sdes_policy == SEC_REQUIRED)) {
     return false;
   }
 
@@ -891,14 +876,25 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   // Handle m=audio.
   const ContentInfo* audio_content = GetFirstAudioContent(offer);
   if (audio_content) {
+    scoped_ptr<TransportDescription> audio_transport(
+        CreateTransportAnswer(audio_content->name, offer,
+                              options.transport_options,
+                              current_description));
+    if (!audio_transport) {
+      return NULL;
+    }
+
     scoped_ptr<AudioContentDescription> audio_answer(
         new AudioContentDescription());
+    // Do not require or create SDES cryptos if DTLS is used.
+    cricket::SecurePolicy sdes_policy =
+        audio_transport->secure() ? cricket::SEC_DISABLED : secure();
     if (!CreateMediaContentAnswer(
             static_cast<const AudioContentDescription*>(
                 audio_content->description),
             options,
             audio_codecs_,
-            secure(),
+            sdes_policy,
             GetCryptos(GetFirstAudioContentDescription(current_description)),
             &current_streams,
             add_legacy_,
@@ -908,18 +904,17 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     }
 
     bool rejected = !options.has_audio ||
-        !IsMediaProtocolSupported(MEDIA_TYPE_AUDIO, audio_answer->protocol());
+          !IsMediaProtocolSupported(MEDIA_TYPE_AUDIO,
+                                    audio_answer->protocol());
     if (!rejected) {
-      if (!AddTransportAnswer(audio_content->name, offer,
-                              options.transport_options,
-                              current_description, answer.get())) {
-        return NULL;
-      }
+      AddTransportAnswer(audio_content->name, *(audio_transport.get()),
+                         answer.get());
     } else {
       // RFC 3264
       // The answer MUST contain the same number of m-lines as the offer.
       LOG(LS_INFO) << "Audio is not supported in the answer.";
     }
+
     answer->AddContent(audio_content->name, audio_content->type, rejected,
                        audio_answer.release());
   } else {
@@ -929,14 +924,25 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   // Handle m=video.
   const ContentInfo* video_content = GetFirstVideoContent(offer);
   if (video_content) {
+    scoped_ptr<TransportDescription> video_transport(
+        CreateTransportAnswer(video_content->name, offer,
+                              options.transport_options,
+                              current_description));
+    if (!video_transport) {
+      return NULL;
+    }
+
     scoped_ptr<VideoContentDescription> video_answer(
         new VideoContentDescription());
+    // Do not require or create SDES cryptos if DTLS is used.
+    cricket::SecurePolicy sdes_policy =
+        video_transport->secure() ? cricket::SEC_DISABLED : secure();
     if (!CreateMediaContentAnswer(
             static_cast<const VideoContentDescription*>(
                 video_content->description),
             options,
             video_codecs_,
-            secure(),
+            sdes_policy,
             GetCryptos(GetFirstVideoContentDescription(current_description)),
             &current_streams,
             add_legacy_,
@@ -947,9 +953,8 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
     bool rejected = !options.has_video ||
         !IsMediaProtocolSupported(MEDIA_TYPE_VIDEO, video_answer->protocol());
     if (!rejected) {
-      if (!AddTransportAnswer(video_content->name, offer,
-                              options.transport_options,
-                              current_description, answer.get())) {
+      if (!AddTransportAnswer(video_content->name, *(video_transport.get()),
+                              answer.get())) {
         return NULL;
       }
       video_answer->set_bandwidth(options.video_bandwidth);
@@ -967,14 +972,24 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   // Handle m=data.
   const ContentInfo* data_content = GetFirstDataContent(offer);
   if (data_content) {
+    scoped_ptr<TransportDescription> data_transport(
+        CreateTransportAnswer(data_content->name, offer,
+                              options.transport_options,
+                              current_description));
+    if (!data_transport) {
+      return NULL;
+    }
     scoped_ptr<DataContentDescription> data_answer(
         new DataContentDescription());
+    // Do not require or create SDES cryptos if DTLS is used.
+    cricket::SecurePolicy sdes_policy =
+        data_transport->secure() ? cricket::SEC_DISABLED : secure();
     if (!CreateMediaContentAnswer(
             static_cast<const DataContentDescription*>(
                 data_content->description),
             options,
             data_codecs_,
-            secure(),
+            sdes_policy,
             GetCryptos(GetFirstDataContentDescription(current_description)),
             &current_streams,
             add_legacy_,
@@ -986,8 +1001,7 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
         !IsMediaProtocolSupported(MEDIA_TYPE_DATA, data_answer->protocol());
     if (!rejected) {
       data_answer->set_bandwidth(options.data_bandwidth);
-      if (!AddTransportAnswer(data_content->name, offer,
-                              options.transport_options, current_description,
+      if (!AddTransportAnswer(data_content->name, *(data_transport.get()),
                               answer.get())) {
         return NULL;
       }
@@ -1001,9 +1015,6 @@ SessionDescription* MediaSessionDescriptionFactory::CreateAnswer(
   } else {
     LOG(LS_INFO) << "Data is not available in the offer.";
   }
-
-  // Strip SDES info for any contents that have negotiated secure transport.
-  RemoveCryptoParamsIfSecureTransport(answer.get());
 
   // If the offer supports BUNDLE, and we want to use it too, create a BUNDLE
   // group in the answer with the appropriate content names.
@@ -1054,7 +1065,7 @@ static const TransportDescription* GetTransportDescription(
 
 bool MediaSessionDescriptionFactory::AddTransportOffer(
   const std::string& content_name,
-  const TransportDescriptionOptions& transport_options,
+  const TransportOptions& transport_options,
   const SessionDescription* current_desc,
   SessionDescription* offer_desc) const {
   if (!transport_desc_factory_)
@@ -1072,28 +1083,33 @@ bool MediaSessionDescriptionFactory::AddTransportOffer(
   return ret;
 }
 
-bool MediaSessionDescriptionFactory::AddTransportAnswer(
+TransportDescription* MediaSessionDescriptionFactory::CreateTransportAnswer(
     const std::string& content_name,
     const SessionDescription* offer_desc,
-    const TransportDescriptionOptions& transport_options,
-    const SessionDescription* current_desc,
-    SessionDescription* answer_desc) const {
+    const TransportOptions& transport_options,
+    const SessionDescription* current_desc) const {
   if (!transport_desc_factory_)
-    return false;
+    return NULL;
   const TransportDescription* offer_tdesc =
       GetTransportDescription(content_name, offer_desc);
   const TransportDescription* current_tdesc =
       GetTransportDescription(content_name, current_desc);
-  talk_base::scoped_ptr<TransportDescription> new_tdesc(
+  return
       transport_desc_factory_->CreateAnswer(offer_tdesc, transport_options,
-                                            current_tdesc));
-  bool ret = (new_tdesc.get() != NULL &&
-      answer_desc->AddTransportInfo(TransportInfo(content_name, *new_tdesc)));
-  if (!ret) {
+                                            current_tdesc);
+}
+
+bool MediaSessionDescriptionFactory::AddTransportAnswer(
+    const std::string& content_name,
+    const TransportDescription& transport_desc,
+    SessionDescription* answer_desc) const {
+  if (!answer_desc->AddTransportInfo(TransportInfo(content_name,
+                                                   transport_desc))) {
     LOG(LS_ERROR)
         << "Failed to AddTransportAnswer, content name=" << content_name;
+    return false;
   }
-  return ret;
+  return true;
 }
 
 bool IsMediaContent(const ContentInfo* content) {

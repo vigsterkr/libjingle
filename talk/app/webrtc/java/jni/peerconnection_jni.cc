@@ -753,7 +753,7 @@ static SessionDescriptionInterface* JavaSdpToNativeSdp(
   std::string std_description = JavaToStdString(jni, j_description);
 
   return webrtc::CreateSessionDescription(
-      std_type, std_description);
+      std_type, std_description, NULL);
 }
 
 JOW(void, PeerConnection_setLocalDescription)(
@@ -792,7 +792,7 @@ JOW(jboolean, PeerConnection_nativeAddIceCandidate)(
   std::string sdp_mid = JavaToStdString(jni, j_sdp_mid);
   std::string sdp = JavaToStdString(jni, j_candidate_sdp);
   talk_base::scoped_ptr<IceCandidateInterface> candidate(
-      webrtc::CreateIceCandidate(sdp_mid, j_sdp_mline_index, sdp));
+      webrtc::CreateIceCandidate(sdp_mid, j_sdp_mline_index, sdp, NULL));
   CHECK(ExtractNativePC(jni, j_pc)->AddIceCandidate(candidate.get()), "");
 }
 

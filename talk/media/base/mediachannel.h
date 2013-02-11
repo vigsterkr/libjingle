@@ -329,22 +329,6 @@ enum VoiceMediaChannelOptions {
   OPT_AGC_MINUS_10DB = 0x80000000
 };
 
-enum VideoMediaChannelOptions {
-  // Increase the output framerate by 2x by interpolating frames.
-  OPT_INTERPOLATE = 0x10000,
-  // Adapt the video input to the encoder based on CPU.
-  OPT_ADAPT_INPUT_TO_CPU_USAGE = 0x20000,
-  // Enable video adaption based on encoder's estimation on bandwidth and
-  // cpu load.
-  OPT_ADAPT_INPUT_TO_ENCODER = 0x40000,
-  // Adapt view switch which quickly switches resolution up on view request.
-  OPT_ADAPT_VIEW_SWITCH = 0x1000000,
-  // Enable video noise reduction.
-  OPT_VIDEO_NOISE_REDUCTION = 0x80000,
-  // Enable WebRTC leaky bucket when sending media packets.
-  OPT_VIDEO_LEAKY_BUCKET = 0x800000
-};
-
 // DTMF flags to control if a DTMF tone should be played and/or sent.
 enum DtmfFlags {
   DF_PLAY = 0x01,

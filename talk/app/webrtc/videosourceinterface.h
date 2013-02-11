@@ -29,6 +29,7 @@
 #define TALK_APP_WEBRTC_VIDEOSOURCEINTERFACE_H_
 
 #include "talk/app/webrtc/mediastreaminterface.h"
+#include "talk/media/base/mediachannel.h"
 
 namespace webrtc {
 
@@ -45,6 +46,7 @@ class VideoSourceInterface : public MediaSourceInterface {
   // Adds |output| to the source to receive frames.
   virtual void AddSink(cricket::VideoRenderer* output) = 0;
   virtual void RemoveSink(cricket::VideoRenderer* output) = 0;
+  virtual const cricket::VideoOptions* options() const = 0;
 
  protected:
   virtual ~VideoSourceInterface() {}

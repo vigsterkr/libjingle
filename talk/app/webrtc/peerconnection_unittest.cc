@@ -483,7 +483,7 @@ class JsepTestClient
                                  const std::string& msg) {
     LOG(INFO) << id() << "ReceiveIceMessage";
     talk_base::scoped_ptr<webrtc::IceCandidateInterface> candidate(
-        webrtc::CreateIceCandidate(sdp_mid, sdp_mline_index, msg));
+        webrtc::CreateIceCandidate(sdp_mid, sdp_mline_index, msg, NULL));
     EXPECT_TRUE(peer_connection()->AddIceCandidate(candidate.get()));
   }
   // Implements PeerConnectionObserver functions needed by Jsep.
@@ -508,6 +508,10 @@ class JsepTestClient
 
   void RemoveMsidFromReceivedSdp(bool remove) {
     remove_msid_ = remove;
+  }
+
+  void RemoveSdesCryptoFromReceivedSdp(bool remove) {
+    remove_sdes_ = remove;
   }
 
   void RemoveBundleFromReceivedSdp(bool remove) {
@@ -558,7 +562,8 @@ class JsepTestClient
   explicit JsepTestClient(const std::string& id)
       : PeerConnectionTestClientBase<JsepMessageReceiver>(id),
         remove_msid_(false),
-        remove_bundle_(false) {
+        remove_bundle_(false),
+        remove_sdes_(false) {
   }
 
   virtual talk_base::scoped_refptr<webrtc::PeerConnectionInterface>
@@ -580,7 +585,7 @@ class JsepTestClient
       AddMediaStream(true, true);
     }
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription("offer", msg));
+         webrtc::CreateSessionDescription("offer", msg, NULL));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
     talk_base::scoped_ptr<SessionDescriptionInterface> answer;
     EXPECT_TRUE(DoCreateAnswer(answer.use()));
@@ -596,7 +601,7 @@ class JsepTestClient
   void HandleIncomingAnswer(const std::string& msg) {
     LOG(INFO) << id() << "HandleIncomingAnswer";
     talk_base::scoped_ptr<SessionDescriptionInterface> desc(
-           webrtc::CreateSessionDescription("answer", msg));
+         webrtc::CreateSessionDescription("answer", msg, NULL));
     EXPECT_TRUE(DoSetRemoteDescription(desc.release()));
   }
 
@@ -668,12 +673,17 @@ class JsepTestClient
       const char kSdpBundleAttribute[] = "a=group:BUNDLE";
       RemoveLinesFromSdp(kSdpBundleAttribute, sdp);
     }
+    if (remove_sdes_) {
+      const char kSdpSdesCryptoAttribute[] = "a=crypto";
+      RemoveLinesFromSdp(kSdpSdesCryptoAttribute, sdp);
+    }
   }
 
  private:
   webrtc::FakeConstraints session_description_constraints_;
   bool remove_msid_;  // True if MSID should be removed in received SDP.
   bool remove_bundle_;  // True if bundle should be removed in received SDP.
+  bool remove_sdes_;  // True if a=crypto should be removed in received SDP.
 
   talk_base::scoped_refptr<DataChannelInterface> data_channel_;
   talk_base::scoped_ptr<MockDataChannelObserver> data_observer_;
@@ -884,6 +894,20 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestOfferSdesToDtls) {
   VerifyRenderedSize(640, 480);
 }
 
+// This test sets up a call between two endpoints that are configured to use
+// DTLS key agreement. The offerer don't support SDES. As a result, DTLS is
+// negotiated and used for transport.
+TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestOfferDtlsButNotSdes) {
+  MAYBE_SKIP_TEST(talk_base::SSLStreamAdapter::HaveDtlsSrtp);
+  FakeConstraints setup_constraints;
+  setup_constraints.AddMandatory(MediaConstraintsInterface::kEnableDtlsSrtp,
+                                 MediaConstraintsInterface::kValueTrue);
+  ASSERT_TRUE(CreateTestClients(&setup_constraints, &setup_constraints));
+  receiving_client()->RemoveSdesCryptoFromReceivedSdp(true);
+  LocalP2PTest();
+  VerifyRenderedSize(640, 480);
+}
+
 // This test sets up a Jsep call between two parties, and the callee only
 // accept to receive video.
 TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestAnswerVideo) {
@@ -1086,3 +1110,22 @@ TEST_F(JsepPeerConnectionP2PTestClient, LocalP2PTestReceiverDoesntSupportData) {
   EXPECT_FALSE(receiving_client()->data_channel());
   EXPECT_FALSE(initializing_client()->data_observer()->IsOpen());
 }
+
+// This test sets up a call between two parties with audio, video. When audio
+// and video is setup and flowing and data channel is negotiated.
+TEST_F(JsepPeerConnectionP2PTestClient, AddDataChannelAfterRenegotiation) {
+  FakeConstraints setup_constraints;
+  setup_constraints.SetAllowRtpDataChannels();
+  ASSERT_TRUE(CreateTestClients(&setup_constraints, &setup_constraints));
+  LocalP2PTest();
+  initializing_client()->CreateDataChannel();
+  // Send new offer and answer.
+  initializing_client()->Negotiate();
+  ASSERT_TRUE(initializing_client()->data_channel() != NULL);
+  ASSERT_TRUE(receiving_client()->data_channel() != NULL);
+  EXPECT_TRUE_WAIT(initializing_client()->data_observer()->IsOpen(),
+                   kMaxWaitMs);
+  EXPECT_TRUE_WAIT(receiving_client()->data_observer()->IsOpen(),
+                   kMaxWaitMs);
+}
+

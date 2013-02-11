@@ -59,6 +59,7 @@ class VideoSourceProxy : public VideoSourceInterface,
   virtual cricket::VideoCapturer* GetVideoCapturer();
   virtual void AddSink(cricket::VideoRenderer* output);
   virtual void RemoveSink(cricket::VideoRenderer* output);
+  virtual const cricket::VideoOptions* options() const;
 
  protected:
   VideoSourceProxy(talk_base::Thread* signaling_thread,

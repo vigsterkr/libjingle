@@ -83,6 +83,7 @@ class TurnPort : public Port {
                      const talk_base::SocketAddress& addr,
                      bool payload);
   virtual int SetOption(talk_base::Socket::Option opt, int value);
+  virtual int GetOption(talk_base::Socket::Option opt, int* value);
   virtual int GetError();
   virtual void OnReadPacket(talk_base::AsyncPacketSocket* socket,
                             const char* data, size_t size,

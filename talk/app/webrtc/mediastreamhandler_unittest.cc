@@ -30,6 +30,7 @@
 #include <string>
 
 #include "talk/app/webrtc/audiotrack.h"
+#include "talk/app/webrtc/localvideosource.h"
 #include "talk/app/webrtc/mediastream.h"
 #include "talk/app/webrtc/streamcollection.h"
 #include "talk/app/webrtc/videotrack.h"
@@ -65,7 +66,8 @@ class MockVideoProvider : public VideoProviderInterface {
   MOCK_METHOD3(SetVideoPlayout, void(const std::string& name,
                                      bool enable,
                                      cricket::VideoRenderer* renderer));
-  MOCK_METHOD2(SetVideoSend, void(const std::string& name, bool enable));
+  MOCK_METHOD3(SetVideoSend, void(const std::string& name, bool enable,
+                                  const cricket::VideoOptions* options));
 };
 
 class FakeVideoSource : public Notifier<VideoSourceInterface> {
@@ -79,6 +81,7 @@ class FakeVideoSource : public Notifier<VideoSourceInterface> {
   virtual void AddSink(cricket::VideoRenderer* output) {}
   virtual void RemoveSink(cricket::VideoRenderer* output) {}
   virtual SourceState state() const { return state_; }
+  virtual const cricket::VideoOptions* options() const { return &options_; }
 
  protected:
   FakeVideoSource() : state_(kLive) {}
@@ -87,6 +90,7 @@ class FakeVideoSource : public Notifier<VideoSourceInterface> {
  private:
   cricket::FakeVideoCapturer fake_capturer_;
   SourceState state_;
+  cricket::VideoOptions options_;
 };
 
 class MediaStreamHandlerTest : public testing::Test {
@@ -111,7 +115,7 @@ class MediaStreamHandlerTest : public testing::Test {
     collection_->AddStream(stream_);
     EXPECT_CALL(video_provider_, SetCaptureDevice(
         kVideoTrackId, video_track_->GetSource()->GetVideoCapturer()));
-    EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, true));
+    EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, true, _));
     EXPECT_CALL(audio_provider_, SetAudioSend(kAudioTrackId, true, _));
     handlers_.CommitLocalStreams(collection_);
   }
@@ -181,10 +185,10 @@ TEST_F(MediaStreamHandlerTest, RemoteAudioTrackDisable) {
 TEST_F(MediaStreamHandlerTest, LocalVideoTrackDisable) {
   AddLocalStream();
 
-  EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, false));
+  EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, false, _));
   video_track_->set_enabled(false);
 
-  EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, true));
+  EXPECT_CALL(video_provider_, SetVideoSend(kVideoTrackId, true, _));
   video_track_->set_enabled(true);
 
   RemoveLocalStream();

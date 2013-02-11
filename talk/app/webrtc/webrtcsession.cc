@@ -277,6 +277,60 @@ static bool FindConstraint(const MediaConstraintsInterface* constraints,
   return false;
 }
 
+// Help class used to remember if a a remote peer has requested ice restart by
+// by sending a description with new ice ufrag and password.
+class IceRestartAnswerLatch {
+ public:
+  IceRestartAnswerLatch() : ice_restart_(false) { }
+
+  // Returns true if CheckForRemoteIceRestart has been called since last
+  // time this method was called with a new session description where
+  // ice password and ufrag has changed.
+  bool AnswerWithIceRestartLatch() {
+    if (ice_restart_) {
+      ice_restart_ = false;
+      return true;
+    }
+    return false;
+  }
+
+  void CheckForRemoteIceRestart(
+      const SessionDescriptionInterface* old_desc,
+      const SessionDescriptionInterface* new_desc) {
+    if (!old_desc || new_desc->type() != SessionDescriptionInterface::kOffer) {
+      return;
+    }
+    const SessionDescription* new_sd = new_desc->description();
+    const SessionDescription* old_sd = old_desc->description();
+    const ContentInfos& contents = new_sd->contents();
+    for (size_t index = 0; index < contents.size(); ++index) {
+      const ContentInfo* cinfo = &contents[index];
+      if (cinfo->rejected) {
+        continue;
+      }
+      // If the content isn't rejected, check if ufrag and password has
+      // changed.
+      const cricket::TransportDescription* new_transport_desc =
+          new_sd->GetTransportDescriptionByName(cinfo->name);
+      const cricket::TransportDescription* old_transport_desc =
+          old_sd->GetTransportDescriptionByName(cinfo->name);
+      if (!new_transport_desc || !old_transport_desc) {
+        // No transport description exist. This is not an ice restart.
+        continue;
+      }
+      if (new_transport_desc->ice_pwd != old_transport_desc->ice_pwd &&
+          new_transport_desc->ice_ufrag != old_transport_desc->ice_ufrag) {
+        LOG(LS_INFO) << "Remote peer request ice restart.";
+        ice_restart_ = true;
+        break;
+      }
+    }
+  }
+
+ private:
+  bool ice_restart_;
+};
+
 WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
                              talk_base::Thread* signaling_thread,
                              talk_base::Thread* worker_thread,
@@ -296,7 +350,8 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
       session_id_(talk_base::ToString(talk_base::CreateRandomId())),
       session_version_(kInitSessionVersion),
       older_version_remote_peer_(false),
-      allow_rtp_data_engine_(false) {
+      allow_rtp_data_engine_(false),
+      ice_restart_latch_(new IceRestartAnswerLatch) {
   transport_desc_factory_.set_protocol(cricket::ICEPROTO_HYBRID);
 }
 
@@ -435,6 +490,12 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
     LOG(LS_ERROR) << "CreateAnswer called with invalid media streams.";
     return NULL;
   }
+
+  // According to http://tools.ietf.org/html/rfc5245#section-9.2.1.1
+  // an answer should also contain new ice ufrag and password if an offer has
+  // been received with new ufrag and password.
+  options.transport_options.ice_restart =
+      ice_restart_latch_->AnswerWithIceRestartLatch();
   SessionDescription* desc(
       session_desc_factory_.CreateAnswer(offer->description(), options,
                                          BaseSession::local_description()));
@@ -578,6 +639,10 @@ bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
   CopySavedCandidates(desc);
   // We retain all received candidates.
   CopyCandidatesFromSessionDescription(remote_desc_.get(), desc);
+  // Check if this new SessionDescription contains new ice ufrag and password
+  // that indicates the remote peer requests ice restart.
+  ice_restart_latch_->CheckForRemoteIceRestart(remote_desc_.get(),
+                                               desc);
   remote_desc_.reset(desc);
   return error() == cricket::BaseSession::ERROR_NONE;
 }
@@ -757,7 +822,8 @@ void WebRtcSession::SetVideoPlayout(const std::string& name,
   }
 }
 
-void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
+void WebRtcSession::SetVideoSend(const std::string& name, bool enable,
+                                 const cricket::VideoOptions* options) {
   ASSERT(signaling_thread()->IsCurrent());
   if (!video_channel_) {
     LOG(LS_ERROR) << "SetVideoSend: No video channel exists.";
@@ -770,6 +836,8 @@ void WebRtcSession::SetVideoSend(const std::string& name, bool enable) {
     return;
   }
   video_channel_->MuteStream(ssrc, !enable);
+  if (enable && options)
+    video_channel_->SetChannelOptions(*options);
 }
 
 bool WebRtcSession::CanInsertDtmf(const std::string& track_id) {

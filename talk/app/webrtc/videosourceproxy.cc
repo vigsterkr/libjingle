@@ -38,6 +38,7 @@ enum {
   MSG_ADD_SINK,
   MSG_REMOVE_SINK,
   MSG_GET_VIDEO_CAPTURER,
+  MSG_OPTIONS,
   MSG_TERMINATE
 };
 
@@ -46,6 +47,8 @@ typedef talk_base::TypedMessageData<webrtc::ObserverInterface*>
 typedef talk_base::TypedMessageData<cricket::VideoRenderer*> SinkMessageData;
 typedef talk_base::TypedMessageData<cricket::VideoCapturer*>
     CapturerMessageData;
+typedef talk_base::TypedMessageData<const cricket::VideoOptions*>
+    OptionsMessageData;
 typedef talk_base::TypedMessageData
     <webrtc::MediaSourceInterface::SourceState> StateMessageData;
 
@@ -104,6 +107,16 @@ void VideoSourceProxy::RemoveSink(cricket::VideoRenderer* output) {
     return;
   }
   return source_->RemoveSink(output);
+}
+
+const cricket::VideoOptions* VideoSourceProxy::options() const {
+  if (!signaling_thread_->IsCurrent()) {
+    OptionsMessageData msg(NULL);
+    signaling_thread_->Send(const_cast<VideoSourceProxy*>(this),
+                            MSG_OPTIONS, &msg);
+    return msg.data();
+  }
+  return source_->options();
 }
 
 MediaSourceInterface::SourceState VideoSourceProxy::state() const {
@@ -171,6 +184,12 @@ void VideoSourceProxy::OnMessage(talk_base::Message* msg) {
       CapturerMessageData* capturer = static_cast<CapturerMessageData*>(
           msg->pdata);
       capturer->data() =  source_->GetVideoCapturer();
+      break;
+    }
+    case MSG_OPTIONS: {
+      OptionsMessageData* options = static_cast<OptionsMessageData*>(
+          msg->pdata);
+      options->data() = source_->options();
       break;
     }
     case MSG_TERMINATE: {

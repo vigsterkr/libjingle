@@ -47,7 +47,7 @@ TransportDescriptionFactory::TransportDescriptionFactory()
 }
 
 TransportDescription* TransportDescriptionFactory::CreateOffer(
-    const TransportDescriptionOptions& options,
+    const TransportOptions& options,
     const TransportDescription* current_description) const {
   talk_base::scoped_ptr<TransportDescription> desc(new TransportDescription());
 
@@ -82,7 +82,7 @@ TransportDescription* TransportDescriptionFactory::CreateOffer(
 
 TransportDescription* TransportDescriptionFactory::CreateAnswer(
     const TransportDescription* offer,
-    const TransportDescriptionOptions& options,
+    const TransportOptions& options,
     const TransportDescription* current_description) const {
   // A NULL offer is treated as a GICE transport description.
   // TODO(juberti): Figure out why we get NULL offers, and fix this upstream.

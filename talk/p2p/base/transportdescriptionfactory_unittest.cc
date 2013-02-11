@@ -37,7 +37,7 @@
 using talk_base::scoped_ptr;
 using cricket::TransportDescriptionFactory;
 using cricket::TransportDescription;
-using cricket::TransportDescriptionOptions;
+using cricket::TransportOptions;
 
 // TODO(juberti): Change this to SHA-256 once we have Win32 using OpenSSL.
 static const char* kDefaultDigestAlg = talk_base::DIGEST_SHA_1;
@@ -89,7 +89,7 @@ class TransportDescriptionFactoryTest : public testing::Test {
       f2_.set_secure(cricket::SEC_DISABLED);
     }
 
-    cricket::TransportDescriptionOptions options;
+    cricket::TransportOptions options;
     // The initial offer / answer exchange.
     talk_base::scoped_ptr<TransportDescription> offer(f1_.CreateOffer(
         options, NULL));
@@ -142,7 +142,7 @@ class TransportDescriptionFactoryTest : public testing::Test {
 TEST_F(TransportDescriptionFactoryTest, TestOfferGice) {
   f1_.set_protocol(cricket::ICEPROTO_GOOGLE);
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_GINGLE_P2P, "", "", "", "");
 }
 
@@ -150,7 +150,7 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferGice) {
 TEST_F(TransportDescriptionFactoryTest, TestOfferHybrid) {
   f1_.set_protocol(cricket::ICEPROTO_HYBRID);
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "google-ice", "", "", "");
 }
 
@@ -158,7 +158,7 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferHybrid) {
 TEST_F(TransportDescriptionFactoryTest, TestOfferIce) {
   f1_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
 }
 
@@ -168,12 +168,12 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferHybridDtls) {
   f1_.set_secure(cricket::SEC_ENABLED);
   f1_.set_identity(id1_.get());
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "google-ice", "", "",
             kDefaultDigestAlg);
   // Ensure it also works with SEC_REQUIRED.
   f1_.set_secure(cricket::SEC_REQUIRED);
-  desc.reset(f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+  desc.reset(f1_.CreateOffer(TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "google-ice", "", "",
             kDefaultDigestAlg);
 }
@@ -183,7 +183,7 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferHybridDtlsWithNoIdentity) {
   f1_.set_protocol(cricket::ICEPROTO_HYBRID);
   f1_.set_secure(cricket::SEC_ENABLED);
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(desc.get() == NULL);
 }
 
@@ -194,7 +194,7 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferHybridDtlsWithBadDigestAlg) {
   f1_.set_identity(id1_.get());
   f1_.set_digest_algorithm("bogus");
   scoped_ptr<TransportDescription> desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(desc.get() == NULL);
 }
 
@@ -205,11 +205,11 @@ TEST_F(TransportDescriptionFactoryTest, TestOfferHybridDtlsReofferIceDtls) {
   f1_.set_secure(cricket::SEC_ENABLED);
   f1_.set_identity(id1_.get());
   scoped_ptr<TransportDescription> old_desc(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(old_desc.get() != NULL);
   f1_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> desc(
-      f1_.CreateOffer(TransportDescriptionOptions(), old_desc.get()));
+      f1_.CreateOffer(TransportOptions(), old_desc.get()));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "",
             old_desc->ice_ufrag, old_desc->ice_pwd, kDefaultDigestAlg);
 }
@@ -219,14 +219,14 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerGiceToGice) {
   f1_.set_protocol(cricket::ICEPROTO_GOOGLE);
   f2_.set_protocol(cricket::ICEPROTO_GOOGLE);
   scoped_ptr<TransportDescription> offer(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(f2_.CreateAnswer(
-      offer.get(), TransportDescriptionOptions(), NULL));
+      offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_GINGLE_P2P, "", "", "", "");
   // Should get the same result when answering as hybrid.
   f2_.set_protocol(cricket::ICEPROTO_HYBRID);
-  desc.reset(f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+  desc.reset(f2_.CreateAnswer(offer.get(), TransportOptions(),
                               NULL));
   CheckDesc(desc.get(), cricket::NS_GINGLE_P2P, "", "", "", "");
 }
@@ -236,10 +236,10 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerGiceToHybrid) {
   f1_.set_protocol(cricket::ICEPROTO_HYBRID);
   f2_.set_protocol(cricket::ICEPROTO_GOOGLE);
   scoped_ptr<TransportDescription> offer(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_GINGLE_P2P, "", "", "", "");
 }
 
@@ -248,14 +248,14 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerIceToHybrid) {
   f1_.set_protocol(cricket::ICEPROTO_HYBRID);
   f2_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> offer(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
   // Should get the same result when answering as hybrid.
   f2_.set_protocol(cricket::ICEPROTO_HYBRID);
-  desc.reset(f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+  desc.reset(f2_.CreateAnswer(offer.get(), TransportOptions(),
                               NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
 }
@@ -265,14 +265,14 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerIceToIce) {
   f1_.set_protocol(cricket::ICEPROTO_RFC5245);
   f2_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> offer(f1_.CreateOffer(
-      TransportDescriptionOptions(), NULL));
+      TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(f2_.CreateAnswer(
-      offer.get(), TransportDescriptionOptions(), NULL));
+      offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
   // Should get the same result when answering as hybrid.
   f2_.set_protocol(cricket::ICEPROTO_HYBRID);
-  desc.reset(f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+  desc.reset(f2_.CreateAnswer(offer.get(), TransportOptions(),
                               NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
 }
@@ -282,10 +282,10 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerIceToGice) {
   f1_.set_protocol(cricket::ICEPROTO_GOOGLE);
   f2_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   ASSERT_TRUE(desc.get() == NULL);
 }
 
@@ -294,10 +294,10 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerGiceToIce) {
   f1_.set_protocol(cricket::ICEPROTO_RFC5245);
   f2_.set_protocol(cricket::ICEPROTO_GOOGLE);
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(f2_.CreateAnswer(
-      offer.get(), TransportDescriptionOptions(), NULL));
+      offer.get(), TransportOptions(), NULL));
   ASSERT_TRUE(desc.get() == NULL);
 }
 
@@ -306,13 +306,13 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerIceToIceReanswer) {
   f1_.set_protocol(cricket::ICEPROTO_RFC5245);
   f2_.set_protocol(cricket::ICEPROTO_RFC5245);
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> old_desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   ASSERT_TRUE(old_desc.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+      f2_.CreateAnswer(offer.get(), TransportOptions(),
                        old_desc.get()));
   ASSERT_TRUE(desc.get() != NULL);
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "",
@@ -326,10 +326,10 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerHybridToHybridDtls) {
   f1_.set_identity(id1_.get());
   f2_.set_protocol(cricket::ICEPROTO_HYBRID);
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
 }
 
@@ -341,13 +341,13 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerHybridDtlsToHybrid) {
   f2_.set_secure(cricket::SEC_ENABLED);
   f2_.set_identity(id2_.get());
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "", "");
   f2_.set_secure(cricket::SEC_REQUIRED);
-  desc.reset(f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+  desc.reset(f2_.CreateAnswer(offer.get(), TransportOptions(),
                               NULL));
   ASSERT_TRUE(desc.get() == NULL);
 }
@@ -362,14 +362,14 @@ TEST_F(TransportDescriptionFactoryTest, TestAnswerHybridDtlsToHybridDtls) {
   f2_.set_secure(cricket::SEC_ENABLED);
   f2_.set_identity(id2_.get());
   scoped_ptr<TransportDescription> offer(
-      f1_.CreateOffer(TransportDescriptionOptions(), NULL));
+      f1_.CreateOffer(TransportOptions(), NULL));
   ASSERT_TRUE(offer.get() != NULL);
   scoped_ptr<TransportDescription> desc(
-      f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(), NULL));
+      f2_.CreateAnswer(offer.get(), TransportOptions(), NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "",
             kDefaultDigestAlg);
   f2_.set_secure(cricket::SEC_REQUIRED);
-  desc.reset(f2_.CreateAnswer(offer.get(), TransportDescriptionOptions(),
+  desc.reset(f2_.CreateAnswer(offer.get(), TransportOptions(),
                               NULL));
   CheckDesc(desc.get(), cricket::NS_JINGLE_ICE_UDP, "", "", "",
             kDefaultDigestAlg);

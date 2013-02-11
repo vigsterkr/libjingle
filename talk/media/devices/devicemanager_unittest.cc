@@ -410,6 +410,7 @@ TEST_F(DeviceManagerTestFake, CaptureConstraintsWhitelisted) {
   scoped_ptr<cricket::VideoCapturer> capturer(
       dm_->CreateVideoCapturer(device));
   cricket::VideoFormat best_format;
+  capturer->set_enable_camera_list(true);
   EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
   EXPECT_EQ(kHdFormat, best_format);
 }
@@ -419,6 +420,7 @@ TEST_F(DeviceManagerTestFake, CaptureConstraintsNotWhitelisted) {
   scoped_ptr<cricket::VideoCapturer> capturer(
       dm_->CreateVideoCapturer(device));
   cricket::VideoFormat best_format;
+  capturer->set_enable_camera_list(true);
   EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
   EXPECT_EQ(kVgaFormat, best_format);
 }
@@ -430,6 +432,7 @@ TEST_F(DeviceManagerTestFake, CaptureConstraintsUnWhitelisted) {
   scoped_ptr<cricket::VideoCapturer> capturer(
       dm_->CreateVideoCapturer(device));
   cricket::VideoFormat best_format;
+  capturer->set_enable_camera_list(true);
   EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
   EXPECT_EQ(kVgaFormat, best_format);
 }
@@ -440,6 +443,7 @@ TEST_F(DeviceManagerTestFake, CaptureConstraintsWildcard) {
   scoped_ptr<cricket::VideoCapturer> capturer(
       dm_->CreateVideoCapturer(device));
   cricket::VideoFormat best_format;
+  capturer->set_enable_camera_list(true);
   EXPECT_TRUE(capturer->GetBestCaptureFormat(kHdFormat, &best_format));
   EXPECT_EQ(kHdFormat, best_format);
 }

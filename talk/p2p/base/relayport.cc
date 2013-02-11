@@ -361,6 +361,17 @@ int RelayPort::SetOption(talk_base::Socket::Option opt, int value) {
   return result;
 }
 
+int RelayPort::GetOption(talk_base::Socket::Option opt, int* value) {
+  std::vector<OptionValue>::iterator it;
+  for (it = options_.begin(); it < options_.end(); ++it) {
+    if (it->first == opt) {
+      *value = it->second;
+      return 0;
+    }
+  }
+  return SOCKET_ERROR;
+}
+
 int RelayPort::GetError() {
   return error_;
 }

@@ -259,6 +259,10 @@ class MediaConstraintsInterface {
   static const char kNoiseSuppression[];  // googNoiseSuppression
   static const char kHighpassFilter[];  // googHighpassFilter
 
+  // Google-specific constraint keys for a local video source
+  static const char kNoiseReduction[];  // googNoiseReduction
+  static const char kLeakyBucket[];  // googLeakyBucket
+
   // Constraint keys for CreateOffer / CreateAnswer
   // Specified by the W3C PeerConnection spec
   static const char kOfferToReceiveVideo[];  // OfferToReceiveVideo

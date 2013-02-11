@@ -48,7 +48,8 @@ class JsepSessionDescription : public SessionDescriptionInterface {
   explicit JsepSessionDescription(const std::string& type);
   virtual ~JsepSessionDescription();
 
-  bool Initialize(const std::string& sdp);
+  // |error| can be NULL if don't care about the failure reason.
+  bool Initialize(const std::string& sdp, SdpParseError* error);
 
   // Takes ownership of |description|.
   bool Initialize(cricket::SessionDescription* description,

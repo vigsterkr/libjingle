@@ -104,7 +104,7 @@ struct MediaSessionOptions {
   // bps. -1 == auto.
   int video_bandwidth;
   int data_bandwidth;
-  TransportDescriptionOptions transport_options;
+  TransportOptions transport_options;
 
   struct Stream {
     Stream(MediaType type,
@@ -360,15 +360,20 @@ class MediaSessionDescriptionFactory {
  private:
   bool AddTransportOffer(
       const std::string& content_name,
-      const TransportDescriptionOptions& transport_options,
+      const TransportOptions& transport_options,
       const SessionDescription* current_desc,
       SessionDescription* offer) const;
+
+  TransportDescription* CreateTransportAnswer(
+      const std::string& content_name,
+      const SessionDescription* offer_desc,
+      const TransportOptions& transport_options,
+      const SessionDescription* current_desc) const;
+
   bool AddTransportAnswer(
       const std::string& content_name,
-      const SessionDescription* offer,
-      const TransportDescriptionOptions& transport_options,
-      const SessionDescription* current_desc,
-      SessionDescription* answer) const;
+      const TransportDescription& transport_desc,
+      SessionDescription* answer_desc) const;
 
   AudioCodecs audio_codecs_;
   VideoCodecs video_codecs_;
