@@ -278,17 +278,52 @@ class UsedPayloadTypes {
   // already in use by another codec. Call this methods with all codecs in a
   // session description to make sure no duplicate payload types exists.
   template <typename C>
-  void FindAndSetPayloadTypesUsed(C* codecs) {
-    for (typename C::iterator it = codecs->begin(); it != codecs->end(); ++it) {
-      Codec& codec = *it;
-      int pl_type = codec.id;
-      if (IsPayloadTypeUsed(pl_type)) {
-        pl_type = FindUnusedPayloadType();
-        LOG(LS_WARNING) << "Duplicate pl-type found. Reassigning "
-                        << codec.name << " to pl-type " << pl_type;
-        codec.id = pl_type;
+  void FindAndSetPayloadTypesUsed(std::vector<C>* codecs) {
+    for (typename std::vector<C>::iterator it = codecs->begin();
+         it != codecs->end(); ++it) {
+      FindAndSetPayloadTypeUsed<C>(&*it);
+    }
+  }
+
+  // Finds and sets an unused payload type if the |codec| payload type is
+  // already in use.
+  template <typename C>
+  void FindAndSetPayloadTypeUsed(C* codec) {
+    int origina_pl_type = codec->id;
+    int new_pl_type = codec->id;
+
+    if (IsPayloadTypeUsed(origina_pl_type)) {
+      new_pl_type = FindUnusedPayloadType();
+      LOG(LS_WARNING) << "Duplicate pl-type found. Reassigning "
+          << codec->name << " from " << origina_pl_type << " to "
+          << new_pl_type;
+      codec->id = new_pl_type;
+    }
+    SetPayloadTypeUsed(new_pl_type, origina_pl_type);
+  }
+
+  template <typename C>
+  void UpdateRtxCodecs(std::vector<C>* codecs) {
+    for (typename std::vector<C>::iterator it = codecs->begin();
+         it != codecs->end(); ++it) {
+      if (IsRtxCodec(*it)) {
+        C& rtx_codec = *it;
+        int referenced_pl_type =
+            talk_base::FromString<int>(
+                rtx_codec.params[kCodecParamAssociatedPayloadType]);
+
+        int updated_referenced_pl_type =
+            FindNewPayloadType(referenced_pl_type);
+        if (updated_referenced_pl_type != referenced_pl_type) {
+          LOG(LS_WARNING) << "Payload type referenced by RTX has been "
+              "reassigned from pt " << referenced_pl_type << " to "
+              << updated_referenced_pl_type
+              << " Updating RTX reference accordingly.";
+
+          rtx_codec.params[kCodecParamAssociatedPayloadType] =
+              talk_base::ToString(updated_referenced_pl_type);
+        };
       }
-      SetPayloadTypeUsed(pl_type);
     }
   }
 
@@ -317,33 +352,31 @@ class UsedPayloadTypes {
 
   bool IsPayloadTypeUsed(int payload_type) {
     if (IsDynamic(payload_type)) {
-      return payload_types_[payload_type -kDynamicPayloadTypeMin] == 1;
+      return payload_types_[payload_type - kDynamicPayloadTypeMin] != 0;
     }
     // Otherwise this is not a dynamic pl-type and we can't change it.
     return false;
   }
 
-  void SetPayloadTypeUsed(int payload_type) {
-    if (IsDynamic(payload_type)) {
-      payload_types_[payload_type -kDynamicPayloadTypeMin] = 1;
+  void SetPayloadTypeUsed(int new_type, int original_type) {
+    if (IsDynamic(new_type)) {
+      payload_types_[new_type - kDynamicPayloadTypeMin] = original_type;
     }
+  }
+
+  int FindNewPayloadType(int original_type) {
+    int payload_type = kDynamicPayloadTypeMax;
+    for (; payload_type >= kDynamicPayloadTypeMin; --payload_type) {
+      if (payload_types_[payload_type-kDynamicPayloadTypeMin] == original_type)
+        break;
+    }
+    ASSERT(payload_type >= kDynamicPayloadTypeMin);
+    return payload_type;
   }
 
   typedef int PayloadTypes[kDynamicPayloadTypeMax-kDynamicPayloadTypeMin+1];
   PayloadTypes payload_types_;
 };
-
-
-// Make sure we don't use the same dynamic RTP payload type twice.
-// This is important when using Bundle.
-static void DeDuplicatePayloadTypes(AudioCodecs* audio_codecs,
-                                    VideoCodecs* video_codecs,
-                                    DataCodecs* data_codecs) {
-  UsedPayloadTypes pltypes;
-  pltypes.FindAndSetPayloadTypesUsed<AudioCodecs>(audio_codecs);
-  pltypes.FindAndSetPayloadTypesUsed<VideoCodecs>(video_codecs);
-  pltypes.FindAndSetPayloadTypesUsed<DataCodecs>(data_codecs);
-}
 
 // Adds a StreamParams for each Stream in Streams with media type
 // media_type to content_description.
@@ -557,11 +590,16 @@ template <class C>
 static bool ContainsRtxCodec(const std::vector<C>& codecs) {
   typename std::vector<C>::const_iterator it;
   for (it = codecs.begin(); it != codecs.end(); ++it) {
-    if (stricmp(it->name.c_str(), kRtxCodecName) == 0) {
+    if (IsRtxCodec(*it)) {
       return true;
     }
   }
   return false;
+}
+
+template <class C>
+static bool IsRtxCodec(const C& codec) {
+  return stricmp(codec.name.c_str(), kRtxCodecName) == 0;
 }
 
 // Create a media content to be offered in a session-initiate,
@@ -625,11 +663,52 @@ static void NegotiateCodecs(const std::vector<C>& local_codecs,
          theirs != offered_codecs.end(); ++theirs) {
       if (ours->Matches(*theirs)) {
         C negotiated(*ours);
+        if (IsRtxCodec(negotiated)) {
+          // Since we use the payload type from the |offered_codecs|, we also
+          // need to use the referenced payload type.
+          negotiated.params = theirs->params;
+        }
         negotiated.id = theirs->id;
         negotiated_codecs->push_back(negotiated);
       }
     }
   }
+}
+
+template <class C>
+static bool FindMatchingCodec(const std::vector<C>& codecs,
+                              const C& codec_to_match,
+                              C* found_codec) {
+  for (typename std::vector<C>::const_iterator it = codecs.begin();
+       it  != codecs.end(); ++it) {
+    if (it->Matches(codec_to_match)) {
+      if (found_codec != NULL) {
+        *found_codec= *it;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// Adds all codecs from |reference_codecs| to |offered_codecs| that dont'
+// already exist in |offered_codecs| and ensure the payload types don't
+// collide.
+template <class C>
+static void FindCodecsToOffer(
+    const std::vector<C>& reference_codecs,
+    std::vector<C>* offered_codecs,
+    UsedPayloadTypes* used_pltypes) {
+  std::vector<C> new_rtx_codecs_;
+  for (typename std::vector<C>::const_iterator it = reference_codecs.begin();
+       it != reference_codecs.end(); ++it) {
+    if (!FindMatchingCodec<C>(*offered_codecs, *it, NULL)) {
+      C codec = *it;
+      used_pltypes->FindAndSetPayloadTypeUsed(&codec);
+      offered_codecs->push_back(codec);
+    }
+  }
+  used_pltypes->UpdateRtxCodecs(offered_codecs);
 }
 
 // Create a media content to be answered in a session-accept,
@@ -746,18 +825,18 @@ MediaSessionDescriptionFactory::MediaSessionDescriptionFactory(
 SessionDescription* MediaSessionDescriptionFactory::CreateOffer(
     const MediaSessionOptions& options,
     const SessionDescription* current_description) const {
-  AudioCodecs audio_codecs = audio_codecs_;
-  VideoCodecs video_codecs = video_codecs_;
-  DataCodecs data_codecs = data_codecs_;
   bool secure_transport = (transport_desc_factory_->secure() != SEC_DISABLED);
 
-  if (options.bundle_enabled) {
-    DeDuplicatePayloadTypes(&audio_codecs, &video_codecs, &data_codecs);
-  }
   scoped_ptr<SessionDescription> offer(new SessionDescription());
 
   StreamParamsVec current_streams;
   GetCurrentStreamParams(current_description, &current_streams);
+
+  AudioCodecs audio_codecs;
+  VideoCodecs video_codecs;
+  DataCodecs data_codecs;
+  GetCodecsToOffer(current_description, &audio_codecs, &video_codecs,
+                   &data_codecs);
 
   // Handle m=audio.
   if (options.has_audio) {
@@ -1061,6 +1140,48 @@ static const TransportDescription* GetTransportDescription(
     }
   }
   return desc;
+}
+
+void MediaSessionDescriptionFactory::GetCodecsToOffer(
+    const SessionDescription* current_description,
+    AudioCodecs* audio_codecs,
+    VideoCodecs* video_codecs,
+    DataCodecs* data_codecs) const {
+  UsedPayloadTypes used_pltypes;
+  audio_codecs->clear();
+  video_codecs->clear();
+  data_codecs->clear();
+
+
+  // First - get all codecs from the current description if the media type
+  // is used.
+  // Add them to |used_pltypes| so the payloadtype is not reused if a new media
+  // type is added.
+  if (current_description) {
+    const AudioContentDescription* audio =
+        GetFirstAudioContentDescription(current_description);
+    if (audio) {
+      *audio_codecs = audio->codecs();
+      used_pltypes.FindAndSetPayloadTypesUsed<AudioCodec>(audio_codecs);
+    }
+    const VideoContentDescription* video =
+        GetFirstVideoContentDescription(current_description);
+    if (video) {
+      *video_codecs = video->codecs();
+      used_pltypes.FindAndSetPayloadTypesUsed<VideoCodec>(video_codecs);
+    }
+    const DataContentDescription* data =
+        GetFirstDataContentDescription(current_description);
+    if (data) {
+      *data_codecs = data->codecs();
+      used_pltypes.FindAndSetPayloadTypesUsed<DataCodec>(data_codecs);
+    }
+  }
+
+  // Add our codecs that are not in |current_description|.
+  FindCodecsToOffer<AudioCodec>(audio_codecs_, audio_codecs, &used_pltypes);
+  FindCodecsToOffer<VideoCodec>(video_codecs_, video_codecs, &used_pltypes);
+  FindCodecsToOffer<DataCodec>(data_codecs_, data_codecs, &used_pltypes);
 }
 
 bool MediaSessionDescriptionFactory::AddTransportOffer(

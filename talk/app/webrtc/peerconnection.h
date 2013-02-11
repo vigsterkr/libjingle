@@ -51,7 +51,7 @@ typedef std::vector<PortAllocatorFactoryInterface::TurnConfiguration>
 // the PeerConnection functionality.
 class PeerConnection : public PeerConnectionInterface,
                        public RemoteMediaStreamObserver,
-                       public IceCandidateObserver,
+                       public IceObserver,
                        public talk_base::MessageHandler,
                        public sigslot::has_slots<> {
  public:
@@ -80,7 +80,10 @@ class PeerConnection : public PeerConnectionInterface,
   virtual ReadyState ready_state() { return signaling_state(); }
   virtual SignalingState signaling_state();
 
+  // TODO(bemasc): Remove ice_state() when callers are removed.
   virtual IceState ice_state();
+  virtual IceConnectionState ice_connection_state();
+  virtual IceGatheringState ice_gathering_state();
 
   virtual const SessionDescriptionInterface* local_description() const;
   virtual const SessionDescriptionInterface* remote_description() const;
@@ -110,8 +113,9 @@ class PeerConnection : public PeerConnectionInterface,
   virtual void OnRemoveStream(MediaStreamInterface* stream);
   virtual void OnAddDataChannel(DataChannelInterface* data_channel);
 
-  // Implements IceCandidateObserver
-  virtual void OnIceChange();
+  // Implements IceObserver
+  virtual void OnIceConnectionChange(IceConnectionState new_state);
+  virtual void OnIceGatheringChange(IceGatheringState new_state);
   virtual void OnIceCandidate(const IceCandidateInterface* candidate);
   virtual void OnIceComplete();
 
@@ -142,8 +146,10 @@ class PeerConnection : public PeerConnectionInterface,
   talk_base::scoped_refptr<PeerConnectionFactory> factory_;
   PeerConnectionObserver* observer_;
   SignalingState signaling_state_;
-  // TODO(ronghuawu): Implement ice_state.
+  // TODO(bemasc): Remove ice_state_.
   IceState ice_state_;
+  IceConnectionState ice_connection_state_;
+  IceGatheringState ice_gathering_state_;
   talk_base::scoped_refptr<StreamCollection> local_media_streams_;
 
   talk_base::scoped_ptr<cricket::PortAllocator> port_allocator_;

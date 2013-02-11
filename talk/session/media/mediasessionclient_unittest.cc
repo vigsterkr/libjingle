@@ -69,7 +69,7 @@ static const cricket::VideoCodec kVideoCodecs[] = {
 };
 
 static const cricket::DataCodec kDataCodecs[] = {
-  cricket::DataCodec(101, "google-data", 0)
+  cricket::DataCodec(127, "google-data", 0)
 };
 
 const std::string kGingleCryptoOffer = \
@@ -439,7 +439,7 @@ const std::string kJingleVideoInitiateWithData(
      "    </content>                                                    " \
      "    <content name='test data'>                                    " \
      "      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='data'> " \
-     "        <payload-type id='101' name='google-data'/>               " \
+     "        <payload-type id='127' name='google-data'/>               " \
      "        <rtcp-mux/>                                               " \
      "      </description>                                              " \
      "     <transport xmlns=\"http://www.google.com/transport/p2p\"/>   " \
@@ -1560,7 +1560,7 @@ class MediaSessionClientTest : public sigslot::has_slots<> {
     buzz::XmlElement* e = PayloadTypeFromContent(content);
     ASSERT_TRUE(e != NULL);
     cricket::DataCodec codec = parser_->DataCodecFromPayloadType(e);
-    EXPECT_EQ(101, codec.id);
+    EXPECT_EQ(127, codec.id);
     EXPECT_EQ("google-data", codec.name);
 
     CheckDataRtcpMux(true, call_->sessions()[0]->local_description());

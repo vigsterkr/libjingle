@@ -119,8 +119,8 @@ static const VideoCodec kVideoCodecsAnswer[] = {
 };
 
 static const DataCodec kDataCodecs1[] = {
-  DataCodec(96, "binary-data", 2),
-  DataCodec(97, "utf8-text", 1)
+  DataCodec(98, "binary-data", 2),
+  DataCodec(99, "utf8-text", 1)
 };
 
 static const DataCodec kDataCodecs2[] = {
@@ -129,8 +129,8 @@ static const DataCodec kDataCodecs2[] = {
 };
 
 static const DataCodec kDataCodecsAnswer[] = {
-  DataCodec(96, "binary-data", 2),
-  DataCodec(97, "utf8-text", 1)
+  DataCodec(98, "binary-data", 2),
+  DataCodec(99, "utf8-text", 1)
 };
 
 static const uint32 kFec1Ssrc[] = {10, 11};
@@ -1126,6 +1126,186 @@ TEST_F(MediaSessionDescriptionFactoryTest, TestCreateMultiStreamVideoAnswer) {
   const StreamParamsVec& updated_data_streams = updated_dcd->streams();
   ASSERT_EQ(1U, updated_data_streams.size());
   EXPECT_TRUE(data_streams[0] == updated_data_streams[0]);
+}
+
+
+// Create an updated offer after creating an answer to the original offer and
+// verify that the codecs that were part of the original answer are not changed
+// in the updated offer.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       RespondentCreatesOfferAfterCreatingAnswer) {
+  MediaSessionOptions opts;
+  opts.has_audio = true;
+  opts.has_video = true;
+
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  const AudioContentDescription* acd =
+      GetFirstAudioContentDescription(answer.get());
+  EXPECT_EQ(MAKE_VECTOR(kAudioCodecsAnswer), acd->codecs());
+
+  const VideoContentDescription* vcd =
+      GetFirstVideoContentDescription(answer.get());
+  EXPECT_EQ(MAKE_VECTOR(kVideoCodecsAnswer), vcd->codecs());
+
+  talk_base::scoped_ptr<SessionDescription> updated_offer(
+      f2_.CreateOffer(opts, answer.get()));
+
+  // The expected audio codecs are the common audio codecs from the first
+  // offer/answer exchange plus the audio codecs only |f2_| offer, sorted in
+  // preference order.
+  const AudioCodec kUpdatedAudioCodecOffer[] = {
+    kAudioCodecs2[0],
+    kAudioCodecsAnswer[0],
+    kAudioCodecsAnswer[1],
+  };
+
+  // The expected video codecs are the common video codecs from the first
+  // offer/answer exchange plus the video codecs only |f2_| offer, sorted in
+  // preference order.
+  const VideoCodec kUpdatedVideoCodecOffer[] = {
+    kVideoCodecsAnswer[0],
+    kVideoCodecs2[1],
+  };
+
+  const AudioContentDescription* updated_acd =
+      GetFirstAudioContentDescription(updated_offer.get());
+  EXPECT_EQ(MAKE_VECTOR(kUpdatedAudioCodecOffer), updated_acd->codecs());
+
+  const VideoContentDescription* updated_vcd =
+      GetFirstVideoContentDescription(updated_offer.get());
+  EXPECT_EQ(MAKE_VECTOR(kUpdatedVideoCodecOffer), updated_vcd->codecs());
+}
+
+// Create an updated offer after creating an answer to the original offer and
+// verify that the codecs that were part of the original answer are not changed
+// in the updated offer. In this test Rtx is enabled.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       RespondentCreatesOfferAfterCreatingAnswerWithRtx) {
+  MediaSessionOptions opts;
+  opts.has_video = true;
+  opts.has_audio = false;
+  std::vector<VideoCodec> f1_codecs = MAKE_VECTOR(kVideoCodecs1);
+  VideoCodec rtx_f1;
+  rtx_f1.id = 126;
+  rtx_f1.name = cricket::kRtxCodecName;
+
+  // This creates rtx for H264 with the payload type |f1_| uses.
+  rtx_f1.params[cricket::kCodecParamAssociatedPayloadType] =
+      talk_base::ToString<int>(kVideoCodecs1[1].id);
+  f1_codecs.push_back(rtx_f1);
+  f1_.set_video_codecs(f1_codecs);
+
+  std::vector<VideoCodec> f2_codecs = MAKE_VECTOR(kVideoCodecs2);
+  VideoCodec rtx_f2;
+  rtx_f2.id = 127;
+  rtx_f2.name = cricket::kRtxCodecName;
+
+  // This creates rtx for H264 with the payload type |f2_| uses.
+  rtx_f2.params[cricket::kCodecParamAssociatedPayloadType] =
+      talk_base::ToString<int>(kVideoCodecs2[0].id);
+  f2_codecs.push_back(rtx_f2);
+  f2_.set_video_codecs(f2_codecs);
+
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  ASSERT_TRUE(offer.get() != NULL);
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  const VideoContentDescription* vcd =
+      GetFirstVideoContentDescription(answer.get());
+
+  std::vector<VideoCodec> expected_codecs = MAKE_VECTOR(kVideoCodecsAnswer);
+  expected_codecs.push_back(rtx_f1);
+
+  EXPECT_EQ(expected_codecs, vcd->codecs());
+
+  // Now, make sure we get same result, except for the preference order,
+  // if |f2_| creates an updated offer even though the default payload types
+  // are different from |f1_|.
+  expected_codecs[0].preference = f1_codecs[1].preference;
+
+  talk_base::scoped_ptr<SessionDescription> updated_offer(
+      f2_.CreateOffer(opts, answer.get()));
+  ASSERT_TRUE(updated_offer);
+  talk_base::scoped_ptr<SessionDescription> updated_answer(
+      f1_.CreateAnswer(updated_offer.get(), opts, answer.get()));
+
+  const VideoContentDescription* updated_vcd =
+      GetFirstVideoContentDescription(updated_answer.get());
+
+  EXPECT_EQ(expected_codecs, updated_vcd->codecs());
+}
+
+// Create an updated offer that adds video after creating an audio only answer
+// to the original offer. This test verifies that if a video codec and the RTX
+// codec have the same default payload type as an audio codec that is already in
+// use, the added codecs payload types are changed.
+TEST_F(MediaSessionDescriptionFactoryTest,
+       RespondentCreatesOfferWithVideoAndRtxAfterCreatingAudiAnswer) {
+  std::vector<VideoCodec> f1_codecs = MAKE_VECTOR(kVideoCodecs1);
+  VideoCodec rtx_f1;
+  rtx_f1.id = 126;
+  rtx_f1.name = cricket::kRtxCodecName;
+
+  // This creates rtx for H264 with the payload type |f1_| uses.
+  rtx_f1.params[cricket::kCodecParamAssociatedPayloadType] =
+      talk_base::ToString<int>(kVideoCodecs1[1].id);
+  f1_codecs.push_back(rtx_f1);
+  f1_.set_video_codecs(f1_codecs);
+
+  MediaSessionOptions opts;
+  opts.has_audio = true;
+  opts.has_video = false;
+
+  talk_base::scoped_ptr<SessionDescription> offer(f1_.CreateOffer(opts, NULL));
+  talk_base::scoped_ptr<SessionDescription> answer(
+      f2_.CreateAnswer(offer.get(), opts, NULL));
+
+  const AudioContentDescription* acd =
+      GetFirstAudioContentDescription(answer.get());
+  EXPECT_EQ(MAKE_VECTOR(kAudioCodecsAnswer), acd->codecs());
+
+  // Now - let |f2_| add video with RTX and let the payload type the RTX codec
+  // reference  be the same as an audio codec that was negotiated in the
+  // first offer/answer exchange.
+  opts.has_audio = true;
+  opts.has_video = true;
+
+  std::vector<VideoCodec> f2_codecs = MAKE_VECTOR(kVideoCodecs2);
+  int used_pl_type = acd->codecs()[0].id;
+  f2_codecs[0].id = used_pl_type;  // Set the payload type for H264.
+  VideoCodec rtx_f2;
+  rtx_f2.id = 127;
+  rtx_f2.name = cricket::kRtxCodecName;
+  rtx_f2.params[cricket::kCodecParamAssociatedPayloadType] =
+      talk_base::ToString<int>(used_pl_type);
+  f2_codecs.push_back(rtx_f2);
+  f2_.set_video_codecs(f2_codecs);
+
+  talk_base::scoped_ptr<SessionDescription> updated_offer(
+      f2_.CreateOffer(opts, answer.get()));
+  ASSERT_TRUE(updated_offer);
+  talk_base::scoped_ptr<SessionDescription> updated_answer(
+      f1_.CreateAnswer(updated_offer.get(), opts, answer.get()));
+
+  const AudioContentDescription* updated_acd =
+      GetFirstAudioContentDescription(answer.get());
+  EXPECT_EQ(MAKE_VECTOR(kAudioCodecsAnswer), updated_acd->codecs());
+
+  const VideoContentDescription* updated_vcd =
+      GetFirstVideoContentDescription(updated_answer.get());
+
+  ASSERT_EQ("H264", updated_vcd->codecs()[0].name);
+  ASSERT_EQ(cricket::kRtxCodecName, updated_vcd->codecs()[1].name);
+  int new_h264_pl_type =  updated_vcd->codecs()[0].id;
+  EXPECT_NE(used_pl_type, new_h264_pl_type);
+  VideoCodec rtx = updated_vcd->codecs()[1];
+  int pt_referenced_by_rtx = talk_base::FromString<int>(
+      rtx.params[cricket::kCodecParamAssociatedPayloadType]);
+  EXPECT_EQ(new_h264_pl_type, pt_referenced_by_rtx);
 }
 
 TEST(MediaSessionDescription, CopySessionDescription) {

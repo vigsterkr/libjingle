@@ -358,6 +358,10 @@ class MediaSessionDescriptionFactory {
         const SessionDescription* current_description) const;
 
  private:
+  void GetCodecsToOffer(const SessionDescription* current_description,
+                        AudioCodecs* audio_codecs,
+                        VideoCodecs* video_codecs,
+                        DataCodecs* data_codecs) const;
   bool AddTransportOffer(
       const std::string& content_name,
       const TransportOptions& transport_options,

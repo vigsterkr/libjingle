@@ -42,6 +42,7 @@ struct Codec {
   std::string name;
   int clockrate;
   int preference;
+  CodecParameterMap params;
 
   // Creates a codec with the given parameters.
   Codec(int id, const std::string& name, int clockrate, int preference)
@@ -85,7 +86,6 @@ struct Codec {
 struct AudioCodec : public Codec {
   int bitrate;
   int channels;
-  CodecParameterMap params;
 
   // Creates a codec with the given parameters.
   AudioCodec(int pt, const std::string& nm, int cr, int br, int cs, int pr)
@@ -137,7 +137,6 @@ struct VideoCodec : public Codec {
   int width;
   int height;
   int framerate;
-  CodecParameterMap params;
 
   // Creates a codec with the given parameters.
   VideoCodec(int pt, const std::string& nm, int w, int h, int fr, int pr)

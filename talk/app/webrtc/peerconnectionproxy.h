@@ -59,7 +59,10 @@ class PeerConnectionProxy : public PeerConnectionInterface,
   // TODO(perkj): Remove ready_state when callers removed. It is deprecated.
   virtual ReadyState ready_state() { return signaling_state(); }
   virtual SignalingState signaling_state();
+  // TODO(bemasc): Remove ice_state when callers are removed. It is deprecated.
   virtual IceState ice_state();
+  virtual IceConnectionState ice_connection_state();
+  virtual IceGatheringState ice_gathering_state();
 
   virtual const SessionDescriptionInterface* local_description() const;
   virtual const SessionDescriptionInterface* remote_description() const;

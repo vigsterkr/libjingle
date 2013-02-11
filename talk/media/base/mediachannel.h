@@ -125,11 +125,9 @@ class SettablePercent : public Settable<float> {
  public:
   virtual void Set(float val) {
     if (val < 0) {
-      LOG(LS_ERROR) << "Value too small, setting to 0 ";
       val = 0;
     }
     if (val >  1.0) {
-      LOG(LS_ERROR) << "Value too large, setting to 1.0 ";
       val = 1.0;
     }
     Settable<float>::Set(val);

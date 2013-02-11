@@ -106,48 +106,6 @@ class StreamCollectionInterface : public talk_base::RefCountInterface {
   ~StreamCollectionInterface() {}
 };
 
-// PeerConnection callback interface. Application should implement these
-// methods.
-class PeerConnectionObserver {
- public:
-  enum StateType {
-    kSignalingState,
-    kIceState,
-  };
-
-  virtual void OnError() = 0;
-
-  // Triggered when SignalingState or IceState have changed.
-  virtual void OnStateChange(StateType state_changed) = 0;
-
-  // Triggered when media is received on a new stream from remote peer.
-  virtual void OnAddStream(MediaStreamInterface* stream) = 0;
-
-  // Triggered when a remote peer close a stream.
-  virtual void OnRemoveStream(MediaStreamInterface* stream) = 0;
-
-  // Triggered when a remote peer open a data channel.
-  // TODO(perkj): Make pure virtual.
-  virtual void OnDataChannel(DataChannelInterface* data_channel) {}
-
-  // Triggered when renegotation is needed, for example the ICE has restarted.
-  virtual void OnRenegotiationNeeded() {}
-
-  // TODO(ronghuawu): Implement OnIceChange.
-  // Called any time the iceState changes.
-  virtual void OnIceChange() {}
-
-  // New Ice candidate have been found.
-  virtual void OnIceCandidate(const IceCandidateInterface* candidate) = 0;
-
-  // All Ice candidates have been found.
-  virtual void OnIceComplete() {}
-
- protected:
-  // Dtor protected as objects shouldn't be deleted via this interface.
-  ~PeerConnectionObserver() {}
-};
-
 class StatsObserver : public talk_base::RefCountInterface {
  public:
   virtual void OnComplete(const std::vector<StatsReport>& reports) = 0;
@@ -158,7 +116,7 @@ class StatsObserver : public talk_base::RefCountInterface {
 
 class PeerConnectionInterface : public talk_base::RefCountInterface {
  public:
-  // Keep in sync with org.webrtc.PeerConnection.SignalingState.
+  // See http://dev.w3.org/2011/webrtc/editor/webrtc.html#state-definitions .
   enum SignalingState {
     kStable,
     kHaveLocalOffer,
@@ -168,7 +126,8 @@ class PeerConnectionInterface : public talk_base::RefCountInterface {
     kClosed,
   };
 
-  // Keep in sync with org.webrtc.PeerConnection.IceState.
+  // TODO(bemasc): Remove IceState when callers are changed to
+  // IceConnection/GatheringState.
   enum IceState {
     kIceNew,
     kIceGathering,
@@ -178,6 +137,22 @@ class PeerConnectionInterface : public talk_base::RefCountInterface {
     kIceCompleted,
     kIceFailed,
     kIceClosed,
+  };
+
+  enum IceGatheringState {
+    kIceGatheringNew,
+    kIceGatheringGathering,
+    kIceGatheringComplete
+  };
+
+  enum IceConnectionState {
+    kIceConnectionNew,
+    kIceConnectionChecking,
+    kIceConnectionConnected,
+    kIceConnectionCompleted,
+    kIceConnectionFailed,
+    kIceConnectionDisconnected,
+    kIceConnectionClosed,
   };
 
   struct IceServer {
@@ -258,12 +233,68 @@ class PeerConnectionInterface : public talk_base::RefCountInterface {
   // Returns the current SignalingState.
   virtual SignalingState signaling_state() = 0;
 
+  // TODO(bemasc): Remove ice_state when callers are changed to
+  // IceConnection/GatheringState.
   // Returns the current IceState.
   virtual IceState ice_state() = 0;
+  virtual IceConnectionState ice_connection_state() = 0;
+  virtual IceGatheringState ice_gathering_state() = 0;
 
  protected:
   // Dtor protected as objects shouldn't be deleted via this interface.
   ~PeerConnectionInterface() {}
+};
+
+// PeerConnection callback interface. Application should implement these
+// methods.
+class PeerConnectionObserver {
+ public:
+  enum StateType {
+    kSignalingState,
+    kIceState,
+  };
+
+  virtual void OnError() = 0;
+
+  // Triggered when the SignalingState changed.
+  virtual void OnSignalingChange(
+     PeerConnectionInterface::SignalingState new_state) {}
+
+  // Triggered when SignalingState or IceState have changed.
+  // TODO(bemasc): Remove once callers transition to OnSignalingChange.
+  virtual void OnStateChange(StateType state_changed) {}
+
+  // Triggered when media is received on a new stream from remote peer.
+  virtual void OnAddStream(MediaStreamInterface* stream) = 0;
+
+  // Triggered when a remote peer close a stream.
+  virtual void OnRemoveStream(MediaStreamInterface* stream) = 0;
+
+  // Triggered when a remote peer open a data channel.
+  // TODO(perkj): Make pure virtual.
+  virtual void OnDataChannel(DataChannelInterface* data_channel) {}
+
+  // Triggered when renegotation is needed, for example the ICE has restarted.
+  virtual void OnRenegotiationNeeded() {}
+
+  // Called any time the IceConnectionState changes
+  virtual void OnIceConnectionChange(
+      PeerConnectionInterface::IceConnectionState new_state) {}
+
+  // Called any time the IceGatheringState changes
+  virtual void OnIceGatheringChange(
+      PeerConnectionInterface::IceGatheringState new_state) {}
+
+  // New Ice candidate have been found.
+  virtual void OnIceCandidate(const IceCandidateInterface* candidate) = 0;
+
+  // TODO(bemasc): Remove this once callers transition to OnIceGatheringChange.
+  // All Ice candidates have been found.
+  virtual void OnIceComplete() {}
+
+ protected:
+  // Dtor protected as objects shouldn't be deleted via this interface.
+  ~PeerConnectionObserver() {}
 };
 
 // Factory class used for creating cricket::PortAllocator that is used

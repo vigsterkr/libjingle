@@ -76,6 +76,7 @@ using webrtc::FakeConstraints;
 using webrtc::JsepSessionDescription;
 using webrtc::JsepIceCandidate;
 using webrtc::SessionDescriptionInterface;
+using webrtc::PeerConnectionInterface;
 
 static const SocketAddress kClientAddr1("11.11.11.11", 0);
 static const SocketAddress kClientAddr2("22.22.22.22", 0);
@@ -113,13 +114,31 @@ static void InjectAfter(const std::string& line,
                              tmp.c_str(), tmp.length(), message);
 }
 
-class MockCandidateObserver : public webrtc::IceCandidateObserver {
+class MockIceObserver : public webrtc::IceObserver {
  public:
-  MockCandidateObserver()
-      : oncandidatesready_(false) {
+  MockIceObserver()
+      : oncandidatesready_(false),
+        ice_connection_state_(PeerConnectionInterface::kIceConnectionNew),
+        ice_gathering_state_(PeerConnectionInterface::kIceGatheringNew) {
   }
 
-  virtual void OnIceChange() {}
+  virtual void OnIceConnectionChange(
+      PeerConnectionInterface::IceConnectionState new_state) {
+    ice_connection_state_ = new_state;
+  }
+  virtual void OnIceGatheringChange(
+      PeerConnectionInterface::IceGatheringState new_state) {
+    // We can never transition back to "new".
+    EXPECT_NE(PeerConnectionInterface::kIceGatheringNew, new_state);
+    ice_gathering_state_ = new_state;
+
+    // oncandidatesready_ really means "ICE gathering is complete".
+    // This if statement ensures that this value remains correct when we
+    // transition from kIceGatheringComplete to kIceGatheringGathering.
+    if (new_state == PeerConnectionInterface::kIceGatheringGathering) {
+      oncandidatesready_ = false;
+    }
+  }
 
   // Found a new candidate.
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
@@ -128,16 +147,28 @@ class MockCandidateObserver : public webrtc::IceCandidateObserver {
     } else if (candidate->sdp_mline_index() == kMediaContentIndex1) {
       mline_1_candidates_.push_back(candidate->candidate());
     }
+    // The ICE gathering state should always be Gathering when a candidate is
+    // received (or possibly Completed in the case of the final candidate).
+    EXPECT_NE(PeerConnectionInterface::kIceGatheringNew, ice_gathering_state_);
   }
 
+  // TODO(bemasc): Remove this once callers transition to OnIceGatheringChange.
   virtual void OnIceComplete() {
     EXPECT_FALSE(oncandidatesready_);
     oncandidatesready_ = true;
+
+    // OnIceGatheringChange(IceGatheringCompleted) and OnIceComplete() should
+    // be called approximately simultaneously.  For ease of testing, this
+    // check additionally requires that they be called in the above order.
+    EXPECT_EQ(PeerConnectionInterface::kIceGatheringComplete,
+              ice_gathering_state_);
   }
 
   bool oncandidatesready_;
   std::vector<cricket::Candidate> mline_0_candidates_;
   std::vector<cricket::Candidate> mline_1_candidates_;
+  PeerConnectionInterface::IceConnectionState ice_connection_state_;
+  PeerConnectionInterface::IceGatheringState ice_gathering_state_;
 };
 
 class WebRtcSessionForTest : public webrtc::WebRtcSession {
@@ -146,11 +177,11 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
                        talk_base::Thread* signaling_thread,
                        talk_base::Thread* worker_thread,
                        cricket::PortAllocator* port_allocator,
-                       webrtc::IceCandidateObserver* ice_observer,
+                       webrtc::IceObserver* ice_observer,
                        webrtc::MediaStreamSignaling* mediastream_signaling)
     : WebRtcSession(cmgr, signaling_thread, worker_thread, port_allocator,
                     mediastream_signaling) {
-    RegisterObserver(ice_observer);
+    RegisterIceObserver(ice_observer);
   }
   virtual ~WebRtcSessionForTest() {}
 
@@ -282,6 +313,11 @@ class WebRtcSessionTest : public testing::Test {
         &observer_,
         &mediastream_signaling_));
 
+    EXPECT_EQ(PeerConnectionInterface::kIceConnectionNew,
+        observer_.ice_connection_state_);
+    EXPECT_EQ(PeerConnectionInterface::kIceGatheringNew,
+        observer_.ice_gathering_state_);
+
     EXPECT_TRUE(session_->Initialize(constraints_.get()));
   }
 
@@ -308,6 +344,9 @@ class WebRtcSessionTest : public testing::Test {
   void InitiateCall() {
     SessionDescriptionInterface* offer = session_->CreateOffer(NULL);
     EXPECT_TRUE(session_->SetLocalDescription(offer));
+    EXPECT_TRUE_WAIT(PeerConnectionInterface::kIceGatheringNew !=
+        observer_.ice_gathering_state_,
+        kIceCandidatesTimeout);
   }
 
   bool ChannelsExist() {
@@ -620,6 +659,68 @@ class WebRtcSessionTest : public testing::Test {
     EXPECT_EQ(can, session_->CanInsertDtmf(kAudioTrack1));
   }
 
+  // The method sets up a call from the session to itself, in a loopback
+  // arrangement.  It also uses a firewall rule to create a temporary
+  // disconnection.  This code is placed as a method so that it can be invoked
+  // by multiple tests with different allocators (e.g. with and without BUNDLE).
+  // While running the call, this method also checks if the session goes through
+  // the correct sequence of ICE states when a connection is established,
+  // broken, and re-established.
+  // The Connection state should go:
+  // New -> Checking -> Connected -> Disconnected -> Connected.
+  // The Gathering state should go: New -> Gathering -> Completed.
+  void TestLoopbackCall() {
+    AddInterface(kClientAddr1);
+    Init();
+    mediastream_signaling_.SendAudioVideoStream1();
+    SessionDescriptionInterface* offer = session_->CreateOffer(NULL);
+
+    EXPECT_EQ(PeerConnectionInterface::kIceGatheringNew,
+              observer_.ice_gathering_state_);
+    EXPECT_TRUE(session_->SetLocalDescription(offer));
+    EXPECT_EQ(PeerConnectionInterface::kIceConnectionNew,
+              observer_.ice_connection_state_);
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceGatheringGathering,
+                   observer_.ice_gathering_state_,
+                   kIceCandidatesTimeout);
+    EXPECT_TRUE_WAIT(observer_.oncandidatesready_, kIceCandidatesTimeout);
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceGatheringComplete,
+                   observer_.ice_gathering_state_,
+                   kIceCandidatesTimeout);
+
+    std::string sdp;
+    offer->ToString(&sdp);
+    SessionDescriptionInterface* desc =
+        webrtc::CreateSessionDescription(JsepSessionDescription::kAnswer, sdp);
+    ASSERT_TRUE(desc != NULL);
+    EXPECT_TRUE(session_->SetRemoteDescription(desc));
+
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceConnectionChecking,
+                   observer_.ice_connection_state_,
+                   kIceCandidatesTimeout);
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceConnectionConnected,
+                   observer_.ice_connection_state_,
+                   kIceCandidatesTimeout);
+    // TODO(bemasc): EXPECT(Completed) once the details are standardized.
+
+    // Adding firewall rule to block ping requests, which should cause
+    // transport channel failure.
+    fss_->AddRule(false, talk_base::FP_ANY, talk_base::FD_ANY, kClientAddr1);
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceConnectionDisconnected,
+                   observer_.ice_connection_state_,
+                   kIceCandidatesTimeout);
+
+    // Clearing the rules, session should move back to completed state.
+    fss_->ClearRules();
+    // Session is automatically calling OnSignalingReady after creation of
+    // new portallocator session which will allocate new set of candidates.
+
+    // TODO(bemasc): Change this to Completed once the details are standardized.
+    EXPECT_EQ_WAIT(PeerConnectionInterface::kIceConnectionConnected,
+                   observer_.ice_connection_state_,
+                   kIceCandidatesTimeout);
+  }
+
   void VerifyTransportType(const std::string& content_name,
                            cricket::TransportProtocol protocol) {
     const cricket::Transport* transport = session_->GetTransport(content_name);
@@ -651,7 +752,7 @@ class WebRtcSessionTest : public testing::Test {
   talk_base::scoped_ptr<FakeConstraints> constraints_;
   FakeMediaStreamSignaling mediastream_signaling_;
   talk_base::scoped_ptr<WebRtcSessionForTest> session_;
-  MockCandidateObserver observer_;
+  MockIceObserver observer_;
   cricket::FakeVideoMediaChannel* video_channel_;
   cricket::FakeVoiceMediaChannel* voice_channel_;
 };
@@ -2112,3 +2213,17 @@ TEST_F(WebRtcSessionTest, TestCreateAnswerWithNewUfragAndPassword) {
 
   EXPECT_TRUE(session_->SetLocalDescription(updated_answer2.release()));
 }
+
+// Runs the loopback call test with BUNDLE and STUN disabled.
+TEST_F(WebRtcSessionTest, TestIceStatesBasic) {
+  // Lets try with only UDP ports.
+  allocator_.set_flags(cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG |
+                       cricket::PORTALLOCATOR_DISABLE_TCP |
+                       cricket::PORTALLOCATOR_DISABLE_STUN |
+                       cricket::PORTALLOCATOR_DISABLE_RELAY);
+  TestLoopbackCall();
+}
+
+// TODO(bemasc): Add a TestIceStatesBundle with BUNDLE enabled.  That test
+// currently fails because upon disconnection and reconnection OnIceComplete is
+// called more than once without returning to IceGatheringGathering.
