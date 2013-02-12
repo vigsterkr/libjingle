@@ -43,8 +43,6 @@ class Candidate;
 
 namespace webrtc {
 
-class MediaConstraintsInterface;
-
 struct SdpParseError {
  public:
   // The sdp line that causes the error.

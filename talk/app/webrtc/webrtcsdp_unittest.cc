@@ -348,7 +348,7 @@ static void Replace(const std::string& line,
                              newlines.c_str(), newlines.length(), message);
 }
 
-static bool ReplaceAndTryToParse(const char* search, const char* replace) {
+static void ReplaceAndTryToParse(const char* search, const char* replace) {
   JsepSessionDescription desc(kDummyString);
   std::string sdp = kSdpFullString;
   Replace(search, replace, &sdp);
@@ -356,7 +356,6 @@ static bool ReplaceAndTryToParse(const char* search, const char* replace) {
   bool ret = webrtc::SdpDeserialize(sdp, &desc, &error);
   EXPECT_FALSE(ret);
   EXPECT_NE(std::string::npos, error.line.find(replace));
-  return ret;
 }
 
 static void ReplaceDirection(cricket::MediaContentDirection direction,
@@ -1508,26 +1507,26 @@ TEST_F(WebRtcSdpTest, DeserializeBrokenSdp) {
       "4A:AD:B9:B1:3F:82:18:3B:54:02:12:DF:3E:5D:49:6B:19:E5:7C:AB";
 
   // Broken session description
-  EXPECT_FALSE(ReplaceAndTryToParse("v=", kSdpDestroyer));
-  EXPECT_FALSE(ReplaceAndTryToParse("o=", kSdpDestroyer));
-  EXPECT_FALSE(ReplaceAndTryToParse("s=-", kSdpDestroyer));
+  ReplaceAndTryToParse("v=", kSdpDestroyer);
+  ReplaceAndTryToParse("o=", kSdpDestroyer);
+  ReplaceAndTryToParse("s=-", kSdpDestroyer);
   // Broken time description
-  EXPECT_FALSE(ReplaceAndTryToParse("t=", kSdpDestroyer));
+  ReplaceAndTryToParse("t=", kSdpDestroyer);
 
   // Broken media description
-  EXPECT_FALSE(ReplaceAndTryToParse("m=video", kSdpDestroyer));
+  ReplaceAndTryToParse("m=video", kSdpDestroyer);
 
   // Invalid lines
-  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine1));
-  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine2));
-  EXPECT_FALSE(ReplaceAndTryToParse("a=candidate", kSdpInvalidLine3));
+  ReplaceAndTryToParse("a=candidate", kSdpInvalidLine1);
+  ReplaceAndTryToParse("a=candidate", kSdpInvalidLine2);
+  ReplaceAndTryToParse("a=candidate", kSdpInvalidLine3);
 
   // Bogus fingerprint replacing a=sendrev. We selected this attribute
   // because it's orthogonal to what we are replacing and hence
   // safe.
-  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine4));
-  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine5));
-  EXPECT_FALSE(ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine6));
+  ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine4);
+  ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine5);
+  ReplaceAndTryToParse("a=sendrecv", kSdpInvalidLine6);
 }
 
 TEST_F(WebRtcSdpTest, DeserializeSdpWithReorderedPltypes) {

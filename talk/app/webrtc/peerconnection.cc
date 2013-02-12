@@ -68,8 +68,7 @@ enum {
   MSG_SET_SESSIONDESCRIPTION_SUCCESS,
   MSG_SET_SESSIONDESCRIPTION_FAILED,
   MSG_GETSTATS,
-  MSG_ICECONNECTIONCHANGE,
-  MSG_ICEGATHERINGCHANGE,
+  MSG_ICECHANGE,
   MSG_ICECANDIDATE,
   MSG_ICECOMPLETE,
 };
@@ -239,8 +238,6 @@ PeerConnection::PeerConnection(PeerConnectionFactory* factory)
       observer_(NULL),
       signaling_state_(kStable),
       ice_state_(kIceNew),
-      ice_connection_state_(kIceConnectionNew),
-      ice_gathering_state_(kIceGatheringNew),
       local_media_streams_(StreamCollection::Create()) {
 }
 
@@ -299,7 +296,7 @@ bool PeerConnection::DoInitialize(
 
   // Register PeerConnection as receiver of local ice candidates.
   // All the callbacks will be posted to the application from PeerConnection.
-  session_->RegisterIceObserver(this);
+  session_->RegisterObserver(this);
   session_->SignalState.connect(this, &PeerConnection::OnSessionStateChange);
   return true;
 }
@@ -375,16 +372,6 @@ PeerConnectionInterface::SignalingState PeerConnection::signaling_state() {
 
 PeerConnectionInterface::IceState PeerConnection::ice_state() {
   return ice_state_;
-}
-
-PeerConnectionInterface::IceConnectionState
-PeerConnection::ice_connection_state() {
-  return ice_connection_state_;
-}
-
-PeerConnectionInterface::IceGatheringState
-PeerConnection::ice_gathering_state() {
-  return ice_gathering_state_;
 }
 
 talk_base::scoped_refptr<DataChannelInterface>
@@ -591,12 +578,8 @@ void PeerConnection::OnMessage(talk_base::Message* msg) {
       delete param;
       break;
     }
-    case MSG_ICECONNECTIONCHANGE: {
-      observer_->OnIceConnectionChange(ice_connection_state_);
-      break;
-    }
-    case MSG_ICEGATHERINGCHANGE: {
-      observer_->OnIceGatheringChange(ice_gathering_state_);
+    case MSG_ICECHANGE: {
+      observer_->OnIceChange();
       break;
     }
     case MSG_ICECANDIDATE: {
@@ -631,16 +614,8 @@ void PeerConnection::OnAddDataChannel(DataChannelInterface* data_channel) {
                                                     data_channel));
 }
 
-void PeerConnection::OnIceConnectionChange(
-    PeerConnectionInterface::IceConnectionState new_state) {
-  ice_connection_state_ = new_state;
-  signaling_thread()->Post(this, MSG_ICECONNECTIONCHANGE);
-}
-
-void PeerConnection::OnIceGatheringChange(
-    PeerConnectionInterface::IceGatheringState new_state) {
-  ice_gathering_state_ = new_state;
-  signaling_thread()->Post(this, MSG_ICEGATHERINGCHANGE);
+void PeerConnection::OnIceChange() {
+  signaling_thread()->Post(this, MSG_ICECHANGE);
 }
 
 void PeerConnection::OnIceCandidate(const IceCandidateInterface* candidate) {
@@ -664,12 +639,7 @@ void PeerConnection::OnIceComplete() {
 void PeerConnection::ChangeSignalingState(
     PeerConnectionInterface::SignalingState signaling_state) {
   signaling_state_ = signaling_state;
-  observer_->OnSignalingChange(signaling_state_);
   observer_->OnStateChange(PeerConnectionObserver::kSignalingState);
-  if (signaling_state == kClosed) {
-    ice_connection_state_ = kIceConnectionClosed;
-    observer_->OnIceConnectionChange(ice_connection_state_);
-  }
 }
 
 }  // namespace webrtc

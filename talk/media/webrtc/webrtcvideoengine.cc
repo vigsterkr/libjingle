@@ -2935,7 +2935,9 @@ bool WebRtcVideoMediaChannel::MaybeResetVieSendCodec(
   bool denoising = !is_screencast && enable_denoising;
   bool reset_send_codec =
       target_width != cur_width || target_height != cur_height ||
-      automatic_resize != vie_codec.codecSpecific.VP8.automaticResizeOn;
+      automatic_resize != vie_codec.codecSpecific.VP8.automaticResizeOn ||
+      denoising != vie_codec.codecSpecific.VP8.denoisingOn ||
+      vp8_frame_dropping != vie_codec.codecSpecific.VP8.frameDroppingOn;
 
   if (reset_send_codec) {
     // Set the new codec on vie.

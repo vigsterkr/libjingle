@@ -343,7 +343,6 @@ WebRtcSession::WebRtcSession(cricket::ChannelManager* channel_manager,
       session_desc_factory_(channel_manager, &transport_desc_factory_),
       mediastream_signaling_(mediastream_signaling),
       ice_observer_(NULL),
-      ice_connection_state_(PeerConnectionInterface::kIceConnectionNew),
       // RFC 4566 suggested a Network Time Protocol (NTP) format timestamp
       // as the session id and session version. To simplify, it should be fine
       // to just use a random number as session id and start version from
@@ -907,64 +906,10 @@ void WebRtcSession::OnMessage(talk_base::Message* msg) {
   }
 }
 
-void WebRtcSession::SetIceConnectionState(
-      PeerConnectionInterface::IceConnectionState state) {
-  if (ice_connection_state_ == state) {
-    return;
-  }
-
-  // ASSERT that the requested transition is allowed.  Note that
-  // WebRtcSession does not implement "kIceConnectionClosed" (that is handled
-  // within PeerConnection).  This switch statement should compile away when
-  // ASSERTs are disabled.
-  switch (ice_connection_state_) {
-    case PeerConnectionInterface::kIceConnectionNew:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionChecking);
-      break;
-    case PeerConnectionInterface::kIceConnectionChecking:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionFailed ||
-             state == PeerConnectionInterface::kIceConnectionConnected);
-      break;
-    case PeerConnectionInterface::kIceConnectionConnected:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionDisconnected ||
-             state == PeerConnectionInterface::kIceConnectionChecking ||
-             state == PeerConnectionInterface::kIceConnectionCompleted);
-      break;
-    case PeerConnectionInterface::kIceConnectionCompleted:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionConnected ||
-             state == PeerConnectionInterface::kIceConnectionDisconnected);
-      break;
-    case PeerConnectionInterface::kIceConnectionFailed:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionNew);
-      break;
-    case PeerConnectionInterface::kIceConnectionDisconnected:
-      ASSERT(state == PeerConnectionInterface::kIceConnectionChecking ||
-             state == PeerConnectionInterface::kIceConnectionConnected ||
-             state == PeerConnectionInterface::kIceConnectionCompleted ||
-             state == PeerConnectionInterface::kIceConnectionFailed);
-      break;
-    case PeerConnectionInterface::kIceConnectionClosed:
-      ASSERT(false);
-      break;
-    default:
-      ASSERT(false);
-      break;
-  }
-
-  ice_connection_state_ = state;
-  if (ice_observer_) {
-    ice_observer_->OnIceConnectionChange(ice_connection_state_);
-  }
-}
-
 void WebRtcSession::OnTransportRequestSignaling(
     cricket::Transport* transport) {
   ASSERT(signaling_thread()->IsCurrent());
   transport->OnSignalingReady();
-  if (ice_observer_) {
-    ice_observer_->OnIceGatheringChange(
-      PeerConnectionInterface::kIceGatheringGathering);
-  }
 }
 
 void WebRtcSession::OnTransportConnecting(cricket::Transport* transport) {
@@ -975,26 +920,6 @@ void WebRtcSession::OnTransportConnecting(cricket::Transport* transport) {
 
 void WebRtcSession::OnTransportWritable(cricket::Transport* transport) {
   ASSERT(signaling_thread()->IsCurrent());
-  // TODO(bemasc): Expose more API from Transport to detect when
-  // candidate selection starts or stops, due to success or failure.
-  if (transport->all_channels_writable()) {
-    if (ice_connection_state_ ==
-            PeerConnectionInterface::kIceConnectionChecking ||
-        ice_connection_state_ ==
-            PeerConnectionInterface::kIceConnectionDisconnected) {
-      SetIceConnectionState(PeerConnectionInterface::kIceConnectionConnected);
-    }
-  } else if (transport->HasChannels()) {
-    // If the current state is Connected or Completed, then there were writable
-    // channels but now there are not, so the next state must be Disconnected.
-    if (ice_connection_state_ ==
-            PeerConnectionInterface::kIceConnectionConnected ||
-        ice_connection_state_ ==
-            PeerConnectionInterface::kIceConnectionCompleted) {
-      SetIceConnectionState(
-          PeerConnectionInterface::kIceConnectionDisconnected);
-    }
-  }
   // If the transport is not in writable state, start a timer to monitor
   // the state. If the transport doesn't become writable state in 30 seconds
   // then we are assuming call can't be continued.
@@ -1044,8 +969,6 @@ bool WebRtcSession::ExpectSetRemoteDescription(Action action) {
 void WebRtcSession::OnCandidatesAllocationDone() {
   ASSERT(signaling_thread()->IsCurrent());
   if (ice_observer_) {
-    ice_observer_->OnIceGatheringChange(
-      PeerConnectionInterface::kIceGatheringComplete);
     ice_observer_->OnIceComplete();
   }
 }
@@ -1137,23 +1060,7 @@ bool WebRtcSession::UseCandidate(
   candidates.push_back(candidate->candidate());
   // Invoking BaseSession method to handle remote candidates.
   std::string error;
-  if (OnRemoteCandidates(content.name, candidates, &error)) {
-    // Candidates successfully submitted for checking.
-    if (ice_connection_state_ == PeerConnectionInterface::kIceConnectionNew ||
-        ice_connection_state_ ==
-            PeerConnectionInterface::kIceConnectionDisconnected) {
-      // If state is New, then the session has just gotten its first remote ICE
-      // candidates, so go to Checking.
-      // If state is Disconnected, the session is re-using old candidates or
-      // receiving additional ones, so go to Checking.
-      // If state is Connected, stay Connected.
-      // TODO(bemasc): If state is Connected, and the new candidates are for a
-      // newly added transport, then the state actually _should_ move to
-      // checking.  Add a way to distinguish that case.
-      SetIceConnectionState(PeerConnectionInterface::kIceConnectionChecking);
-    }
-    // TODO(bemasc): If state is Completed, go back to Connected.
-  } else {
+  if (!OnRemoteCandidates(content.name, candidates, &error)) {
     LOG(LS_WARNING) << error;
   }
   return true;

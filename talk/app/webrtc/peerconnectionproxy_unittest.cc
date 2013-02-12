@@ -67,10 +67,6 @@ class MockPeerConnection : public PeerConnectionInterface {
       SignalingState());
   MOCK_METHOD0(ice_state,
       IceState());
-  MOCK_METHOD0(ice_connection_state,
-      IceConnectionState());
-  MOCK_METHOD0(ice_gathering_state,
-      IceGatheringState());
   MOCK_METHOD2(CreateDataChannel,
         talk_base::scoped_refptr<DataChannelInterface>(
             const std::string& label,
@@ -232,26 +228,6 @@ TEST_F(PeerConnectionProxyTest, ice_state) {
           DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
                 Return(PeerConnectionInterface::kIceCompleted)));
   EXPECT_EQ(PeerConnectionInterface::kIceCompleted, pc_proxy_->ice_state());
-}
-
-TEST_F(PeerConnectionProxyTest, ice_connection_state) {
-  EXPECT_CALL(*pc_, ice_connection_state())
-      .Times(Exactly(1))
-      .WillOnce(
-          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
-                Return(PeerConnectionInterface::kIceConnectionCompleted)));
-  EXPECT_EQ(PeerConnectionInterface::kIceConnectionCompleted,
-            pc_proxy_->ice_connection_state());
-}
-
-TEST_F(PeerConnectionProxyTest, ice_gathering_state) {
-  EXPECT_CALL(*pc_, ice_gathering_state())
-      .Times(Exactly(1))
-      .WillOnce(
-          DoAll(InvokeWithoutArgs(this, &PeerConnectionProxyTest::CheckThread),
-                Return(PeerConnectionInterface::kIceGatheringGathering)));
-  EXPECT_EQ(PeerConnectionInterface::kIceGatheringGathering,
-            pc_proxy_->ice_gathering_state());
 }
 
 TEST_F(PeerConnectionProxyTest, local_description) {

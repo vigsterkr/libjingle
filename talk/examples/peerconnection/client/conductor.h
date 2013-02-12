@@ -81,17 +81,12 @@ class Conductor
   // PeerConnectionObserver implementation.
   //
   virtual void OnError();
-  virtual void OnSignalingChange(
-      webrtc::PeerConnectionInterface::SignalingState new_state);
   virtual void OnStateChange(
       webrtc::PeerConnectionObserver::StateType state_changed) {}
   virtual void OnAddStream(webrtc::MediaStreamInterface* stream);
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* stream);
   virtual void OnRenegotiationNeeded() {}
-  virtual void OnIceConnectionChange(
-      webrtc::PeerConnectionInterface::IceConnectionState new_state);
-  virtual void OnIceGatheringChange(
-      webrtc::PeerConnectionInterface::IceGatheringState new_state);
+  virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate);
 
   //

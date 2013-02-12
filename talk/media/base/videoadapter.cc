@@ -35,7 +35,7 @@
 namespace cricket {
 
 // TODO(fbarchard): Make downgrades settable
-static const int kMaxCpuDowngrades = 4;  // Downgrade at most 4 times for CPU.
+static const int kMaxCpuDowngrades = 2;  // Downgrade at most 2 times for CPU.
 static const int kDefaultDowngradeWaitTimeMs = 2000;
 
 // TODO(fbarchard): Consider making scale factor table settable, to allow

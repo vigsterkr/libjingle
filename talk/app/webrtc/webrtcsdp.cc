@@ -1932,9 +1932,9 @@ bool ParseSsrcAttribute(const std::string& line, SsrcInfoVec* ssrc_infos,
     std::vector<std::string> fields;
     talk_base::split(value, kSdpDelimiterSpace, &fields);
     if (fields.size() < 1 || fields.size() > 2) {
-      std::ostringstream description;
-      description << "Expected format \"msid:<identifier>[ <appdata>]\".";
-      return ParseFailed(line, description.str(), error);
+      return ParseFailed(line,
+                         "Expected format \"msid:<identifier>[ <appdata>]\".",
+                         error);
     }
     ssrc_info->msid_identifier = fields[0];
     if (fields.size() == 2) {

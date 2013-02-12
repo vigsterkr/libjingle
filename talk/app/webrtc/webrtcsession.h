@@ -60,24 +60,19 @@ namespace webrtc {
 class IceRestartAnswerLatch;
 class MediaStreamSignaling;
 
-// ICE state callback interface.
-class IceObserver {
+// Ice candidate callback interface.
+class IceCandidateObserver {
  public:
-  // Called any time the IceConnectionState changes
-  virtual void OnIceConnectionChange(
-      PeerConnectionInterface::IceConnectionState new_state) {}
-  // Called any time the IceGatheringState changes
-  virtual void OnIceGatheringChange(
-      PeerConnectionInterface::IceGatheringState new_state) {}
+  // TODO(ronghuawu): Implement OnIceChange.
+  // Called any time the iceState changes.
+  virtual void OnIceChange() {}
   // New Ice candidate have been found.
   virtual void OnIceCandidate(const IceCandidateInterface* candidate) = 0;
   // All Ice candidates have been found.
-  // TODO(bemasc): Remove this once callers transition to OnIceGatheringChange.
-  // (via PeerConnectionObserver)
   virtual void OnIceComplete() {}
 
  protected:
-  ~IceObserver() {}
+  ~IceCandidateObserver() {}
 };
 
 class WebRtcSession : public cricket::BaseSession,
@@ -95,7 +90,7 @@ class WebRtcSession : public cricket::BaseSession,
 
   bool Initialize(const MediaConstraintsInterface* constraints);
 
-  void RegisterIceObserver(IceObserver* observer) {
+  void RegisterObserver(IceCandidateObserver* observer) {
     ice_observer_ = observer;
   }
 
@@ -235,8 +230,6 @@ class WebRtcSession : public cricket::BaseSession,
   bool GetLocalTrackName(uint32 ssrc, std::string* name);
   bool GetRemoteTrackName(uint32 ssrc, std::string* name);
 
-  void SetIceConnectionState(PeerConnectionInterface::IceConnectionState state);
-
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
   talk_base::scoped_ptr<cricket::VideoChannel> video_channel_;
   talk_base::scoped_ptr<cricket::DataChannel> data_channel_;
@@ -244,8 +237,7 @@ class WebRtcSession : public cricket::BaseSession,
   cricket::TransportDescriptionFactory transport_desc_factory_;
   cricket::MediaSessionDescriptionFactory session_desc_factory_;
   MediaStreamSignaling* mediastream_signaling_;
-  IceObserver* ice_observer_;
-  PeerConnectionInterface::IceConnectionState ice_connection_state_;
+  IceCandidateObserver* ice_observer_;
   talk_base::scoped_ptr<SessionDescriptionInterface> local_desc_;
   talk_base::scoped_ptr<SessionDescriptionInterface> remote_desc_;
   // Candidates that arrived before the remote description was set.

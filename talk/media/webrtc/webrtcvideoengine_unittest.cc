@@ -111,6 +111,23 @@ class WebRtcVideoEngineTestFake : public testing::Test {
     channel_->SendFrame(&capturer, &frame);
     return true;
   }
+  bool SendI420ScreencastFrame(int width, int height) {
+    if (NULL == channel_) {
+      return false;
+    }
+    cricket::WebRtcVideoFrame frame;
+    size_t size = width * height * 3 / 2;  // I420
+    talk_base::scoped_array<uint8> pixel(new uint8[size]);
+    if (!frame.Init(cricket::FOURCC_I420,
+                    width, height, width, height,
+                    pixel.get(), size, 1, 1, 0, 0, 0)) {
+      return false;
+    }
+    cricket::FakeVideoCapturer capturer;
+    capturer.SetScreencast(true);
+    channel_->SendFrame(&capturer, &frame);
+    return true;
+  }
   void VerifyVP8SendCodec(int channel_num,
                           unsigned int width,
                           unsigned int height,
@@ -1220,4 +1237,33 @@ TEST_F(WebRtcVideoMediaChannelTest, TwoStreamsSendAndReceive) {
 TEST_F(WebRtcVideoMediaChannelTest, TwoStreamsReUseFirstStream) {
   Base::TwoStreamsReUseFirstStream(cricket::VideoCodec(100, "VP8", 640, 400, 30,
                                                        0));
+}
+
+TEST_F(WebRtcVideoEngineTestFake, ResetCodecOnScreencast) {
+  EXPECT_TRUE(SetupEngine());
+  cricket::VideoOptions options;
+  options.video_noise_reduction.Set(true);
+  EXPECT_TRUE(channel_->SetOptions(options));
+
+  // Set send codec.
+  cricket::VideoCodec codec(kVP8Codec);
+  std::vector<cricket::VideoCodec> codec_list;
+  codec_list.push_back(codec);
+  EXPECT_TRUE(channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(123)));
+  EXPECT_TRUE(channel_->SetSendCodecs(codec_list));
+  EXPECT_TRUE(channel_->SetSend(true));
+  EXPECT_EQ(1, vie_.num_set_send_codecs());
+
+  webrtc::VideoCodec gcodec;
+  int channel_num = vie_.GetLastChannel();
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_TRUE(gcodec.codecSpecific.VP8.denoisingOn);
+
+  // Send a screencast frame with the same size.
+  // Verify that denoising is turned off.
+  SendI420ScreencastFrame(kVP8Codec.width, kVP8Codec.height);
+  EXPECT_EQ(2, vie_.num_set_send_codecs());
+  EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
+  EXPECT_FALSE(gcodec.codecSpecific.VP8.denoisingOn);
 }

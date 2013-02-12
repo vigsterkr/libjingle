@@ -37,8 +37,6 @@ enum {
   MSG_RETURNREMOTEMEDIASTREAMS,
   MSG_SIGNALINGSTATE,
   MSG_ICESTATE,
-  MSG_ICECONNECTION,
-  MSG_ICEGATHERING,
   MSG_CREATEDATACHANNEL,
   MSG_TERMINATE,
   MSG_CREATEOFFER,
@@ -149,18 +147,6 @@ struct SignalingStateMessage : public talk_base::MessageData {
 struct IceStateMessage : public talk_base::MessageData {
   IceStateMessage() : state(webrtc::PeerConnectionInterface::kIceNew) {}
   webrtc::PeerConnectionInterface::IceState state;
-};
-
-struct IceConnectionMessage : public talk_base::MessageData {
-  IceConnectionMessage()
-      : state(webrtc::PeerConnectionInterface::kIceConnectionNew) {}
-  webrtc::PeerConnectionInterface::IceConnectionState state;
-};
-
-struct IceGatheringMessage : public talk_base::MessageData {
-  IceGatheringMessage()
-      : state(webrtc::PeerConnectionInterface::kIceGatheringNew) {}
-  webrtc::PeerConnectionInterface::IceGatheringState state;
 };
 
 struct CreateDataChannelMessageData : public talk_base::MessageData {
@@ -275,26 +261,6 @@ PeerConnectionInterface::IceState PeerConnectionProxy::ice_state() {
     return msg.state;
   }
   return peerconnection_->ice_state();
-}
-
-PeerConnectionInterface::IceConnectionState
-PeerConnectionProxy::ice_connection_state() {
-  if (!signaling_thread_->IsCurrent()) {
-    IceConnectionMessage msg;
-    signaling_thread_->Send(this, MSG_ICECONNECTION, &msg);
-    return msg.state;
-  }
-  return peerconnection_->ice_connection_state();
-}
-
-PeerConnectionInterface::IceGatheringState
-PeerConnectionProxy::ice_gathering_state() {
-  if (!signaling_thread_->IsCurrent()) {
-    IceGatheringMessage msg;
-    signaling_thread_->Send(this, MSG_ICEGATHERING, &msg);
-    return msg.state;
-  }
-  return peerconnection_->ice_gathering_state();
 }
 
 talk_base::scoped_refptr<DataChannelInterface>
@@ -448,16 +414,6 @@ void PeerConnectionProxy::OnMessage(talk_base::Message* msg) {
     case MSG_ICESTATE: {
       IceStateMessage* param(static_cast<IceStateMessage*> (data));
       param->state = peerconnection_->ice_state();
-      break;
-    }
-    case MSG_ICECONNECTION: {
-      IceConnectionMessage* param(static_cast<IceConnectionMessage*> (data));
-      param->state = peerconnection_->ice_connection_state();
-      break;
-    }
-    case MSG_ICEGATHERING: {
-      IceGatheringMessage* param(static_cast<IceGatheringMessage*> (data));
-      param->state = peerconnection_->ice_gathering_state();
       break;
     }
     case MSG_CREATEDATACHANNEL: {

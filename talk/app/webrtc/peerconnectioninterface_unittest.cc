@@ -121,22 +121,12 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
     state_ = pc_->signaling_state();
   }
   virtual void OnError() {}
-  virtual void OnSignalingChange(
-      PeerConnectionInterface::SignalingState new_state) {
-    EXPECT_EQ(pc_->signaling_state(), new_state);
-    state_ = new_state;
-  }
-  // TODO(bemasc): Remove this once callers transition to OnIceGatheringChange.
   virtual void OnStateChange(StateType state_changed) {
     if (pc_.get() == NULL)
       return;
     switch (state_changed) {
       case kSignalingState:
-        // OnSignalingChange and OnStateChange(kSignalingState) should always
-        // be called approximately simultaneously.  To ease testing, we require
-        // that they always be called in that order.  This check verifies
-        // that OnSignalingChange has just been called.
-        EXPECT_EQ(pc_->signaling_state(), state_);
+        state_ = pc_->signaling_state();
         break;
       case kIceState:
         ADD_FAILURE();
@@ -159,18 +149,8 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
     last_datachannel_ = data_channel;
   }
 
-  virtual void OnIceConnectionChange(
-      PeerConnectionInterface::IceConnectionState new_state) {
-    EXPECT_EQ(pc_->ice_connection_state(), new_state);
-  }
-  virtual void OnIceGatheringChange(
-      PeerConnectionInterface::IceGatheringState new_state) {
-    EXPECT_EQ(pc_->ice_gathering_state(), new_state);
-  }
+  virtual void OnIceChange() {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-    EXPECT_NE(PeerConnectionInterface::kIceGatheringNew,
-              pc_->ice_gathering_state());
-
     std::string sdp;
     EXPECT_TRUE(candidate->ToString(&sdp));
     EXPECT_LT(0u, sdp.size());
@@ -178,14 +158,8 @@ class MockPeerConnectionObserver : public PeerConnectionObserver {
         candidate->sdp_mline_index(), sdp, NULL));
     EXPECT_TRUE(last_candidate_.get() != NULL);
   }
-  // TODO(bemasc): Remove this once callers transition to OnSignalingChange.
   virtual void OnIceComplete() {
     ice_complete_ = true;
-    // OnIceGatheringChange(IceGatheringCompleted) and OnIceComplete() should
-    // be called approximately simultaneously.  For ease of testing, this
-    // check additionally requires that they be called in the above order.
-    EXPECT_EQ(PeerConnectionInterface::kIceGatheringComplete,
-      pc_->ice_gathering_state());
   }
 
   // Returns the label of the last added stream.

@@ -284,11 +284,6 @@ class PCOJava : public PeerConnectionObserver {
     CHECK_EXCEPTION(jni(), "error during CallVoidMethod");
   }
 
-  virtual void OnSignalingChange(
-      PeerConnectionInterface::SignalingState new_state) {
-    // TODO(bemasc): Update JNI to use this new signaling state callback.
-  }
-
   virtual void OnStateChange(StateType stateChanged) {
     jmethodID m = GetMethodID(
         jni(), j_observer_class_, "onStateChange",
@@ -296,16 +291,6 @@ class PCOJava : public PeerConnectionObserver {
     jni()->CallVoidMethod(j_observer_global_, m, JavaEnumFromIndex(
         jni(), "PeerConnection$Observer$StateType", stateChanged));
     CHECK_EXCEPTION(jni(), "error during CallVoidMethod");
-  }
-
-  virtual void OnIceConnectionChange(
-      PeerConnectionInterface::IceConnectionState new_state) {
-    // TODO(bemasc): Update JNI to match ice state changes.
-  }
-
-  virtual void OnIceGatheringChange(
-      PeerConnectionInterface::IceGatheringState new_state) {
-    // TODO(bemasc): Update JNI to match ice state changes.
   }
 
   virtual void OnAddStream(MediaStreamInterface* stream) {
