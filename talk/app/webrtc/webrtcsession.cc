@@ -78,6 +78,18 @@ const char kWebRTCIdentityPrefix[] = "WebRTC";
 const char MediaConstraintsInterface::kValueTrue[] = "true";
 const char MediaConstraintsInterface::kValueFalse[] = "false";
 
+// Error messages
+const char kInvalidSdp[] = "Invalid session description.";
+const char kSdpWithoutCrypto[] =
+    "Called with a SDP without crypto enabled.";
+const char kCreateChannelFailed[] = "Failed to create channels.";
+const char kUpdateStateFailed[] = "Failed to update session state.";
+const char kMlineMismatch[] =
+    "Offer and answer descriptions m-lines are not matching. "
+    "Rejecting answer.";
+const char kInvalidCandidates[] =
+    "Description contains invalid candidates.";
+
 // Compares |answer| against |offer|. Comparision is done
 // for number of m-lines in answer against offer. If matches true will be
 // returned otherwise false.
@@ -133,7 +145,7 @@ static bool VerifyCrypto(const SessionDescription* desc) {
     const TransportInfo* tinfo = desc->GetTransportInfoByName(cinfo->name);
     if (!media || !tinfo) {
       // Something is not right.
-      LOG(LS_ERROR) << "Invalid session description.";
+      LOG(LS_ERROR) << kInvalidSdp;
       return false;
     }
     if (media->cryptos().empty() &&
@@ -275,6 +287,63 @@ static bool FindConstraint(const MediaConstraintsInterface* constraints,
   }
 
   return false;
+}
+
+static bool BadSdp(const std::string& desc, std::string* err_desc) {
+  if (err_desc) {
+    *err_desc = desc;
+  }
+  LOG(LS_ERROR) << desc;
+  return false;
+}
+
+static bool BadLocalSdp(const std::string& desc, std::string* err_desc) {
+  std::string set_local_sdp_failed = "SetLocalDescription failed: ";
+  set_local_sdp_failed.append(desc);
+  return BadSdp(set_local_sdp_failed, err_desc);
+}
+
+static bool BadRemoteSdp(const std::string& desc, std::string* err_desc) {
+  std::string set_remote_sdp_failed = "SetRemoteDescription failed: ";
+  set_remote_sdp_failed.append(desc);
+  return BadSdp(set_remote_sdp_failed, err_desc);
+}
+
+static std::string SessionErrorMsg(cricket::BaseSession::Error error) {
+  std::ostringstream desc;
+  desc << "Session error code: " << error;
+  return desc.str();
+}
+
+#define GET_STRING_OF_STATE(state)  \
+  case cricket::BaseSession::state:  \
+    result = #state;  \
+    break;
+
+static std::string GetStateString(cricket::BaseSession::State state) {
+  std::string result;
+  switch (state) {
+    GET_STRING_OF_STATE(STATE_INIT)
+    GET_STRING_OF_STATE(STATE_SENTINITIATE)
+    GET_STRING_OF_STATE(STATE_RECEIVEDINITIATE)
+    GET_STRING_OF_STATE(STATE_SENTPRACCEPT)
+    GET_STRING_OF_STATE(STATE_SENTACCEPT)
+    GET_STRING_OF_STATE(STATE_RECEIVEDPRACCEPT)
+    GET_STRING_OF_STATE(STATE_RECEIVEDACCEPT)
+    GET_STRING_OF_STATE(STATE_SENTMODIFY)
+    GET_STRING_OF_STATE(STATE_RECEIVEDMODIFY)
+    GET_STRING_OF_STATE(STATE_SENTREJECT)
+    GET_STRING_OF_STATE(STATE_RECEIVEDREJECT)
+    GET_STRING_OF_STATE(STATE_SENTREDIRECT)
+    GET_STRING_OF_STATE(STATE_SENTTERMINATE)
+    GET_STRING_OF_STATE(STATE_RECEIVEDTERMINATE)
+    GET_STRING_OF_STATE(STATE_INPROGRESS)
+    GET_STRING_OF_STATE(STATE_DEINIT)
+    default:
+      ASSERT(false);
+      break;
+  }
+  return result;
 }
 
 // Help class used to remember if a a remote peer has requested ice restart by
@@ -520,34 +589,28 @@ SessionDescriptionInterface* WebRtcSession::CreateAnswer(
   return answer;
 }
 
-bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
+bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc,
+                                        std::string* err_desc) {
   if (!desc || !desc->description()) {
-    LOG(LS_ERROR) << "SetLocalDescription called with an invalid session"
-                  <<" description";
     delete desc;
-    return false;
+    return BadLocalSdp(kInvalidSdp, err_desc);
   }
   Action action = GetAction(desc->type());
   if (!ExpectSetLocalDescription(action)) {
-    LOG(LS_ERROR) << "SetLocalDescription called with action in wrong state, "
-                  << "action: " << action << " state: " << state();
+    std::string type = desc->type();
     delete desc;
-    return false;
+    return BadLocalSdp(BadStateErrMsg(type, state()), err_desc);
   }
 
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !VerifyCrypto(desc->description())) {
-    LOG(LS_ERROR) << "SetLocalDescription called with a session"
-                  <<" description without crypto enabled";
     delete desc;
-    return false;
+    return BadLocalSdp(kSdpWithoutCrypto, err_desc);
   }
 
   if (action == kAnswer && !VerifyMediaDescriptions(
       desc->description(), remote_description()->description())) {
-    LOG(LS_ERROR) << "Offer and answer descriptions m-lines are not matching."
-                  << " Rejecting answer.";
-    return false;
+    return BadLocalSdp(kMlineMismatch, err_desc);
   }
 
   // Update the initiator flag if this session is the initiator.
@@ -566,11 +629,11 @@ bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
   if (!CreateChannels(action, desc->description())) {
     // TODO(mallinath) - Handle CreateChannel failure, as new local description
     // is applied. Restore back to old description.
-    return false;
+    return BadLocalSdp(kCreateChannelFailed, err_desc);
   }
 
   if (!UpdateSessionState(action, cricket::CS_LOCAL, desc->description())) {
-    return false;
+    return BadLocalSdp(kUpdateStateFailed, err_desc);
   }
   // Kick starting the ice candidates allocation.
   StartCandidatesAllocation();
@@ -579,37 +642,34 @@ bool WebRtcSession::SetLocalDescription(SessionDescriptionInterface* desc) {
   // local session description.
   mediastream_signaling_->UpdateLocalStreams(local_desc_.get());
 
-  return error() == cricket::BaseSession::ERROR_NONE;
+  if (error() != cricket::BaseSession::ERROR_NONE) {
+    return BadLocalSdp(SessionErrorMsg(error()), err_desc);
+  }
+  return true;
 }
 
-bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
+bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc,
+                                         std::string* err_desc) {
   if (!desc || !desc->description()) {
-    LOG(LS_ERROR) << "SetRemoteDescription called with an invalid session"
-                  <<" description";
     delete desc;
-    return false;
+    return BadRemoteSdp(kInvalidSdp, err_desc);
   }
   Action action = GetAction(desc->type());
   if (!ExpectSetRemoteDescription(action)) {
-    LOG(LS_ERROR) << "SetRemoteDescription called with action in wrong state, "
-                  << "action: " << action << " state: " << state();
+    std::string type = desc->type();
     delete desc;
-    return false;
+    return BadRemoteSdp(BadStateErrMsg(type, state()), err_desc);
   }
 
   if (action == kAnswer && !VerifyMediaDescriptions(
       desc->description(), local_description()->description())) {
-    LOG(LS_ERROR) << "Offer and answer descriptions m-lines are not matching. "
-                  << "Rejecting answer.";
-    return false;
+    return BadRemoteSdp(kMlineMismatch, err_desc);
   }
 
   if (session_desc_factory_.secure() == cricket::SEC_REQUIRED &&
       !VerifyCrypto(desc->description())) {
-    LOG(LS_ERROR) << "SetRemoteDescription called with a session"
-                  <<" description without crypto enabled";
     delete desc;
-    return false;
+    return BadRemoteSdp(kSdpWithoutCrypto, err_desc);
   }
 
   // Transport and Media channels will be created only when local description is
@@ -617,23 +677,21 @@ bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
   if (!CreateChannels(action, desc->description())) {
     // TODO(mallinath) - Handle CreateChannel failure, as new local description
     // is applied. Restore back to old description.
-    return false;
+    return BadRemoteSdp(kCreateChannelFailed, err_desc);
   }
 
   // NOTE: Candidates allocation will be initiated only when SetLocalDescription
   // is called.
   set_remote_description(desc->description()->Copy());
   if (!UpdateSessionState(action, cricket::CS_REMOTE, desc->description())) {
-    return false;
+    return BadRemoteSdp(kUpdateStateFailed, err_desc);
   }
 
   // Update remote MediaStreams.
   mediastream_signaling_->UpdateRemoteStreams(desc);
   if (local_description() && !UseCandidatesInSessionDescription(desc)) {
-    LOG(LS_ERROR) << "SetRemoteDescription: Argument |desc| contains "
-                  << "invalid candidates";
     delete desc;
-    return false;
+    return BadRemoteSdp(kInvalidCandidates, err_desc);
   }
 
   // Copy all saved candidates.
@@ -645,7 +703,10 @@ bool WebRtcSession::SetRemoteDescription(SessionDescriptionInterface* desc) {
   ice_restart_latch_->CheckForRemoteIceRestart(remote_desc_.get(),
                                                desc);
   remote_desc_.reset(desc);
-  return error() == cricket::BaseSession::ERROR_NONE;
+  if (error() != cricket::BaseSession::ERROR_NONE) {
+    return BadRemoteSdp(SessionErrorMsg(error()), err_desc);
+  }
+  return true;
 }
 
 bool WebRtcSession::UpdateSessionState(
@@ -746,6 +807,14 @@ bool WebRtcSession::GetRemoteTrackName(uint32 ssrc, std::string* name) {
   if (!BaseSession::remote_description())
       return false;
   return GetNameBySsrc(BaseSession::remote_description(), ssrc, name);
+}
+
+std::string WebRtcSession::BadStateErrMsg(
+    const std::string& type, State state) {
+  std::ostringstream desc;
+  desc << "Called with type in wrong state, "
+       << "type: " << type << " state: " << GetStateString(state);
+  return desc.str();
 }
 
 void WebRtcSession::SetAudioPlayout(const std::string& name, bool enable) {

@@ -469,8 +469,9 @@ void PeerConnection::SetLocalDescription(
   // Update stats here so that we have the most recent stats for tracks and
   // streams that might be removed by updating the session description.
   stats_.UpdateStats();
-  if (!session_->SetLocalDescription(desc)) {
-    PostSetSessionDescriptionFailure(observer, "SetLocalDescription failed.");
+  std::string error;
+  if (!session_->SetLocalDescription(desc, &error)) {
+    PostSetSessionDescriptionFailure(observer, error);
     return;
   }
   stream_handler_->CommitLocalStreams(local_media_streams_);
@@ -493,8 +494,9 @@ void PeerConnection::SetRemoteDescription(
   // Update stats here so that we have the most recent stats for tracks and
   // streams that might be removed by updating the session description.
   stats_.UpdateStats();
-  if (!session_->SetRemoteDescription(desc)) {
-    PostSetSessionDescriptionFailure(observer, "SetRemoteDescription failed.");
+  std::string error;
+  if (!session_->SetRemoteDescription(desc, &error)) {
+    PostSetSessionDescriptionFailure(observer, error);
     return;
   }
   SetSessionDescriptionMsg* msg  = new SetSessionDescriptionMsg(observer);

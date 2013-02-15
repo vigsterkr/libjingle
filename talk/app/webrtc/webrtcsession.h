@@ -60,6 +60,13 @@ namespace webrtc {
 class IceRestartAnswerLatch;
 class MediaStreamSignaling;
 
+extern const char kInvalidSdp[];
+extern const char kSdpWithoutCrypto[];
+extern const char kCreateChannelFailed[];
+extern const char kUpdateStateFailed[];
+extern const char kMlineMismatch[];
+extern const char kInvalidCandidates[];
+
 // ICE state callback interface.
 class IceObserver {
  public:
@@ -125,8 +132,10 @@ class WebRtcSession : public cricket::BaseSession,
       const MediaConstraintsInterface* constraints,
       const SessionDescriptionInterface* offer);
 
-  bool SetLocalDescription(SessionDescriptionInterface* desc);
-  bool SetRemoteDescription(SessionDescriptionInterface* desc);
+  bool SetLocalDescription(SessionDescriptionInterface* desc,
+                           std::string* err_desc);
+  bool SetRemoteDescription(SessionDescriptionInterface* desc,
+                            std::string* err_desc);
   bool ProcessIceMessage(const IceCandidateInterface* ice_candidate);
   const SessionDescriptionInterface* local_description() const {
     return local_desc_.get();
@@ -235,6 +244,7 @@ class WebRtcSession : public cricket::BaseSession,
   bool GetLocalTrackName(uint32 ssrc, std::string* name);
   bool GetRemoteTrackName(uint32 ssrc, std::string* name);
 
+  std::string BadStateErrMsg(const std::string& type, State state);
   void SetIceConnectionState(PeerConnectionInterface::IceConnectionState state);
 
   talk_base::scoped_ptr<cricket::VoiceChannel> voice_channel_;
