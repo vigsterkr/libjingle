@@ -2405,7 +2405,7 @@ bool ParseFmtpAttributes(const std::string& line, const MediaType media_type,
   }
   cricket::CodecParameterMap codec_params;
 
-  for (std::vector<std::string>::const_iterator iter = ++fields.begin();
+  for (std::vector<std::string>::const_iterator iter = fields.begin() + 1;
        iter != fields.end(); ++iter) {
     std::string name;
     std::string value;
