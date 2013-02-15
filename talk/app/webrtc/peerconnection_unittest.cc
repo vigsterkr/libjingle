@@ -313,11 +313,26 @@ class PeerConnectionTestClientBase
     return peer_connection()->local_streams();
   }
 
+  webrtc::PeerConnectionInterface::SignalingState signaling_state() {
+    return peer_connection()->signaling_state();
+  }
+
+  webrtc::PeerConnectionInterface::IceConnectionState ice_connection_state() {
+    return peer_connection()->ice_connection_state();
+  }
+
+  webrtc::PeerConnectionInterface::IceGatheringState ice_gathering_state() {
+    return peer_connection()->ice_gathering_state();
+  }
+
   // PeerConnectionObserver callbacks.
   virtual void OnError() {}
   virtual void OnMessage(const std::string&) {}
   virtual void OnSignalingMessage(const std::string& /*msg*/) {}
-  virtual void OnStateChange(StateType /*state_changed*/) {}
+  virtual void OnSignalingChange(
+      webrtc::PeerConnectionInterface::SignalingState new_state) {
+    EXPECT_EQ(peer_connection_->signaling_state(), new_state);
+  }
   virtual void OnAddStream(webrtc::MediaStreamInterface* media_stream) {
     for (size_t i = 0; i < media_stream->video_tracks()->count(); ++i) {
       const std::string id = media_stream->video_tracks()->at(i)->id();
@@ -329,10 +344,16 @@ class PeerConnectionTestClientBase
   }
   virtual void OnRemoveStream(webrtc::MediaStreamInterface* media_stream) {}
   virtual void OnRenegotiationNeeded() {}
-  virtual void OnIceChange() {}
+  virtual void OnIceConnectionChange(
+      webrtc::PeerConnectionInterface::IceConnectionState new_state) {
+    EXPECT_EQ(peer_connection_->ice_connection_state(), new_state);
+  }
+  virtual void OnIceGatheringChange(
+      webrtc::PeerConnectionInterface::IceGatheringState new_state) {
+    EXPECT_EQ(peer_connection_->ice_gathering_state(), new_state);
+  }
   virtual void OnIceCandidate(
       const webrtc::IceCandidateInterface* /*candidate*/) {}
-  virtual void OnIceComplete() {}
 
  protected:
   explicit PeerConnectionTestClientBase(const std::string& id)
@@ -796,6 +817,40 @@ class P2PTestConductor : public testing::Test {
         !receiving_client_->can_receive_video()) {
       video_frame_count = -1;
     }
+
+    if (audio_frame_count != -1 || video_frame_count != -1) {
+      // Audio or video is expected to flow, so both sides should get to the
+      // Connected state.
+      // Note: These tests have been observed to fail under heavy load at
+      // shorter timeouts, so they may be flaky.
+      EXPECT_EQ_WAIT(
+          webrtc::PeerConnectionInterface::kIceConnectionConnected,
+          initiating_client_->ice_connection_state(),
+          kMaxWaitForFramesMs);
+      EXPECT_EQ_WAIT(
+          webrtc::PeerConnectionInterface::kIceConnectionConnected,
+          receiving_client_->ice_connection_state(),
+          kMaxWaitForFramesMs);
+    }
+
+    if (initiating_client_->can_receive_audio() ||
+        initiating_client_->can_receive_video()) {
+      // The initiating client can receive media, so it must produce candidates
+      // that will serve as destinations for that media.
+      // TODO(bemasc): Understand why the state is not already Complete here, as
+      // seems to be the case for the receiving client. This may indicate a bug
+      // in the ICE gathering system.
+      EXPECT_NE(webrtc::PeerConnectionInterface::kIceGatheringNew,
+                initiating_client_->ice_gathering_state());
+    }
+    if (receiving_client_->can_receive_audio() ||
+        receiving_client_->can_receive_video()) {
+      // The receiving client can receive media, so it must produce candidates
+      // that will serve as destinations for that media.
+      EXPECT_EQ(webrtc::PeerConnectionInterface::kIceGatheringComplete,
+                receiving_client_->ice_gathering_state());
+    }
+
     EXPECT_TRUE_WAIT(FramesNotPending(audio_frame_count, video_frame_count),
                      kMaxWaitForFramesMs);
   }

@@ -75,6 +75,8 @@ extern const char kMediaProtocolSavpf[];
 
 // Options to control how session descriptions are generated.
 const int kAutoBandwidth = -1;
+const int kBufferedModeDisabled = 0;
+
 struct MediaSessionOptions {
   MediaSessionOptions() :
       has_audio(true),  // Audio enabled by default.
@@ -132,6 +134,7 @@ class MediaContentDescription : public ContentDescription {
         multistream_(false),
         conference_mode_(false),
         partial_(false),
+        buffered_mode_latency_(kBufferedModeDisabled),
         direction_(MD_SENDRECV) {
   }
 
@@ -236,6 +239,11 @@ class MediaContentDescription : public ContentDescription {
   void set_partial(bool partial) { partial_ = partial; }
   bool partial() const { return partial_;  }
 
+  void set_buffered_mode_latency(int latency) {
+    buffered_mode_latency_ = latency;
+  }
+  int buffered_mode_latency() const { return buffered_mode_latency_; }
+
  protected:
   bool rtcp_mux_;
   int bandwidth_;
@@ -248,6 +256,7 @@ class MediaContentDescription : public ContentDescription {
   StreamParamsVec streams_;
   bool conference_mode_;
   bool partial_;
+  int buffered_mode_latency_;
   MediaContentDirection direction_;
 };
 

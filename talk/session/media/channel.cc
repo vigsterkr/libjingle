@@ -2011,6 +2011,8 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
     VideoOptions video_options;
     media_channel()->GetOptions(&video_options);
     video_options.conference_mode.Set(video->conference_mode());
+    video_options.buffered_mode_latency.Set(video->buffered_mode_latency());
+
     if (!media_channel()->SetOptions(video_options)) {
       // Log an error on failure, but don't abort the call.
       LOG(LS_ERROR) << "Failed to set video channel options";

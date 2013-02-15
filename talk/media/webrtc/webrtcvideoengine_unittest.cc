@@ -508,6 +508,40 @@ TEST_F(WebRtcVideoEngineTestFake, LeakyBucketTest) {
   EXPECT_TRUE(vie_.GetTransmissionSmoothingStatus(second_send_channel));
 }
 
+TEST_F(WebRtcVideoEngineTestFake, BufferedModeLatency) {
+  EXPECT_TRUE(SetupEngine());
+
+  // Verify this is off by default.
+  EXPECT_TRUE(channel_->AddSendStream(cricket::StreamParams::CreateLegacy(1)));
+  int first_send_channel = vie_.GetLastChannel();
+  EXPECT_EQ(0, vie_.GetSenderTargetDelay(first_send_channel));
+
+  // Enable the experiment and verify.
+  cricket::VideoOptions options;
+  options.conference_mode.Set(true);
+  options.buffered_mode_latency.Set(100);
+  EXPECT_TRUE(channel_->SetOptions(options));
+  EXPECT_EQ(100, vie_.GetSenderTargetDelay(first_send_channel));
+
+  // Add a receive channel and verify sender buffered mode isn't enabled.
+  EXPECT_TRUE(channel_->AddRecvStream(cricket::StreamParams::CreateLegacy(2)));
+  int recv_channel_num = vie_.GetLastChannel();
+  EXPECT_NE(first_send_channel, recv_channel_num);
+  EXPECT_EQ(0, vie_.GetSenderTargetDelay(recv_channel_num));
+
+  // Add a new send stream and verify sender buffered mode is enabled.
+  EXPECT_TRUE(channel_->AddSendStream(cricket::StreamParams::CreateLegacy(3)));
+  int second_send_channel = vie_.GetLastChannel();
+  EXPECT_NE(first_send_channel, second_send_channel);
+  EXPECT_EQ(100, vie_.GetSenderTargetDelay(second_send_channel));
+
+  // Disable sender buffered mode and verify.
+  options.buffered_mode_latency.Clear();
+  EXPECT_TRUE(channel_->SetOptions(options));
+  EXPECT_EQ(0, vie_.GetSenderTargetDelay(first_send_channel));
+  EXPECT_EQ(0, vie_.GetSenderTargetDelay(second_send_channel));
+}
+
 // Test that AddRecvStream doesn't create new channel for 1:1 call.
 TEST_F(WebRtcVideoEngineTestFake, AddRecvStream1On1) {
   EXPECT_TRUE(SetupEngine());
@@ -1256,6 +1290,7 @@ TEST_F(WebRtcVideoEngineTestFake, ResetCodecOnScreencast) {
   EXPECT_EQ(1, vie_.num_set_send_codecs());
 
   webrtc::VideoCodec gcodec;
+  memset(&gcodec, 0, sizeof(gcodec));
   int channel_num = vie_.GetLastChannel();
   EXPECT_EQ(0, vie_.GetSendCodec(channel_num, gcodec));
   EXPECT_TRUE(gcodec.codecSpecific.VP8.denoisingOn);

@@ -89,7 +89,7 @@ static bool FindConstraint(const MediaConstraintsInterface* constraints,
 
 static bool ParseConstraints(
     const MediaConstraintsInterface* constraints,
-    cricket::MediaSessionOptions* options) {
+    cricket::MediaSessionOptions* options, bool is_answer) {
   std::string value;
   size_t mandatory_constraints_satisfied = 0;
 
@@ -104,7 +104,7 @@ static bool ParseConstraints(
         (value == MediaConstraintsInterface::kValueTrue);
   } else {
     // kOfferToReceiveAudio is non mandatory true according to spec.
-    options->has_audio |= true;
+    options->has_audio = true;
   }
 
   if (FindConstraint(constraints,
@@ -117,7 +117,10 @@ static bool ParseConstraints(
     options->has_video |=
         (value == MediaConstraintsInterface::kValueTrue);
   } else {
-    // kOfferToReceiveVideo is non mandatory false according to spec.
+    // kOfferToReceiveVideo is non mandatory false according to spec. But
+    // if it is an answer and video is offered, we should still accept video
+    // per default.
+    options->has_video |= is_answer ? true : false;
   }
 
   if (FindConstraint(constraints,
@@ -306,7 +309,7 @@ bool MediaStreamSignaling::GetOptionsForOffer(
     const MediaConstraintsInterface* constraints,
     cricket::MediaSessionOptions* options) {
   UpdateSessionOptions();
-  if (!ParseConstraints(constraints, &options_)) {
+  if (!ParseConstraints(constraints, &options_, false)) {
     return false;
   }
   options_.bundle_enabled = EvaluateNeedForBundle(options_);
@@ -322,7 +325,7 @@ bool MediaStreamSignaling::GetOptionsForAnswer(
   // Copy the |options_| to not let the flag MediaSessionOptions::has_audio and
   // MediaSessionOptions::has_video affect subsequent offers.
   cricket::MediaSessionOptions current_options = options_;
-  if (!ParseConstraints(constraints, &current_options)) {
+  if (!ParseConstraints(constraints, &current_options, true)) {
     return false;
   }
   current_options.bundle_enabled = EvaluateNeedForBundle(current_options);

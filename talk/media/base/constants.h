@@ -45,8 +45,45 @@ extern const float kProcessCpuThreshold;
 
 extern const char* kRtxCodecName;
 
-// Codec parameter: associated payload type
+// Codec parameters
 extern const char* kCodecParamAssociatedPayloadType;
+
+extern const char* kOpusCodecName;
+
+// Attribute parameters
+extern const char* kCodecParamPTime;
+extern const char* kCodecParamMaxPTime;
+// fmtp parameters
+extern const char* kCodecParamMinPTime;
+extern const char* kCodecParamSPropStereo;
+extern const char* kCodecParamStereo;
+extern const char* kCodecParamUseInbandFec;
+
+extern const char* kParamTrue;
+
+// opus parameters.
+// Default value for maxptime according to
+// http://tools.ietf.org/html/draft-spittka-payload-rtp-opus-03
+extern const int kOpusDefaultMaxPTime;
+extern const int kOpusDefaultPTime;
+extern const int kOpusDefaultMinPTime;
+extern const int kOpusDefaultSPropStereo;
+extern const int kOpusDefaultStereo;
+extern const int kOpusDefaultUseInbandFec;
+// Prefered values in this code base. Note that they may differ from the default
+// values in http://tools.ietf.org/html/draft-spittka-payload-rtp-opus-03
+// Only frames larger or equal to 10 ms are currently supported in this code
+// base.
+extern const int kPreferredMaxPTime;
+extern const int kPreferredMinPTime;
+extern const int kPreferredSPropStereo;
+extern const int kPreferredStereo;
+extern const int kPreferredUseInbandFec;
+
+// Google specific parameters
+extern const char* kCodecParamMaxBitrate;
+extern const char* kCodecParamMinBitrate;
+extern const char* kCodecParamMaxQuantization;
 
 }  // namespace cricket
 

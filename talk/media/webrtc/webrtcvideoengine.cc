@@ -2288,6 +2288,9 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
   bool leaky_bucket_changed =
       (options_.video_leaky_bucket != options.video_leaky_bucket);
 
+  bool buffer_latency_changed =
+      (options_.buffered_mode_latency != options.buffered_mode_latency);
+
   // Save the options, to be interpreted where appropriate.
   options_ = options;
 
@@ -2317,6 +2320,19 @@ bool WebRtcVideoMediaChannel::SetOptions(const VideoOptions &options) {
           it->second->channel_id(), enable_leaky_bucket) != 0) {
         LOG_RTCERR2(SetTransmissionSmoothingStatus, it->second->channel_id(),
                     enable_leaky_bucket);
+      }
+    }
+  }
+  if (buffer_latency_changed) {
+    int buffer_latency =
+        options_.buffered_mode_latency.GetWithDefaultIfUnset(
+            cricket::kBufferedModeDisabled);
+    for (SendChannelMap::iterator it = send_channels_.begin();
+        it != send_channels_.end(); ++it) {
+      if (engine()->vie()->rtp()->EnableSenderStreamingMode(
+          it->second->channel_id(), buffer_latency) != 0) {
+        LOG_RTCERR2(EnableSenderStreamingMode, it->second->channel_id(),
+                    buffer_latency);
       }
     }
   }
@@ -2695,6 +2711,16 @@ bool WebRtcVideoMediaChannel::ConfigureSending(int channel_id,
                                                                true) != 0) {
       LOG_RTCERR2(SetTransmissionSmoothingStatus, channel_id, true);
       return false;
+    }
+  }
+
+  int buffer_latency =
+      options_.buffered_mode_latency.GetWithDefaultIfUnset(
+          cricket::kBufferedModeDisabled);
+  if (buffer_latency != cricket::kBufferedModeDisabled) {
+    if (engine()->vie()->rtp()->EnableSenderStreamingMode(
+            channel_id, buffer_latency) != 0) {
+      LOG_RTCERR2(EnableSenderStreamingMode, channel_id, buffer_latency);
     }
   }
 

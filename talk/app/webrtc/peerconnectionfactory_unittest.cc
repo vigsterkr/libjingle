@@ -58,13 +58,16 @@ class NullPeerConnectionObserver : public PeerConnectionObserver {
   virtual void OnError() {}
   virtual void OnMessage(const std::string& msg) {}
   virtual void OnSignalingMessage(const std::string& msg) {}
-  virtual void OnStateChange(StateType state_changed) {}
+  virtual void OnSignalingChange(
+      PeerConnectionInterface::SignalingState new_state) {}
   virtual void OnAddStream(MediaStreamInterface* stream) {}
   virtual void OnRemoveStream(MediaStreamInterface* stream) {}
   virtual void OnRenegotiationNeeded() {}
-  virtual void OnIceChange() {}
+  virtual void OnIceConnectionChange(
+      PeerConnectionInterface::IceConnectionState new_state) {}
+  virtual void OnIceGatheringChange(
+      PeerConnectionInterface::IceGatheringState new_state) {}
   virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {}
-  virtual void OnIceComplete() {}
 };
 
 }  // namespace

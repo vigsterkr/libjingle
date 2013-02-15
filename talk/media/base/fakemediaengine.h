@@ -688,8 +688,9 @@ class FakeVoiceEngine : public FakeBaseEngine {
         delay_offset_(0),
         rx_processor_(NULL),
         tx_processor_(NULL) {
-    // Add a fake audio codec
-    codecs_.push_back(AudioCodec());
+    // Add a fake audio codec. Note that the name must not be "" as there are
+    // sanity checks against that.
+    codecs_.push_back(AudioCodec(101, "fakecodec", 0, 0, 1, 0));
   }
 
   int GetCapabilities() {

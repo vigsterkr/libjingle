@@ -228,6 +228,7 @@ struct VideoOptions {
         change.system_low_adaptation_threshhold);
     system_high_adaptation_threshhold.SetFrom(
         change.system_high_adaptation_threshhold);
+    buffered_mode_latency.SetFrom(change.buffered_mode_latency);
   }
 
   bool operator==(const VideoOptions& o) const {
@@ -241,7 +242,8 @@ struct VideoOptions {
         system_low_adaptation_threshhold ==
             o.system_low_adaptation_threshhold &&
         system_high_adaptation_threshhold ==
-            o.system_high_adaptation_threshhold;
+            o.system_high_adaptation_threshhold &&
+        buffered_mode_latency == o.buffered_mode_latency;
   }
 
   virtual std::string ToString() const {
@@ -256,6 +258,7 @@ struct VideoOptions {
     ost << ToStringIfSet("process", process_adaptation_threshhold);
     ost << ToStringIfSet("low", system_low_adaptation_threshhold);
     ost << ToStringIfSet("high", system_high_adaptation_threshhold);
+    ost << ToStringIfSet("buffered mode latency", buffered_mode_latency);
     ost << "}";
     return ost.str();
   }
@@ -278,6 +281,8 @@ struct VideoOptions {
   SettablePercent system_low_adaptation_threshhold;
   // High threshhold for cpu adaptation.  (Adapt down)
   SettablePercent system_high_adaptation_threshhold;
+  // Specify buffered mode latency in milliseconds.
+  Settable<int> buffered_mode_latency;
 };
 
 // A class for playing out soundclips.

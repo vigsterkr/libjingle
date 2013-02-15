@@ -45,6 +45,7 @@
 #include "talk/base/logging.h"
 #include "talk/base/stringencode.h"
 #include "talk/base/stringutils.h"
+#include "talk/media/base/constants.h"
 #include "talk/media/base/streamparams.h"
 #include "talk/media/base/voiceprocessor.h"
 #include "talk/media/webrtc/webrtcvoe.h"
@@ -66,7 +67,7 @@ struct CodecPref {
 static const CodecPref kCodecPrefs[] = {
   { "ISAC",   16000,  1, 103, true },
   { "ISAC",   32000,  1, 104, true },
-  { "OPUS",   48000,  2, 111, true },
+  { kOpusCodecName,   48000,  2, 111, true },
   { "CELT",   32000,  1, 109, true },
   { "CELT",   32000,  2, 110, true },
   { "G722",   16000,  1, 9,   false },
@@ -110,18 +111,9 @@ static const char kRtpAudioLevelHeaderExtension[] =
 
 static const char kIsacCodecName[] = "ISAC";
 static const char kL16CodecName[] = "L16";
-static const char kOpusCodecName[] = "OPUS";
+// Codec parameters for Opus.
 static const int kOpusMonoBitrate = 32000;
 static const int kOpusStereoBitrate = 64000;
-// Codec parameters for Opus.
-static const char kOpusStereo[] = "stereo";
-static const char kOpusTrue[] = "1";
-// Minimum amount of data in one packet.
-static const char kOpusMinPacketTime[] = "minptime";
-static const char kOpusRecommendedMinPacketTime[] = "10";
-// Maximum amount of data in one packet.
-static const char kOpusMaxPacketTime[] = "maxptime";
-static const char kOpusRecommendedMaxPacketTime[] = "60";
 
 // Dumps an AudioCodec in RFC 2327-ish format.
 static std::string ToString(const AudioCodec& codec) {
@@ -298,11 +290,12 @@ bool IsIsac(const AudioCodec& codec) {
 
 // True if params["stereo"] == "1"
 bool IsOpusStereoEnabled(const AudioCodec& codec) {
-  CodecParameterMap::const_iterator param = codec.params.find(kOpusStereo);
+  CodecParameterMap::const_iterator param =
+      codec.params.find(kCodecParamStereo);
   if (param == codec.params.end()) {
     return false;
   }
-  return param->second == kOpusTrue;
+  return param->second == kParamTrue;
 }
 
 void WebRtcVoiceEngine::ConstructCodecs() {
@@ -338,8 +331,17 @@ void WebRtcVoiceEngine::ConstructCodecs() {
           codec.bitrate = 0;
         }
         if (IsOpus(codec)) {
-          codec.params[kOpusMinPacketTime] = kOpusRecommendedMinPacketTime;
-          codec.params[kOpusMaxPacketTime] = kOpusRecommendedMaxPacketTime;
+          // Only add fmtp parameters that differ from the spec.
+          if (kPreferredMinPTime != kOpusDefaultMinPTime) {
+            codec.params[kCodecParamMinPTime] =
+                talk_base::ToString(kPreferredMinPTime);
+          }
+          if (kPreferredMaxPTime != kOpusDefaultMaxPTime) {
+            codec.params[kCodecParamMaxPTime] =
+                talk_base::ToString(kPreferredMaxPTime);
+          }
+          // TODO(hellner): Add ptime, sprop-stereo, stereo and useinbandfec
+          // when they can be set to values other than the default.
         }
         codecs_.push_back(codec);
       } else {

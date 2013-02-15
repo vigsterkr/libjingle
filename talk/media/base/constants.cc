@@ -43,5 +43,33 @@ const char* kRtxCodecName = "rtx";
 
 const char* kCodecParamAssociatedPayloadType = "apt";
 
+const char* kOpusCodecName = "opus";
+
+const char* kCodecParamPTime = "ptime";
+const char* kCodecParamMaxPTime = "maxptime";
+
+const char* kCodecParamMinPTime = "minptime";
+const char* kCodecParamSPropStereo = "sprop-stereo";
+const char* kCodecParamStereo = "stereo";
+const char* kCodecParamUseInbandFec = "useinbandfec";
+
+const char* kParamTrue = "1";
+
+const int kOpusDefaultMaxPTime = 120;
+const int kOpusDefaultPTime = 20;
+const int kOpusDefaultMinPTime = 3;
+const int kOpusDefaultSPropStereo = 0;
+const int kOpusDefaultStereo = 0;
+const int kOpusDefaultUseInbandFec = 0;
+
+const int kPreferredMaxPTime = 60;
+const int kPreferredMinPTime = 10;
+const int kPreferredSPropStereo = 0;
+const int kPreferredStereo = 0;
+const int kPreferredUseInbandFec = 0;
+
+const char* kCodecParamMaxBitrate = "x-google-max-bitrate";
+const char* kCodecParamMinBitrate = "x-google-min-bitrate";
+const char* kCodecParamMaxQuantization = "x-google-max-quantization";
 
 }  // namespace cricket

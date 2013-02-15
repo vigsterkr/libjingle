@@ -130,6 +130,7 @@ win_env = root_env.Clone(
     'component_targets_msvs',
     'directx_9_0_c',
     #'grid_builder',
+    'mc',
     'midl',
     'target_platform_windows'
   ],

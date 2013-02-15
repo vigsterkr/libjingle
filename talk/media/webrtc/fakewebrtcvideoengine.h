@@ -90,6 +90,7 @@ class FakeWebRtcVideoEngine
           remb_receive_(false),
           rtp_offset_send_id_(0),
           rtp_offset_receive_id_(0),
+          sender_target_delay_(0),
           transmission_smoothing_(false),
           nack_(false),
           hybrid_nack_fec_(false),
@@ -116,7 +117,7 @@ class FakeWebRtcVideoEngine
     bool remb_receive_;  // This channel receives video packets.
     int rtp_offset_send_id_;
     int rtp_offset_receive_id_;
-    int target_delay;
+    int sender_target_delay_;
     bool transmission_smoothing_;
     bool nack_;
     bool hybrid_nack_fec_;
@@ -260,6 +261,10 @@ class FakeWebRtcVideoEngine
   bool GetTransmissionSmoothingStatus(int channel) {
     WEBRTC_ASSERT_CHANNEL(channel);
     return channels_.find(channel)->second->transmission_smoothing_;
+  }
+  int GetSenderTargetDelay(int channel) {
+    WEBRTC_ASSERT_CHANNEL(channel);
+    return channels_.find(channel)->second->sender_target_delay_;
   }
   bool GetNackStatus(int channel) const {
     WEBRTC_ASSERT_CHANNEL(channel);
@@ -670,7 +675,11 @@ class FakeWebRtcVideoEngine
     channels_[channel]->key_frame_request_method_ = method;
     return 0;
   }
-  WEBRTC_STUB(EnableSenderStreamingMode, (int channel, int target_delay));
+  WEBRTC_FUNC(EnableSenderStreamingMode, (int channel, int target_delay)) {
+    WEBRTC_CHECK_CHANNEL(channel);
+    channels_[channel]->sender_target_delay_ = target_delay;
+    return 0;
+  }
   WEBRTC_FUNC(SetRembStatus, (int channel, bool send, bool receive)) {
     WEBRTC_CHECK_CHANNEL(channel);
     channels_[channel]->remb_send_ = send;
