@@ -67,7 +67,7 @@ struct CodecPref {
 static const CodecPref kCodecPrefs[] = {
   { "ISAC",   16000,  1, 103, true },
   { "ISAC",   32000,  1, 104, true },
-  { kOpusCodecName,   48000,  2, 111, true },
+  { "OPUS",   48000,  2, 111, true },
   { "CELT",   32000,  1, 109, true },
   { "CELT",   32000,  2, 110, true },
   { "G722",   16000,  1, 9,   false },
